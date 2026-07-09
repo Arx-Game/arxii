@@ -52,6 +52,7 @@ from world.combat.constants import (
     TargetingMode,
     TargetSelection,
 )
+from world.covenants.constants import RoleArchetype
 from world.fatigue.constants import EffortLevel
 from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
@@ -896,6 +897,17 @@ class ComboSlot(SharedMemoryModel):
         blank=True,
         related_name="combo_slots",
         help_text="Required resonance on the technique's gift. Null means any.",
+    )
+    required_archetype = models.CharField(
+        max_length=20,
+        choices=RoleArchetype.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "#2022: Required covenant role archetype for this slot's participant. "
+            "Blank means any archetype. Lets authored combos require specific role "
+            "composition (e.g. Slot 1: SWORD, Slot 2: SHIELD)."
+        ),
     )
 
     class Meta:

@@ -284,6 +284,27 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
             "duel for the covenant (#1710). Only settable on CovenantType.BATTLE roles."
         ),
     )
+    granted_gifts = models.ManyToManyField(
+        "magic.Gift",
+        through="CovenantRoleGiftGrant",
+        blank=True,
+        related_name="granted_by_roles",
+        help_text=(
+            "#2022: Gifts granted by this role while engaged. The role's gift "
+            "techniques are auto-granted on engage and auto-revoked on disengage "
+            "(the #2051 vow-dim path). Techniques are primarily enhancements that "
+            "boost overlapping techniques from the character's existing gifts."
+        ),
+    )
+    granted_capabilities = models.ManyToManyField(
+        "conditions.CapabilityType",
+        blank=True,
+        related_name="granted_by_roles",
+        help_text=(
+            "#2022: Capabilities granted by this role while engaged. Written to "
+            "the character's capability ledger on engage; revoked on disengage."
+        ),
+    )
 
     @cached_property
     def cached_sub_roles(self) -> list:
@@ -711,6 +732,44 @@ class CovenantLevelBonus(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.modifier_target.name}: +{self.bonus_per_level}/level"
+
+
+class CovenantRoleGiftGrant(SharedMemoryModel):
+    """Through model for CovenantRole.granted_gifts (#2022).
+
+    Carries ``unlock_thread_level`` — the COVENANT_ROLE thread level at which
+    the gift's techniques become available while engaged. 0 = always available
+    while engaged.
+    """
+
+    covenant_role = models.ForeignKey(
+        COVENANT_ROLE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="gift_grants",
+    )
+    gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.CASCADE,
+        related_name="role_grants",
+    )
+    unlock_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "The COVENANT_ROLE thread level at which this gift's techniques "
+            "become available while engaged. 0 = always available."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant_role", "gift"],
+                name="covenant_role_gift_grant_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.covenant_role.name} → {self.gift.name} (≥L{self.unlock_thread_level})"
 
 
 class CovenantRoleBonus(SharedMemoryModel):

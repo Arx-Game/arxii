@@ -1,1 +1,1 @@
-0023_courtgrantconfig_summons_refusal_escalation_pool_and_more
+0024_covenantrole_granted_capabilities_and_more
