@@ -223,6 +223,23 @@ export async function reactToWindow(
   }
 }
 
+export async function reactToInteraction(body: {
+  persona_id: number;
+  interaction_id: number;
+  kind: string;
+  choice: string;
+}): Promise<void> {
+  const res = await apiFetch('/api/reaction-windows/react-to-interaction/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { detail?: string[] | string } | null;
+    const detail = Array.isArray(data?.detail) ? data.detail[0] : data?.detail;
+    throw new Error(detail || 'Failed to react');
+  }
+}
+
 export async function createPoseEndorsement(body: { interaction: number; resonance: number }) {
   const res = await apiFetch('/api/magic/pose-endorsements/', {
     method: 'POST',
