@@ -230,8 +230,10 @@ def _deeds_by_instance(
         deeds_by_instance[row.instance_id].append(
             JournalDeed(
                 node_key=row.node.key,
+                node_id=row.node_id,
                 option_id=row.option_id,
                 outcome_name=row.outcome.name if row.outcome_id else None,
+                unseen_count=row.unseen_count,
                 applied_at=row.applied_at,
             )
         )
@@ -301,13 +303,22 @@ def _journal_entry_for(  # noqa: PLR0913
         target_project_threshold = project.threshold_target
     tale_text = tales_by_instance.get(instance.pk)
     is_terminal = instance.status in _TERMINAL_STATUSES
+
+    # #2046: unseen_count from the most recent deed at the current node
+    last_unseen_count = 0
+    node_deeds = deeds_by_instance.get(instance.pk, ())
+    if current is not None:
+        recent_deed = next((d for d in node_deeds if d.node_id == current.pk), None)
+        if recent_deed is not None:
+            last_unseen_count = recent_deed.unseen_count
+
     return JournalEntry(
         instance_id=instance.pk,
         template_name=instance.template.name,
         status=instance.status,
         current_node_key=current.key if current is not None else None,
         is_contract_holder=part.is_contract_holder,
-        deeds=tuple(deeds_by_instance.get(instance.pk, ())),
+        deeds=tuple(node_deeds),
         summary=instance.template.summary,
         epilogue=(instance.template.epilogue if instance.status == MissionStatus.COMPLETE else ""),
         current_node_flavor=current.flavor_text if current is not None else "",
@@ -324,6 +335,7 @@ def _journal_entry_for(  # noqa: PLR0913
         source_beat_hint=_source_beat_hint(instance),
         tale=tale_text,
         can_tell_tale=(is_terminal and tale_text is None),
+        last_unseen_count=last_unseen_count,
     )
 
 

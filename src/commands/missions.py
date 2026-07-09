@@ -44,6 +44,7 @@ _SUBVERBS = frozenset(
         "decline",
         "take",
         "opportunities",
+        "support",
     }
 )
 _USAGE = (
@@ -103,6 +104,7 @@ class CmdMission(ArxCommand):
             "decline": lambda: self._handle_respond(rest, accept=False),
             "take": lambda: self._handle_take(rest),
             "opportunities": lambda: self._handle_opportunities(),
+            "support": lambda: self._handle_support(rest),
         }
         _DISPATCH[subverb]()
 
@@ -386,6 +388,33 @@ class CmdMission(ArxCommand):
         except BeatActionError as exc:
             raise CommandError(exc.user_message) from exc
         self.msg(f"You vote for '{option.label}'.")
+        self._render_group_result(instance, result)
+
+    def _handle_support(self, rest: str) -> None:
+        """Declare a support move in place of a pick/vote (#2046)."""
+        from world.missions.services.play import (  # noqa: PLC0415
+            BeatActionError,
+            declare_support_play,
+            group_beat,
+        )
+
+        instance, remainder = self._require_group_beat(rest)
+        beat = group_beat(instance, self.caller)
+        moves = beat.group_beat.support_moves if beat.group_beat else ()
+        ordinal = self._choice_ordinal(remainder)
+        if ordinal < 1 or ordinal > len(moves):
+            raise CommandError(_ERR_CHOOSE_NUMBER)
+        move = moves[ordinal - 1]
+        try:
+            result = declare_support_play(
+                instance,
+                self.caller,
+                source_kind=move.source_kind,
+                source_id=move.source_id,
+            )
+        except BeatActionError as exc:
+            raise CommandError(exc.user_message) from exc
+        self.msg(f"You declare support: {move.label}.")
         self._render_group_result(instance, result)
 
     # ------------------------------------------------------------------

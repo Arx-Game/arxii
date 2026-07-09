@@ -84,9 +84,11 @@ class JournalDeed:
     """
 
     node_key: str
+    node_id: int
     option_id: int
     outcome_name: str | None
     applied_at: datetime
+    unseen_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -158,6 +160,7 @@ class JournalEntry:
     source_beat_hint: str | None = None
     tale: str | None = None  # the participant's authored epilogue, if any (#2047)
     can_tell_tale: bool = False  # run is terminal and tale hasn't been written (#2047)
+    last_unseen_count: int = 0  # unseen approaches at the last resolved node (#2046)
 
 
 @dataclass(frozen=True)
@@ -239,6 +242,8 @@ class GroupBeatView:
     options: tuple[BeatOption, ...]
     ballots: tuple[GroupBallotState, ...]
     expires_at: str | None
+    support_moves: tuple[SupportMove, ...] = ()
+    declared_supports: tuple[SupportDeclarationView, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -376,3 +381,37 @@ class PresentedOption:
     ic_framing: str
     owner: ObjectDB
     approach: ChallengeApproach | None = None
+
+
+@dataclass(frozen=True)
+class SupportMove:
+    """One support move offered to a helper at a node (#2046).
+
+    Built by ``world.missions.services.support.support_moves_for``. Fanned
+    from the helper's own capabilities (via the capability oracle) and/or
+    a predicate-tree leg, matched against the node's live CHECK options.
+    ``rumored`` moves are offered as tease-only entries (the whole party
+    sees them regardless of qualification).
+    """
+
+    source_id: int
+    source_kind: str  # "pattern" or "gem"
+    label: str
+    capability_name: str | None
+    check_type_name: str
+    difficulty: int
+    easing: int
+    flavor: str
+    rumored: bool
+    rumor_text: str
+
+
+@dataclass(frozen=True)
+class SupportDeclarationView:
+    """One participant's declared support at a node, for journal/beat display."""
+
+    character_id: int
+    character_name: str
+    label: str
+    outcome_name: str | None
+    easing_banked: int

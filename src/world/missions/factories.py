@@ -20,6 +20,7 @@ from world.missions.constants import (
     RewardGroupRule,
 )
 from world.missions.models import (
+    MissionAssistPattern,
     MissionCategory,
     MissionDeedRecord,
     MissionDeedRewardLine,
@@ -27,12 +28,14 @@ from world.missions.models import (
     MissionInstance,
     MissionNode,
     MissionNodeSnapshot,
+    MissionNodeSupportOption,
     MissionOption,
     MissionOptionRoute,
     MissionOptionRouteCandidate,
     MissionOptionRouteReward,
     MissionParticipant,
     MissionRewardQueue,
+    MissionSupportDeclaration,
     MissionTemplate,
 )
 
@@ -290,3 +293,58 @@ class MissionRewardQueueFactory(DjangoModelFactory):
     applied = False
     applied_at = None
     failure_reason = ""
+
+
+class MissionAssistPatternFactory(DjangoModelFactory):
+    """Factory for MissionAssistPattern — catalog row (#2046).
+
+    Defaults to a capability-leg-only pattern with no context axes
+    (callers add check_types / challenge_categories for matching).
+    """
+
+    class Meta:
+        model = MissionAssistPattern
+
+    name = factory.Sequence(lambda n: f"Assist Pattern {n}")
+    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    qualifier_rule = {}
+    support_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    difficulty = 5
+    easing = 2
+    complication_consequence = None
+    flavor_template = ""
+    rumor_text = ""
+    is_active = True
+
+
+class MissionNodeSupportOptionFactory(DjangoModelFactory):
+    """Factory for MissionNodeSupportOption — authored gem (#2046)."""
+
+    class Meta:
+        model = MissionNodeSupportOption
+
+    node = factory.SubFactory(MissionNodeFactory)
+    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    qualifier_rule = {}
+    support_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    difficulty = 5
+    easing = 2
+    complication_consequence = None
+    flavor_template = ""
+    rumor_text = ""
+    suppress_patterns = False
+
+
+class MissionSupportDeclarationFactory(DjangoModelFactory):
+    """Factory for MissionSupportDeclaration — runtime declaration (#2046)."""
+
+    class Meta:
+        model = MissionSupportDeclaration
+
+    instance = factory.SubFactory(MissionInstanceFactory)
+    snapshot = factory.SubFactory(MissionNodeSnapshotFactory)
+    participant = factory.SubFactory(MissionParticipantFactory)
+    pattern = factory.SubFactory(MissionAssistPatternFactory)
+    support_option = None
+    outcome = None
+    easing_banked = 0

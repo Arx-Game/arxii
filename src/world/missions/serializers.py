@@ -574,6 +574,7 @@ class JournalEntrySerializer(serializers.Serializer):
     participant_count = serializers.IntegerField()
     tale = serializers.CharField(allow_null=True)
     can_tell_tale = serializers.BooleanField()
+    last_unseen_count = serializers.IntegerField(read_only=True)
 
     @extend_schema_field(PendingMissionInviteSerializer(many=True))
     def get_pending_invites(self, obj: object) -> list[dict]:
@@ -698,6 +699,13 @@ class GroupVoteRequestSerializer(serializers.Serializer):
     """POST body for the #1036 group-vote endpoint."""
 
     option_id = serializers.IntegerField(min_value=1)
+
+
+class SupportDeclareRequestSerializer(serializers.Serializer):
+    """POST body for the #2046 support-declare endpoint."""
+
+    source_kind = serializers.ChoiceField(choices=["pattern", "gem"])
+    source_id = serializers.IntegerField(min_value=1)
 
 
 class MissionInviteRequestSerializer(serializers.Serializer):

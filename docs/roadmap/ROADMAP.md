@@ -79,7 +79,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [Magic System](magic.md) | in-progress | Affinities, resonances, gifts, techniques, threads, spells |
 | [Capabilities & Challenges](capabilities-and-challenges.md) | in-progress | Properties, capabilities, applications, action generation, challenges, situations |
 | [Combat](combat.md) | in-progress | Party combat (Phases 1–9 + clash + web UI + escalation/passives/aftermath complete; NPC-tier gap tracked), battle scenes, duels |
-| [Missions & Living Grid](missions.md) | in-progress | Branching narrative quests, world consequences, CK-style events |
+| [Missions & Living Grid](missions.md) | in-progress | Branching narrative quests, world consequences, co-op group beats, support moves |
 | [Crafting, Fashion & Economy](crafting-economy.md) | not-started | Crafting, fashion-resonance loop, housing, shops, domains, ships |
 | [Items & Equipment](items-equipment.md) | not-started | Worn items, body slots, item stats, fashion integration |
 | [Rooms, Buildings & Estates](rooms-and-estates.md) | skeleton | What ownership of rooms/buildings/estates unlocks — servants, decoration, vaults, special-purpose rooms |

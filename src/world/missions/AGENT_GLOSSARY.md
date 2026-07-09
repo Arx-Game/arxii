@@ -31,3 +31,19 @@ _Avoid_: epilogue writeup, story log, mission journal entry (the journal is the 
 **Non-canonical fabrication**:
 An elaboration in a tale that exceeds the character's demonstrated capability. In-world braggadocio — the character told a taller tale than the truth. Not a moderation case; the world reacts accordingly. The braggadocio rule is the containment mechanism (see ADR-0105).
 _Avoid_: lie, fabrication, moderation case.
+
+**Support Move**:
+A flavored action a co-located participant can declare at a group beat, fanned from their own capabilities (via the ownership oracle, plus predicate-tree legs for distinction/trait combos). A declaration takes the place of the helper's pick/vote in the group flow. The helper rolls their own check; on success the easing enters the resolving check via `perform_check(extra_modifiers=...)`, and on failure a complication can fire on the helper via the existing consequence pipeline. See ADR-0106.
+_Avoid_: assist, teamwork action, stat donation (helping is drama, not a bonus transfer).
+
+**Assist Pattern**:
+A `MissionAssistPattern` catalog row that auto-offers support moves wherever the run context + qualifier match. Density comes from these patterns; authored gems on specific nodes add to or suppress them. Qualifying moves light up; `rumored` ones show a veiled tease to the whole party.
+_Avoid_: assist template, support catalog entry, mission perk.
+
+**Rumored**:
+A support move marked with `rumor_text`; the whole party sees the veiled tease even if no one present is qualified. Discovery is part of the fun — the journal shows an unseen-approaches count after resolution.
+_Avoid_: hint, foreshadow, locked move (it's a teaser, not a gate).
+
+**Easing**:
+Bonus banked on a successful support check, injected into the resolving check via the `extra_modifiers` argument of `perform_check`. Additive aid: it stacks onto the primary actor's roll rather than replacing it.
+_Avoid_: assist bonus, donated stat, flat buff (it's banked on a helper's own roll, not a stat hand-off).

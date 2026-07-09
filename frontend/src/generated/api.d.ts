@@ -11292,6 +11292,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/journal/{id}/support/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #2046 — declare a support move in place of a pick/vote. */
+    post: operations['missions_journal_support_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/journal/{id}/tale/': {
     parameters: {
       query?: never;
@@ -22324,6 +22341,7 @@ export interface components {
       participant_count: number;
       tale: string | null;
       can_tell_tale: boolean;
+      readonly last_unseen_count: number;
     };
     /** @description One known secret, from the viewer's side, with locked layers shown as "Unknown". */
     KnownSecret: {
@@ -31255,6 +31273,17 @@ export interface components {
       /** @default false */
       acknowledge_risk: boolean;
     };
+    /** @description POST body for the #2046 support-declare endpoint. */
+    SupportDeclareRequestRequest: {
+      source_kind: components['schemas']['SupportDeclareRequestSourceKindEnum'];
+      source_id: number;
+    };
+    /**
+     * @description * `pattern` - pattern
+     *     * `gem` - gem
+     * @enum {string}
+     */
+    SupportDeclareRequestSourceKindEnum: 'pattern' | 'gem';
     /**
      * @description Staff read + status-update view of an auto-captured error (#1164).
      *
@@ -47484,6 +47513,45 @@ export interface operations {
         };
       };
       /** @description Option not live here / run not active. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_journal_support_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SupportDeclareRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GroupBeatResult'];
+        };
+      };
+      /** @description Not a group beat / already declared / cap reached. */
       400: {
         headers: {
           [name: string]: unknown;

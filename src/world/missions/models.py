@@ -355,6 +355,13 @@ class MissionNode(SharedMemoryModel):
             "per-option via ``MissionOption.locations``."
         ),
     )
+    max_support = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "Cap on support declarations per node entry across the party (#2046). "
+            "A support declaration takes the place of the helper's pick/vote."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1487,9 +1494,246 @@ class MissionDeedRecord(SharedMemoryModel):
             "LegendDeedStory rows when they tell the tale."
         ),
     )
+    unseen_count = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Count of approaches that went unseen by the party at this "
+            "node (moves no participant qualified for + regular options "
+            "hidden from all). Set on the deed(s) minted at resolution. "
+            "The journal reads it from deed history (#2046)."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"deed {self.option} by {self.actor}"
+
+
+class MissionAssistPattern(SharedMemoryModel):
+    """Catalog row auto-offering support moves wherever context + qualifier match (#2046).
+
+    Density without per-node authoring: active patterns whose context axes
+    (check_types / challenge_categories) match the node's live CHECK options
+    and whose qualifier (capability leg + optional predicate leg) passes
+    for a participant are offered as support moves. Authored gems on specific
+    nodes add to or suppress these patterns.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    capability = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="assist_patterns",
+        help_text="Capability leg: the participant must hold this capability (>0 effective value).",
+    )
+    qualifier_rule = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Predicate-tree leg (sanctioned AND/OR/NOT vocabulary). Optional; "
+            "covers distinction/trait combos that aren't capabilities. Empty "
+            "dict = no predicate gate."
+        ),
+    )
+    check_types = models.ManyToManyField(
+        "checks.CheckType",
+        blank=True,
+        related_name="assist_patterns",
+        help_text="Context axis: match when the node has a CHECK option using any of these.",
+    )
+    challenge_categories = models.ManyToManyField(
+        "mechanics.ChallengeCategory",
+        blank=True,
+        related_name="assist_patterns",
+        help_text=(
+            "Context axis: match when the node has a CHALLENGE option in any of these categories."
+        ),
+    )
+    support_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The CheckType rolled when a helper declares this support move.",
+    )
+    difficulty = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Difficulty for the support move's check (retunable).",
+    )
+    easing = models.IntegerField(
+        default=2,
+        help_text="Bonus added to the resolving check on success (retunable, can be negative).",
+    )
+    complication_consequence = models.ForeignKey(
+        "checks.Consequence",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Consequence fired on the helper on a failed support check (null = nothing fires)."
+        ),
+    )
+    flavor_template = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Flavor text shown to the helper. May reference the granting source name.",
+    )
+    rumor_text = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "When non-empty, the move is 'rumored' — everyone sees this tease even if unqualified."
+        ),
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(capability__isnull=False) | ~models.Q(qualifier_rule={}),
+                name="assist_pattern_at_least_one_qualifier_leg",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class MissionNodeSupportOption(SharedMemoryModel):
+    """Authored gem — a per-node support move that adds to or suppresses patterns (#2046).
+
+    When ``suppress_patterns`` is True, only this node's gems are offered
+    (the pattern catalog is skipped for this node). Otherwise gems are
+    offered in addition to matching patterns.
+    """
+
+    node = models.ForeignKey(
+        MissionNode,
+        on_delete=models.CASCADE,
+        related_name="support_options",
+    )
+    capability = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Capability leg (optional when qualifier_rule covers it).",
+    )
+    qualifier_rule = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Predicate-tree leg. Empty dict = no predicate gate.",
+    )
+    support_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The CheckType rolled when a helper declares this support move.",
+    )
+    difficulty = models.PositiveSmallIntegerField(default=5)
+    easing = models.IntegerField(default=2)
+    complication_consequence = models.ForeignKey(
+        "checks.Consequence",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    flavor_template = models.CharField(max_length=200, blank=True)
+    rumor_text = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="When non-empty, the move is 'rumored' — everyone sees this tease.",
+    )
+    suppress_patterns = models.BooleanField(
+        default=False,
+        help_text="When True, only this node's gems are offered (skip the pattern catalog).",
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(capability__isnull=False) | ~models.Q(qualifier_rule={}),
+                name="node_support_option_at_least_one_qualifier_leg",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.node}: {self.flavor_template or 'support gem'}"
+
+
+class MissionSupportDeclaration(SharedMemoryModel):
+    """A helper's support move declaration at a node entry (#2046).
+
+    Takes the place of the helper's pick/vote in the group flow. One per
+    helper per node entry (unique on snapshot — re-entry creates new
+    snapshots, so declarations refresh). The helper rolls their own check;
+    success banks easing, failure can fire a complication on the helper.
+    """
+
+    instance = models.ForeignKey(
+        MissionInstance,
+        on_delete=models.CASCADE,
+        related_name="support_declarations",
+    )
+    snapshot = models.ForeignKey(
+        MissionNodeSnapshot,
+        on_delete=models.CASCADE,
+        related_name="support_declaration",
+        help_text="The helper's own snapshot row for this node entry.",
+    )
+    participant = models.ForeignKey(
+        MissionParticipant,
+        on_delete=models.CASCADE,
+        related_name="support_declarations",
+    )
+    pattern = models.ForeignKey(
+        MissionAssistPattern,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    support_option = models.ForeignKey(
+        MissionNodeSupportOption,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Resolved outcome tier of the support check.",
+    )
+    easing_banked = models.IntegerField(
+        default=0,
+        help_text="Easing banked on success (0 on failure).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["snapshot"],
+                name="unique_support_declaration_per_snapshot",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(pattern__isnull=False, support_option__isnull=True)
+                    | models.Q(pattern__isnull=True, support_option__isnull=False)
+                ),
+                name="support_declaration_xor_pattern_option",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"support by {self.participant} @ {self.snapshot}"
 
 
 class MissionGiver(SharedMemoryModel):

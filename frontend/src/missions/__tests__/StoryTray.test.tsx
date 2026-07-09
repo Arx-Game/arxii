@@ -30,6 +30,7 @@ const ACTIVE_ENTRY: JournalEntry = {
   participant_count: 1,
   tale: null,
   can_tell_tale: false,
+  last_unseen_count: 0,
 };
 
 const DONE_ENTRY: JournalEntry = {

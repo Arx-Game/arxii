@@ -135,17 +135,6 @@ class ChallengeGroup:
     actions: list[AvailableAction]
 
 
-@dataclass
-class CooperativeAction:
-    """A cooperative Action combining multiple characters."""
-
-    application_id: int
-    application_name: str
-    challenge_instance_id: int
-    challenge_name: str
-    participants: list[AvailableAction] = field(default_factory=list)
-
-
 class ChallengeResolutionError(Exception):
     """Raised when challenge resolution is called with invalid state."""
 

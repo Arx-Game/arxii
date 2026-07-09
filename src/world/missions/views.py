@@ -81,6 +81,7 @@ from world.missions.serializers import (
     MissionTemplateSerializer,
     OpportunitiesSerializer,
     ResolvedBeatSerializer,
+    SupportDeclareRequestSerializer,
     TaleRequestSerializer,
 )
 from world.predicates.catalog import leaf_params
@@ -696,6 +697,38 @@ class MissionJournalViewSet(viewsets.ViewSet):
         try:
             result = cast_group_vote(
                 instance, character, option_id=body.validated_data["option_id"]
+            )
+        except BeatActionError as exc:
+            raise ValidationError(exc.user_message) from exc
+        return Response(GroupBeatResultSerializer(result).data)
+
+    @extend_schema(
+        request=SupportDeclareRequestSerializer,
+        responses={
+            200: GroupBeatResultSerializer,
+            400: OpenApiResponse(description="Not a group beat / already declared / cap reached."),
+            404: OpenApiResponse(description="Not a participant / no such mission."),
+        },
+    )
+    @action(detail=True, methods=("POST",), url_path="support")
+    def support(self, request: Request, pk: str | None = None) -> Response:
+        """#2046 — declare a support move in place of a pick/vote."""
+        from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.missions.services.play import (  # noqa: PLC0415
+            BeatActionError,
+            declare_support_play,
+        )
+
+        body = SupportDeclareRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        instance, character = self._instance_for(request, pk)
+        try:
+            result = declare_support_play(
+                instance,
+                character,
+                source_kind=body.validated_data["source_kind"],
+                source_id=body.validated_data["source_id"],
             )
         except BeatActionError as exc:
             raise ValidationError(exc.user_message) from exc
