@@ -35,7 +35,7 @@ def ensure_scene_for_location(
     Returns:
         The active Scene for this room.
     """
-    existing = Scene.objects.filter(location=room, is_active=True).first()
+    existing = Scene.objects.active_for_room(room).first()
     if existing is not None:
         return existing
 

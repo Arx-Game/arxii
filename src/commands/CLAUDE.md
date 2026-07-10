@@ -324,10 +324,11 @@ actions, backends, and service functions.
   `Action().run()` directly. GM staging subverbs (#2010 — turn a catalog pick into a live
   Battle): `battle create <name> [risk=<level>] [map=<blueprint>]` → `CreateBattleAction`;
   `battle stage <blueprint> [replace]` → `StageBattleMapAction`; `battle spawn <template>
-  [count=N] [at <front>] [side=<role>]` → `SpawnBattleUnitsAction`; `battle enlist
+  [count=N] [at <front>] side=<role>` → `SpawnBattleUnitsAction`; `battle enlist
   <character> = <side>[, <front>]` → `EnlistBattleParticipantAction`; `battle maps [<term>]`
-  / `battle units [<term>]` → `BrowseBattleCatalogAction`, pre-filtered to blueprints/
-  templates only. See `docs/systems/battles.md#staging-2010` for the full contract. Bare
+  / `battle units [<term>]` → `BrowseBattleCatalogAction` — both subverbs search BOTH
+  catalogs (blueprints + templates); there is no kind filter.
+  See `docs/systems/battles.md#staging-2010` for the full contract. Bare
   `battle` prints a status hub (battle name, side VP, front, current round).
   All 10 `declare` kinds share one dispatch (a `dict[str, Callable]` lookup, not an if/elif
   chain): `strike`/`rout` resolve a named unit on either side (ACTIVE only) or accept

@@ -27,6 +27,7 @@ from world.battles.factories import (
     BattleUnitFactory,
     BattleUnitTemplateCapabilityFactory,
     BattleUnitTemplateFactory,
+    BattleVehicleFactory,
     BlueprintBattlePlaceFactory,
     BlueprintFortificationFactory,
 )
@@ -187,6 +188,19 @@ class InstantiateBattleBlueprintTests(TestCase):
         BattleParticipantFactory(
             battle=self.battle, side=self.attacker, character_sheet=sheet, place=places[0]
         )
+
+        with self.assertRaises(BattleStagingError):
+            instantiate_battle_blueprint(self.blueprint, self.battle, replace=True)
+
+    def test_replace_refused_when_vehicle_stationed(self) -> None:
+        """A vehicle boarded onto a place blocks replace even with no units/
+        participants stationed anywhere -- ``BattleVehicle.place`` is CASCADE
+        (and the vehicle's own unit never has a ``place`` of its own, #1714), so
+        tearing down the place would silently delete the vehicle too (#2010 review).
+        """
+        places = instantiate_battle_blueprint(self.blueprint, self.battle)
+        vehicle_unit = BattleUnitFactory(battle=self.battle, side=self.attacker, place=None)
+        BattleVehicleFactory(unit=vehicle_unit, place=places[0])
 
         with self.assertRaises(BattleStagingError):
             instantiate_battle_blueprint(self.blueprint, self.battle, replace=True)

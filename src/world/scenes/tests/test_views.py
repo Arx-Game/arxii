@@ -87,6 +87,26 @@ class SceneViewSetTestCase(APITestCase):
         assert name1 != name2
         assert name2.endswith(" (2)")
 
+    @suppress_permission_errors
+    def test_scene_creation_not_blocked_by_battle_only_scene(self):
+        """A room holding ONLY a staged battle's backing Scene is not "occupied" (#2010 review).
+
+        The collision check (``perform_create``) must exclude battle-backed scenes the
+        same way ``get_active_scene`` does -- a GM's battle map must never prevent a
+        real RP scene from starting in that room.
+        """
+        from world.battles.staging import stage_battle
+
+        room = ObjectDBFactory(
+            db_key="warfront",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        stage_battle(name="Siege of the Hall", location=room)
+
+        url = reverse("scene-list")
+        response = self.client.post(url, {"location_id": room.id}, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+
     def test_scene_list_filtering(self):
         """Test scene filtering by is_active and privacy_mode"""
         # Clear any existing scenes from previous tests

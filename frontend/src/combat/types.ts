@@ -146,4 +146,11 @@ export interface DispatchResult {
    * haven't been updated to read this field yet.
    */
   success?: boolean | null;
+  /**
+   * Minimal jsonable identifying-field bag from the action's result
+   * (`DispatchResultSerializer.data` — e.g. `{battle_id, scene_id}` for
+   * `create_battle`). `null`/absent when the action carries no such data or
+   * the dispatch was deferred.
+   */
+  data?: Record<string, unknown> | null;
 }

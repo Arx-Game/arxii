@@ -1058,9 +1058,9 @@ GM staging subverbs, alongside the round-flow subverbs documented above:
 |---|---|
 | `battle create <name> [risk=<level>] [map=<blueprint>]` | `create_battle` |
 | `battle stage <blueprint> [replace]` | `stage_battle_map` (on the caller's active battle) |
-| `battle spawn <template> [count=N] [at <front>] [side=<role>]` | `spawn_battle_units` |
+| `battle spawn <template> [count=N] [at <front>] side=<role>` | `spawn_battle_units` |
 | `battle enlist <character> = <side>[, <front>]` | `enlist_battle_participant` |
-| `battle maps [<term>]` / `battle units [<term>]` | `browse_battle_catalog`, pre-filtered to blueprints / templates only |
+| `battle maps [<term>]` / `battle units [<term>]` | `browse_battle_catalog` — both subverbs search BOTH catalogs (blueprints + templates); there is no kind filter |
 
 E2E coverage: `src/integration_tests/pipeline/test_battle_staging_telnet_e2e.py`.
 

@@ -494,7 +494,7 @@ class CreateBattleAction(Action):
         return ActionResult(
             success=True,
             message=f"Battle '{battle.name}' created.",
-            data={"battle_id": battle.pk},
+            data={"battle_id": battle.pk, "scene_id": battle.scene_id},
         )
 
 

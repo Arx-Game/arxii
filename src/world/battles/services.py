@@ -915,6 +915,18 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     scene.date_finished = timezone.now()
     scene.save(update_fields=["is_active", "date_finished"])
 
+    # scene.is_active=False above doesn't bust the room's in-memory
+    # _active_scene_cache (mirrors finish_scene_full's identical step,
+    # world/scenes/scene_admin_services.py) — without this, a stale cache
+    # entry keeps pointing room-scoped lookups at the just-concluded battle's
+    # scene until something else happens to invalidate it (#2010 review).
+    if scene.location is not None:
+        from world.scenes.interaction_services import (  # noqa: PLC0415
+            invalidate_active_scene_cache,
+        )
+
+        invalidate_active_scene_cache(scene.location)
+
     resolve_battle_beats(battle)
     run_battle_conclusion_hooks(battle)
     transaction.on_commit(lambda: notify_battle_state_changed(battle))

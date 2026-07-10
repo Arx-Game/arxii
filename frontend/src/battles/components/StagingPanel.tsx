@@ -11,7 +11,12 @@
  *
  * Two render modes:
  *   - No Battle yet for this scene: the empty-battle "Create Battle" form
- *     (name/risk/optional blueprint), dispatching `create_battle`.
+ *     (name/risk/optional blueprint), dispatching `create_battle`. `create_battle`
+ *     always stages a brand-NEW Scene (`CreateBattleAction`,
+ *     `src/actions/definitions/battles.py`) — never this page's own `sceneId` — so a
+ *     successful create navigates to `/scenes/<data.scene_id>/battle`, the new
+ *     battle's own map page, rather than leaving the GM stranded on this now-orphaned
+ *     route (#2010 review).
  *   - A Battle exists: Apply Blueprint (with a replace-confirm step when the
  *     battle already has a staged map), Spawn Units, and Enlist Participant
  *     forms — each gated independently on its own action ref being present.
@@ -29,6 +34,7 @@
  */
 
 import { useMemo, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAppSelector } from '@/store/hooks';
@@ -68,6 +74,7 @@ interface Props {
 
 export function StagingPanel({ sceneId, battle, detail }: Props) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // ---------------------------------------------------------------------------
   // Resolve active character -> characterId for the actions endpoint
@@ -175,6 +182,14 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
         setNewBattleName('');
         setNewBattleBlueprintId('');
         invalidateBattleQueries();
+        // create_battle stages a NEW Scene for the battle (CreateBattleAction,
+        // src/actions/definitions/battles.py) — it is never the current page's
+        // sceneId. Follow the action's own `data.scene_id` to the new battle's
+        // map page rather than staying on this now-orphaned route (#2010 review).
+        const newSceneId = result.data?.scene_id;
+        if (typeof newSceneId === 'number') {
+          navigate(`/scenes/${newSceneId}/battle`);
+        }
       })
       .catch((err: unknown) =>
         setFeedback({

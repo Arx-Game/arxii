@@ -11,6 +11,16 @@ import type { BattleDetail, BattleMapBlueprint, BattleUnitTemplate } from '../ty
 // Mocks — must come before importing the component under test
 // ---------------------------------------------------------------------------
 
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 vi.mock('@/scenes/queries', async () => {
   const actual = await vi.importActual<typeof import('@/scenes/queries')>('@/scenes/queries');
   return {
@@ -358,6 +368,73 @@ describe('StagingPanel', () => {
     await user.click(screen.getByTestId('staging-create-submit'));
 
     expect(await screen.findByTestId('staging-feedback')).toHaveTextContent('Battle stood up.');
+  });
+
+  it('navigates to the new battle scene on a successful create_battle dispatch', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({
+        backend: 'registry',
+        deferred: false,
+        message: 'Battle stood up.',
+        success: true,
+        data: { battle_id: 55, scene_id: 99 },
+      })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const createAction = makeStagingAction('create_battle', 'Create Battle');
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [createAction],
+    });
+
+    const user = userEvent.setup();
+    render(<StagingPanel sceneId={10} battle={null} detail={null} />, {
+      wrapper: createWrapper(),
+    });
+
+    await screen.findByTestId('staging-panel-create');
+    await user.type(screen.getByTestId('staging-create-name'), 'The Bridge Skirmish');
+    await user.click(screen.getByTestId('staging-create-submit'));
+
+    await vi.waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/scenes/99/battle');
+    });
+  });
+
+  it('does not navigate when create_battle succeeds without a scene_id in data', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, message: 'Battle stood up.' })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const createAction = makeStagingAction('create_battle', 'Create Battle');
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [createAction],
+    });
+
+    const user = userEvent.setup();
+    render(<StagingPanel sceneId={10} battle={null} detail={null} />, {
+      wrapper: createWrapper(),
+    });
+
+    await screen.findByTestId('staging-panel-create');
+    await user.type(screen.getByTestId('staging-create-name'), 'The Bridge Skirmish');
+    await user.click(screen.getByTestId('staging-create-submit'));
+
+    await screen.findByTestId('staging-feedback');
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('shows the thrown error message when a dispatch fails', async () => {

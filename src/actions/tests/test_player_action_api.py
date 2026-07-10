@@ -170,6 +170,85 @@ class AvailableActionsViewOwnerTests(TestCase):
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
+class AvailableActionsViewBattleStagingTests(TestCase):
+    """``_battle_staging_actions`` reaches the real ``/available/`` endpoint (#2010 review).
+
+    Unmocked -- hits ``get_player_actions`` for real so a JUNIOR GM's response
+    actually contains the four staging refs ``StagingPanel`` gates on, and a
+    non-GM character's response does not.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.gm_account = AccountFactory()
+        cls.gm_player_data = PlayerDataFactory(account=cls.gm_account)
+        cls.gm_roster_entry = RosterEntryFactory()
+        cls.gm_character = cls.gm_roster_entry.character_sheet.character
+        cls.gm_tenure = RosterTenureFactory(
+            player_data=cls.gm_player_data,
+            roster_entry=cls.gm_roster_entry,
+            start_date=timezone.now(),
+            end_date=None,
+        )
+
+        cls.non_gm_account = AccountFactory()
+        cls.non_gm_player_data = PlayerDataFactory(account=cls.non_gm_account)
+        cls.non_gm_roster_entry = RosterEntryFactory()
+        cls.non_gm_character = cls.non_gm_roster_entry.character_sheet.character
+        cls.non_gm_tenure = RosterTenureFactory(
+            player_data=cls.non_gm_player_data,
+            roster_entry=cls.non_gm_roster_entry,
+            start_date=timezone.now(),
+            end_date=None,
+        )
+
+        from world.gm.constants import GMLevel
+        from world.gm.factories import GMProfileFactory
+
+        GMProfileFactory(account=cls.gm_account, level=GMLevel.JUNIOR)
+
+    def _url(self, character: object) -> str:
+        return f"/api/actions/characters/{character.pk}/available/"
+
+    def test_junior_gm_sees_staging_refs(self) -> None:
+        """A JUNIOR GM's response includes all four staging registry_keys."""
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.get(self._url(self.gm_character))
+        assert response.status_code == status.HTTP_200_OK
+        registry_keys = {
+            r["ref"]["registry_key"]
+            for r in response.data["results"]
+            if r["ref"]["backend"] == "registry"
+        }
+        assert {
+            "create_battle",
+            "stage_battle_map",
+            "spawn_battle_units",
+            "enlist_battle_participant",
+        }.issubset(registry_keys)
+
+    def test_non_gm_does_not_see_staging_refs(self) -> None:
+        """A non-GM character's response has none of the four staging registry_keys."""
+        client = APIClient()
+        client.force_authenticate(user=self.non_gm_account)
+        response = client.get(self._url(self.non_gm_character))
+        assert response.status_code == status.HTTP_200_OK
+        registry_keys = {
+            r["ref"]["registry_key"]
+            for r in response.data["results"]
+            if r["ref"]["backend"] == "registry"
+        }
+        assert registry_keys.isdisjoint(
+            {
+                "create_battle",
+                "stage_battle_map",
+                "spawn_battle_units",
+                "enlist_battle_participant",
+            }
+        )
+
+
 class AvailableActionsViewChallengeShapeTests(TestCase):
     """Endpoint returns correctly-shaped serialized CHALLENGE actions.
 

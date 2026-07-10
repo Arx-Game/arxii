@@ -164,8 +164,11 @@ def instantiate_battle_blueprint(
 
 def _ensure_blueprint_replace_is_safe(battle: Battle) -> None:
     """Raise BattleStagingError when tearing down ``battle``'s map would orphan
-    live state (#2010) — a round has opened, or a unit/participant is already
-    stationed at one of its places."""
+    live state (#2010) — a round has opened, a unit/participant is already
+    stationed at one of its places, or a vehicle is boarded onto one of its
+    places (``BattleVehicle.place`` is CASCADE, even when the vehicle's own
+    unit has no boarded occupants yet — deleting the place would silently
+    delete the vehicle too)."""
     if battle.rounds.exists():
         msg = "Cannot replace this battle's map — it already has at least one round."
         raise BattleStagingError(msg)
@@ -174,6 +177,9 @@ def _ensure_blueprint_replace_is_safe(battle: Battle) -> None:
         raise BattleStagingError(msg)
     if battle.participants.filter(place__isnull=False).exists():
         msg = "Cannot replace this battle's map — a participant is already stationed on it."
+        raise BattleStagingError(msg)
+    if battle.places.filter(vehicle__isnull=False).exists():
+        msg = "Cannot replace this battle's map — a vehicle is stationed on it."
         raise BattleStagingError(msg)
 
 

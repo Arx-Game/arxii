@@ -868,6 +868,28 @@ class TestGetActiveScene(TestCase):
     def test_returns_none_for_none_location(self) -> None:
         assert get_active_scene(None) is None
 
+    def test_excludes_battle_backed_scene(self) -> None:
+        """A staged battle's backing Scene must not hijack room-scoped resolution.
+
+        ``Scene`` orders newest-first (``Meta.ordering = ["-date_started"]``), and a
+        staged Battle's backing Scene is active + located + PUBLIC and newer than the
+        room's existing RP scene -- without the ``battle__isnull=True`` exclusion, the
+        battle scene would win this lookup instead of the room's real RP scene
+        (#2010 review).
+        """
+        from world.battles.staging import stage_battle
+
+        room = ObjectDBFactory(
+            db_key="Warfront",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        rp_scene = SceneFactory(location=room, is_active=True)
+        stage_battle(name="Siege of Warfront", location=room)
+
+        result = get_active_scene(room)
+        assert result is not None
+        assert result.pk == rp_scene.pk
+
 
 class TestRecordInteractionActiveSceneFromDB(TestCase):
     """Test that record_interaction picks up the active scene from the database."""

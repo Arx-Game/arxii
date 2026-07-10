@@ -27,7 +27,7 @@ GM subverbs:
 GM staging subverbs (#2010 — turn a catalog pick into a live Battle):
     battle create <name> [risk=<level>] [map=<blueprint>]
     battle stage <blueprint> [replace]
-    battle spawn <template> [count=N] [at <front>] [side=<role>]
+    battle spawn <template> [count=N] [at <front>] side=<role>
     battle enlist <character> = <side>[, <front>]
     battle maps [<term>]
     battle units [<term>]
@@ -108,7 +108,7 @@ class CmdBattle(ArxCommand):
     Syntax (GM staging, #2010):
         battle create <name> [risk=<level>] [map=<blueprint>]
         battle stage <blueprint> [replace]
-        battle spawn <template> [count=N] [at <front>] [side=<role>]
+        battle spawn <template> [count=N] [at <front>] side=<role>
         battle enlist <character> = <side>[, <front>]
         battle maps [<term>]
         battle units [<term>]
@@ -845,10 +845,10 @@ class CmdBattle(ArxCommand):
         self._send(result)
 
     def _spawn_units(self, rest: list[str]) -> None:
-        """``battle spawn <template> [count=N] [at <front>] [side=<role>]`` (#2010)."""
+        """``battle spawn <template> [count=N] [at <front>] side=<role>`` (#2010)."""
         from actions.definitions.battles import SpawnBattleUnitsAction  # noqa: PLC0415
 
-        usage = "Usage: battle spawn <template> [count=N] [at <front>] [side=<role>]"
+        usage = "Usage: battle spawn <template> [count=N] [at <front>] side=<role>"
         if not rest:
             raise CommandError(usage)
 

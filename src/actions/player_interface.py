@@ -395,6 +395,7 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_scene_actions(character))
     actions.extend(_positioning_actions(character))
     actions.extend(_set_the_stage_actions(character))
+    actions.extend(_battle_staging_actions(character))
     # Registry backend: all current actions excluded (no ActionTemplate / check_type)
     # — see module docstring.  When registry actions gain ActionTemplate backing,
     # uncomment and implement _registry_actions(character).
@@ -1045,6 +1046,56 @@ def _set_the_stage_actions(character: ObjectDB) -> list[PlayerAction]:
             description=blueprint.description if blueprint.description else "",
             action_category=ActionCategory.PHYSICAL,
         )
+    ]
+
+
+def _battle_staging_actions(character: ObjectDB) -> list[PlayerAction]:
+    """Surface the four GM battle-staging dispatchables to the web (#2010 review).
+
+    ``get_player_actions`` excludes the generic REGISTRY backend (see the module
+    docstring) because most registry actions have no ``ActionTemplate``/``CheckType``
+    to resolve into a ``PlayerAction``. The staging pipeline's battle actions
+    (``actions/definitions/battles.py``) are UI-driving REGISTRY actions dispatched
+    directly by ``StagingPanel`` (``frontend/src/battles/components/StagingPanel.tsx``)
+    keyed on ``registry_key`` -- mirrors ``_set_the_stage_actions``'s bespoke-adapter
+    precedent exactly (one gate check, hand-built ``PlayerAction``s, no ``CheckType``).
+
+    Gate: ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`` -- the same prerequisite every
+    staging Action's ``get_prerequisites()`` returns, so a caller who can see these
+    entries can always dispatch them (staff bypass comes free from the prerequisite).
+    The battle-scoped actions (``stage_battle_map``/``spawn_battle_units``/
+    ``enlist_battle_participant``) additionally re-verify ``_actor_may_gm_battle`` at
+    ``execute()`` time against the specific battle id in the dispatch kwargs -- this
+    adapter only proves general JUNIOR+ trust, not standing over any one battle.
+
+    Only ``create_battle``/``stage_battle_map``/``spawn_battle_units``/
+    ``enlist_battle_participant`` are emitted -- the four refs ``StagingPanel``
+    actually dispatches. ``browse_battle_catalog`` is a read-only catalog search, not
+    a form the panel drives, so it stays off this UI-driving adapter (the blueprint/
+    template catalogs are reached via their own list endpoints --
+    ``useBattleMapBlueprintsQuery``/``useBattleUnitTemplatesQuery``).
+    """
+    from actions.prerequisites import MinimumGMLevelPrerequisite  # noqa: PLC0415
+    from world.gm.constants import GMLevel  # noqa: PLC0415
+
+    available, _reason = MinimumGMLevelPrerequisite(GMLevel.JUNIOR).is_met(character)
+    if not available:
+        return []
+
+    staging_keys = (
+        ("create_battle", "Create Battle"),
+        ("stage_battle_map", "Stage Battle Map"),
+        ("spawn_battle_units", "Spawn Battle Units"),
+        ("enlist_battle_participant", "Enlist Battle Participant"),
+    )
+    return [
+        PlayerAction(
+            backend=ActionBackend.REGISTRY,
+            display_name=display_name,
+            ref=ActionRef(backend=ActionBackend.REGISTRY, registry_key=key),
+            action_category=ActionCategory.PHYSICAL,
+        )
+        for key, display_name in staging_keys
     ]
 
 
