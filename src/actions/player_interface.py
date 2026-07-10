@@ -1339,6 +1339,7 @@ class _CategoryConsentData(NamedTuple):
     whitelisted_owner_ids: set[int]
     blacklisted_owner_ids: set[int]
     friend_owner_ids: set[int]
+    rival_owner_ids: set[int]
 
 
 def _load_category_consent_data(
@@ -1361,15 +1362,20 @@ def _load_category_consent_data(
         SocialConsentCategoryRule,
         SocialConsentWhitelist,
     )
-    from world.scenes.models import Friendship  # noqa: PLC0415
+    from world.scenes.models import Friendship, Rivalry  # noqa: PLC0415
 
     rule_modes: dict[int, str] = {}
     whitelisted_owner_ids: set[int] = set()
     blacklisted_owner_ids: set[int] = set()
     friend_owner_ids: set[int] = set()
+    rival_owner_ids: set[int] = set()
     if category is None:
         return _CategoryConsentData(
-            rule_modes, whitelisted_owner_ids, blacklisted_owner_ids, friend_owner_ids
+            rule_modes,
+            whitelisted_owner_ids,
+            blacklisted_owner_ids,
+            friend_owner_ids,
+            rival_owner_ids,
         )
 
     pref_ids = [pref.pk for pref in prefs_by_tenure.values()]
@@ -1404,8 +1410,25 @@ def _load_category_consent_data(
                 friend_tenure=actor_tenure,
             ).values_list("friender_tenure_id", flat=True)
         )
+        # Mutual rivalry (#2170, double opt-in): owner tenures that declared the actor a
+        # rival AND whom the actor declared a rival — the intersection is the RIVALS set.
+        owners_declaring_actor = set(
+            Rivalry.objects.filter(
+                rivaler_tenure_id__in=tenure_ids, rival_tenure=actor_tenure
+            ).values_list("rivaler_tenure_id", flat=True)
+        )
+        owners_actor_declared = set(
+            Rivalry.objects.filter(
+                rivaler_tenure=actor_tenure, rival_tenure_id__in=tenure_ids
+            ).values_list("rival_tenure_id", flat=True)
+        )
+        rival_owner_ids = owners_declaring_actor & owners_actor_declared
     return _CategoryConsentData(
-        rule_modes, whitelisted_owner_ids, blacklisted_owner_ids, friend_owner_ids
+        rule_modes,
+        whitelisted_owner_ids,
+        blacklisted_owner_ids,
+        friend_owner_ids,
+        rival_owner_ids,
     )
 
 
@@ -1454,6 +1477,7 @@ def _consent_excluded_persona_ids(
             whitelisted=tenure.pk in data.whitelisted_owner_ids,
             blacklisted=tenure.pk in data.blacklisted_owner_ids,
             is_friend=tenure.pk in data.friend_owner_ids,
+            is_rival=tenure.pk in data.rival_owner_ids,
         ):
             excluded.update(_tenure_persona_ids(tenure))
     return excluded

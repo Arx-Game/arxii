@@ -1042,7 +1042,9 @@ so web and telnet converge on the same write path.
   (owner_tenure / allowed_tenure / category), `SocialConsentBlacklist` (#1698 —
   owner_tenure / blocked_tenure / category; consulted under `ALL_BUT_BLACKLIST`)
 - **ConsentMode (#1698):** `EVERYONE` / `ALL_BUT_BLACKLIST` / `FRIENDS_WHITELIST` (OOC friends via
-  `scenes.Friendship`) / `ALLOWLIST`
+  `scenes.Friendship`) / `RIVALS` (declared **mutual** rivals via `scenes.Rivalry`, double
+  opt-in — #2170; `friend_services.is_rival` + `declare_rival`/`undeclare_rival`, telnet
+  `rival`/`unrival`/`rivals`) / `ALLOWLIST`
 - **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()` (thin delegator
   to `consent_blocks_targeting`, #1909), `decide_consent_block()`, `_social_consent_exclusions()`
   (`actions/player_interface.py`) — the batched picker sweep does NOT honor `default_mode`

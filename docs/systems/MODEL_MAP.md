@@ -2007,7 +2007,7 @@
 - `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
 - `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909).`
-- `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
+- `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool', is_rival: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
@@ -2621,6 +2621,7 @@
   - item_instances <- items.ItemInstance
   - itemfacet_attachments <- items.ItemFacet
   - itemstyle_attachments <- items.ItemStyle
+  - crafted_item_recipes <- items.CraftedItemRecipe
 
 ### InteractionType
 **Pointed to by:**
@@ -2677,10 +2678,10 @@
   - ownership_events <- items.OwnershipEvent
   - item_facets <- items.ItemFacet
   - item_styles <- items.ItemStyle
-  - crafted_recipes <- items.CraftedItemRecipe
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
+  - crafted_recipes <- items.CraftedItemRecipe
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - project_contributions <- projects.Contribution
@@ -5204,6 +5205,8 @@
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer
   - friendships_made <- scenes.Friendship
   - friendships_received <- scenes.Friendship
+  - rivalries_made <- scenes.Rivalry
+  - rivalries_received <- scenes.Rivalry
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
   - social_consent_preference <- consent.SocialConsentPreference
@@ -5388,6 +5391,11 @@
 **Foreign Keys:**
   - friender_tenure -> roster.RosterTenure [FK]
   - friend_tenure -> roster.RosterTenure [FK]
+
+### Rivalry
+**Foreign Keys:**
+  - rivaler_tenure -> roster.RosterTenure [FK]
+  - rival_tenure -> roster.RosterTenure [FK]
 
 ### Mute
 **Foreign Keys:**

@@ -695,6 +695,46 @@ class Friendship(SharedMemoryModel):
         return f"{self.friender_tenure} → {self.friend_tenure}"
 
 
+class Rivalry(SharedMemoryModel):
+    """A one-way IC rivalry declaration — the antagonism-consent counterpart to Friendship (#2170).
+
+    A player marks another character their rival. It drives the ``RIVALS`` consent mode: a rival
+    may aim the antagonism categories at you that you've opened to rivals. **Double opt-in** — a
+    *mutual* rivalry (both directions declared) is required for the RIVALS gate to pass, so no one
+    is dragged into a rivalry one-sidedly (see ``world.scenes.friend_services.is_rival``).
+
+    **Symmetric per-tenure scoping** (mirrors ``Friendship``): binds *this player's run of A*
+    (``rivaler_tenure``) to *that player's run of B* (``rival_tenure``) — re-roster-safe both ways
+    and alt-private (declaring a rival from character A never marks your other characters, and the
+    target is a character, not the person behind it).
+    """
+
+    rivaler_tenure = models.ForeignKey(
+        "roster.RosterTenure",
+        on_delete=models.CASCADE,
+        related_name="rivalries_made",
+        help_text="The declarer's tenure (this player's run of the character that named a rival).",
+    )
+    rival_tenure = models.ForeignKey(
+        "roster.RosterTenure",
+        on_delete=models.CASCADE,
+        related_name="rivalries_received",
+        help_text="The named rival's tenure (a specific player's run of that character).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rivaler_tenure", "rival_tenure"], name="unique_rivalry"
+            ),
+        ]
+        indexes = [models.Index(fields=["rival_tenure"])]
+
+    def __str__(self) -> str:
+        return f"{self.rivaler_tenure} ⚔ {self.rival_tenure}"
+
+
 class Mute(SharedMemoryModel):
     """One player filtering a persona out of their own view (#1278) — the lighter sibling of Block.
 

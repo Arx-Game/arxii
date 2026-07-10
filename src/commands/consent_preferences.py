@@ -18,7 +18,7 @@ _MSG_USAGE = (
     "Usage:\n"
     "  consent                          - show your consent settings\n"
     "  consent on|off                   - allow or block all social actions\n"
-    "  consent category <key>=<mode>    - mode: everyone|whitelist|blacklist|friends|default\n"
+    "  consent category <key>=<mode> - everyone|whitelist|blacklist|friends|rivals|default\n"
     "  consent whitelist add <name> to <category>       (people you always allow)\n"
     "  consent whitelist remove <name> from <category>\n"
     "  consent whitelist list [category]\n"
@@ -48,6 +48,7 @@ _PLAYER_FACING_MODE_MAP = {
     "friends": "friends_whitelist",
     "friends-whitelist": "friends_whitelist",
     "friends_whitelist": "friends_whitelist",
+    "rivals": "rivals",
     "default": "default",
 }
 
@@ -56,6 +57,7 @@ _MODE_DISPLAY_MAP = {
     "allowlist": "whitelist",
     "all_but_blacklist": "blacklist",
     "friends_whitelist": "friends",
+    "rivals": "rivals",
 }
 
 

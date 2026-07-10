@@ -50094,6 +50094,7 @@ components:
             * `everyone` - Everyone
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
+            * `rivals` - My declared rivals (and whitelist)
             * `allowlist` - Allowlist only
     PatchedSocialConsentPreferenceRequest:
       type: object
@@ -56180,6 +56181,7 @@ components:
             * `everyone` - Everyone
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
+            * `rivals` - My declared rivals (and whitelist)
             * `allowlist` - Allowlist only
       required:
       - category
@@ -56190,12 +56192,14 @@ components:
       - everyone
       - all_but_blacklist
       - friends_whitelist
+      - rivals
       - allowlist
       type: string
       description: |-
         * `everyone` - Everyone
         * `all_but_blacklist` - Everyone except my blacklist
         * `friends_whitelist` - Friends and my whitelist
+        * `rivals` - My declared rivals (and whitelist)
         * `allowlist` - Allowlist only
     SocialConsentCategoryRuleRequest:
       type: object
@@ -56214,6 +56218,7 @@ components:
             * `everyone` - Everyone
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
+            * `rivals` - My declared rivals (and whitelist)
             * `allowlist` - Allowlist only
       required:
       - category
