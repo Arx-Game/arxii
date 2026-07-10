@@ -100,11 +100,17 @@ vi.mock('@/roster/queries', () => ({
 // a Battle Writeup link when a battle exists for the scene (#1735).
 // ---------------------------------------------------------------------------
 
-const mockUseBattleForSceneQuery = vi.fn(() => ({
-  data: null,
-  isLoading: false,
-  isError: false,
-}));
+const mockUseBattleForSceneQuery = vi.fn(
+  (): {
+    data: { id: number } | null;
+    isLoading: boolean;
+    isError: boolean;
+  } => ({
+    data: null,
+    isLoading: false,
+    isError: false,
+  })
+);
 
 vi.mock('@/battles/queries', () => ({
   useBattleForSceneQuery: () => mockUseBattleForSceneQuery(),
@@ -310,7 +316,7 @@ describe('SceneDetailPage', () => {
 
   it('shows a Battle Writeup link when a battle exists for the scene (#1735)', () => {
     mockUseBattleForSceneQuery.mockReturnValue({
-      data: { id: 42 } as { id: number },
+      data: { id: 42 },
       isLoading: false,
       isError: false,
     });

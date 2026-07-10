@@ -12,7 +12,7 @@
 import { Link, useParams } from 'react-router-dom';
 
 import { useBattleDetailQuery } from '../queries';
-import type { BattleDeed } from '../types';
+import type { BattleDeed, BattlePersonaSummary } from '../types';
 
 const OUTCOME_LABELS: Record<string, string> = {
   unresolved: 'Unresolved',
@@ -130,22 +130,25 @@ export function BattleWriteupPage() {
       <section data-testid="battle-writeup-participants">
         <h2 className="mb-2 text-lg font-semibold">Participants</h2>
         <div className="flex flex-wrap gap-3">
-          {battle.participants.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center gap-2 rounded border px-3 py-1"
-              data-testid="battle-writeup-participant"
-            >
-              {p.persona?.thumbnail_media_url && (
-                <img
-                  src={p.persona.thumbnail_media_url}
-                  alt={p.persona.name}
-                  className="h-8 w-8 rounded-full object-cover"
-                />
-              )}
-              <span className="text-sm">{p.persona?.name ?? 'Unknown'}</span>
-            </div>
-          ))}
+          {battle.participants.map((p) => {
+            const persona = p.persona as BattlePersonaSummary | null;
+            return (
+              <div
+                key={p.id}
+                className="flex items-center gap-2 rounded border px-3 py-1"
+                data-testid="battle-writeup-participant"
+              >
+                {persona?.thumbnail_media_url && (
+                  <img
+                    src={persona.thumbnail_media_url}
+                    alt={persona.name}
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                )}
+                <span className="text-sm">{persona?.name ?? 'Unknown'}</span>
+              </div>
+            );
+          })}
         </div>
       </section>
 
