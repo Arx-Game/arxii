@@ -92,6 +92,7 @@ class CmdGMDashboard(ArxCommand):
 
         result = ClaimGroupStoryRequestAction().run(actor=self.caller, request_id=int(rest))
         self.msg(result.message)
+
     def _resolve_target(self, name: str) -> Any:
         """Resolve a co-located character by name; raises CommandError if absent."""
         room = self.caller.location
