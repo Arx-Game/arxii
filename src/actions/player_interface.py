@@ -1546,9 +1546,7 @@ def _social_consent_exclusions(character: ObjectDB, category: object | None) -> 
     if location is None:
         return frozenset()
 
-    scene = (
-        Scene.objects.filter(location=location, is_active=True).order_by("-date_started").first()
-    )
+    scene = Scene.objects.active_for_room(location).order_by("-date_started").first()
     if scene is None:
         return frozenset()
 
