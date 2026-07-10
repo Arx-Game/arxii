@@ -643,3 +643,141 @@ class DispatchActionViewCombatTests(TestCase):
         response = self.client.post(self._url(), self._combat_payload(), format="json")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["backend"] == "combat"
+
+
+class DispatchActionViewSuccessFieldTests(TestCase):
+    """``success`` on the dispatch response — the explicit failure/success wire signal.
+
+    The view always resolves HTTP 200 for a business-rule rejection (a 400 only
+    comes from a structural ``ActionDispatchError``, see ``test_invalid_ref_*``
+    above) — ``dispatch_player_action`` is patched here so the response shape can
+    be exercised directly against a REGISTRY ``ActionResult`` without standing up
+    a full battle-staging action + prerequisites (#2010 review finding).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.owner_account = AccountFactory()
+        cls.owner_player_data = PlayerDataFactory(account=cls.owner_account)
+
+        cls.roster_entry = RosterEntryFactory()
+        cls.sheet = cls.roster_entry.character_sheet
+        cls.character = cls.sheet.character
+
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.owner_player_data,
+            roster_entry=cls.roster_entry,
+            start_date=timezone.now(),
+            end_date=None,
+        )
+
+        cls.room = ObjectDB.objects.create(db_key="DispatchSuccessFieldRoom")
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.owner_account)
+        self.character.db_location = self.room
+        self.character.save()
+
+    def _url(self) -> str:
+        return f"/api/actions/characters/{self.character.pk}/dispatch/"
+
+    def _registry_payload(self) -> dict:
+        return {
+            "ref": {"backend": "registry", "registry_key": "spawn_battle_units"},
+            "kwargs": {},
+        }
+
+    @patch("actions.views.dispatch_player_action")
+    def test_registry_action_result_failure_surfaces_success_false(
+        self, mock_dispatch: object
+    ) -> None:
+        """A REGISTRY dispatch whose ActionResult.success is False → success: false on the wire."""
+        from actions.constants import ActionBackend
+        from actions.types import ActionResult, DispatchResult
+
+        mock_dispatch.return_value = DispatchResult(  # type: ignore[attr-defined]
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(success=False, message="No such unit template."),
+        )
+        response = self.client.post(self._url(), self._registry_payload(), format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["success"] is False
+        assert response.data["message"] == "No such unit template."
+
+    @patch("actions.views.dispatch_player_action")
+    def test_registry_action_result_success_surfaces_success_true(
+        self, mock_dispatch: object
+    ) -> None:
+        """A REGISTRY dispatch whose ActionResult.success is True → success: true on the wire."""
+        from actions.constants import ActionBackend
+        from actions.types import ActionResult, DispatchResult
+
+        mock_dispatch.return_value = DispatchResult(  # type: ignore[attr-defined]
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(success=True, message="Units spawned."),
+        )
+        response = self.client.post(self._url(), self._registry_payload(), format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["success"] is True
+
+    @patch("actions.views.dispatch_player_action")
+    def test_deferred_dispatch_success_is_null(self, mock_dispatch: object) -> None:
+        """A deferred dispatch (no detail resolved yet) → success: null, not false."""
+        from actions.constants import ActionBackend
+        from actions.types import DispatchResult
+
+        mock_dispatch.return_value = DispatchResult(  # type: ignore[attr-defined]
+            backend=ActionBackend.COMBAT,
+            deferred=True,
+            detail=None,
+        )
+        response = self.client.post(self._url(), self._registry_payload(), format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["success"] is None
+
+    @patch("actions.views.dispatch_player_action")
+    def test_challenge_result_without_action_result_success_is_null(
+        self, mock_dispatch: object
+    ) -> None:
+        """A CHALLENGE dispatch's detail is a ChallengeResolutionResult, not ActionResult → null."""
+        from actions.constants import ActionBackend
+        from actions.types import DispatchResult
+        from world.checks.types import CheckResult
+        from world.mechanics.types import ChallengeResolutionResult
+
+        check_result = CheckResult(
+            check_type=CheckTypeFactory(),
+            outcome=CheckOutcomeFactory(success_level=1),
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+        mock_dispatch.return_value = DispatchResult(  # type: ignore[attr-defined]
+            backend=ActionBackend.CHALLENGE,
+            deferred=False,
+            detail=ChallengeResolutionResult(
+                challenge_instance_id=1,
+                challenge_name="Test Challenge",
+                approach_name="Test Approach",
+                check_result=check_result,
+                consequence=ConsequenceFactory(),
+                applied_effects=[],
+                resolution_type="personal",
+                challenge_deactivated=False,
+                display_consequences=[],
+            ),
+        )
+        response = self.client.post(
+            self._url(),
+            {"ref": {"backend": "challenge", "challenge_instance_id": 1, "approach_id": 1}},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["success"] is None

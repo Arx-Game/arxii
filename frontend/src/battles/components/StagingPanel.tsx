@@ -16,11 +16,16 @@
  *     battle already has a staged map), Spawn Units, and Enlist Participant
  *     forms — each gated independently on its own action ref being present.
  *
- * Every dispatch invalidates the battle detail + for-scene queries so
- * BattleMapCanvas (#2009) refetches; the dispatch endpoint always resolves
- * HTTP 200 (business failures come back as an actor-only message, not an
- * HTTP error — see `actions/views.py` `DispatchActionView`), so invalidating
- * unconditionally on resolve is safe.
+ * The dispatch endpoint always resolves HTTP 200 — business-rule rejections
+ * come back as a resolved promise too, not a thrown error (see
+ * `actions/views.py` `DispatchActionView`) — so `result.success === false`
+ * is the signal that distinguishes an honest failure from a real success
+ * (`true`/`null`/`undefined` all read as success; see `DispatchResult` in
+ * `combat/types.ts`). A failed dispatch shows the error styling and leaves
+ * the form/state alone (nothing changed server-side, so there's nothing to
+ * reset and nothing to refetch); a successful dispatch resets its form and
+ * invalidates the battle detail + for-scene queries so BattleMapCanvas
+ * (#2009) refetches.
  */
 
 import { useMemo, useState, type FormEvent } from 'react';
@@ -104,10 +109,16 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
   const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId ?? 0);
 
   // Actor-only outcome line — the dispatch endpoint always resolves HTTP 200
-  // for game-logic failures (message-only, see module docstring) but throws
-  // for real errors (`postDispatchAction`, `frontend/src/combat/api.ts:383-397`);
-  // surface both the same way SceneHeader's GrantSceneGMControl does.
+  // for game-logic rejections; `result.success === false` (see module
+  // docstring) is what marks those as failures, while a thrown error
+  // (`postDispatchAction`, `frontend/src/combat/api.ts:383-397`) marks a
+  // real transport/structural error. Both render with the same error styling.
   const [feedback, setFeedback] = useState<{ text: string; error: boolean } | null>(null);
+
+  /** `result.success === false` is the honest-failure wire signal (#2010 review). */
+  function isDispatchFailure(result: { success?: boolean | null }): boolean {
+    return result.success === false;
+  }
 
   function invalidateBattleQueries() {
     queryClient.invalidateQueries({ queryKey: battleKeys.forScene(sceneId) });
@@ -156,6 +167,10 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
     if (newBattleBlueprintId !== '') kwargs.blueprint_id = newBattleBlueprintId;
     dispatchAction({ ref: createBattleAction.ref, kwargs })
       .then((result) => {
+        if (isDispatchFailure(result)) {
+          setFeedback({ text: result.message ?? 'Could not create battle.', error: true });
+          return;
+        }
         setFeedback({ text: result.message ?? 'Battle created.', error: false });
         setNewBattleName('');
         setNewBattleBlueprintId('');
@@ -183,6 +198,10 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
       kwargs: { battle_id: battle.id, blueprint_id: applyBlueprintId, replace },
     })
       .then((result) => {
+        if (isDispatchFailure(result)) {
+          setFeedback({ text: result.message ?? 'Could not apply blueprint.', error: true });
+          return;
+        }
         setFeedback({ text: result.message ?? 'Blueprint applied.', error: false });
         setConfirmingReplace(false);
         invalidateBattleQueries();
@@ -217,6 +236,10 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
     if (spawnPlaceId !== '') kwargs.place_id = spawnPlaceId;
     dispatchAction({ ref: spawnBattleUnitsAction.ref, kwargs })
       .then((result) => {
+        if (isDispatchFailure(result)) {
+          setFeedback({ text: result.message ?? 'Could not spawn units.', error: true });
+          return;
+        }
         setFeedback({ text: result.message ?? 'Units spawned.', error: false });
         // Reset the per-spawn picks; leave side/place selections in place — a
         // GM commonly spawns several waves into the same side/place in a row.
@@ -257,6 +280,10 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
     if (enlistPlaceId !== '') kwargs.place_id = enlistPlaceId;
     dispatchAction({ ref: enlistParticipantAction.ref, kwargs })
       .then((result) => {
+        if (isDispatchFailure(result)) {
+          setFeedback({ text: result.message ?? 'Could not enlist participant.', error: true });
+          return;
+        }
         setFeedback({ text: result.message ?? 'Participant enlisted.', error: false });
         // Reset the character pick only — leave side/place in place — a GM
         // commonly enlists several characters into the same side/place in a row.

@@ -422,4 +422,79 @@ describe('StagingPanel', () => {
     // Side selection is left in place — a GM commonly spawns several waves in a row.
     expect(screen.getByTestId('staging-spawn-side')).toHaveValue('100');
   });
+
+  it('renders failure styling and does not reset the form when the dispatch resolves success: false', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({
+        backend: 'registry',
+        deferred: false,
+        message: 'A battle with that name already exists in this scene.',
+        success: false,
+      })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const createAction = makeStagingAction('create_battle', 'Create Battle');
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [createAction],
+    });
+
+    const user = userEvent.setup();
+    render(<StagingPanel sceneId={10} battle={null} detail={null} />, {
+      wrapper: createWrapper(),
+    });
+
+    await screen.findByTestId('staging-panel-create');
+    await user.type(screen.getByTestId('staging-create-name'), 'The Bridge Skirmish');
+    await user.click(screen.getByTestId('staging-create-submit'));
+
+    const feedback = await screen.findByTestId('staging-feedback');
+    expect(feedback).toHaveTextContent('A battle with that name already exists in this scene.');
+    expect(feedback).toHaveClass('text-destructive');
+    // Business-rule rejection — nothing changed server-side, so the form is not reset.
+    expect(screen.getByTestId('staging-create-name')).toHaveValue('The Bridge Skirmish');
+  });
+
+  it('still treats a resolved dispatch with success: true as a normal success', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({
+        backend: 'registry',
+        deferred: false,
+        message: 'Battle stood up.',
+        success: true,
+      })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const createAction = makeStagingAction('create_battle', 'Create Battle');
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [createAction],
+    });
+
+    const user = userEvent.setup();
+    render(<StagingPanel sceneId={10} battle={null} detail={null} />, {
+      wrapper: createWrapper(),
+    });
+
+    await screen.findByTestId('staging-panel-create');
+    await user.type(screen.getByTestId('staging-create-name'), 'The Bridge Skirmish');
+    await user.click(screen.getByTestId('staging-create-submit'));
+
+    const feedback = await screen.findByTestId('staging-feedback');
+    expect(feedback).toHaveTextContent('Battle stood up.');
+    expect(feedback).not.toHaveClass('text-destructive');
+    expect(screen.getByTestId('staging-create-name')).toHaveValue('');
+  });
 });
