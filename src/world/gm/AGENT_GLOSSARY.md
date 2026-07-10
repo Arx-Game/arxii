@@ -35,3 +35,14 @@ _Avoid_: demotion (as a separate concept — same service, same audit row), leve
 **Evidence Summary**:
 `GMEvidenceSummary` (`world.gm.types`) — the read model `gm_evidence_summary(profile)` builds for a staff reviewer deciding on a promotion: stories currently running, beats completed by risk tier, feedback by trust category (`CategoryFeedback`), and the GM's `GMLevelChange` audit trail. Reachable via `GMProfileViewSet.evidence` (`IsAdminUser`) or telnet `gmtrust evidence <account>`.
 _Avoid_: track record (informal; use the type name in code/docs), review packet.
+
+**GM Story Reward**:
+The XP a GM earns (via `world.gm.services.award_gm_story_reward`, `ProgressionReason
+.GM_STORY_REWARD`) for running stories for other players — the opposite direction from
+"Rewards and Gating" above (a GM granting rewards to players). Fires at four
+convergence points that ride real, reviewable story artifacts (never self-attested):
+a GM-marked beat, a resolved episode, a completed story, and a positive story-feedback
+rating on GM performance. Scaled by players served (never a flat amount) and capped
+per event and per `GameWeek` (`GMWeeklyRewardTracker`); every award value lives on the
+`GMRewardConfig` singleton, never a module constant (#2123).
+_Avoid_: GM payout, GM stipend, session pay.

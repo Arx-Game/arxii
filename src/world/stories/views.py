@@ -1545,12 +1545,21 @@ class BeatViewSet(viewsets.ModelViewSet):
         Lead GM, staff, or an AGM with an approved claim on this beat may call this.
         Wraps record_gm_marked_outcome. Returns 201 with BeatCompletion on success.
         """
+        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.services.beats import record_gm_marked_outcome  # noqa: PLC0415
 
         beat = self.get_object()
         ser = MarkBeatInputSerializer(data=request.data, context={"beat": beat})
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
+
+        # Whoever is actually marking (Lead GM or an approved AGM — CanMarkBeat
+        # already gated this) is the GM credited with GM Story Reward XP (#2123),
+        # never silently the Lead GM.
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
 
         completion = record_gm_marked_outcome(
             progress=data["progress"],
@@ -1559,6 +1568,7 @@ class BeatViewSet(viewsets.ModelViewSet):
             gm_notes=data["gm_notes"],
             participants=data.get("participants") or None,
             extra_participants=data.get("extra_participants") or None,
+            resolved_by=gm_profile,
         )
         return Response(BeatCompletionSerializer(completion).data, status=status.HTTP_201_CREATED)
 

@@ -1183,7 +1183,14 @@ GM at a given level may author (#2000, ADR-0097).
   (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`; seeded via
   `factories.seed_default_gm_level_caps`), `GMLevelChange` (audit row: `profile`,
   `old_level`, `new_level`, `changed_by`, `reason`, `created_at`; written only by
-  `promote_gm`, never edited by hand)
+  `promote_gm`, never edited by hand), **`GMRewardConfig`** (#2123 — pk=1 singleton,
+  `load()` classmethod; every GM Story Reward award value as a proper column:
+  `beat_xp_per_player`/`beat_xp_cap`, `episode_xp_per_player`/`episode_xp_cap`,
+  `story_completion_xp_per_player`/`story_completion_xp_cap`, `weekly_reward_cap`,
+  `feedback_xp_per_rating_point`; staff-editable in admin, seeded via the `gm`
+  cluster seeder, surfaced read-only on the Game Ops Story/GM panel), **`GMWeeklyRewardTracker`**
+  (#2123 — OneToOne `GMProfile`, FK `game_clock.GameWeek` (SET_NULL),
+  `xp_awarded_this_week`; mirrors `journals.WeeklyJournalXP`'s get-or-reset-by-week shape)
 - **Enums (`constants.py`):** `GMLevel` (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR),
   `GM_LEVEL_ORDER` + `gm_level_index(level)` (position on the ladder, 0–4),
   `GMApplicationStatus`, `GMTableStatus`
@@ -1200,7 +1207,14 @@ GM at a given level may author (#2000, ADR-0097).
   same-level or unknown-level input (programmer-error guard, real validation lives in
   `PromoteGMInputSerializer`), **`gm_evidence_summary(profile) -> GMEvidenceSummary`** —
   aggregate track record (stories running, beats completed by risk, feedback by trust
-  category, level-change audit trail) backing a staff promotion/demotion decision
+  category, level-change audit trail) backing a staff promotion/demotion decision,
+  **`award_gm_story_reward(*, gm_profile, players_served, per_player_xp, event_cap,
+  description) -> XPTransaction | None`** (#2123) — the single choke point for GM Story
+  Reward XP: `raw = min(per_player_xp * players_served, event_cap)`, further truncated by
+  `GMRewardConfig.weekly_reward_cap` headroom in `GMWeeklyRewardTracker` for the current
+  `GameWeek`; awards via `progression.award_xp(reason=ProgressionReason.GM_STORY_REWARD)`.
+  Never raises — a bug here logs and returns `None` rather than aborting the beat
+  mark/episode resolve/story completion/feedback submission that triggered it.
 - **Trust-ladder consumers:** `stories.BeatSerializer`'s risk gate and
   `stories.StakeSerializer`'s custom-stakes gate read the acting GM's `GMLevelCap` via
   `_gm_max_risk`/`_gm_allows_custom_stakes` (staff bypass unchanged);
@@ -1238,12 +1252,18 @@ GM at a given level may author (#2000, ADR-0097).
   `CmdGMDashboard`).
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
-  Story and seats the covenant via `join_table`), combat (`StakesLevelRequirement
+  Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`
+  (#2123) — `players_served_for_scope`/`credit_gm_story_reward`, called from
+  `record_gm_marked_outcome`, `resolve_episode`, `complete_story`, and
+  `world.stories.services.feedback.submit_story_feedback` — is the specific side of
+  the dependency per ADR-0010; `world.gm` never imports `world.stories` at module
+  level), combat (`StakesLevelRequirement
   .minimum_gm_level`), roster (`GMRosterInvite` → `RosterApplication`), scenes
   (`GMTableMembership` pinned to `Persona`, `Scene.is_gm` for the adjudication
   toolkit's gate), checks (`InvokeCatalogCheckAction` → `perform_check`),
-  progression (`GMAwardAction` → `award_xp`/`award_development_points`), conditions
-  (`GMApplyConditionAction` → `apply_condition`)
+  progression (`GMAwardAction` → `award_xp`/`award_development_points`;
+  `award_gm_story_reward` → `award_xp(reason=ProgressionReason.GM_STORY_REWARD)`, #2123),
+  conditions (`GMApplyConditionAction` → `apply_condition`)
 - **Source:** `src/world/gm/`
 - **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
 - **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
