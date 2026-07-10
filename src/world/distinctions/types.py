@@ -47,10 +47,20 @@ def build_distinction_entry(
 
 
 class DistinctionOrigin(models.TextChoices):
-    """How a character acquired a distinction."""
+    """How a character acquired a distinction.
+
+    ``GAMEPLAY`` is vestigial (#2037) — kept for schema stability, but no
+    production writer assigns it. The four values below are the ratified
+    post-CG acquisition sources; every in-play grant goes through
+    ``world.distinctions.services.grant_distinction`` and stamps one of them.
+    """
 
     CHARACTER_CREATION = "character_creation", "Character Creation"
     GAMEPLAY = "gameplay", "Gameplay"
+    GM_AWARD = "gm_award", "GM Award"
+    ACHIEVEMENT_AUTO_GRANT = "achievement_auto_grant", "Achievement"
+    CONSEQUENCE_POOL = "consequence_pool", "Consequence"
+    ENDORSEMENT_THRESHOLD = "endorsement_threshold", "Endorsement Threshold"
 
 
 class OtherStatus(models.TextChoices):
