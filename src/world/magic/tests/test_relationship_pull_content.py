@@ -51,7 +51,7 @@ class RelationshipPullContentTests(TestCase):
         self.assertIsNotNone(tier0)
         self.assertEqual(tier0.effect_kind, EffectKind.VITAL_BONUS)
         self.assertEqual(tier0.vital_target, VitalBonusTarget.DAMAGE_TAKEN_REDUCTION)
-        self.assertEqual(tier0.vital_bonus_amount, 3)
+        self.assertEqual(tier0.vital_bonus_amount, 10)
 
     def test_tier1_is_vital_bonus_death_save(self):
         """Tier 1 is VITAL_BONUS with DEATH_SAVE."""
@@ -66,7 +66,7 @@ class RelationshipPullContentTests(TestCase):
         self.assertIsNotNone(tier1)
         self.assertEqual(tier1.effect_kind, EffectKind.VITAL_BONUS)
         self.assertEqual(tier1.vital_target, VitalBonusTarget.DEATH_SAVE)
-        self.assertEqual(tier1.vital_bonus_amount, 5)
+        self.assertEqual(tier1.vital_bonus_amount, 10)
 
     def test_tier2_is_resistance(self):
         """Tier 2 is RESISTANCE with null damage_type (all types)."""
@@ -96,7 +96,7 @@ class RelationshipPullContentTests(TestCase):
         self.assertIsNotNone(tier3)
         self.assertEqual(tier3.effect_kind, EffectKind.VITAL_BONUS)
         self.assertEqual(tier3.vital_target, VitalBonusTarget.KNOCKOUT_RESIST)
-        self.assertEqual(tier3.vital_bonus_amount, 5)
+        self.assertEqual(tier3.vital_bonus_amount, 10)
 
 
 class RelationshipCapstoneModulationTests(TestCase):
