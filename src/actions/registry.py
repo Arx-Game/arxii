@@ -28,6 +28,7 @@ from actions.definitions.combat_maneuvers import (
     SuccorAction,
     TauntAction,
     UpgradeComboAction,
+    UseItemManeuverAction,
 )
 from actions.definitions.communication import (
     EmitAction,
@@ -70,6 +71,7 @@ from actions.definitions.crafting import (
 from actions.definitions.crossing import resolve_crossing_offer
 from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
+from actions.definitions.distinctions import GMAwardDistinctionAction
 from actions.definitions.doors import LockAction, UnlockAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
@@ -165,8 +167,10 @@ from actions.definitions.locations import (
     SettleBuildingArrearsAction,
     StartBuildingRenovationAction,
     StartExtensionAction,
+    TagRoomResonanceAction,
     ToggleUltraUpkeepAction,
     UnlinkRoomsAction,
+    UntagRoomResonanceAction,
 )
 from actions.definitions.market import (
     BuyStockAction,
@@ -333,6 +337,8 @@ _ALL_ACTIONS: list[Action] = [
     AssignRoomTenantAction(),
     EndRoomTenancyAction(),
     SetPrimaryHomeAction(),
+    TagRoomResonanceAction(),
+    UntagRoomResonanceAction(),
     CommissionDecorationAction(),
     StartExtensionAction(),
     StartBuildingRenovationAction(),
@@ -368,6 +374,7 @@ _ALL_ACTIONS: list[Action] = [
     ActivatePermitAction(),
     UseItemAction(),
     GrantItemAction(),
+    GMAwardDistinctionAction(),
     # #1866 — crafting telnet coverage.
     AttachFacetAction(),
     DetachFacetAction(),
@@ -410,6 +417,7 @@ _ALL_ACTIONS: list[Action] = [
     CoverAction(),
     InterposeAction(),
     SuccorAction(),
+    UseItemManeuverAction(),
     EngageAction(),
     DisengageAction(),
     RallyAction(),

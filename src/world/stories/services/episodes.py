@@ -128,9 +128,26 @@ def resolve_episode(
 
     # Stamp GM activity (#2004) — the resolution succeeded.
     if resolved_by is not None:
+        from world.gm.models import GMRewardConfig  # noqa: PLC0415
         from world.gm.services import touch_gm_activity  # noqa: PLC0415
+        from world.stories.services.gm_rewards import credit_gm_story_reward  # noqa: PLC0415
 
         touch_gm_activity(resolved_by)
+
+        # Credit GM Story Reward XP (#2123) — same scope-derived anchor used
+        # to build resolution_kwargs above.
+        reward_character_sheet = progress.character_sheet if scope == StoryScope.CHARACTER else None
+        reward_gm_table = progress.gm_table if scope == StoryScope.GROUP else None
+        config = GMRewardConfig.load()
+        credit_gm_story_reward(
+            resolved_by=resolved_by,
+            scope=scope,
+            character_sheet=reward_character_sheet,
+            gm_table=reward_gm_table,
+            per_player_xp=config.episode_xp_per_player,
+            event_cap=config.episode_xp_cap,
+            label=f"episode '{episode.title}' resolved",
+        )
 
     # Narrative notification — fans out a NarrativeMessage per recipient.
     from world.stories.services.narrative import notify_episode_resolution  # noqa: PLC0415

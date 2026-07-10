@@ -54,7 +54,10 @@ actions, backends, and service functions.
   staff bypass preserved)
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive` (#1909: swaps to
   `GiveCoinsAction` when the item-name text parses as money via `parse_coppers`),
-  `CmdHome`
+  `CmdHome` (bare `home` recalls; `home/set` delegates to `SetPrimaryHomeAction` (#2036) —
+  the same seam `room/home` and the web "Set as Home" button use, replacing a hand-rolled
+  owner/tenant check that never accepted org-derived standing or wrote
+  `CharacterSheet.current_residence`)
 - **`evennia_overrides/items.py`**: `CmdWear`, `CmdUndress`, `CmdRemove`, `CmdPut`,
   `CmdWithdraw` (`withdraw <item> from <container>`; also the `withdraw coins <amount>`
   loose-cash branch, #1909 — the `withdraw` command key was already spoken for by
@@ -295,11 +298,17 @@ actions, backends, and service functions.
     consumed by `_resolve_clashes` in the round post-pass). `strain=<n>` commits
     extra anima beyond the technique's base cost (default 0). Pull params are parsed by
     the shared `_CombatCommandMixin` pull parser (same semantics as `cast`).
-- **`combat_maneuvers.py`**: `CmdCombat` (`combat`, #1453/#1452, Succor #1744) — the shared-verb
-  namespace. One command routes a leading subverb (`combat flee` / `cover <ally>` /
-  `interpose [ally]` / `succor <ally>` / `join` / `leave` / `ready` / `combo <name>` / `revert` /
+- **`combat_maneuvers.py`**: `CmdCombat` (`combat`, #1453/#1452, Succor #1744, USE_ITEM #2120)
+  — the shared-verb namespace. One command routes a leading subverb (`combat flee` /
+  `cover <ally>` / `interpose [ally]` / `succor <ally>` / `use <item> [on <target>]` / `join` /
+  `leave` / `ready` / `combo <name>` / `revert` /
   `yield`) to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` — the same
-  seam the web `CombatEncounterViewSet` uses. Bare `combat` prints a status hub — anima +
+  seam the web `CombatEncounterViewSet` uses. `use <item> [on <target>]` (#2120) mirrors
+  `CmdUse`'s ` on ` grammar; the item name resolves against the caller's held items inside
+  `UseItemManeuverAction` (key `combat_use`), and the target clause resolves an active ally
+  first, then an active opponent (`_resolve_use_item_target`). `ready` (#2120) additionally
+  early-resolves the round in `PaceMode.READY` encounters once every ACTIVE participant is
+  ready (`maybe_resolve_on_ready`). Bare `combat` prints a status hub — anima +
   soulfray stage (+ fury/Berserk when in an active round) alongside the declared action —
   mirroring the resource/risk visibility the web combat panel will show (#1543). Verbs are
   namespaced — not bare top-level keys — to avoid exit/channel/alias collisions (mirrors
@@ -422,7 +431,11 @@ actions, backends, and service functions.
   [like=<room>] [size=<tier>]` → `DigRoomAction`; `room/size <tier>` → `ResizeRoomAction`;
   `room/drop confirm` → `RemoveRoomAction`; `room/addexit <room>=<there>,<back>` /
   `room/removeexit <exit>` / `room/renameexit <exit>=<name>` → the exit actions;
-  `room/home` → `SetPrimaryHomeAction` (tenant-gated); `room/tenant <char>` /
+  `room/home` → `SetPrimaryHomeAction` (owner-or-tenant standing, #2036 —
+  `IsRoomTenantPrerequisite` widened to `is_owner OR is_tenant`); `room/aura <resonance>` /
+  `room/aura clear <resonance>` → `TagRoomResonanceAction`/`UntagRoomResonanceAction` (#2036,
+  same owner-or-tenant gate; tagging additionally requires the caller has claimed that
+  resonance); `room/tenant <char>` /
   `room/evict <char>` → tenancy actions; `room/extend <units>` → `StartExtensionAction`;
   `room/decorate <template> [here]` → `CommissionDecorationAction`; `room/style <name>` →
   `SetBuildingStyleAction` (#1469, knowledge-gated throwback tier); `room/fixture <kind>` /
@@ -465,6 +478,17 @@ actions, backends, and service functions.
   story-earned touchstones/reagents (a GM hand-awarding a specific item after a story beat).
   Gated on `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` (staff bypass preserved) — requires
   JUNIOR-tier GM trust or higher, not a staff flag. No business logic in the command.
+- **`grant_distinction.py`**: `CmdGrantDistinction` (`grant_distinction`, `cmd:all()`, #2037) —
+  the post-CG distinction award surface. `grant_distinction <character>=<distinction slug>[,rank]`
+  parses the raw text into `target_name`/`distinction_slug`/optional `rank` kwargs and delegates
+  to `GMAwardDistinctionAction` (key `gm_award_distinction`, REGISTRY backend,
+  `actions/definitions/distinctions.py`) via `action.run()`. The Action resolves the target by
+  name (`actor.search(..., global_search=True)`), looks up the catalog `Distinction` by slug
+  (case-insensitive, active only — never freehand), validates an explicit rank against
+  `max_rank` (reject, not clamp), and calls `world.distinctions.services.grant_distinction`
+  (origin `GM_AWARD`) — the shared acquisition seam; re-awarding a held distinction ranks it up.
+  Gated on `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` (staff bypass preserved). Mirrors
+  `grant_item.py` exactly. No business logic in the command.
 - **`setstage.py`**: `CmdSetStage` (`setstage`, `cmd:all()`, #1498/#2117) — telnet face of
   `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A STARTING-tier-or-higher GM (or
   staff) caller instantiates a `PositionBlueprint` into their current room: `setstage` shows this
@@ -645,6 +669,10 @@ actions, backends, and service functions.
   precondition of the Durance advance — `advance_class_level_via_session`/
   `convene_durance_at_site` additionally require the purchased `CharacterUnlock` receipt
   alongside `check_requirements_for_unlock`; see `world/progression/CLAUDE.md`'s multi-gate rule.
+  **#2122:** `progression unlocks` also prepends the caller's XP balance
+  (`ExperiencePointsData.current_available`) + last-5 `XPTransaction` rows, mirroring
+  `CmdKudos._show_balance`'s account-scoped lookup pattern — previously the balance only
+  leaked into failed-purchase error text. Not duplicated onto `sheet`.
 - **`gift_learning.py`**: `CmdLearn` (`learn`, #2116) — the gift/technique/thread-weaving
   acquisition namespace. One `DispatchCommand` routes a leading subverb (`gift <id>` /
   `technique <id>` / `thread <id>`) through `dispatch_player_action` — the same seam the web
@@ -720,7 +748,28 @@ actions, backends, and service functions.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
-- **`account_info.py`**: `CmdAccount` — account information display
+- **`account_info.py`**: `CmdAccount` (`@account`/`account`) — bare shows account information
+  display; `account email <address>` (#2122) sets/updates the account's primary allauth
+  `EmailAddress` and (re)sends the confirmation email — the telnet path to satisfy
+  `can_apply_for_characters()`'s verified-email gate for `create <user> <pass>`-registered
+  accounts, which collect no email otherwise. Operates on `self.account` only (no
+  target-account argument — can't touch another account's email). Calls
+  `EmailAddress.set_as_primary()` + `EmailAddress.send_confirmation(request=None,
+  signup=False)` directly rather than the higher-level `EmailAddress.objects.add_email()` /
+  `send_verification_email_to_address()` helper — that helper additionally calls
+  `django.contrib.messages.add_message(request, ...)`, which requires a real `HttpRequest`
+  with message-storage middleware and raises `TypeError` on `request=None` outside an HTTP
+  request/response cycle (this project has `django.contrib.messages` installed via Evennia's
+  default settings). `send_confirmation(request=None, ...)` is itself a documented allauth
+  call shape (confirmations sent outside a request context) and is safe here because
+  `settings.FRONTEND_URL` / `HEADLESS_FRONTEND_URLS` is always an absolute URL, so allauth's
+  `render_url` never dereferences `request.build_absolute_uri`. `can_apply_for_characters()`
+  (`evennia_extensions/models.py`) is unchanged — this command only gives telnet-only accounts
+  a path to satisfy it. Also home to `CmdRoster` (`roster`/`roster status`, #2122) — read-only
+  status of the caller's own pending `RosterApplication` rows via `PlayerData
+  .get_pending_applications()`; roster browsing stays web-only (by design), scoped to the
+  caller's own `PlayerData` (no id-based lookup exists, so it can't leak another account's
+  applications).
 - **`character_switching.py`**: `CmdIC`, `CmdCharacters` — character switching
 - **`sheet.py`**: `CmdSheet` — the character sheet **hub**. Bare `sheet` shows the overview;
   `sheet/<section>` dispatches to a section (mirroring the web sheet tabs). The sheet is the

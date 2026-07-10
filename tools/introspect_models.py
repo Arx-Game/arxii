@@ -20,6 +20,7 @@ TARGET_APPS = [
     "evennia_extensions",
     "flows",
     "typeclasses",
+    "world.achievements",
     "world.areas",
     "world.assets",
     "world.attempts",

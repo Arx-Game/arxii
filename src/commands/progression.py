@@ -29,6 +29,9 @@ _KEY_CLASS = "class"
 _KEY_THREAD = "thread"
 _KEY_LEVEL = "level"
 
+# Number of recent XPTransaction rows shown on the ``progression unlocks`` listing (#2122).
+_RECENT_XP_TRANSACTION_COUNT = 5
+
 # Subverbs
 _SUBVERB_LIST = "list"
 _SUBVERB_ADD = "add"
@@ -320,7 +323,7 @@ class CmdProgressionUnlock(DispatchCommand):
         raise CommandError(msg)
 
     def _show_listing(self) -> None:
-        """Render available class-level and thread XP-lock unlocks."""
+        """Render the caller's XP balance/history, then available unlocks."""
         from world.progression.services.spends import (  # noqa: PLC0415
             get_available_unlocks_for_character,
         )
@@ -334,13 +337,45 @@ class CmdProgressionUnlock(DispatchCommand):
         available = get_available_unlocks_for_character(character)
         entries = list(available[_AVAILABLE_KEY]) + list(available[_LOCKED_KEY])
 
-        lines = ["Available progression unlocks:"]
+        lines = self._render_xp_balance(character)
+        lines.append("Available progression unlocks:")
         lines.extend(self._render_class_unlock_entries(entries))
         if sheet is not None:
             lines.extend(self._render_thread_unlocks(sheet, has_entries=bool(entries)))
         lines.extend(self._render_skill_breakthroughs(character, has_entries=bool(entries)))
 
         self.msg("\n".join(lines))
+
+    def _render_xp_balance(self, character: Any) -> list[str]:
+        """Return the caller's XP balance + last-5 XPTransaction lines (#2122).
+
+        Mirrors ``CmdKudos._show_balance``'s account-scoped lookup pattern so telnet
+        players don't have to trigger a failed purchase just to see what they have.
+        """
+        from world.progression.models import (  # noqa: PLC0415
+            ExperiencePointsData,
+            XPTransaction,
+        )
+        from world.roster.selectors import get_account_for_character  # noqa: PLC0415
+
+        account = get_account_for_character(character)
+        if account is None:
+            return ["XP available: 0 (no active character on the roster)", ""]
+
+        points = ExperiencePointsData.objects.filter(account=account).first()
+        available = points.current_available if points else 0
+        lines = [f"XP available: {available}"]
+
+        recent = XPTransaction.objects.filter(account=account)[:_RECENT_XP_TRANSACTION_COUNT]
+        if recent:
+            lines.append("Recent XP transactions:")
+            lines.extend(
+                f"  {'+' if txn.amount >= 0 else ''}{txn.amount} XP — "
+                f"{txn.get_reason_display()} ({txn.transaction_date:%Y-%m-%d})"
+                for txn in recent
+            )
+        lines.append("")
+        return lines
 
     def _render_class_unlock_entries(self, entries: list[DetailedUnlockEntry]) -> list[str]:
         """Return rendered lines for class-level unlocks."""

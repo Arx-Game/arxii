@@ -8,8 +8,10 @@ from evennia.objects.models import ObjectDB
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from actions.services import get_effective_consequences
 from actions.types import WeightedConsequence
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.consequence_resolution import (
+    apply_pool_deterministically,
     apply_pool_for_tier,
     select_consequence_from_result,
 )
@@ -17,6 +19,9 @@ from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import CheckResult, PendingResolution, ResolutionContext
 from world.conditions.factories import ConditionTemplateFactory
+from world.distinctions.factories import DistinctionFactory
+from world.distinctions.models import CharacterDistinction
+from world.distinctions.types import DistinctionOrigin
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -284,6 +289,76 @@ class ApplyResolutionTests(TestCase):
         context = self._make_context()
         results = apply_resolution(pending, context)
         assert results == []
+
+
+class GrantDistinctionResolutionTests(TestCase):
+    """GRANT_DISTINCTION fires through apply_resolution() (select_consequence/apply_resolution
+    path) and apply_pool_deterministically() (deterministic pool path) exactly like
+    ADD_PROPERTY (#2037 acceptance criteria)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory(db_key="GrantDistResolutionChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.outcome = CheckOutcomeFactory(name="GrantDistSuccess", success_level=1)
+
+    def _make_context(self) -> ResolutionContext:
+        return ResolutionContext(character=self.character)
+
+    def test_apply_resolution_grants_the_distinction(self) -> None:
+        from world.checks.consequence_resolution import apply_resolution
+
+        distinction = DistinctionFactory(name="Silver Tongue_resolution")
+        consequence = ConsequenceFactory(
+            outcome_tier=self.outcome, label="Grant dist via apply_resolution"
+        )
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.GRANT_DISTINCTION,
+            target=EffectTarget.SELF,
+            distinction=distinction,
+        )
+        pending = PendingResolution(
+            check_result=CheckResult(
+                check_type=None,
+                outcome=self.outcome,
+                chart=None,
+                roller_rank=None,
+                target_rank=None,
+                rank_difference=0,
+                trait_points=0,
+                aspect_bonus=0,
+                total_points=0,
+            ),
+            selected_consequence=consequence,
+        )
+
+        results = apply_resolution(pending, self._make_context())
+
+        assert len(results) == 1
+        assert results[0].applied is True
+        cd = CharacterDistinction.objects.get(character=self.character, distinction=distinction)
+        assert cd.rank == 1
+        assert cd.origin == DistinctionOrigin.CONSEQUENCE_POOL
+
+    def test_apply_pool_deterministically_grants_the_distinction(self) -> None:
+        distinction = DistinctionFactory(name="Silver Tongue_pool")
+        consequence = ConsequenceFactory(label="Grant dist via pool")
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.GRANT_DISTINCTION,
+            target=EffectTarget.SELF,
+            distinction=distinction,
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+
+        applied = apply_pool_deterministically(pool=pool, context=self._make_context())
+
+        assert len(applied) == 1
+        assert applied[0].applied is True
+        cd = CharacterDistinction.objects.get(character=self.character, distinction=distinction)
+        assert cd.rank == 1
 
 
 class SelectConsequenceFromResultTests(TestCase):

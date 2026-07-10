@@ -162,6 +162,14 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text="Minimum trust required when access_level is 'trust_required'",
     )
+    grants_residence_tenancy = models.BooleanField(
+        default=True,
+        help_text="Whether finalizing a character here grants a LocationTenancy at the "
+        "starting room (#2036) — auto-defaulting current_residence via "
+        "maybe_default_residence, so the daily residence-trickle gate is reachable with "
+        "zero manual player step. An authored per-area toggle: not every starting area "
+        "need be residence-backed (e.g. a staff testing area with no real dorm room).",
+    )
 
     objects = NaturalKeyManager()
 

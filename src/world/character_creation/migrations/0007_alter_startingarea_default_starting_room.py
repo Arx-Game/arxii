@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("character_creation", "0005_characterdraft_claimed_kin_pool_and_more"),
+        ("character_creation", "0006_startingarea_grants_residence_tenancy"),
         # Repointed from the venv-only phantom objects.0014 to the canonical
         # CI-present dep — see docs/evennia-quirks.md "phantom Evennia library
         # migrations".

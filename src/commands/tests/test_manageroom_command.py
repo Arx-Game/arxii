@@ -130,6 +130,28 @@ class RoomCommandParseTests(TestCase):
         key, kwargs = self._dispatch(["ultraupkeep"], "")
         assert (key, kwargs) == ("toggle_ultra_upkeep", {})
 
+    def test_aura_switch_routes_to_tag_room_resonance(self) -> None:
+        from world.magic.factories import ResonanceFactory
+
+        resonance = ResonanceFactory(name="Copperi")
+        key, kwargs = self._dispatch(["aura"], "Copperi")
+        assert (key, kwargs) == ("tag_room_resonance", {"resonance_id": resonance.pk})
+
+    def test_aura_clear_routes_to_untag_room_resonance(self) -> None:
+        from world.magic.factories import ResonanceFactory
+
+        resonance = ResonanceFactory(name="Predari")
+        key, kwargs = self._dispatch(["aura"], "clear Predari")
+        assert (key, kwargs) == ("untag_room_resonance", {"resonance_id": resonance.pk})
+
+    def test_aura_requires_a_resonance_name(self) -> None:
+        with self.assertRaises(CommandError):
+            self._dispatch(["aura"], "")
+
+    def test_aura_unknown_resonance_raises(self) -> None:
+        with self.assertRaises(CommandError):
+            self._dispatch(["aura"], "Nonexistent Resonance Name")
+
     def test_no_switch_raises_usage(self) -> None:
         with self.assertRaises(CommandError):
             self._dispatch([], "anything")

@@ -194,6 +194,11 @@ over the last N ISO weeks (default 8) so a week with no rows still renders a bar
   (`BeatCompletion`), scenes started (`Scene`).
 - `story_snapshot() -> dict[str, int]` — point-in-time counters: `active_stories`,
   `active_gm_tables`, `pending_session_requests`, `gms_active_30d`.
+- The Story/GM panel (`ops_story_fragment`, `views.py`, not `metrics.py`) also reads
+  `GMRewardConfig.load()` directly and passes it as `reward_config` — a read-only
+  surfacing of the GM Story Reward's tunable award values (#2123) alongside the other
+  story/GM balance knobs on this panel, with a link to the model's normal admin change
+  form for actual edits (this dashboard stays read+preview-only per its own contract).
 - `reports_snapshot() -> list[ReportBucket]` — open/total counts for each
   player-submissions queue (Player Feedback, Bug Reports, Player Reports, System
   Errors), one query per model via a single `Count`/`Case`/`When` aggregate; "open"

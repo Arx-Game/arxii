@@ -18,6 +18,7 @@ class RewardType(models.TextChoices):
     BONUS = "bonus", "Mechanical Bonus"
     COSMETIC = "cosmetic", "Cosmetic"
     PRESTIGE = "prestige", "Prestige"
+    DISTINCTION = "distinction", "Distinction"
 
 
 class ConditionEventType(models.TextChoices):

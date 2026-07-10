@@ -288,6 +288,18 @@ class ConsequenceEffect(SharedMemoryModel):
     )
     property_value = models.PositiveIntegerField(null=True, blank=True)
 
+    # Distinction-grant effects (#2037) — the consequence-pool acquisition source.
+    # distinction_rank mirrors property_value: null means "advance one step" (the
+    # grant_distinction seam's default), a set value means "set/raise to that rank".
+    distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+    )
+    distinction_rank = models.PositiveIntegerField(null=True, blank=True)
+
     # Damage effects (stubbed — needs HP/combat system)
     damage_amount = models.PositiveIntegerField(null=True, blank=True)
     damage_type = models.ForeignKey(
@@ -423,6 +435,7 @@ class ConsequenceEffect(SharedMemoryModel):
         ],
         EffectType.ADD_PROPERTY: [("property", "property_id")],
         EffectType.REMOVE_PROPERTY: [("property", "property_id")],
+        EffectType.GRANT_DISTINCTION: [("distinction", "distinction_id")],
         EffectType.DEAL_DAMAGE: [
             ("damage_amount", "damage_amount"),
             ("damage_type", "damage_type_id"),

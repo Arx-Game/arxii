@@ -95,6 +95,32 @@
   inhabitant surfacing shipped as #1522's REST widgets + weather echo);
   Chilled/Soaked threshold conditions (Tehom's integration, per the spec).
 
+## Built (2026-07-10, #2036 — residence declaration + room aura tagging)
+
+- **Residence declaration widened:** `set_primary_home` now also writes
+  `CharacterSheet.current_residence` (the daily resonance-trickle gate, `world/magic`'s
+  Spec C) alongside the #1514 Evennia `home`, and accepts org-derived owner/tenant
+  standing — not only a direct `LocationTenancy` row — by minting a personal tenancy
+  first (`grant_tenancy`) when the persona's only standing comes from a shared
+  family/org/Academy grant. `end_tenancy` clears `current_residence` when the ended
+  tenancy was the declared residence. `CmdHome`'s `home/set` switch was consolidated
+  onto the same `SetPrimaryHomeAction` seam `room/home` and the web "Set as Home" button
+  use (previously a duplicated, drifted hand-rolled check).
+- **Room aura tagging (a room's declared magical character):** `room/aura <resonance>` /
+  `room/aura clear <resonance>` (`TagRoomResonanceAction`/`UntagRoomResonanceAction`,
+  web `RoomAuraPicker`) write/remove a `LocationValueModifier(key_type=RESONANCE)` row —
+  the same aura a resident's residence trickle reads. Gated by `IsRoomTenantPrerequisite`,
+  widened to owner-OR-tenant standing (previously a direct tenancy row only); tagging
+  additionally requires the caller has claimed that resonance.
+- **Zero-manual-step CG on-ramp:** `StartingArea.grants_residence_tenancy` (an authored
+  per-area toggle) auto-grants a starting-room `LocationTenancy` at CG finalization,
+  which auto-defaults both Evennia `home` and `current_residence` — a new character
+  reaches the trickle gate with no manual player step.
+- See `world/magic/CLAUDE.md` "Residence declaration + room aura tagging" for the full
+  declare→tag→tick mechanism, including the intentional emergent synergy where a
+  Sanctum's Ritual of Homecoming writes the same `LocationValueModifier` row shape onto
+  its own room.
+
 ## Overview
 
 Rooms are the spatial substrate of the world. Buildings and estates are
@@ -195,6 +221,9 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   auto-default on first rent/acquire); `world.locations.comfort_effect` materializes
   `comfort_level − 5` as a flat `CharacterModifier` on the ap-regen targets, recomputed only on
   comfort-change events (home / style / decoration) and read for free by the regen cron.
+  Widened #2036 to also declare `CharacterSheet.current_residence` (the resonance-trickle
+  gate) and accept org-derived standing — see "Built (2026-07-10, #2036 — residence
+  declaration + room aura tagging)" above.
 - **Climate baseline (#1522, done):** `world.weather.Climate` — a per-region signed
   `temperature`/`moisture` baseline, designated via `Area.climate` and resolved
   most-specific-wins (`get_effective_climate`, mirrors realm). It decomposes onto the

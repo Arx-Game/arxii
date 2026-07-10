@@ -18,6 +18,7 @@ import { ExitsList } from './room-panel/ExitsList';
 import { ObjectsList } from './room-panel/ObjectsList';
 import { RoomEditorPanel } from './room-panel/RoomEditorPanel';
 import { HubTidingsPanel } from './room-panel/HubTidingsPanel';
+import { RoomAuraPicker } from './room-panel/RoomAuraPicker';
 
 export interface RoomData {
   id: number;
@@ -172,6 +173,10 @@ export function RoomPanel({
             </Button>
           </div>
         ) : null)}
+
+      {characterId != null && (forRoom.data?.is_tenant || forRoom.data?.is_owner) && (
+        <RoomAuraPicker characterId={characterId} roomId={room.id} />
+      )}
 
       {room.thumbnail_url && (
         <div className="border-b">

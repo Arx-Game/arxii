@@ -16,7 +16,7 @@ own cmdsets by inheriting from them or directly from `evennia.CmdSet`.
 
 from evennia import default_cmds
 
-from commands.account.account_info import CmdAccount
+from commands.account.account_info import CmdAccount, CmdRoster
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
@@ -83,6 +83,7 @@ from commands.gm_ops import CmdGMDashboard, CmdGMIdle
 from commands.gm_tables import CmdGMTable
 from commands.gmtrust import CmdGMTrust
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
+from commands.grant_distinction import CmdGrantDistinction
 from commands.grant_item import CmdGrantItem
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
@@ -308,6 +309,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdDemandRansom,
             # #707 — staff: ad-hoc narrative item grant (no shop/merchant system exists).
             CmdGrantItem,
+            # #2037 — GM: award/rank-up a catalog Distinction (post-CG acquisition).
+            CmdGrantDistinction,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdRoom,
             # #1498 — staff set-the-stage: apply a position blueprint to the room.
@@ -392,6 +395,8 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         self.add(CmdSheet())
         self.add(CmdPage())
         self.add(CmdPromptReply())
+        # #2122 — own-status-only roster check (browsing stays web-first).
+        self.add(CmdRoster())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):

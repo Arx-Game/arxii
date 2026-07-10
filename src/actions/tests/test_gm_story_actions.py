@@ -344,6 +344,30 @@ class MarkBeatActionTests(GMStoryActionTestBase):
         self.assertEqual(self.beat.outcome, BeatOutcome.SUCCESS)
         self.assertTrue(BeatCompletion.objects.filter(beat=self.beat).exists())
 
+    def test_lead_gm_marking_own_puppeted_character_is_self_dealing_no_award(self) -> None:
+        """A GM running their own solo CHARACTER-scope arc gets no reward (#2123)."""
+        from actions.definitions.gm_stories import MarkBeatAction
+        from world.progression.models import XPTransaction
+        from world.progression.types import ProgressionReason
+
+        # The self-dealing guard reads ObjectDB.db_account (the same field
+        # views.py's own CHARACTER-scope ownership checks read) — stamp it to
+        # make this fixture's progress genuinely "the Lead GM's own character".
+        self.lead_gm_sheet.character.db_account = self.lead_gm_account
+        self.lead_gm_sheet.character.save()
+
+        result = MarkBeatAction().run(
+            self.lead_gm_actor,
+            beat_id=self.beat.pk,
+            outcome=BeatOutcome.SUCCESS,
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertFalse(
+            XPTransaction.objects.filter(
+                account=self.lead_gm_account, reason=ProgressionReason.GM_STORY_REWARD
+            ).exists()
+        )
+
     def test_staff_can_mark_beat(self) -> None:
         from actions.definitions.gm_stories import MarkBeatAction
 
@@ -377,6 +401,43 @@ class MarkBeatActionTests(GMStoryActionTestBase):
             outcome=BeatOutcome.SUCCESS,
         )
         self.assertTrue(result.success, result.message)
+
+    def test_approved_agm_marking_is_credited_to_agm_not_lead_gm(self) -> None:
+        """An AGM (not the Lead GM) resolving a claimed beat is credited (#2123)."""
+        from actions.definitions.gm_stories import MarkBeatAction
+        from world.progression.models import XPTransaction
+        from world.progression.types import ProgressionReason
+
+        agm_account = AccountFactory(username="agm_credited")
+        agm_profile = GMProfileFactory(account=agm_account)
+        agm_actor, _ = _make_actor_with_account(
+            "agm_credited_actor",
+            self.room,
+            agm_account,
+        )
+        AssistantGMClaimFactory(
+            beat=self.beat,
+            assistant_gm=agm_profile,
+            status=AssistantClaimStatus.APPROVED,
+            approved_by=self.lead_gm_profile,
+        )
+
+        result = MarkBeatAction().run(
+            agm_actor,
+            beat_id=self.beat.pk,
+            outcome=BeatOutcome.SUCCESS,
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(
+            XPTransaction.objects.filter(
+                account=agm_account, reason=ProgressionReason.GM_STORY_REWARD
+            ).exists()
+        )
+        self.assertFalse(
+            XPTransaction.objects.filter(
+                account=self.lead_gm_account, reason=ProgressionReason.GM_STORY_REWARD
+            ).exists()
+        )
 
     def test_unapproved_agm_denied(self) -> None:
         from actions.definitions.gm_stories import MarkBeatAction

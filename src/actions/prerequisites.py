@@ -195,7 +195,19 @@ class IsSceneGMPrerequisite(Prerequisite):
 
 @dataclass
 class IsRoomTenantPrerequisite(Prerequisite):
-    """The actor's active persona must actively tenant the room they're standing in (#670)."""
+    """The actor's active persona must have owner OR tenant standing in the room
+    they're standing in (#670, widened #2036).
+
+    ``is_tenant`` alone does not imply ``is_owner`` — a room's deeded owner has
+    no guarantee of an active ``LocationTenancy`` row (e.g. immediately after
+    ``transfer_ownership``, which mints no tenancy). Checking both composes the
+    full "I have any standing here" gate without a second near-duplicate
+    prerequisite class — the name predates this widening (#670) but the shape
+    (any of owner/tenant, both of which already compose org-derived standing
+    via ``is_owner``/``is_tenant``) is exactly "does this persona have standing
+    at this room," which every current caller (``SetPrimaryHomeAction``,
+    ``TagRoomResonanceAction``, ``UntagRoomResonanceAction``) wants.
+    """
 
     def is_met(
         self,
@@ -205,7 +217,7 @@ class IsRoomTenantPrerequisite(Prerequisite):
     ) -> tuple[bool, str]:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-        from world.locations.services import is_tenant  # noqa: PLC0415
+        from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
         room = actor.location
@@ -216,9 +228,9 @@ class IsRoomTenantPrerequisite(Prerequisite):
         except (AttributeError, ObjectDoesNotExist):
             return False, ONLY_CHARACTERS_MESSAGE
         persona = active_persona_for_sheet(sheet)
-        if is_tenant(persona, room):
+        if is_owner(persona, room) or is_tenant(persona, room):
             return True, ""
-        return False, "You don't live here."
+        return False, "You have no standing in this room."
 
 
 @dataclass

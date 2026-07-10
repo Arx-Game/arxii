@@ -1,19 +1,24 @@
 # Investigation & Discovery
 
 The mystery core loop, built as one reusable spine over existing systems. Players
-discover hidden things — lore (codex entries), missions, and held captives to rescue —
-by **acquiring clues** and **resolving** them. Lives in `src/world/clues/`. Epic: #1143.
+discover hidden things — lore (codex entries), missions, held captives to rescue,
+character secrets, and masked identities — by **acquiring clues** and **resolving**
+them. Lives in `src/world/clues/`. Epic: #1143.
 
 ## The model: a clue is a pointer, on three independent axes
 
 A `Clue` is a pointer defined by three orthogonal things:
 
 1. **Target** — *what it points at.* `target_kind` (DiscriminatorMixin) ∈ `CODEX` /
-   `MISSION` / `RESCUE`, with a matching per-kind FK (`target_codex_entry`,
-   `target_mission`, `target_captivity`). **Invariant:** a clue cannot save without a
+   `MISSION` / `RESCUE` / `SECRET` (#1334) / `PERSONA_LINK` (#2120), with a matching
+   per-kind FK (`target_codex_entry`, `target_mission`, `target_captivity`,
+   `target_secret`, `target_persona`). **Invariant:** a clue cannot save without a
    target (`clean()` enforces exactly one) — no red herrings, no empty clues. The target
    also drives the "you already know this" flag (`target_already_known`) — a known-target
-   clue is surfaced, not hidden.
+   clue is surfaced, not hidden. **PERSONA_LINK is the documented multi-discriminator
+   exception:** it points at a *pair* of `scenes.Persona` rows (`target_persona` +
+   `target_persona_linked`, both required together — `clean()` folds in the second FK,
+   per `DiscriminatorMixin`'s multi-discriminator override guidance).
 2. **Acquisition** — *how you come to hold it.* A room **search** (`RoomClue` + the Search
    action) or a passive **trigger** (`ClueTrigger`, fired on room entry). Both record the
    holding via `CharacterClue` (roster-scoped, idempotent `acquire_clue`).
@@ -46,7 +51,13 @@ A `Clue` is a pointer defined by three orthogonal things:
 - **AUTOMATIC** (`grant_clue_target`): CODEX → the character learns the entry
   (`CharacterCodexKnowledge.add_progress`, firing the codex KNOWN reactivity hook); RESCUE →
   the finder is handed the rescue mission (`grant_rescue_mission`, captive as
-  `rescue_target`).
+  `rescue_target`); SECRET → the finder learns the secret's fact
+  (`grant_secret_knowledge`, #1334); PERSONA_LINK → the finder pierces the mask
+  (`_grant_persona_link_target`, #2120): a normalized `scenes.PersonaDiscovery` row is
+  `get_or_create`d for the finder's character sheet — the **only in-game producer** of
+  `PersonaDiscovery`. Piercing stays GM-authored per ADR-0033: a linking clue must exist
+  and be planted (Search / triggers / research all work, like any clue kind); there is
+  no direct "study persona" roll against an arbitrary masked character.
 - **RESEARCH** (`world/clues/research.py`): a `ProjectKind.RESEARCH` project (on the shared
   `world/projects` framework) targeting a clue. Contributors spend AP to make Research rolls
   (`contribute_research`); progress scales with the outcome, **floored at 0** (a failed help

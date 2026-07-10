@@ -12,8 +12,10 @@ from world.locations.services import (
     RoomEditError,
     assign_room_tenant,
     end_room_tenancy,
+    end_tenancy,
     set_primary_home,
 )
+from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 
 
 def _pc_persona():
@@ -96,3 +98,109 @@ class SetPrimaryHomeTests(TenancyServiceBase):
         flags = LocationTenancy.objects.filter(tenant_persona=self.tenant, is_primary_home=True)
         self.assertEqual(flags.count(), 1)
         self.assertEqual(flags.get().room_profile, other_room)
+
+    def test_writes_current_residence(self) -> None:
+        assign_room_tenant(persona=self.owner, room=self.room.objectdb, tenant_persona=self.tenant)
+        set_primary_home(persona=self.tenant, room=self.room.objectdb)
+        self.tenant.character_sheet.refresh_from_db()
+        self.assertEqual(self.tenant.character_sheet.current_residence, self.room)
+
+    def test_redeclare_moves_current_residence_and_clears_old_primary_flag(self) -> None:
+        """Journey 4: declare A then B → only B is current_residence; A's flag clears."""
+        other_room = RoomProfileFactory(area=self.area)
+        assign_room_tenant(persona=self.owner, room=self.room.objectdb, tenant_persona=self.tenant)
+        assign_room_tenant(persona=self.owner, room=other_room.objectdb, tenant_persona=self.tenant)
+        set_primary_home(persona=self.tenant, room=self.room.objectdb)
+        set_primary_home(persona=self.tenant, room=other_room.objectdb)
+
+        self.tenant.character_sheet.refresh_from_db()
+        self.assertEqual(self.tenant.character_sheet.current_residence, other_room)
+        # Query fresh (not the stale in-memory instance) — is_primary_home is flipped via a
+        # bulk .update(), which bypasses the SharedMemoryModel identity-map cache.
+        flags = LocationTenancy.objects.filter(tenant_persona=self.tenant, is_primary_home=True)
+        self.assertEqual(flags.count(), 1)
+        self.assertEqual(flags.get().room_profile, other_room)
+
+
+class SetPrimaryHomeOrgStandingTests(TenancyServiceBase):
+    """Journey 2 (#2036): org-derived standing (no direct persona row) mints a personal one."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.org = OrganizationFactory()
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=cls.room,
+            tenant_type=HolderType.ORGANIZATION,
+            tenant_organization=cls.org,
+        )
+        cls.member = _pc_persona()
+        OrganizationMembershipFactory(organization=cls.org, persona=cls.member)
+
+    def test_org_member_with_no_direct_row_can_claim_via_set_primary_home(self) -> None:
+        self.assertFalse(
+            LocationTenancy.objects.filter(
+                tenant_persona=self.member, room_profile=self.room
+            ).exists()
+        )
+        tenancy = set_primary_home(persona=self.member, room=self.room.objectdb)
+
+        self.assertEqual(tenancy.tenant_persona, self.member)
+        self.assertEqual(tenancy.room_profile, self.room)
+        self.assertTrue(tenancy.is_primary_home)
+        self.member.character_sheet.refresh_from_db()
+        self.assertEqual(self.member.character_sheet.current_residence, self.room)
+
+    def test_org_row_itself_is_not_flagged_primary(self) -> None:
+        set_primary_home(persona=self.member, room=self.room.objectdb)
+        org_row = LocationTenancy.objects.get(tenant_organization=self.org)
+        self.assertFalse(org_row.is_primary_home)
+
+    def test_second_org_member_claims_independently(self) -> None:
+        second_member = _pc_persona()
+        OrganizationMembershipFactory(organization=self.org, persona=second_member)
+
+        first_tenancy = set_primary_home(persona=self.member, room=self.room.objectdb)
+        second_tenancy = set_primary_home(persona=second_member, room=self.room.objectdb)
+
+        self.assertNotEqual(first_tenancy.pk, second_tenancy.pk)
+        first_tenancy.refresh_from_db()
+        self.assertTrue(first_tenancy.is_primary_home)
+        self.assertTrue(second_tenancy.is_primary_home)
+        self.member.character_sheet.refresh_from_db()
+        second_member.character_sheet.refresh_from_db()
+        self.assertEqual(self.member.character_sheet.current_residence, self.room)
+        self.assertEqual(second_member.character_sheet.current_residence, self.room)
+
+    def test_stranger_with_no_standing_still_rejected(self) -> None:
+        with self.assertRaises(RoomEditError):
+            set_primary_home(persona=self.stranger, room=self.room.objectdb)
+
+
+class EndTenancyClearsResidenceTests(TenancyServiceBase):
+    """Journey 6 (#2036): ending the declared-residence tenancy clears current_residence."""
+
+    def test_ending_the_residence_tenancy_clears_current_residence(self) -> None:
+        assign_room_tenant(persona=self.owner, room=self.room.objectdb, tenant_persona=self.tenant)
+        tenancy = set_primary_home(persona=self.tenant, room=self.room.objectdb)
+        self.tenant.character_sheet.refresh_from_db()
+        self.assertEqual(self.tenant.character_sheet.current_residence, self.room)
+
+        end_tenancy(tenancy)
+
+        self.tenant.character_sheet.refresh_from_db()
+        self.assertIsNone(self.tenant.character_sheet.current_residence)
+
+    def test_ending_a_different_tenancy_leaves_residence_untouched(self) -> None:
+        other_room = RoomProfileFactory(area=self.area)
+        assign_room_tenant(persona=self.owner, room=self.room.objectdb, tenant_persona=self.tenant)
+        other_tenancy = assign_room_tenant(
+            persona=self.owner, room=other_room.objectdb, tenant_persona=self.tenant
+        )
+        set_primary_home(persona=self.tenant, room=self.room.objectdb)
+
+        end_tenancy(other_tenancy)
+
+        self.tenant.character_sheet.refresh_from_db()
+        self.assertEqual(self.tenant.character_sheet.current_residence, self.room)

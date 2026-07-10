@@ -57,6 +57,7 @@ class ProgressionReason(models.TextChoices):
     VOTE_REWARD = "vote_reward", "Vote Reward"
     MEMORABLE_POSE = "memorable_pose", "Memorable Pose"
     RANDOM_SCENE = "random_scene", "Random Scene"
+    GM_STORY_REWARD = "gm_story_reward", "GM Story Reward"
     OTHER = "other", "Other"
 
 

@@ -41,3 +41,47 @@ class ClueInvariantTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             clue.full_clean()
+
+    def test_persona_link_clue_is_valid_with_both_fks(self) -> None:
+        # PERSONA_LINK is a documented multi-discriminator exception (#2120) — it
+        # needs BOTH target_persona and target_persona_linked set together.
+        from world.scenes.factories import PersonaFactory
+
+        mask = PersonaFactory(is_fake_name=True)
+        real = PersonaFactory()
+        clue = Clue(
+            target_kind=ClueTargetKind.PERSONA_LINK,
+            target_persona=mask,
+            target_persona_linked=real,
+            name="A signet ring",
+            description="x",
+        )
+        clue.full_clean()  # does not raise
+        assert clue.get_active_target() == mask
+
+    def test_persona_link_clue_requires_both_fks(self) -> None:
+        from world.scenes.factories import PersonaFactory
+
+        # Only target_persona set — target_persona_linked missing.
+        clue = Clue(
+            target_kind=ClueTargetKind.PERSONA_LINK,
+            target_persona=PersonaFactory(is_fake_name=True),
+            name="A signet ring",
+            description="x",
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            clue.full_clean()
+        assert "target_persona_linked" in ctx.exception.message_dict
+
+    def test_persona_link_linked_fk_must_be_null_for_other_kinds(self) -> None:
+        from world.scenes.factories import PersonaFactory
+
+        clue = Clue(
+            target_kind=ClueTargetKind.CODEX,
+            target_codex_entry=None,
+            target_persona_linked=PersonaFactory(),
+            name="Mismatch",
+            description="x",
+        )
+        with self.assertRaises(ValidationError):
+            clue.full_clean()
