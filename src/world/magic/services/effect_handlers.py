@@ -468,6 +468,68 @@ def create_obstacle_on_condition(
     )
 
 
+def create_zone_hazard_on_condition(  # noqa: PLR0913
+    *,
+    payload: Any,
+    position_id: int,
+    duration_rounds: int,
+    consequence_pool_id: int,
+    detect_check_type_id: int,
+    disarm_check_type_id: int | None = None,
+    hazard_name: str = "Conjured Hazard",
+) -> None:
+    """CONDITION_APPLIED adapter: create a position-anchored zone hazard (#2019).
+
+    Creates a Trap at the cast-time destination position with the given damage
+    consequence pool + duration. The hazard ticks damage on occupants each round
+    via the round-tick path (consequence_pool resolution).
+
+    Reads the destination from payload.instance.cast_destination (set by the
+    cast pipeline via position_params).
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    # #2019: Prefer the cast-time destination on the instance.
+    try:
+        instance = payload.instance
+    except AttributeError:
+        instance = None
+    if instance is not None and instance.cast_destination_id is not None:
+        position = instance.cast_destination
+    elif position_id > 0:
+        position = Position.objects.get(pk=position_id)
+    else:
+        return  # no position resolved — no-op
+
+    room_profile, _created = RoomProfile.objects.get_or_create(objectdb=position.room)
+    caster_sheet = _caster_sheet_from_instance(instance)
+
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.room_features.models import Trap  # noqa: PLC0415
+
+    pool = ConsequencePool.objects.get(pk=consequence_pool_id)
+    detect_check = CheckType.objects.get(pk=detect_check_type_id)
+    disarm_check = (
+        CheckType.objects.get(pk=disarm_check_type_id) if disarm_check_type_id else detect_check
+    )
+
+    Trap.objects.create(
+        room_profile=room_profile,
+        position=position,
+        name=hazard_name,
+        consequence_pool=pool,
+        detect_check_type=detect_check,
+        disarm_check_type=disarm_check,
+        detect_difficulty=0,
+        disarm_difficulty=0,
+        is_armed=True,
+        is_hidden=False,
+        duration_rounds=duration_rounds,
+        created_by_sheet=caster_sheet,
+    )
+
+
 def summon_ally_on_condition(
     *, payload: Any, threat_pool_id: int, bond_rounds: int | None = None, max_health: int = 30
 ) -> None:
