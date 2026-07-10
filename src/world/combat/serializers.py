@@ -12,6 +12,8 @@ from rest_framework import serializers
 
 from world.areas.positioning.serializers import (
     PositionAdjacencyItemSerializer,
+    PositionEdgeSerializer,
+    PositionNodeSerializer,
     PositionSummarySerializer,
 )
 from world.combat.constants import (
@@ -760,6 +762,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     engagement_locks = serializers.SerializerMethodField()
     resolution_order = serializers.SerializerMethodField()
     position_adjacency = serializers.SerializerMethodField()
+    position_nodes = serializers.SerializerMethodField()
+    position_edges = serializers.SerializerMethodField()
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -818,6 +822,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "escalation_tick_narration",
             "forced_escape",
             "position_adjacency",
+            "position_nodes",
+            "position_edges",
             "is_lethal",
             "duel_winner",
         ]
@@ -1061,6 +1067,35 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         entries = room_position_adjacency(obj.room)
         return PositionAdjacencyItemSerializer(entries, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(PositionNodeSerializer(many=True))
+    def get_position_nodes(self, obj: CombatEncounter) -> list[dict[str, object]]:
+        """Return the full position-node list for the encounter's room (#2006).
+
+        Unlike ``positions`` (id+name only), carries kind/elevation/layout for
+        spatial rendering. Empty list when the encounter has no room.
+        """
+        if obj.room_id is None:
+            return []
+        from world.areas.positioning.services import position_graph  # noqa: PLC0415
+
+        graph = position_graph(obj.room)
+        return PositionNodeSerializer(graph.nodes, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(PositionEdgeSerializer(many=True))
+    def get_position_edges(self, obj: CombatEncounter) -> list[dict[str, object]]:
+        """Return every edge (obstacle/gate visibility) for the encounter's room (#2006).
+
+        Unlike ``position_adjacency`` (the reach graph — passable edges only,
+        gating ignored), carries is_passable/blocks_flight/gating_challenge_name
+        for every edge. Empty list when the encounter has no room.
+        """
+        if obj.room_id is None:
+            return []
+        from world.areas.positioning.services import position_graph  # noqa: PLC0415
+
+        graph = position_graph(obj.room)
+        return PositionEdgeSerializer(graph.edges, many=True).data  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
