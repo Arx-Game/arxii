@@ -330,4 +330,96 @@ describe('StagingPanel', () => {
       kwargs: { battle_id: 7, blueprint_id: 1, replace: true },
     });
   });
+
+  it('shows the server message on a successful create_battle dispatch', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, message: 'Battle stood up.' })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const createAction = makeStagingAction('create_battle', 'Create Battle');
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [createAction],
+    });
+
+    const user = userEvent.setup();
+    render(<StagingPanel sceneId={10} battle={null} detail={null} />, {
+      wrapper: createWrapper(),
+    });
+
+    await screen.findByTestId('staging-panel-create');
+    await user.type(screen.getByTestId('staging-create-name'), 'The Bridge Skirmish');
+    await user.click(screen.getByTestId('staging-create-submit'));
+
+    expect(await screen.findByTestId('staging-feedback')).toHaveTextContent('Battle stood up.');
+  });
+
+  it('shows the thrown error message when a dispatch fails', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.reject(new Error('That name is already in use for this scene.'))
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const createAction = makeStagingAction('create_battle', 'Create Battle');
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [createAction],
+    });
+
+    const user = userEvent.setup();
+    render(<StagingPanel sceneId={10} battle={null} detail={null} />, {
+      wrapper: createWrapper(),
+    });
+
+    await screen.findByTestId('staging-panel-create');
+    await user.type(screen.getByTestId('staging-create-name'), 'The Bridge Skirmish');
+    await user.click(screen.getByTestId('staging-create-submit'));
+
+    expect(await screen.findByTestId('staging-feedback')).toHaveTextContent(
+      'That name is already in use for this scene.'
+    );
+  });
+
+  it('resets the spawn form and shows the outcome message after a successful spawn', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, message: 'Spawned 3 Spearmen.' })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [makeStagingAction('spawn_battle_units', 'Spawn Battle Units')],
+    });
+
+    const user = userEvent.setup();
+    render(<StagingPanel sceneId={10} battle={{ id: 7 }} detail={MOCK_BATTLE_DETAIL} />, {
+      wrapper: createWrapper(),
+    });
+
+    await screen.findByTestId('staging-spawn-units');
+    await user.selectOptions(screen.getByTestId('staging-spawn-template'), '1');
+    await user.selectOptions(screen.getByTestId('staging-spawn-side'), '100');
+    await user.click(screen.getByTestId('staging-spawn-submit'));
+
+    expect(await screen.findByTestId('staging-feedback')).toHaveTextContent('Spawned 3 Spearmen.');
+    expect(screen.getByTestId('staging-spawn-template')).toHaveValue('');
+    // Side selection is left in place — a GM commonly spawns several waves in a row.
+    expect(screen.getByTestId('staging-spawn-side')).toHaveValue('100');
+  });
 });

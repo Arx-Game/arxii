@@ -103,6 +103,12 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
   // ---------------------------------------------------------------------------
   const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId ?? 0);
 
+  // Actor-only outcome line — the dispatch endpoint always resolves HTTP 200
+  // for game-logic failures (message-only, see module docstring) but throws
+  // for real errors (`postDispatchAction`, `frontend/src/combat/api.ts:383-397`);
+  // surface both the same way SceneHeader's GrantSceneGMControl does.
+  const [feedback, setFeedback] = useState<{ text: string; error: boolean } | null>(null);
+
   function invalidateBattleQueries() {
     queryClient.invalidateQueries({ queryKey: battleKeys.forScene(sceneId) });
     if (battle) {
@@ -149,12 +155,18 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
     };
     if (newBattleBlueprintId !== '') kwargs.blueprint_id = newBattleBlueprintId;
     dispatchAction({ ref: createBattleAction.ref, kwargs })
-      .then(() => {
+      .then((result) => {
+        setFeedback({ text: result.message ?? 'Battle created.', error: false });
         setNewBattleName('');
         setNewBattleBlueprintId('');
         invalidateBattleQueries();
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        setFeedback({
+          text: err instanceof Error ? err.message : 'Could not create battle.',
+          error: true,
+        })
+      );
   }
 
   // ---------------------------------------------------------------------------
@@ -170,11 +182,17 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
       ref: stageBattleMapAction.ref,
       kwargs: { battle_id: battle.id, blueprint_id: applyBlueprintId, replace },
     })
-      .then(() => {
+      .then((result) => {
+        setFeedback({ text: result.message ?? 'Blueprint applied.', error: false });
         setConfirmingReplace(false);
         invalidateBattleQueries();
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        setFeedback({
+          text: err instanceof Error ? err.message : 'Could not apply blueprint.',
+          error: true,
+        })
+      );
   }
 
   // ---------------------------------------------------------------------------
@@ -198,8 +216,20 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
     };
     if (spawnPlaceId !== '') kwargs.place_id = spawnPlaceId;
     dispatchAction({ ref: spawnBattleUnitsAction.ref, kwargs })
-      .then(() => invalidateBattleQueries())
-      .catch(() => {});
+      .then((result) => {
+        setFeedback({ text: result.message ?? 'Units spawned.', error: false });
+        // Reset the per-spawn picks; leave side/place selections in place — a
+        // GM commonly spawns several waves into the same side/place in a row.
+        setSpawnTemplateId('');
+        setSpawnCount(1);
+        invalidateBattleQueries();
+      })
+      .catch((err: unknown) =>
+        setFeedback({
+          text: err instanceof Error ? err.message : 'Could not spawn units.',
+          error: true,
+        })
+      );
   }
 
   // ---------------------------------------------------------------------------
@@ -226,14 +256,35 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
     };
     if (enlistPlaceId !== '') kwargs.place_id = enlistPlaceId;
     dispatchAction({ ref: enlistParticipantAction.ref, kwargs })
-      .then(() => invalidateBattleQueries())
-      .catch(() => {});
+      .then((result) => {
+        setFeedback({ text: result.message ?? 'Participant enlisted.', error: false });
+        // Reset the character pick only — leave side/place in place — a GM
+        // commonly enlists several characters into the same side/place in a row.
+        setEnlistCharacterSheetId('');
+        invalidateBattleQueries();
+      })
+      .catch((err: unknown) =>
+        setFeedback({
+          text: err instanceof Error ? err.message : 'Could not enlist participant.',
+          error: true,
+        })
+      );
   }
 
   // ---------------------------------------------------------------------------
   // Server-authoritative gate — nothing to show without any staging ref
   // ---------------------------------------------------------------------------
   if (!hasAnyStagingAction) return null;
+
+  // Actor-only outcome line, shared by every render branch below.
+  const feedbackLine = feedback && (
+    <p
+      className={feedback.error ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}
+      data-testid="staging-feedback"
+    >
+      {feedback.text}
+    </p>
+  );
 
   // ---------------------------------------------------------------------------
   // Empty-battle state — create-battle form only
@@ -254,12 +305,14 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
             placeholder="Battle name"
             value={newBattleName}
             onChange={(e) => setNewBattleName(e.target.value)}
+            aria-label="Battle name"
             data-testid="staging-create-name"
           />
           <select
             className={SELECT_CLASS}
             value={newBattleRisk}
             onChange={(e) => setNewBattleRisk(e.target.value as BattleRiskLevel)}
+            aria-label="Risk level"
             data-testid="staging-create-risk"
           >
             {BATTLE_RISK_LEVELS.map((level) => (
@@ -274,6 +327,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
             onChange={(e) =>
               setNewBattleBlueprintId(e.target.value === '' ? '' : Number(e.target.value))
             }
+            aria-label="Blueprint (optional)"
             data-testid="staging-create-blueprint"
           >
             <option value="">No blueprint</option>
@@ -292,6 +346,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
             Create Battle
           </button>
         </form>
+        {feedbackLine}
       </div>
     );
   }
@@ -305,6 +360,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
   return (
     <div className="space-y-3" data-testid="staging-panel">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Staging</p>
+      {feedbackLine}
 
       {stageBattleMapAction && (
         <div className="space-y-1 rounded bg-muted/30 p-2" data-testid="staging-apply-blueprint">
@@ -316,6 +372,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
               setApplyBlueprintId(e.target.value === '' ? '' : Number(e.target.value));
               setConfirmingReplace(false);
             }}
+            aria-label="Blueprint to apply"
             data-testid="staging-apply-blueprint-select"
           >
             <option value="">Select a blueprint…</option>
@@ -383,6 +440,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
             onChange={(e) =>
               setSpawnTemplateId(e.target.value === '' ? '' : Number(e.target.value))
             }
+            aria-label="Unit template"
             data-testid="staging-spawn-template"
           >
             <option value="">Select a unit template…</option>
@@ -396,6 +454,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
             className={SELECT_CLASS}
             value={spawnSideId}
             onChange={(e) => setSpawnSideId(e.target.value === '' ? '' : Number(e.target.value))}
+            aria-label="Spawn side"
             data-testid="staging-spawn-side"
           >
             <option value="">Select a side…</option>
@@ -409,6 +468,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
             className={SELECT_CLASS}
             value={spawnPlaceId}
             onChange={(e) => setSpawnPlaceId(e.target.value === '' ? '' : Number(e.target.value))}
+            aria-label="Spawn place (optional)"
             data-testid="staging-spawn-place"
           >
             <option value="">No place</option>
@@ -421,9 +481,12 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
           <input
             type="number"
             min={1}
+            // Mirrors the server clamp: MAX_TEMPLATE_SPAWN in src/world/battles/staging.py.
+            max={20}
             className={SELECT_CLASS}
             value={spawnCount}
-            onChange={(e) => setSpawnCount(Math.max(1, Number(e.target.value) || 1))}
+            onChange={(e) => setSpawnCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+            aria-label="Unit count"
             data-testid="staging-spawn-count"
           />
           <button
@@ -450,6 +513,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
             onChange={(e) =>
               setEnlistCharacterSheetId(e.target.value === '' ? '' : Number(e.target.value))
             }
+            aria-label="Character to enlist"
             data-testid="staging-enlist-character"
           >
             <option value="">Select a character…</option>
@@ -463,6 +527,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
             className={SELECT_CLASS}
             value={enlistSideId}
             onChange={(e) => setEnlistSideId(e.target.value === '' ? '' : Number(e.target.value))}
+            aria-label="Enlist side"
             data-testid="staging-enlist-side"
           >
             <option value="">Select a side…</option>
@@ -476,6 +541,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
             className={SELECT_CLASS}
             value={enlistPlaceId}
             onChange={(e) => setEnlistPlaceId(e.target.value === '' ? '' : Number(e.target.value))}
+            aria-label="Enlist place (optional)"
             data-testid="staging-enlist-place"
           >
             <option value="">No place</option>
