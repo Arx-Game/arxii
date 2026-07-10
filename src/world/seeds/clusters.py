@@ -121,6 +121,12 @@ def _seed_missions() -> None:
     seed_missions_dev()
 
 
+def _seed_tutorial() -> None:
+    from world.seeds.game_content.tutorial import seed_tutorial_dev  # noqa: PLC0415
+
+    seed_tutorial_dev()
+
+
 def _seed_progression() -> None:
     from world.progression.seeds import seed_durance_officiants  # noqa: PLC0415
 
@@ -289,6 +295,11 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # starting room the board sits in) and "checks"/"combat_checks" (the
     # authored MissionOption's CheckType composition).
     "missions": _seed_missions,
+    # Tutorial chain (#1035): seven-template new-player arc. After "missions"
+    # (board object + fieldwork check), "character_creation" (starting room),
+    # and self-contained for the tutor NPCRole (no other cluster's content is
+    # required to create it).
+    "tutorial": _seed_tutorial,
     # Progression: one NPC Durance-training officiant + DuranceTrainingSite per
     # PROSPECT path, at the canonical starting room, so the first-ever Ritual
     # of the Durance is conductible without a live higher-level PC (#2121).
@@ -403,6 +414,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.magic.models import Affinity, Resonance, Ritual  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
     from world.missions.models import MissionGiver, MissionTemplate  # noqa: PLC0415
+    from world.npc_services.models import NPCRole  # noqa: PLC0415
     from world.progression.models import (  # noqa: PLC0415
         DuranceTrainingSite,
         KudosSourceCategory,
@@ -466,6 +478,11 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # 3 OPEN MissionTemplate rows so `mission opportunities` isn't
         # dead-on-arrival.
         "missions": [MissionGiver, MissionTemplate],
+        # Tutorial chain: seven-template T1-T7 new-player arc (#1035) — trigger/
+        # environmental discovery, an NPC-carried external-act beat, a board job
+        # that summons the next step, and the durable external-act beats ending
+        # in the first legend-risk mission. Represented by NPCRole (the tutor).
+        "tutorial": [NPCRole],
         # Progression: one Durance training officiant + site per PROSPECT path
         # (#2121), so the first-ever Ritual of the Durance is conductible.
         "progression": [DuranceTrainingSite],

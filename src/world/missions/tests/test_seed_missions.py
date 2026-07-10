@@ -26,12 +26,22 @@ from world.traits.models import CheckOutcome
 class SeedMissionsDevTests(TestCase):
     """The "missions" cluster's row shape + idempotency."""
 
+    #: The three starter templates this cluster itself authors (#2121). Scoped
+    #: by name rather than "every template on the giver" because #1035's
+    #: tutorial chain deliberately reuses this SAME board giver for its T4
+    #: "A Simple Job" template (same room, one shared notice board) — the
+    #: giver legitimately carries a 4th template post-#1035 that this test
+    #: must not count against the starter set's own shape.
+    _STARTER_TEMPLATE_NAMES = frozenset(
+        {"The Lost Ledger", "Whispers at the Gate", "The Merchant's Debt"}
+    )
+
     def test_seeds_one_board_giver_and_three_open_templates(self) -> None:
         seed_dev_database()
 
         giver = MissionGiver.objects.get(giver_kind=GiverKind.BOARD)
         self.assertTrue(giver.is_publishable)
-        templates = list(giver.templates.all())
+        templates = [t for t in giver.templates.all() if t.name in self._STARTER_TEMPLATE_NAMES]
         self.assertEqual(len(templates), 3)
         risk_tiers = {t.risk_tier for t in templates}
         self.assertEqual(len(risk_tiers), 3, "risk_tier must be distinct across the 3 templates")
