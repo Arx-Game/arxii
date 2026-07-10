@@ -96,6 +96,21 @@ vi.mock('@/roster/queries', () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Mock battles queries — SceneDetailPage calls useBattleForSceneQuery to show
+// a Battle Writeup link when a battle exists for the scene (#1735).
+// ---------------------------------------------------------------------------
+
+const mockUseBattleForSceneQuery = vi.fn(() => ({
+  data: null,
+  isLoading: false,
+  isError: false,
+}));
+
+vi.mock('@/battles/queries', () => ({
+  useBattleForSceneQuery: () => mockUseBattleForSceneQuery(),
+}));
+
+// ---------------------------------------------------------------------------
 // Mock pending-unlinked-actions hook — Phase 10's chip strip queries this.
 // ---------------------------------------------------------------------------
 
@@ -229,6 +244,12 @@ describe('SceneDetailPage', () => {
       is_active: true,
       description: '',
     };
+    // Reset battle query to default (no battle) by default.
+    mockUseBattleForSceneQuery.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
   });
 
   it('renders without crashing', () => {
@@ -285,5 +306,34 @@ describe('SceneDetailPage', () => {
     );
 
     expect(fetchPlaces).toHaveBeenCalledWith('777');
+  });
+
+  it('shows a Battle Writeup link when a battle exists for the scene (#1735)', () => {
+    mockUseBattleForSceneQuery.mockReturnValue({
+      data: { id: 42 },
+      isLoading: false,
+      isError: false,
+    });
+
+    const { getByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    const link = getByTestId('scene-battle-writeup-link');
+    expect(link).toHaveAttribute('href', '/battles/42');
+  });
+
+  it('does not show a Battle Writeup link when no battle exists (#1735)', () => {
+    const { queryByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    expect(queryByTestId('scene-battle-writeup-link')).not.toBeInTheDocument();
   });
 });
