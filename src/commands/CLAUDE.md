@@ -295,11 +295,17 @@ actions, backends, and service functions.
     consumed by `_resolve_clashes` in the round post-pass). `strain=<n>` commits
     extra anima beyond the technique's base cost (default 0). Pull params are parsed by
     the shared `_CombatCommandMixin` pull parser (same semantics as `cast`).
-- **`combat_maneuvers.py`**: `CmdCombat` (`combat`, #1453/#1452, Succor #1744) — the shared-verb
-  namespace. One command routes a leading subverb (`combat flee` / `cover <ally>` /
-  `interpose [ally]` / `succor <ally>` / `join` / `leave` / `ready` / `combo <name>` / `revert` /
+- **`combat_maneuvers.py`**: `CmdCombat` (`combat`, #1453/#1452, Succor #1744, USE_ITEM #2120)
+  — the shared-verb namespace. One command routes a leading subverb (`combat flee` /
+  `cover <ally>` / `interpose [ally]` / `succor <ally>` / `use <item> [on <target>]` / `join` /
+  `leave` / `ready` / `combo <name>` / `revert` /
   `yield`) to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` — the same
-  seam the web `CombatEncounterViewSet` uses. Bare `combat` prints a status hub — anima +
+  seam the web `CombatEncounterViewSet` uses. `use <item> [on <target>]` (#2120) mirrors
+  `CmdUse`'s ` on ` grammar; the item name resolves against the caller's held items inside
+  `UseItemManeuverAction` (key `combat_use`), and the target clause resolves an active ally
+  first, then an active opponent (`_resolve_use_item_target`). `ready` (#2120) additionally
+  early-resolves the round in `PaceMode.READY` encounters once every ACTIVE participant is
+  ready (`maybe_resolve_on_ready`). Bare `combat` prints a status hub — anima +
   soulfray stage (+ fury/Berserk when in an active round) alongside the declared action —
   mirroring the resource/risk visibility the web combat panel will show (#1543). Verbs are
   namespaced — not bare top-level keys — to avoid exit/channel/alias collisions (mirrors

@@ -846,18 +846,23 @@ Lore storage and character knowledge tracking.
 - **Details:** [codex.md](codex.md)
 
 ### Investigation & Discovery
-The mystery core loop: a clue points at something worth finding (codex entry, mission, or a
-held captive to rescue); players acquire clues by **searching** a room or via passive
-**triggers**, then resolve them automatically or through a collaborative **research project**.
+The mystery core loop: a clue points at something worth finding (codex entry, mission, a
+held captive to rescue, a character secret, or a masked identity); players acquire clues by
+**searching** a room or via passive **triggers**, then resolve them automatically or through
+a collaborative **research project**.
 
-- **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE + a
-  per-kind FK; never exists without a target), `CharacterClue` (held-clue, roster-scoped),
+- **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE / SECRET /
+  PERSONA_LINK + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is the
+  documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
+  FKs → `scenes.Persona`, required together), `CharacterClue` (held-clue, roster-scoped),
   `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule`),
   `ClueTrigger` (passive on-entry placement + `eligibility_rule`), `ResearchProjectDetails`
   (the clue a `ProjectKind.RESEARCH` project researches toward)
 - **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
   `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
-  (AUTOMATIC resolution — codex KNOWN / rescue mission), `maybe_grant_clue_triggers`
+  (AUTOMATIC resolution — codex KNOWN / rescue mission / secret fact / persona-link
+  `PersonaDiscovery` via `_grant_persona_link_target`, #2120 — the only in-game
+  `PersonaDiscovery` producer; mask piercing stays GM-authored per ADR-0033), `maybe_grant_clue_triggers`
   (on room entry), `plant_rescue_clue` / `clear_rescue_clues` (#931), `start_research_project`
   / `contribute_research` (floored CHECK→progress) / `resolve_research` (RESEARCH handler)
 - **Action:** `SearchAction` (`actions/definitions/investigation.py`) — AP + mental fatigue
@@ -2993,6 +2998,18 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     multiplier
   - `_ensure_succor_challenges(encounter, pc_actions)` — idempotently mints
     `ChallengeInstance` rows bound to each protected ally for armed SUCCOR actions each round
+  - `declare_use_item(participant, item_instance, *, target=None)` (#2023/#2120) — arm a
+    USE_ITEM `CombatRoundAction` (a primary maneuver — consumes the round's action slot,
+    unlike the passives-only maneuvers); validates possession via `ItemState.is_in_possession`;
+    `target` may be a `CombatParticipant` (→ `focused_ally_target`) or `CombatOpponent`
+    (→ `focused_opponent_target`). Resolution (`_resolve_use_item`) dispatches the existing
+    `UseItemAction` with the declared target threaded through (the #2120 target-forwarding fix).
+    Entry points: telnet `combat use <item> [on <target>]`, web `POST /api/combat/{pk}/use_item/`,
+    registry key `combat_use` (`UseItemManeuverAction`, `actions/definitions/combat_maneuvers.py`).
+  - `maybe_resolve_on_ready(encounter)` (#2120) — PaceMode.READY early resolution: when every
+    ACTIVE participant's round action is `is_ready=True`, calls `resolve_round` immediately
+    instead of waiting for the TIMED game-clock sweep. Called from `ReadyAction.execute`
+    after `toggle_action_ready`, only when the toggle landed on ready=True.
 - **Key Services (`world/mechanics/succor_shared.py`, #1744):** `SUCCOR_CHALLENGE_NAME` +
   `apply_succor_outcome(result)` — domain-agnostic Succor pieces shared by combat and scene
   rounds (moved out of `world.combat` so `world.scenes` doesn't need a one-directional import
@@ -3033,12 +3050,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
     filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
     with `TechniqueAppliedCondition(target_kind=ALLY)`
-- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR / ENGAGE / DISENGAGE / RALLY / DEMORALIZE / TAUNT / PARLEY), `OpponentMoraleState` (STEADY / FALTER / BREAK — derived, `world.combat.morale`), `RoundStatus` (shared with
+- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR / ENGAGE / DISENGAGE / RALLY / DEMORALIZE / TAUNT / PARLEY / USE_ITEM), `OpponentMoraleState` (STEADY / FALTER / BREAK — derived, `world.combat.morale`), `RoundStatus` (shared with
   `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
   COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
 - **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
   participant, add opponent, pause), player actions (declare, ready, interpose, cover,
-  yield, flee, my_action, available_combos, rally, demoralize, taunt, parley),
+  yield, flee, use_item, my_action, available_combos, rally, demoralize, taunt, parley),
   duel challenge endpoints
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),

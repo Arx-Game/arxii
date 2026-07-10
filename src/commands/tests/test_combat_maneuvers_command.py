@@ -42,6 +42,13 @@ class CmdCombatRoutingTests(TestCase):
         ref = cmd.resolve_action_ref()
         self.assertEqual(ref.registry_key, "yield")
 
+    def test_use_builds_registry_ref(self) -> None:
+        cmd = _make_cmd("use potion")
+        cmd._subverb = "use"
+        ref = cmd.resolve_action_ref()
+        self.assertEqual(ref.backend, ActionBackend.REGISTRY)
+        self.assertEqual(ref.registry_key, "combat_use")
+
     def test_unknown_subverb_messages_and_does_not_dispatch(self) -> None:
         cmd = _make_cmd("frobnicate")
         with patch(_DISPATCH) as dispatch:
@@ -108,3 +115,24 @@ class CmdCombatArgResolutionTests(TestCase):
         cmd = _make_cmd("flee")
         cmd._subverb, cmd._rest = "flee", ""
         self.assertEqual(cmd.resolve_action_args(), {})
+
+    def test_use_item_only_resolves_item_name(self) -> None:
+        cmd = _make_cmd("use healing draught")
+        cmd._subverb, cmd._rest = "use", "healing draught"
+        self.assertEqual(cmd.resolve_action_args(), {"item_name": "healing draught"})
+
+    def test_use_item_on_ally_resolves_target_kwarg(self) -> None:
+        cmd = _make_cmd("use potion on Bob")
+        cmd._subverb, cmd._rest = "use", "potion on Bob"
+        with patch.object(
+            cmd, "_resolve_use_item_target", return_value={"ally_participant_id": 5}
+        ) as resolve_target:
+            kwargs = cmd.resolve_action_args()
+        resolve_target.assert_called_once_with("Bob")
+        self.assertEqual(kwargs, {"item_name": "potion", "ally_participant_id": 5})
+
+    def test_use_without_item_raises(self) -> None:
+        cmd = _make_cmd("use")
+        cmd._subverb, cmd._rest = "use", ""
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()

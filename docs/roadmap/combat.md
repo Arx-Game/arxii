@@ -24,6 +24,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).
+- **On-use items as a round action (#2023/#2120).** `combat use <item> [on <target>]`
+  (telnet) and `POST /api/combat/{pk}/use_item/` (web) both declare a USE_ITEM
+  `CombatRoundAction` through the shared `combat_use` REGISTRY action; round resolution
+  dispatches the real `UseItemAction` with the declared target threaded through (a healing
+  potion declared on an ally provably lands on the ally, not the user — the #2120
+  target-forwarding fix) and decrements the item charge (journey tests in
+  `world/combat/tests/test_combat_maneuvers_e2e.py` + `test_use_item_maneuver.py`).
+- **Ready-mode early resolution (#2120).** In `PaceMode.READY`, the round resolves the
+  moment every ACTIVE participant is ready (`maybe_resolve_on_ready`, wired into
+  `combat ready` / the web `ready` endpoint via `ReadyAction`); a lone ready participant
+  provably does not trigger it (`world/combat/tests/test_pace_mode_ready.py`). TIMED keeps
+  the game-clock sweep; MANUAL keeps GM-only resolution.
 - **Tactical placement, end-to-end (#2005).** Voluntary `take_position` (entry onto the
   position graph), GM `gm_place_in_position` (unchecked staging teleport), and positioned
   opponent spawn (`add_opponent(..., position=...)`) close the last placement gaps —

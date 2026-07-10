@@ -37,11 +37,18 @@ They do not use the command system, dispatchers, or handlers.
   `CmdRitual` and the web `RitualPerformView`, #1331;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
   seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;
-  `combat_maneuvers.py` (#1453/#1452, Succor #1744) — the non-cast/non-clash combat verbs as
-  REGISTRY actions: `FleeAction`/`CoverAction`/`InterposeAction`/`SuccorAction`/`ReadyAction`/
+  `combat_maneuvers.py` (#1453/#1452, Succor #1744, USE_ITEM/READY-pace #2120) — the
+  non-cast/non-clash combat verbs as
+  REGISTRY actions: `FleeAction`/`CoverAction`/`InterposeAction`/`SuccorAction`/
+  `UseItemManeuverAction`/`ReadyAction`/
   `UpgradeComboAction`/`RevertComboAction`/`JoinEncounterAction`/`LeaveEncounterAction` (keys
   prefixed `combat_`). `SuccorAction` (key `combat_succor`) wraps `declare_succor` — always
-  names a specific ally (no "any ally" path, unlike Interpose).
+  names a specific ally (no "any ally" path, unlike Interpose). `UseItemManeuverAction`
+  (key `combat_use`, #2120) wraps `declare_use_item` — a primary maneuver (consumes the
+  round's action slot); resolves the item by `item_instance_id` (web) or held-item name
+  (telnet) and takes an optional ally/opponent target. `ReadyAction` calls
+  `maybe_resolve_on_ready` after a toggle lands on ready=True (#2120) so `PaceMode.READY`
+  encounters resolve the moment everyone is ready.
   Each `execute()` resolves the actor's active `CombatParticipant`/encounter and calls the
   existing combat service; shared by telnet `CmdCombat` (`combat <subverb>`) and the web
   `CombatEncounterViewSet`. `yield` is not here — `YieldAction` (`duels.py`) is reused. The one

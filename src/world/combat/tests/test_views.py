@@ -514,6 +514,137 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["detail"], _ERR_DECLARE_FAILED)
 
+    def _held_item(self, actor_character, key: str = "healing draught"):
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        item_obj = ObjectDBFactory(db_key=key, location=actor_character)
+        return ItemInstanceFactory(template=ItemTemplateFactory(), game_object=item_obj)
+
+    def test_use_item_declares_use_item_maneuver(self) -> None:
+        """POST /use_item creates a USE_ITEM action with item_instance set (#2120)."""
+        from world.combat.constants import CombatManeuver
+        from world.combat.models import CombatRoundAction
+
+        use_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+        )
+        use_participant = CombatParticipantFactory(
+            encounter=use_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=self.player_sheet,
+            defaults={"health": 50, "max_health": 100},
+        )
+        item = self._held_item(self.player_character)
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(
+            f"/api/combat/{use_encounter.pk}/use_item/",
+            {"item_instance_id": item.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        action = CombatRoundAction.objects.get(
+            participant=use_participant, round_number=use_encounter.round_number
+        )
+        self.assertEqual(action.maneuver, CombatManeuver.USE_ITEM)
+        self.assertEqual(action.item_instance_id, item.pk)
+
+    def test_use_item_with_ally_target(self) -> None:
+        """POST /use_item with target_participant_id sets focused_ally_target."""
+        use_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+        )
+        use_participant = CombatParticipantFactory(
+            encounter=use_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        ally_sheet = CharacterSheetFactory()
+        ally_participant = CombatParticipantFactory(
+            encounter=use_encounter,
+            character_sheet=ally_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=self.player_sheet,
+            defaults={"health": 50, "max_health": 100},
+        )
+        item = self._held_item(self.player_character)
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(
+            f"/api/combat/{use_encounter.pk}/use_item/",
+            {"item_instance_id": item.pk, "target_participant_id": ally_participant.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        action = CombatRoundAction.objects.get(
+            participant=use_participant, round_number=use_encounter.round_number
+        )
+        self.assertEqual(action.focused_ally_target, ally_participant)
+
+    def test_use_item_rejects_unheld_item(self) -> None:
+        """POST /use_item with an unheld item returns 400 with _ERR_DECLARE_FAILED."""
+        from world.combat.views import _ERR_DECLARE_FAILED
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        use_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+        )
+        CombatParticipantFactory(
+            encounter=use_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=self.player_sheet,
+            defaults={"health": 50, "max_health": 100},
+        )
+        loose_item = ItemInstanceFactory(template=ItemTemplateFactory())  # no game_object
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(
+            f"/api/combat/{use_encounter.pk}/use_item/",
+            {"item_instance_id": loose_item.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], _ERR_DECLARE_FAILED)
+
+    def test_use_item_rejects_non_participant_viewer(self) -> None:
+        """POST /use_item from an account with no participant in the encounter returns 403."""
+        other_account = AccountFactory(username="use_item_outsider")
+        other_char = CharacterFactory(db_key="use_item_outsider_char")
+        CharacterSheetFactory(character=other_char)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=other_char,
+            player_data__account=other_account,
+        )
+        use_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+        )
+        item = self._held_item(other_char)
+        client = APIClient()
+        client.force_authenticate(user=other_account)
+        response = client.post(
+            f"/api/combat/{use_encounter.pk}/use_item/",
+            {"item_instance_id": item.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
 
 class StaffAccessTest(TestCase):
     """Staff can access GM endpoints without being scene GM.

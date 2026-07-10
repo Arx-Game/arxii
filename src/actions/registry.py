@@ -28,6 +28,7 @@ from actions.definitions.combat_maneuvers import (
     SuccorAction,
     TauntAction,
     UpgradeComboAction,
+    UseItemManeuverAction,
 )
 from actions.definitions.communication import (
     EmitAction,
@@ -409,6 +410,7 @@ _ALL_ACTIONS: list[Action] = [
     CoverAction(),
     InterposeAction(),
     SuccorAction(),
+    UseItemManeuverAction(),
     EngageAction(),
     DisengageAction(),
     RallyAction(),

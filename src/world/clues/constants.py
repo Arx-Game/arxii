@@ -14,6 +14,7 @@ class ClueTargetKind(models.TextChoices):
     MISSION = "mission", "Mission"
     RESCUE = "rescue", "Rescue (a held captive)"
     SECRET = "secret", "Character Secret"
+    PERSONA_LINK = "persona_link", "Persona Link (mask piercing)"
 
 
 class ClueResolution(models.TextChoices):

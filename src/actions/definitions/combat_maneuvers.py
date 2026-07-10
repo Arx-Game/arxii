@@ -240,6 +240,92 @@ class SuccorAction(Action):
         return ActionResult(success=True, message="You move to shelter your ally.")
 
 
+def _resolve_held_item_instance(
+    actor: ObjectDB,
+    item_name: str | None,
+    item_instance_id: int | None,
+) -> Any:
+    """Resolve the item to use — by explicit id (web) or held-item name (telnet, #2120).
+
+    ``item_instance_id`` (web) is looked up directly; ``item_name`` (telnet) is
+    resolved by searching only the actor's own held items -- mirrors ``CmdUse``'s
+    ``self.search_or_raise`` (``evennia_overrides/items.py``), but scoped to
+    ``location=actor`` rather than the room+inventory default, since a used item
+    must be held. Returns ``None`` when nothing resolves; actual possession is
+    re-validated by ``declare_use_item``.
+    """
+    from actions.definitions.item_helpers import resolve_item_instance  # noqa: PLC0415
+    from world.items.models import ItemInstance  # noqa: PLC0415
+
+    if item_instance_id is not None:
+        return ItemInstance.objects.filter(pk=item_instance_id).first()
+    if not item_name:
+        return None
+    found = actor.search(item_name, location=actor, quiet=True)
+    if isinstance(found, list):
+        found = found[0] if found else None
+    if found is None:
+        return None
+    return resolve_item_instance(found)
+
+
+@dataclass
+class UseItemManeuverAction(Action):
+    """Declare using a held on-use item as this round's action (wraps ``declare_use_item``, #2120).
+
+    A primary maneuver -- mutually exclusive with a declared focused technique,
+    unlike the passives-only FLEE/COVER/INTERPOSE/SUCCOR maneuvers above. The item
+    is resolved either by ``item_instance_id`` (web) or by ``item_name`` (telnet,
+    searched among the actor's own held items). The optional target may be an
+    ally (``ally_participant_id``) or an opponent (``opponent_id``); at most one
+    should be supplied.
+    """
+
+    key: str = "combat_use"
+    name: str = "Use Item"
+    icon: str = "flask-conical"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(  # noqa: PLR0913
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        item_name: str | None = None,
+        item_instance_id: int | None = None,
+        ally_participant_id: int | None = None,
+        opponent_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_use_item  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+
+        item_instance = _resolve_held_item_instance(actor, item_name, item_instance_id)
+        if item_instance is None:
+            return ActionResult(success=False, message="Use what?")
+
+        target: object | None = None
+        if ally_participant_id is not None:
+            target = _resolve_ally(participant, ally_participant_id)
+            if target is None:
+                return ActionResult(success=False, message="No such ally in this encounter.")
+        elif opponent_id is not None:
+            target = _resolve_opponent(participant, opponent_id)
+            if target is None:
+                return ActionResult(success=False, message="No such opponent in this encounter.")
+
+        try:
+            declare_use_item(participant, item_instance, target=target)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message=f"You use {item_instance}.")
+
+
 @dataclass
 class ReadyAction(Action):
     """Toggle your declared action's ready flag (wraps ``toggle_action_ready``)."""
@@ -256,7 +342,10 @@ class ReadyAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.services import toggle_action_ready  # noqa: PLC0415
+        from world.combat.services import (  # noqa: PLC0415
+            maybe_resolve_on_ready,
+            toggle_action_ready,
+        )
         from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
@@ -266,9 +355,13 @@ class ReadyAction(Action):
         if action is None:
             return ActionResult(success=False, message=NO_ACTION_DECLARED_MESSAGE)
         toggle_action_ready(action)
-        if action.is_ready:
-            return ActionResult(success=True, message="You are ready.")
-        return ActionResult(success=True, message="You are no longer ready.")
+        if not action.is_ready:
+            return ActionResult(success=True, message="You are no longer ready.")
+        # #2120: in PaceMode.READY, this may be the last participant to ready
+        # — check whether the round should resolve now rather than wait out
+        # the TIMED sweep. Un-readying (handled above) never triggers this.
+        maybe_resolve_on_ready(participant.encounter)
+        return ActionResult(success=True, message="You are ready.")
 
 
 @dataclass

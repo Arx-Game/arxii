@@ -13,7 +13,8 @@ rescues all reuse rather than each reinventing.
 ## The model
 
 A **clue is a pointer** on three independent axes: a **target** (codex entry / mission /
-rescue-a-captive; never empty), an **acquisition** (room search or passive trigger), and a
+rescue-a-captive / character secret / masked-identity pair; never empty), an **acquisition**
+(room search or passive trigger), and a
 **resolution** (granted automatically, or won through a collaborative research project).
 Every player-facing detail — clue text, difficulties, eligibility, research magnitudes — is
 **authored data**, never agent-generated; code ships the mechanism, GMs fill the menu.
@@ -28,6 +29,11 @@ Every player-facing detail — clue text, difficulties, eligibility, research ma
 - **Rescue-as-clue** (#931 / #1159) — capture plants a discoverable rescue clue; closes the
   captivity arc.
 - **Passive enter-room triggers** (#1160 slice A) — clues revealed on entry by precondition.
+- **PERSONA_LINK target kind** (#2120) — mask piercing as a clue: a GM-planted clue pointing
+  at a `target_persona`/`target_persona_linked` pair; AUTOMATIC resolution `get_or_create`s
+  the finder's `PersonaDiscovery` (the only in-game producer — no "study persona" roll,
+  per ADR-0033). Journey test: plant → search → per-viewer reveal, with a non-discoverer
+  negative (`world/clues/tests/test_persona_link_clue.py`).
 
 ## Remaining
 
@@ -36,8 +42,9 @@ Every player-facing detail — clue text, difficulties, eligibility, research ma
   "flag the holes" moment — resonance probably exists, soul-tie may not).
 - **Clue journal UI** — the web surface where players see held clues, known-target flags, and
   pursue research. Frontend; wants a UX design pass.
-- **Secret / scandal target kinds** — the social-information targets; informational shapes not
-  yet settled (deliberately stubbed in the discriminator).
+- **Scandal target kind** — the remaining social-information target; informational shape not
+  yet settled (deliberately stubbed in the discriminator). (SECRET shipped in #1334;
+  PERSONA_LINK shipped in #2120.)
 - **Error-handling service** (#1164) — replace the interim log-and-continue in the trigger
   hooks with a Sentry-style report + user-facing error, per TehomCD's review.
 

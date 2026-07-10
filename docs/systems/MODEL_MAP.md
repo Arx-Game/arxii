@@ -1400,6 +1400,8 @@
   - target_mission -> missions.MissionTemplate [FK] (nullable)
   - target_captivity -> captivity.Captivity [FK] (nullable)
   - target_secret -> secrets.Secret [FK] (nullable)
+  - target_persona -> scenes.Persona [FK] (nullable)
+  - target_persona_linked -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
   - held_by <- clues.CharacterClue
   - research_projects <- clues.ResearchProjectDetails
