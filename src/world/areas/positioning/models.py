@@ -102,6 +102,21 @@ class PositionEdge(PositionEdgeBase):
         help_text="When true, the aerial mirror does NOT make this edge freely passable "
         "(anti-air ward): flight may not bypass it.",
     )
+    duration_rounds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="For conjured obstacles: rounds until expiry. Null = permanent (staff-authored).",
+    )
+    created_by_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="conjured_obstacles",
+        help_text=(
+            "Provenance: the caster who conjured this obstacle. Null for staff-authored edges."
+        ),
+    )
 
     class Meta:
         app_label = "areas"
