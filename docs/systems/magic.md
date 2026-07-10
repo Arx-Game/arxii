@@ -1052,7 +1052,14 @@ populated on a given `ResonanceGrant` row (the universal audit ledger — see "S
 Resonance Gain" in `docs/systems/INDEX.md`). Current values:
 
 - `POSE_ENDORSEMENT` / `SCENE_ENTRY` — peer endorsement of a pose/scene-entry (#1138).
-- `ROOM_RESIDENCE` — room residence trickle.
+- `ROOM_RESIDENCE` — room residence trickle. Live end-to-end via a declare→tag→tick loop
+  (#2036): `SetPrimaryHomeAction` declares `CharacterSheet.current_residence`,
+  `tag_room_resonance`/`untag_room_resonance` tag the room's aura, `residence_trickle_tick()`
+  grants daily for the tagged∩claimed intersection; `StartingArea.grants_residence_tenancy`
+  auto-grants a CG starting tenancy so the gate is reachable with zero manual player step. A
+  Sanctum's Ritual of Homecoming writes the same `LocationValueModifier` row shape onto its own
+  room, so a resident Sanctum owner trickles from Homecoming growth as an intentional emergent
+  synergy — see `world/magic/CLAUDE.md` "Residence declaration + room aura tagging" for detail.
 - `OUTFIT_TRICKLE` — outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`).
 - `STAFF_GRANT` — manual staff grant.
 - `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `SANCTUM_DISSOLUTION_RECOVERY` —

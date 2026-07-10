@@ -871,6 +871,40 @@ resonance picker remains a needs-design follow-up. Proven end-to-end by
 - `Interaction.pose_kind` CharField - STANDARD / ENTRY / DEPARTURE
 - `GainSource` TextChoice - POSE_ENDORSEMENT / SCENE_ENTRY / ROOM_RESIDENCE / OUTFIT_ITEM / STAFF_GRANT
 
+**Residence declaration + room aura tagging, live end-to-end (#2036):** the daily
+residence-trickle gate above was mechanically inert until #2036 wired every write path —
+declaring a residence, tagging a room's aura, and reaching both without a manual step at CG.
+
+- **Declare→tag→tick loop:** a player declares a residence via `SetPrimaryHomeAction`
+  (`world.locations.services.set_primary_home` — telnet `room/home` / `home/set`, web "Set as
+  Home"), which writes `CharacterSheet.current_residence` (via `set_residence` in this file)
+  alongside Evennia `home`, and accepts org-derived owner/tenant standing (not only a direct
+  `LocationTenancy` row) by minting a personal tenancy first — so a resident of a shared
+  family/org/Academy-granted room can still declare their own home. A tenant or owner then tags
+  the room's aura via `tag_room_resonance`/`untag_room_resonance` (telnet `room/aura <resonance>`
+  / `room/aura clear <resonance>`, web `RoomAuraPicker`; gated by the owner-or-tenant
+  `IsRoomTenantPrerequisite`, tagging additionally requires the caller has claimed that
+  resonance). `residence_trickle_tick()` then grants resonance daily for the intersection of
+  (aura-tagged resonances on `current_residence`) ∩ (the sheet's claimed resonances) —
+  `get_residence_resonances()` above. `end_tenancy()` clears `current_residence` when the ended
+  tenancy was the declared residence — a character shouldn't keep trickling from a room they no
+  longer have standing in.
+- **Zero-manual-step CG on-ramp:** `StartingArea.grants_residence_tenancy` (BooleanField, default
+  True) — an authored per-area toggle — drives `_grant_cg_residence_tenancy()`
+  (`world/character_creation/services.py`, called from `finalize_character`): grants a
+  `LocationTenancy` at the starting room for areas that author it, which auto-defaults both
+  Evennia `home` and `current_residence` via `maybe_default_residence()`. A new character can
+  reach the trickle gate with zero manual player action (the "Academy auto-residence" story).
+- **Intentional emergent synergy — sanctum Homecoming satisfies the same gate:** the Ritual of
+  Homecoming (`perform_homecoming_ritual` → `apply_homecoming_gain`, `services/sanctum_rituals.py`
+  / `services/sanctum_lvm.py`) grows a Sanctum's consecrated resonance by writing/incrementing a
+  `LocationValueModifier(key_type=RESONANCE, resonance=sanctum.resonance_type,
+  room_profile=sanctum's room)` row — the exact same row shape `tag_room_resonance` writes, just
+  under a different `source` tag. `get_residence_resonances()` doesn't filter on `source`, so a
+  character whose `current_residence` is a Sanctum room, with a claimed resonance matching the
+  Sanctum's consecrated type, trickles daily for free as a side effect of ordinary Homecoming
+  ritual growth — no extra wiring needed, and no code should special-case it.
+
 ### Soul Tether (Resonance Pivot Spec B)
 
 **Spec:** `docs/architecture/soul-tether.md`

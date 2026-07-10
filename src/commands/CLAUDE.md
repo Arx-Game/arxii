@@ -54,7 +54,10 @@ actions, backends, and service functions.
   staff bypass preserved)
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive` (#1909: swaps to
   `GiveCoinsAction` when the item-name text parses as money via `parse_coppers`),
-  `CmdHome`
+  `CmdHome` (bare `home` recalls; `home/set` delegates to `SetPrimaryHomeAction` (#2036) —
+  the same seam `room/home` and the web "Set as Home" button use, replacing a hand-rolled
+  owner/tenant check that never accepted org-derived standing or wrote
+  `CharacterSheet.current_residence`)
 - **`evennia_overrides/items.py`**: `CmdWear`, `CmdUndress`, `CmdRemove`, `CmdPut`,
   `CmdWithdraw` (`withdraw <item> from <container>`; also the `withdraw coins <amount>`
   loose-cash branch, #1909 — the `withdraw` command key was already spoken for by
