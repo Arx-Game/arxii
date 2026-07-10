@@ -246,6 +246,22 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
     )
 
 
+def _crafted_modifier_total(character: object, modifier_target: ModifierTarget) -> int:
+    """Sum per-instance crafted item modifiers for equipped items (#1567).
+
+    ``character`` is a CharacterSheet; ``character.character`` is the ObjectDB
+    Character whose ``equipped_items`` handler caches the crafted recipe rows.
+    Returns 0 when the character has no typeclass handler (raw ObjectDB fixtures).
+    """
+    char = character.character
+    if char is None:
+        return 0
+    try:
+        return char.equipped_items.crafted_modifier_total(modifier_target)
+    except AttributeError:
+        return 0
+
+
 def get_modifier_total(
     character,
     modifier_target: ModifierTarget,
@@ -287,10 +303,11 @@ def get_modifier_total(
     equipment_total = equipment_walk_total(
         character, modifier_target, level_override=level_override
     )
+    crafted_total = _crafted_modifier_total(character, modifier_target)
     fashion_total = 0
     if perceiving_society is not None:
         fashion_total = fashion_outfit_bonus(character, modifier_target, perceiving_society)
-    return eager_total + equipment_total + fashion_total
+    return eager_total + equipment_total + crafted_total + fashion_total
 
 
 def power_flat_bonus_for_resonance(sheet: object, resonance_id: int) -> int:
