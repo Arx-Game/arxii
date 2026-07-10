@@ -45,6 +45,11 @@ _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
         ("Partial Success", "Target rattled but holds firm", 2),
         ("Success", "Target cowed and compliant", 1),
     ],
+    "Blackmail": [
+        ("Failure", "The threat rings hollow", 1),
+        ("Partial Success", "They waver, but call your bluff", 2),
+        ("Success", "They fold under the threat", 1),
+    ],
     "Persuade": [
         ("Failure", "Argument dismissed outright", 1),
         ("Partial Success", "Target intrigued but unconvinced", 2),
