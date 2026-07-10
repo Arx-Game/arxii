@@ -219,6 +219,7 @@ describe('gameSlice', () => {
           scene: null,
           sceneInteractions: [],
           threadLastSeen: {},
+          sceneBaselineId: null,
         });
       });
 

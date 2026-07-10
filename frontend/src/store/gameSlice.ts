@@ -33,6 +33,15 @@ interface Session {
   sceneInteractions: InteractionWsPayload[];
   /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
   threadLastSeen: Record<string, number>;
+  /**
+   * Highest interaction id present the moment the current scene's threading
+   * was baselined (#2156 review fix). `countUnread` falls back to this scalar
+   * for any thread key with no `threadLastSeen` entry, so a brand-new thread
+   * that appears mid-session (e.g. a first whisper) badges unread starting
+   * from its first message, while threads that already existed at scene load
+   * stay zeroed. `null` before the baseline effect has run for this scene.
+   */
+  sceneBaselineId: number | null;
 }
 
 interface GameState {
@@ -61,6 +70,7 @@ export const gameSlice = createSlice({
           scene: null,
           sceneInteractions: [],
           threadLastSeen: {},
+          sceneBaselineId: null,
         };
       }
       state.active = name;
@@ -129,6 +139,14 @@ export const gameSlice = createSlice({
       const { character, scene } = action.payload;
       const session = state.sessions[character];
       if (session) {
+        // A scene change (including a brand-new scene at the same room)
+        // invalidates any previous scene's baseline — the baseline effect
+        // must re-run for the new scene id (#2156 review fix).
+        const previousId = session.scene?.id ?? null;
+        const nextId = scene?.id ?? null;
+        if (previousId !== nextId) {
+          session.sceneBaselineId = null;
+        }
         session.scene = scene;
       }
     },
@@ -153,6 +171,22 @@ export const gameSlice = createSlice({
       const session = state.sessions[action.payload];
       if (session) {
         session.sceneInteractions = [];
+        session.sceneBaselineId = null;
+      }
+    },
+    // Scene-load baseline scalar (#2156 review fix): set once by GamePage's
+    // baseline effect the first time it runs for a given scene id. See the
+    // `sceneBaselineId` field doc for why this replaced the old per-thread-key
+    // baseline (it one-shotted per KEY, so a brand-new thread's first message
+    // got marked seen on arrival instead of badging unread).
+    setSceneBaseline: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; baselineId: number | null }>
+    ) => {
+      const { character, baselineId } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        session.sceneBaselineId = baselineId;
       }
     },
     // Idempotent: never lowers an existing last-seen value for the thread key
@@ -191,5 +225,6 @@ export const {
   addSceneInteraction,
   clearSceneInteractions,
   markThreadSeen,
+  setSceneBaseline,
   resetGame,
 } = gameSlice.actions;

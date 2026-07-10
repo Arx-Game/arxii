@@ -16,7 +16,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { markThreadSeen } from '@/store/gameSlice';
+import { markThreadSeen, setSceneBaseline } from '@/store/gameSlice';
 import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
 import { useThreading, getThreadKey } from '@/scenes/hooks/useThreading';
 import { threadToComposerMode } from '@/scenes/hooks/threadToComposerMode';
@@ -66,41 +66,37 @@ export function GamePage() {
   // network calls or producing threads.
   const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId);
   const threadLastSeen = activeSession?.threadLastSeen ?? EMPTY_THREAD_LAST_SEEN;
+  const sceneBaselineId = activeSession?.sceneBaselineId ?? null;
   const threading = useThreading(allInteractions, roomName, {
     lastSeenByThread: threadLastSeen,
     viewerPersonaId: personaId,
+    sceneBaselineId,
   });
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
 
-  // Per-thread unread badges (#2156): "no entry -> 0 unread" (useThreading) means a
-  // brand-new session would otherwise show every existing thread as fully unread on
-  // login. Baseline every thread's current max interaction id once per scene load
-  // (guarded per thread key so it never re-baselines — and thereby erases — a
-  // legitimately-accumulated unread count once that key has been seen this scene).
-  const baselinedRef = useRef<{ sceneId: string | undefined; keys: Set<string> }>({
-    sceneId: undefined,
-    keys: new Set(),
-  });
+  // Scene-load baseline (#2156 review fix): a single scalar snapshot, not a
+  // per-thread-key one. The old per-key baseline one-shotted per KEY, so a
+  // brand-new thread appearing mid-session (e.g. a first whisper) got its own
+  // key baselined to its first message's id the moment it was observed —
+  // countUnread's strict `>` then suppressed the badge on that very first
+  // message. Instead: the first time this effect runs for a given `sceneId`,
+  // capture the highest interaction id present at that moment as
+  // `sceneBaselineId` and never touch it again for this scene.
+  // `useThreading`'s `countUnread` falls back to this scalar only for thread
+  // keys with no `threadLastSeen` entry, so pre-existing threads (which get a
+  // `threadLastSeen` entry from the selected-thread effect below, or already
+  // had one) stay zeroed while a genuinely new thread badges from message one.
+  const sceneBaselinedRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!sceneId || !active) return;
-    if (baselinedRef.current.sceneId !== sceneId) {
-      baselinedRef.current = { sceneId, keys: new Set() };
-    }
-    const maxByThread = new Map<string, number>();
+    if (sceneBaselinedRef.current === sceneId) return;
+    sceneBaselinedRef.current = sceneId;
+    let maxId: number | undefined;
     for (const interaction of allInteractions) {
-      const key = getThreadKey(interaction);
       const id = Number(interaction.id);
-      const current = maxByThread.get(key);
-      if (current === undefined || id > current) {
-        maxByThread.set(key, id);
-      }
+      if (maxId === undefined || id > maxId) maxId = id;
     }
-    for (const [threadKey, interactionId] of maxByThread) {
-      if (!baselinedRef.current.keys.has(threadKey)) {
-        baselinedRef.current.keys.add(threadKey);
-        dispatch(markThreadSeen({ character: active, threadKey, interactionId }));
-      }
-    }
+    dispatch(setSceneBaseline({ character: active, baselineId: maxId ?? null }));
   }, [sceneId, active, allInteractions, dispatch]);
 
   // Continuously mark the SELECTED thread seen as its interactions grow — this is

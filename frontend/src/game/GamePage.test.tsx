@@ -237,6 +237,70 @@ describe('GamePage', () => {
       expect(within(whisperButton()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
     });
 
+    it('badges a brand-new thread that appears mid-session from its very first message (#2156 review fix)', async () => {
+      // Regression for a reviewer-caught defect: the old per-thread-KEY
+      // baseline zeroed out a brand-new thread's unread count the instant it
+      // was first observed (it baselined to the thread's own first message
+      // id), so a first-ever whisper never showed a badge. The fix baselines
+      // the SCENE once at load instead, so a thread with no prior
+      // `threadLastSeen` entry falls back to that scene baseline and counts
+      // unread from message one.
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const roomButton = () =>
+        within(sidebar).getByText('The Grand Ballroom').closest('button') as HTMLElement;
+
+      // Pre-existing room thread: no unread at scene load (the baseline was
+      // captured, zeroing it out).
+      await waitFor(() => {
+        expect(within(roomButton()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
+      });
+
+      // A brand-new whisper thread arrives mid-session — the very first
+      // message anyone has ever sent in it, from someone other than the
+      // viewer, while it's unselected.
+      store.dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 5,
+            persona: { id: 42, name: 'Mysterious Stranger', thumbnail_url: '' },
+            content: 'psst -- a word, in private.',
+            mode: 'whisper',
+            timestamp: '2026-01-01T00:05:00Z',
+            scene_id: 100,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [7],
+            target_persona_ids: [],
+          },
+        })
+      );
+
+      const whisperButton = () =>
+        within(sidebar)
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+
+      // The new thread badges unread from its first message, not 0.
+      await waitFor(() => {
+        expect(within(whisperButton()).getByText('1')).toBeInTheDocument();
+      });
+
+      // Selecting it clears the badge.
+      await user.click(whisperButton());
+      await waitFor(() => {
+        expect(within(whisperButton()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
+      });
+    });
+
     it('falls back to the plain ChatWindow with no thread sidebar when there is no active scene', () => {
       store.dispatch(setAccount(mockAccount));
       store.dispatch(startSession(ACTIVE_NAME));
