@@ -13,7 +13,9 @@ XP, kudos, development points, character-level XP, path history, and unlock syst
 from world.progression.types import (
     UnlockType,          # LEVEL, SKILL_RATING, STAT_RATING, ABILITY, OTHER
     DevelopmentSource,   # SCENE, TRAINING, PRACTICE, TEACHING, QUEST, EXPLORATION, CRAFTING, COMBAT, SOCIAL, OTHER
-    ProgressionReason,   # XP_PURCHASE, CG_CONVERSION, SCENE_AWARD, GM_AWARD, SYSTEM_AWARD, REFUND, CORRECTION, KUDOS_CLAIM, OTHER
+    ProgressionReason,   # XP_PURCHASE, CG_CONVERSION, SCENE_AWARD, GM_AWARD, SYSTEM_AWARD, REFUND,
+                         # CORRECTION, KUDOS_CLAIM, FIRST_IMPRESSION, VOTE_REWARD, MEMORABLE_POSE,
+                         # RANDOM_SCENE, GM_STORY_REWARD (#2123 — GM Story Reward, see gm-system.md), OTHER
 )
 
 # Typed data structures
@@ -235,6 +237,13 @@ transaction = award_development_points(
 # Get or create XP tracker
 xp_tracker = get_or_create_xp_tracker(account)
 ```
+
+**GM Story Reward (#2123):** the sole GM-side XP source in the game — `world.gm.services.award_gm_story_reward`
+calls this same `award_xp` with `reason=ProgressionReason.GM_STORY_REWARD` (`gm=None` — it is a
+system-issued award, not a manual GM correction). See [gm-system.md](../roadmap/gm-system.md) and
+the GM entry in `INDEX.md` for the full players-served formula, weekly cap, and the three
+convergence points (a GM-marked beat, a resolved episode, a completed story) plus the positive
+story-feedback path.
 
 ### Spends (`services.spends`)
 

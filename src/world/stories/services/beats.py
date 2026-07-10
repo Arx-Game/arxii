@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from actions.models.consequence_pools import ConsequencePool
+    from world.gm.models import GMProfile
     from world.scenes.models import Persona
     from world.stories.models import Episode, Story
     from world.traits.models import CheckOutcome
@@ -101,6 +102,7 @@ def record_gm_marked_outcome(  # noqa: PLR0913
     gm_notes: str = "",
     participants: list[Persona] | None = None,
     extra_participants: list[Persona] | None = None,
+    resolved_by: GMProfile | None = None,
 ) -> BeatCompletion:
     """Record a GM's manual outcome on a GM_MARKED beat.
 
@@ -116,6 +118,12 @@ def record_gm_marked_outcome(  # noqa: PLR0913
     ``extra_participants`` — additional Persona instances to credit alongside
         the progress's primary persona in CHARACTER scope. Ignored for other
         scopes.
+
+    ``resolved_by`` — the GM (Lead GM or an approved Assistant GM — whoever
+        actually called this) credited with GM Story Reward XP (#2123) when
+        the outcome resolves SUCCESS/FAILURE. ``None`` skips the award (no
+        GM identity resolved by the caller, or a machine-graded completion
+        via ``record_outcome_tier_completion``, which never passes this).
 
     Defensive assertions (programmer errors — the API serializer validates these
     for user-facing calls; assertions guard direct service callers):
@@ -155,6 +163,7 @@ def record_gm_marked_outcome(  # noqa: PLR0913
         progress=progress,
         scope=scope,
         explicit_participants=participants if scope == StoryScope.GROUP else extra_participants,
+        resolved_by=resolved_by,
     )
 
 
@@ -202,6 +211,7 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     explicit_participants: list[Persona] | None,
     outcome_tier: CheckOutcome | None = None,
     withdrawal: bool = False,
+    resolved_by: GMProfile | None = None,
 ) -> BeatCompletion:
     """Persist the outcome, create the BeatCompletion, and fire its consequence pool.
 
@@ -213,6 +223,14 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     the open stake activation, and opens a SessionRequest if the episode is now
     ready-to-run. Notifies post-commit (outside the atomic block) so a
     notify failure can't roll back the completion.
+
+    ``resolved_by`` (#2123) — only ever passed by record_gm_marked_outcome
+    (never by the machine-graded record_outcome_tier_completion, which is
+    OUTCOME_TIER-only and excluded from GM Story Reward by construction).
+    Credits GM Story Reward XP after commit when the outcome is SUCCESS or
+    FAILURE (EXPIRED is system-caused, not GM effort, and never reaches this
+    path via record_gm_marked_outcome anyway — _GM_MARKED_VALID_OUTCOMES
+    excludes it).
     """
     from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
     from world.stories.services.stake_resolution import (  # noqa: PLC0415
@@ -253,6 +271,23 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
         maybe_create_session_request(progress)
 
     _notify_beat_completion(completion, progress)
+
+    if resolved_by is not None and outcome in _GM_MARKED_VALID_OUTCOMES:
+        from world.gm.models import GMRewardConfig  # noqa: PLC0415
+        from world.stories.services.gm_rewards import credit_gm_story_reward  # noqa: PLC0415
+
+        reward_character_sheet = progress.character_sheet if scope == StoryScope.CHARACTER else None
+        reward_gm_table = progress.gm_table if scope == StoryScope.GROUP else None
+        config = GMRewardConfig.load()
+        credit_gm_story_reward(
+            resolved_by=resolved_by,
+            scope=scope,
+            character_sheet=reward_character_sheet,
+            gm_table=reward_gm_table,
+            per_player_xp=config.beat_xp_per_player,
+            event_cap=config.beat_xp_cap,
+            label=f"beat #{beat.pk} resolved",
+        )
 
     return completion
 

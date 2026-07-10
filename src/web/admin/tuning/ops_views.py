@@ -87,10 +87,20 @@ def ops_economy_fragment(request: HttpRequest) -> HttpResponse:
 
 @superuser_required
 def ops_story_fragment(request: HttpRequest) -> HttpResponse:
-    """Story/GM panel: weekly beats/scenes + activity snapshot."""
+    """Story/GM panel: weekly beats/scenes + activity snapshot + GM reward config.
+
+    ``reward_config`` (#2123) is a read-only surfacing of the current
+    ``GMRewardConfig`` singleton's tunable award values, alongside the other
+    story/GM balance knobs on this panel — actual edits still go through the
+    normal admin change form (linked from the panel), per this dashboard's
+    read+preview-only contract.
+    """
+    from world.gm.models import GMRewardConfig  # noqa: PLC0415
+
     context = {
         "series": [_series_row(s) for s in story_series()],
         "snapshot": story_snapshot(),
+        "reward_config": GMRewardConfig.load(),
     }
     return render(request, "admin/tuning/_story_panel.html", context)
 

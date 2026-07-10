@@ -183,8 +183,12 @@ def _seed_kudos() -> None:
 
 def _seed_gm() -> None:
     from world.gm.factories import seed_default_gm_level_caps  # noqa: PLC0415
+    from world.gm.models import GMRewardConfig  # noqa: PLC0415
 
     seed_default_gm_level_caps()
+    # GM Story Reward config singleton (#2123) — .load() lazily creates the
+    # row with its field defaults (the spec's recommended values) if absent.
+    GMRewardConfig.load()
 
 
 def _seed_covenant_roles() -> None:
@@ -351,7 +355,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
-    from world.gm.models import GMLevelCap  # noqa: PLC0415
+    from world.gm.models import GMLevelCap, GMRewardConfig  # noqa: PLC0415
     from world.items.market.models import MarketSquare  # noqa: PLC0415
     from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
@@ -436,7 +440,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Market: the PLACEHOLDER capital square (#2066).
         "market": [MarketSquare],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
-        "gm": [GMLevelCap],
+        # Plus the GM Story Reward config singleton (#2123).
+        "gm": [GMLevelCap, GMRewardConfig],
         # Kinship: the PLACEHOLDER ducal demo tree (#2062).
         "kinship": [Kinsperson],
         # Houses: the landed demo house; represented by Title (#1884).

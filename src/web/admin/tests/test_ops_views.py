@@ -64,6 +64,17 @@ class TestOpsFragmentViews(TestCase):
         resp = self.client.get(reverse("admin_ops_story"))
         self.assertEqual(resp.status_code, 200)
 
+    def test_story_fragment_surfaces_gm_reward_config(self) -> None:
+        """GM Story Reward balance knobs (#2123) are readable on this panel."""
+        from world.gm.models import GMRewardConfig
+
+        config = GMRewardConfig.load()
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_ops_story"))
+        body = resp.content.decode()
+        self.assertIn(str(config.beat_xp_per_player), body)
+        self.assertIn(str(config.weekly_reward_cap), body)
+
     def test_reports_fragment_superuser_200(self) -> None:
         self.client.force_login(self.super)
         resp = self.client.get(reverse("admin_ops_reports"))
