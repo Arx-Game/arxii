@@ -500,6 +500,33 @@ class CraftingRecipeConsequenceFactory(factory.django.DjangoModelFactory):
     cost_consumption = CostConsumption.FULL
 
 
+class CraftingRecipeModifierFactory(factory.django.DjangoModelFactory):
+    """Factory for CraftingRecipeModifier.
+
+    The unique constraint on (recipe, target) means callers must use distinct
+    targets when adding multiple modifier outcomes to the same recipe.
+    """
+
+    class Meta:
+        model = "items.CraftingRecipeModifier"
+
+    recipe = factory.SubFactory(CraftingRecipeFactory)
+    target = factory.SubFactory(ModifierTargetFactory)
+    base_value = 0
+    quality_scale_factor = 0
+
+
+class CraftedItemRecipeFactory(factory.django.DjangoModelFactory):
+    """Factory for CraftedItemRecipe — a recipe applied to an item at a quality tier."""
+
+    class Meta:
+        model = "items.CraftedItemRecipe"
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    recipe = factory.SubFactory(CraftingRecipeFactory)
+    quality_tier = factory.SubFactory(QualityTierFactory)
+
+
 class GarmentMitigationFactory(factory.django.DjangoModelFactory):
     """Factory for GarmentMitigation. ``stat_key``/``value`` default to a wool-coat-style COLD."""
 

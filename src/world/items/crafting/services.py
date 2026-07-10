@@ -25,7 +25,7 @@ from world.checks.consequence_resolution import (
 from world.checks.services import perform_check
 from world.checks.types import ResolutionContext
 from world.items.crafting.cost import consume_cost, stage_and_assert_affordable
-from world.items.crafting.models import CraftingRecipe, CraftingSkillCap
+from world.items.crafting.models import CraftedItemRecipe, CraftingRecipe, CraftingSkillCap
 from world.items.crafting.quality import resolve_capped_tier
 from world.items.crafting.registry import get_handler
 from world.items.exceptions import (
@@ -33,7 +33,7 @@ from world.items.exceptions import (
     CraftingStationBroken,
     CraftingStationRequired,
 )
-from world.items.models import ItemInstance
+from world.items.models import EquippedItem, ItemInstance
 from world.items.services.materials import meets_quality_tier
 from world.room_features.constants import RoomFeatureServiceStrategy
 
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.items.crafting.constants import CraftingRecipeKind
-    from world.items.crafting.models import LabStationDetails
+    from world.items.crafting.models import CraftedItemRecipe, LabStationDetails
     from world.items.models import QualityTier
     from world.traits.models import CheckOutcome
 
@@ -92,6 +92,7 @@ class CraftRunResult:
     quality_tier: QualityTier | None
     consumed: dict
     consequence_label: str | None
+    crafted_recipe: CraftedItemRecipe | None = None
 
 
 @dataclass(frozen=True)
@@ -438,6 +439,19 @@ def run_crafting_recipe(
         row = None
         attached = False
 
+    # --- 10b. Record the recipe on the item (#1567) ---
+    crafted_recipe = None
+    if attached:
+        crafted_recipe, _ = CraftedItemRecipe.objects.update_or_create(
+            item_instance=item_instance,
+            recipe=recipe,
+            defaults={"quality_tier": tier},
+        )
+        # Invalidate the wearer's equipped_items handler cache if the item is
+        # currently equipped — same pattern as attach_facet_to_item.
+        for equipped in EquippedItem.objects.filter(item_instance=item_instance):
+            equipped.character.equipped_items.invalidate()
+
     return CraftRunResult(
         attached=attached,
         outcome=check_result.outcome,
@@ -445,4 +459,5 @@ def run_crafting_recipe(
         quality_tier=tier,
         consumed=consumed,
         consequence_label=consequence_label,
+        crafted_recipe=crafted_recipe,
     )

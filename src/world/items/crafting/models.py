@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
@@ -98,6 +99,11 @@ class CraftingRecipe(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name  # noqa: STRING_LITERAL — model display, not an identifier
+
+    @cached_property
+    def cached_modifier_outcomes(self) -> list[CraftingRecipeModifier]:
+        """Modifier outcomes for this recipe, loaded once and cached."""
+        return list(self.modifier_outcomes.all().select_related("target"))
 
 
 class CraftingMaterialRequirement(SharedMemoryModel):
@@ -232,6 +238,85 @@ class CraftingRecipeConsequence(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.recipe}: {self.consequence}"
+
+
+class CraftingRecipeModifier(SharedMemoryModel):
+    """A modifier outcome a crafting recipe grants on the output item.
+
+    Designers author (recipe, target, base_value, quality_scale_factor) rows.
+    On successful craft, the service records a CraftedItemRecipe join row.
+    At read time, the value is computed:
+        final_value = base_value + round(quality_scale_factor * quality_tier.stat_multiplier)
+    """
+
+    recipe = models.ForeignKey(
+        CraftingRecipe,
+        on_delete=models.CASCADE,
+        related_name="modifier_outcomes",
+    )
+    target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    base_value = models.IntegerField(
+        help_text="Flat value granted regardless of quality (can be negative).",
+    )
+    quality_scale_factor = models.IntegerField(
+        default=0,
+        help_text="Additional value scaled by the resolved QualityTier.stat_multiplier.",
+    )
+
+    class Meta:
+        app_label = "items"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["recipe", "target"],
+                name="items_craftingrecipemodifier_recipe_target_unique",
+            )
+        ]
+
+    def __str__(self) -> str:
+        sign = "+" if self.base_value >= 0 else ""
+        return f"{self.recipe.name}: {sign}{self.base_value} to {self.target.name}"
+
+
+class CraftedItemRecipe(SharedMemoryModel):
+    """Join: a crafting recipe applied to an item instance at a specific quality.
+
+    The quality_tier is the resolved crafting outcome quality (snapshotted at
+    craft time). Modifier values are computed at read time from the recipe's
+    modifier outcomes × this quality tier.
+    """
+
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="crafted_recipes",
+    )
+    recipe = models.ForeignKey(
+        CraftingRecipe,
+        on_delete=models.CASCADE,
+        related_name="crafted_items",
+    )
+    quality_tier = models.ForeignKey(
+        "items.QualityTier",
+        on_delete=models.PROTECT,
+        related_name="crafted_item_recipes",
+        help_text="Quality tier resolved at craft time, used to scale modifier outcomes.",
+    )
+
+    class Meta:
+        app_label = "items"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "recipe"],
+                name="items_crafteditemrecipe_unique",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance} ← {self.recipe.name} ({self.quality_tier.name})"
 
 
 class LabStationDetails(SharedMemoryModel):

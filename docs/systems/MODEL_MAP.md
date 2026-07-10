@@ -2634,6 +2634,7 @@
   - ownership_events <- items.OwnershipEvent
   - item_facets <- items.ItemFacet
   - item_styles <- items.ItemStyle
+  - crafted_recipes <- items.CraftedItemRecipe
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
@@ -2776,6 +2777,8 @@
   - material_requirements <- items.CraftingMaterialRequirement
   - skill_caps <- items.CraftingSkillCap
   - consequence_rows <- items.CraftingRecipeConsequence
+  - modifier_outcomes <- items.CraftingRecipeModifier
+  - crafted_items <- items.CraftedItemRecipe
 
 ### CraftingMaterialRequirement
 **Foreign Keys:**
@@ -2792,6 +2795,17 @@
 **Foreign Keys:**
   - recipe -> items.CraftingRecipe [FK]
   - consequence -> checks.Consequence [FK]
+
+### CraftingRecipeModifier
+**Foreign Keys:**
+  - recipe -> items.CraftingRecipe [FK]
+  - target -> mechanics.ModifierTarget [FK]
+
+### CraftedItemRecipe
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [FK]
+  - recipe -> items.CraftingRecipe [FK]
+  - quality_tier -> items.QualityTier [FK]
 
 ### LabStationDetails
 **Foreign Keys:**
