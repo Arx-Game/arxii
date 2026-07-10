@@ -23,7 +23,19 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # 1. Claim: delegate to pickup-issue.sh (assigns + status:spec-draft + branch).
 #    pickup-issue.sh exits 3 if the issue is assigned to a different user,
 #    which is the duplicate-work guard.
-PICKUP_JSON=$(bash "$SCRIPT_DIR/pickup-issue.sh" "$ISSUE")
+PICKUP_OUTPUT=$(bash "$SCRIPT_DIR/pickup-issue.sh" "$ISSUE")
+# pickup-issue.sh emits its JSON contract as the final stdout line. Guard against
+# any stray stdout leaking ahead of it (the #2060 crash was git's "set up to
+# track 'origin/main'." notice landing on stdout): take the last line and
+# validate it before parsing, so a leak fails with a readable error + the raw
+# output instead of a cryptic `jq: parse error: Invalid numeric literal`.
+PICKUP_JSON=$(printf '%s\n' "$PICKUP_OUTPUT" | tail -n 1)
+if ! jq -e . >/dev/null 2>&1 <<<"$PICKUP_JSON"; then
+  echo "ERROR: pickup-issue.sh did not emit valid JSON on its final stdout line." >&2
+  echo "Raw pickup output was:" >&2
+  printf '%s\n' "$PICKUP_OUTPUT" >&2
+  exit 1
+fi
 BRANCH=$(jq -r '.branch' <<<"$PICKUP_JSON")
 
 # 1b. Re-verify assignment after claiming (closes the gap where pickup's
