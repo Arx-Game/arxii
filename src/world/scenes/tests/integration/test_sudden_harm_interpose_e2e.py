@@ -58,7 +58,7 @@ from world.vitals.factories import CharacterVitalsFactory
 
 
 def _clean_block_dispatch(  # noqa: PLR0913
-    actor, target_object, *, challenge_name, approach, error_msg, outcome_fn
+    actor, target_object, *, challenge_name, approach, error_msg, outcome_fn, extra_modifiers=0
 ):
     """Force a clean-block DESTROY outcome, exactly as test_sudden_harm.py's
     ResolvePendingInterposeHarmTests._dispatch_clean_block does — invokes
