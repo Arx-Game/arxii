@@ -21,6 +21,12 @@ class PersonaSerializer(serializers.ModelSerializer):
     roster_entry = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
     allow_social_actions = serializers.SerializerMethodField()
+    # #1682 — the guise's fabricated bio (null profile → empty strings), so the
+    # web authoring dialog can prefill and blank-clears stay safe.
+    guise_concept = serializers.SerializerMethodField()
+    guise_quote = serializers.SerializerMethodField()
+    guise_personality = serializers.SerializerMethodField()
+    guise_background = serializers.SerializerMethodField()
 
     class Meta:
         model = Persona
@@ -35,8 +41,24 @@ class PersonaSerializer(serializers.ModelSerializer):
             "thumbnail_media_url",
             "roster_entry",
             "allow_social_actions",
+            "guise_concept",
+            "guise_quote",
+            "guise_personality",
+            "guise_background",
         ]
         read_only_fields = ["roster_entry", "allow_social_actions"]
+
+    def get_guise_concept(self, obj: Persona) -> str:
+        return obj.profile.concept if obj.profile_id else ""
+
+    def get_guise_quote(self, obj: Persona) -> str:
+        return obj.profile.quote if obj.profile_id else ""
+
+    def get_guise_personality(self, obj: Persona) -> str:
+        return obj.profile.personality if obj.profile_id else ""
+
+    def get_guise_background(self, obj: Persona) -> str:
+        return obj.profile.background if obj.profile_id else ""
 
     def get_thumbnail_media_url(self, obj: Persona) -> str | None:
         if obj.thumbnail_id is None:
@@ -462,6 +484,21 @@ class CreateMaskRequestSerializer(serializers.Serializer):
     """POST body for the #1127 create-mask endpoint — a temporary anonymous face."""
 
     name = serializers.CharField(max_length=255)
+
+
+class SetPersonaProfileRequestSerializer(serializers.Serializer):
+    """POST body for the #1682 set-profile endpoint — author a guise's bio.
+
+    Every bio field is optional and None-preserving: an ABSENT field leaves the
+    stored value untouched (the ``set_persona_profile`` contract, so partial
+    edits are safe), while a PRESENT-but-blank field explicitly clears it.
+    """
+
+    persona_id = serializers.IntegerField(min_value=1)
+    concept = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    quote = serializers.CharField(required=False, allow_blank=True)
+    personality = serializers.CharField(required=False, allow_blank=True)
+    background = serializers.CharField(required=False, allow_blank=True)
 
 
 class SetRoundModeRequestSerializer(serializers.Serializer):

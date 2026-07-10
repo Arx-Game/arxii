@@ -236,6 +236,13 @@ Key service functions for scene round lifecycle:
     anonymous mask, optionally applying a #1110 disguise overlay + switching the worn face). PRIMARY
     is never created here. Creation copies **no** descriptors from sibling faces — the
     descriptor-never-auto-attach privacy invariant (#1109) holds structurally.
+  - **Guise-Sheet authoring (#1682):** `set-profile` POST action — the web face of
+    `scenes.services.set_persona_profile` (sole mutator; PRIMARY rejected). Ownership-gated
+    like `set_active` (own-sheet personas only, uniform rejection); absent fields stay
+    untouched, blank fields clear. `PersonaSerializer` exposes read-only `guise_concept` /
+    `guise_quote` / `guise_personality` / `guise_background` so the switcher's
+    `GuiseSheetDialog` (`frontend/src/game/components/`) prefills. Telnet parity:
+    `persona profile <name> …` (#1270).
 - **`SceneSummaryRevisionViewSet`**: Summary revision management
 
 ### `friend_views.py` (#1727)

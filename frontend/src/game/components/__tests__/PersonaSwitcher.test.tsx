@@ -26,6 +26,10 @@ function persona(
     is_fake_name: type === 'temporary',
     thumbnail_url: null,
     thumbnail_media_url: null,
+    guise_concept: '',
+    guise_quote: '',
+    guise_personality: '',
+    guise_background: '',
   };
 }
 
