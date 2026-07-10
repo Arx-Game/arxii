@@ -21,6 +21,7 @@ from world.battles.conclusion_hooks import run_battle_conclusion_hooks
 from world.battles.constants import (
     BASE_INTEGRITY,
     DECISIVE_MARGIN,
+    DEFAULT_MORALE,
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
     FORTIFICATION_LEVEL_INTEGRITY_BONUS,
@@ -147,12 +148,15 @@ def add_side(
 
 
 @transaction.atomic
-def add_place(
+def add_place(  # noqa: PLR0913 - each param is a distinct place attribute
     *,
     battle: Battle,
     name: str,
     terrain_type: str = TerrainType.OPEN,
     movement_cost: int = 1,
+    x: Decimal = Decimal(0),
+    y: Decimal = Decimal(0),
+    footprint_radius: Decimal = Decimal(1),
 ) -> BattlePlace:
     """Add a named front/zone to a battle.
 
@@ -163,6 +167,11 @@ def add_place(
         movement_cost: Authored cost for a future reposition/movement action —
             not yet filed as an issue; #1712 explicitly did not build this
             (#1711). Defaults to 1.
+        x: Position on the battle's internal battle-map coordinate plane (#1714).
+            Defaults to 0.
+        y: See ``x``. Defaults to 0.
+        footprint_radius: How much of the battle-map grid this place occupies
+            (#1714). Defaults to 1.
 
     Returns:
         The newly created ``BattlePlace``.
@@ -172,6 +181,9 @@ def add_place(
         name=name,
         terrain_type=terrain_type,
         movement_cost=movement_cost,
+        x=x,
+        y=y,
+        footprint_radius=footprint_radius,
     )
 
 
@@ -186,6 +198,7 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
     commander: CharacterSheet | None = None,
     summoned_by: CharacterSheet | None = None,
     strength: int = 100,
+    morale: int = DEFAULT_MORALE,
     place: BattlePlace | None = None,
     properties: Iterable[Property] = (),
     capability_values: Iterable[tuple[CapabilityType, int]] = (),
@@ -203,6 +216,7 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         summoned_by: Optional summoning ``CharacterSheet``, set by the military-summon
             bridge (#1711).
         strength: Starting strength value (default 100).
+        morale: Starting morale value (default DEFAULT_MORALE, #1712).
         place: Optional ``BattlePlace`` this unit is stationed at.
         properties: Property tags to attach (#1794) — presence-only.
         capability_values: (CapabilityType, magnitude) pairs to attach (#1794) —
@@ -222,6 +236,7 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         commander=commander,
         summoned_by=summoned_by,
         strength=strength,
+        morale=morale,
         status=BattleUnitStatus.ACTIVE,
         place=place,
         individual_count=individual_count,
@@ -241,6 +256,7 @@ def create_fortification(
     defending_side: BattleSide,
     kind: str = FortificationKind.WALL,
     building: Building | None = None,
+    max_integrity: int | None = None,
 ) -> Fortification:
     """Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).
 
@@ -258,12 +274,17 @@ def create_fortification(
         kind: A FortificationKind value. Defaults to WALL.
         building: Optional persistent Building this structure's integrity
             ceiling derives from.
+        max_integrity: Optional explicit integrity ceiling, bypassing the
+            BASE_INTEGRITY[kind]/building computation entirely — used when
+            staging a blueprint's authored BlueprintFortification.max_integrity
+            (#2010) onto a live Fortification.
 
     Returns:
         The newly created Fortification, with integrity == max_integrity.
     """
-    level = building.fortification_level if building is not None else 0
-    max_integrity = BASE_INTEGRITY[kind] + level * FORTIFICATION_LEVEL_INTEGRITY_BONUS
+    if max_integrity is None:
+        level = building.fortification_level if building is not None else 0
+        max_integrity = BASE_INTEGRITY[kind] + level * FORTIFICATION_LEVEL_INTEGRITY_BONUS
     return Fortification.objects.create(
         place=place,
         defending_side=defending_side,
