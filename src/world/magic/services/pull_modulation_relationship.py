@@ -17,7 +17,7 @@ negative tracks. Two additive, valence-aware terms (#2034) sit on top of it:
   once (a love/hate dynamic) earns a bonus keyed on the smaller of the two
   signed sub-sums (`developed_signed_sums`). A bond lopsided entirely in one
   direction earns nothing here, no matter how large.
-- **Devotion** — a bond so overwhelmingly positive its `developed_absolute_value`
+- **Devotion** — a bond so overwhelmingly deep its `developed_absolute_value`
   clears a threshold well past the base curve's own half-saturation point earns
   a second-wind bonus on the excess above that threshold.
 """

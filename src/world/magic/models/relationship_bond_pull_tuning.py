@@ -28,7 +28,7 @@ class RelationshipBondPullTuning(SharedMemoryModel):
             fraught_half_saturation,
         )
 
-    Devotion term — rewards a bond so overwhelmingly positive that it clears a
+    Devotion term — rewards a bond so overwhelmingly deep that it clears a
     threshold well past the generic curve's own half-saturation point (only
     genuinely extreme devotion earns the second wind)::
 
