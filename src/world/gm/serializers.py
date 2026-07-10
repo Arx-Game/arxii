@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 from world.gm.constants import GMApplicationStatus, GMLevel, GMTableViewerRole
 from world.gm.models import (
+    CatalogSuggestion,
     GMApplication,
     GMLevelChange,
     GMProfile,
@@ -75,6 +76,50 @@ class GMApplicationDetailSerializer(serializers.ModelSerializer):
             "reviewed_by_username",
         ]
         read_only_fields = ["id", "account", "created_at", "updated_at", "reviewed_by"]
+
+
+class CatalogSuggestionDetailSerializer(serializers.ModelSerializer):
+    """For staff triaging GM scenario-catalog suggestions (#2127).
+
+    No create serializer — creation only happens through
+    ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+    telnet and web use), never a direct DRF POST.
+    """
+
+    submitted_by_username = serializers.CharField(source="submitted_by.username", read_only=True)
+    situation_kind_name = serializers.CharField(
+        source="situation_kind.name", read_only=True, allow_null=True
+    )
+    reviewer_username = serializers.CharField(
+        source="reviewer.username", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = CatalogSuggestion
+        fields = [
+            "id",
+            "submitted_by",
+            "submitted_by_username",
+            "situation_kind",
+            "situation_kind_name",
+            "proposal_kind",
+            "proposal_text",
+            "status",
+            "reviewer",
+            "reviewer_username",
+            "review_notes",
+            "created_at",
+            "resolved_at",
+        ]
+        read_only_fields = [
+            "id",
+            "submitted_by",
+            "situation_kind",
+            "proposal_kind",
+            "proposal_text",
+            "reviewer",
+            "created_at",
+        ]
 
 
 class GMProfileSerializer(serializers.ModelSerializer):

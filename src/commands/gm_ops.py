@@ -9,6 +9,11 @@ toolkit's telnet face — thin ``resolve_action_args()``-style parsing +
 ``action.run()`` over ``InvokeCatalogCheckAction``/``GMAwardAction``/
 ``GMApplyConditionAction`` (``actions/definitions/gm_adjudication.py``), the
 same seam the web available-actions dispatcher uses.
+
+``gm suggest <kind>=<text>`` (#2127) is the scenario catalog's suggestion
+inbox verb — thin over ``SubmitCatalogSuggestionAction``
+(``actions/definitions/gm_catalog.py``), landing in the same staff inbox
+``GMApplication`` already routes through.
 """
 
 from __future__ import annotations
@@ -34,6 +39,10 @@ _USAGE_AWARD = (
 _USAGE_CONDITION = (
     "Usage: gm condition <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]"
 )
+_USAGE_SUGGEST = (
+    "Usage: gm suggest <kind>=<text>"
+    " (kind: new_situation|check_fit|difficulty_guide|pool_guide|other)"
+)
 
 # parse_kv_and_flags key names -- module constants so the STRING_LITERAL lint's
 # comparison/membership check doesn't see bare identifier-shaped literals.
@@ -55,6 +64,7 @@ class CmdGMDashboard(ArxCommand):
       gm award <character> xp=<amount> [reason=<text>]
       gm award <character> dev=<trait> amount=<n> [reason=<text>]
       gm condition <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]
+      gm suggest <kind>=<text>
     """
 
     key = "gm"
@@ -78,6 +88,8 @@ class CmdGMDashboard(ArxCommand):
                 self._handle_award(rest)
             elif first == "condition":  # noqa: STRING_LITERAL
                 self._handle_condition(rest)
+            elif first == "suggest":  # noqa: STRING_LITERAL
+                self._handle_suggest(rest)
             else:
                 self._render()
         except CommandError as err:
@@ -213,6 +225,26 @@ class CmdGMDashboard(ArxCommand):
             run_kwargs["note"] = kwargs[_KEY_NOTE]
 
         result = GMApplyConditionAction().run(actor=self.caller, **run_kwargs)
+        if result.message:
+            self.msg(result.message)
+
+    def _handle_suggest(self, rest: str) -> None:
+        """Dispatch SubmitCatalogSuggestionAction -- <kind>=<text> (#2127)."""
+        from actions.definitions.gm_catalog import SubmitCatalogSuggestionAction  # noqa: PLC0415
+
+        if "=" not in rest:
+            raise CommandError(_USAGE_SUGGEST)
+        kind, _, text = rest.partition("=")
+        proposal_kind = kind.strip().lower()
+        proposal_text = text.strip()
+        if not proposal_kind or not proposal_text:
+            raise CommandError(_USAGE_SUGGEST)
+
+        result = SubmitCatalogSuggestionAction().run(
+            actor=self.caller,
+            proposal_kind=proposal_kind,
+            proposal_text=proposal_text,
+        )
         if result.message:
             self.msg(result.message)
 

@@ -24,6 +24,7 @@ class SubmissionCategory(models.TextChoices):
     CHARACTER_APPLICATION = "character_application", "Character Application"
     GM_APPLICATION = "gm_application", "GM Application"
     SYSTEM_ERROR = "system_error", "System Error"  # auto-captured runtime errors (#1164)
+    CATALOG_SUGGESTION = "catalog_suggestion", "Catalog Suggestion"  # GM scenario catalog (#2127)
 
 
 class ReportCategory(models.TextChoices):

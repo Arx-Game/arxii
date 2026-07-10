@@ -260,6 +260,43 @@ Day-to-day GM ops that the staff inbox + existing APIs cover for now:
   dedicated view post-Stories)
 - Invite generation (can be done via admin / API until dashboard lands)
 
+### Phase 6 — Scenario Catalog ✅ (#2127, first increment, ADR-0110)
+Extends the "discovery, never invention" shape from #2118's ad-hoc checks to the
+rest of the catalog. A GM says "this is a chase" and gets back fitting authored
+`SituationTemplate`s, the `CheckType`s proven to fit that kind of scene, an
+authored difficulty recommendation, and — advisory only, never a live binding —
+consequence-pool guidance text.
+
+Delivered this increment:
+- **Taxonomy + guidance models** (`world.gm`): `SituationKind` (cross-cutting
+  tag, `minimum_gm_level` breadth gate), `CheckTypeSituationFit`,
+  `SituationDifficultyGuide`, `ConsequencePoolGuide` (advisory text only — no
+  code path writes a live `consequence_pool` FK), `CatalogSuggestion`.
+- **`FindSituationAction`** (`gm_find_situation`) + `setsituation find <term>` —
+  per-type situation browse (Decision 1: per-type listings, never a unified
+  cross-type index), gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` and
+  breadth-filtered on `SituationKind.minimum_gm_level` against the caller's own
+  `GMLevel`.
+- **Suggestion inbox**: `SubmitCatalogSuggestionAction` (`gm_submit_catalog_suggestion`)
+  + `gm suggest <kind>=<text>`, gated by `PROPOSAL_KIND_MIN_LEVEL[proposal_kind]`
+  (Decision 9 — proposal rights scale with `GMLevel`, breadth *and* what a GM
+  may even suggest, both independently on the ladder). Routed through the
+  existing `world.staff_inbox` aggregator via `SubmissionCategory
+  .CATALOG_SUGGESTION`, mirroring `GMApplication`'s pipeline exactly (Decision 8).
+- **Starter content**: `Chase`/`Negotiation`/`Infiltration` `SituationKind`s +
+  a `SituationDifficultyGuide` row per `RenownRisk` tier, seeded idempotently
+  by `world.gm.factories.seed_catalog_starter_content`, composed into the
+  existing `"gm"` cluster seeder.
+
+Deferred (premises verified in the #2127 spec's anti-reinvention pass):
+- Encounter- and mission-type find/browse (separate PR per Decision 1).
+- Crowdsourced ratification to higher-GM tiers beyond staff-only review.
+- Structured `CheckType`-draft proposals (today's `CatalogSuggestion
+  proposal_kind=OTHER` covers the freeform ask).
+- Bounded per-invocation modifiers beyond #2118's edge/setback.
+- `ChallengeTemplate.severity` guidance (Decision 6 — different scale, guides a
+  content author rather than a live GM).
+
 ## Cross-System Dependencies
 
 - **Stories app** — needs GM role relations and permission checks added as it grows

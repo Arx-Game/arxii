@@ -23,6 +23,7 @@
   - situation_trap_links <- mechanics.SituationTrapLink
   - context_attachments <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
+  - situation_guides <- gm.ConsequencePoolGuide
   - traps <- room_features.Trap
 
 ### ConsequencePoolEntry
@@ -1347,6 +1348,7 @@
   - item_check_modifiers <- items.ItemCheckModifier
   - threat_pool_entries <- combat.ThreatPoolEntry
   - escalation_curves <- combat.EscalationCurve
+  - situation_fits <- gm.CheckTypeSituationFit
   - assist_patterns <- missions.MissionAssistPattern
   - project_contribution_methods <- projects.ContributionMethod
   - detect_traps <- room_features.Trap
@@ -2474,6 +2476,33 @@
   - profile -> gm.GMProfile [FK]
   - changed_by -> accounts.AccountDB [FK]
 
+### SituationKind
+**Pointed to by:**
+  - check_fits <- gm.CheckTypeSituationFit
+  - difficulty_guides <- gm.SituationDifficultyGuide
+  - pool_guides <- gm.ConsequencePoolGuide
+  - suggestions <- gm.CatalogSuggestion
+
+### CheckTypeSituationFit
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+  - situation_kind -> gm.SituationKind [FK]
+
+### SituationDifficultyGuide
+**Foreign Keys:**
+  - situation_kind -> gm.SituationKind [FK]
+
+### ConsequencePoolGuide
+**Foreign Keys:**
+  - situation_kind -> gm.SituationKind [FK]
+  - pool -> actions.ConsequencePool [FK]
+
+### CatalogSuggestion
+**Foreign Keys:**
+  - submitted_by -> accounts.AccountDB [FK]
+  - situation_kind -> gm.SituationKind [FK] (nullable)
+  - reviewer -> accounts.AccountDB [FK] (nullable)
+
 ### GMRewardConfig
 
 ### GMWeeklyRewardTracker
@@ -2498,6 +2527,7 @@
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' — Set profile.level (promotion OR demotion), writing the audit row.`
 - `revoke_invite(invite: 'GMRosterInvite') -> 'None' — Revoke an invite by setting expires_at to now.`
 - `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' — Future integration hook: called when a persona is retired.`
+- `submit_catalog_suggestion(account: 'AccountDB', *, proposal_kind: 'str', proposal_text: 'str', situation_kind: 'SituationKind | None' = None) -> 'CatalogSuggestion' — Create a ``CatalogSuggestion`` row, routed to the staff inbox (#2127).`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' — GM surrenders oversight of a story.`
 - `touch_gm_activity(gm_profile: 'GMProfile') -> 'None' — Stamp ``GMProfile.last_active_at`` to now (#2004).`
 - `transfer_ownership(table: 'GMTable', new_gm: 'GMProfile') -> 'None' — Reassign a table to a different GM. Staff-only action.`
@@ -2880,13 +2910,13 @@
 - `hazard_is_covered_for(character: 'DefaultObject', room: 'DefaultObject | None', damage_type: 'DamageType', *, threshold: 'int' = 1) -> 'bool' — Whether *character* in *room* is sheltered against *damage_type*.`
 - `is_owner(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``ownership_for(persona, room)`` returns a row.`
 - `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``tenancies_for(persona, room)`` has any rows.`
-- `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' — Default a persona's character home to this room when it has none yet (#1514).`
+- `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' — Default a persona's character home to this room when it has none yet (#1514, #2036).`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' — Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' — Return ALL LocationOwnership rows (active and ended) for a`
 - `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' — The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
 - `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' — Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
-- `set_primary_home(*, persona: 'Persona', room: 'DefaultObject') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670).`
+- `set_primary_home(*, persona: 'Persona', room: 'DefaultObject', notes: 'str' = '') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670, #2036).`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
 - `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
 - `tenancies_for(persona: 'Persona', room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return the QuerySet of currently-active tenancies that give this`

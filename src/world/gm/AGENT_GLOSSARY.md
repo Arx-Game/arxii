@@ -36,6 +36,26 @@ _Avoid_: demotion (as a separate concept — same service, same audit row), leve
 `GMEvidenceSummary` (`world.gm.types`) — the read model `gm_evidence_summary(profile)` builds for a staff reviewer deciding on a promotion: stories currently running, beats completed by risk tier, feedback by trust category (`CategoryFeedback`), and the GM's `GMLevelChange` audit trail. Reachable via `GMProfileViewSet.evidence` (`IsAdminUser`) or telnet `gmtrust evidence <account>`.
 _Avoid_: track record (informal; use the type name in code/docs), review packet.
 
+**Situation Kind**:
+`SituationKind` — the cross-cutting scenario taxonomy tag (#2127, e.g. "Chase", "Negotiation") a GM finds by name/description in a per-type browse (`FindSituationAction`, `setsituation find <term>`). Not a reuse of `mechanics.ChallengeCategory` or `checks.CheckCategory` (those are per-app display groupings); a `SituationKind` is the shared label that lets checks/difficulty/pool guidance stay consistent across every per-type listing. Gates its own visibility via `minimum_gm_level` (breadth gating, Decision 9) — a GM below that tier never sees the kind, even on an exact name match. Deliberately holds no FK to `mechanics.SituationTemplate` (ADR-0010: `gm` depends on `mechanics`, never the reverse) — a browse matches templates and kinds independently by the same search term.
+_Avoid_: scenario tag, situation category (collides with `ChallengeCategory`), situation type.
+
+**Check Fit**:
+`CheckTypeSituationFit` — a through-row proving a `checks.CheckType` fits a `SituationKind`, with `fit_notes` explaining why. The "translatable across contexts" record (Decision 1): the same check can be proven to fit more than one kind.
+_Avoid_: check mapping, check association.
+
+**Difficulty Guide**:
+`SituationDifficultyGuide` — an authored `DifficultyChoice` band recommendation for a `SituationKind` at a given `RenownRisk` tier, with `guidance_text`. Targets the live band surface a GM actually picks (`InvokeCatalogCheckAction`'s `difficulty` kwarg) — never `ChallengeTemplate.severity`, which is baked into pre-authored content at authoring time and never touched by a live GM (Decision 6).
+_Avoid_: severity guide, difficulty rating.
+
+**Pool Guide**:
+`ConsequencePoolGuide` — advisory text (`selection_criteria`, `is_default`) on which `ConsequencePool` fits a `SituationKind`. ADVISORY ONLY (Decision 7): nothing anywhere reads this row to select, compose, or write a live `consequence_pool` FK — staff keeps authoring `ActionTemplate.consequence_pool` / `ActionTemplateGate.consequence_pool` / `SituationTrapLink.consequence_pool` by hand in admin. The single most guarded piece of guidance text in the catalog, since a live pool *binding* (as opposed to advisory text about one) is exactly the "if u fail u die lol" invention Arx I failed on.
+_Avoid_: pool binding, pool selector (implies live application — this never applies anything).
+
+**Catalog Suggestion**:
+`CatalogSuggestion` — a GM's proposed catalog growth (a new `SituationKind`, a check fit, a difficulty guide, or — at EXPERIENCED+ trust — a pool guide), routed through `world.staff_inbox` exactly like a `GMApplication`. Reuses `player_submissions.SubmissionStatus` (OPEN/REVIEWED/DISMISSED, Decision 8) rather than a new enum. `proposal_kind` is tiered by the submitting GM's `GMLevel` (`PROPOSAL_KIND_MIN_LEVEL`, Decision 9) — STARTING/JUNIOR may propose NEW_SITUATION/CHECK_FIT/OTHER only; GM+ additionally DIFFICULTY_GUIDE; EXPERIENCED+ additionally POOL_GUIDE. Staff acceptance is a manual admin action that separately authors the real catalog row(s) — accepting a suggestion never auto-creates them.
+_Avoid_: catalog proposal (use the model name), suggestion (ambiguous outside this context).
+
 **GM Story Reward**:
 The XP a GM earns (via `world.gm.services.award_gm_story_reward`, `ProgressionReason
 .GM_STORY_REWARD`) for running stories for other players — the opposite direction from

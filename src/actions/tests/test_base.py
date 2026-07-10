@@ -391,6 +391,9 @@ class ActionRegistryTests(TestCase):
             "gm_invoke_check",
             "gm_award_progression",
             "gm_apply_condition",
+            # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
+            "gm_find_situation",
+            "gm_submit_catalog_suggestion",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

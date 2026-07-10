@@ -406,9 +406,16 @@ actions, backends, and service functions.
   key token and can't be pre-registered as a multiword key), `gm award <character>
   xp=<amount>|dev=<trait> amount=<n> [reason=<text>]` (`GMAwardAction`), `gm condition
   <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]`
-  (`GMApplyConditionAction`). `CmdGMIdle` (`gmidle`, staff-only `perm(Admin)`) — idle GM
-  tables. No business logic in the command; permission gating (`IsSceneGMPrerequisite` +
-  `MinimumGMLevelPrerequisite` where applicable) lives entirely in the Actions.
+  (`GMApplyConditionAction`). `gm suggest <kind>=<text>` (#2127 — `kind` one of
+  `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`) dispatches
+  `SubmitCatalogSuggestionAction` (`actions/definitions/gm_catalog.py`), gated
+  `MinimumGMLevelPrerequisite(GMLevel.STARTING)` plus a `proposal_kind` tier check
+  against the caller's `GMLevel` (`PROPOSAL_KIND_MIN_LEVEL`) — refuses a below-tier
+  kind with a level-appropriate message; creates a `CatalogSuggestion` routed to the
+  same staff inbox `GMApplication` uses. `CmdGMIdle` (`gmidle`, staff-only
+  `perm(Admin)`) — idle GM tables. No business logic in the command; permission
+  gating (`IsSceneGMPrerequisite` + `MinimumGMLevelPrerequisite` where applicable)
+  lives entirely in the Actions.
 - **`gm_tables.py`**: `CmdGMTable` (`gmtable`, #1505) — basic telnet parity for GM-table admin
   (the React `frontend/src/tables/` module is the primary surface). Thin over `world.gm.services`,
   subverb-dispatched: `gmtable [list]`, `gmtable create <name>[=<desc>]`, `gmtable members <id>`,
@@ -497,12 +504,16 @@ actions, backends, and service functions.
   grid. Thin `ArxCommand` over `action.run()` (same seam as the web quick-action
   `_set_the_stage_actions`); gated by `MinimumGMLevelPrerequisite(GMLevel.STARTING)` (staff bypass
   preserved). No business logic in the command.
-- **`setsituation.py`**: `CmdSetSituation` (`setsituation`, `cmd:all()`, #1895/#2117) — telnet face
-  of `SetSituationAction` (key `set_situation`, REGISTRY backend). A JUNIOR-tier-or-higher GM (or
-  staff) caller instantiates an authored `SituationTemplate` into their current room via
+- **`setsituation.py`**: `CmdSetSituation` (`setsituation`, `cmd:all()`, #1895/#2117/#2127) — telnet
+  face of `SetSituationAction` (key `set_situation`, REGISTRY backend). A JUNIOR-tier-or-higher GM
+  (or staff) caller instantiates an authored `SituationTemplate` into their current room via
   `action.run()`. Gated by `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` (staff bypass preserved) —
-  mints live `Challenge`/`ChallengeInstance` rows, one tier above bare approval. No business logic
-  in the command.
+  mints live `Challenge`/`ChallengeInstance` rows, one tier above bare approval. `setsituation find
+  <term>` (#2127) extends the same command with a STARTING-tier-or-higher browse mode, mirroring
+  `gm check find`'s shape: dispatches `FindSituationAction` (`actions/definitions/gm_catalog.py`)
+  instead, searching `SituationTemplate` by name/description and any matching `SituationKind`
+  (breadth-filtered on `minimum_gm_level`) — read-only, never instantiates anything. No business
+  logic in the command.
 - **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list, create, or switch
   faces. Bare `persona`/`persona list` renders all the caller's personas (marking the active one
   `◄ active`). `persona <name>`/`wear-face <name>` resolves the name among the caller's own faces

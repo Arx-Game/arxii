@@ -108,6 +108,7 @@ from actions.definitions.gm_adjudication import (
     GMAwardAction,
     InvokeCatalogCheckAction,
 )
+from actions.definitions.gm_catalog import FindSituationAction, SubmitCatalogSuggestionAction
 from actions.definitions.gm_combat import (
     AddEncounterParticipantAction,
     AddOpponentAction,
@@ -564,6 +565,9 @@ _ALL_ACTIONS: list[Action] = [
     InvokeCatalogCheckAction(),
     GMAwardAction(),
     GMApplyConditionAction(),
+    # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
+    FindSituationAction(),
+    SubmitCatalogSuggestionAction(),
 ]
 
 # Lookup by key
