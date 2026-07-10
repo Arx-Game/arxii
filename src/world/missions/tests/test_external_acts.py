@@ -313,3 +313,180 @@ class FastForwardExternalActsTests(TestCase):
 
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.entry)
+
+
+class WeaveThreadExternalActWiringTests(TestCase):
+    """``weave_thread`` calls ``satisfy_external_act(THREAD_WOVEN)`` on success (#1035)."""
+
+    def test_weave_thread_resolves_waiting_thread_woven_mission(self) -> None:
+        from world.magic.constants import TargetKind
+        from world.magic.factories import (
+            CharacterThreadWeavingUnlockFactory,
+            ResonanceFactory,
+            ThreadWeavingUnlockFactory,
+        )
+        from world.magic.services import weave_thread
+        from world.traits.factories import TraitFactory
+
+        trait = TraitFactory()
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        unlock = ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=trait)
+        CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock, xp_spent=100)
+
+        template = MissionTemplateFactory(name="weave-wiring-tmpl")
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        target = MissionNodeFactory(template=template, key="target")
+        instance = MissionInstanceFactory(template=template, current_node=entry)
+        MissionParticipantFactory(
+            instance=instance,
+            character=sheet.character,
+            is_contract_holder=True,
+        )
+        MissionOptionFactory(
+            node=entry,
+            order=0,
+            option_kind=OptionKind.EXTERNAL_ACT,
+            source_kind=OptionSource.AUTHORED,
+            required_act=ExternalAct.THREAD_WOVEN,
+            branch_target=target,
+        )
+
+        thread = weave_thread(sheet, TargetKind.TRAIT, trait, resonance, name="Wired Thread")
+
+        self.assertEqual(thread.owner, sheet)
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, target)
+
+
+class CreateCovenantExternalActWiringTests(TestCase):
+    """``create_covenant`` calls ``satisfy_external_act(COVENANT_SWORN)`` per founder (#1035)."""
+
+    def test_create_covenant_resolves_covenant_sworn_for_every_founder(self) -> None:
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.services import create_covenant
+        from world.covenants.types import CovenantFounder
+
+        template = MissionTemplateFactory(name="covenant-wiring-tmpl")
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        target = MissionNodeFactory(template=template, key="target")
+
+        founder_sheets = [CharacterSheetFactory(), CharacterSheetFactory()]
+        instances = []
+        for founder_sheet in founder_sheets:
+            instance = MissionInstanceFactory(template=template, current_node=entry)
+            MissionParticipantFactory(
+                instance=instance,
+                character=founder_sheet.character,
+                is_contract_holder=True,
+            )
+            MissionOptionFactory(
+                node=entry,
+                order=0,
+                option_kind=OptionKind.EXTERNAL_ACT,
+                source_kind=OptionSource.AUTHORED,
+                required_act=ExternalAct.COVENANT_SWORN,
+                branch_target=target,
+            )
+            instances.append(instance)
+
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        founders = [
+            CovenantFounder(character_sheet=founder_sheet, role=role)
+            for founder_sheet in founder_sheets
+        ]
+
+        create_covenant(
+            name="Wired Covenant",
+            covenant_type=CovenantType.DURANCE,
+            sworn_objective="Prove the wiring.",
+            founders=founders,
+        )
+
+        for instance in instances:
+            instance.refresh_from_db()
+            self.assertEqual(instance.current_node, target)
+
+
+class UseTechniqueExternalActWiringTests(TestCase):
+    """``use_technique`` calls ``satisfy_external_act(TECHNIQUE_CAST)`` on success (#1035)."""
+
+    def test_use_technique_resolves_waiting_technique_cast_mission(self) -> None:
+        from unittest.mock import MagicMock
+
+        from world.magic.factories import CharacterAnimaFactory, TechniqueFactory
+        from world.magic.services import use_technique
+        from world.mechanics.factories import CharacterEngagementFactory
+
+        anima = CharacterAnimaFactory(current=20, maximum=20)
+        character = anima.character
+        CharacterEngagementFactory(character=character)
+        sheet = CharacterSheetFactory(character=character)
+        technique = TechniqueFactory(intensity=5, control=10, anima_cost=3)
+
+        template = MissionTemplateFactory(name="technique-cast-wiring-tmpl")
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        target = MissionNodeFactory(template=template, key="target")
+        instance = MissionInstanceFactory(template=template, current_node=entry)
+        MissionParticipantFactory(
+            instance=instance,
+            character=character,
+            is_contract_holder=True,
+        )
+        MissionOptionFactory(
+            node=entry,
+            order=0,
+            option_kind=OptionKind.EXTERNAL_ACT,
+            source_kind=OptionSource.AUTHORED,
+            required_act=ExternalAct.TECHNIQUE_CAST,
+            branch_target=target,
+        )
+
+        use_technique(
+            character=character,
+            technique=technique,
+            resolve_fn=MagicMock(return_value="ok"),
+        )
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, target)
+        self.assertIsNotNone(sheet)
+
+
+class ExternalActFailureIsolationTests(TestCase):
+    """A raising ``satisfy_external_act`` never aborts the host act (#1035, ADR-0111)."""
+
+    def test_weave_thread_still_succeeds_and_logs_when_satisfy_external_act_raises(
+        self,
+    ) -> None:
+        from world.magic.constants import TargetKind
+        from world.magic.factories import (
+            CharacterThreadWeavingUnlockFactory,
+            ResonanceFactory,
+            ThreadWeavingUnlockFactory,
+        )
+        from world.magic.models import Thread
+        from world.magic.services import weave_thread
+        from world.traits.factories import TraitFactory
+
+        trait = TraitFactory()
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        unlock = ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=trait)
+        CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock, xp_spent=100)
+
+        with (
+            patch(
+                "world.missions.services.external_acts.satisfy_external_act",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertLogs("world.magic.services.threads", level="ERROR") as logs,
+        ):
+            thread = weave_thread(sheet, TargetKind.TRAIT, trait, resonance, name="Still Woven")
+
+        self.assertIsInstance(thread, Thread)
+        self.assertTrue(Thread.objects.filter(pk=thread.pk).exists())
+        self.assertTrue(
+            any("external-act satisfaction failed" in message for message in logs.output)
+        )

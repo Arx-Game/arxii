@@ -13,6 +13,7 @@ Covers:
 from __future__ import annotations
 
 from decimal import Decimal
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -56,6 +57,8 @@ if TYPE_CHECKING:
         ThreadWeavingUnlock,
     )
     from world.magic.models.gifts import Gift
+
+logger = logging.getLogger(__name__)
 
 
 def thread_level_multiplier(level: int) -> Decimal:
@@ -487,7 +490,7 @@ def _has_weaving_unlock(
 
 
 @transaction.atomic
-def weave_thread(  # noqa: PLR0913, PLR0912, C901
+def weave_thread(  # noqa: PLR0913, PLR0912, PLR0915, C901
     character_sheet: CharacterSheet,
     target_kind: str,
     target: object,
@@ -630,6 +633,18 @@ def weave_thread(  # noqa: PLR0913, PLR0912, C901
         techniques = handler.acquired_techniques_for(resonance)
         for technique in techniques:
             CharacterTechnique.objects.get_or_create(character=character_sheet, technique=technique)
+
+    # #1035 external-act beat: never abort the host act on tutorial failure. The
+    # call is wrapped in its own savepoint (nested atomic) so a DB error inside
+    # satisfy_external_act can't poison weave_thread's own @transaction.atomic block.
+    from world.missions.constants import ExternalAct  # noqa: PLC0415
+    from world.missions.services.external_acts import satisfy_external_act  # noqa: PLC0415
+
+    try:
+        with transaction.atomic():
+            satisfy_external_act(character_sheet, ExternalAct.THREAD_WOVEN)
+    except Exception:  # log-and-continue by design (ADR-0111)
+        logger.exception("external-act satisfaction failed after weave_thread")
 
     return thread
 

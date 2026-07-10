@@ -894,7 +894,7 @@ def _charge_cast_pull(
     return pull_flat_bonus, effective_power, pull_result.resolved_effects
 
 
-def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibilities
+def use_technique(  # noqa: PLR0913, PLR0915  — orchestrator; multiple small responsibilities
     *,
     character: ObjectDB,
     technique: Technique,
@@ -1152,5 +1152,21 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         effective_ledger=effective_ledger,
         resolution_result=resolution_result,
     )
+
+    # #1035 external-act beat: never abort the host cast on tutorial failure. The
+    # call is wrapped in its own savepoint (nested atomic) so a DB error inside
+    # satisfy_external_act can't poison any enclosing atomic block a caller may
+    # have opened. NPCs without a CharacterSheet have nothing to satisfy.
+    if sheet is not None:
+        from django.db import transaction  # noqa: PLC0415
+
+        from world.missions.constants import ExternalAct  # noqa: PLC0415
+        from world.missions.services.external_acts import satisfy_external_act  # noqa: PLC0415
+
+        try:
+            with transaction.atomic():
+                satisfy_external_act(sheet, ExternalAct.TECHNIQUE_CAST)
+        except Exception:  # log-and-continue by design (ADR-0111)
+            logger.exception("external-act satisfaction failed after use_technique")
 
     return technique_result

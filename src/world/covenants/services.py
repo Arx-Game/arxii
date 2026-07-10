@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
@@ -58,6 +59,8 @@ if TYPE_CHECKING:
     from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
     from world.magic.models.sessions import RitualSession
     from world.stories.models import Story
+
+logger = logging.getLogger(__name__)
 
 MINIMUM_FOUNDERS = 2
 _COVENANT_NAME_UNIQUE_MARKER = "name"  # substring in DB integrity error for name uniqueness
@@ -234,6 +237,20 @@ def create_covenant(  # noqa: PLR0913, C901, PLR0912
     # The covenant is freshly created so its member_roster handler is new, but
     # invalidate for consistency in case the handler was accessed during this flow.
     cov.member_roster.invalidate()
+
+    # #1035 external-act beat: never abort the host act on tutorial failure. Each
+    # call is wrapped in its own savepoint (nested atomic) so a DB error inside
+    # satisfy_external_act can't poison create_covenant's own @transaction.atomic block.
+    from world.missions.constants import ExternalAct  # noqa: PLC0415
+    from world.missions.services.external_acts import satisfy_external_act  # noqa: PLC0415
+
+    for founder in founders:
+        try:
+            with transaction.atomic():
+                satisfy_external_act(founder.character_sheet, ExternalAct.COVENANT_SWORN)
+        except Exception:  # log-and-continue by design (ADR-0111)
+            logger.exception("external-act satisfaction failed after create_covenant")
+
     return cov
 
 
@@ -1748,6 +1765,19 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
             granted_pull_cap=granted_pull_cap,
         )
         _emit_court_fealty_message(target_covenant, servant_sheet)
+
+    # #1035 external-act beat: never abort the host act on tutorial failure. The
+    # call is wrapped in its own savepoint (nested atomic) so a DB error inside
+    # satisfy_external_act can't poison induct_member_via_session's own
+    # @transaction.atomic block.
+    from world.missions.constants import ExternalAct  # noqa: PLC0415
+    from world.missions.services.external_acts import satisfy_external_act  # noqa: PLC0415
+
+    try:
+        with transaction.atomic():
+            satisfy_external_act(candidate_participant.character_sheet, ExternalAct.COVENANT_SWORN)
+    except Exception:  # log-and-continue by design (ADR-0111)
+        logger.exception("external-act satisfaction failed after induct_member_via_session")
 
     return membership
 
