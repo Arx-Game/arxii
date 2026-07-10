@@ -685,6 +685,22 @@ def _character_and_equipment_contributions(
         if not detail.blocked_by_immunity and detail.final_value != 0
     )
 
+    # EQUIPMENT-INSTANCE — per-instance crafted mods (#1567)
+    character = character_sheet.character
+    if character is not None:
+        try:
+            crafted_value = character.equipped_items.crafted_modifier_total(scoped_target)
+        except AttributeError:
+            crafted_value = 0
+        if crafted_value != 0:
+            contributions.append(
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.EQUIPMENT,
+                    source_label="Crafted modifiers",
+                    value=crafted_value,
+                )
+            )
+
     # EQUIPMENT walk — facet + covenant-role + mantle passive bonuses.
     walk = equipment_walk_total(character_sheet, scoped_target)
     if walk:

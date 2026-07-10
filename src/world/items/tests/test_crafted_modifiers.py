@@ -186,3 +186,59 @@ class CraftedModifierHandlerTests(TestCase):
         # 3 + round(5 * 1.20) = 9
         self.assertEqual(character.equipped_items.crafted_modifier_total(target), 9)
         character.equipped_items.invalidate()
+
+
+class CraftedModifierInChecksTests(TestCase):
+    """collect_check_modifiers includes crafted modifiers for equipped items."""
+
+    def test_crafted_mod_appears_in_check_breakdown(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.checks.factories import CheckTypeFactory
+        from world.checks.services import collect_check_modifiers
+        from world.items.constants import BodyRegion, EquipmentLayer
+        from world.items.factories import EquippedItemFactory
+        from world.mechanics.models import ModifierCategory, ModifierTarget
+
+        character = CharacterFactory(db_key="CraftedCheckChar")
+        sheet = CharacterSheetFactory(character=character)
+
+        # Create a ModifierTarget linked to a CheckType via target_check_type
+        # so _character_and_equipment_contributions resolves scoped_target.
+        category = ModifierCategory.objects.create(name="check_1567", display_order=99)
+        target = ModifierTarget.objects.create(
+            name="crafted_check_target",
+            category=category,
+        )
+        check_type = CheckTypeFactory(name="crafted_check_type_1567")
+        target.target_check_type = check_type
+        target.save()
+
+        quality = QualityTierFactory(stat_multiplier=Decimal("1.20"))
+        item = ItemInstanceFactory()
+        crafted = CraftedItemRecipeFactory(
+            item_instance=item,
+            quality_tier=quality,
+        )
+        CraftingRecipeModifierFactory(
+            recipe=crafted.recipe,
+            target=target,
+            base_value=3,
+            quality_scale_factor=5,
+        )
+        EquippedItemFactory(
+            character=character,
+            item_instance=item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        breakdown = collect_check_modifiers(sheet, check_type)
+        crafted_contribs = [
+            c
+            for c in breakdown.contributions
+            if c.source_kind == "equipment" and c.source_label == "Crafted modifiers"
+        ]
+        self.assertEqual(len(crafted_contribs), 1)
+        self.assertEqual(crafted_contribs[0].value, 9)
+        character.equipped_items.invalidate()
