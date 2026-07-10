@@ -166,6 +166,35 @@ def teardown_conjured_obstacles(room: ObjectDB) -> None:
         )
 
 
+def expire_obstacle_rounds(room: ObjectDB) -> None:
+    """Decrement duration_rounds on conjured obstacles in the room.
+
+    At 0, restore-to-passable (preserve the base edge). Staff-authored edges
+    (null duration_rounds) are never decremented.
+    """
+    expiring = PositionEdge.objects.filter(
+        duration_rounds__isnull=False,
+        position_a__room=room,
+    )
+    for edge in expiring:
+        edge.duration_rounds -= 1
+        if edge.duration_rounds <= 0:
+            edge.is_passable = True
+            edge.duration_rounds = None
+            edge.created_by_sheet = None
+            edge.gating_challenge = None
+            edge.save(
+                update_fields=[
+                    "is_passable",
+                    "duration_rounds",
+                    "created_by_sheet",
+                    "gating_challenge",
+                ]
+            )
+        else:
+            edge.save(update_fields=["duration_rounds"])
+
+
 # ---------------------------------------------------------------------------
 # Blueprint authoring
 # ---------------------------------------------------------------------------
