@@ -78,6 +78,31 @@ stakes-contract engine's `check_stake_boundaries` seam (#1770 PR4's allow-all st
   hard-line-excluded queries, counts-only GM reads) — not by convention.
 - **Details:** `docs/systems/boundaries.md`, ADR-0086.
 
+## Built — Telnet Onboarding Front Door (#2122)
+
+Chargen/roster stay web-first by design, but the telnet front door itself was a dead end
+with no signpost, and telnet-only accounts had no way to satisfy the web app's verified-email
+gate. Three small, additive polish items (part of the #2112 launch-content-bootstrap slate):
+
+- **Web pointers.** `settings.FRONTEND_URL` (promoted from five inline `env("FRONTEND_URL",
+  ...)` calls in `settings.py`) now appears on the connection screen
+  (`server/conf/connection_screens.py`) and the characterless post-login message
+  (`typeclasses/accounts.py::at_post_login`), so a telnet-only player always has a path to the
+  web roster/application/chargen flow.
+- **`roster status`.** Own-pending-application status only (`CmdRoster`,
+  `commands/account/account_info.py`) — roster browsing stays web-only, per the existing
+  by-design boundary; this needed no listing/browsing UI, just a status line.
+- **`account email <address>`.** A subverb on `CmdAccount` that sets/updates the account's
+  primary allauth `EmailAddress` and sends the confirmation email — the telnet path to satisfy
+  `can_apply_for_characters()`'s verified-email gate for `create <user> <pass>`-registered
+  accounts (which collect no email otherwise). `can_apply_for_characters()` itself is
+  unchanged.
+- **XP balance.** `progression unlocks` now shows the caller's XP balance + last-5
+  `XPTransaction` rows (previously it only leaked into failed-purchase error text).
+
+Details: `docs/systems/roster.md`'s "Telnet Surface (#2122)" section, `docs/systems
+/progression.md`'s Telnet Commands section, `commands/CLAUDE.md`.
+
 ## What's Needed for MVP
 - Friend list system — explicit friend tracking with online status
 - Player finder — who's online, who's in scenes, who's looking for RP
