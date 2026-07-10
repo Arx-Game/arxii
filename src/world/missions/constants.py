@@ -136,6 +136,20 @@ class OptionKind(models.TextChoices):
 
     BRANCH = "branch", "Branch"
     CHECK = "check", "Check"
+    EXTERNAL_ACT = "external_act", "External Act"
+
+
+class ExternalAct(models.TextChoices):
+    """Non-mission acts that resolve an EXTERNAL_ACT option (#1035).
+
+    TECHNIQUE_CAST is transient (never fast-forwards — a fresh cast is the
+    point); THREAD_WOVEN and COVENANT_SWORN are durable (auto-resolve on node
+    entry when already true).
+    """
+
+    TECHNIQUE_CAST = "technique_cast", "Technique Cast"
+    THREAD_WOVEN = "thread_woven", "Thread Woven"
+    COVENANT_SWORN = "covenant_sworn", "Covenant Sworn"
 
 
 class OptionSource(models.TextChoices):

@@ -32,6 +32,7 @@ from world.missions.constants import (
     ConflictMode,
     DeedRewardKind,
     DeedRewardSink,
+    ExternalAct,
     GiverKind,
     JointCombine,
     MissionStatus,
@@ -456,7 +457,7 @@ class MissionOption(SharedMemoryModel):
         "callers order explicitly).",
     )
     option_kind = models.CharField(
-        max_length=10,
+        max_length=12,
         choices=OptionKind.choices,
     )
     source_kind = models.CharField(
@@ -508,6 +509,16 @@ class MissionOption(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="+",
         help_text="BRANCH/authored route: the node this option leads to.",
+    )
+    required_act = models.CharField(
+        max_length=32,
+        choices=ExternalAct.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "EXTERNAL_ACT options only: the non-mission act (cast/weave/covenant) "
+            "that resolves this option (#1035). Blank for BRANCH/CHECK options."
+        ),
     )
     challenge = models.ForeignKey(
         "mechanics.ChallengeTemplate",
@@ -587,7 +598,7 @@ class MissionOption(SharedMemoryModel):
         return errors
 
     def _kind_errors(self) -> dict[str, str]:
-        """BRANCH forbids check fields; AUTHORED+CHECK requires a check type."""
+        """BRANCH/EXTERNAL_ACT forbid check fields; AUTHORED+CHECK requires a check type."""
         errors: dict[str, str] = {}
         if self.option_kind == OptionKind.BRANCH:
             if self.authored_check_type_id is not None:
@@ -600,6 +611,15 @@ class MissionOption(SharedMemoryModel):
             and self.authored_check_type_id is None
         ):
             errors["authored_check_type"] = "Required for AUTHORED options that resolve a CHECK."
+        elif self.option_kind == OptionKind.EXTERNAL_ACT:
+            if not self.required_act:
+                errors["required_act"] = "Required for EXTERNAL_ACT options."
+            if self.authored_check_type_id is not None:
+                errors["authored_check_type"] = "Must be null for EXTERNAL_ACT options."
+            if self.authored_base_risk:
+                errors["authored_base_risk"] = "Must be 0 for EXTERNAL_ACT options."
+        if self.option_kind != OptionKind.EXTERNAL_ACT and self.required_act:
+            errors["required_act"] = "Only EXTERNAL_ACT options may set required_act."
         return errors
 
     def clean(self) -> None:
