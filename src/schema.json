@@ -5355,6 +5355,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/use_item/:
+    post:
+      operationId: combat_use_item_create
+      description: |-
+        Declare using a held on-use item as this round's action (#2023, #2120).
+
+        A primary maneuver with maneuver=USE_ITEM and item_instance set to the
+        named ``ItemInstance`` -- mutually exclusive with a declared focused
+        technique, unlike the passives-only cover/interpose declarations. At
+        most one of ``target_participant_id`` (an ally) / ``target_opponent_id``
+        (an NPC opponent) may be supplied.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/action-outcome-details/:
     get:
       operationId: combat_action_outcome_details_list
@@ -10406,6 +10441,152 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GMApplicationDetail'
+          description: ''
+  /api/gm/catalog-suggestions/:
+    get:
+      operationId: gm_catalog_suggestions_list
+      description: |-
+        Staff triage of GM scenario-catalog suggestions (#2127).
+
+        No create action — a suggestion is only ever created through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet's ``gm suggest`` and web already use), mirroring
+        ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+        are staff-only.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: proposal_kind
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - dismissed
+          - open
+          - reviewed
+        description: |-
+          * `open` - Open
+          * `reviewed` - Reviewed
+          * `dismissed` - Dismissed
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCatalogSuggestionDetailList'
+          description: ''
+  /api/gm/catalog-suggestions/{id}/:
+    get:
+      operationId: gm_catalog_suggestions_retrieve
+      description: |-
+        Staff triage of GM scenario-catalog suggestions (#2127).
+
+        No create action — a suggestion is only ever created through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet's ``gm suggest`` and web already use), mirroring
+        ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+        are staff-only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Catalog Suggestion.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogSuggestionDetail'
+          description: ''
+    put:
+      operationId: gm_catalog_suggestions_update
+      description: |-
+        Staff triage of GM scenario-catalog suggestions (#2127).
+
+        No create action — a suggestion is only ever created through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet's ``gm suggest`` and web already use), mirroring
+        ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+        are staff-only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Catalog Suggestion.
+        required: true
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogSuggestionDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogSuggestionDetail'
+          description: ''
+    patch:
+      operationId: gm_catalog_suggestions_partial_update
+      description: |-
+        Staff triage of GM scenario-catalog suggestions (#2127).
+
+        No create action — a suggestion is only ever created through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet's ``gm suggest`` and web already use), mirroring
+        ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+        are staff-only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Catalog Suggestion.
+        required: true
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCatalogSuggestionDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogSuggestionDetail'
           description: ''
   /api/gm/dashboard/:
     get:
@@ -21118,6 +21299,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/ActivePersonaResult'
           description: ''
+  /api/personas/set-profile/:
+    post:
+      operationId: personas_set_profile_create
+      description: |-
+        #1682 — author a cover persona's Guise Sheet from the web.
+
+        Wires the shipped #1270 service to the primary surface: the face must
+        be one of the played character's own personas (a foreign or unknown id
+        is rejected uniformly, mirroring set-active); PRIMARY is rejected by
+        the service (the real bio is the sheet's ``true_profile``). Absent
+        fields stay untouched (partial edits are safe); blank fields clear.
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPersonaProfileRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
   /api/personas/spread-specializations/:
     get:
       operationId: personas_spread_specializations_list
@@ -22335,6 +22544,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/RandomSceneTarget'
           description: ''
+  /api/progression/select-path/:
+    get:
+      operationId: progression_select_path_retrieve
+      description: GET — current path (usually null) + selectable PROSPECT paths.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: progression_select_path_create
+      description: POST — select a starting path; only succeeds with no path on record.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          description: No response body
   /api/progression/unlocks/:
     get:
       operationId: progression_unlocks_list
@@ -31169,6 +31399,93 @@ components:
       - target_spec
       - target_type
       - tier
+    CatalogSuggestionDetail:
+      type: object
+      description: |-
+        For staff triaging GM scenario-catalog suggestions (#2127).
+
+        No create serializer — creation only happens through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet and web use), never a direct DRF POST.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        submitted_by:
+          type: integer
+          readOnly: true
+          description: OOC authoring, not IC -- mirrors GMApplication.account, not
+            persona-anchored.
+        submitted_by_username:
+          type: string
+          readOnly: true
+        situation_kind:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The kind this suggestion relates to, if any (e.g. a check-fit
+            proposal).
+        situation_kind_name:
+          type: string
+          readOnly: true
+          nullable: true
+        proposal_kind:
+          allOf:
+          - $ref: '#/components/schemas/ProposalKindEnum'
+          readOnly: true
+        proposal_text:
+          type: string
+          readOnly: true
+          description: 'Freeform: what the GM is proposing, and why.'
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+        reviewer:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Staff account that reviewed this suggestion.
+        reviewer_username:
+          type: string
+          readOnly: true
+          nullable: true
+        review_notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - created_at
+      - id
+      - proposal_kind
+      - proposal_text
+      - reviewer
+      - reviewer_username
+      - situation_kind
+      - situation_kind_name
+      - submitted_by
+      - submitted_by_username
+    CatalogSuggestionDetailRequest:
+      type: object
+      description: |-
+        For staff triaging GM scenario-catalog suggestions (#2127).
+
+        No create serializer — creation only happens through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet and web use), never a direct DRF POST.
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+        review_notes:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
     CategoryC06Enum:
       enum:
       - harassment
@@ -44306,6 +44623,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BuildingKind'
+    PaginatedCatalogSuggestionDetailList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogSuggestionDetail'
     PaginatedChallengeInstanceList:
       type: object
       required:
@@ -47883,6 +48223,23 @@ components:
           nullable: true
         status:
           $ref: '#/components/schemas/StatusD66Enum'
+    PatchedCatalogSuggestionDetailRequest:
+      type: object
+      description: |-
+        For staff triaging GM scenario-catalog suggestions (#2127).
+
+        No create serializer — creation only happens through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet and web use), never a direct DRF POST.
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+        review_notes:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
     PatchedChapterDetailRequest:
       type: object
       description: Full serializer for chapter details
@@ -49670,6 +50027,13 @@ components:
             * `same` - Same position
             * `adjacent` - Adjacent position
             * `any` - Anywhere in room
+            * `reach_n` - N-hop reach
+        reach_hops:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: When reach=REACH_N, the maximum number of passable edges BFS
+            may traverse. Ignored for SAME/ADJACENT/ANY.
     PatchedTenureGalleryRequest:
       type: object
       description: Serialize tenure galleries.
@@ -50633,9 +50997,25 @@ components:
             characters (#1181); the backend still enforces the full gate at dispatch.
             Defaults to True when there is no tenure or preference row.
           readOnly: true
+        guise_concept:
+          type: string
+          readOnly: true
+        guise_quote:
+          type: string
+          readOnly: true
+        guise_personality:
+          type: string
+          readOnly: true
+        guise_background:
+          type: string
+          readOnly: true
       required:
       - allow_social_actions
       - character_sheet
+      - guise_background
+      - guise_concept
+      - guise_personality
+      - guise_quote
       - id
       - name
       - roster_entry
@@ -51909,6 +52289,20 @@ components:
       - object
       - possessive
       - subject
+    ProposalKindEnum:
+      enum:
+      - new_situation
+      - check_fit
+      - difficulty_guide
+      - pool_guide
+      - other
+      type: string
+      description: |-
+        * `new_situation` - New Situation
+        * `check_fit` - Check Fit
+        * `difficulty_guide` - Difficulty Guide
+        * `pool_guide` - Pool Guide
+        * `other` - Other
     PublicFeedItem:
       type: object
       description: One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem``
@@ -54583,6 +54977,29 @@ components:
         persona_id:
           type: integer
           minimum: 1
+      required:
+      - persona_id
+    SetPersonaProfileRequestRequest:
+      type: object
+      description: |-
+        POST body for the #1682 set-profile endpoint — author a guise's bio.
+
+        Every bio field is optional and None-preserving: an ABSENT field leaves the
+        stored value untouched (the ``set_persona_profile`` contract, so partial
+        edits are safe), while a PRESENT-but-blank field explicitly clears it.
+      properties:
+        persona_id:
+          type: integer
+          minimum: 1
+        concept:
+          type: string
+          maxLength: 255
+        quote:
+          type: string
+        personality:
+          type: string
+        background:
+          type: string
       required:
       - persona_id
     SetRoundModeRequestRequest:
@@ -57843,6 +58260,13 @@ components:
             * `same` - Same position
             * `adjacent` - Adjacent position
             * `any` - Anywhere in room
+            * `reach_n` - N-hop reach
+        reach_hops:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: When reach=REACH_N, the maximum number of passable edges BFS
+            may traverse. Ignored for SAME/ADJACENT/ANY.
         tier:
           type: integer
           readOnly: true
@@ -57904,11 +58328,13 @@ components:
       - same
       - adjacent
       - any
+      - reach_n
       type: string
       description: |-
         * `same` - Same position
         * `adjacent` - Adjacent position
         * `any` - Anywhere in room
+        * `reach_n` - N-hop reach
     TechniqueRequest:
       type: object
       description: Serializer for Technique records with intensity and control stats.
@@ -57969,6 +58395,13 @@ components:
             * `same` - Same position
             * `adjacent` - Adjacent position
             * `any` - Anywhere in room
+            * `reach_n` - N-hop reach
+        reach_hops:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: When reach=REACH_N, the maximum number of passable edges BFS
+            may traverse. Ignored for SAME/ADJACENT/ANY.
       required:
       - anima_cost
       - effect_type

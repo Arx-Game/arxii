@@ -227,6 +227,127 @@ class ResonanceGainPipelineTests(TestCase):
         cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=r_matched)
         self.assertEqual(cr.balance, cfg.residence_daily_trickle_per_resonance)
 
+    def test_journey3_aura_tag_via_action_then_trickle(self) -> None:
+        """Journey 3 (#2036): tag via TagRoomResonanceAction (claimed resonance
+        only — unclaimed rejected), declare residence via SetPrimaryHomeAction,
+        run residence_trickle_tick() → a ROOM_RESIDENCE grant lands. Untag via
+        UntagRoomResonanceAction → rerun the tick → no further grant.
+        """
+        from actions.definitions.locations import (
+            SetPrimaryHomeAction,
+            TagRoomResonanceAction,
+            UntagRoomResonanceAction,
+        )
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.locations.factories import LocationOwnershipFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.gain import residence_trickle_tick
+
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        room_profile = RoomProfileFactory()
+        character.location = room_profile.objectdb
+        character.save()
+        LocationOwnershipFactory(
+            on_room=True,
+            room_profile=room_profile,
+            holder_persona=sheet.primary_persona,
+        )
+
+        claimed = ResonanceFactory()
+        unclaimed = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=sheet, resonance=claimed)
+
+        # Unclaimed-resonance rejection.
+        reject = TagRoomResonanceAction().run(actor=character, resonance_id=unclaimed.pk)
+        self.assertFalse(reject.success)
+        self.assertIn("haven't claimed", reject.message)
+
+        # Tag the claimed resonance, then declare this room as residence.
+        tag_result = TagRoomResonanceAction().run(actor=character, resonance_id=claimed.pk)
+        self.assertTrue(tag_result.success, tag_result.message)
+        home_result = SetPrimaryHomeAction().run(actor=character)
+        self.assertTrue(home_result.success, home_result.message)
+
+        summary = residence_trickle_tick()
+        self.assertEqual(summary.residence_grants_issued, 1)
+        grants = ResonanceGrant.objects.filter(
+            source=GainSource.ROOM_RESIDENCE, character_sheet=sheet, resonance=claimed
+        )
+        self.assertEqual(grants.count(), 1)
+
+        # Untag — the next tick grants nothing further.
+        untag_result = UntagRoomResonanceAction().run(actor=character, resonance_id=claimed.pk)
+        self.assertTrue(untag_result.success, untag_result.message)
+        second_summary = residence_trickle_tick()
+        self.assertEqual(second_summary.residence_grants_issued, 0)
+        self.assertEqual(
+            ResonanceGrant.objects.filter(
+                source=GainSource.ROOM_RESIDENCE, character_sheet=sheet, resonance=claimed
+            ).count(),
+            1,
+        )
+
+    def test_journey5_sanctum_homecoming_satisfies_trickle_gate(self) -> None:
+        """Journey 5 (#2036): a Personal Sanctum's own Homecoming-grown
+        LocationValueModifier row (no ``tag_room_resonance`` call at all)
+        satisfies the residence-trickle gate, per the documented synergy —
+        both read the same room-level cascade rows.
+        """
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.locations.constants import HolderType, LocationParentType
+        from world.locations.factories import LocationOwnershipFactory
+        from world.locations.models import LocationValueModifier
+        from world.magic.constants import GainSource
+        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.models import ResonanceGrant, SanctumDetails, SanctumOwnerMode
+        from world.magic.services.gain import residence_trickle_tick, set_residence
+        from world.magic.services.sanctum_lvm import apply_homecoming_gain, homecoming_source_tag
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
+
+        sheet = CharacterSheetFactory()
+        founder_persona = sheet.primary_persona
+        room_profile = RoomProfileFactory()
+        LocationOwnershipFactory(
+            parent_type=LocationParentType.ROOM,
+            area=None,
+            room_profile=room_profile,
+            holder_type=HolderType.PERSONA,
+            holder_persona=founder_persona,
+            holder_organization=None,
+        )
+        sanctum_kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.SANCTUM)
+        instance = RoomFeatureInstanceFactory(
+            room_profile=room_profile, feature_kind=sanctum_kind, level=1
+        )
+        resonance = ResonanceFactory()
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=instance,
+            resonance_type=resonance,
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+
+        CharacterResonanceFactory(character_sheet=sheet, resonance=resonance)
+        set_residence(sheet, room_profile)
+
+        # No tag_room_resonance call — only the Sanctum's own Homecoming growth.
+        apply_homecoming_gain(sanctum, gain=20, cap=100)
+        homecoming_row = LocationValueModifier.objects.get(source=homecoming_source_tag(sanctum))
+        self.assertGreater(homecoming_row.value, 0)
+
+        summary = residence_trickle_tick()
+        self.assertEqual(summary.residence_grants_issued, 1)
+        self.assertTrue(
+            ResonanceGrant.objects.filter(
+                source=GainSource.ROOM_RESIDENCE, character_sheet=sheet, resonance=resonance
+            ).exists()
+        )
+
     def test_outfit_tick_no_items_returns_zero(self) -> None:
         """Daily tick runs without errors; outfit grants is 0 when no items
         equipped.

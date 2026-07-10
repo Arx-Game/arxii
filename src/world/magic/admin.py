@@ -19,6 +19,7 @@ from world.magic.models import (
     CharacterTradition,
     CrossingChoice,
     CrossingOption,
+    DistinctionResonanceRankThreshold,
     EffectType,
     Facet,
     Gift,
@@ -569,6 +570,18 @@ class ThreadPullCostAdmin(admin.ModelAdmin):
 class ThreadXPLockedLevelAdmin(admin.ModelAdmin):
     list_display = ["level", "xp_cost"]
     ordering = ["level"]
+
+
+@admin.register(DistinctionResonanceRankThreshold)
+class DistinctionResonanceRankThresholdAdmin(admin.ModelAdmin):
+    """Reverse sidecar of the distinction currency-knob grant (#2037 Decision 8)."""
+
+    list_display = ["distinction", "resonance", "rank", "lifetime_earned_threshold"]
+    list_filter = ["resonance"]
+    search_fields = ["distinction__name", "resonance__name"]
+    autocomplete_fields = ["distinction", "resonance"]
+    list_select_related = ["distinction", "resonance"]
+    ordering = ["distinction_id", "resonance_id", "rank"]
 
 
 @admin.register(ThreadPullEffect)

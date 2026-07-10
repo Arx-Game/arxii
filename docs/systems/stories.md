@@ -457,7 +457,7 @@ All services in `src/world/stories/services/`.
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `evaluate_auto_beats` | `(progress: AnyStoryProgress) -> None` | Re-evaluates all non-GM_MARKED beats; flips UNSATISFIED beats whose predicate is now met; writes BeatCompletion rows; calls `maybe_create_session_request` on exit |
-| `record_gm_marked_outcome` | `(*, progress, beat, outcome, gm_notes="") -> BeatCompletion` | GM manually resolves a GM_MARKED beat; raises `BeatNotResolvableError` if wrong type or invalid outcome |
+| `record_gm_marked_outcome` | `(*, progress, beat, outcome, gm_notes="", participants=None, extra_participants=None, resolved_by=None) -> BeatCompletion` | GM manually resolves a GM_MARKED beat; raises `BeatNotResolvableError` if wrong type or invalid outcome. `resolved_by` (#2123) — the marking GM's `GMProfile` (Lead GM or an approved Assistant GM); when set and the outcome is SUCCESS/FAILURE, credits GM Story Reward XP via `world.stories.services.gm_rewards.credit_gm_story_reward` after commit. `None` (the default, and always the case from the machine-graded `record_outcome_tier_completion`) skips the award |
 | `record_aggregate_contribution` | `(*, beat, character_sheet, points, source_note="") -> AggregateBeatContribution` | Records contribution, re-evaluates beat atomically, flips to SUCCESS if threshold crossed |
 | `expire_overdue_beats` | `(now=None) -> int` | Idempotent bulk sweep; flips UNSATISFIED past-deadline beats to EXPIRED; returns count |
 
@@ -471,8 +471,34 @@ All services in `src/world/stories/services/`.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `resolve_episode` | `(*, progress, chosen_transition=None, gm_notes="", resolved_by=None) -> EpisodeResolution` | Selects/validates transition, creates EpisodeResolution, advances progress; raises `NoEligibleTransitionError` or `AmbiguousTransitionError` on bad state. Now reconciles progress.status after advancing (`_reconcile_status_after_advance`): a non-PLOT target routes through `resolve_frontier` (WAITING_FOR_GM / RESTING), a PLOT target clears a stale frontier status back to ACTIVE, a None target is left untouched. Distinguishes a genuine authoring frontier (current episode has *no* outbound transitions → `resolve_frontier`) from a transient routing block (outbound transitions exist but none routable yet → status stays ACTIVE) before re-raising `NoEligibleTransitionError` |
+| `resolve_episode` | `(*, progress, chosen_transition=None, gm_notes="", resolved_by=None) -> EpisodeResolution` | Selects/validates transition, creates EpisodeResolution, advances progress; raises `NoEligibleTransitionError` or `AmbiguousTransitionError` on bad state. Now reconciles progress.status after advancing (`_reconcile_status_after_advance`): a non-PLOT target routes through `resolve_frontier` (WAITING_FOR_GM / RESTING), a PLOT target clears a stale frontier status back to ACTIVE, a None target is left untouched. Distinguishes a genuine authoring frontier (current episode has *no* outbound transitions → `resolve_frontier`) from a transient routing block (outbound transitions exist but none routable yet → status stays ACTIVE) before re-raising `NoEligibleTransitionError`. When `resolved_by` is set: stamps `touch_gm_activity` (#2004) *and* credits GM Story Reward XP (#2123) via `gm_rewards.credit_gm_story_reward` |
 | `_reconcile_status_after_advance` | `(progress: AnyStoryProgress) -> None` | Internal; called by `resolve_episode` after the atomic advance — see above |
+
+### completion.py
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `complete_story` | `(*, story: Story) -> Story` | Idempotent (no-op if already COMPLETED). Sets `status=COMPLETED` + `completed_at`, forecloses every still-active progress record across all three scope models, dissolves any linked CAMPAIGN covenant, then credits GM Story Reward XP (#2123) to `story.primary_table.gm` (no-op when orphaned — `primary_table is None`) via `_credit_story_completion_reward` |
+| `resolve_foreclosed_progress` | `(*, progress: AnyStoryProgress, resolved_by: GMProfile \| None) -> AnyStoryProgress` | Stamps `resolved_at`/`resolved_by` on a FORECLOSED progress record; idempotent; `resolved_by=None` is legal (staff without a GMProfile) |
+
+### gm_rewards.py (#2123)
+
+The players-served scaling formula + self-dealing guard shared by every GM Story Reward
+convergence point. Depends on `world.gm` (per ADR-0010: the more specific `world.stories`
+app depends on the more general/reusable `world.gm` primitives — GM identity, table
+membership, the reward service itself — never the reverse).
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `players_served_for_scope` | `(*, scope, gm_profile, character_sheet=None, gm_table=None) -> int` | CHARACTER: 1, unless the credited GM's own account owns the character (self-dealing) or no `character_sheet` was resolvable → 0. GROUP: count of active `GMTableMembership` rows on `gm_table`, excluding the GM's own seated persona, capped at `MAX_GROUP_PLAYERS_SERVED` (8). GLOBAL/anything else: 0 (deferred — no players-served formula fits a world-scope story yet) |
+| `credit_gm_story_reward` | `(*, resolved_by, scope, character_sheet, gm_table, per_player_xp, event_cap, label) -> None` | Computes `players_served_for_scope` and calls `world.gm.services.award_gm_story_reward`; no-ops when `resolved_by` is `None` or `players_served` is 0. `label` becomes the aggregate (never player-naming) tail of the XP transaction description, e.g. `"GM reward: beat #12 resolved for 3 player(s)"` |
+
+### feedback.py (#2123)
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `submit_story_feedback` | `(*, story, reviewer, reviewed_player, is_gm_feedback, comments, category_ratings) -> StoryFeedback` | The convergence point for creating a `StoryFeedback` row (+ its `TrustCategoryFeedbackRating` children) — replaces the ORM calls that used to live inline in `StoryFeedbackCreateSerializer.create`. When `is_gm_feedback` is set, also credits the reviewed GM with GM Story Reward XP (see `_maybe_award_gm_feedback_xp` below). Uniqueness `(story, reviewer, reviewed_player)` is the model's own constraint — enforces "one counted feedback per player per story" |
+| `_maybe_award_gm_feedback_xp` | `(*, feedback, story, reviewer, reviewed_player) -> None` | Guards: reviewer must be a served participant (an active-or-historical `StoryParticipation` row in this story — never a spectator); `reviewed_player` must have a `GMProfile`; the average rating must round to a positive `rating_band` (ratings are bounded -2..2, so the band is 1 or 2). Awards `GMRewardConfig.feedback_xp_per_rating_point * rating_band` via `award_gm_story_reward`, with `event_cap` set to that same product (only the weekly ceiling can further truncate it). The XP transaction description is deliberately aggregate ("story feedback") — never names the rating player, per the leak rule |
 
 ### progress.py
 
@@ -687,7 +713,7 @@ All ViewSets support standard REST verbs (GET list/detail, POST create, PATCH/PU
 | Model | Purpose |
 |-------|---------|
 | `StoryParticipation` | Character involvement in a story |
-| `StoryFeedback` | Post-story trust-building feedback |
+| `StoryFeedback` | Post-story trust-building feedback. GM feedback (`is_gm_feedback=True`) from a served participant with a positive average rating credits the reviewed GM with GM Story Reward XP (#2123) — see `services.feedback.submit_story_feedback` |
 | `TrustCategoryFeedbackRating` | Per-category rating within feedback |
 | `EpisodeScene` | Links scenes to episodes |
 | `CrossoverInvite` | Lead-GM consent to link another GM's story to a shared event (#2002) |
@@ -747,6 +773,12 @@ be performed by an approved Assistant GM for that beat.
 | `story promote <episode-id> <pitch|outline|plot>` | `promote_episode` | Change the episode's authoring maturity. |
 | `story mark <beat-id> <success|failure> [notes]` | `mark_beat` | Record a GM-marked outcome on a beat. |
 | `story surrender <story-id>` | — (service-direct) | GM surrenders oversight; story enters "seeking GM" (#2004). |
+
+`story mark`/`story resolve`/`story complete` (and their web-endpoint equivalents,
+`BeatViewSet.mark`/`EpisodeViewSet.resolve`) all resolve the acting account's own
+`GMProfile` and pass it through as `resolved_by`/credit the GM whose `primary_table`
+owns the story — so an approved Assistant GM who marks a beat is credited with GM
+Story Reward XP directly, never silently the Lead GM (#2123).
 
 ## Player→GM recruitment loop (#2119)
 

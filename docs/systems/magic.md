@@ -1052,11 +1052,31 @@ populated on a given `ResonanceGrant` row (the universal audit ledger — see "S
 Resonance Gain" in `docs/systems/INDEX.md`). Current values:
 
 - `POSE_ENDORSEMENT` / `SCENE_ENTRY` — peer endorsement of a pose/scene-entry (#1138).
-- `ROOM_RESIDENCE` — room residence trickle.
+- `ROOM_RESIDENCE` — room residence trickle. Live end-to-end via a declare→tag→tick loop
+  (#2036): `SetPrimaryHomeAction` declares `CharacterSheet.current_residence`,
+  `tag_room_resonance`/`untag_room_resonance` tag the room's aura, `residence_trickle_tick()`
+  grants daily for the tagged∩claimed intersection; `StartingArea.grants_residence_tenancy`
+  auto-grants a CG starting tenancy so the gate is reachable with zero manual player step. A
+  Sanctum's Ritual of Homecoming writes the same `LocationValueModifier` row shape onto its own
+  room, so a resident Sanctum owner trickles from Homecoming growth as an intentional emergent
+  synergy — see `world/magic/CLAUDE.md` "Residence declaration + room aura tagging" for detail.
 - `OUTFIT_TRICKLE` — outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`).
 - `STAFF_GRANT` — manual staff grant.
-- `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `PROJECT_CONTRIBUTION` /
-  `SANCTUM_DISSOLUTION_RECOVERY` — Sanctum/Project income and dissolution recovery (Plan 4).
+- `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `SANCTUM_DISSOLUTION_RECOVERY` —
+  Sanctum income and dissolution recovery (Plan 4).
+- `PROJECT_CONTRIBUTION` — flat resonance per contribution to a project whose
+  `ProjectKind` has opted in (#2038). `ProjectKindResonanceAward`
+  (`world/projects/models.py`) is a staff-authored per-kind opt-in table
+  (`kind` unique, `resonance_award_amount`; a missing row or amount 0 means the
+  kind doesn't pay out — fail-closed, no `add_contribution` behavior change).
+  Seeded today: only `ORGANIZATION_CAPABILITY` → 5 (`ensure_project_kind_resonance_awards`,
+  `world/projects/seeds.py`, `project_resonance` cluster). The payout hook,
+  `_maybe_grant_project_contribution_resonance` (`world/projects/services.py`), runs
+  at the end of every `add_contribution` call regardless of `ContributionKind`;
+  it reads resonance off `Project.resonance` (the typed source FK is
+  `ResonanceGrant.source_project`) and is exception-guarded so a payout failure
+  never rolls back the contribution itself. Uncapped by design — every
+  contribution to an opted-in project's kind pays out again.
 - `ENTRY_FLOURISH` — see "Entry-Flourish Declaration" above.
 - `DRAMATIC_MOMENT` — see "Dramatic Moment Tagging" above.
 - `STYLE_PRESENTATION` — style presentation endorsement (#1152).
@@ -1096,6 +1116,17 @@ perception/presence-driven sources a character actively performs to be seen (`PO
 written; authored/system sources (`STAFF_GRANT`, `MISSION_REWARD`, `MISSION_REPORT`,
 `STAKE_REWARD`, `PROJECT_CONTRIBUTION`, the three `SANCTUM_*` sources, and `DISTINCTION`
 itself — accelerating a distinction's own seed grant would be circular) are never accelerated.
+
+The same `ACCELERATED_GAIN_SOURCES` gate also drives the reverse distinction link (#2037):
+after an accelerated-source grant lands, `grant_resonance` calls
+`check_distinction_rank_thresholds(character_sheet, resonance)`
+(`world/magic/services/distinction_resonance.py`), which ranks up **held** distinctions whose
+authored `DistinctionResonanceRankThreshold` (`world/magic/models/grants.py`) at exactly
+`current_rank + 1` is crossed by the new `lifetime_earned` — looping to a fully caught-up
+final state per grant, exclusion conflicts logged and skipped, and the whole check
+failure-isolated (`logger.exception`) so the resonance grant itself always stands.
+`DISTINCTION`-source seeds never trigger it (feedback-loop guard). Details:
+`docs/systems/distinctions.md` "Reverse direction".
 
 ### Aura Drift (#1737)
 

@@ -1,1 +1,1 @@
-0005_characterdraft_claimed_kin_pool_and_more
+0007_alter_startingarea_default_starting_room

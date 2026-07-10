@@ -1125,6 +1125,28 @@ class InterposeSerializer(serializers.Serializer):
     ally_participant_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
 
 
+class UseItemSerializer(serializers.Serializer):
+    """Write serializer for declaring a USE_ITEM maneuver (#2023, #2120).
+
+    ``item_instance_id`` is the PK of the held ``ItemInstance`` to use — a
+    primary maneuver, unlike the passives-only cover/interpose declarations
+    above. At most one of ``target_participant_id`` (an ally) /
+    ``target_opponent_id`` (an NPC opponent) may be supplied; possession and
+    encounter-membership validation happens in the view (``get_object_or_404``)
+    and service (``declare_use_item``).
+    """
+
+    item_instance_id = serializers.IntegerField(min_value=1)
+    target_participant_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    target_opponent_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs.get("target_participant_id") and attrs.get("target_opponent_id"):
+            msg = "Supply at most one of target_participant_id / target_opponent_id."
+            raise serializers.ValidationError(msg)
+        return attrs
+
+
 class OpponentTargetSerializer(serializers.Serializer):
     """Write serializer for social-combat verbs that target an NPC opponent (#2015).
 

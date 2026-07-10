@@ -24,16 +24,18 @@ import type { PositionAdjacencyItem } from './types';
  *                OR targetPositionId appears in the adjacency entry for
  *                actorPositionId.
  *
- * @param reach            The technique's reach string ("same" | "adjacent" | "any" | null).
+ * @param reach            The technique's reach string ("same" | "adjacent" | "any" | "reach_n" | null).
  * @param actorPositionId  The actor's current position PK, or null/undefined if unplaced.
  * @param targetPositionId The target's current position PK, or null/undefined if unplaced.
  * @param adjacency        The encounter's position adjacency graph (EncounterDetail.position_adjacency).
+ * @param reachHops        When reach is "reach_n", the max BFS hops (default 1).
  */
 export function isTargetReachable(
   reach: string | null | undefined,
   actorPositionId: number | null | undefined,
   targetPositionId: number | null | undefined,
-  adjacency: PositionAdjacencyItem[]
+  adjacency: PositionAdjacencyItem[],
+  reachHops?: number | null
 ): boolean {
   // No constraint (or any) — always reachable.
   if (reach == null || reach === 'any') return true;
@@ -51,6 +53,43 @@ export function isTargetReachable(
     return entry?.adjacent_position_ids.includes(targetPositionId) ?? false;
   }
 
+  // "reach_n" — bounded BFS over the adjacency graph up to reachHops hops.
+  if (reach === 'reach_n') {
+    const maxHops = reachHops ?? 1;
+    if (targetPositionId === actorPositionId) return true;
+    return isReachableWithinHops(adjacency, actorPositionId, targetPositionId, maxHops);
+  }
+
   // Unknown reach values — default to reachable (safe/lenient).
   return true;
+}
+
+/**
+ * Bounded BFS over the adjacency graph. Returns true if `targetPositionId`
+ * is reachable from `startPositionId` within `maxHops` edges.
+ */
+function isReachableWithinHops(
+  adjacency: PositionAdjacencyItem[],
+  startPositionId: number,
+  targetPositionId: number,
+  maxHops: number
+): boolean {
+  const visited = new Set<number>([startPositionId]);
+  const frontier: Array<{ id: number; depth: number }> = [{ id: startPositionId, depth: 0 }];
+
+  while (frontier.length > 0) {
+    const { id, depth } = frontier.shift()!;
+    if (depth >= maxHops) continue;
+
+    const entry = adjacency.find((a) => a.position_id === id);
+    const neighbors = entry?.adjacent_position_ids ?? [];
+    for (const neighborId of neighbors) {
+      if (neighborId === targetPositionId) return true;
+      if (!visited.has(neighborId)) {
+        visited.add(neighborId);
+        frontier.push({ id: neighborId, depth: depth + 1 });
+      }
+    }
+  }
+  return false;
 }

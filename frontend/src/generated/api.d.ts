@@ -3608,6 +3608,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/use_item/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Declare using a held on-use item as this round's action (#2023, #2120).
+     *
+     *     A primary maneuver with maneuver=USE_ITEM and item_instance set to the
+     *     named ``ItemInstance`` -- mutually exclusive with a declared focused
+     *     technique, unlike the passives-only cover/interpose declarations. At
+     *     most one of ``target_participant_id`` (an ally) / ``target_opponent_id``
+     *     (an NPC opponent) may be supplied.
+     */
+    post: operations['combat_use_item_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/action-outcome-details/': {
     parameters: {
       query?: never;
@@ -6633,6 +6658,74 @@ export interface paths {
      *     List/Retrieve/Update: staff only.
      */
     patch: operations['gm_applications_partial_update'];
+    trace?: never;
+  };
+  '/api/gm/catalog-suggestions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff triage of GM scenario-catalog suggestions (#2127).
+     *
+     *     No create action — a suggestion is only ever created through
+     *     ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+     *     telnet's ``gm suggest`` and web already use), mirroring
+     *     ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+     *     are staff-only.
+     */
+    get: operations['gm_catalog_suggestions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/catalog-suggestions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff triage of GM scenario-catalog suggestions (#2127).
+     *
+     *     No create action — a suggestion is only ever created through
+     *     ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+     *     telnet's ``gm suggest`` and web already use), mirroring
+     *     ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+     *     are staff-only.
+     */
+    get: operations['gm_catalog_suggestions_retrieve'];
+    /**
+     * @description Staff triage of GM scenario-catalog suggestions (#2127).
+     *
+     *     No create action — a suggestion is only ever created through
+     *     ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+     *     telnet's ``gm suggest`` and web already use), mirroring
+     *     ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+     *     are staff-only.
+     */
+    put: operations['gm_catalog_suggestions_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff triage of GM scenario-catalog suggestions (#2127).
+     *
+     *     No create action — a suggestion is only ever created through
+     *     ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+     *     telnet's ``gm suggest`` and web already use), mirroring
+     *     ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+     *     are staff-only.
+     */
+    patch: operations['gm_catalog_suggestions_partial_update'];
     trace?: never;
   };
   '/api/gm/dashboard/': {
@@ -12991,6 +13084,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/set-profile/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #1682 — author a cover persona's Guise Sheet from the web.
+     *
+     *     Wires the shipped #1270 service to the primary surface: the face must
+     *     be one of the played character's own personas (a foreign or unknown id
+     *     is rejected uniformly, mirroring set-active); PRIMARY is rejected by
+     *     the service (the real bio is the sheet's ``true_profile``). Absent
+     *     fields stay untouched (partial edits are safe); blank fields clear.
+     */
+    post: operations['personas_set_profile_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/spread-specializations/': {
     parameters: {
       query?: never;
@@ -13575,6 +13693,24 @@ export interface paths {
     put?: never;
     /** @description Reroll a random scene target slot. */
     post: operations['progression_random_scenes_reroll_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/select-path/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET — current path (usually null) + selectable PROSPECT paths. */
+    get: operations['progression_select_path_retrieve'];
+    put?: never;
+    /** @description POST — select a starting path; only succeeds with no path on record. */
+    post: operations['progression_select_path_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -18443,6 +18579,47 @@ export interface components {
       readonly target_spec: {
         [key: string]: unknown;
       } | null;
+    };
+    /**
+     * @description For staff triaging GM scenario-catalog suggestions (#2127).
+     *
+     *     No create serializer — creation only happens through
+     *     ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+     *     telnet and web use), never a direct DRF POST.
+     */
+    CatalogSuggestionDetail: {
+      readonly id: number;
+      /** @description OOC authoring, not IC -- mirrors GMApplication.account, not persona-anchored. */
+      readonly submitted_by: number;
+      readonly submitted_by_username: string;
+      /** @description The kind this suggestion relates to, if any (e.g. a check-fit proposal). */
+      readonly situation_kind: number | null;
+      readonly situation_kind_name: string | null;
+      readonly proposal_kind: components['schemas']['ProposalKindEnum'];
+      /** @description Freeform: what the GM is proposing, and why. */
+      readonly proposal_text: string;
+      status?: components['schemas']['StatusD66Enum'];
+      /** @description Staff account that reviewed this suggestion. */
+      readonly reviewer: number | null;
+      readonly reviewer_username: string | null;
+      review_notes?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+    };
+    /**
+     * @description For staff triaging GM scenario-catalog suggestions (#2127).
+     *
+     *     No create serializer — creation only happens through
+     *     ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+     *     telnet and web use), never a direct DRF POST.
+     */
+    CatalogSuggestionDetailRequest: {
+      status?: components['schemas']['StatusD66Enum'];
+      review_notes?: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
     };
     /**
      * @description * `harassment` - Harassment
@@ -24717,6 +24894,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['BuildingKind'][];
     };
+    PaginatedCatalogSuggestionDetailList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CatalogSuggestionDetail'][];
+    };
     PaginatedChallengeInstanceList: {
       /** @example 123 */
       count: number;
@@ -26995,6 +27187,19 @@ export interface components {
       location?: number | null;
       status?: components['schemas']['StatusD66Enum'];
     };
+    /**
+     * @description For staff triaging GM scenario-catalog suggestions (#2127).
+     *
+     *     No create serializer — creation only happens through
+     *     ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+     *     telnet and web use), never a direct DRF POST.
+     */
+    PatchedCatalogSuggestionDetailRequest: {
+      status?: components['schemas']['StatusD66Enum'];
+      review_notes?: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+    };
     /** @description Full serializer for chapter details */
     PatchedChapterDetailRequest: {
       title?: string;
@@ -28056,8 +28261,11 @@ export interface components {
        *     * `same` - Same position
        *     * `adjacent` - Adjacent position
        *     * `any` - Anywhere in room
+       *     * `reach_n` - N-hop reach
        */
       reach?: components['schemas']['TechniqueReachEnum'];
+      /** @description When reach=REACH_N, the maximum number of passable edges BFS may traverse. Ignored for SAME/ADJACENT/ANY. */
+      reach_hops?: number;
     };
     /** @description Serialize tenure galleries. */
     PatchedTenureGalleryRequest: {
@@ -28586,6 +28794,10 @@ export interface components {
        *     Defaults to True when there is no tenure or preference row.
        */
       readonly allow_social_actions: boolean;
+      readonly guise_concept: string;
+      readonly guise_quote: string;
+      readonly guise_personality: string;
+      readonly guise_background: string;
     };
     /**
      * @description One warrant row on the viewer's own crime tab — tiers only, never the raw number.
@@ -29209,6 +29421,15 @@ export interface components {
       /** @description Possessive pronoun (e.g., 'his') */
       possessive: string;
     };
+    /**
+     * @description * `new_situation` - New Situation
+     *     * `check_fit` - Check Fit
+     *     * `difficulty_guide` - Difficulty Guide
+     *     * `pool_guide` - Pool Guide
+     *     * `other` - Other
+     * @enum {string}
+     */
+    ProposalKindEnum: 'new_situation' | 'check_fit' | 'difficulty_guide' | 'pool_guide' | 'other';
     /** @description One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem`` dataclass. */
     PublicFeedItem: {
       kind: components['schemas']['PublicFeedItemKindEnum'];
@@ -30462,6 +30683,20 @@ export interface components {
     /** @description POST body for the #981 set-active-persona endpoint. */
     SetActivePersonaRequestRequest: {
       persona_id: number;
+    };
+    /**
+     * @description POST body for the #1682 set-profile endpoint — author a guise's bio.
+     *
+     *     Every bio field is optional and None-preserving: an ABSENT field leaves the
+     *     stored value untouched (the ``set_persona_profile`` contract, so partial
+     *     edits are safe), while a PRESENT-but-blank field explicitly clears it.
+     */
+    SetPersonaProfileRequestRequest: {
+      persona_id: number;
+      concept?: string;
+      quote?: string;
+      personality?: string;
+      background?: string;
     };
     /**
      * @description POST body for the #1445 set-round-mode endpoint.
@@ -32113,8 +32348,11 @@ export interface components {
        *     * `same` - Same position
        *     * `adjacent` - Adjacent position
        *     * `any` - Anywhere in room
+       *     * `reach_n` - N-hop reach
        */
       reach?: components['schemas']['TechniqueReachEnum'];
+      /** @description When reach=REACH_N, the maximum number of passable edges BFS may traverse. Ignored for SAME/ADJACENT/ANY. */
+      reach_hops?: number;
       readonly tier: number;
       readonly target_spec: components['schemas']['TargetSpec'];
     };
@@ -32137,9 +32375,10 @@ export interface components {
      * @description * `same` - Same position
      *     * `adjacent` - Adjacent position
      *     * `any` - Anywhere in room
+     *     * `reach_n` - N-hop reach
      * @enum {string}
      */
-    TechniqueReachEnum: 'same' | 'adjacent' | 'any';
+    TechniqueReachEnum: 'same' | 'adjacent' | 'any' | 'reach_n';
     /** @description Serializer for Technique records with intensity and control stats. */
     TechniqueRequest: {
       /** @description Name of the technique (not unique - different characters can have same name). */
@@ -32169,8 +32408,11 @@ export interface components {
        *     * `same` - Same position
        *     * `adjacent` - Adjacent position
        *     * `any` - Anywhere in room
+       *     * `reach_n` - N-hop reach
        */
       reach?: components['schemas']['TechniqueReachEnum'];
+      /** @description When reach=REACH_N, the maximum number of passable edges BFS may traverse. Ignored for SAME/ADJACENT/ANY. */
+      reach_hops?: number;
     };
     /** @description Serializer for TechniqueStyle lookup records. */
     TechniqueStyle: {
@@ -37996,6 +38238,32 @@ export interface operations {
       };
     };
   };
+  combat_use_item_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
   combat_action_outcome_details_list: {
     parameters: {
       query?: never;
@@ -42174,6 +42442,111 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GMApplicationDetail'];
+        };
+      };
+    };
+  };
+  gm_catalog_suggestions_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        proposal_kind?: string;
+        /**
+         * @description * `open` - Open
+         *     * `reviewed` - Reviewed
+         *     * `dismissed` - Dismissed
+         */
+        status?: 'dismissed' | 'open' | 'reviewed';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCatalogSuggestionDetailList'];
+        };
+      };
+    };
+  };
+  gm_catalog_suggestions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Catalog Suggestion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CatalogSuggestionDetail'];
+        };
+      };
+    };
+  };
+  gm_catalog_suggestions_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Catalog Suggestion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CatalogSuggestionDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CatalogSuggestionDetail'];
+        };
+      };
+    };
+  };
+  gm_catalog_suggestions_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Catalog Suggestion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedCatalogSuggestionDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CatalogSuggestionDetail'];
         };
       };
     };
@@ -51355,6 +51728,29 @@ export interface operations {
       };
     };
   };
+  personas_set_profile_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetPersonaProfileRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
   personas_spread_specializations_list: {
     parameters: {
       query?: {
@@ -52383,6 +52779,42 @@ export interface operations {
         content: {
           'application/json': components['schemas']['RandomSceneTarget'];
         };
+      };
+    };
+  };
+  progression_select_path_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  progression_select_path_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

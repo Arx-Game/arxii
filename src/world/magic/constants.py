@@ -407,6 +407,7 @@ class TechniqueReach(models.TextChoices):
     SAME = "same", "Same position"
     ADJACENT = "adjacent", "Adjacent position"
     ANY = "any", "Anywhere in room"
+    REACH_N = "reach_n", "N-hop reach"
 
 
 class FuryCheckTrait(models.TextChoices):

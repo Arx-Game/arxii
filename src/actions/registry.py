@@ -28,6 +28,7 @@ from actions.definitions.combat_maneuvers import (
     SuccorAction,
     TauntAction,
     UpgradeComboAction,
+    UseItemManeuverAction,
 )
 from actions.definitions.communication import (
     EmitAction,
@@ -70,6 +71,7 @@ from actions.definitions.crafting import (
 from actions.definitions.crossing import resolve_crossing_offer
 from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
+from actions.definitions.distinctions import GMAwardDistinctionAction
 from actions.definitions.doors import LockAction, UnlockAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
@@ -106,6 +108,7 @@ from actions.definitions.gm_adjudication import (
     GMAwardAction,
     InvokeCatalogCheckAction,
 )
+from actions.definitions.gm_catalog import FindSituationAction, SubmitCatalogSuggestionAction
 from actions.definitions.gm_combat import (
     AddEncounterParticipantAction,
     AddOpponentAction,
@@ -165,8 +168,10 @@ from actions.definitions.locations import (
     SettleBuildingArrearsAction,
     StartBuildingRenovationAction,
     StartExtensionAction,
+    TagRoomResonanceAction,
     ToggleUltraUpkeepAction,
     UnlinkRoomsAction,
+    UntagRoomResonanceAction,
 )
 from actions.definitions.market import (
     BuyStockAction,
@@ -228,6 +233,7 @@ from actions.definitions.progression_rewards import (
     ClearPathIntentAction,
     RemoveVoteAction,
     RerollRandomSceneAction,
+    SelectPathAction,
     SetPathIntentAction,
 )
 from actions.definitions.projects import (
@@ -332,6 +338,8 @@ _ALL_ACTIONS: list[Action] = [
     AssignRoomTenantAction(),
     EndRoomTenancyAction(),
     SetPrimaryHomeAction(),
+    TagRoomResonanceAction(),
+    UntagRoomResonanceAction(),
     CommissionDecorationAction(),
     StartExtensionAction(),
     StartBuildingRenovationAction(),
@@ -367,6 +375,7 @@ _ALL_ACTIONS: list[Action] = [
     ActivatePermitAction(),
     UseItemAction(),
     GrantItemAction(),
+    GMAwardDistinctionAction(),
     # #1866 — crafting telnet coverage.
     AttachFacetAction(),
     DetachFacetAction(),
@@ -409,6 +418,7 @@ _ALL_ACTIONS: list[Action] = [
     CoverAction(),
     InterposeAction(),
     SuccorAction(),
+    UseItemManeuverAction(),
     EngageAction(),
     DisengageAction(),
     RallyAction(),
@@ -486,6 +496,7 @@ _ALL_ACTIONS: list[Action] = [
     RerollRandomSceneAction(),
     SetPathIntentAction(),
     ClearPathIntentAction(),
+    SelectPathAction(),
     start_npc_interaction,
     resolve_npc_offer,
     end_npc_interaction,
@@ -554,6 +565,9 @@ _ALL_ACTIONS: list[Action] = [
     InvokeCatalogCheckAction(),
     GMAwardAction(),
     GMApplyConditionAction(),
+    # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
+    FindSituationAction(),
+    SubmitCatalogSuggestionAction(),
 ]
 
 # Lookup by key

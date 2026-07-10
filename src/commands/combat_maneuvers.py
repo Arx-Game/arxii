@@ -29,6 +29,7 @@ _SUBVERBS: dict[str, str] = {
     "cover": "combat_cover",
     "interpose": "combat_interpose",
     "succor": "combat_succor",
+    "use": "combat_use",
     "join": "combat_join",
     "leave": "combat_leave",
     "ready": "combat_ready",
@@ -55,6 +56,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat cover <ally>         — cover an ally's escape
         combat interpose [ally]     — guard an ally (or any ally) from harm
         combat succor <ally>        — shelter an ally from environmental hazards
+        combat use <item> [on <target>] — use a held on-use item this round
         combat rally <ally>         — inspire an ally, bolstering their next action
         combat demoralize <opp>     — break an opponent's nerve (morale damage)
         combat taunt <opp>          — draw an NPC's aggro toward you
@@ -109,6 +111,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return {"opponent_id": self._resolve_opponent_pk(self._require_rest("an opponent"))}
         if self._subverb == "combo":  # noqa: STRING_LITERAL
             return {"combo_id": self._resolve_combo_pk(self._require_rest("a combo name"))}
+        if self._subverb == "use":  # noqa: STRING_LITERAL
+            return self._resolve_use_item_args(self._require_rest("an item"))
         return {}
 
     # -- helpers ---------------------------------------------------------------
@@ -166,6 +170,64 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             msg = f"More than one opponent named '{name}' — be more specific."
             raise CommandError(msg)
         return matches[0].pk
+
+    def _resolve_use_item_args(self, text: str) -> dict[str, Any]:
+        """Parse ``<item> [on <target>]`` (#2120, mirrors ``CmdUse``'s ``on`` grammar).
+
+        The item name is resolved to a held ``ItemInstance`` by
+        ``UseItemManeuverAction`` itself (kwarg ``item_name``); this only
+        splits the text and, when a target clause is present, resolves it to
+        an ally or opponent kwarg.
+        """
+        item_text, _, target_text = text.partition(" on ")
+        item_text = item_text.strip()
+        if not item_text:
+            msg = "Use what?"
+            raise CommandError(msg)
+        kwargs: dict[str, Any] = {"item_name": item_text}
+        target_text = target_text.strip()
+        if target_text:
+            kwargs.update(self._resolve_use_item_target(target_text))
+        return kwargs
+
+    def _resolve_use_item_target(self, name: str) -> dict[str, Any]:
+        """Resolve a use-item target name to an ally or opponent kwarg (#2120).
+
+        Tries an active ally first, then an active opponent -- USE_ITEM's
+        target can be either (heal an ally / throw at a foe), unlike the
+        ally-only or opponent-only subverbs above.
+        """
+        from world.combat.constants import OpponentStatus, ParticipantStatus  # noqa: PLC0415
+        from world.combat.models import CombatOpponent, CombatParticipant  # noqa: PLC0415
+
+        participant = self._combat_participant_or_none()
+        if participant is None:
+            msg = "You are not in an active combat round."
+            raise CommandError(msg)
+        ally_matches = list(
+            CombatParticipant.objects.filter(
+                encounter=participant.encounter,
+                status=ParticipantStatus.ACTIVE,
+                character_sheet__character__db_key__iexact=name,
+            )
+        )
+        opponent_matches = list(
+            CombatOpponent.objects.filter(
+                encounter=participant.encounter,
+                status=OpponentStatus.ACTIVE,
+                name__iexact=name,
+            )
+        )
+        total = len(ally_matches) + len(opponent_matches)
+        if total == 0:
+            msg = f"No active ally or opponent named '{name}' in this encounter."
+            raise CommandError(msg)
+        if total > 1:
+            msg = f"More than one target named '{name}' — be more specific."
+            raise CommandError(msg)
+        if ally_matches:
+            return {"ally_participant_id": ally_matches[0].pk}
+        return {"opponent_id": opponent_matches[0].pk}
 
     def _resolve_combo_pk(self, name: str) -> int:
         from world.combat.models import ComboDefinition  # noqa: PLC0415
@@ -258,8 +320,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         """Print resource/risk state + the declared action + available subverbs."""
         lines = [
             "|wCombat actions|n: "
-            "flee, cover <ally>, interpose [ally], succor <ally>, rally <ally>, "
-            "demoralize <opp>, taunt <opp>, parley <opp>, join, leave, ready, "
+            "flee, cover <ally>, interpose [ally], succor <ally>, use <item> [on <target>], "
+            "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, join, leave, ready, "
             "combo <name>, revert, yield"
         ]
         participant = self._combat_participant_or_none()

@@ -33,6 +33,8 @@ export type RoomBuilderActionKey =
   | 'assign_room_tenant'
   | 'end_room_tenancy'
   | 'set_primary_home'
+  | 'tag_room_resonance'
+  | 'untag_room_resonance'
   | 'commission_decoration'
   | 'start_building_extension'
   | 'start_building_renovation'

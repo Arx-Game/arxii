@@ -72,10 +72,13 @@ artist changes persona with an *identical* body; a curse changes the body and
   stays the real face's bio (presented by PRIMARY). `scenes.services.set_persona_profile` is the
   **sole mutator** (PRIMARY rejected; narrative text only — **lineage stays display-only**, every
   *mechanical* lineage read pinned to `true_profile` via the sheet's forwarding properties).
-  Authored on telnet via `persona profile <name> [concept=… quote=… personality=… background=…]`;
-  the web profile serializer already renders the *presented* face's profile cover-aware (slices
-  1–3), so a guise authored anywhere shows correctly — a dedicated **web authoring form** is the
-  remaining follow-up. (Telnet `@sheet` is self/staff-only, so a non-privileged viewer never sees
+  Authored on telnet via `persona profile <name> [concept=… quote=… personality=… background=…]`
+  and on the web (#1682) via `POST /api/personas/set-profile/` (`PersonaViewSet.set_profile` —
+  ownership-gated like set-active; absent fields stay untouched, blank fields clear), reached
+  from the persona switcher's "Edit guise sheet…" dialog (`GuiseSheetDialog`, prefilled from
+  the `guise_*` read fields now on `PersonaSerializer`). The web profile serializer renders the
+  *presented* face's profile cover-aware (slices 1–3), so a guise authored anywhere shows
+  correctly. (Telnet `@sheet` is self/staff-only, so a non-privileged viewer never sees
   another's cover there; the `<cover> (<real>)` reveal is a web-profile concern.)
 - **Named/public personas** (PRIMARY, ESTABLISHED) render **by name to everyone** —
   the accessibility guarantee.
@@ -231,6 +234,10 @@ viewer **V**:
 3. Apply the **active persona's descriptors** where the trait is present.
 4. Resolve the **name**: public-named persona → the name; anonymous persona → composed
    **sdesc**; if V holds a `PersonaDiscovery` for it → the real identity (per-viewer).
+   The in-game producer of `PersonaDiscovery` rows is the `PERSONA_LINK` clue kind
+   (#2120, `world/clues` — `grant_clue_target` → `_grant_persona_link_target`); piercing
+   is GM-authored evidence (a planted clue), never an automatic roll against a masked
+   character (ADR-0033). Staff/admin remain the out-of-band paths.
 5. V is **always told a presence is there** — never nothing; a concealed/invisible
    presence surfaces an OOC marker ("an invisible presence is here") rather than silence.
 
@@ -286,7 +293,7 @@ path copies a descriptor from a sibling persona.
 | Surface | Verdict | Evidence |
 |---|---|---|
 | `Persona` + `active_persona` resolution | **BUILT & WIRED** | `world/scenes/models.py`; `active_persona_for_sheet` (#1044); set-active wired via `SetActivePersonaAction` (web + telnet, #1347) |
-| `PersonaDiscovery` | **BUILT** | `world/scenes` (per scenes guide) |
+| `PersonaDiscovery` | **BUILT & WIRED** | `world/scenes`; in-game producer: `PERSONA_LINK` clue kind (`world/clues`, #2120) |
 | `CharacterForm` / `FormType` (TRUE/ALTERNATE/DISGUISE) / `CharacterFormState` / `switch_form` / `get_apparent_form` | **BUILT, partly wired** | `world/forms/models.py:202-302`, `services.py:18-64`; wired to a forms API endpoint, **not** to character-appearance rendering (`_build_appearance` reads the TRUE form) |
 | `DurationType` + `TemporaryFormChange` | **BUILT** | `world/forms/models.py:215-318` — covers shapeshift/overlay durations |
 | Legacy `Characteristic` skin/eye/hair | **BUILT & WIRED (to retire)** | `character_sheets/factories.py:280-393`; read by telnet `item_data` — **duplicates** the FormTrait definitions |

@@ -282,6 +282,14 @@ class PositionShelter(SharedMemoryModel):
     value = models.IntegerField(
         help_text="Magnitude of shelter. Added to the room's cascade value."
     )
+    applies_to_attacks = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, this shelter applies to incoming attacks of this "
+            "damage type (attack-cover). When False (default), it applies "
+            "to environmental hazards only."
+        ),
+    )
     change_per_day = models.IntegerField(
         default=0,
         help_text=(
@@ -351,6 +359,14 @@ class BlueprintPositionShelter(SharedMemoryModel):
         related_name="blueprint_position_shelters",
     )
     value = models.IntegerField()
+    applies_to_attacks = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, this shelter applies to incoming attacks of this "
+            "damage type (attack-cover). When False (default), it applies "
+            "to environmental hazards only."
+        ),
+    )
 
     class Meta:
         app_label = "areas"

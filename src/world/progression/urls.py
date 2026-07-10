@@ -12,6 +12,7 @@ from world.progression.views import (
     PathOptionsView,
     ProgressionUnlockViewSet,
     RandomSceneViewSet,
+    SelectPathViewSet,
     VoteViewSet,
 )
 
@@ -28,10 +29,18 @@ _path_intent_view = PathIntentViewSet.as_view(
     }
 )
 
+_select_path_view = SelectPathViewSet.as_view(
+    {
+        "get": "list",
+        "post": "create",
+    }
+)
+
 urlpatterns = [
     path("account/", AccountProgressionView.as_view(), name="account-progression"),
     path("claim-kudos/", ClaimKudosView.as_view(), name="claim-kudos"),
     path("path-options/", PathOptionsView.as_view(), name="path-options"),
     path("path-intent/", _path_intent_view, name="path-intent"),
+    path("select-path/", _select_path_view, name="select-path"),
     path("", include(router.urls)),
 ]

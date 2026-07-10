@@ -6,7 +6,8 @@ from django.db.models import QuerySet
 import django_filters
 
 from world.gm.constants import GMApplicationStatus, GMTableStatus
-from world.gm.models import GMApplication, GMProfile, GMTable, GMTableMembership
+from world.gm.models import CatalogSuggestion, GMApplication, GMProfile, GMTable, GMTableMembership
+from world.player_submissions.constants import SubmissionStatus
 
 
 class GMProfileFilter(django_filters.FilterSet):
@@ -56,3 +57,12 @@ class GMTableMembershipFilter(django_filters.FilterSet):
         if value:
             return queryset.filter(left_at__isnull=True)
         return queryset.filter(left_at__isnull=False)
+
+
+class CatalogSuggestionFilter(django_filters.FilterSet):
+    status = django_filters.ChoiceFilter(choices=SubmissionStatus.choices)
+    proposal_kind = django_filters.CharFilter()
+
+    class Meta:
+        model = CatalogSuggestion
+        fields = ["status", "proposal_kind"]

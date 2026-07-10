@@ -60,6 +60,38 @@ The GM system defines these role relationships; the stories app uses them for pe
 - Anti-abuse tracking: per-GM/per-week caps, unusual patterns flagged to staff
 - Rewards tie into existing XP/codex/kudos systems, not a new reward pipeline
 
+### GM Story Reward — GMs earn XP too ✅ (#2123)
+The section above is about GMs granting rewards *to players*. This one is the opposite
+direction: **GMs earning XP for themselves** by running stories — the incentive engine
+that makes GM-ing pay enough to pull players into GMing for each other (ADR-0109: "XP
+unlocks, never grants" makes XP scarce, so this is the pull). Built:
+
+- `world.gm.services.award_gm_story_reward(*, gm_profile, players_served, per_player_xp,
+  event_cap, description) -> XPTransaction | None` — the single choke point. Never
+  raises (log-and-continue); every convergence point below calls it the same way.
+- Every award value is a proper column on the `GMRewardConfig` singleton (pk=1,
+  `load()`), never a module constant — staff-tunable in admin, seeded via the `gm`
+  cluster seeder: `beat_xp_per_player`/`beat_xp_cap`, `episode_xp_per_player`/
+  `episode_xp_cap`, `story_completion_xp_per_player`/`story_completion_xp_cap`,
+  `weekly_reward_cap`, `feedback_xp_per_rating_point`.
+- `GMWeeklyRewardTracker` (mirrors `journals.WeeklyJournalXP`'s get-or-reset-by-week
+  shape) bounds total award XP per GM per `GameWeek`, regardless of which event kind
+  fired it.
+- Four convergence points, all riding real, reviewable story artifacts — never
+  self-attested activity: a GM-marked beat (`record_gm_marked_outcome`, `resolved_by`
+  param — the actual marking GM, Lead or an approved Assistant GM, never silently the
+  Lead), a resolved episode (`resolve_episode`, alongside the existing
+  `touch_gm_activity` stamp), a completed story (`complete_story`, credits
+  `story.primary_table.gm`), and a positive story-feedback rating on GM performance
+  (`world.stories.services.feedback.submit_story_feedback` — a served participant only,
+  never a spectator; self-feedback already excluded upstream).
+- Award magnitude scales by players served (`world.stories.services.gm_rewards
+  .players_served_for_scope`, capped at 8 for GROUP scope) and event weight (beat <
+  episode < story completion) — never flattened to a boolean. A GM running their own
+  solo CHARACTER-scope arc is a self-dealing no-op.
+- Machine-graded combat/mission outcome tiers (`record_outcome_tier_completion`) never
+  award — that path never passes a GM identity through, by construction.
+
 ### Trust and Feedback ✅ (#2000)
 - **`GMProfile.level` is the canonical trust ladder** — see ADR-0097. `GMLevelCap`
   (one row per `GMLevel`, seeded via `seed_default_gm_level_caps`) holds the
@@ -227,6 +259,43 @@ Day-to-day GM ops that the staff inbox + existing APIs cover for now:
 - Application queue (staff / admin can action; GMs will get the
   dedicated view post-Stories)
 - Invite generation (can be done via admin / API until dashboard lands)
+
+### Phase 6 — Scenario Catalog ✅ (#2127, first increment, ADR-0110)
+Extends the "discovery, never invention" shape from #2118's ad-hoc checks to the
+rest of the catalog. A GM says "this is a chase" and gets back fitting authored
+`SituationTemplate`s, the `CheckType`s proven to fit that kind of scene, an
+authored difficulty recommendation, and — advisory only, never a live binding —
+consequence-pool guidance text.
+
+Delivered this increment:
+- **Taxonomy + guidance models** (`world.gm`): `SituationKind` (cross-cutting
+  tag, `minimum_gm_level` breadth gate), `CheckTypeSituationFit`,
+  `SituationDifficultyGuide`, `ConsequencePoolGuide` (advisory text only — no
+  code path writes a live `consequence_pool` FK), `CatalogSuggestion`.
+- **`FindSituationAction`** (`gm_find_situation`) + `setsituation find <term>` —
+  per-type situation browse (Decision 1: per-type listings, never a unified
+  cross-type index), gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` and
+  breadth-filtered on `SituationKind.minimum_gm_level` against the caller's own
+  `GMLevel`.
+- **Suggestion inbox**: `SubmitCatalogSuggestionAction` (`gm_submit_catalog_suggestion`)
+  + `gm suggest <kind>=<text>`, gated by `PROPOSAL_KIND_MIN_LEVEL[proposal_kind]`
+  (Decision 9 — proposal rights scale with `GMLevel`, breadth *and* what a GM
+  may even suggest, both independently on the ladder). Routed through the
+  existing `world.staff_inbox` aggregator via `SubmissionCategory
+  .CATALOG_SUGGESTION`, mirroring `GMApplication`'s pipeline exactly (Decision 8).
+- **Starter content**: `Chase`/`Negotiation`/`Infiltration` `SituationKind`s +
+  a `SituationDifficultyGuide` row per `RenownRisk` tier, seeded idempotently
+  by `world.gm.factories.seed_catalog_starter_content`, composed into the
+  existing `"gm"` cluster seeder.
+
+Deferred (premises verified in the #2127 spec's anti-reinvention pass):
+- Encounter- and mission-type find/browse (separate PR per Decision 1).
+- Crowdsourced ratification to higher-GM tiers beyond staff-only review.
+- Structured `CheckType`-draft proposals (today's `CatalogSuggestion
+  proposal_kind=OTHER` covers the freeform ask).
+- Bounded per-invocation modifiers beyond #2118's edge/setback.
+- `ChallengeTemplate.severity` guidance (Decision 6 — different scale, guides a
+  content author rather than a live GM).
 
 ## Cross-System Dependencies
 

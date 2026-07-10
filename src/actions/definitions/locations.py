@@ -554,7 +554,7 @@ class EndRoomTenancyAction(Action):
 
 @dataclass
 class SetPrimaryHomeAction(Action):
-    """Make the room you're standing in your home (requires your active tenancy here)."""
+    """Make the room you're standing in your home (requires owner or tenant standing here)."""
 
     key: str = "set_primary_home"
     name: str = "Set Home"
@@ -582,6 +582,99 @@ class SetPrimaryHomeAction(Action):
         except RoomEditError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, message="This is home now.")
+
+
+@dataclass
+class TagRoomResonanceAction(Action):
+    """Tag the room you're standing in with a resonance you've claimed (#2036).
+
+    Thin wrapper over ``world.magic.services.gain.tag_room_resonance`` — the
+    already-idempotent room-aura cascade write. Gated on owner-or-tenant
+    standing (``IsRoomTenantPrerequisite``, widened #2036) rather than a
+    direct tenancy row, so an owner with no personal ``LocationTenancy`` can
+    still dress their own room. The claimed-resonance check mirrors the same
+    predicate the pose/scene-entry endorsement services use — you can only
+    tag with a resonance already on your own sheet.
+    """
+
+    key: str = "tag_room_resonance"
+    name: str = "Tag Room Aura"
+    icon: str = "sparkles"
+    category: str = "locations"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [IsRoomTenantPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.magic.models import Resonance  # noqa: PLC0415
+        from world.magic.services.gain import tag_room_resonance  # noqa: PLC0415
+
+        room = actor.location
+        if room is None:
+            return ActionResult(success=False, message="You're not in a room.")
+        resonance = Resonance.objects.filter(pk=kwargs.get("resonance_id")).first()
+        if resonance is None:
+            return ActionResult(success=False, message="No such resonance.")
+        sheet = actor.sheet_data
+        if not sheet.resonances.filter(resonance=resonance).exists():
+            return ActionResult(success=False, message="You haven't claimed that resonance.")
+        try:
+            profile = room.room_profile
+        except RoomProfile.DoesNotExist:
+            return ActionResult(success=False, message="This room can't hold a resonance aura.")
+        tag_room_resonance(profile, resonance)
+        return ActionResult(success=True, message=f"You tag this room with {resonance.name}.")
+
+
+@dataclass
+class UntagRoomResonanceAction(Action):
+    """Remove a resonance tag from the room you're standing in (#2036).
+
+    Mirrors ``TagRoomResonanceAction`` over ``untag_room_resonance``, same
+    owner-or-tenant gate. No claimed-resonance check on removal — untagging
+    something you can no longer claim is still a valid "undo."
+    """
+
+    key: str = "untag_room_resonance"
+    name: str = "Untag Room Aura"
+    icon: str = "sparkles"
+    category: str = "locations"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [IsRoomTenantPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.magic.models import Resonance  # noqa: PLC0415
+        from world.magic.services.gain import untag_room_resonance  # noqa: PLC0415
+
+        room = actor.location
+        if room is None:
+            return ActionResult(success=False, message="You're not in a room.")
+        resonance = Resonance.objects.filter(pk=kwargs.get("resonance_id")).first()
+        if resonance is None:
+            return ActionResult(success=False, message="No such resonance.")
+        try:
+            profile = room.room_profile
+        except RoomProfile.DoesNotExist:
+            return ActionResult(success=False, message="This room can't hold a resonance aura.")
+        untag_room_resonance(profile, resonance)
+        return ActionResult(success=True, message=f"You untag {resonance.name} from this room.")
 
 
 @dataclass

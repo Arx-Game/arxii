@@ -18,6 +18,9 @@ def _seed_items() -> None:
 
 
 def _seed_combat() -> None:
+    from world.combat.factories import (  # noqa: PLC0415
+        wire_elevation_advantage_modifier_target,
+    )
     from world.seeds.game_content.combat import (  # noqa: PLC0415
         seed_dramatic_surge_content,
         seed_encounter_beat_wiring,
@@ -29,6 +32,7 @@ def _seed_combat() -> None:
     seed_flee_check()
     seed_encounter_beat_wiring()
     seed_dramatic_surge_content()
+    wire_elevation_advantage_modifier_target()
 
 
 def _seed_battles() -> None:
@@ -103,6 +107,18 @@ def _seed_character_creation() -> None:
     from world.seeds.character_creation import seed_character_creation_dev  # noqa: PLC0415
 
     seed_character_creation_dev()
+
+
+def _seed_missions() -> None:
+    from world.seeds.game_content.missions import seed_missions_dev  # noqa: PLC0415
+
+    seed_missions_dev()
+
+
+def _seed_progression() -> None:
+    from world.progression.seeds import seed_durance_officiants  # noqa: PLC0415
+
+    seed_durance_officiants()
 
 
 def _seed_justice() -> None:
@@ -182,9 +198,19 @@ def _seed_kudos() -> None:
 
 
 def _seed_gm() -> None:
-    from world.gm.factories import seed_default_gm_level_caps  # noqa: PLC0415
+    from world.gm.factories import (  # noqa: PLC0415
+        seed_catalog_starter_content,
+        seed_default_gm_level_caps,
+    )
+    from world.gm.models import GMRewardConfig  # noqa: PLC0415
 
     seed_default_gm_level_caps()
+    # GM scenario catalog: starter SituationKind taxonomy + difficulty guides
+    # (#2127) -- Big Button acceptance criterion.
+    seed_catalog_starter_content()
+    # GM Story Reward config singleton (#2123) — .load() lazily creates the
+    # row with its field defaults (the spec's recommended values) if absent.
+    GMRewardConfig.load()
 
 
 def _seed_covenant_roles() -> None:
@@ -201,6 +227,12 @@ def _seed_skills() -> None:
     )
 
     seed_skill_breakthrough_catalog()
+
+
+def _seed_project_resonance() -> None:
+    from world.projects.seeds import ensure_project_kind_resonance_awards  # noqa: PLC0415
+
+    ensure_project_kind_resonance_awards()
 
 
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
@@ -245,6 +277,18 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Gender/TarotCard/HeightBand/Build/stats/Rosters/Path) — after magic because
     # finalize_character picks the magic-seeded cantrip + resonance. (#1333)
     "character_creation": _seed_character_creation,
+    # Missions: the starter notice board (1 BOARD MissionGiver + 3 OPEN
+    # MissionTemplate rows) so `mission opportunities` isn't dead-on-arrival on
+    # a fresh DB (#2121). After "character_creation" (needs the canonical
+    # starting room the board sits in) and "checks"/"combat_checks" (the
+    # authored MissionOption's CheckType composition).
+    "missions": _seed_missions,
+    # Progression: one NPC Durance-training officiant + DuranceTrainingSite per
+    # PROSPECT path, at the canonical starting room, so the first-ever Ritual
+    # of the Durance is conductible without a live higher-level PC (#2121).
+    # After "character_creation" (the room) and "magic" (the Ritual of the
+    # Durance row + the 5 PROSPECT Path rows, both seeded by seed_magic_dev).
+    "progression": _seed_progression,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
@@ -299,6 +343,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # new skills (combat_checks/social/investigation/governance/stealth); safe to
     # re-run (idempotent) after authoring a skill outside those clusters.
     "skills": _seed_skills,
+    # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row for the
+    # PROJECT_CONTRIBUTION GainSource (#2038 — "projects to add gifts to
+    # organizations"). No dependencies on any other cluster.
+    "project_resonance": _seed_project_resonance,
 }
 
 
@@ -341,14 +389,22 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
-    from world.gm.models import GMLevelCap  # noqa: PLC0415
+    from world.gm.models import GMLevelCap, GMRewardConfig, SituationKind  # noqa: PLC0415
     from world.items.market.models import MarketSquare  # noqa: PLC0415
     from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance, Ritual  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
-    from world.progression.models import KudosSourceCategory, TraitRatingUnlock  # noqa: PLC0415
-    from world.projects.models import ContributionMethod  # noqa: PLC0415
+    from world.missions.models import MissionGiver, MissionTemplate  # noqa: PLC0415
+    from world.progression.models import (  # noqa: PLC0415
+        DuranceTrainingSite,
+        KudosSourceCategory,
+        TraitRatingUnlock,
+    )
+    from world.projects.models import (  # noqa: PLC0415
+        ContributionMethod,
+        ProjectKindResonanceAward,
+    )
     from world.relationships.models import RelationshipCondition, RelationshipTier  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.roster.models import Kinsperson  # noqa: PLC0415
@@ -398,6 +454,13 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "battles": [],
         "consent": [SocialConsentCategory],
         "character_creation": [StartingArea, Beginnings, Species],
+        # Missions: the starter notice board (#2121) — 1 BOARD MissionGiver +
+        # 3 OPEN MissionTemplate rows so `mission opportunities` isn't
+        # dead-on-arrival.
+        "missions": [MissionGiver, MissionTemplate],
+        # Progression: one Durance training officiant + site per PROSPECT path
+        # (#2121), so the first-ever Ritual of the Durance is conductible.
+        "progression": [DuranceTrainingSite],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under
@@ -423,7 +486,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Market: the PLACEHOLDER capital square (#2066).
         "market": [MarketSquare],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
-        "gm": [GMLevelCap],
+        # Also seeds the starter scenario-catalog SituationKind taxonomy + difficulty
+        # guides (#2127); represented by SituationKind alongside GMLevelCap.
+        # Plus the GM Story Reward config singleton (#2123).
+        "gm": [GMLevelCap, GMRewardConfig, SituationKind],
         # Kinship: the PLACEHOLDER ducal demo tree (#2062).
         "kinship": [Kinsperson],
         # Houses: the landed demo house; represented by Title (#1884).
@@ -436,4 +502,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's
         # four XP boundaries (#2115).
         "skills": [TraitRatingUnlock],
+        # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row
+        # (#2038).
+        "project_resonance": [ProjectKindResonanceAward],
     }

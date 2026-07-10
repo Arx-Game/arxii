@@ -134,3 +134,61 @@ class PositionReachableUnknownReachTests(TestCase):
 
     def test_unknown_reach_same_position_returns_false(self) -> None:
         self.assertFalse(position_reachable(self.a, self.a, "teleport"))
+
+
+class PositionReachableReachNTests(TestCase):
+    """REACH_N reach: hop-limited BFS over passable edges.
+
+    Follows reach semantics (is_passable only, ignores active gating
+    challenges — same as ADJACENT). N=1 is equivalent to ADJACENT.
+    """
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="ReachNRoom", nohome=True)
+        self.room2 = create_object("typeclasses.rooms.Room", key="ReachNRoom2", nohome=True)
+        self.a = create_position(self.room, "rn_a")
+        self.b = create_position(self.room, "rn_b")
+        self.c = create_position(self.room, "rn_c")
+        self.d = create_position(self.room, "rn_d")
+        self.e_other = create_position(self.room2, "rn_e_other")
+
+        connect_positions(self.a, self.b, is_passable=True)
+        connect_positions(self.b, self.c, is_passable=True)
+        connect_positions(self.c, self.d, is_passable=True)
+
+    def test_same_position_is_reachable_with_reach_n(self) -> None:
+        self.assertTrue(position_reachable(self.a, self.a, TechniqueReach.REACH_N, reach_hops=2))
+
+    def test_one_hop_reachable_with_reach_n_2(self) -> None:
+        self.assertTrue(position_reachable(self.a, self.b, TechniqueReach.REACH_N, reach_hops=2))
+
+    def test_two_hops_reachable_with_reach_n_2(self) -> None:
+        self.assertTrue(position_reachable(self.a, self.c, TechniqueReach.REACH_N, reach_hops=2))
+
+    def test_three_hops_not_reachable_with_reach_n_2(self) -> None:
+        self.assertFalse(position_reachable(self.a, self.d, TechniqueReach.REACH_N, reach_hops=2))
+
+    def test_reach_n_1_equivalent_to_adjacent(self) -> None:
+        """N=1 behaves exactly like ADJACENT."""
+        self.assertTrue(position_reachable(self.a, self.b, TechniqueReach.REACH_N, reach_hops=1))
+        self.assertFalse(position_reachable(self.a, self.c, TechniqueReach.REACH_N, reach_hops=1))
+
+    def test_different_room_not_reachable_with_reach_n(self) -> None:
+        self.assertFalse(
+            position_reachable(self.a, self.e_other, TechniqueReach.REACH_N, reach_hops=5)
+        )
+
+    def test_impassable_edge_blocks_reach_n(self) -> None:
+        """An impassable edge (wall) blocks REACH_N traversal."""
+        from evennia import create_object
+
+        room = create_object("typeclasses.rooms.Room", key="ReachNImpRoom", nohome=True)
+        x = create_position(room, "rnimp_x")
+        y = create_position(room, "rnimp_y")
+        connect_positions(x, y, is_passable=False)
+        self.assertFalse(position_reachable(x, y, TechniqueReach.REACH_N, reach_hops=3))
+
+    def test_reach_n_3_reaches_three_hops(self) -> None:
+        self.assertTrue(position_reachable(self.a, self.d, TechniqueReach.REACH_N, reach_hops=3))

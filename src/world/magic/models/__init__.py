@@ -112,6 +112,7 @@ from world.magic.models.grants import (
     BeginningsRitualGrant,
     CodexEntryRitualGrant,
     DistinctionResonanceGrant,
+    DistinctionResonanceRankThreshold,
     DistinctionRitualGrant,
     PathGiftGrant,
     PathRitualGrant,
@@ -263,6 +264,8 @@ __all__ = [
     "CrossingOption",
     # currency-knob sidecar (#1834)
     "DistinctionResonanceGrant",
+    # reverse currency-knob sidecar (#2037)
+    "DistinctionResonanceRankThreshold",
     # dramatic moment tagging (#545)
     "DistinctionRitualGrant",
     "DramaticMomentTag",

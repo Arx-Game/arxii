@@ -110,7 +110,56 @@ def add_contribution(  # noqa: PLR0913
     # Increment the contributor's project-contribution achievement stat.
     _increment_contribution_stat(contributor_persona)
 
+    _maybe_grant_project_contribution_resonance(project, contributor_persona)
+
     return contribution
+
+
+def _maybe_grant_project_contribution_resonance(
+    project: Project, contributor_persona: Persona
+) -> None:
+    """Grant PROJECT_CONTRIBUTION resonance if this project's kind opts in (#2038).
+
+    No-op (logged) if the kind has no ProjectKindResonanceAward row, the row's
+    amount is 0, or project.resonance is unset — a contribution always succeeds
+    regardless; this is a bonus layered on top, never a gate.
+    """
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.projects.models import ProjectKindResonanceAward  # noqa: PLC0415
+
+    award = ProjectKindResonanceAward.objects.filter(kind=project.kind).first()
+    if award is None or award.resonance_award_amount <= 0:
+        return
+    if project.resonance_id is None:
+        logger.warning(
+            "Project #%s (kind=%s) opts into PROJECT_CONTRIBUTION payout but has "
+            "no resonance set — skipping grant.",
+            project.pk,
+            project.kind,
+        )
+        return
+    try:
+        grant_resonance(
+            contributor_persona.character_sheet,
+            project.resonance,
+            award.resonance_award_amount,
+            source=GainSource.PROJECT_CONTRIBUTION,
+            project=project,
+        )
+    except Exception:
+        # A failed bonus forfeits only the bonus, never the contribution it's
+        # layered on top of (see docstring above). This runs inside
+        # add_contribution's @transaction.atomic — and, via donate_to_project,
+        # inside the shared atomic block that also debits the donor's purse —
+        # so an uncaught exception here would roll back the whole contribution
+        # (and the money already spent) for what should be a non-gating bonus.
+        logger.exception(
+            "PROJECT_CONTRIBUTION resonance grant failed for project #%s (kind=%s) — "
+            "contribution stands, bonus forfeited.",
+            project.pk,
+            project.kind,
+        )
 
 
 def donate_to_project(project: Project, *, donor_persona: Persona, amount: int) -> Contribution:

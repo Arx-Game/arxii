@@ -325,6 +325,16 @@ commits (so hooks never ran), scope the catch-up to just the branch's diff —
 > switch to Sonnet (`/model claude-sonnet-5`) before running `watch-ci.sh`.
 > Top-tier models are for design and implementation, not waiting.
 
+> ⚠️ **Probe any poll command once in the foreground before arming a loop.**
+> Before you wrap a `gh`/`git`/status query in a `Monitor` or a background
+> `until` loop, run that exact command once by hand and read its output. A
+> mistyped `--jq` filter, a stale auth token, or an empty-result query does not
+> error — it just returns "" every tick, so the loop either spins to timeout or
+> exits on a false "done." One foreground probe turns a silent 25-minute hang
+> into an immediate, fixable error. This applies to `watch-ci.sh` (confirm the
+> PR number resolves and `statusCheckRollup` is non-empty first) and to any
+> ad-hoc poll you author.
+
 Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
 - `OK` (exit 0): enqueue for the merge queue with `scripts/enqueue-pr.sh
   <pr-N>` (arms squash auto-merge), post a brief status comment, exit the

@@ -13,7 +13,8 @@ Part of CG Stage 6 (Traits).
 
 ```python
 from world.distinctions.types import (
-    DistinctionOrigin,     # CHARACTER_CREATION, GAMEPLAY
+    DistinctionOrigin,     # CHARACTER_CREATION, GAMEPLAY (vestigial), GM_AWARD,
+                            # ACHIEVEMENT_AUTO_GRANT, CONSEQUENCE_POOL, ENDORSEMENT_THRESHOLD
     OtherStatus,           # PENDING_REVIEW, APPROVED, MAPPED
 )
 
@@ -37,7 +38,11 @@ from world.distinctions.types import (
 | `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `secret_by_default`, `default_secret_level` |
 | `DistinctionEffect` | Mechanical effects | `distinction`, `target` (FK `mechanics.ModifierTarget`), `value_per_rank`, `scaling_values`, `amplifies_sources_by`, `grants_immunity_to_negative`, `description` |
 | `DistinctionPrerequisite` | Requirements (JSON rules) | `distinction`, `rule_json`, `description` |
-| `DistinctionMutualExclusion` | Incompatible pairs | `distinction_a`, `distinction_b` |
+
+**Mutual exclusion is not a separate model.** `Distinction.mutually_exclusive_with` is a
+symmetrical self-referential `ManyToManyField` — adding `a.mutually_exclusive_with.add(b)`
+automatically makes the pair conflict in both directions. There is no
+`DistinctionMutualExclusion` model/table.
 
 **There is no `effect_type` enum/column.** `DistinctionEffect` targets a single
 `mechanics.ModifierTarget` row, and the effect's *kind* is derived on read from
@@ -59,6 +64,73 @@ branches on `target.category.name`:
 |-------|---------|------------|
 | `CharacterDistinction` | Character's acquired distinctions | `character`, `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`) |
 | `CharacterDistinctionOther` | Freeform "Other" entries | `character`, `parent_distinction`, `freeform_text`, `status`, `staff_mapped_distinction` |
+
+---
+
+## Post-CG acquisition — the `grant_distinction` seam (#2037)
+
+Character creation grants distinctions through `CharacterDraft.draft_data` and
+`_create_distinction_modifiers_bulk` (`world.character_creation.services`) — the CG-only path.
+Every **in-play** (post-CG) acquisition or rank-up, from any source, goes through exactly one
+function: `world.distinctions.services.grant_distinction(character, distinction, *, origin,
+rank=None, source_description="")`. It is the single writer of `CharacterDistinction` outside
+CG finalization and Django admin — no in-play caller re-implements the create/rank-up branching.
+
+**Semantics:**
+
+- `rank=None` **advances one step**: 1 for a brand-new grant; `current.rank + 1` (clamped to
+  `distinction.max_rank`, a no-op returning the row unchanged if already at max) for an existing
+  holder.
+- An explicit `rank` **sets/raises only — never lowers**: a no-op if `rank <= current.rank`.
+  Monotonic, matching the "rank-down never claws back" ethos `reconcile_distinction_resonance_grants`
+  already established.
+- **`origin` is first-acquisition provenance, not latest-touch** — it is stamped once, at
+  creation, and is **never rewritten by a rank-up**. A GM re-award/rank-up of a distinction
+  originally earned via `ENDORSEMENT_THRESHOLD` keeps that origin; the `origin` kwarg on a
+  rank-up call is accepted but has no effect on an existing row. Deliberate (#2037 review
+  fold-in) — a future toucher must not "fix" this into latest-touch without realizing it's
+  ratified.
+- Internally: mutual/variant exclusion check → branch on existing `CharacterDistinction` → create
+  (`world.mechanics.services.create_distinction_modifiers`) or bump-and-recalculate
+  (`update_distinction_rank`) → narrate via `send_narrative_message` (ABILITY category) → return
+  the row. The modifier/resonance-seed cascade (see "Distinctions grant/shape Resonance" below)
+  fires automatically either way, since both branches reuse the same CG-time modifier services.
+- **No XP path.** Unlike progression unlocks, granting or ranking up a distinction through this
+  seam never spends or checks XP — it is a narrative/mechanical award (GM narration, an
+  achievement, a consequence-pool outcome, or sustained in-character endorsement), not a
+  purchase. CG-time distinctions remain point-costed (`Distinction.calculate_total_cost`); that
+  budget economy does not extend past character creation.
+
+### Exclusion checks
+
+`_check_exclusions` (private to `services.py`) is a service-layer port of
+`DraftDistinctionViewSet._check_mutual_exclusions`/`_check_variant_exclusions` — the same
+`mutually_exclusive_with` (symmetrical M2M) and variant-sibling rules the CG draft view enforces,
+run against a character's **currently-held** distinctions instead of a draft. It raises
+`DistinctionExclusionError` (`world.distinctions.exceptions`, carries a `user_message`) instead
+of a DRF `ValidationError`, since `grant_distinction` has non-HTTP callers (GM action, telnet,
+achievement engine, consequence-effect handler, resonance-threshold check).
+
+**In-play exclusion behavior differs from CG:** at CG time an exclusion conflict blocks the
+draft's Traits stage outright. In play, every calling source catches
+`DistinctionExclusionError` at its own call site and **skips just that grant** — logging it and
+continuing — rather than failing the surrounding operation (an achievement award, a
+consequence-pool resolution, an endorsement's resonance grant). This mirrors
+`_apply_capture`'s `AlreadyCapturedError` skip pattern in `world/checks/consequence_resolution.py`.
+The one exception is the GM action/telnet path, which surfaces the conflict as a failed action
+(`exc.user_message`) since a GM issuing the award is present to see and correct it.
+
+### The four ratified sources
+
+| `DistinctionOrigin` | Caller | Where |
+|---|---|---|
+| `GM_AWARD` | `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier `MinimumGMLevelPrerequisite`, staff bypass) — global target search, catalog-only slug lookup (never creates), optional `rank` validated at the action boundary (rejects `<1` or `>max_rank`, never clamps) | `src/actions/definitions/distinctions.py`; telnet face `CmdGrantDistinction` (`grant_distinction <character>=<distinction slug>[,rank]`, mirrors `CmdGrantItem`) in `src/commands/grant_distinction.py`; web surface is the existing generic `DispatchActionView` (registry registration only, zero new endpoint) |
+| `ACHIEVEMENT_AUTO_GRANT` | `RewardType.DISTINCTION` on `achievements.RewardDefinition` (`distinction` FK, nullable, mirrors `modifier_target`) dispatched by `apply_achievement_rewards` → `_grant_distinction` | `src/world/achievements/services.py`. `AchievementReward.reward_value` parses as an explicit rank when a valid int, else `rank=None` (advance one step — **not** a no-op, unlike `_grant_bonus`'s parse-or-skip for BONUS rewards) |
+| `CONSEQUENCE_POOL` | `EffectType.GRANT_DISTINCTION` on `checks.ConsequenceEffect` (`distinction` FK, CASCADE, mirrors `property`; `distinction_rank` nullable, mirrors `property_value`, null = advance one step) dispatched by the `_grant_distinction` handler | `src/world/mechanics/effect_handlers.py`, registered in the `EffectType` → handler dispatch table |
+| `ENDORSEMENT_THRESHOLD` | `check_distinction_rank_thresholds(character_sheet, resonance)`, called from `grant_resonance` only for `ACCELERATED_GAIN_SOURCES` (sustained in-character endorsement play) | `src/world/magic/services/distinction_resonance.py` — see "Reverse direction — resonance thresholds rank up a held distinction (#2037)" below for the full mechanic (ranks up held distinctions only, never mints a new grant, multi-level catch-up) |
+
+All four sources are lazy-imported callers of the single seam — none reimplements exclusion
+checking, the create/rank-up branch, or the narrative message.
 
 ---
 
@@ -110,6 +182,35 @@ Wired at both distinction-acquisition sites: gameplay grant/rank-up
 (`create_distinction_modifiers` / `update_distinction_rank`) and character creation
 (`_create_distinction_modifiers_bulk` in `world/character_creation/services.py`, followed by
 `recompute_aura` after `CharacterAura` is created during `finalize_magic_data`).
+
+### Reverse direction — resonance thresholds rank up a held distinction (#2037)
+
+`DistinctionResonanceRankThreshold` (`world/magic/models/grants.py`, beside
+`DistinctionResonanceGrant`, same ADR-0010 placement) authors the opposite direction:
+`(distinction, resonance, rank)`-unique rows saying "reaching `lifetime_earned_threshold`
+lifetime-earned in this resonance unlocks this rank of this distinction."
+
+Consumer: `check_distinction_rank_thresholds(character_sheet, resonance)`
+(`world/magic/services/distinction_resonance.py`), called from `grant_resonance` **only when
+`source` is in `ACCELERATED_GAIN_SOURCES`** — the "sustained endorsements" identity-
+reinforcing-play cluster. Semantics:
+
+- **Ranks up held distinctions only** — never mints a new `CharacterDistinction`; only rows
+  whose threshold matches exactly `current_rank + 1` are candidates. That keying is also the
+  re-fire guard: once a threshold fires, `current_rank + 1` moves past it, so repeated
+  over-threshold grants are no-ops.
+- **Multi-level catch-up loops to the final state** — one grant that crosses several
+  thresholds ranks all the way up in that call (deterministic final state per grant), rather
+  than one rank per grant.
+- Rank-ups go through `grant_distinction(..., origin=DistinctionOrigin.ENDORSEMENT_THRESHOLD)`
+  (`world/distinctions/services.py`), so the modifier/resonance-seed cascade fires normally;
+  a `DistinctionExclusionError` is caught, logged, and skipped.
+- **Never fires for `DISTINCTION`-source grants** (that source is not in
+  `ACCELERATED_GAIN_SOURCES`), preventing a feedback loop where a distinction's own resonance
+  seed re-triggers its own rank-up. The whole check is one query when no thresholds match;
+  a crash in it is caught in `grant_resonance` (`logger.exception`) so the resonance grant
+  itself always stands — mirrors the `PROJECT_CONTRIBUTION` bonus-isolation precedent in
+  `world/projects/services.py`.
 
 ### Potency axis — POWER-category `DistinctionEffect`
 
@@ -172,12 +273,12 @@ if distinction.is_variant_parent:
     variants = distinction.variants.filter(is_active=True)
 ```
 
-### DistinctionMutualExclusion
+### Mutual exclusion (`Distinction.mutually_exclusive_with`)
 
 ```python
 # Get all distinctions that conflict with a given distinction
-excluded = DistinctionMutualExclusion.get_excluded_for(distinction)
-# Returns QuerySet of Distinction objects that are mutually exclusive
+excluded = distinction.mutually_exclusive_with.all()
+# Symmetrical M2M — a.mutually_exclusive_with.add(b) makes each exclude the other.
 ```
 
 ### CharacterDistinction

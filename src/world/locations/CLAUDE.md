@@ -532,10 +532,19 @@ builder verbs), the web action-dispatch endpoint, and the React `RoomEditorPanel
   owner-gated wrapper over `grant_tenancy` (raises `RoomEditError`).
 - `end_room_tenancy(*, persona, tenancy)` — the room's owner (eviction) or the
   tenant (departure).
-- `set_primary_home(*, persona, room)` — flags the caller's own active room
+- `set_primary_home(*, persona, room, notes="")` — flags the caller's own active room
   tenancy as `is_primary_home` (one active per persona; partial unique
   constraint). Also syncs the character-level residence (`set_residence`, #1514
   Evennia `home`) and recomputes `prestige_from_dwellings` (home-anchored rule,
-  see `world.buildings.polish_services`).
+  see `world.buildings.polish_services`). **Widened #2036:** also writes
+  `CharacterSheet.current_residence` (via `world.magic.services.gain.set_residence` — the
+  daily resonance-trickle gate, see `world/magic/CLAUDE.md`) on every deliberate
+  declaration, and accepts org-derived owner/tenant standing, not only a direct persona
+  tenancy — when the persona has no direct `LocationTenancy` row on the room but has
+  owner or tenant standing (composed via org membership by `is_owner`/`is_tenant`), a
+  personal tenancy is minted first via `grant_tenancy` (`notes` forwarded to it, e.g.
+  authoring "may be charged rent") — the only way "one residence per character" stays
+  meaningful when access comes from a shared family/org/Academy grant. `end_tenancy`
+  clears `current_residence` when the ended tenancy was the declared residence.
 - `LocationTenancy` is the **one** tenancy model — #670 removed the old
   `RoomProfile.tenant_persona` pointer.

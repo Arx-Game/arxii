@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import logging
 import secrets
 from typing import TYPE_CHECKING
 
@@ -12,7 +13,17 @@ from django.db.models import Q
 from django.utils import timezone
 
 from world.gm.constants import GMLevel, GMTableStatus
-from world.gm.models import GMLevelChange, GMProfile, GMRosterInvite, GMTable, GMTableMembership
+from world.gm.models import (
+    CatalogSuggestion,
+    GMLevelChange,
+    GMProfile,
+    GMRewardConfig,
+    GMRosterInvite,
+    GMTable,
+    GMTableMembership,
+    GMWeeklyRewardTracker,
+    SituationKind,
+)
 from world.gm.types import CategoryFeedback, GMEvidenceSummary
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
@@ -22,11 +33,14 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.progression.models import XPTransaction
     from world.roster.models import RosterEntry
     from world.roster.models.applications import RosterApplication
     from world.stories.models import Story
 
 DEFAULT_INVITE_DURATION_DAYS = 30
+
+logger = logging.getLogger(__name__)
 
 
 def touch_gm_activity(gm_profile: GMProfile) -> None:
@@ -451,3 +465,129 @@ def gm_evidence_summary(profile: GMProfile) -> GMEvidenceSummary:
         feedback_by_category=feedback_by_category,
         level_changes=list(profile.level_changes.select_related("changed_by").all()[:20]),
     )
+
+
+def submit_catalog_suggestion(
+    account: AccountDB,
+    *,
+    proposal_kind: str,
+    proposal_text: str,
+    situation_kind: SituationKind | None = None,
+) -> CatalogSuggestion:
+    """Create a ``CatalogSuggestion`` row, routed to the staff inbox (#2127).
+
+    Pure creation -- no live catalog row is ever touched here (Decision 7/8).
+    Staff accepts a suggestion by hand-authoring the real catalog row(s)
+    separately (e.g. in admin); this function never does that itself.
+    """
+    return CatalogSuggestion.objects.create(
+        submitted_by=account,
+        situation_kind=situation_kind,
+        proposal_kind=proposal_kind,
+        proposal_text=proposal_text,
+    )
+
+
+def _get_or_reset_weekly_reward_tracker(gm_profile: GMProfile) -> GMWeeklyRewardTracker:
+    """Get this GM's weekly reward tracker, resetting it if the game week has changed.
+
+    Mirrors ``world.journals.services._get_or_reset_weekly_tracker``. Must be
+    called inside an open transaction — uses ``select_for_update()``.
+    """
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+
+    current_week = get_current_game_week()
+    tracker, created = GMWeeklyRewardTracker.objects.select_for_update().get_or_create(
+        gm_profile=gm_profile,
+        defaults={"game_week": current_week},
+    )
+    if not created and tracker.needs_reset(current_week):
+        tracker.reset_week(current_week)
+    return tracker
+
+
+def _do_award_gm_story_reward(
+    *,
+    gm_profile: GMProfile,
+    players_served: int,
+    per_player_xp: int,
+    event_cap: int,
+    description: str,
+) -> XPTransaction | None:
+    """Compute and grant the weekly-capped GM Story Reward award (#2123).
+
+    ``raw = min(per_player_xp * players_served, event_cap)`` — the event's own
+    cap. That amount is then further truncated by whatever headroom remains
+    under ``GMRewardConfig.weekly_reward_cap`` for this GM this game week.
+    Returns ``None`` (a no-op, not an error) when there's nothing to award —
+    zero/negative players_served or per_player_xp, or the weekly cap is
+    already exhausted.
+    """
+    if players_served <= 0 or per_player_xp <= 0:
+        return None
+    raw = min(per_player_xp * players_served, event_cap)
+    if raw <= 0:
+        return None
+
+    from world.progression.services.awards import award_xp  # noqa: PLC0415
+    from world.progression.types import ProgressionReason  # noqa: PLC0415
+
+    config = GMRewardConfig.load()
+    with transaction.atomic():
+        tracker = _get_or_reset_weekly_reward_tracker(gm_profile)
+        remaining = config.weekly_reward_cap - tracker.xp_awarded_this_week
+        amount = min(raw, remaining)
+        if amount <= 0:
+            logger.info(
+                "GM weekly reward cap reached for gm_profile=%s; award skipped.",
+                gm_profile.pk,
+            )
+            return None
+
+        transaction_row = award_xp(
+            account=gm_profile.account,
+            amount=amount,
+            reason=ProgressionReason.GM_STORY_REWARD,
+            description=description,
+        )
+        tracker.xp_awarded_this_week += amount
+        tracker.save(update_fields=["xp_awarded_this_week"])
+
+    return transaction_row
+
+
+def award_gm_story_reward(
+    *,
+    gm_profile: GMProfile,
+    players_served: int,
+    per_player_xp: int,
+    event_cap: int,
+    description: str,
+) -> XPTransaction | None:
+    """Award GM Story Reward XP to ``gm_profile.account`` (#2123).
+
+    The single choke point every award convergence point calls: a GM-marked
+    beat, a resolved episode, a completed story, and a positive story-feedback
+    rating all route through here. Reads ``GMRewardConfig`` for the weekly
+    ceiling; per-player-xp/event_cap are passed by the caller (already sourced
+    from the same config row for the specific event kind).
+
+    Failure isolation: never raises. A bug here must never abort the host
+    operation (beat marking, episode resolution, story completion, feedback
+    submission) that triggered the award — mirrors the log-and-continue
+    pattern already used by ``_notify_surrender`` in this module.
+    """
+    try:
+        return _do_award_gm_story_reward(
+            gm_profile=gm_profile,
+            players_served=players_served,
+            per_player_xp=per_player_xp,
+            event_cap=event_cap,
+            description=description,
+        )
+    except Exception:
+        logger.exception(
+            "award_gm_story_reward failed for gm_profile=%s; award skipped.",
+            gm_profile.pk,
+        )
+        return None

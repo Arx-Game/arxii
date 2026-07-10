@@ -168,6 +168,8 @@ class ActionRegistryTests(TestCase):
             "assign_room_tenant",
             "end_room_tenancy",
             "set_primary_home",
+            "tag_room_resonance",
+            "untag_room_resonance",
             "commission_decoration",
             "start_building_extension",
             "start_building_renovation",
@@ -200,6 +202,7 @@ class ActionRegistryTests(TestCase):
             "activate_permit",
             "use_item",
             "grant_item",
+            "gm_award_distinction",
             "craft_attach_facet",
             "craft_detach_facet",
             "craft_attach_style",
@@ -245,6 +248,7 @@ class ActionRegistryTests(TestCase):
             "combat_cover",
             "combat_interpose",
             "combat_succor",
+            "combat_use",
             "combat_engage",
             "combat_disengage",
             "combat_rally",
@@ -320,6 +324,7 @@ class ActionRegistryTests(TestCase):
             "reroll_random_scene",
             "set_path_intent",
             "clear_path_intent",
+            "select_path",
             "give_writeup_kudos",
             "file_writeup_complaint",
             "author_technique",
@@ -386,6 +391,9 @@ class ActionRegistryTests(TestCase):
             "gm_invoke_check",
             "gm_award_progression",
             "gm_apply_condition",
+            # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
+            "gm_find_situation",
+            "gm_submit_catalog_suggestion",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

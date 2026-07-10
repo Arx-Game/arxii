@@ -390,12 +390,21 @@ class MarkBeatAction(Action):
         if progress is None:
             return ActionResult(success=False, message=_NO_PROGRESS)
 
+        # Whoever is actually marking (Lead GM or an approved AGM — already
+        # gated by _actor_may_mark_beat above) is the GM credited with GM
+        # Story Reward XP (#2123), never silently the Lead GM.
+        try:
+            gm_profile = account.gm_profile
+        except (GMProfile.DoesNotExist, AttributeError):
+            gm_profile = None
+
         try:
             record_gm_marked_outcome(
                 progress=progress,
                 beat=beat,
                 outcome=outcome,
                 gm_notes=kwargs.get("gm_notes", ""),
+                resolved_by=gm_profile,
             )
         except (StoryError, ValueError) as exc:
             return ActionResult(success=False, message=str(exc))

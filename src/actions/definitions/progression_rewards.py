@@ -259,3 +259,43 @@ class ClearPathIntentAction(Action):
             return ActionResult(success=False, message="No active character.")
         clear_path_intent(sheet)
         return ActionResult(success=True, message="Path intent cleared.")
+
+
+@dataclass
+class SelectPathAction(Action):
+    """Late-selection recovery: pick a Path when CG never set one (#2121).
+
+    For characters created via a CG-bypassing path (GM-finalize quickstart,
+    NPCAsset -> PC promotion) with no ``CharacterPathHistory`` row at all —
+    see ``select_initial_path``. Gated on
+    ``current_path_for_character(actor) is None``; a character with a path
+    already on record must use path advancement/crossing instead, not this
+    recovery surface. Only the 5 CG-selectable PROSPECT paths are offered —
+    this mirrors the initial CG choice, not a jump to an advanced stage.
+    """
+
+    key: str = "select_path"
+    name: str = "Select Path"
+    icon: str = "compass"
+    category: str = "progression"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.classes.models import Path, PathStage  # noqa: PLC0415
+        from world.progression.exceptions import PathAlreadySelectedError  # noqa: PLC0415
+        from world.progression.services.advancement import select_initial_path  # noqa: PLC0415
+
+        if getattr(actor, "sheet_data", None) is None:  # noqa: GETATTR_LITERAL
+            return ActionResult(success=False, message="No active character.")
+        path = Path.objects.filter(
+            pk=kwargs.get("path_id"), is_active=True, stage=PathStage.PROSPECT
+        ).first()
+        if path is None:
+            return ActionResult(success=False, message="That is not a valid starting path.")
+        try:
+            select_initial_path(actor, path)
+        except PathAlreadySelectedError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message=f"You have chosen to walk {path.name}.")

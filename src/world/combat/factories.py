@@ -1337,6 +1337,27 @@ def wire_armor_soak_modifier_target():
     )
 
 
+def wire_elevation_advantage_modifier_target():
+    """Seed the 'elevation_advantage' ModifierTarget (#2011).
+
+    A flat stat-category bonus read positionally at combat time: when an
+    attacker is ELEVATED/AERIAL and the target is not, the bonus feeds into
+    the combat check's extra_modifiers. Offensive-only — no penalty for
+    firing up. Staff authors CharacterModifier rows against this target to
+    set the magnitude. Idempotent via django_get_or_create on (category, name).
+    """
+    from world.combat.constants import ELEVATION_ADVANTAGE_TARGET_NAME
+    from world.mechanics.constants import STAT_CATEGORY_NAME
+    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+    return ModifierTargetFactory(
+        name=ELEVATION_ADVANTAGE_TARGET_NAME,
+        category=ModifierCategoryFactory(name=STAT_CATEGORY_NAME),
+        description="Offensive-only elevation bonus (ELEVATED/AERIAL attacker firing down).",
+        is_active=True,
+    )
+
+
 def wire_escalation_content() -> None:
     """Seed the escalation spike trigger definitions (idempotent).
 

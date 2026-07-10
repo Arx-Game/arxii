@@ -141,6 +141,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `PoseUnit` (`frontend/src/scenes/components/`) — `kind` prop is `'pose' | 'entry' |
     'style'` (style added #2031), POSTing to `pose-endorsements/` /
     `scene-entry-endorsements/` / `style-presentation-endorsements/` respectively.
+  - **Residence declaration + room aura, live end-to-end (#2036):** the `ROOM_RESIDENCE`
+    daily-trickle `GainSource` above is reachable via a full declare→tag→tick loop —
+    `SetPrimaryHomeAction` (`world.locations.services.set_primary_home`) writes
+    `CharacterSheet.current_residence`, `tag_room_resonance`/`untag_room_resonance`
+    (`world.magic.services.gain`) write/remove the room's aura as a
+    `LocationValueModifier(key_type=RESONANCE)` row, and `residence_trickle_tick()` grants
+    resonance for the intersection of tagged and claimed resonances. `StartingArea
+    .grants_residence_tenancy` auto-grants a CG starting tenancy so a new character reaches
+    the gate with zero manual step. A Sanctum's Ritual of Homecoming happens to write the same
+    row shape onto its own room, so a resident Sanctum owner trickles from Homecoming growth
+    for free — see `world/magic/CLAUDE.md` "Residence declaration + room aura tagging" for the
+    full mechanism.
   - **Aura drift (#1737):** `CharacterAura`'s stored percentages recompute from
     `CharacterResonance.lifetime_earned` on every `grant_resonance()` call, firing
     achievements on authored `AuraAffinityThreshold` crossings; see magic.md
@@ -153,7 +165,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     FK. `ACCELERATED_GAIN_SOURCES` / `NON_ACCELERATED_GAIN_SOURCES` (ADR-0041, total
     classification test) gate which `GainSource`s get the earn-rate accelerator. See
     `docs/systems/distinctions.md` "Distinctions grant/shape Resonance" for the two axes
-    (standing/currency vs. potency).
+    (standing/currency vs. potency). Reverse direction (#2037):
+    `DistinctionResonanceRankThreshold` (same module; unique `(distinction, resonance,
+    rank)`, field `lifetime_earned_threshold`) — sustained accelerated-source gains rank up
+    a **held** distinction via `check_distinction_rank_thresholds`; see distinctions.md
+    "Reverse direction".
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
@@ -178,7 +194,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `reconcile_distinction_resonance_grants(character_distinction)` (establish + idempotent
     seed top-off; called by `create_distinction_modifiers`/`update_distinction_rank`),
     `distinction_earn_rate_for(character_sheet, resonance) -> Decimal` (summed earn-rate
-    bonus; read by `grant_resonance` for `ACCELERATED_GAIN_SOURCES`). Potency (POWER axis):
+    bonus; read by `grant_resonance` for `ACCELERATED_GAIN_SOURCES`),
+    `check_distinction_rank_thresholds(character_sheet, resonance)` (#2037 reverse
+    direction — ranks up held distinctions past authored
+    `DistinctionResonanceRankThreshold` rows; called by `grant_resonance` for
+    `ACCELERATED_GAIN_SOURCES` only, failure-isolated). Potency (POWER axis):
     `power_flat_bonus_for_resonance(sheet, resonance_id) -> int`
     (`world/mechanics/services.py`) folded into a standalone pull by
     `_fold_distinction_pull_bonus` (`world/magic/services/resonance.py`); a cast already
@@ -461,12 +481,27 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
-- **Enums:** `DistinctionOrigin`, `OtherStatus`
-- **Integrates with:** character_creation (draft storage), traits (stat modifiers), magic
+- **Enums:** `DistinctionOrigin` (`CHARACTER_CREATION`, `GAMEPLAY` vestigial, `GM_AWARD`,
+  `ACHIEVEMENT_AUTO_GRANT`, `CONSEQUENCE_POOL`, `ENDORSEMENT_THRESHOLD`), `OtherStatus`
+- **Key Services:** `grant_distinction(character, distinction, *, origin, rank=None,
+  source_description="") -> CharacterDistinction` (#2037) — the single seam every in-play
+  (post-CG) acquisition/rank-up goes through; `rank=None` advances one step, an explicit rank
+  only raises; `origin` is stamped once at creation and never rewritten by a rank-up; raises
+  `DistinctionExclusionError` on a mutual/variant conflict (service-layer port of the CG draft
+  view's checks). No XP path. See [distinctions.md](distinctions.md) "Post-CG acquisition" for
+  the four ratified sources (`GMAwardDistinctionAction`/telnet `grant_distinction`, achievement
+  `RewardType.DISTINCTION`, consequence-pool `EffectType.GRANT_DISTINCTION`, magic's
+  `ENDORSEMENT_THRESHOLD`) and the skip-on-conflict pattern each one uses.
+- **Integrates with:** character_creation (draft storage; CG-only writer besides this seam and
+  admin), traits (stat modifiers), gm/actions (`GMAwardDistinctionAction`, JUNIOR-tier),
+  commands (telnet `CmdGrantDistinction`), achievements (`RewardType.DISTINCTION` reward
+  dispatch), checks/mechanics (`EffectType.GRANT_DISTINCTION` consequence-pool dispatch), magic
   (`DistinctionResonanceGrant` — a distinction can grant/shape `Resonance` standing and
-  potency, #1834; the sidecar model itself lives in `world.magic` per ADR-0010 — see below
-  and [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
+  potency, #1834; `DistinctionResonanceRankThreshold` — the reverse direction, #2037; both
+  sidecar models live in `world.magic` per ADR-0010 — see below and
+  [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
 - **Source:** `src/world/distinctions/`
+- **Glossary:** `src/world/distinctions/AGENT_GLOSSARY.md`
 - **Details:** [distinctions.md](distinctions.md)
 
 ### Checks
@@ -640,7 +675,20 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
   readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/
   `is_tenant()` (ownership/tenancy lookups), `assign_room_tenant()`/`end_room_tenancy()`/
   `set_primary_home()` (#670 player tenancy seam — owner grants/evicts, tenant departs or
-  designates home; syncs the #1514 residence + recomputes prestige)
+  designates home; syncs the #1514 Evennia-`home` residence + recomputes prestige). #2036 widened
+  `set_primary_home()`: it now also writes `CharacterSheet.current_residence` (via
+  `world.magic.services.gain.set_residence`, the daily resonance-trickle gate) on every deliberate
+  declaration, accepts org-derived owner/tenant standing (not only a direct `LocationTenancy` row)
+  by minting a personal tenancy first via `grant_tenancy()`, and `end_tenancy()` clears
+  `current_residence` when the ended tenancy was the declared residence.
+  `maybe_default_residence()` was widened the same way — the first room a persona rents/acquires
+  now defaults both Evennia `home` and `current_residence`. Room aura tagging —
+  `tag_room_resonance()`/`untag_room_resonance()` (`world.magic.services.gain`) — writes/removes
+  the `LocationValueModifier(key_type=RESONANCE, source=ROOM_RESONANCE_TAG_SOURCE)` row a room's
+  resident resonances trickle from; reached via Actions `tag_room_resonance`/`untag_room_resonance`
+  (telnet `room/aura <resonance>` / `room/aura clear <resonance>`, web `RoomAuraPicker`), gated by
+  `IsRoomTenantPrerequisite` (widened #2036 to owner-OR-tenant standing, not a direct tenancy row
+  only — same widened gate now used by `SetPrimaryHomeAction` itself).
 - **API:** `GET /api/locations/comfort/?character_id=<id>` (`ComfortViewSet`) — personal comfort
   readout, tenure-gated
 - **Frontend:** `ComfortWidget` (`frontend/src/comfort/`) — silent unless something is biting
@@ -846,18 +894,23 @@ Lore storage and character knowledge tracking.
 - **Details:** [codex.md](codex.md)
 
 ### Investigation & Discovery
-The mystery core loop: a clue points at something worth finding (codex entry, mission, or a
-held captive to rescue); players acquire clues by **searching** a room or via passive
-**triggers**, then resolve them automatically or through a collaborative **research project**.
+The mystery core loop: a clue points at something worth finding (codex entry, mission, a
+held captive to rescue, a character secret, or a masked identity); players acquire clues by
+**searching** a room or via passive **triggers**, then resolve them automatically or through
+a collaborative **research project**.
 
-- **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE + a
-  per-kind FK; never exists without a target), `CharacterClue` (held-clue, roster-scoped),
+- **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE / SECRET /
+  PERSONA_LINK + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is the
+  documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
+  FKs → `scenes.Persona`, required together), `CharacterClue` (held-clue, roster-scoped),
   `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule`),
   `ClueTrigger` (passive on-entry placement + `eligibility_rule`), `ResearchProjectDetails`
   (the clue a `ProjectKind.RESEARCH` project researches toward)
 - **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
   `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
-  (AUTOMATIC resolution — codex KNOWN / rescue mission), `maybe_grant_clue_triggers`
+  (AUTOMATIC resolution — codex KNOWN / rescue mission / secret fact / persona-link
+  `PersonaDiscovery` via `_grant_persona_link_target`, #2120 — the only in-game
+  `PersonaDiscovery` producer; mask piercing stays GM-authored per ADR-0033), `maybe_grant_clue_triggers`
   (on room entry), `plant_rescue_clue` / `clear_rescue_clues` (#931), `start_research_project`
   / `contribute_research` (floored CHECK→progress) / `resolve_research` (RESEARCH handler)
 - **Action:** `SearchAction` (`actions/definitions/investigation.py`) — AP + mental fatigue
@@ -1082,8 +1135,16 @@ Character identity, appearance, demographics, and guise system.
 ### Character Creation
 Multi-stage character creation flow with draft system.
 
-- **Models:** `CharacterDraft`, `StartingArea`, `Beginnings`
-- **Key Functions:** Stage validation, draft progression
+- **Models:** `CharacterDraft`, `StartingArea` (`grants_residence_tenancy` BooleanField, default
+  True, #2036 — an authored per-area toggle for whether finalizing a character there grants a
+  `LocationTenancy` at the starting room), `Beginnings`
+- **Key Functions:** Stage validation, draft progression, `_grant_cg_residence_tenancy()` (#2036,
+  `world/character_creation/services.py`) — called from `finalize_character`; when
+  `starting_area.grants_residence_tenancy` and the starting room resolves a `RoomProfile`, calls
+  `world.locations.services.grant_tenancy()` for the new primary persona (notes="Academy
+  enrollment"), which auto-defaults both Evennia `home` and `CharacterSheet.current_residence` via
+  `maybe_default_residence()` — closes the "Academy auto-residence" story with zero manual player
+  step, making the daily residence-trickle gate reachable straight out of CG.
 - **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stat Traits/Rosters/Path so `finalize_character` runs on a fresh DB. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
@@ -1145,10 +1206,33 @@ GM at a given level may author (#2000, ADR-0097).
   (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`; seeded via
   `factories.seed_default_gm_level_caps`), `GMLevelChange` (audit row: `profile`,
   `old_level`, `new_level`, `changed_by`, `reason`, `created_at`; written only by
-  `promote_gm`, never edited by hand)
+  `promote_gm`, never edited by hand), **`GMRewardConfig`** (#2123 — pk=1 singleton,
+  `load()` classmethod; every GM Story Reward award value as a proper column:
+  `beat_xp_per_player`/`beat_xp_cap`, `episode_xp_per_player`/`episode_xp_cap`,
+  `story_completion_xp_per_player`/`story_completion_xp_cap`, `weekly_reward_cap`,
+  `feedback_xp_per_rating_point`; staff-editable in admin, seeded via the `gm`
+  cluster seeder, surfaced read-only on the Game Ops Story/GM panel), **`GMWeeklyRewardTracker`**
+  (#2123 — OneToOne `GMProfile`, FK `game_clock.GameWeek` (SET_NULL),
+  `xp_awarded_this_week`; mirrors `journals.WeeklyJournalXP`'s get-or-reset-by-week shape).
+  **Scenario catalog (#2127, ADR-0110):**
+  `SituationKind` (`NaturalKeyMixin`, cross-cutting taxonomy tag — "Chase",
+  "Negotiation" — `minimum_gm_level` breadth-gates visibility; `objects` has
+  `cached_all()` via `CachedAllMixin`, mirrors `ConsequencePoolManager`; holds no FK
+  to `mechanics.SituationTemplate` — ADR-0010, `gm` depends on `mechanics`, not the
+  reverse), `CheckTypeSituationFit` (through, `checks.CheckType` ↔ `SituationKind`,
+  `fit_notes`), `SituationDifficultyGuide` (`situation_kind` + `risk: RenownRisk` +
+  `recommended_difficulty: DifficultyChoice` + `guidance_text`; `unique_together`),
+  `ConsequencePoolGuide` (`situation_kind` + `pool: actions.ConsequencePool` +
+  `selection_criteria` + `is_default`; ADVISORY TEXT ONLY — no code path reads it to
+  select/write a live `consequence_pool` FK, Decision 7), `CatalogSuggestion`
+  (`submitted_by: accounts.AccountDB`, `situation_kind` nullable, `proposal_kind`,
+  `proposal_text`, `status: player_submissions.SubmissionStatus` — reused directly,
+  Decision 8 — `reviewer`, `review_notes`, `resolved_at`)
 - **Enums (`constants.py`):** `GMLevel` (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR),
   `GM_LEVEL_ORDER` + `gm_level_index(level)` (position on the ladder, 0–4),
-  `GMApplicationStatus`, `GMTableStatus`
+  `GMApplicationStatus`, `GMTableStatus`, `CatalogSuggestionProposalKind`
+  (NEW_SITUATION/CHECK_FIT/DIFFICULTY_GUIDE/POOL_GUIDE/OTHER) + `PROPOSAL_KIND_MIN_LEVEL`
+  (dict: the minimum `GMLevel` required to submit each kind — Decision 9)
 - **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,
   `approved_at`, `last_active_at`, `stories_running`, `beats_completed_by_risk`,
   `feedback_by_category`, `level_changes`), `CategoryFeedback` (`category_name`,
@@ -1162,7 +1246,14 @@ GM at a given level may author (#2000, ADR-0097).
   same-level or unknown-level input (programmer-error guard, real validation lives in
   `PromoteGMInputSerializer`), **`gm_evidence_summary(profile) -> GMEvidenceSummary`** —
   aggregate track record (stories running, beats completed by risk, feedback by trust
-  category, level-change audit trail) backing a staff promotion/demotion decision
+  category, level-change audit trail) backing a staff promotion/demotion decision,
+  **`award_gm_story_reward(*, gm_profile, players_served, per_player_xp, event_cap,
+  description) -> XPTransaction | None`** (#2123) — the single choke point for GM Story
+  Reward XP: `raw = min(per_player_xp * players_served, event_cap)`, further truncated by
+  `GMRewardConfig.weekly_reward_cap` headroom in `GMWeeklyRewardTracker` for the current
+  `GameWeek`; awards via `progression.award_xp(reason=ProgressionReason.GM_STORY_REWARD)`.
+  Never raises — a bug here logs and returns `None` rather than aborting the beat
+  mark/episode resolve/story completion/feedback submission that triggered it.
 - **Trust-ladder consumers:** `stories.BeatSerializer`'s risk gate and
   `stories.StakeSerializer`'s custom-stakes gate read the acting GM's `GMLevelCap` via
   `_gm_max_risk`/`_gm_allows_custom_stakes` (staff bypass unchanged);
@@ -1198,14 +1289,54 @@ GM at a given level may author (#2000, ADR-0097).
   <char> xp=<amount>|dev=<trait> amount=<n> [reason=<text>]`, `gm condition <char>
   condition=<name> [severity=<n>] [duration=<n>] [note=<text>]` (`commands/gm_ops.py`'s
   `CmdGMDashboard`).
+- **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
+  shape from checks to situations. `FindSituationAction` (key `gm_find_situation`,
+  read-only, gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` — lower than
+  `SetSituationAction`'s JUNIOR floor since browsing mutates nothing) searches
+  `mechanics.SituationTemplate` by name/description and, independently by the same
+  term, any matching `SituationKind` — returning its `CheckTypeSituationFit`,
+  `SituationDifficultyGuide`, and `ConsequencePoolGuide` rows as text.
+  `SituationKind` results are filtered server-side on `minimum_gm_level` against the
+  caller's own `GMLevel` (staff see everything) — a kind above a GM's tier never
+  appears, even on an exact name match. `SubmitCatalogSuggestionAction` (key
+  `gm_submit_catalog_suggestion`, same STARTING floor) creates a `CatalogSuggestion`
+  via `world.gm.services.submit_catalog_suggestion`, gated additionally on
+  `PROPOSAL_KIND_MIN_LEVEL[proposal_kind]` (Decision 9) — refuses a below-tier
+  `proposal_kind` with a level-appropriate message; staff bypass every gate. Both
+  live in `actions/definitions/gm_catalog.py`. Telnet: `setsituation find <term>`
+  (extends `commands/setsituation.py`, mirroring `gm check find`'s shape) and `gm
+  suggest <kind>=<text>` (`commands/gm_ops.py`'s `CmdGMDashboard`, kind one of
+  `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`). Web: the
+  same generic `DispatchActionView` seam `set_the_stage`/`gm_invoke_check` already
+  use — no dedicated endpoint. Suggestion inbox: `SubmissionCategory
+  .CATALOG_SUGGESTION` (`world.player_submissions.constants`) +
+  `_catalog_suggestion_to_item` in `world.staff_inbox.services.get_staff_inbox`,
+  mirroring `GMApplication`'s exact mapping shape (Decision 8); staff triage via
+  `CatalogSuggestionViewSet` (`/api/gm/catalog-suggestions/`, list/retrieve/update,
+  `IsAdminUser` — no create route, creation only through the Action). Starter
+  taxonomy (Chase/Negotiation/Infiltration + a `SituationDifficultyGuide` row per
+  `RenownRisk` tier) seeded idempotently by `world.gm.factories
+  .seed_catalog_starter_content`, composed into the `"gm"` cluster seeder
+  alongside `seed_default_gm_level_caps`.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
-  Story and seats the covenant via `join_table`), combat (`StakesLevelRequirement
+  Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`
+  (#2123) — `players_served_for_scope`/`credit_gm_story_reward`, called from
+  `record_gm_marked_outcome`, `resolve_episode`, `complete_story`, and
+  `world.stories.services.feedback.submit_story_feedback` — is the specific side of
+  the dependency per ADR-0010; `world.gm` never imports `world.stories` at module
+  level), combat (`StakesLevelRequirement
   .minimum_gm_level`), roster (`GMRosterInvite` → `RosterApplication`), scenes
   (`GMTableMembership` pinned to `Persona`, `Scene.is_gm` for the adjudication
-  toolkit's gate), checks (`InvokeCatalogCheckAction` → `perform_check`),
-  progression (`GMAwardAction` → `award_xp`/`award_development_points`), conditions
-  (`GMApplyConditionAction` → `apply_condition`)
+  toolkit's gate), checks (`InvokeCatalogCheckAction` → `perform_check`;
+  `CheckTypeSituationFit` → `checks.CheckType`), progression (`GMAwardAction` →
+  `award_xp`/`award_development_points`;
+  `award_gm_story_reward` → `award_xp(reason=ProgressionReason.GM_STORY_REWARD)`, #2123),
+  conditions (`GMApplyConditionAction` → `apply_condition`), mechanics
+  (`FindSituationAction` → `mechanics.SituationTemplate`, text-search only, no FK),
+  actions (`ConsequencePoolGuide.pool` → `actions.ConsequencePool`, advisory only),
+  player_submissions/staff_inbox (`CatalogSuggestion` → `SubmissionCategory
+  .CATALOG_SUGGESTION`)
 - **Source:** `src/world/gm/`
 - **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
 - **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
@@ -1620,15 +1751,17 @@ gains a discoverable content item for the first time.
   `prerequisite` self-FK, `is_active`), `AchievementRequirement` (stat threshold comparison per
   achievement), `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp),
   `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a co-discoverer),
-  `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE reward catalog),
-  `AchievementReward` (per-achievement reward with optional `reward_value` amount),
+  `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION reward catalog;
+  `distinction` nullable FK → `distinctions.Distinction`, mirrors `modifier_target`, #2037),
+  `AchievementReward` (per-achievement reward with optional `reward_value` amount, or an
+  explicit rank for DISTINCTION),
   `CharacterTitle` (earned display-only title record; FK → TITLE `RewardDefinition`),
   `ConditionStatRule` (bridge: condition event type → stat increment),
   **`DiscoverableContent`** (abstract base — adds nullable `discovery_achievement` FK to any
   content model whose instances can be discovered for the first time; inherited by `Technique`
   and `CovenantRole`; null = not discoverable; see ADR-0061)
 - **Enums:** `NotificationLevel` (PERSONAL / ROOM / GAMEWIDE), `ComparisonType` (GTE / EQ / LTE),
-  `RewardType` (TITLE / BONUS / COSMETIC / PRESTIGE), `ConditionEventType` (GAINED),
+  `RewardType` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION), `ConditionEventType` (GAINED),
   `AccessChangeSource` (ASSUMED_ALTERNATE_SELF / REVERTED_ALTERNATE_SELF /
   COVENANT_ROLE_ENGAGED / COVENANT_ROLE_DISENGAGED / CHARACTER_CREATION)
 - **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
@@ -1653,8 +1786,9 @@ gains a discoverable content item for the first time.
   FK), covenants (`CovenantRole` inherits `DiscoverableContent`), narrative
   (`send_narrative_message` with ABILITY category), roster (`active_player_character_sheets()`
   for gamewide first-ever recipient selection), mechanics (BONUS reward → `CharacterModifier`),
-  societies (PRESTIGE reward → `award_deed_prestige`), conditions (`ConditionStatRule` bridge),
-  stories (reactivity hook `on_achievement_earned`)
+  societies (PRESTIGE reward → `award_deed_prestige`), distinctions (DISTINCTION reward →
+  `grant_distinction(origin=ACHIEVEMENT_AUTO_GRANT)`, #2037), conditions (`ConditionStatRule`
+  bridge), stories (reactivity hook `on_achievement_earned`)
 - **Source:** `src/world/achievements/`
 - **Glossary:** `src/world/achievements/AGENT_GLOSSARY.md`
 
@@ -1835,6 +1969,16 @@ captivity's RANSOM ownership).
   form lists active scales). Seeds: `propaganda` cluster (3 PLACEHOLDER tiers).
 - **Stat definitions:** Project achievement stats are created lazily on first
   contribution (same pattern as combat achievement counters)
+- **PROJECT_CONTRIBUTION resonance payout (#2038):** `ProjectKindResonanceAward`
+  (per-`ProjectKind` opt-in: `kind` unique, `resonance_award_amount`; missing
+  row/amount 0 = no payout) + `_maybe_grant_project_contribution_resonance`,
+  called at the end of `add_contribution` for every `ContributionKind`. Grants
+  `Project.resonance` via `grant_resonance(..., source=GainSource.PROJECT_CONTRIBUTION)`
+  (see "Resonance Gain Surfaces" in [magic.md](magic.md)); exception-guarded (a
+  payout failure never rolls back the contribution) and uncapped (repeat
+  contributions each grant again). Seeded via `ensure_project_kind_resonance_awards`
+  (`world/projects/seeds.py`, `project_resonance` cluster) — only
+  `ORGANIZATION_CAPABILITY` opts in today, at +5.
 - **Cross-app dependencies:** `world.scenes.Persona`, `societies.Organization`
 - **Source:** `src/world/projects/`
 
@@ -2427,6 +2571,13 @@ Unified modifier system — categories, types, sources, and per-character modifi
     `LEGEND_AWARD`, `CAPTURE`, `ESCAPE_CAPTIVITY`, `RESCUE_CAPTIVE`
   - Added in #1018: `CREATE_POSITION`, `MOVE_TO_POSITION`, `SEVER_EDGE`,
     `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT`
+  - Added in #1697: `SET_RELATIONSHIP_CONDITION`, `SHIFT_AFFECTION`
+  - Added in #2037: `GRANT_DISTINCTION` — `ConsequenceEffect.distinction` FK (CASCADE, mirrors
+    `property`) + `distinction_rank` (nullable, mirrors `property_value`; null = advance one
+    step). Handler `_grant_distinction` calls the shared `distinctions.grant_distinction` seam
+    with `origin=DistinctionOrigin.CONSEQUENCE_POOL`; a `DistinctionExclusionError` is caught
+    and turned into a skipped `AppliedEffect` (mirrors `_apply_capture`'s
+    `AlreadyCapturedError` skip pattern) — never crashes the surrounding resolution.
 - **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers),
   action_points (AP modifiers), goals (goal domains), positioning (reshape handlers in effect_handlers.py)
 - **Source:** `src/world/mechanics/`
@@ -2983,6 +3134,18 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     multiplier
   - `_ensure_succor_challenges(encounter, pc_actions)` — idempotently mints
     `ChallengeInstance` rows bound to each protected ally for armed SUCCOR actions each round
+  - `declare_use_item(participant, item_instance, *, target=None)` (#2023/#2120) — arm a
+    USE_ITEM `CombatRoundAction` (a primary maneuver — consumes the round's action slot,
+    unlike the passives-only maneuvers); validates possession via `ItemState.is_in_possession`;
+    `target` may be a `CombatParticipant` (→ `focused_ally_target`) or `CombatOpponent`
+    (→ `focused_opponent_target`). Resolution (`_resolve_use_item`) dispatches the existing
+    `UseItemAction` with the declared target threaded through (the #2120 target-forwarding fix).
+    Entry points: telnet `combat use <item> [on <target>]`, web `POST /api/combat/{pk}/use_item/`,
+    registry key `combat_use` (`UseItemManeuverAction`, `actions/definitions/combat_maneuvers.py`).
+  - `maybe_resolve_on_ready(encounter)` (#2120) — PaceMode.READY early resolution: when every
+    ACTIVE participant's round action is `is_ready=True`, calls `resolve_round` immediately
+    instead of waiting for the TIMED game-clock sweep. Called from `ReadyAction.execute`
+    after `toggle_action_ready`, only when the toggle landed on ready=True.
 - **Key Services (`world/mechanics/succor_shared.py`, #1744):** `SUCCOR_CHALLENGE_NAME` +
   `apply_succor_outcome(result)` — domain-agnostic Succor pieces shared by combat and scene
   rounds (moved out of `world.combat` so `world.scenes` doesn't need a one-directional import
@@ -3023,12 +3186,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
     filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
     with `TechniqueAppliedCondition(target_kind=ALLY)`
-- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR / ENGAGE / DISENGAGE / RALLY / DEMORALIZE / TAUNT / PARLEY), `OpponentMoraleState` (STEADY / FALTER / BREAK — derived, `world.combat.morale`), `RoundStatus` (shared with
+- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR / ENGAGE / DISENGAGE / RALLY / DEMORALIZE / TAUNT / PARLEY / USE_ITEM), `OpponentMoraleState` (STEADY / FALTER / BREAK — derived, `world.combat.morale`), `RoundStatus` (shared with
   `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
   COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
 - **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
   participant, add opponent, pause), player actions (declare, ready, interpose, cover,
-  yield, flee, my_action, available_combos, rally, demoralize, taunt, parley),
+  yield, flee, use_item, my_action, available_combos, rally, demoralize, taunt, parley),
   duel challenge endpoints
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
@@ -3455,7 +3618,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier GM distinction award/rank-up, telnet `grant_distinction`, wraps `distinctions.grant_distinction`, #2037), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `MinimumGMLevelPrerequisite` (#2117 — staff bypass + `GMProfile.level` >= a configured `GMLevel` tier, generalizing `world.combat.scaling.validate_stakes_requirement`'s pattern; gates `SetTheStageAction`/`PemitAction` at STARTING and `SetSituationAction`/`GrantItemAction` at JUNIOR), `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)

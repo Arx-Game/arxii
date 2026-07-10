@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { PersonaAvatar, type PersonaAvatarSource } from '@/components/PersonaAvatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -16,6 +17,7 @@ import {
   useSetActivePersonaMutation,
   type SwitchablePersona,
 } from '../personaQueries';
+import { GuiseSheetDialog } from './GuiseSheetDialog';
 
 interface PersonaSwitcherProps {
   characterSheetId: number;
@@ -39,10 +41,13 @@ function avatarSource(p: SwitchablePersona): PersonaAvatarSource {
  * Shows the worn identity and, when the character has more than one face, lets the
  * player switch via `POST /api/personas/set-active/`. The worn face is made
  * deliberately obvious so a player never acts as the wrong identity by accident.
+ * A worn non-primary face also offers "Edit guise sheet…" (#1682) — its
+ * fabricated bio, authored via `POST /api/personas/set-profile/`.
  */
 export function PersonaSwitcher({ characterSheetId, activePersonaId }: PersonaSwitcherProps) {
   const { data: personas = [] } = useCharacterPersonasQuery(characterSheetId);
   const setActive = useSetActivePersonaMutation();
+  const [guiseOpen, setGuiseOpen] = useState(false);
 
   const worn = useMemo(
     () =>
@@ -60,40 +65,60 @@ export function PersonaSwitcher({ characterSheetId, activePersonaId }: PersonaSw
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className="flex items-center gap-1.5 rounded px-2 py-1 text-sm font-medium ring-1 ring-primary/40 hover:bg-accent disabled:opacity-50"
-        disabled={setActive.isPending}
-        title="Switch which identity you are presenting as"
-      >
-        <span>{worn.name}</span>
-        <span className="text-xs text-muted-foreground" aria-hidden>
-          ▾
-        </span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-56">
-        <DropdownMenuLabel>Presenting as</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup
-          value={worn.id.toString()}
-          onValueChange={(value) => {
-            const id = Number(value);
-            if (id !== worn.id) {
-              setActive.mutate(id);
-            }
-          }}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className="flex items-center gap-1.5 rounded px-2 py-1 text-sm font-medium ring-1 ring-primary/40 hover:bg-accent disabled:opacity-50"
+          disabled={setActive.isPending}
+          title="Switch which identity you are presenting as"
         >
-          {personas.map((p) => (
-            <DropdownMenuRadioItem key={p.id} value={p.id.toString()} className="gap-2">
-              <PersonaAvatar source={avatarSource(p)} size="sm" />
-              <span className="flex flex-col">
-                <span>{p.name}</span>
-                <span className="text-xs text-muted-foreground">{TYPE_LABEL[p.persona_type]}</span>
-              </span>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <span>{worn.name}</span>
+          <span className="text-xs text-muted-foreground" aria-hidden>
+            ▾
+          </span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-56">
+          <DropdownMenuLabel>Presenting as</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup
+            value={worn.id.toString()}
+            onValueChange={(value) => {
+              const id = Number(value);
+              if (id !== worn.id) {
+                setActive.mutate(id);
+              }
+            }}
+          >
+            {personas.map((p) => (
+              <DropdownMenuRadioItem key={p.id} value={p.id.toString()} className="gap-2">
+                <PersonaAvatar source={avatarSource(p)} size="sm" />
+                <span className="flex flex-col">
+                  <span>{p.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {TYPE_LABEL[p.persona_type]}
+                  </span>
+                </span>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          {worn.persona_type !== 'primary' && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setGuiseOpen(true)}>
+                Edit guise sheet…
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {worn.persona_type !== 'primary' && (
+        <GuiseSheetDialog
+          persona={worn}
+          characterSheetId={characterSheetId}
+          open={guiseOpen}
+          onOpenChange={setGuiseOpen}
+        />
+      )}
+    </>
   );
 }

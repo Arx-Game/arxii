@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
 
@@ -21,6 +22,21 @@ class CommandUpdateTests(TestCase):
             with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
                 account.at_post_login(session=session)
         session.msg.assert_any_call(commands=(["cmd"], {}))
+
+    def test_at_post_login_characterless_message_points_to_web(self):
+        """#2122 — the no-characters login message signposts the web app."""
+        session = MagicMock()
+        account = AccountFactory(typeclass="typeclasses.accounts.Account")
+        account.sessions.all = MagicMock(return_value=[session])
+        account.get_available_characters = MagicMock(return_value=[])
+        with patch("typeclasses.accounts.serialize_cmdset", return_value=["cmd"]):
+            with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
+                account.at_post_login(session=session)
+
+        texts = [str(call.args[0]) for call in session.msg.call_args_list if call.args]
+        combined = "\n".join(texts)
+        self.assertIn(settings.FRONTEND_URL, combined)
+        self.assertIn("no available characters", combined.lower())
 
     def test_at_post_puppet_sends_commands(self):
         session1 = MagicMock()

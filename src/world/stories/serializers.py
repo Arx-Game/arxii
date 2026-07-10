@@ -688,17 +688,18 @@ class StoryFeedbackCreateSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data: dict[str, Any]) -> StoryFeedback:
-        """Create feedback with category ratings"""
+        """Create feedback with category ratings, crediting the reviewed GM (#2123)."""
+        from world.stories.services.feedback import submit_story_feedback  # noqa: PLC0415
+
         category_ratings_data = validated_data.pop("category_ratings", [])
-        feedback = cast(Any, StoryFeedback).objects.create(**validated_data)
-
-        for rating_data in category_ratings_data:
-            cast(Any, TrustCategoryFeedbackRating).objects.create(
-                feedback=feedback,
-                **rating_data,
-            )
-
-        return feedback
+        return submit_story_feedback(
+            story=validated_data["story"],
+            reviewer=validated_data["reviewer"],
+            reviewed_player=validated_data["reviewed_player"],
+            is_gm_feedback=validated_data.get("is_gm_feedback", False),
+            comments=validated_data["comments"],
+            category_ratings=category_ratings_data,
+        )
 
     def validate_comments(self, value):
         """Ensure feedback has meaningful content"""

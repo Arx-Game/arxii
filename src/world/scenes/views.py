@@ -51,6 +51,7 @@ from world.scenes.serializers import (
     ScenesSpotlightSerializer,
     SceneSummaryRevisionSerializer,
     SetActivePersonaRequestSerializer,
+    SetPersonaProfileRequestSerializer,
     SetRoundModeRequestSerializer,
 )
 from world.scenes.services import broadcast_scene_message
@@ -546,6 +547,50 @@ class PersonaViewSet(
         except PersonaCreationError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
         return Response(PersonaSerializer(mask).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        request=SetPersonaProfileRequestSerializer,
+        responses={200: PersonaSerializer},
+        tags=["personas"],
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="set-profile",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def set_profile(self, request: Request) -> Response:
+        """#1682 — author a cover persona's Guise Sheet from the web.
+
+        Wires the shipped #1270 service to the primary surface: the face must
+        be one of the played character's own personas (a foreign or unknown id
+        is rejected uniformly, mirroring set-active); PRIMARY is rejected by
+        the service (the real bio is the sheet's ``true_profile``). Absent
+        fields stay untouched (partial edits are safe); blank fields clear.
+        """
+        from world.scenes.services import GuiseProfileError, set_persona_profile  # noqa: PLC0415
+
+        body = SetPersonaProfileRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        sheet = self._played_sheet(request)
+        persona = Persona.objects.filter(
+            pk=body.validated_data["persona_id"], character_sheet=sheet
+        ).first()
+        if persona is None:
+            msg = "That is not one of your identities."
+            raise serializers.ValidationError(msg)
+        data = body.validated_data
+        try:
+            set_persona_profile(
+                persona,
+                concept=data.get("concept"),
+                quote=data.get("quote"),
+                personality=data.get("personality"),
+                background=data.get("background"),
+            )
+        except GuiseProfileError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        return Response(PersonaSerializer(persona).data, status=status.HTTP_200_OK)
 
     @extend_schema(responses=RenownSerializer, tags=["personas"])
     @action(detail=True, methods=[HTTPMethod.GET])

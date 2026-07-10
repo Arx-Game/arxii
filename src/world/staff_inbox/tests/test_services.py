@@ -99,6 +99,39 @@ class StaffInboxGMApplicationTest(TestCase):
         assert len(gm_items) == 0
 
 
+class StaffInboxCatalogSuggestionTest(TestCase):
+    """Coverage for CatalogSuggestion -> InboxItem wiring (#2127)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.factories import CatalogSuggestionFactory
+
+        cls.suggestion = CatalogSuggestionFactory()
+
+    def test_catalog_suggestion_appears_in_inbox(self) -> None:
+        items = get_staff_inbox()
+        matches = [i for i in items if i.source_type == SubmissionCategory.CATALOG_SUGGESTION]
+        assert len(matches) == 1
+        assert matches[0].source_pk == self.suggestion.pk
+        assert self.suggestion.submitted_by.username in matches[0].reporter_summary
+
+    def test_catalog_suggestion_filtered_by_category(self) -> None:
+        items = get_staff_inbox(categories=[SubmissionCategory.CATALOG_SUGGESTION])
+        assert len(items) == 1
+
+    def test_catalog_suggestion_excluded_by_category(self) -> None:
+        items = get_staff_inbox(categories=[SubmissionCategory.PLAYER_FEEDBACK])
+        matches = [i for i in items if i.source_type == SubmissionCategory.CATALOG_SUGGESTION]
+        assert len(matches) == 0
+
+    def test_non_open_catalog_suggestion_excluded(self) -> None:
+        from world.gm.factories import CatalogSuggestionFactory
+
+        CatalogSuggestionFactory(status=SubmissionStatus.DISMISSED)
+        items = get_staff_inbox(categories=[SubmissionCategory.CATALOG_SUGGESTION])
+        assert len(items) == 1  # only the OPEN one from setUpTestData
+
+
 class AccountHistoryTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:

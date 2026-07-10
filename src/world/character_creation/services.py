@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         DraftApplicationComment,
     )
     from world.character_sheets.models import CharacterSheet
+    from world.scenes.models import Persona
     from world.stories.models import Story
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,7 @@ def finalize_character(
     # Create Character + CharacterSheet + PRIMARY Persona atomically.
     # The service ensures every sheet has a PRIMARY persona, preserving the
     # invariant used everywhere else (tests, factories, etc.).
-    character, sheet, _primary_persona = create_character_with_sheet(
+    character, sheet, primary_persona = create_character_with_sheet(
         character_key=full_name,
         primary_persona_name=full_name,
     )
@@ -123,6 +124,7 @@ def finalize_character(
     if starting_room is not None:
         character.location = starting_room
         character.home = starting_room
+        _grant_cg_residence_tenancy(draft, starting_room, primary_persona)
 
     # Populate sheet fields (demographics, descriptive text, physical traits) and save.
     _apply_sheet_demographics(sheet, draft)
@@ -305,6 +307,42 @@ def _build_character_full_name(draft: CharacterDraft) -> str:
     if family_name:
         return f"{first_name} {family_name}"
     return first_name
+
+
+def _grant_cg_residence_tenancy(
+    draft: CharacterDraft,
+    starting_room: ObjectDB,
+    primary_persona: Persona,
+) -> None:
+    """Grant a residence tenancy at CG finalization when the area authors it (#2036).
+
+    Design item 4: closes the "Academy auto-residence" story with zero manual player
+    step. Guarded on ``StartingArea.grants_residence_tenancy`` (an authored per-area
+    toggle — not every starting area need be residence-backed) and on the starting
+    room actually resolving a ``RoomProfile`` (rooms may lack one during early
+    testing, per ``StartingArea``'s own docstring — a graceful no-op, matching
+    today's behavior for those rooms).
+
+    ``grant_tenancy`` auto-defaults both Evennia ``home`` (redundant with the direct
+    assignment the caller already made, but idempotent/harmless) and
+    ``CharacterSheet.current_residence`` via ``maybe_default_residence`` — the one
+    call that makes the daily residence-trickle gate reachable.
+    """
+    starting_area = draft.selected_area
+    if starting_area is None or not starting_area.grants_residence_tenancy:
+        return
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.locations.services import grant_tenancy  # noqa: PLC0415
+
+    try:
+        room_profile = starting_room.room_profile
+    except RoomProfile.DoesNotExist:
+        return
+    grant_tenancy(
+        room_profile=room_profile,
+        tenant_persona=primary_persona,
+        notes="Academy enrollment",
+    )
 
 
 def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:  # noqa: C901, PLR0912
