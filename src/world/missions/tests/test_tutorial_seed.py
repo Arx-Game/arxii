@@ -14,6 +14,8 @@ time (it was already invoked once via the "tutorial" cluster inside
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.test import TestCase
 
 from world.missions.constants import DeedRewardSink, ExternalAct, GiverKind, OptionKind
@@ -98,6 +100,28 @@ class SeedTutorialDevTests(TestCase):
         self.assertEqual(
             [t.risk_tier for t in (self.t1, self.t2, self.t3, self.t4, self.t5, self.t6, self.t7)],
             [1, 1, 1, 2, 2, 2, 4],
+        )
+
+    # -- role-cooldown (review fold-in, #1035 Task 6): the anti-spam
+    # NPCRoleCooldown gate must not block same-session chain progression --
+
+    def test_tutor_offers_carry_zero_role_cooldown(self) -> None:
+        """T3/T5/T6/T7 all seed role_cooldown_duration=timedelta(0).
+
+        Curated single-path chain: availability_rule + the per-(persona,
+        role) one-in-flight gate already prevent double-dipping, so leaving
+        this at the factory-default cooldown (1 day) would block a real
+        player finishing T3 from accepting T5/T6/T7 in the same session
+        (reviewer-verified bug on commit a159b6c9e). Asserted as a single
+        ladder across all four so seed drift on any one breaks this loudly.
+        """
+        details = [
+            MissionOfferDetails.objects.get(mission_template=t)
+            for t in (self.t3, self.t5, self.t6, self.t7)
+        ]
+        self.assertEqual(
+            [d.role_cooldown_duration for d in details],
+            [timedelta(0)] * 4,
         )
 
     # -- T1 Arrival ------------------------------------------------------

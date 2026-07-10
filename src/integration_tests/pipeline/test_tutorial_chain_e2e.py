@@ -42,13 +42,19 @@ choice):
     of that assertion is ``enter_node``'s fast-forward, not the chain's
     visibility gating (already covered by the primary walk + the explicit
     T7-gate-before/after assertion).
-  - Between tutor-role NPC-offer/summons acceptances, the test explicitly
-    clears the ``NPCRoleCooldown`` row ``issue_mission`` writes after a grant
-    (real per-(role, persona) pacing — ``MissionTemplateFactory``'s default
-    ``cooldown`` is 1 day, and offer eligibility re-checks it live). A real
-    player naturally clears it by playing across sessions; the test
-    "fast-forwards" that wait, exactly like patching ``check_anti_spam`` in
-    ``test_noncombat_cast_telnet_e2e.py``.
+  - Between tutor-role NPC-offer/summons acceptances, the journey walks at
+    natural speed — no cooldown fast-forwarding. Each of the four tutor
+    ``MissionOfferDetails`` rows (T3/T5/T6/T7) is seeded with an explicit
+    ``role_cooldown_duration=timedelta(0)`` (see
+    ``world.seeds.game_content.tutorial._ensure_offer``): this is a curated
+    single-path chain — ``availability_rule`` + the per-(persona, role)
+    one-in-flight gate already prevent double-dipping, so the generic
+    anti-spam ``NPCRoleCooldown`` (default 24h, shared per-role across ALL of
+    a role's offers) would otherwise block T5/T6/T7 for a full day after
+    accepting T3, which a real player finishing the chain same-session would
+    hit (#1035 Task 6 review fix). ``setUp`` asserts the zero-duration seed so
+    drift re-breaks this test loudly instead of silently reintroducing the
+    fast-forward workaround.
 
 Bug fixed in passing (fold-in, CLAUDE.md "Fold In, Don't File" — a one-line
 wiring nit surfaced by this being the first test to ever drive
@@ -63,6 +69,7 @@ never the room itself (see ``MissionGiver.clean()``, and the already-correct
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -97,7 +104,7 @@ from world.missions.services.trigger_dispatch import (
 )
 from world.missions.services.visibility import template_visible_to
 from world.npc_services.constants import SummonsStatus
-from world.npc_services.models import NPCRoleCooldown, NPCServiceOffer, OfferSummons
+from world.npc_services.models import NPCServiceOffer, OfferSummons
 from world.npc_services.summons import respond_to_summons
 from world.seeds.character_creation import ensure_canonical_fallback_room
 from world.seeds.database import seed_dev_database
@@ -149,6 +156,21 @@ class TutorialChainJourneyE2ETests(TestCase):
         self.tutor_role = result.tutor_role
         self.room = ensure_canonical_fallback_room()
 
+        # Guard the review-fix invariant (#1035 Task 6): each tutor offer
+        # must carry a zero role-cooldown, or the anti-spam NPCRoleCooldown
+        # gate blocks same-session progression through T5/T6/T7 (see module
+        # docstring). Seed drift on this must fail loudly, not silently
+        # reintroduce a need for cooldown fast-forwarding in this test.
+        tutor_offers = NPCServiceOffer.objects.filter(role=self.tutor_role)
+        self.assertEqual(tutor_offers.count(), 4)
+        for offer in tutor_offers:
+            self.assertEqual(
+                offer.mission_offer_details.role_cooldown_duration,
+                timedelta(0),
+                f"tutor offer {offer.label!r} must seed role_cooldown_duration="
+                "timedelta(0) (curated single-path chain; #1035 Task 6 review fix)",
+            )
+
         self.pc, self.sheet = self._make_pc("Newcomer")
 
         # Leak-rule spy: BRANCH beat resolution (T1/T2/T4/T7) legitimately emits
@@ -177,12 +199,6 @@ class TutorialChainJourneyE2ETests(TestCase):
     def _offer(self, label: str) -> NPCServiceOffer:
         return NPCServiceOffer.objects.get(role=self.tutor_role, label=label)
 
-    def _clear_tutor_cooldown(self) -> None:
-        """Fast-forward past the per-(role, persona) pacing cooldown (see module docstring)."""
-        NPCRoleCooldown.objects.filter(
-            role=self.tutor_role, persona=self.sheet.primary_persona
-        ).delete()
-
     def _accept_npc_offer(self, offer: NPCServiceOffer, *, acknowledge_risk: bool = False):
         start = start_npc_interaction.run(actor=self.pc, role_id=offer.role_id)
         self.assertTrue(start.success, start.message)
@@ -194,7 +210,6 @@ class TutorialChainJourneyE2ETests(TestCase):
             acknowledge_risk=acknowledge_risk,
         )
         self.assertTrue(result.success, result.message)
-        self._clear_tutor_cooldown()
         return (
             MissionInstance.objects.filter(participants__character=self.pc, source_offer=offer)
             .order_by("-pk")
@@ -313,7 +328,6 @@ class TutorialChainJourneyE2ETests(TestCase):
         # --- T5: The Loom (NPC offer via summons, EXTERNAL_ACT/THREAD_WOVEN) -
         summons_result = respond_to_summons(summons, self.pc, accept=True)
         self.assertTrue(summons_result.success, summons_result.message)
-        self._clear_tutor_cooldown()
         instance_t5 = (
             MissionInstance.objects.filter(participants__character=self.pc, source_offer=t5_offer)
             .order_by("-pk")

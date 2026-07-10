@@ -56,6 +56,7 @@ line needs T5's ``NPCServiceOffer`` FK; T5's availability_rule needs T4's pk).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from world.missions.constants import (
@@ -263,7 +264,12 @@ def _ensure_tutor_functionary(role: NPCRole, room: ObjectDB) -> None:
 
 
 def _ensure_offer(
-    role: NPCRole, label: str, mission_template: MissionTemplate, *, draw_priority: int = 1
+    role: NPCRole,
+    label: str,
+    mission_template: MissionTemplate,
+    *,
+    draw_priority: int = 1,
+    role_cooldown_duration: timedelta = timedelta(0),
 ) -> NPCServiceOffer:
     """Idempotent (role, label)-keyed MISSION offer + its MissionOfferDetails row.
 
@@ -271,6 +277,15 @@ def _ensure_offer(
     eligible), not a randomized POOL draw; ``draw_priority`` is set anyway per
     the spec (#1035) for authoring-intent consistency even though POOL is the
     field's primary consumer.
+
+    ``role_cooldown_duration`` defaults to zero: this is a curated, single-path
+    tutorial chain — each step's ``availability_rule`` already gates on the
+    previous step's completion, and the per-(persona, role) "one mission
+    in-flight" check (#686) already prevents double-dipping the same offer.
+    The generic anti-spam ``NPCRoleCooldown`` (default 24h, shared per-role
+    across ALL of this role's offers) would otherwise block T5/T6/T7 for a
+    full day after accepting T3, breaking same-session tutorial progression
+    (review finding on #1035 Task 6).
     """
     from world.npc_services.models import MissionOfferDetails, NPCServiceOffer  # noqa: PLC0415
 
@@ -291,6 +306,7 @@ def _ensure_offer(
             mission_template=mission_template,
             requirements_override={},
             draw_priority=draw_priority,
+            role_cooldown_duration=role_cooldown_duration,
         )
     return offer
 
