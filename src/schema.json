@@ -18254,6 +18254,10 @@ paths:
         schema:
           type: integer
       - in: query
+        name: target_area
+        schema:
+          type: number
+      - in: query
         name: template
         schema:
           type: number
@@ -41371,6 +41375,20 @@ components:
       - origin_affinity_name
       - player_description
       - tier
+    LocationModeEnum:
+      enum:
+      - anywhere
+      - anchor
+      - rooms
+      - instance
+      - area
+      type: string
+      description: |-
+        * `anywhere` - Anywhere
+        * `anchor` - Anchor Room
+        * `rooms` - Authored Rooms
+        * `instance` - Spawned Instance
+        * `area` - Target Area
     MachineMatchLifecycleStateEnum:
       enum:
       - ALIVE
@@ -41917,7 +41935,8 @@ components:
         ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-        sibling are both editable.
+        sibling are both editable. ``location_mode``/``locations``/``target_area``
+        round-trip the node's location gate (#885, #888).
       properties:
         id:
           type: integer
@@ -41994,6 +42013,29 @@ components:
             me'); the Phase-D edit service clears it on save. Surfaces in the Studio's
             'N flavor fields are still flagged as un-rewritten copy' counter (design
             §10). NOT cleared automatically at the model layer — service responsibility.
+        location_mode:
+          allOf:
+          - $ref: '#/components/schemas/LocationModeEnum'
+          description: |-
+            Default location gate for this node's options (#885): ANYWHERE = live wherever the character is; ANCHOR = live only in the instance's grant-time anchor room; ROOMS = live in this node's authored ``locations`` set. An option with its own ``locations`` rows overrides this default.
+
+            * `anywhere` - Anywhere
+            * `anchor` - Anchor Room
+            * `rooms` - Authored Rooms
+            * `instance` - Spawned Instance
+            * `area` - Target Area
+        locations:
+          type: array
+          items:
+            type: integer
+          description: Authored rooms where this node's options are live (consulted
+            only when ``location_mode=ROOMS``). Options may override per-option via
+            ``MissionOption.locations``.
+        target_area:
+          type: integer
+          nullable: true
+          description: Target area for AREA location_mode. A room matches when its
+            RoomProfile.area is this area or any descendant via AreaClosure.
       required:
       - conflict_mode
       - id
@@ -42007,7 +42049,8 @@ components:
         ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-        sibling are both editable.
+        sibling are both editable. ``location_mode``/``locations``/``target_area``
+        round-trip the node's location gate (#885, #888).
       properties:
         template:
           type: integer
@@ -42082,6 +42125,29 @@ components:
             me'); the Phase-D edit service clears it on save. Surfaces in the Studio's
             'N flavor fields are still flagged as un-rewritten copy' counter (design
             §10). NOT cleared automatically at the model layer — service responsibility.
+        location_mode:
+          allOf:
+          - $ref: '#/components/schemas/LocationModeEnum'
+          description: |-
+            Default location gate for this node's options (#885): ANYWHERE = live wherever the character is; ANCHOR = live only in the instance's grant-time anchor room; ROOMS = live in this node's authored ``locations`` set. An option with its own ``locations`` rows overrides this default.
+
+            * `anywhere` - Anywhere
+            * `anchor` - Anchor Room
+            * `rooms` - Authored Rooms
+            * `instance` - Spawned Instance
+            * `area` - Target Area
+        locations:
+          type: array
+          items:
+            type: integer
+          description: Authored rooms where this node's options are live (consulted
+            only when ``location_mode=ROOMS``). Options may override per-option via
+            ``MissionOption.locations``.
+        target_area:
+          type: integer
+          nullable: true
+          description: Target area for AREA location_mode. A room matches when its
+            RoomProfile.area is this area or any descendant via AreaClosure.
       required:
       - conflict_mode
       - key
@@ -49145,7 +49211,8 @@ components:
         ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-        sibling are both editable.
+        sibling are both editable. ``location_mode``/``locations``/``target_area``
+        round-trip the node's location gate (#885, #888).
       properties:
         template:
           type: integer
@@ -49220,6 +49287,29 @@ components:
             me'); the Phase-D edit service clears it on save. Surfaces in the Studio's
             'N flavor fields are still flagged as un-rewritten copy' counter (design
             §10). NOT cleared automatically at the model layer — service responsibility.
+        location_mode:
+          allOf:
+          - $ref: '#/components/schemas/LocationModeEnum'
+          description: |-
+            Default location gate for this node's options (#885): ANYWHERE = live wherever the character is; ANCHOR = live only in the instance's grant-time anchor room; ROOMS = live in this node's authored ``locations`` set. An option with its own ``locations`` rows overrides this default.
+
+            * `anywhere` - Anywhere
+            * `anchor` - Anchor Room
+            * `rooms` - Authored Rooms
+            * `instance` - Spawned Instance
+            * `area` - Target Area
+        locations:
+          type: array
+          items:
+            type: integer
+          description: Authored rooms where this node's options are live (consulted
+            only when ``location_mode=ROOMS``). Options may override per-option via
+            ``MissionOption.locations``.
+        target_area:
+          type: integer
+          nullable: true
+          description: Target area for AREA location_mode. A room matches when its
+            RoomProfile.area is this area or any descendant via AreaClosure.
     PatchedMissionOfferDetailsRequest:
       type: object
       description: |-

@@ -15,6 +15,7 @@ from world.mechanics.factories import ChallengeTemplateFactory
 from world.missions.constants import (
     ConflictMode,
     JointCombine,
+    NodeLocationMode,
     OptionKind,
     OptionSource,
 )
@@ -405,3 +406,48 @@ class MissionOptionChallengeSourceTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             option.full_clean()
+
+
+class MissionNodeTargetAreaValidationTests(TestCase):
+    """AREA mode requires target_area; other modes forbid it."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.areas.factories import AreaFactory
+
+        cls.template = MissionTemplateFactory()
+        cls.area = AreaFactory()
+
+    def test_area_mode_requires_target_area(self) -> None:
+        node = MissionNode(
+            template=self.template,
+            key="area_need_target",
+            conflict_mode=ConflictMode.GROUP_VOTE,
+            location_mode=NodeLocationMode.AREA,
+            target_area=None,
+        )
+        with self.assertRaises(ValidationError) as cm:
+            node.full_clean()
+        self.assertIn("target_area", cm.exception.message_dict)
+
+    def test_non_area_mode_forbids_target_area(self) -> None:
+        node = MissionNode(
+            template=self.template,
+            key="rooms_no_target",
+            conflict_mode=ConflictMode.GROUP_VOTE,
+            location_mode=NodeLocationMode.ROOMS,
+            target_area=self.area,
+        )
+        with self.assertRaises(ValidationError) as cm:
+            node.full_clean()
+        self.assertIn("target_area", cm.exception.message_dict)
+
+    def test_area_mode_with_target_area_is_valid(self) -> None:
+        node = MissionNode(
+            template=self.template,
+            key="area_ok",
+            conflict_mode=ConflictMode.GROUP_VOTE,
+            location_mode=NodeLocationMode.AREA,
+            target_area=self.area,
+        )
+        node.full_clean()  # should not raise

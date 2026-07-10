@@ -24,6 +24,7 @@ from evennia_extensions.factories import (
     ObjectDBFactory,
     RoomProfileFactory,
 )
+from world.areas.constants import AreaLevel
 from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import (
     MissionStatus,
@@ -175,6 +176,65 @@ class LocationConjunctTests(TestCase):
         self.assertEqual(len(build_option_list(instance, entry, participant)), 0)
 
 
+class AreaLocationConjunctTests(TestCase):
+    """NodeLocationMode.AREA matches rooms in the target area subtree (#888)."""
+
+    def setUp(self) -> None:
+        from world.areas.factories import AreaFactory
+
+        self.parent_area = AreaFactory(level=AreaLevel.CITY)
+        self.child_area = AreaFactory(parent=self.parent_area, level=AreaLevel.NEIGHBORHOOD)
+        self.other_area = AreaFactory()
+
+        self.here_room, self.here = _room("AreaHere")
+        self.here.area = self.parent_area
+        self.here.save(update_fields=["area"])
+
+        self.child_room, self.child = _room("AreaChild")
+        self.child.area = self.child_area
+        self.child.save(update_fields=["area"])
+
+        self.other_room, self.other = _room("AreaOther")
+        self.other.area = self.other_area
+        self.other.save(update_fields=["area"])
+
+    def _run_area(self, *, target_area, in_room):
+        template, entry, _entry_option, *_ = _graph(f"area-{target_area.pk}-{in_room}")
+        entry.location_mode = NodeLocationMode.AREA
+        entry.target_area = target_area
+        entry.save(update_fields=["location_mode", "target_area"])
+        character = _pc(in_room)
+        instance = staff_assign_mission(template, character)
+        participant = instance.participants.get(character=character)
+        return build_option_list(instance, entry, participant)
+
+    def test_area_live_in_target_area(self) -> None:
+        live = self._run_area(target_area=self.parent_area, in_room=self.here_room)
+        self.assertEqual(len(live), 1)
+
+    def test_area_live_in_descendant_area(self) -> None:
+        live = self._run_area(target_area=self.parent_area, in_room=self.child_room)
+        self.assertEqual(len(live), 1)
+
+    def test_area_dead_outside_subtree(self) -> None:
+        dead = self._run_area(target_area=self.parent_area, in_room=self.other_room)
+        self.assertEqual(len(dead), 0)
+
+    def test_area_dead_when_target_area_null(self) -> None:
+        template, entry, *_ = _graph("area-null-target")
+        # The model's clean() forbids saving AREA with a null target_area, so
+        # we test the runtime guard by mutating the in-memory node after saving
+        # it with a placeholder area.
+        entry.location_mode = NodeLocationMode.AREA
+        entry.target_area = self.other_area
+        entry.save(update_fields=["location_mode", "target_area"])
+        entry.target_area_id = None
+        character = _pc(self.here_room)
+        instance = staff_assign_mission(template, character)
+        participant = instance.participants.get(character=character)
+        self.assertEqual(len(build_option_list(instance, entry, participant)), 0)
+
+
 class JournalCompassTests(TestCase):
     # setUp, not setUpTestData — see LocationConjunctTests.
     def setUp(self) -> None:
@@ -208,6 +268,36 @@ class JournalCompassTests(TestCase):
         staff_assign_mission(template, character)
         (entry_row,) = [e for e in journal_for(character) if e.template_name == template.name]
         self.assertIn("Merchants Guildhall", entry_row.compass_rooms)
+
+    def test_compass_area_names_target_area(self) -> None:
+        from world.areas.factories import AreaFactory
+
+        district = AreaFactory(name="Lowtown", level=AreaLevel.CITY)
+        template, entry, *_ = _graph("compass-area")
+        entry.location_mode = NodeLocationMode.AREA
+        entry.target_area = district
+        entry.save(update_fields=["location_mode", "target_area"])
+        character = _pc(self.hall_room)
+        staff_assign_mission(template, character)
+        (entry_row,) = [e for e in journal_for(character) if e.template_name == template.name]
+        self.assertIn("Lowtown", entry_row.compass_rooms)
+        self.assertFalse(entry_row.compass_anywhere)
+
+    def test_compass_area_null_target_is_empty(self) -> None:
+        from world.areas.factories import AreaFactory
+
+        template, entry, *_ = _graph("compass-area-null")
+        # Model clean() forbids saving AREA with a null target_area; test the
+        # runtime fallback by saving with a placeholder and clearing it in memory.
+        entry.location_mode = NodeLocationMode.AREA
+        entry.target_area = AreaFactory()
+        entry.save(update_fields=["location_mode", "target_area"])
+        entry.target_area_id = None
+        character = _pc(self.hall_room)
+        staff_assign_mission(template, character)
+        (entry_row,) = [e for e in journal_for(character) if e.template_name == template.name]
+        self.assertEqual(entry_row.compass_rooms, ())
+        self.assertFalse(entry_row.compass_anywhere)
 
     def test_epilogue_only_on_complete(self) -> None:
         template, _entry, entry_option, _second, second_option = _graph("compass-epilogue")

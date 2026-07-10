@@ -341,18 +341,23 @@ def _journal_entry_for(  # noqa: PLR0913
 
 def _node_default_compass(instance: MissionInstance, node: MissionNode) -> tuple[list[str], bool]:
     """Room names + anywhere-flag for a node's own location default."""
+    names: list[str] = []
+    anywhere = False
     if node.location_mode == NodeLocationMode.ANYWHERE:
-        return [], True
-    if node.location_mode == NodeLocationMode.INSTANCE:
+        anywhere = True
+    elif node.location_mode == NodeLocationMode.INSTANCE:
         if instance.spawned_room_id is not None:
-            return [instance.spawned_room.objectdb.db_key], False
-        return [], False
-    if node.location_mode == NodeLocationMode.ANCHOR:
+            names = [instance.spawned_room.objectdb.db_key]
+    elif node.location_mode == NodeLocationMode.ANCHOR:
         if instance.anchor_room_id is not None:
-            return [instance.anchor_room.objectdb.db_key], False
-        return [], False
-    # NodeLocationMode.ROOMS
-    return [room.objectdb.db_key for room in node.locations.all()], False
+            names = [instance.anchor_room.objectdb.db_key]
+    elif node.location_mode == NodeLocationMode.AREA:
+        if node.target_area_id is not None:
+            names = [node.target_area.name]
+    else:
+        # NodeLocationMode.ROOMS
+        names = [room.objectdb.db_key for room in node.locations.all()]
+    return names, anywhere
 
 
 def _compass_for(
