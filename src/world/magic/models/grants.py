@@ -6,7 +6,9 @@ in world.codex.models (BeginningsCodexGrant, PathCodexGrant, etc.).
 
 Also carries ``DistinctionResonanceGrant`` — the currency-knob sidecar for
 #1834 (distinctions granting resonance): flat seed amount + earn-rate bonus,
-both rank-scaled by the character's rank in the distinction.
+both rank-scaled by the character's rank in the distinction. Its reverse
+sidecar, ``DistinctionResonanceRankThreshold`` (#2037), authors the opposite
+direction: sustained investment in a Resonance ranking up a held Distinction.
 """
 
 from decimal import Decimal
@@ -205,6 +207,59 @@ class DistinctionResonanceGrant(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.distinction} grants {self.resonance}"
+
+
+class DistinctionResonanceRankThreshold(SharedMemoryModel):
+    """Reverse sidecar of ``DistinctionResonanceGrant`` (#2037 Decision 8).
+
+    ``DistinctionResonanceGrant`` models Distinction -> Resonance (a distinction seeds/
+    accelerates a resonance). This is the reverse direction: "sustained investment in
+    THIS Resonance ranks up THAT Distinction" — the identity-reinforcing-play leg Tehom
+    named ("sustained endorsements around one resonance ranking up an associated
+    Distinction"). Lives in ``world.magic`` (not ``world.distinctions``) for the same
+    ADR-0010 reason as its sibling: the general primitive (``magic.Resonance``) must not
+    import back into a dependent app.
+
+    Consumed by ``check_distinction_rank_thresholds``
+    (``world.magic.services.distinction_resonance``): a character who already holds
+    ``distinction`` and whose ``CharacterResonance.lifetime_earned`` for ``resonance``
+    reaches ``lifetime_earned_threshold`` is ranked up to ``rank`` via
+    ``world.distinctions.services.grant_distinction`` — never grants the distinction
+    fresh, only ranks up an existing holder.
+    """
+
+    distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.CASCADE,
+        related_name="resonance_rank_thresholds",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="distinction_rank_thresholds",
+    )
+    rank = models.PositiveIntegerField(
+        help_text="Which rank of the distinction this threshold unlocks.",
+    )
+    lifetime_earned_threshold = models.PositiveIntegerField(
+        help_text=(
+            "CharacterResonance.lifetime_earned in this resonance required to reach the above rank."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["distinction", "resonance", "rank"],
+                name="unique_distinction_resonance_rank_threshold",
+            ),
+        ]
+        ordering = ["distinction_id", "resonance_id", "rank"]
+        verbose_name = "Distinction Resonance Rank Threshold"
+        verbose_name_plural = "Distinction Resonance Rank Thresholds"
+
+    def __str__(self) -> str:
+        return f"{self.distinction} rank {self.rank} via {self.resonance}"
 
 
 class TraditionRitualGrant(SharedMemoryModel):

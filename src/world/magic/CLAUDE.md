@@ -1399,6 +1399,17 @@ The following models have been removed and replaced:
 - Wired at both acquisition sites: gameplay grant/rank-up and character creation
   (`_create_distinction_modifiers_bulk` in `world/character_creation/services.py`, followed
   by `recompute_aura` once `CharacterAura` exists in `finalize_magic_data`).
+- **Reverse direction (#2037):** `DistinctionResonanceRankThreshold` (`models/grants.py`,
+  unique `(distinction, resonance, rank)` + `lifetime_earned_threshold`) authors "sustained
+  investment in this Resonance ranks up that Distinction."
+  `check_distinction_rank_thresholds(character_sheet, resonance)`
+  (`services/distinction_resonance.py`) is the consumer, called by `grant_resonance` only
+  when `source in ACCELERATED_GAIN_SOURCES` (never for `DISTINCTION` seeds — feedback-loop
+  guard). Ranks up **held** distinctions only (threshold keyed to exactly
+  `current_rank + 1`, which is also the re-fire guard), loops to a fully caught-up state per
+  grant, routes through `grant_distinction(origin=ENDORSEMENT_THRESHOLD)`, catches/logs
+  `DistinctionExclusionError`, and is failure-isolated in `grant_resonance` so the resonance
+  grant always stands.
 
 ### Distinction Potency (POWER axis, #1834 Task 7)
 

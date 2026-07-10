@@ -450,6 +450,79 @@
   - scriptdb_set <- scripts.ScriptDB
 
 
+## world.achievements
+
+### StatDefinition
+**Pointed to by:**
+  - trackers <- achievements.StatTracker
+  - requirements <- achievements.AchievementRequirement
+  - condition_rules <- achievements.ConditionStatRule
+
+### StatTracker
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - stat -> achievements.StatDefinition [FK]
+
+### Achievement
+**Foreign Keys:**
+  - prerequisite -> achievements.Achievement [FK] (nullable)
+**Pointed to by:**
+  - achievementrequirement_set <- progression.AchievementRequirement
+  - aura_affinity_thresholds <- magic.AuraAffinityThreshold
+  - crossing_options <- magic.CrossingOption
+  - next_in_chain <- achievements.Achievement
+  - requirements <- achievements.AchievementRequirement
+  - discovery <- achievements.Discovery
+  - character_achievements <- achievements.CharacterAchievement
+  - rewards <- achievements.AchievementReward
+
+### AchievementRequirement
+**Foreign Keys:**
+  - achievement -> achievements.Achievement [FK]
+  - stat -> achievements.StatDefinition [FK]
+
+### Discovery
+**Foreign Keys:**
+  - achievement -> achievements.Achievement [OneToOne]
+**Pointed to by:**
+  - discoverers <- achievements.CharacterAchievement
+
+### CharacterAchievement
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - achievement -> achievements.Achievement [FK]
+  - discovery -> achievements.Discovery [FK] (nullable)
+
+### RewardDefinition
+**Foreign Keys:**
+  - modifier_target -> mechanics.ModifierTarget [FK] (nullable)
+  - distinction -> distinctions.Distinction [FK] (nullable)
+**Pointed to by:**
+  - achievement_rewards <- achievements.AchievementReward
+  - character_titles <- achievements.CharacterTitle
+
+### AchievementReward
+**Foreign Keys:**
+  - achievement -> achievements.Achievement [FK]
+  - reward -> achievements.RewardDefinition [FK]
+
+### ConditionStatRule
+**Foreign Keys:**
+  - stat -> achievements.StatDefinition [FK]
+  - condition -> conditions.ConditionTemplate [FK]
+
+### CharacterTitle
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - reward -> achievements.RewardDefinition [FK]
+
+### Service Functions
+- `apply_achievement_rewards(character_sheet: 'CharacterSheet', achievement: 'Achievement') -> 'None' — Apply an achievement's rewards to a character — title / bonus / prestige / distinction`
+- `get_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition') -> 'int' — Return current value of a stat tracker, 0 if it doesn't exist.`
+- `grant_achievement(achievement: 'Achievement', character_sheets: 'list[CharacterSheet]') -> 'list[CharacterAchievement]' — Grant an achievement to one or more characters simultaneously.`
+- `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
+
+
 ## world.areas
 
 ### Area
@@ -1312,6 +1385,7 @@
   - condition_template -> conditions.ConditionTemplate [FK] (nullable)
   - relationship_condition -> relationships.RelationshipCondition [FK] (nullable)
   - property -> mechanics.Property [FK] (nullable)
+  - distinction -> distinctions.Distinction [FK] (nullable)
   - damage_type -> conditions.DamageType [FK] (nullable)
   - flow_definition -> flows.FlowDefinition [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
@@ -2890,6 +2964,7 @@
   - entry_flourish_records <- magic.EntryFlourishRecord
   - resonancegrant_set <- magic.ResonanceGrant
   - distinction_grants <- magic.DistinctionResonanceGrant
+  - distinction_rank_thresholds <- magic.DistinctionResonanceRankThreshold
   - motif_resonances <- magic.MotifResonance
   - imbuing_prose <- magic.ImbuingProseTemplate
   - sanctums <- magic.SanctumDetails
@@ -3294,6 +3369,11 @@
   - ritual -> magic.Ritual [FK]
 
 ### DistinctionResonanceGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - resonance -> magic.Resonance [FK]
+
+### DistinctionResonanceRankThreshold
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [FK]
   - resonance -> magic.Resonance [FK]

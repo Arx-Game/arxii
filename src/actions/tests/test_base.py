@@ -202,6 +202,7 @@ class ActionRegistryTests(TestCase):
             "activate_permit",
             "use_item",
             "grant_item",
+            "gm_award_distinction",
             "craft_attach_facet",
             "craft_detach_facet",
             "craft_attach_style",

@@ -273,6 +273,60 @@ def _remove_property(
     )
 
 
+def _grant_distinction(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Grant or rank up a Distinction on the resolved target via the shared acquisition
+    seam (#2037). Mirrors ``_add_property``'s shape: ``distinction_rank`` null means
+    "advance one step" (the seam's default), matching ``property_value``'s optional-int
+    convention. Skips gracefully — never crashes the surrounding resolution — when the
+    target has no character sheet, or when the grant would violate a mutual/variant
+    exclusion (mirrors ``_apply_capture``'s ``AlreadyCapturedError`` skip pattern).
+    """
+    from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
+    from world.distinctions.services import grant_distinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    target = _resolve_target(effect, context)
+    try:
+        sheet = target.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return AppliedEffect(
+            effect_type=EffectType.GRANT_DISTINCTION,
+            description=_NO_SHEET_DESCRIPTION,
+            applied=False,
+            skip_reason=_NO_SHEET_SKIP_REASON,
+        )
+
+    distinction_name = effect.distinction.name
+    try:
+        grant_distinction(
+            sheet,
+            effect.distinction,
+            origin=DistinctionOrigin.CONSEQUENCE_POOL,
+            rank=effect.distinction_rank,
+        )
+    except DistinctionExclusionError as exc:
+        logger.info(
+            "Consequence effect: distinction grant skipped for %s (%s)",
+            target.db_key,
+            exc.user_message,
+        )
+        return AppliedEffect(
+            effect_type=EffectType.GRANT_DISTINCTION,
+            description=f"{distinction_name} grant skipped for {target.db_key}",
+            applied=False,
+            skip_reason=exc.user_message,
+        )
+
+    return AppliedEffect(
+        effect_type=EffectType.GRANT_DISTINCTION,
+        description=f"Granted distinction {distinction_name} to {target.db_key}",
+        applied=True,
+    )
+
+
 def apply_resolved_damage(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     amount: int,
@@ -1085,6 +1139,7 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.SHIFT_AFFECTION: _shift_affection,
     EffectType.ADD_PROPERTY: _add_property,
     EffectType.REMOVE_PROPERTY: _remove_property,
+    EffectType.GRANT_DISTINCTION: _grant_distinction,
     EffectType.DEAL_DAMAGE: _deal_damage,
     EffectType.LAUNCH_ATTACK: _launch_attack,
     EffectType.LAUNCH_FLOW: _launch_flow,

@@ -165,7 +165,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     FK. `ACCELERATED_GAIN_SOURCES` / `NON_ACCELERATED_GAIN_SOURCES` (ADR-0041, total
     classification test) gate which `GainSource`s get the earn-rate accelerator. See
     `docs/systems/distinctions.md` "Distinctions grant/shape Resonance" for the two axes
-    (standing/currency vs. potency).
+    (standing/currency vs. potency). Reverse direction (#2037):
+    `DistinctionResonanceRankThreshold` (same module; unique `(distinction, resonance,
+    rank)`, field `lifetime_earned_threshold`) — sustained accelerated-source gains rank up
+    a **held** distinction via `check_distinction_rank_thresholds`; see distinctions.md
+    "Reverse direction".
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
@@ -190,7 +194,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `reconcile_distinction_resonance_grants(character_distinction)` (establish + idempotent
     seed top-off; called by `create_distinction_modifiers`/`update_distinction_rank`),
     `distinction_earn_rate_for(character_sheet, resonance) -> Decimal` (summed earn-rate
-    bonus; read by `grant_resonance` for `ACCELERATED_GAIN_SOURCES`). Potency (POWER axis):
+    bonus; read by `grant_resonance` for `ACCELERATED_GAIN_SOURCES`),
+    `check_distinction_rank_thresholds(character_sheet, resonance)` (#2037 reverse
+    direction — ranks up held distinctions past authored
+    `DistinctionResonanceRankThreshold` rows; called by `grant_resonance` for
+    `ACCELERATED_GAIN_SOURCES` only, failure-isolated). Potency (POWER axis):
     `power_flat_bonus_for_resonance(sheet, resonance_id) -> int`
     (`world/mechanics/services.py`) folded into a standalone pull by
     `_fold_distinction_pull_bonus` (`world/magic/services/resonance.py`); a cast already
@@ -473,12 +481,27 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
-- **Enums:** `DistinctionOrigin`, `OtherStatus`
-- **Integrates with:** character_creation (draft storage), traits (stat modifiers), magic
+- **Enums:** `DistinctionOrigin` (`CHARACTER_CREATION`, `GAMEPLAY` vestigial, `GM_AWARD`,
+  `ACHIEVEMENT_AUTO_GRANT`, `CONSEQUENCE_POOL`, `ENDORSEMENT_THRESHOLD`), `OtherStatus`
+- **Key Services:** `grant_distinction(character, distinction, *, origin, rank=None,
+  source_description="") -> CharacterDistinction` (#2037) — the single seam every in-play
+  (post-CG) acquisition/rank-up goes through; `rank=None` advances one step, an explicit rank
+  only raises; `origin` is stamped once at creation and never rewritten by a rank-up; raises
+  `DistinctionExclusionError` on a mutual/variant conflict (service-layer port of the CG draft
+  view's checks). No XP path. See [distinctions.md](distinctions.md) "Post-CG acquisition" for
+  the four ratified sources (`GMAwardDistinctionAction`/telnet `grant_distinction`, achievement
+  `RewardType.DISTINCTION`, consequence-pool `EffectType.GRANT_DISTINCTION`, magic's
+  `ENDORSEMENT_THRESHOLD`) and the skip-on-conflict pattern each one uses.
+- **Integrates with:** character_creation (draft storage; CG-only writer besides this seam and
+  admin), traits (stat modifiers), gm/actions (`GMAwardDistinctionAction`, JUNIOR-tier),
+  commands (telnet `CmdGrantDistinction`), achievements (`RewardType.DISTINCTION` reward
+  dispatch), checks/mechanics (`EffectType.GRANT_DISTINCTION` consequence-pool dispatch), magic
   (`DistinctionResonanceGrant` — a distinction can grant/shape `Resonance` standing and
-  potency, #1834; the sidecar model itself lives in `world.magic` per ADR-0010 — see below
-  and [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
+  potency, #1834; `DistinctionResonanceRankThreshold` — the reverse direction, #2037; both
+  sidecar models live in `world.magic` per ADR-0010 — see below and
+  [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
 - **Source:** `src/world/distinctions/`
+- **Glossary:** `src/world/distinctions/AGENT_GLOSSARY.md`
 - **Details:** [distinctions.md](distinctions.md)
 
 ### Checks
@@ -1678,15 +1701,17 @@ gains a discoverable content item for the first time.
   `prerequisite` self-FK, `is_active`), `AchievementRequirement` (stat threshold comparison per
   achievement), `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp),
   `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a co-discoverer),
-  `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE reward catalog),
-  `AchievementReward` (per-achievement reward with optional `reward_value` amount),
+  `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION reward catalog;
+  `distinction` nullable FK → `distinctions.Distinction`, mirrors `modifier_target`, #2037),
+  `AchievementReward` (per-achievement reward with optional `reward_value` amount, or an
+  explicit rank for DISTINCTION),
   `CharacterTitle` (earned display-only title record; FK → TITLE `RewardDefinition`),
   `ConditionStatRule` (bridge: condition event type → stat increment),
   **`DiscoverableContent`** (abstract base — adds nullable `discovery_achievement` FK to any
   content model whose instances can be discovered for the first time; inherited by `Technique`
   and `CovenantRole`; null = not discoverable; see ADR-0061)
 - **Enums:** `NotificationLevel` (PERSONAL / ROOM / GAMEWIDE), `ComparisonType` (GTE / EQ / LTE),
-  `RewardType` (TITLE / BONUS / COSMETIC / PRESTIGE), `ConditionEventType` (GAINED),
+  `RewardType` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION), `ConditionEventType` (GAINED),
   `AccessChangeSource` (ASSUMED_ALTERNATE_SELF / REVERTED_ALTERNATE_SELF /
   COVENANT_ROLE_ENGAGED / COVENANT_ROLE_DISENGAGED / CHARACTER_CREATION)
 - **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
@@ -1711,8 +1736,9 @@ gains a discoverable content item for the first time.
   FK), covenants (`CovenantRole` inherits `DiscoverableContent`), narrative
   (`send_narrative_message` with ABILITY category), roster (`active_player_character_sheets()`
   for gamewide first-ever recipient selection), mechanics (BONUS reward → `CharacterModifier`),
-  societies (PRESTIGE reward → `award_deed_prestige`), conditions (`ConditionStatRule` bridge),
-  stories (reactivity hook `on_achievement_earned`)
+  societies (PRESTIGE reward → `award_deed_prestige`), distinctions (DISTINCTION reward →
+  `grant_distinction(origin=ACHIEVEMENT_AUTO_GRANT)`, #2037), conditions (`ConditionStatRule`
+  bridge), stories (reactivity hook `on_achievement_earned`)
 - **Source:** `src/world/achievements/`
 - **Glossary:** `src/world/achievements/AGENT_GLOSSARY.md`
 
@@ -2495,6 +2521,13 @@ Unified modifier system — categories, types, sources, and per-character modifi
     `LEGEND_AWARD`, `CAPTURE`, `ESCAPE_CAPTIVITY`, `RESCUE_CAPTIVE`
   - Added in #1018: `CREATE_POSITION`, `MOVE_TO_POSITION`, `SEVER_EDGE`,
     `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT`
+  - Added in #1697: `SET_RELATIONSHIP_CONDITION`, `SHIFT_AFFECTION`
+  - Added in #2037: `GRANT_DISTINCTION` — `ConsequenceEffect.distinction` FK (CASCADE, mirrors
+    `property`) + `distinction_rank` (nullable, mirrors `property_value`; null = advance one
+    step). Handler `_grant_distinction` calls the shared `distinctions.grant_distinction` seam
+    with `origin=DistinctionOrigin.CONSEQUENCE_POOL`; a `DistinctionExclusionError` is caught
+    and turned into a skipped `AppliedEffect` (mirrors `_apply_capture`'s
+    `AlreadyCapturedError` skip pattern) — never crashes the surrounding resolution.
 - **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers),
   action_points (AP modifiers), goals (goal domains), positioning (reshape handlers in effect_handlers.py)
 - **Source:** `src/world/mechanics/`
@@ -3535,7 +3568,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier GM distinction award/rank-up, telnet `grant_distinction`, wraps `distinctions.grant_distinction`, #2037), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `MinimumGMLevelPrerequisite` (#2117 — staff bypass + `GMProfile.level` >= a configured `GMLevel` tier, generalizing `world.combat.scaling.validate_stakes_requirement`'s pattern; gates `SetTheStageAction`/`PemitAction` at STARTING and `SetSituationAction`/`GrantItemAction` at JUNIOR), `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
