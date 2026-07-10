@@ -139,13 +139,27 @@ def _maybe_grant_project_contribution_resonance(
             project.kind,
         )
         return
-    grant_resonance(
-        contributor_persona.character_sheet,
-        project.resonance,
-        award.resonance_award_amount,
-        source=GainSource.PROJECT_CONTRIBUTION,
-        project=project,
-    )
+    try:
+        grant_resonance(
+            contributor_persona.character_sheet,
+            project.resonance,
+            award.resonance_award_amount,
+            source=GainSource.PROJECT_CONTRIBUTION,
+            project=project,
+        )
+    except Exception:
+        # A failed bonus forfeits only the bonus, never the contribution it's
+        # layered on top of (see docstring above). This runs inside
+        # add_contribution's @transaction.atomic — and, via donate_to_project,
+        # inside the shared atomic block that also debits the donor's purse —
+        # so an uncaught exception here would roll back the whole contribution
+        # (and the money already spent) for what should be a non-gating bonus.
+        logger.exception(
+            "PROJECT_CONTRIBUTION resonance grant failed for project #%s (kind=%s) — "
+            "contribution stands, bonus forfeited.",
+            project.pk,
+            project.kind,
+        )
 
 
 def donate_to_project(project: Project, *, donor_persona: Persona, amount: int) -> Contribution:

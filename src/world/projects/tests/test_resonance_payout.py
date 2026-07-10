@@ -8,15 +8,18 @@ from the same contributor to the same project each grant independently
 (uncapped, per Tehom's ruling).
 """
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
+from world.currency.models import CharacterPurse
 from world.magic.constants import GainSource
 from world.magic.factories import ResonanceFactory
 from world.magic.models import ResonanceGrant
 from world.projects.constants import ContributionKind, ProjectKind, ProjectStatus
 from world.projects.factories import ProjectFactory
-from world.projects.models import ProjectKindResonanceAward
-from world.projects.services import add_contribution
+from world.projects.models import Contribution, ProjectKindResonanceAward
+from world.projects.services import add_contribution, donate_to_project
 from world.scenes.factories import PersonaFactory
 
 
@@ -171,3 +174,48 @@ class ProjectContributionResonancePayoutTests(TestCase):
         )
         self.assertEqual(grants.count(), 3)
         self.assertEqual(sum(g.amount for g in grants), 15)
+
+
+class PayoutFailureNeverRollsBackContributionTests(TestCase):
+    """Regression (#2038 HIGH finding): a broken payout must never roll back the
+    contribution it's layered on top of — including the money debit on the
+    donate_to_project path, which shares add_contribution's atomic block.
+    """
+
+    def test_grant_resonance_raising_does_not_roll_back_donation(self) -> None:
+        resonance = ResonanceFactory()
+        project = ProjectFactory(
+            kind=ProjectKind.ORGANIZATION_CAPABILITY,
+            status=ProjectStatus.ACTIVE,
+            resonance=resonance,
+            threshold_target=100,
+        )
+        ProjectKindResonanceAward.objects.create(
+            kind=ProjectKind.ORGANIZATION_CAPABILITY, resonance_award_amount=5
+        )
+        donor = PersonaFactory()
+        purse = CharacterPurse.objects.create(character_sheet=donor.character_sheet, balance=10_000)
+
+        with (
+            patch(
+                "world.magic.services.resonance.grant_resonance",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertLogs("world.projects.services", level="ERROR") as logs,
+        ):
+            contribution = donate_to_project(project, donor_persona=donor, amount=5_000)
+
+        # The contribution and its money debit stand — a failed bonus forfeits
+        # only the bonus, never the contribution.
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 5_000)
+        self.assertTrue(Contribution.objects.filter(pk=contribution.pk).exists())
+        project.refresh_from_db()
+        self.assertEqual(project.current_progress, 50)
+
+        # No resonance grant was written — the payout genuinely failed.
+        self.assertEqual(
+            ResonanceGrant.objects.filter(source=GainSource.PROJECT_CONTRIBUTION).count(), 0
+        )
+        # But the failure was logged, not swallowed silently.
+        self.assertTrue(any("boom" in message for message in logs.output))
