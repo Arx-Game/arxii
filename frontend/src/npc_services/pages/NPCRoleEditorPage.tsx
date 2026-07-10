@@ -32,21 +32,26 @@ import {
   type PredicateNode,
 } from '@/missions/components/PredicateBuilder';
 import { useMissionTemplates, usePredicateLeaves } from '@/missions/queries';
+import { useBuildingKindsQuery } from '@/buildings/queries';
+import { useQuery } from '@tanstack/react-query';
 
-import { ApiValidationError, flattenErrorMessage } from '../api';
+import { ApiValidationError, flattenErrorMessage, listAreasFlat } from '../api';
 import {
   useCreateMissionDetails,
   useCreateOffer,
+  useCreatePermitDetails,
   useDeleteOffer,
   useDeleteRole,
   useMissionDetailsForRole,
   useOffersForRole,
   usePatchMissionDetails,
   usePatchOffer,
+  usePatchPermitDetails,
   usePatchRole,
+  usePermitDetailsForRole,
   useRole,
 } from '../queries';
-import type { MissionOfferDetails, NPCServiceOffer } from '../types';
+import type { MissionOfferDetails, NPCServiceOffer, PermitOfferDetails } from '../types';
 
 const EMPTY_RULE: PredicateNode = {};
 
@@ -178,10 +183,15 @@ function RoleFieldsCard({ roleId }: { roleId: number }) {
 function OffersSection({ roleId }: { roleId: number }) {
   const { data: offersData, isLoading } = useOffersForRole(roleId);
   const { data: detailsData } = useMissionDetailsForRole(roleId);
+  const { data: permitDetailsData } = usePermitDetailsForRole(roleId);
   const offers = offersData?.results ?? [];
   const detailsByOffer = new Map<number, MissionOfferDetails>();
   for (const d of detailsData?.results ?? []) {
     if (typeof d.offer === 'number') detailsByOffer.set(d.offer, d);
+  }
+  const permitDetailsByOffer = new Map<number, PermitOfferDetails>();
+  for (const d of permitDetailsData?.results ?? []) {
+    if (typeof d.offer === 'number') permitDetailsByOffer.set(d.offer, d);
   }
 
   return (
@@ -203,6 +213,7 @@ function OffersSection({ roleId }: { roleId: number }) {
               roleId={roleId}
               offer={offer}
               details={detailsByOffer.get(offer.id) ?? null}
+              permitDetails={permitDetailsByOffer.get(offer.id) ?? null}
             />
           ))
         )}
@@ -216,10 +227,12 @@ function OfferCard({
   roleId,
   offer,
   details,
+  permitDetails,
 }: {
   roleId: number;
   offer: NPCServiceOffer;
   details: MissionOfferDetails | null;
+  permitDetails: PermitOfferDetails | null;
 }) {
   const patchOffer = usePatchOffer(roleId);
   const patchDetails = usePatchMissionDetails(roleId);
@@ -415,6 +428,10 @@ function OfferCard({
           </p>
         ))}
 
+      {offer.kind === 'permit' && (
+        <PermitDetailsPanel roleId={roleId} offerId={offer.id} details={permitDetails} />
+      )}
+
       <PredicateBuilder label="Eligibility rule" value={rule} onChange={setRule} />
       {ruleErrors.length > 0 && <p className="text-sm text-destructive">{ruleErrors[0]}</p>}
 
@@ -431,6 +448,118 @@ function OfferCard({
         }
       >
         {patchOffer.isPending ? 'Saving…' : 'Save offer'}
+      </Button>
+    </div>
+  );
+}
+
+function PermitDetailsPanel({
+  roleId,
+  offerId,
+  details,
+}: {
+  roleId: number;
+  offerId: number;
+  details: PermitOfferDetails | null;
+}) {
+  const buildingKinds = useBuildingKindsQuery();
+  const areas = useQuery({ queryKey: ['areas', 'flat'], queryFn: listAreasFlat });
+  const createDetails = useCreatePermitDetails(roleId);
+  const patchDetails = usePatchPermitDetails(roleId);
+
+  const [buildingKind, setBuildingKind] = useState(details?.building_kind?.toString() ?? '');
+  const [wards, setWards] = useState<Set<number>>(
+    () => new Set((details?.default_approved_wards ?? []) as number[])
+  );
+  const [maxSize, setMaxSize] = useState(details?.default_max_target_size?.toString() ?? '');
+  const [cost, setCost] = useState(details?.permit_cost_currency?.toString() ?? '');
+
+  const toggleWard = (id: number) => {
+    setWards((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const save = () => {
+    const body = {
+      building_kind: numOrNull(buildingKind),
+      default_approved_wards: [...wards],
+      default_max_target_size: numOrNull(maxSize) ?? 10,
+      permit_cost_currency: numOrNull(cost) ?? 0,
+    };
+    if (details) {
+      patchDetails.mutate({ id: details.id, body });
+    } else {
+      createDetails.mutate({ offer: offerId, ...body });
+    }
+  };
+
+  const pending = createDetails.isPending || patchDetails.isPending;
+  const error = createDetails.error ?? patchDetails.error;
+
+  return (
+    <div className="space-y-3 rounded-md border border-dashed p-3">
+      <p className="text-xs font-medium text-muted-foreground">Permit details</p>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Building kind">
+          <Select value={buildingKind} onValueChange={setBuildingKind}>
+            <SelectTrigger>
+              <SelectValue placeholder="Pick a building kind" />
+            </SelectTrigger>
+            <SelectContent>
+              {(buildingKinds.data?.results ?? []).map((kind) => (
+                <SelectItem key={kind.id} value={String(kind.id)}>
+                  {kind.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Max target size">
+          <Input
+            type="number"
+            value={maxSize}
+            onChange={(e) => setMaxSize(e.target.value)}
+            placeholder="default 10"
+          />
+        </Field>
+      </div>
+      <Field label="Permit cost (coppers — approval fee, not construction)">
+        <Input
+          type="number"
+          value={cost}
+          onChange={(e) => setCost(e.target.value)}
+          placeholder="0 = free"
+        />
+      </Field>
+      <Field label="Default approved wards">
+        {areas.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading areas…</p>
+        ) : (
+          <div className="grid max-h-40 grid-cols-2 gap-1 overflow-y-auto rounded-md border p-2">
+            {(areas.data ?? []).map((area) => (
+              <label key={area.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={wards.has(area.id)}
+                  onChange={() => toggleWard(area.id)}
+                />
+                {area.name}
+              </label>
+            ))}
+          </div>
+        )}
+      </Field>
+      {error != null && (
+        <p className="text-sm text-destructive">
+          {errText(error, 'Could not save the permit details.')}
+        </p>
+      )}
+      <Button size="sm" variant="secondary" onClick={save} disabled={pending}>
+        {pending ? 'Saving…' : details ? 'Save permit details' : 'Create permit details'}
       </Button>
     </div>
   );

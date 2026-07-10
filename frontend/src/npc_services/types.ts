@@ -12,6 +12,8 @@ export type NPCServiceOffer = components['schemas']['NPCServiceOffer'];
 export type NPCServiceOfferRequest = components['schemas']['NPCServiceOfferRequest'];
 export type MissionOfferDetails = components['schemas']['MissionOfferDetails'];
 export type MissionOfferDetailsRequest = components['schemas']['MissionOfferDetailsRequest'];
+export type PermitOfferDetails = components['schemas']['PermitOfferDetails'];
+export type PermitOfferDetailsRequest = components['schemas']['PermitOfferDetailsRequest'];
 
 export interface PaginatedResponse<T> {
   count: number;

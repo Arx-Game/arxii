@@ -19,6 +19,8 @@ import type {
   NPCServiceOffer,
   NPCServiceOfferRequest,
   PaginatedResponse,
+  PermitOfferDetails,
+  PermitOfferDetailsRequest,
 } from './types';
 
 export { ApiValidationError, flattenErrorMessage } from '@/missions/api';
@@ -128,6 +130,37 @@ export function patchMissionDetails(
   body: Partial<MissionOfferDetailsRequest>
 ): Promise<MissionOfferDetails> {
   return writeJson(`${BASE_URL}/mission-details/${id}/`, 'PATCH', body);
+}
+
+// ---------------------------------------------------------------------------
+// PermitOfferDetails (per permit-kind offer, #1684)
+// ---------------------------------------------------------------------------
+
+export async function listPermitDetails(
+  filters: { offer?: number; role?: number; page_size?: number } = {}
+): Promise<PaginatedResponse<PermitOfferDetails>> {
+  const res = await apiFetch(`${BASE_URL}/permit-details/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load permit offer details');
+  return res.json();
+}
+
+export function createPermitDetails(body: PermitOfferDetailsRequest): Promise<PermitOfferDetails> {
+  return writeJson(`${BASE_URL}/permit-details/`, 'POST', body);
+}
+
+export function patchPermitDetails(
+  id: number,
+  body: Partial<PermitOfferDetailsRequest>
+): Promise<PermitOfferDetails> {
+  return writeJson(`${BASE_URL}/permit-details/${id}/`, 'PATCH', body);
+}
+
+/** Flat area list for the permit ward picker (#1684). One page covers the world (cap 200). */
+export async function listAreasFlat(): Promise<{ id: number; name: string }[]> {
+  const res = await apiFetch('/api/areas/?page_size=200');
+  if (!res.ok) throw new Error('Failed to load areas');
+  const data = await res.json();
+  return Array.isArray(data) ? data : data.results;
 }
 
 // ---------------------------------------------------------------------------

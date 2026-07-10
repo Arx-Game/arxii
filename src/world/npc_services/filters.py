@@ -62,6 +62,9 @@ class MissionOfferDetailsFilterSet(django_filters.FilterSet):
 
 class PermitOfferDetailsFilterSet(django_filters.FilterSet):
     offer = django_filters.NumberFilter(field_name="offer_id")
+    # No denormalized role on PermitOfferDetails (unlike mission details) — walk the
+    # FK so the role editor can fetch a role's permit details in one call (#1684).
+    role = django_filters.NumberFilter(field_name="offer__role_id")
     building_kind = django_filters.NumberFilter(field_name="building_kind_id")
 
     class Meta:
