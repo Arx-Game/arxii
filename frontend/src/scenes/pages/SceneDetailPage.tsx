@@ -117,18 +117,18 @@ export function SceneDetailPage() {
     setComposerMode(mode);
   }, []);
 
-  // `isAtPlace` (#2156, Task 6): derived from the SAME `['scene-places', id]`
-  // query key `PlaceBar` uses below, so React Query dedupes the two fetches
-  // into one (query-reuse, matching GamePage's approach). NOTE: `id` here is
-  // the *scene* id, not a room id — `fetchPlaces` treats its argument as the
-  // ROOM id in its `?room=` query param (confirmed by reading PlaceBar.tsx +
-  // actionQueries.ts). This mirrors `PlaceBar sceneId={id}` above unchanged
-  // (a pre-existing latent bug in this page's places query, not introduced or
-  // fixed by this task — see the task report), so `isAtPlace` will only ever
-  // be `true` here in the coincidental case scene id === room id.
+  // `isAtPlace` (#2156, Task 6): derived from the SAME `['scene-places',
+  // placesRoomId]` query key `PlaceBar` uses below, so React Query dedupes the
+  // two fetches into one (query-reuse, matching GamePage's approach).
+  // `fetchPlaces` filters `?room=<id>` — a ROOM id, not the scene id — so this
+  // derives the room id from `scene.location.id` (fold-in fix, #2156: the
+  // earlier version passed the *scene* id here and to `PlaceBar`, which only
+  // worked by coincidence when scene pk === room pk).
+  const placesRoomId = scene?.location?.id != null ? String(scene.location.id) : undefined;
   const { data: placesData } = useQuery({
-    queryKey: ['scene-places', id],
-    queryFn: () => fetchPlaces(id),
+    queryKey: ['scene-places', placesRoomId],
+    queryFn: () => fetchPlaces(placesRoomId!),
+    enabled: !!placesRoomId,
   });
   const isAtPlace = placesData?.results?.some((place) => place.viewer_is_present) ?? false;
 
@@ -141,7 +141,7 @@ export function SceneDetailPage() {
         {isActive && <SoulTetherRescuePrompt />}
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
         {scene && <SceneLinesAndVeilsCard sceneId={id} />}
-        <PlaceBar sceneId={id} />
+        {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
         <RoomPositionsPanel sceneId={id} />
         <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
       </div>
