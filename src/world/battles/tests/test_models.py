@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import IntegrityError
 from django.test import TestCase
 
@@ -13,6 +15,7 @@ from world.battles.constants import (
 )
 from world.battles.factories import (
     BattleFactory,
+    BattleParticipantFactory,
     BattlePlaceFactory,
     BattleSideFactory,
     BattleUnitFactory,
@@ -271,3 +274,29 @@ class BattleIsPausedFieldTests(TestCase):
         battle.save(update_fields=["is_paused"])
         battle.refresh_from_db()
         assert battle.is_paused is True
+
+
+class BattleMovementTransitFieldsTests(TestCase):
+    def test_battle_unit_transit_fields_default_none(self) -> None:
+        unit = BattleUnitFactory()
+        self.assertIsNone(unit.transit_x)
+        self.assertIsNone(unit.transit_y)
+        self.assertIsNone(unit.transit_target_place)
+
+    def test_battle_participant_transit_fields_default_none(self) -> None:
+        participant = BattleParticipantFactory()
+        self.assertIsNone(participant.transit_x)
+        self.assertIsNone(participant.transit_y)
+        self.assertIsNone(participant.transit_target_place)
+
+    def test_battle_unit_transit_fields_are_settable(self) -> None:
+        place = BattlePlaceFactory()
+        unit = BattleUnitFactory(battle=place.battle)
+        unit.transit_x = Decimal("3.50")
+        unit.transit_y = Decimal("-1.25")
+        unit.transit_target_place = place
+        unit.save(update_fields=["transit_x", "transit_y", "transit_target_place"])
+        unit.refresh_from_db()
+        self.assertEqual(unit.transit_x, Decimal("3.50"))
+        self.assertEqual(unit.transit_y, Decimal("-1.25"))
+        self.assertEqual(unit.transit_target_place_id, place.pk)

@@ -386,6 +386,24 @@ class BattleUnit(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="units",
     )
+    transit_x = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="In-progress MOVE position on the battle-map coordinate plane "
+        "(#2007). Null when at rest — effective position is then simply this "
+        "unit's .place coordinates. Mirrors BattlePlace.x's shape.",
+    )
+    transit_y = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    transit_target_place = models.ForeignKey(
+        BattlePlace,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="units_in_transit",
+        help_text="Destination of an in-progress multi-round MOVE (#2007). Null when at rest.",
+    )
     name = models.CharField(max_length=120)
     descriptor = models.CharField(
         max_length=80,
@@ -572,6 +590,24 @@ class BattleParticipant(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="participants",
     )
+    transit_x = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="In-progress MOVE position on the battle-map coordinate plane "
+        "(#2007). Null when at rest — effective position is then simply this "
+        "participant's .place coordinates. Mirrors BattlePlace.x's shape.",
+    )
+    transit_y = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    transit_target_place = models.ForeignKey(
+        BattlePlace,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="participants_in_transit",
+        help_text="Destination of an in-progress multi-round MOVE (#2007). Null when at rest.",
+    )
     status = models.CharField(
         max_length=20,
         choices=BattleParticipantStatus.choices,
@@ -647,7 +683,8 @@ class BattleActionDeclaration(SharedMemoryModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="scoped_declarations",
-        help_text="Set when scope=PLACE.",
+        help_text="Set when scope=PLACE, or as a MOVE destination regardless of "
+        "scope (#2007) — null with action_kind=MOVE and scope=UNIT means withdraw.",
     )
     target_side = models.ForeignKey(
         BattleSide,
