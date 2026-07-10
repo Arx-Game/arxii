@@ -469,6 +469,38 @@ class BlackmailAmmoPrerequisite(Prerequisite):
         return True, ""
 
 
+class LeverageHeldPrerequisite(Prerequisite):
+    """Coerce is offered only against a target you hold leverage over (#1680).
+
+    Visibility = eligibility: reads the ``target_persona_id`` kwarg, resolves its sheet,
+    and confirms the actor holds standing leverage over it (minted by a prior Blackmail).
+    The ``coerce_into_asset`` service re-checks this authoritatively at execution.
+    """
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.secrets.services import has_leverage  # noqa: PLC0415
+
+        kwargs = (context or {}).get("kwargs", {})
+        target_persona_id = kwargs.get("target_persona_id")
+        actor_sheet = resolve_actor_sheet(actor)
+        if actor_sheet is None or target_persona_id is None:
+            return False, "Coerce whom?"
+        target_persona = (
+            Persona.objects.filter(pk=target_persona_id).select_related("character_sheet").first()
+        )
+        if target_persona is None:
+            return False, "No such target."
+        if has_leverage(holder_sheet=actor_sheet, subject_sheet=target_persona.character_sheet):
+            return True, ""
+        return False, "You hold no leverage over them."
+
+
 def _is_visible_to(actor, target) -> bool:
     """Whether ``actor`` can perceive ``target``.
 

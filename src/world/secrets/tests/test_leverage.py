@@ -11,7 +11,7 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.secrets.factories import LeverageFactory, SecretFactory
 from world.secrets.models import Leverage
-from world.secrets.services import has_leverage, mint_leverage
+from world.secrets.services import has_leverage, mint_leverage, reveal_leveraged_secret
 
 
 class MintLeverageTests(TestCase):
@@ -70,3 +70,17 @@ class HasLeverageTests(TestCase):
         self.assertFalse(has_leverage(holder_sheet=lev.holder_sheet, subject_sheet=other))
         # and an unrelated holder has none over subject
         self.assertFalse(has_leverage(holder_sheet=other, subject_sheet=lev.subject_sheet))
+
+
+class RevealLeveragedSecretTests(TestCase):
+    def test_reveal_fires_and_spends_the_leverage(self) -> None:
+        lev = LeverageFactory()  # holder_sheet / subject_sheet / founded_on (a Secret)
+        fired = reveal_leveraged_secret(revealer_sheet=lev.holder_sheet, secret=lev.founded_on)
+        self.assertTrue(fired)
+        # The secret is out — every leverage founded on it is spent.
+        self.assertFalse(Leverage.objects.filter(founded_on=lev.founded_on).exists())
+
+    def test_reveal_without_leverage_is_a_noop(self) -> None:
+        secret = SecretFactory()
+        fired = reveal_leveraged_secret(revealer_sheet=CharacterSheetFactory(), secret=secret)
+        self.assertFalse(fired)

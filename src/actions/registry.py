@@ -12,6 +12,7 @@ from actions.definitions.battles import (
     ResolveBattleRoundAction,
 )
 from actions.definitions.cast import CastTechniqueAction
+from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.combat_maneuvers import (
     CoverAction,
     DemoralizeAction,
@@ -514,6 +515,8 @@ _ALL_ACTIONS: list[Action] = [
     flirt,
     seduce,
     blackmail,
+    coerce,
+    reveal_secret,
     perform,
     entrance,
     restore_sense,

@@ -484,6 +484,32 @@ def has_leverage(*, holder_sheet: CharacterSheet, subject_sheet: CharacterSheet)
     return Leverage.objects.filter(holder_sheet=holder_sheet, subject_sheet=subject_sheet).exists()
 
 
+def reveal_leveraged_secret(*, revealer_sheet: CharacterSheet, secret: Secret) -> bool:
+    """Play the blackmail card: expose ``secret`` and spend the leverage founded on it (#1680).
+
+    Guarded to a holder — you can only reveal a secret you actually hold leverage from.
+    Fires the exposure→renown bridge (``expose_secret``) against the **subject's own
+    societies** (their circles judge the archetypes by their principles; victim-org hits
+    fire regardless via the relational channel). Once public it is no longer *secret*
+    leverage, so every ``Leverage`` founded on it clears — a one-time card. Already-coerced
+    ``NPCAsset`` relationships persist (they're a separate, standing consequence).
+
+    Returns True if the reveal fired; False if the revealer holds no leverage on the secret.
+    """
+    from world.societies.models import OrganizationMembership, Society  # noqa: PLC0415
+
+    if not Leverage.objects.filter(holder_sheet=revealer_sheet, founded_on=secret).exists():
+        return False
+    society_ids = OrganizationMembership.objects.filter(
+        persona__character_sheet=secret.subject_sheet
+    ).values_list("organization__society_id", flat=True)
+    societies = Society.objects.filter(pk__in=set(society_ids))
+    expose_secret(secret, societies=societies)
+    # The secret is out — leverage founded on it is spent (coerced assets stay).
+    Leverage.objects.filter(founded_on=secret).delete()
+    return True
+
+
 def character_knows_secret(*, knower_sheet: CharacterSheet, secret: Secret) -> bool:
     """True if the character (by current tenure) holds knowledge of ``secret`` (#1680).
 
