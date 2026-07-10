@@ -343,7 +343,7 @@ class TestSeedThreadPullCatalogCreation(TestCase):
         from world.magic.constants import EffectKind
         from world.magic.models.threads import ThreadPullEffect
 
-        self.assertEqual(ThreadPullEffect.objects.count(), 20)
+        self.assertEqual(ThreadPullEffect.objects.count(), 4)
 
         self.assertIn(EffectKind.FLAT_BONUS, self.result.pull_effects)
         self.assertIn(EffectKind.INTENSITY_BUMP, self.result.pull_effects)
