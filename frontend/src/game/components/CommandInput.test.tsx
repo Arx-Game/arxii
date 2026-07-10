@@ -277,7 +277,7 @@ describe('CommandInput', () => {
     });
   });
 
-  it('pose without detachments uses WebSocket send and skips REST submitPose', () => {
+  it('pose without detachments still uses REST submitPose (scene poses always take REST)', () => {
     const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
     render(
       <CommandInput
@@ -294,7 +294,54 @@ describe('CommandInput', () => {
     fireEvent.change(textarea, { target: { value: 'stands ready' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
-    expect(sendMock).toHaveBeenCalledWith('Alice', 'pose stands ready');
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 42,
+      scene_id: 1,
+      content: 'stands ready',
+    });
+  });
+
+  it('plain pose (no composerMode) with sceneId/personaId uses REST submitPose', () => {
+    render(<CommandInput character="Alice" sceneId="5" personaId={9} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'looks around' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 5,
+      content: 'looks around',
+    });
+  });
+
+  it('pose with no sceneId uses WebSocket send', () => {
+    const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
+    render(<CommandInput character="Alice" composerMode={mode} personaId={9} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'waves' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'pose waves');
+    expect(submitPoseMock).not.toHaveBeenCalled();
+  });
+
+  it('whisper composer mode with sceneId still uses WebSocket send (non-pose commands keep WS)', () => {
+    const mode: ComposerMode = {
+      command: 'whisper',
+      targets: ['Bob'],
+      label: 'Whisper → Bob',
+    };
+    render(<CommandInput character="Alice" composerMode={mode} sceneId="5" personaId={9} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'secret message' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'whisper Bob=secret message');
     expect(submitPoseMock).not.toHaveBeenCalled();
   });
 });

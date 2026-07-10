@@ -113,18 +113,16 @@ export function CommandInput({
       onSubmitAction(actionAttachment);
     }
 
-    // Determine submission path for scene poses.
-    // The REST path is used ONLY when the user has detached actions — this is
-    // the only case where we need an explicit action_link_ids override.
-    // For all other cases (no detachments, non-pose commands, outside a scene)
-    // the WebSocket path runs and server-side auto-link handles attachment.
+    // Determine submission path. The REST path (submit_pose) is now the
+    // canonical route for scene poses: it carries scene_id explicitly and the
+    // server enforces the co-location check (actor must be in the scene's
+    // room) that the WebSocket command protocol can't express. WS remains
+    // for non-pose commands (say, whisper, tt, ...) and for poses outside a
+    // scene (no sceneId/personaId — e.g. room-only poses with no active scene).
     const isPose = !composerMode || composerMode.command === 'pose';
     const detachedSet = new Set(detachedActionIds ?? []);
     const hasDetachments = detachedSet.size > 0;
-    // Entrance poses must take the REST path — pose_kind doesn't travel over
-    // the WebSocket command protocol.
-    const usesRestSubmit =
-      isPose && sceneId !== undefined && personaId != null && (hasDetachments || isEntrance);
+    const usesRestSubmit = isPose && sceneId !== undefined && personaId != null;
 
     if (usesRestSubmit) {
       // REST path: explicit action_link_ids override when the user has detached

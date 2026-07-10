@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { ChatWindow } from './ChatWindow';
 import { CommandInput } from './CommandInput';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { Link } from 'react-router-dom';
 import type { MyRosterEntry } from '@/roster/types';
 
@@ -14,6 +16,11 @@ export function GameWindow({ characters }: GameWindowProps) {
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
+  const { data: myEntries = [] } = useMyRosterEntriesQuery();
+  const personaId = useMemo(
+    () => myEntries.find((e) => e.name === active)?.primary_persona_id ?? null,
+    [myEntries, active]
+  );
 
   if (characters.length === 0) {
     return (
@@ -39,6 +46,7 @@ export function GameWindow({ characters }: GameWindowProps) {
 
   const session = sessions[active];
   const sessionNames = Object.keys(sessions);
+  const sceneId = session.scene ? String(session.scene.id) : undefined;
 
   const handleTabClick = (name: MyRosterEntry['name']) => {
     dispatch(setActiveSession(name));
@@ -68,7 +76,7 @@ export function GameWindow({ characters }: GameWindowProps) {
         </div>
       )}
       <ChatWindow messages={session.messages} />
-      <CommandInput character={active} />
+      <CommandInput character={active} sceneId={sceneId} personaId={personaId} />
     </div>
   );
 }
