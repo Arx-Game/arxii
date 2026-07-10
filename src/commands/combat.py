@@ -64,6 +64,8 @@ if TYPE_CHECKING:
 
 # Keyword prefix used to parse strain=<n> from clash command args.
 _STRAIN_PREFIX = "strain="
+# Keyword prefix used to parse position=<name> from cast command args (#2019).
+_POSITION_PREFIX = "position="
 # Usage hint for the clash command (shared across three error sites in _parse_args).
 _CLASH_USAGE = (
     "Usage: clash <opponent> with <technique> [strain=<n>]"
@@ -213,6 +215,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         # order-independent and never swallowed into the technique/target name.
         raw, fury_str, anchor_str = self._extract_fury_keywords(raw)
 
+        # #2019: Strip position=<name> or position_a=<name>,position_b=<name>
+        # keywords (order-independent). Resolved to PKs in resolve_action_args.
+        raw, position_str = self._extract_position_keywords(raw)
+
         # Strip off effort=<level> if present.  After pull keywords are removed,
         # only effort= and positional tokens remain, so a simple split is safe.
         effort_str: str = EffortLevel.MEDIUM
@@ -256,6 +262,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         self._beseech_bonus = beseech_bonus
         self._fury_str = fury_str
         self._anchor_str = anchor_str
+        self._position_str = position_str
         self._parsed = True
 
     @staticmethod
@@ -319,6 +326,83 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             else:
                 kept.append(token)
         return " ".join(kept), fury_val, anchor_val
+
+    def _extract_position_keywords(self, raw: str) -> tuple[str, str | None]:
+        """Strip ``position=<name>`` or ``position_a=<name>,position_b=<name>`` tokens (#2019).
+
+        Returns ``(remainder, position_str)`` where *position_str* is the raw
+        value after ``position=`` (e.g. ``"center"`` or
+        ``"alpha,bravo"``). ``None`` when no ``position=`` keyword was present.
+        """
+        kept: list[str] = []
+        position_val: str | None = None
+        for token in raw.split():
+            lower = token.lower()
+            if lower.startswith(_POSITION_PREFIX):
+                position_val = token[len(_POSITION_PREFIX) :] or None
+            else:
+                kept.append(token)
+        return " ".join(kept), position_val
+
+    def _resolve_position_params(self) -> dict[str, int] | None:
+        """Resolve ``position=`` into a ``position_params`` dict for the cast (#2019).
+
+        Parses the raw position string into Position PKs:
+        - ``position=<name>`` → ``{"destination_position_id": <pk>}``
+        - ``position_a=<name>,position_b=<name>``
+          → ``{"position_a_id": <pk>, "position_b_id": <pk>}``
+
+        Returns ``None`` when no position was declared.
+
+        Raises:
+            CommandError: If a named position doesn't exist in the caller's room.
+        """
+        if not self._position_str:
+            return None
+
+        from world.areas.positioning.models import Position  # noqa: PLC0415
+
+        room = self.caller.location
+        if room is None:
+            msg = "You must be in a room to target a position."
+            raise CommandError(msg)
+
+        val = self._position_str
+
+        # Barricade-style: position_a=<name>,position_b=<name>
+        if val.startswith("position_a="):
+            # Strip the inner prefix and split on comma
+            inner = val[len("position_a=") :]
+            if "," not in inner:
+                msg = "Usage: position_a=<name>,position_b=<name>"
+                raise CommandError(msg)
+            parts = inner.split(",", 1)
+            name_a = parts[0].strip()
+            rest = parts[1].strip()
+            if not rest.lower().startswith("position_b="):
+                msg = "Expected position_b=<name> after position_a=<name>."
+                raise CommandError(msg)
+            name_b = rest[len("position_b=") :].strip()
+
+            try:
+                pos_a = Position.objects.get(room=room, name__iexact=name_a)
+            except Position.DoesNotExist:
+                msg = f"No position '{name_a}' in this room."
+                raise CommandError(msg) from None
+            try:
+                pos_b = Position.objects.get(room=room, name__iexact=name_b)
+            except Position.DoesNotExist:
+                msg = f"No position '{name_b}' in this room."
+                raise CommandError(msg) from None
+            return {"position_a_id": pos_a.pk, "position_b_id": pos_b.pk}
+
+        # Phase Jump / Force Grip style: position=<name>
+        try:
+            pos = Position.objects.get(room=room, name__iexact=val)
+        except Position.DoesNotExist:
+            msg = f"No position '{val}' in this room."
+            raise CommandError(msg) from None
+        return {"destination_position_id": pos.pk}
 
     def _resolve_fury_commitment_id(self) -> int | None:
         """Return the pk of the FuryTier named by ``fury=`` (by name or depth).
@@ -609,6 +693,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
         if self._target_name:
             self._inject_target_kwargs(kwargs)
+
+        # #2019: Resolve position= keyword into position_params for the cast.
+        position_params = self._resolve_position_params()
+        if position_params is not None:
+            kwargs["position_params"] = position_params
 
         return kwargs
 
