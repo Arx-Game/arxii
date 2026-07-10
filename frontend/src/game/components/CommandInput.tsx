@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
@@ -136,12 +137,18 @@ export function CommandInput({
     if (usesRestSubmit) {
       // REST path: explicit action_link_ids override when the user has detached
       // one or more pending actions. WebSocket send() is intentionally skipped
-      // to avoid creating two POSE Interactions for the same pose.
+      // to avoid creating two POSE Interactions for the same pose. The draft
+      // is only cleared on success (#2156 review fix) — a rejected request
+      // (e.g. the co-location 400) must not silently eat the player's text;
+      // the composer keeps it and the server's error surfaces via toast so a
+      // retry doesn't mean retyping the whole pose.
+      const composerTargets = composerMode?.targets ?? [];
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
         content: trimmed,
         pose_kind: isEntrance ? 'entry' : undefined,
+        ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
         ...(hasDetachments
           ? {
               action_link_ids: (pendingActionIds ?? []).filter((id) => !detachedSet.has(id)),
@@ -150,14 +157,24 @@ export function CommandInput({
       })
         .then(() => {
           onPoseSubmitted?.();
+          setHistory((prev) => [...prev, trimmed]);
+          setHistoryIndex(-1);
+          setCommand('');
+          setIsEntrance(false);
         })
-        .catch(() => {});
-      setIsEntrance(false);
-    } else {
-      // WebSocket path: existing behavior. Server-side auto-link will attach
-      // any pending ACTION interactions when the POSE is created.
-      send(character, fullCommand);
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Failed to submit pose.';
+          toast.error(message);
+        })
+        .finally(() => {
+          submittingRef.current = false;
+        });
+      return;
     }
+
+    // WebSocket path: existing behavior. Server-side auto-link will attach
+    // any pending ACTION interactions when the POSE is created.
+    send(character, fullCommand);
 
     setHistory((prev) => [...prev, trimmed]);
     setHistoryIndex(-1);

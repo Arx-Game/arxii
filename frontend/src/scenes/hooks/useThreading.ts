@@ -37,6 +37,16 @@ export interface ThreadingState {
   showAll: () => void;
   togglePersonaHidden: (threadKey: string, personaId: number) => void;
   getHiddenPersonaIds: (threadKey: string) => Set<number>;
+  /**
+   * Clears the thread filter (enabledThreadKeys), selection, and every
+   * per-thread hidden-persona mute (#2156 review fix). `showAll` alone only
+   * clears the first two — this is the full reset a scene change or puppet
+   * switch needs so a filter/mute picked in the PREVIOUS scene/puppet
+   * context doesn't silently strand-hide interactions in a new one that
+   * happens to reuse the same thread key (e.g. two puppets in the same
+   * room, or a room re-entering an old scene id).
+   */
+  resetForNewScene: () => void;
 }
 
 export function getThreadKey(interaction: Interaction): string {
@@ -217,6 +227,12 @@ export function useThreading(
     setSelectedThread('room');
   }, []);
 
+  const resetForNewScene = useCallback(() => {
+    setEnabledThreadKeys(new Set());
+    setSelectedThread('room');
+    setHiddenPersonaIds(new Map());
+  }, []);
+
   const togglePersonaHidden = useCallback((threadKey: string, personaId: number) => {
     setHiddenPersonaIds((prev) => {
       const next = new Map(prev);
@@ -249,5 +265,6 @@ export function useThreading(
     showAll,
     togglePersonaHidden,
     getHiddenPersonaIds,
+    resetForNewScene,
   };
 }

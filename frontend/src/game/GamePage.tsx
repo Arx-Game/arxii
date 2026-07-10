@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
@@ -102,7 +102,7 @@ export function GamePage() {
   // brand-new thread appearing mid-session (e.g. a first whisper) got its own
   // key baselined to its first message's id the moment it was observed —
   // countUnread's strict `>` then suppressed the badge on that very first
-  // message. Instead: the first time this effect runs for a given `sceneId`,
+  // message. Instead: the first time this effect runs for a given puppet+scene,
   // capture the highest interaction id present at that moment as
   // `sceneBaselineId` and never touch it again for this scene.
   // `useThreading`'s `countUnread` falls back to this scalar only for thread
@@ -115,18 +115,44 @@ export function GamePage() {
   // indistinguishable from "baseline effect hasn't run yet", which would make
   // `countUnread` fall through to its no-baseline branch and stay silently
   // unbadged for that scene's first message.
-  const sceneBaselinedRef = useRef<string | undefined>(undefined);
+  //
+  // Gated on the per-puppet Redux `sceneBaselineId == null` (review fix 3),
+  // NOT a single scalar ref keyed only by sceneId: a ref keyed on sceneId
+  // alone has two bugs with multiple puppets — (1) puppet A (scene X,
+  // baselined) -> puppet B (scene Y) -> back to puppet A (still scene X)
+  // re-triggers the effect (the ref now holds "Y", not "X") and WIPES A's
+  // already-accumulated unread by re-baselining to the current max id; (2)
+  // puppet A and puppet B in the SAME scene X: A's switch already set the
+  // ref to "X", so B's own turn never runs the effect at all and B's
+  // Redux `sceneBaselineId` starves at its initial `null` forever. Reading
+  // the per-puppet Redux value directly sidesteps both — it's already keyed
+  // by character (`sessions[active]`), and `setSessionScene` nulls it out
+  // exactly when that puppet's own scene id changes (see gameSlice.ts).
   useEffect(() => {
     if (!sceneId || !active) return;
-    if (sceneBaselinedRef.current === sceneId) return;
-    sceneBaselinedRef.current = sceneId;
+    if (activeSession?.sceneBaselineId != null) return;
     let maxId: number | undefined;
     for (const interaction of allInteractions) {
       const id = Number(interaction.id);
       if (maxId === undefined || id > maxId) maxId = id;
     }
     dispatch(setSceneBaseline({ character: active, baselineId: maxId ?? 0 }));
-  }, [sceneId, active, allInteractions, dispatch]);
+  }, [sceneId, active, activeSession?.sceneBaselineId, allInteractions, dispatch]);
+
+  // Threading filter/mute reset on scene change or puppet switch (#2156 review
+  // fix): `useThreading`'s selectedThreadKey/enabledThreadKeys/hiddenPersonaIds
+  // are local component state that otherwise never resets across renders —
+  // GamePage is a single long-lived composition root, unlike SceneDetailPage
+  // (a route change there remounts the whole tree for free). Without this, a
+  // thread filter or muted participant picked in a PREVIOUS scene/puppet
+  // context silently keeps hiding interactions in a new one, especially when
+  // the new context happens to reuse an identical thread key (e.g. two
+  // puppets in the same room). Keyed on the same `[active, sceneId]` pair the
+  // baseline effect above uses.
+  const threadingResetForNewScene = threading.resetForNewScene;
+  useEffect(() => {
+    threadingResetForNewScene();
+  }, [active, sceneId, threadingResetForNewScene]);
 
   // Continuously mark the SELECTED thread seen as its interactions grow — this is
   // the thread the player is actively viewing, so it never accumulates unread.

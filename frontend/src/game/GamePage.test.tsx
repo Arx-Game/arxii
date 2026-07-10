@@ -8,6 +8,7 @@ import { setAccount } from '@/store/authSlice';
 import { mockAccount } from '@/test/mocks/account';
 import {
   startSession,
+  setActiveSession,
   setSessionRoom,
   setSessionScene,
   addSceneInteraction,
@@ -35,9 +36,21 @@ const rosterEntry: MyRosterEntry = {
   active_persona_id: 7,
 };
 
+// A second puppet (#2156 review fix — multi-puppet threading/baseline tests
+// below need a real second roster entry so `active` can validly switch to it).
+const SECOND_NAME = 'Bianca';
+const rosterEntry2: MyRosterEntry = {
+  id: 2,
+  name: SECOND_NAME,
+  character_id: 43,
+  profile_picture_url: null,
+  primary_persona_id: 8,
+  active_persona_id: 8,
+};
+
 vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: vi.fn(() => ({
-    data: [rosterEntry],
+    data: [rosterEntry, rosterEntry2],
     isLoading: false,
     isError: false,
   })),
@@ -451,6 +464,147 @@ describe('GamePage', () => {
       // scene baseline survived the churn.
       await waitFor(() => {
         expect(within(whisperButton()).getByText('1')).toBeInTheDocument();
+      });
+    });
+
+    it('resets the thread filter when the active puppet moves into a new scene (#2156 review fix 4)', async () => {
+      // Regression: useThreading's selectedThreadKey/enabledThreadKeys are
+      // local component state that never reset on their own — GamePage is a
+      // single long-lived composition root (unlike SceneDetailPage, which
+      // remounts on route change). A thread filter picked in the OLD scene
+      // must not silently keep hiding interactions once the puppet moves
+      // into a brand-new scene.
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = () => screen.getByLabelText('Thread sidebar');
+      const whisperButton = () =>
+        within(sidebar())
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+
+      // Filter down to just the whisper thread — the room pose is hidden.
+      await user.click(whisperButton());
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+
+      // The puppet moves into an entirely new scene.
+      store.dispatch(
+        setSessionScene({
+          character: ACTIVE_NAME,
+          scene: {
+            id: 300,
+            name: 'The Garden',
+            description: '',
+            is_owner: false,
+            has_unseen_observer: false,
+          },
+        })
+      );
+      store.dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 10,
+            persona: { id: 7, name: ACTIVE_NAME, thumbnail_url: '' },
+            content: 'strolls among the roses.',
+            mode: 'pose',
+            timestamp: '2026-01-01T00:10:00Z',
+            scene_id: 300,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [],
+            target_persona_ids: [],
+          },
+        })
+      );
+
+      // The stale whisper-only filter from the OLD scene must not hide the
+      // new scene's room pose.
+      await waitFor(() => {
+        expect(screen.getByText('strolls among the roses.')).toBeInTheDocument();
+      });
+    });
+
+    it("preserves puppet A's accumulated unread badge across a round trip through puppet B's different scene (#2156 review fix 3)", async () => {
+      // Regression: the old baseline gate was a single ref keyed only on
+      // sceneId. Puppet A (scene 100, badge already accumulated) -> puppet B
+      // (scene 200) -> back to puppet A re-triggered the baseline effect
+      // (the ref now held "200") and wiped A's badge back to 0. Gating on the
+      // per-puppet Redux `sceneBaselineId == null` instead means A's own
+      // baseline, once set, survives any number of puppet round trips.
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+      store.dispatch(startSession(SECOND_NAME));
+      store.dispatch(
+        setSessionScene({
+          character: SECOND_NAME,
+          scene: {
+            id: 200,
+            name: 'The Kitchen',
+            description: '',
+            is_owner: false,
+            has_unseen_observer: false,
+          },
+        })
+      );
+      // startSession(SECOND_NAME) above made Bianca active — switch back to
+      // Aria before rendering (this test starts with Aria in view).
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = () => screen.getByLabelText('Thread sidebar');
+      const roomButton = () =>
+        within(sidebar()).getByText('The Grand Ballroom').closest('button') as HTMLElement;
+      const whisperButton = () =>
+        within(sidebar())
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+
+      await waitFor(() => {
+        expect(within(roomButton()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
+      });
+
+      // Select the whisper thread so the (now unselected) room thread
+      // accumulates unread from a new arrival.
+      await user.click(whisperButton());
+      store.dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 3,
+            persona: { id: 99, name: 'Bystander', thumbnail_url: '' },
+            content: 'glances over curiously.',
+            mode: 'pose',
+            timestamp: '2026-01-01T00:02:00Z',
+            scene_id: 100,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [],
+            target_persona_ids: [],
+          },
+        })
+      );
+      await waitFor(() => {
+        expect(within(roomButton()).getByText('1')).toBeInTheDocument();
+      });
+
+      // Round-trip through puppet B, who is in a completely different scene.
+      store.dispatch(setActiveSession(SECOND_NAME));
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+
+      // Puppet A's room-thread badge must still read 1 — not wiped by the
+      // round trip.
+      await waitFor(() => {
+        expect(within(roomButton()).getByText('1')).toBeInTheDocument();
       });
     });
 
