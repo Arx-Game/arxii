@@ -31,7 +31,9 @@ def _pc_side_id(battle_place: BattlePlace, encounter: CombatEncounter) -> int | 
     """Majority BattleSide id among the BattleParticipants who joined *encounter*.
 
     Returns None when no joiner resolves to a BattleParticipant on this battle
-    (e.g. only NPC opponents were added).
+    (e.g. only NPC opponents were added), or when two or more distinct sides tie
+    for the maximum join-count — a tie has no majority, so this is a no-op rather
+    than a nondeterministic pick.
     """
     from world.battles.models import BattleParticipant  # noqa: PLC0415
 
@@ -42,7 +44,11 @@ def _pc_side_id(battle_place: BattlePlace, encounter: CombatEncounter) -> int | 
     counts = Counter(side_ids)
     if not counts:
         return None
-    return counts.most_common(1)[0][0]
+    top_count = max(counts.values())
+    tied_side_ids = [side_id for side_id, count in counts.items() if count == top_count]
+    if len(tied_side_ids) > 1:
+        return None
+    return tied_side_ids[0]
 
 
 def apply_place_encounter_outcome(*, payload: object) -> None:

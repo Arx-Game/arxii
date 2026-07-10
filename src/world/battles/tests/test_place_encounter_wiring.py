@@ -109,6 +109,29 @@ class PlaceEncounterOutcomeWiringTests(TestCase):
         self.pc_side.refresh_from_db()
         self.assertEqual(self.pc_side.victory_points, 0)
 
+    def test_tied_pc_sides_has_no_mechanical_effect(self) -> None:
+        enemy_sheet = CharacterSheetFactory()
+        BattleParticipantFactory(
+            battle=self.battle,
+            side=self.enemy_side,
+            character_sheet=enemy_sheet,
+            place=self.place,
+        )
+        enc = self._open_bound_encounter()
+        join_encounter(enc, self.pc_sheet)
+        join_encounter(enc, enemy_sheet)
+
+        complete_encounter(enc, outcome=EncounterOutcome.VICTORY)
+
+        self.pc_unit.refresh_from_db()
+        self.enemy_unit.refresh_from_db()
+        self.assertEqual(self.pc_unit.status, BattleUnitStatus.ACTIVE)
+        self.assertEqual(self.enemy_unit.status, BattleUnitStatus.ACTIVE)
+        self.pc_side.refresh_from_db()
+        self.enemy_side.refresh_from_db()
+        self.assertEqual(self.pc_side.victory_points, 0)
+        self.assertEqual(self.enemy_side.victory_points, 0)
+
     def test_noop_when_not_battle_bound(self) -> None:
         enc = CombatEncounter.objects.create(
             room=self.room,
