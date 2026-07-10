@@ -190,6 +190,50 @@ class CharacterRelationshipTests(TestCase):
 
         self.assertEqual(relationship.developed_absolute_value, 50)
 
+    def test_developed_signed_sums_mixed_valence(self):
+        """Test developed_signed_sums splits developed points into (positive, negative)."""
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
+        track1 = RelationshipTrackFactory(name="SignedTrust", sign=TrackSign.POSITIVE)
+        track2 = RelationshipTrackFactory(name="SignedFear", sign=TrackSign.NEGATIVE)
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track1, capacity=50, developed_points=30
+        )
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track2, capacity=40, developed_points=20
+        )
+
+        pos, neg = relationship.developed_signed_sums
+        self.assertEqual(pos, 30)
+        self.assertEqual(neg, 20)
+        # Same points measure as developed_absolute_value.
+        self.assertEqual(pos + neg, relationship.developed_absolute_value)
+
+    def test_developed_signed_sums_pure_positive(self):
+        """Test developed_signed_sums returns (X, 0) when only positive tracks exist."""
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
+        track = RelationshipTrackFactory(name="OnlyPositive", sign=TrackSign.POSITIVE)
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track, capacity=50, developed_points=45
+        )
+
+        self.assertEqual(relationship.developed_signed_sums, (45, 0))
+
+    def test_developed_signed_sums_non_prefetched_path(self):
+        """Test developed_signed_sums works from a fresh (non-prefetched) instance."""
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
+        track1 = RelationshipTrackFactory(name="CachedPos", sign=TrackSign.POSITIVE)
+        track2 = RelationshipTrackFactory(name="CachedNeg", sign=TrackSign.NEGATIVE)
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track1, capacity=50, developed_points=15
+        )
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track2, capacity=50, developed_points=5
+        )
+
+        # Fresh instance has no _cached_track_progress set — falls through to the query path.
+        fresh = CharacterRelationship.objects.get(pk=relationship.pk)
+        self.assertEqual(fresh.developed_signed_sums, (15, 5))
+
     def test_affection_uses_total_points(self):
         """Test affection uses developed points (positive add, negative subtract)."""
         relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
