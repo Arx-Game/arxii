@@ -478,6 +478,18 @@ class PoseSubmitSerializer(serializers.Serializer):
         ),
     )
 
+    target_names = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        allow_empty=True,
+        help_text=(
+            "Optional composer-mode @Name targets (#2156). Resolved against the "
+            "writer's room with the same case-insensitive exact-match semantics as "
+            "the WS/telnet '@Name' prefix parser — an unresolvable name is silently "
+            "skipped, not an error."
+        ),
+    )
+
     def validate_persona_id(self, value: int) -> int:
         """Confirm the persona exists and belongs to the requesting user."""
         request = self.context.get("request")

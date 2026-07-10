@@ -27,7 +27,13 @@ from world.scenes.factories import (
     PlaceFactory,
     SceneFactory,
 )
-from world.scenes.models import Interaction, InteractionAction, InteractionFavorite
+from world.scenes.models import (
+    Interaction,
+    InteractionAction,
+    InteractionFavorite,
+    InteractionTargetPersona,
+    SceneParticipation,
+)
 
 
 class InteractionViewSetTestCase(APITestCase):
@@ -641,6 +647,126 @@ class PoseSubmitViewTests(APITestCase):
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
+
+    @patch("world.scenes.interaction_views.message_location")
+    def test_submit_pose_broadcasts_via_message_location(self, mock_message_location) -> None:
+        """REST poses reach telnet clients too (#2156) — the same message_location
+
+        call PoseAction.execute makes, so a room-wide raw-text broadcast fires
+        regardless of which surface (web/telnet) submitted the pose.
+        """
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "waves at the room."},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert mock_message_location.call_count == 1
+        _caller_state, text = mock_message_location.call_args.args
+        assert text == "waves at the room."
+
+    def test_submit_pose_creates_scene_participation_for_latecomer(self) -> None:
+        """A web pose into a scene the poser has no SceneParticipation row in yet
+
+        enrolls them (#2156) — parity with the WS pose path's
+        ``_ensure_scene_participation`` call.
+        """
+        scene = SceneFactory()
+        assert not SceneParticipation.objects.filter(scene=scene, account=self.account).exists()
+
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "scene_id": scene.pk, "content": "arrives late."},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert SceneParticipation.objects.filter(scene=scene, account=self.account).exists()
+
+    @patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_submit_pose_in_ephemeral_scene_is_not_persisted(self, mock_broadcast) -> None:
+        """EPHEMERAL scenes push in real-time but never persist a POSE row (#2156)."""
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
+
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "a pose that must not be written to the log.",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data == {"ephemeral": True}
+        assert not Interaction.objects.filter(scene=scene).exists()
+        assert mock_broadcast.call_count == 1
+
+    def test_submit_pose_with_target_names_creates_target_rows(self) -> None:
+        """target_names resolves co-located characters into InteractionTargetPersona
+
+        rows (#2156) — the REST equivalent of the WS ``@Name``-prefix parse.
+        """
+        target_character = CharacterFactory(db_key="Bob", location=self.room)
+        target_sheet = CharacterSheetFactory(character=target_character)
+        target_persona = target_sheet.primary_persona
+
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "content": "waves.",
+                "target_names": ["Bob"],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        pose_id = response.data["id"]
+        assert InteractionTargetPersona.objects.filter(
+            interaction_id=pose_id, persona=target_persona
+        ).exists()
+        assert response.data["target_persona_ids"] == [target_persona.pk]
+
+    @patch("world.scenes.interaction_views.flag_blocked_contact_attempt")
+    def test_submit_pose_with_target_names_flags_blocked_contact(self, mock_flag) -> None:
+        """Directed REST poses run the same blocked-contact flag as WS/telnet (#2156)."""
+        target_character = CharacterFactory(db_key="Carol", location=self.room)
+        target_sheet = CharacterSheetFactory(character=target_character)
+        target_persona = target_sheet.primary_persona
+
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "content": "confronts.",
+                "target_names": ["Carol"],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        mock_flag.assert_called_once_with(
+            initiator_persona=self.persona,
+            target_persona=target_persona,
+            scene=None,
+        )
+
+    def test_submit_pose_with_unresolvable_target_name_is_not_an_error(self) -> None:
+        """An unresolvable target_names entry is silently skipped, not rejected (#2156)."""
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "content": "waves at nobody.",
+                "target_names": ["Nobody"],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["target_persona_ids"] == []
 
 
 class ActionLinksSerializerTests(APITestCase):

@@ -32,18 +32,14 @@ def _characters_to_active_personas(characters: list[ObjectDB]) -> list[Persona] 
     """Resolve character objects to their active personas.
 
     Returns None if no characters could be resolved (callers treat None as
-    'no explicit targets').
+    'no explicit targets'). Thin alias over the shared
+    ``world.scenes.interaction_services.personas_for_characters`` helper — the
+    REST submit-pose path (#2156) resolves directed-pose targets through the
+    same function, so both surfaces derive InteractionTargetPersona rows identically.
     """
-    personas: list[Persona] = []
-    for character in characters:
-        try:
-            sheet = character.sheet_data
-            primary = sheet.primary_persona
-        except (AttributeError, ObjectDoesNotExist):
-            continue
-        if primary is not None:
-            personas.append(primary)
-    return personas or None
+    from world.scenes.interaction_services import personas_for_characters  # noqa: PLC0415
+
+    return personas_for_characters(characters)
 
 
 def _flag_blocked_contact_for_targets(

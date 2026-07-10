@@ -14,8 +14,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from flows.scene_data_manager import SceneDataManager
+from flows.service_functions.communication import message_location
 from world.magic.models import CharacterResonance, PoseEndorsement, SceneEntryEndorsement
-from world.scenes.block_services import hidden_persona_ids_for_viewer
+from world.scenes.block_services import flag_blocked_contact_attempt, hidden_persona_ids_for_viewer
 from world.scenes.constants import (
     InteractionMode,
     PersonaType,
@@ -43,10 +45,11 @@ from world.scenes.interaction_serializers import (
     ReactionEmojiSerializer,
 )
 from world.scenes.interaction_services import (
-    create_interaction,
     delete_interaction,
     mark_very_private,
-    push_interaction,
+    personas_for_characters,
+    record_interaction,
+    resolve_characters_by_name,
 )
 from world.scenes.models import (
     Interaction,
@@ -277,11 +280,18 @@ class InteractionViewSet(
 
     @action(detail=False, methods=[HTTPMethod.POST], url_path="submit-pose")
     def submit_pose(self, request: Request) -> Response:
-        """Create a POSE Interaction and auto-link prior ACTION Interactions.
+        """Create a POSE Interaction with full WS-pose-path parity (#2156).
 
         Accepts ``action_link_ids`` for an explicit override:
         - Absent (key missing): auto-link is run.
         - Present as a list (even empty): exact links are created; auto-link skipped.
+
+        Mirrors ``actions.definitions.communication.PoseAction.execute``: broadcasts
+        the raw text via ``message_location`` (telnet visibility), records through the
+        shared ``record_interaction`` seam (ephemeral-scene gate, SceneParticipation +
+        covenant engagement), and flags blocked-contact attempts for any resolved
+        directed-pose targets. ``target_names`` (composer-mode ``@Name`` targets) are
+        resolved with the same semantics as the WS ``@Name``-prefix parser.
         """
         serializer = PoseSubmitSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -291,29 +301,42 @@ class InteractionViewSet(
         scene: Scene | None = (
             Scene.objects.get(pk=data["scene_id"]) if data.get("scene_id") else None
         )
-
+        character = persona.character_sheet.character
         pose_kind = data.get("pose_kind", PoseKind.STANDARD)
-        with transaction.atomic():
-            interaction = create_interaction(
-                persona=persona,
-                content=data["content"],
-                mode=InteractionMode.POSE,
+        content = data["content"]
+
+        target_names: list[str] = data.get("target_names") or []
+        target_characters = (
+            resolve_characters_by_name(target_names, character.location)
+            if target_names and character.location is not None
+            else []
+        )
+        target_personas = personas_for_characters(target_characters) if target_characters else None
+
+        # #1278/#2088 — flag circumvention: a blocked player directing a pose at the
+        # blocker via another identity. Mirrors PoseAction.execute's directed-pose gate.
+        for target_persona in target_personas or []:
+            flag_blocked_contact_attempt(
+                initiator_persona=persona,
+                target_persona=target_persona,
                 scene=scene,
-                pose_kind=pose_kind,
             )
-            if pose_kind == PoseKind.ENTRY and scene is not None:
+
+        action_link_ids: list[int] | None = data.get("action_link_ids")
+
+        def _on_created(created: Interaction) -> None:
+            if pose_kind == PoseKind.ENTRY and created.scene_id is not None:
                 # #904 — an entrance is a reactable moment; the window stays
                 # open (and reactable) until the scene closes.
-                open_reaction_window(interaction=interaction, kind=ReactionWindowKind.ENTRANCE)
+                open_reaction_window(interaction=created, kind=ReactionWindowKind.ENTRANCE)
 
-            action_link_ids: list[int] | None = data.get("action_link_ids")
             if action_link_ids is not None:
                 # Explicit override: create exactly the supplied links in order,
                 # skipping auto-link entirely (empty list = caller opted out).
                 InteractionAction.objects.bulk_create(
                     [
                         InteractionAction(
-                            pose=interaction,
+                            pose=created,
                             action_interaction_id=aid,
                             ordering=i,
                         )
@@ -321,25 +344,40 @@ class InteractionViewSet(
                     ]
                 )
             else:
-                auto_link_pose_to_actions(interaction)
+                auto_link_pose_to_actions(created)
 
-        # Broadcast after commit so clients that refetch on receipt see committed state.
-        # A fresh REST pose has no receiver/target rows; passing empty lists here
-        # explicitly skips push_interaction's fallback DB queries (per its docstring).
-        push_interaction(
-            interaction,
-            receiver_persona_ids=[],
-            target_persona_ids=[],
-            receiver_characters=[],
-        )
+        # Broadcast raw text for telnet clients (WS parity — mirrors
+        # PoseAction.execute's message_location call, which fires unconditionally
+        # before persistence, ephemeral scenes included).
+        sdm = SceneDataManager()
+        caller_state = sdm.initialize_state_for_object(character)
+        message_location(caller_state, content)
+
+        with transaction.atomic():
+            interaction = record_interaction(
+                character=character,
+                content=content,
+                mode=InteractionMode.POSE,
+                scene=scene,
+                persona=persona,
+                pose_kind=pose_kind,
+                target_personas=target_personas,
+                on_created=_on_created,
+            )
+
+        if interaction is None:
+            # Ephemeral scene: record_interaction already pushed the real-time
+            # payload (push_ephemeral_interaction) and deliberately never persists
+            # an Interaction row — there is nothing to serialize as a resource.
+            return Response({"ephemeral": True}, status=status.HTTP_201_CREATED)
 
         # The freshly-created interaction has not been through get_queryset()'s
         # Prefetch pipeline, so the cached_* to_attr attributes used by
         # InteractionListSerializer do not exist yet. Set them to empty lists
         # to avoid AttributeError on serialization; a new pose has no receivers,
-        # target personas, favorites, or reactions.
+        # favorites, or reactions (target personas are whatever we just resolved).
         interaction.cached_receivers = []
-        interaction.cached_target_personas = []
+        interaction.cached_target_personas = target_personas or []
         interaction.cached_favorites = []
         interaction.cached_reactions = []
         interaction.cached_action_links = []
