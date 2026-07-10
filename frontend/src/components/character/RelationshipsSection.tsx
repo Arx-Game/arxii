@@ -22,11 +22,18 @@ interface RelationshipsSectionProps {
    * True only when viewing the CALLER's own character sheet.
    *
    * The writeups list endpoint (GET /api/relationships/relationship-updates/)
-   * is scoped to the requesting user, not the viewed character — it always
-   * returns the caller's own commendable writeups. Fetching/rendering it on
-   * another character's sheet would silently show the viewer's writeups under
-   * the wrong character's tab, so this flag gates both the query and the
-   * subsection's render (#2031).
+   * is scoped to the requesting user's *account* (tenure-based — every
+   * character the account currently owns), not to any single viewed
+   * character. `characterSheetId` is passed through as `?subject_character=`
+   * to narrow the account-wide set down to just the viewed character's
+   * writeups, so a multi-character account's sibling writeups never leak
+   * onto the wrong sheet's tab (fix wave, Finding 2). `isMyCharacter` itself
+   * mirrors `useMyRosterEntriesQuery`'s tenure-based ownership check
+   * (CharacterSheetPage.tsx), which now has the SAME tenure semantics as the
+   * backend's subject scoping — so gating on it here is correct for any
+   * owned character, not just the currently-puppeted one. It still gates
+   * both the query and the subsection's render, so a foreign-sheet viewer
+   * neither fetches nor sees this subsection.
    */
   isMyCharacter?: boolean;
 }
@@ -37,7 +44,7 @@ export function RelationshipsSection({
   isMyCharacter = false,
 }: RelationshipsSectionProps) {
   const { data: bonds = [] } = useMyTetherBonds(characterSheetId ?? null);
-  const { data: writeups = [] } = useMyWriteups(isMyCharacter);
+  const { data: writeups = [] } = useMyWriteups(characterSheetId, isMyCharacter);
   const giveKudos = useGiveWriteupKudos();
   const [kudosError, setKudosError] = useState<string | null>(null);
 

@@ -13,7 +13,7 @@ from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from world.mechanics.models import ModifierTarget
 from world.relationships.constants import UpdateVisibility
-from world.relationships.filters import RelationshipCapstoneFilter
+from world.relationships.filters import RelationshipCapstoneFilter, RelationshipUpdateFilter
 from world.relationships.models import (
     CharacterRelationship,
     HybridRelationshipType,
@@ -180,14 +180,20 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
     writeup browser. Scoped to writeups where the caller's character is the
     parent relationship's ``target`` (the writeup's commendable subject) and
     visibility is SHARED or PUBLIC; PRIVATE and GOSSIP writeups never appear
-    here regardless of subject.
+    here regardless of subject. Subject eligibility is tenure-based (current,
+    un-ended ``RosterTenure``, mirroring ``get_account_for_character``), not
+    Evennia's live-puppet ``db_account`` field, so a subject browsing while
+    not currently puppeting the character still sees writeups they can
+    legally commend. ``?subject_character=<CharacterSheet pk>`` narrows to one
+    owned character sheet (see ``RelationshipUpdateFilter``) for accounts with
+    several owned characters.
     """
 
     permission_classes = [IsAuthenticated]
     serializer_class = FirstImpressionWriteSerializer
     pagination_class = PageNumberPagination
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["relationship", "track"]
+    filterset_class = RelationshipUpdateFilter
 
     def get_serializer_class(self):  # type: ignore[override]
         """Return the write serializer matching the current action."""
@@ -203,15 +209,33 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
         return mapping.get(self.action, FirstImpressionWriteSerializer)
 
     def get_queryset(self):  # type: ignore[override]
-        """Return SHARED/PUBLIC writeups about the caller's character (subject side).
+        """Return SHARED/PUBLIC writeups about the caller's tenure-owned subject character(s).
 
-        Annotates ``kudos_count``/``viewer_has_kudosed`` the same way
-        ``RelationshipCapstoneViewSet`` does, to avoid N+1 queries when serializing.
+        Subject eligibility mirrors ``world.roster.selectors.get_account_for_character``'s
+        tenure join — a current (``end_date__isnull=True``) ``RosterTenure`` — rather than
+        the live-puppet ``db_account`` field: a subject browsing their sheet while not
+        currently puppeting that character must still see (and be able to commend)
+        writeups about them.
+
+        The eligible subject pks are resolved via a separate ``.distinct()`` lookup and
+        applied to the annotated queryset with ``pk__in`` rather than joining ``tenures``
+        directly alongside the ``Count``/``Exists`` annotations — joining the to-many
+        ``tenures`` relation on the same query as those aggregates would risk inflating
+        ``kudos_count`` if a character ever had more than one current tenure row (should
+        not happen, but isn't DB-enforced).
         """
         user = self.request.user
+        eligible_ids = (
+            RelationshipUpdate.objects.filter(
+                relationship__target__roster_entry__tenures__player_data__account=user,
+                relationship__target__roster_entry__tenures__end_date__isnull=True,
+            )
+            .values_list("pk", flat=True)
+            .distinct()
+        )
         return (
             RelationshipUpdate.objects.filter(
-                relationship__target__character__db_account=user,
+                pk__in=eligible_ids,
                 visibility__in=[UpdateVisibility.SHARED, UpdateVisibility.PUBLIC],
             )
             .select_related("author", "author__character", "track", "relationship")

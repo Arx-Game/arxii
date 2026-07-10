@@ -330,7 +330,17 @@ describe('RelationshipsSection', () => {
         wrapper: createWrapper(),
       });
 
-      expect(useMyWriteups).toHaveBeenCalledWith(false);
+      expect(useMyWriteups).toHaveBeenCalledWith(42, false);
+    });
+
+    it('passes characterSheetId as subject_character narrowing to useMyWriteups', () => {
+      vi.mocked(useMyWriteups).mockClear();
+
+      render(<RelationshipsSection isMyCharacter characterSheetId={99} />, {
+        wrapper: createWrapper(),
+      });
+
+      expect(useMyWriteups).toHaveBeenCalledWith(99, true);
     });
   });
 });

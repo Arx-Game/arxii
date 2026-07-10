@@ -127,13 +127,21 @@ The positive relationship-building loop is reachable from both web and telnet:
   Relationship state list/detail reads live on `CharacterRelationshipViewSet` (read-only).
   The same `RelationshipUpdateViewSet` also mixes in `ListModelMixin` for a narrow `GET`
   list route (#2031) — **not** a general writeup browser: scoped to `RelationshipUpdate`
-  rows where the requesting user's character is the parent relationship's `target` (the
-  writeup's commendable subject, matching `give_writeup_kudos`'s subject rule) and
-  visibility is SHARED or PUBLIC (PRIVATE/GOSSIP never appear here regardless of subject).
-  Supports `?relationship=`/`?track=` filters. Feeds the commend button on the frontend's
-  own-sheet Relationships tab. Read serializers expose `kudos_count` and
-  `viewer_has_kudosed` on every writeup row (annotated via `Count`/`Exists` to avoid N+1).
-  Complaints never appear in any player-facing serializer.
+  rows where the requesting user's account has a **current RosterTenure** (mirroring
+  `world.roster.selectors.get_account_for_character`) over the parent relationship's
+  `target` (the writeup's commendable subject, matching `give_writeup_kudos`'s subject
+  rule) and visibility is SHARED or PUBLIC (PRIVATE/GOSSIP never appear here regardless
+  of subject). Deliberately tenure-based rather than Evennia's live-puppet `db_account`
+  field — a subject browsing while not currently puppeting the character must still see
+  writeups they can legally commend. Supports `?relationship=`/`?track=` filters, plus
+  `?subject_character=<CharacterSheet pk>` (#2031 fix wave) to narrow the (possibly
+  multi-character) tenure-scoped set down to one owned sheet — it can only narrow, never
+  widen, past the requester's own tenure-owned characters. Feeds the commend button on
+  the frontend's own-sheet Relationships tab, which passes the viewed character's pk as
+  `subject_character` so a multi-character account's Writeups subsection never mislabels
+  a sibling character's writeups as the viewed character's. Read serializers expose
+  `kudos_count` and `viewer_has_kudosed` on every writeup row (annotated via
+  `Count`/`Exists` to avoid N+1). Complaints never appear in any player-facing serializer.
 - **Telnet** — `CmdRelationship` (`relationship <subverb>`) runs the same Actions; it adds
   telnet-only `relationship list` and `relationship show <name|#>` read surfaces (the web provides
   these implicitly).

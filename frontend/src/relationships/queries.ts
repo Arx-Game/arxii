@@ -12,21 +12,36 @@ import type { GiveWriteupKudosRequest } from './api';
 
 export const relationshipsKeys = {
   all: ['relationships'] as const,
-  writeups: () => [...relationshipsKeys.all, 'writeups'] as const,
+  /**
+   * `writeups()` (no arg) is the shared prefix used to invalidate every
+   * subject-scoped variant at once; `writeups(subjectCharacterId)` is the
+   * specific key a given sheet's query is cached under.
+   */
+  writeups: (subjectCharacterId?: number) =>
+    subjectCharacterId == null
+      ? ([...relationshipsKeys.all, 'writeups'] as const)
+      : ([...relationshipsKeys.all, 'writeups', subjectCharacterId] as const),
 };
 
 /**
- * GET the caller's commendable writeups (subject-scoped, SHARED/PUBLIC only).
+ * GET the caller's commendable writeups about one owned character
+ * (tenure-scoped, SHARED/PUBLIC only).
+ *
+ * `subjectCharacterId` (the viewed CharacterSheet pk) is threaded into both
+ * the request (`?subject_character=`) and the query key — required because
+ * the endpoint is scoped to the requester's *account*, which may tenure-own
+ * more than one character; without narrowing, a multi-character account's
+ * Writeups subsection would show every owned character's writeups under
+ * whichever sheet happens to be open (fix wave, Finding 2).
  *
  * Pass `enabled=false` when viewing a character sheet that is NOT the
- * caller's own — the endpoint is requester-scoped (subject = the
- * authenticated user), so fetching it while viewing another character's
- * sheet would return the *viewer's* writeups, not the viewed character's.
+ * caller's own — fetching it on a foreign sheet would return the *viewer's*
+ * own writeups, not the viewed character's.
  */
-export function useMyWriteups(enabled = true) {
+export function useMyWriteups(subjectCharacterId?: number, enabled = true) {
   return useQuery({
-    queryKey: relationshipsKeys.writeups(),
-    queryFn: api.getMyWriteups,
+    queryKey: relationshipsKeys.writeups(subjectCharacterId),
+    queryFn: () => api.getMyWriteups(subjectCharacterId),
     enabled,
   });
 }

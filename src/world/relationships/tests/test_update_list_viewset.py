@@ -1,13 +1,19 @@
 """Tests for RelationshipUpdateViewSet's list route (#2031, commend button read surface).
 
 Scoped narrowly to the commend use-case: only writeups where the requesting user's
-character is the relationship's SUBJECT (``relationship.target``, matching
-``give_writeup_kudos``'s subject rule) and visibility is SHARED or PUBLIC. Mirrors
-``RelationshipCapstoneViewSet``'s annotated read pattern (see test_capstone_viewset.py)
-but scopes by target/subject instead of author.
+account holds a *current RosterTenure* over the relationship's SUBJECT
+(``relationship.target``, matching ``give_writeup_kudos``'s subject rule) and
+visibility is SHARED or PUBLIC. Mirrors ``RelationshipCapstoneViewSet``'s annotated
+read pattern (see test_capstone_viewset.py) but scopes by target/subject instead of
+author.
+
+Ownership is provisioned via ``RosterTenure`` (the pattern ``test_writeup_feedback_api.py``
+uses for ``give_writeup_kudos``), **not** ``db_account`` — ``db_account`` is Evennia's
+live-puppet field, cleared on unpuppet, and does not reflect roster ownership (fix wave,
+Finding 1: a subject browsing while not currently puppeting the character must still see
+their commendable writeups).
 """
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -20,6 +26,18 @@ from world.relationships.factories import (
     RelationshipUpdateFactory,
 )
 from world.relationships.models import WriteupKudos
+from world.roster.factories import RosterTenureFactory
+
+
+def _make_linked_account(character_sheet):
+    """Create a RosterTenure linking character_sheet.character to a fresh account.
+
+    Deliberately does NOT touch ``db_account`` — ownership here is tenure-based,
+    matching how ``get_account_for_character``/``give_writeup_kudos`` resolve the
+    subject, and how a real player is linked to a roster character.
+    """
+    tenure = RosterTenureFactory(roster_entry__character_sheet__character=character_sheet.character)
+    return tenure.player_data.account
 
 
 class RelationshipUpdateListViewSetTests(TestCase):
@@ -28,27 +46,28 @@ class RelationshipUpdateListViewSetTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         """Set up test data shared across all tests."""
-        User = get_user_model()
-
         # The viewer/subject account and their character sheet — writeups are
-        # "about" this sheet (relationship.target == subject_sheet).
-        cls.subject_account = User.objects.create_user(
-            username="update_list_subject", password="testpass"
-        )
+        # "about" this sheet (relationship.target == subject_sheet). Linked via
+        # RosterTenure, NOT db_account (the live-puppet field) — this account is
+        # NOT currently puppeting subject_sheet's character in most tests below,
+        # proving the endpoint is reachable regardless of puppet state.
         cls.subject_sheet = CharacterSheetFactory()
-        cls.subject_sheet.character.db_account = cls.subject_account
-        cls.subject_sheet.character.save()
+        cls.subject_account = _make_linked_account(cls.subject_sheet)
 
         # The author account/sheet — writes about the subject.
-        cls.author_account = User.objects.create_user(
-            username="update_list_author", password="testpass"
-        )
         cls.author_sheet = CharacterSheetFactory()
-        cls.author_sheet.character.db_account = cls.author_account
-        cls.author_sheet.character.save()
+        cls.author_account = _make_linked_account(cls.author_sheet)
 
         # A third party, entirely uninvolved.
         cls.third_sheet = CharacterSheetFactory()
+
+        # A second character owned by the SAME subject account, for the
+        # ?subject_character= narrowing tests.
+        cls.subject_alt_sheet = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry__character_sheet=cls.subject_alt_sheet,
+            player_data=cls.subject_account.player_data,
+        )
 
         cls.track = RelationshipTrackFactory(name="UpdateListTrack", sign=TrackSign.POSITIVE)
 
@@ -64,6 +83,10 @@ class RelationshipUpdateListViewSetTests(TestCase):
         # Relationship with no subject involvement at all.
         cls.rel_third = CharacterRelationshipFactory(
             source=cls.third_sheet, target=cls.author_sheet
+        )
+        # A relationship about the subject's SECOND character.
+        cls.rel_author_subject_alt = CharacterRelationshipFactory(
+            source=cls.author_sheet, target=cls.subject_alt_sheet
         )
 
         cls.update_shared = RelationshipUpdateFactory(
@@ -106,6 +129,13 @@ class RelationshipUpdateListViewSetTests(TestCase):
             author=cls.third_sheet,
             track=cls.track,
             title="Unrelated Third Party Update",
+            visibility=UpdateVisibility.SHARED,
+        )
+        cls.update_about_alt = RelationshipUpdateFactory(
+            relationship=cls.rel_author_subject_alt,
+            author=cls.author_sheet,
+            track=cls.track,
+            title="Shared About Subject's Second Character",
             visibility=UpdateVisibility.SHARED,
         )
 
@@ -180,6 +210,49 @@ class RelationshipUpdateListViewSetTests(TestCase):
         titles = [u["title"] for u in data]
         assert "Shared About Subject" in titles
         assert "Public About Subject" in titles
+
+    def test_list_reachable_when_subject_not_currently_puppeting(self) -> None:
+        """A tenure-owned, not-currently-puppeted subject still sees their writeups.
+
+        Regression for Finding 1: the old queryset filtered on
+        ``relationship__target__character__db_account``, Evennia's live-puppet field,
+        which is cleared on unpuppet. Confirm ``subject_sheet.character.db_account``
+        is unset here (proving the account is NOT puppeting) while the tenure-linked
+        writeup is still listed.
+        """
+        assert self.subject_sheet.character.db_account_id is None
+        response = self.client.get("/api/relationships/relationship-updates/")
+        assert response.status_code == status.HTTP_200_OK
+        titles = [u["title"] for u in self._get_results(response.data)]
+        assert "Shared About Subject" in titles
+
+    def test_subject_character_narrows_to_one_owned_character(self) -> None:
+        """?subject_character=<pk> narrows to writeups about that owned sheet only."""
+        url = f"/api/relationships/relationship-updates/?subject_character={self.subject_sheet.pk}"
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        titles = [u["title"] for u in self._get_results(response.data)]
+        assert "Shared About Subject" in titles
+        assert "Public About Subject" in titles
+        assert "Shared About Subject's Second Character" not in titles
+
+    def test_subject_character_narrows_to_other_owned_character(self) -> None:
+        """?subject_character=<other pk> narrows to the OTHER owned sheet's writeups."""
+        url = (
+            "/api/relationships/relationship-updates/"
+            f"?subject_character={self.subject_alt_sheet.pk}"
+        )
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        titles = [u["title"] for u in self._get_results(response.data)]
+        assert titles == ["Shared About Subject's Second Character"]
+
+    def test_subject_character_cannot_widen_to_unowned_character(self) -> None:
+        """?subject_character=<unowned pk> narrows to nothing — it can't widen access."""
+        url = f"/api/relationships/relationship-updates/?subject_character={self.third_sheet.pk}"
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert self._get_results(response.data) == []
 
     # ------------------------------------------------------------------
     # Helpers

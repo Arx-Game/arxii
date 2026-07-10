@@ -13967,7 +13967,13 @@ export interface paths {
      *     writeup browser. Scoped to writeups where the caller's character is the
      *     parent relationship's ``target`` (the writeup's commendable subject) and
      *     visibility is SHARED or PUBLIC; PRIVATE and GOSSIP writeups never appear
-     *     here regardless of subject.
+     *     here regardless of subject. Subject eligibility is tenure-based (current,
+     *     un-ended ``RosterTenure``, mirroring ``get_account_for_character``), not
+     *     Evennia's live-puppet ``db_account`` field, so a subject browsing while
+     *     not currently puppeting the character still sees writeups they can
+     *     legally commend. ``?subject_character=<CharacterSheet pk>`` narrows to one
+     *     owned character sheet (see ``RelationshipUpdateFilter``) for accounts with
+     *     several owned characters.
      */
     get: operations['relationships_relationship_updates_list'];
     put?: never;
