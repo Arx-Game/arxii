@@ -8,8 +8,9 @@ gates weather; and comfort points map to a 1–10 level driving an AP-regen mult
 
 from django.test import TestCase
 
-from evennia_extensions.constants import RoomEnclosure
-from evennia_extensions.factories import RoomProfileFactory
+from evennia_extensions.constants import ExitKind, RoomEnclosure
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
+from evennia_extensions.models import ExitProfile
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.locations.constants import LocationParentType, StatKey
@@ -193,3 +194,46 @@ class ComfortLevelTests(TestCase):
         assert summary.level == comfort_level_for_points(-450)
         assert summary.amenity == 50
         assert summary.felt_exposures == {StatKey.COLD: 500}  # HEAT/WET/WIND omitted (0)
+
+
+class WindowEnclosureTests(TestCase):
+    def _modifier(self, area, stat_key: StatKey, value: int) -> None:
+        LocationValueModifier.objects.create(
+            parent_type=LocationParentType.AREA, area=area, stat_key=stat_key, value=value
+        )
+
+    def _room_with_profile(self):
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile = RoomProfileFactory(area=ward, enclosure=RoomEnclosure.WALLED)
+        return ward, profile.objectdb
+
+    def _window_in_room(self, room, is_open=False):
+        exit_obj = ObjectDBFactory(
+            db_key="window", db_typeclass_path="typeclasses.exits.Exit", location=room
+        )
+        profile = ExitProfile.get_or_create_for_exit(exit_obj)
+        profile.exit_kind = ExitKind.WINDOW
+        profile.is_open = is_open
+        profile.save()
+        return exit_obj
+
+    def test_open_window_lowers_enclosure_for_weather_axes(self):
+        ward, room = self._room_with_profile()
+        self._modifier(ward, StatKey.WIND, 5)
+        self._window_in_room(room, is_open=True)
+        # WALLED normally shelters WET/WIND; open window makes it ROOFED (shelters only WET).
+        assert felt_exposure(room, stat_key=StatKey.WET) == 0
+        assert felt_exposure(room, stat_key=StatKey.WIND) == 5
+
+    def test_closed_window_keeps_weather_sheltered(self):
+        ward, room = self._room_with_profile()
+        self._modifier(ward, StatKey.WIND, 5)
+        self._window_in_room(room, is_open=False)
+        assert felt_exposure(room, stat_key=StatKey.WET) == 0
+        assert felt_exposure(room, stat_key=StatKey.WIND) == 0
+
+    def test_open_window_does_not_affect_temperature_axes(self):
+        ward, room = self._room_with_profile()
+        self._modifier(ward, StatKey.COLD, 5)
+        self._window_in_room(room, is_open=True)
+        assert felt_exposure(room, stat_key=StatKey.COLD) == 5
