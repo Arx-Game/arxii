@@ -508,6 +508,20 @@ admin all converge on the same service layer.
   `RELATIONSHIP_CAPSTONE` in addition to `RELATIONSHIP_TRACK` —
   `relationship_bond_modulation` generalized via `_thread_relationship_target`
   to resolve the threaded person from either FK.
+- `RelationshipBondPullTuning` - Singleton (pk=1, `get_relationship_bond_pull_tuning()`)
+  tuning surface for `relationship_bond_modulation` (`world/magic/services/
+  pull_modulation_relationship.py`, #1849, ADR-0092), the RELATIONSHIP_TRACK sibling of
+  Court's `court_regard_modulation`. Base term is sign-blind (keyed on the owner's own
+  `CharacterRelationship.developed_absolute_value` bond to the thread's threaded person);
+  two additive valence-aware terms (#2034, ADR-0110) sit on top, each with its own
+  soft-cap columns on the same singleton: **fraught** (`fraught_coefficient/_cap/
+  _half_saturation`, keyed on `min` of `CharacterRelationship.developed_signed_sums` —
+  rewards a bond invested in both positive AND negative tracks at once) and **devotion**
+  (`devotion_threshold/_coefficient/_cap/_half_saturation`, keyed on
+  `max(0, developed_absolute_value - devotion_threshold)` — rewards raw depth past a
+  threshold, no ritual/ceremony gate). All three terms reuse `_soft_cap`
+  (`world/magic/services/threads.py`); see docs/systems/magic.md's "Relationship Bond
+  Pull Modulation" section for the full formulas.
 - `ThreadSurvivabilityTuning` - Per-`VitalBonusTarget` tuning row for the
   universal thread survivability baseline (#1175). One row per target — five
   at launch: `MAX_HEALTH`, `DAMAGE_TAKEN_REDUCTION`, and the three threshold-save

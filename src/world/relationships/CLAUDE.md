@@ -9,6 +9,13 @@ mutual consent, deceit mechanics, and achievement integration.
 - **Developed Absolute Value**: Sum of permanent points only. Drives mechanical bonuses (cube root).
 - **Capacity**: Maximum developed points allowed per track. Increased by updates and capstones.
 - **Affection**: Signed sum — positive tracks add, negative tracks subtract.
+- **Developed Signed Sums** (`developed_signed_sums`, #2034): `(positive_sum, negative_sum)` —
+  Developed Absolute Value split by track sign instead of netted; `pos + neg ==
+  developed_absolute_value`. Consumed by `world.magic`'s fraught/devotion pull terms
+  (ADR-0110) — a mixed-valence bond (invested in both signs at once) and an
+  overwhelmingly deep bond (past a threshold) each earn an extra thread-pull bonus.
+  This app has no concept of "fraughtness" or "devotion" itself — it just exposes the
+  split; the math lives in `world/magic/services/pull_modulation_relationship.py`.
 - **Tracks**: Categories of feeling (Friendship, Romance, Enemies, etc.) with positive or negative sign.
 - **Tiers**: Intensity levels within tracks, unlocked by developed point thresholds.
 - **Hybrid Types**: Staff-defined combinations (Frenemy = Friendship + Enemies).

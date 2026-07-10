@@ -39,6 +39,14 @@ Relationships are the heart of the game. A track-based system lets characters de
   trackers. Supporting tables: `ThreadPullCost`, `ThreadXPLockedLevel`, `ThreadLevelUnlock`,
   `ThreadPullEffect`, `ThreadWeavingUnlock`, `CharacterThreadWeavingUnlock`. See
   `docs/systems/magic.md` for the full model lineup.
+- **Fraught + devotion pull differentials (#2034, ADR-0110, SHIPPED):** the "conflicted
+  feelings are first-class" and "beloved enemy"/devoted-lover design points above now have
+  a mechanical payoff on `RELATIONSHIP_TRACK` thread pulls, not just the sign-blind base
+  bonus — a bond invested heavily in BOTH positive and negative tracks at once earns an
+  additive **fraught** bonus (`CharacterRelationship.developed_signed_sums`, keyed on the
+  smaller of the two signed sub-sums), and a bond deep enough to clear a threshold past the
+  base curve's own half-saturation point earns an additive **devotion** bonus (depth alone,
+  no ritual gate). See `world/magic/services/pull_modulation_relationship.py`.
 - **APIs:** Full viewsets and serializers for tracks, tiers, hybrids, conditions, and relationships
 - **Admin:** Admin classes for all models with inlines
 - **Tests:** Model tests, service tests, and view tests
