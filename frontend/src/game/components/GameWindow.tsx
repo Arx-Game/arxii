@@ -29,7 +29,7 @@ interface GameWindowProps {
   onModeChange: (mode: ComposerMode) => void;
   /** The active character's persona id — lifted to GamePage to dedupe the roster query (#2156). */
   personaId: number | null;
-  /** Avatar identity-click affordance (#2156) — not wired up until the character-card task (Task 7). */
+  /** Avatar identity-click affordance (#2156) — opens the character-card drawer (Task 7). */
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
   /**
    * Scene toolset plumbing (#2156, Task 6) — GamePage is the composition root

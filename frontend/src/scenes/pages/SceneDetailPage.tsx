@@ -16,6 +16,8 @@ import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePromp
 import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
 import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
+import { CharacterCardDrawer } from '@/game/components/CharacterCardDrawer';
+import type { PoseUnitAvatarClickPersona } from '../components/PoseUnit';
 import type { ActionAttachmentInfo } from '../actionTypes';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
@@ -44,6 +46,12 @@ export function SceneDetailPage() {
   );
   const characterSheetId = useMemo(
     () => myRosterEntries.find((e) => e.name === activeCharacter)?.character_id ?? 0,
+    [myRosterEntries, activeCharacter]
+  );
+  // The active character's own RosterEntry id (#2156 Task 7) — the FriendButton's
+  // `viewerEntryId` inside the character-card drawer.
+  const viewerEntryId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacter)?.id ?? null,
     [myRosterEntries, activeCharacter]
   );
 
@@ -117,6 +125,18 @@ export function SceneDetailPage() {
     setComposerMode(mode);
   }, []);
 
+  // Character-card drawer (#2156 Task 7): the clicked bubble's persona identity,
+  // or null when the drawer is closed. Mirrors GamePage's state — the drawer
+  // opens "in place" over this record page's feed, not as a route navigation.
+  const [cardPersona, setCardPersona] = useState<PoseUnitAvatarClickPersona | null>(null);
+  const handleWhisper = useCallback(
+    (name: string) => {
+      handleComposerModeChange({ command: 'whisper', targets: [name], label: `Whisper → ${name}` });
+      setCardPersona(null);
+    },
+    [handleComposerModeChange]
+  );
+
   // `isAtPlace` (#2156, Task 6): derived from the SAME `['scene-places',
   // placesRoomId]` query key `PlaceBar` uses below, so React Query dedupes the
   // two fetches into one (query-reuse, matching GamePage's approach).
@@ -154,6 +174,7 @@ export function SceneDetailPage() {
         onAddTarget={setPendingTarget}
         onAttachAction={handleActionAttach}
         canGm={scene?.viewer_can_gm}
+        onAvatarClick={setCardPersona}
       />
 
       {/* Composer + Action Panel */}
@@ -190,6 +211,12 @@ export function SceneDetailPage() {
           <ActionPanel sceneId={id} />
         </div>
       )}
+      <CharacterCardDrawer
+        persona={cardPersona}
+        onClose={() => setCardPersona(null)}
+        viewerEntryId={viewerEntryId}
+        onWhisper={handleWhisper}
+      />
     </div>
   );
 }

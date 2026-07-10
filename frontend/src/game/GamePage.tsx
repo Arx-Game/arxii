@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
+import { CharacterCardDrawer } from './components/CharacterCardDrawer';
 import { ConversationSidebar } from './components/ConversationSidebar';
 import { FocusPanel } from './components/FocusPanel';
 import { SidebarTabPanel } from './components/SidebarTabPanel';
@@ -28,6 +29,7 @@ import { ActionPanel } from '@/scenes/components/ActionPanel';
 import { PendingActionAttachments } from '@/scenes/components/PendingActionAttachments';
 import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
+import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { ComposerMode } from './components/CommandInput';
 
 const DEFAULT_ROOM_ENTRY: FocusEntry = {
@@ -59,6 +61,9 @@ export function GamePage() {
   // Lifted from GameWindow (#2156 review fold-in) — dedupes the roster query
   // that both GamePage and GameWindow used to call independently.
   const personaId = activeEntry?.primary_persona_id ?? null;
+  // The active character's own RosterEntry id (#2156 Task 7) — the FriendButton's
+  // `viewerEntryId` inside the character-card drawer.
+  const viewerEntryId = activeEntry?.id ?? null;
 
   const activeSession = active ? sessions[active] : null;
   const roomData = activeSession?.room ?? null;
@@ -81,6 +86,16 @@ export function GamePage() {
     sceneBaselineId,
   });
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
+
+  // Character-card drawer (#2156 Task 7): the clicked bubble's persona identity,
+  // or null when the drawer is closed. GamePage owns this state (mirrored on
+  // SceneDetailPage) since the drawer opens "in place" over whichever surface
+  // the avatar was clicked on, not as a route navigation.
+  const [cardPersona, setCardPersona] = useState<PoseUnitAvatarClickPersona | null>(null);
+  const handleWhisper = useCallback((name: string) => {
+    setComposerMode({ command: 'whisper', targets: [name], label: `Whisper → ${name}` });
+    setCardPersona(null);
+  }, []);
 
   // Scene-load baseline (#2156 review fix): a single scalar snapshot, not a
   // per-thread-key one. The old per-key baseline one-shotted per KEY, so a
@@ -289,6 +304,7 @@ export function GamePage() {
               composerMode={composerMode}
               onModeChange={setComposerMode}
               personaId={personaId}
+              onAvatarClick={setCardPersona}
               onAddTarget={setPendingTarget}
               onAttachAction={handleActionAttach}
               targetToAppend={targetToAppend}
@@ -343,6 +359,12 @@ export function GamePage() {
             }
           />
         }
+      />
+      <CharacterCardDrawer
+        persona={cardPersona}
+        onClose={() => setCardPersona(null)}
+        viewerEntryId={viewerEntryId}
+        onWhisper={handleWhisper}
       />
       <Toaster />
     </>

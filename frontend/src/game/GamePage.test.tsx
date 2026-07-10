@@ -41,6 +41,11 @@ vi.mock('@/roster/queries', () => ({
     isLoading: false,
     isError: false,
   })),
+  // The character-card drawer (#2156 Task 7) always mounts (persona is null
+  // unless an avatar was clicked) and calls these — stub them out since this
+  // test suite isn't exercising the drawer's own identity resolution.
+  useRosterEntryByNameQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useRosterEntryQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
 
 // ---------------------------------------------------------------------------

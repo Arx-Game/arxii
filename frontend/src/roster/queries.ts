@@ -73,6 +73,24 @@ export function useRosterEntriesQuery(
   });
 }
 
+/**
+ * Public roster search by exact persona name (#2156) — the character-card drawer's
+ * ONLY allowed identity-resolution path. Searches across every public roster (no
+ * `roster` scope) since a persona name isn't tied to one; the `name` filter is
+ * `icontains` server-side, so callers must still check for an exact
+ * `result.character.name === name` match before treating it as a hit — a
+ * disguised/temporary persona whose name doesn't exactly match a public roster
+ * entry must render as "not on the roster," never fall back to a substring match.
+ */
+export function useRosterEntryByNameQuery(name: string | undefined) {
+  return useQuery<PaginatedResponse<RosterEntryData>>({
+    queryKey: ['roster-entry-by-name', name],
+    queryFn: () => fetchRosterEntries(undefined, 1, { name }),
+    enabled: !!name,
+    throwOnError: true,
+  });
+}
+
 export function useSendRosterApplication(id: RosterEntryData['id']) {
   return useMutation({
     mutationFn: (message: string) => postRosterApplication(id, message),
