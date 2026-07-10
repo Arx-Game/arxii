@@ -3949,8 +3949,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Starting Area.
+          type: string
         required: true
       tags:
       - character-creation
@@ -36582,6 +36581,16 @@ components:
           items:
             $ref: '#/components/schemas/PositionAdjacencyItem'
           readOnly: true
+        position_nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionNode'
+          readOnly: true
+        position_edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionEdge'
+          readOnly: true
         is_lethal:
           type: boolean
           readOnly: true
@@ -36609,6 +36618,8 @@ components:
       - outcome
       - participants
       - position_adjacency
+      - position_edges
+      - position_nodes
       - resolution_order
       - scene
       - surge_beats
@@ -52370,6 +52381,66 @@ components:
       required:
       - adjacent_position_ids
       - position_id
+    PositionEdge:
+      type: object
+      description: Read-only serializer for one PositionEdgeInfo — obstacle/gate visibility
+        (#2006).
+      properties:
+        position_a_id:
+          type: integer
+          readOnly: true
+        position_b_id:
+          type: integer
+          readOnly: true
+        is_passable:
+          type: boolean
+          readOnly: true
+        blocks_flight:
+          type: boolean
+          readOnly: true
+        gating_challenge_name:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - blocks_flight
+      - gating_challenge_name
+      - is_passable
+      - position_a_id
+      - position_b_id
+    PositionNode:
+      type: object
+      description: Read-only serializer for one PositionNode — tactical-map node shape
+        (#2006).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        kind:
+          type: string
+          readOnly: true
+        elevation_anchor_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        layout_x:
+          type: integer
+          readOnly: true
+          nullable: true
+        layout_y:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - elevation_anchor_id
+      - id
+      - kind
+      - layout_x
+      - layout_y
+      - name
     PositionSummary:
       type: object
       description: Compact public representation of a Position (id + name).
@@ -54928,6 +54999,16 @@ components:
           items:
             $ref: '#/components/schemas/PositionAdjacencyItem'
           readOnly: true
+        position_nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionNode'
+          readOnly: true
+        position_edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionEdge'
+          readOnly: true
         persona_positions:
           type: array
           items:
@@ -54948,6 +55029,8 @@ components:
       - persona_positions
       - personas
       - position_adjacency
+      - position_edges
+      - position_nodes
       - positions
       - viewer_can_gm
     SceneDetailRequest:

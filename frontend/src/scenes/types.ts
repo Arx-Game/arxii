@@ -61,6 +61,25 @@ export interface PositionAdjacencyItem {
   adjacent_position_ids: number[];
 }
 
+/** A position-graph node — kind, elevation-anchor, and cosmetic layout coords (#2006). */
+export interface PositionNode {
+  id: number;
+  name: string;
+  kind: string;
+  elevation_anchor_id: number | null;
+  layout_x: number | null;
+  layout_y: number | null;
+}
+
+/** A position-graph edge — passability/gating state for obstacle visibility (#2006). */
+export interface PositionEdgeInfo {
+  position_a_id: number;
+  position_b_id: number;
+  is_passable: boolean;
+  blocks_flight: boolean;
+  gating_challenge_name: string | null;
+}
+
 /** A persona present in the scene and the position it currently occupies (or null). */
 export interface PersonaPosition {
   persona_id: number;
@@ -97,6 +116,10 @@ export interface SceneDetail extends SceneListItem {
   persona_positions: PersonaPosition[];
   /** Active scene round (#1467); null when no round is in progress. */
   active_round: SceneRoundState | null;
+  /** Full position-graph nodes for this scene's location (#2006). */
+  position_nodes: PositionNode[];
+  /** Full position-graph edges — obstacle/gate visibility (#2006). */
+  position_edges: PositionEdgeInfo[];
 }
 
 export interface InteractionPersona {

@@ -20975,6 +20975,8 @@ export interface components {
       readonly escalation_tick_narration: string | null;
       readonly forced_escape: boolean;
       readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
+      readonly position_nodes: components['schemas']['PositionNode'][];
+      readonly position_edges: components['schemas']['PositionEdge'][];
       readonly is_lethal: boolean;
       readonly duel_winner: components['schemas']['DuelWinner'] | null;
     };
@@ -29487,6 +29489,23 @@ export interface components {
       readonly position_id: number;
       readonly adjacent_position_ids: number[];
     };
+    /** @description Read-only serializer for one PositionEdgeInfo — obstacle/gate visibility (#2006). */
+    PositionEdge: {
+      readonly position_a_id: number;
+      readonly position_b_id: number;
+      readonly is_passable: boolean;
+      readonly blocks_flight: boolean;
+      readonly gating_challenge_name: string | null;
+    };
+    /** @description Read-only serializer for one PositionNode — tactical-map node shape (#2006). */
+    PositionNode: {
+      readonly id: number;
+      readonly name: string;
+      readonly kind: string;
+      readonly elevation_anchor_id: number | null;
+      readonly layout_x: number | null;
+      readonly layout_y: number | null;
+    };
     /** @description Compact public representation of a Position (id + name). */
     PositionSummary: {
       readonly id: number;
@@ -30682,6 +30701,8 @@ export interface components {
       }[];
       readonly positions: components['schemas']['PositionSummary'][];
       readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
+      readonly position_nodes: components['schemas']['PositionNode'][];
+      readonly position_edges: components['schemas']['PositionEdge'][];
       readonly persona_positions: components['schemas']['PersonaPosition'][];
       readonly active_round: components['schemas']['SceneRound'] | null;
     };
@@ -37177,8 +37198,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Starting Area. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
