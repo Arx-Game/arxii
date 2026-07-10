@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0095_touchstonecastconfig"),
+        ("magic", "0096_relationshipbondpulltuning_devotion_cap_and_more"),
     ]
 
     operations = [
