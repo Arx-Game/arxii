@@ -3993,6 +3993,9 @@ def apply_damage_to_participant(  # noqa: PLR0913
     # armor is their only soak source, and absorbing pieces take durability wear.
     effective_damage = apply_equipped_armor_soak(character, effective_damage)
 
+    # Attack-cover from PositionShelter (applies_to_attacks=True rows, #2011).
+    effective_damage = apply_position_cover(character, effective_damage, damage_type)
+
     # Condition-damage interactions (#2018). Final percentage multiplier on
     # net damage, after resistance + armor soak. May consume/transform conditions.
     interaction_result = None
@@ -7626,6 +7629,36 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> int:
         decrement_item_durability(item_instance=inst)
 
     return max(0, damage - soak)
+
+
+def apply_position_cover(character: Character, damage: int, damage_type: DamageType | None) -> int:
+    """Subtract attack-cover from damage.
+
+    Reads the character's current position and sums PositionShelter rows with
+    applies_to_attacks=True for the given damage type. No-op when the character
+    is unpositioned (lenient — matching technique_can_reach) or when damage_type
+    is None (untyped damage has no cover).
+
+    Args:
+        character: The target character taking damage.
+        damage: The incoming damage amount (after armor soak, before condition interactions).
+        damage_type: The damage type of the incoming attack (None = untyped, no cover).
+
+    Returns:
+        The damage after cover reduction, floored at 0.
+    """
+    if damage <= 0 or damage_type is None:
+        return damage
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        position_of,
+        position_shelter_value,
+    )
+
+    position = position_of(character)
+    if position is None:
+        return damage
+    cover = position_shelter_value(position, damage_type, attacks_only=True)
+    return max(0, damage - cover)
 
 
 def _select_equipped_weapon(character: Character) -> ItemInstance | None:
