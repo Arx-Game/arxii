@@ -11,10 +11,14 @@ class AssetAcquisitionSource(models.TextChoices):
     PROMOTION is the runtime path (a class-1 Functionary cultivated through
     interaction + a capability check, #1872). DISTINCTION_GRANT is the
     character-creation path (a starting asset granted by a Distinction, #1906).
+    COERCION is the blackmail path (#1680): leverage over a sheeted NPC extracts
+    them as a coerced asset — no functionary, no rapport, no capability check
+    (unless the NPC is actively piloted, then the pilot resists like a player).
     """
 
     PROMOTION = "promotion", "Promotion"
     DISTINCTION_GRANT = "distinction_grant", "Distinction Grant"
+    COERCION = "coercion", "Coercion"
 
 
 class AssetRoleContext(models.TextChoices):

@@ -386,3 +386,54 @@ class SecretGossip(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"gossip heat {self.heat} for secret {self.secret_id} in region {self.region_id}"
+
+
+class Leverage(SharedMemoryModel):
+    """Coercive leverage one character holds over another, founded on a Secret (#1680).
+
+    Minted when a **blackmail** action succeeds (the actor knows a ``Secret`` about the
+    target and presses it). A **standing** marker, not one-shot:
+
+    - **vs an NPC** it makes ``FAVOR`` ``NPCServiceOffer`` rows claimable — the
+      ``has_leverage_over`` predicate leaf reads the actor's leverage — and each claim is
+      throttled per-time by the existing ``OfferCooldown`` (the "trade-in").
+    - **vs a PC** it is the coded anchor for a reveal-threat; the demand itself is RP.
+
+    Both ends anchor on ``CharacterSheet`` (the source-of-truth character handle, held by
+    PCs and NPCs alike); per ADR-0010 the consumer (leverage) points at the ``Secret``
+    primitive, so ``secrets`` gains no dependency on its consumers.
+    """
+
+    holder_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="leverage_held",
+        help_text="The character who holds this leverage (the blackmailer).",
+    )
+    subject_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="leverage_against",
+        help_text="The character the leverage is over (PC or NPC).",
+    )
+    founded_on = models.ForeignKey(
+        Secret,
+        on_delete=models.CASCADE,
+        related_name="leverage",
+        help_text="The secret this leverage is built from.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["holder_sheet", "subject_sheet", "founded_on"],
+                name="uniq_leverage_holder_subject_secret",
+            ),
+        ]
+        ordering = ["subject_sheet", "holder_sheet"]
+        verbose_name = "Leverage"
+        verbose_name_plural = "Leverage"
+
+    def __str__(self) -> str:
+        return f"leverage {self.holder_sheet_id} over {self.subject_sheet_id}"

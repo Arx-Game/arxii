@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 # Seduce reuses the Seduction check but rolls one tier harder than Flirt (#1697).
 _SOCIAL_ACTION_TEMPLATES = [
     ("Intimidate", "Intimidation", "single", "skull", 0),
+    # Blackmail reuses the Intimidation check (coercion by threat), gated by the
+    # `blackmail` consent category and resolved by the defender's plausibility band; on
+    # success BlackmailAction mints Leverage founded on the pressed secret (#1680).
+    ("Blackmail", "Intimidation", "single", "lock", 0),
     ("Persuade", "Persuasion", "single", "handshake", 0),
     ("Deceive", "Deceive", "single", "mask", 0),
     ("Flirt", "Seduction", "single", "heart", 0),
@@ -40,6 +44,11 @@ _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
         ("Failure", "Intimidation falls flat", 1),
         ("Partial Success", "Target rattled but holds firm", 2),
         ("Success", "Target cowed and compliant", 1),
+    ],
+    "Blackmail": [
+        ("Failure", "The threat rings hollow", 1),
+        ("Partial Success", "They waver, but call your bluff", 2),
+        ("Success", "They fold under the threat", 1),
     ],
     "Persuade": [
         ("Failure", "Argument dismissed outright", 1),

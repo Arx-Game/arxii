@@ -17,6 +17,7 @@ from actions.definitions.battles import (
     StageBattleMapAction,
 )
 from actions.definitions.cast import CastTechniqueAction
+from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.combat_maneuvers import (
     CoverAction,
     DemoralizeAction,
@@ -297,6 +298,7 @@ from actions.definitions.signature import (
 )
 from actions.definitions.situations import SetSituationAction
 from actions.definitions.social import (
+    blackmail,
     deceive,
     entrance,
     flirt,
@@ -518,6 +520,9 @@ _ALL_ACTIONS: list[Action] = [
     deceive,
     flirt,
     seduce,
+    blackmail,
+    coerce,
+    reveal_secret,
     perform,
     entrance,
     restore_sense,
@@ -600,7 +605,17 @@ for _action in _ALL_ACTIONS:
 # the ActionTemplate for a consent request.
 SOCIAL_ACTIONS_BY_TEMPLATE_NAME: dict[str, Action] = {
     a.template_name: a
-    for a in (intimidate, persuade, deceive, flirt, seduce, perform, entrance, restore_sense)
+    for a in (
+        intimidate,
+        persuade,
+        deceive,
+        flirt,
+        seduce,
+        blackmail,
+        perform,
+        entrance,
+        restore_sense,
+    )
 }
 
 

@@ -935,15 +935,26 @@ relationships. The privacy layer for the mystery loop: **bio/story stay public**
 info is *relocated* into Secrets that must be earned and shared. A Secret is the missing 4th
 primitive alongside Distinction / Condition / Resonance. *Slices 1–3 (content model, discovery,
 secret-tab display) + the #1269 distinction migration + the **act-anchor cross-link** (#1573 —
-`legend_deed`/`mission_deed`/`scene`, one act = one secret) are built; action-anchored minting, the
-blackmail loop, and the PersonaDiscovery subsumption are later slices.*
+`legend_deed`/`mission_deed`/`scene`, one act = one secret) + the **blackmail → leverage loop**
+(#1680) are built; action-anchored minting and the PersonaDiscovery subsumption are later slices.*
 
 - **Models:** `Secret` (subject-anchored to a `CharacterSheet`, which **owns** it — single-owner,
   no shared/group rows; `level` 1–4 / `category` FK / `consequences` — each may be Unknown;
   `provenance` ∈ GM / action / player-flavor; `author_persona` for OOC attribution),
   `SecretCategory` (staff-editable lookup; null category = Unknown), `SecretKnowledge`
   (roster-scoped held record with partial-knowledge layers — fact / `knows_category` /
-  `knows_consequences`, monotonic; tracks *others* learning a secret)
+  `knows_consequences`, monotonic; tracks *others* learning a secret),
+  `Leverage` (#1680 — standing coercive hold `holder_sheet → subject_sheet`, `founded_on` a
+  `Secret`; minted by a successful Blackmail)
+- **Blackmail → leverage loop (#1680):** the `Blackmail` social action (register-gated by a
+  `blackmail` `SocialConsentCategory` at `FRIENDS_WHITELIST` default, resolved by the defender's
+  plausibility band, ammo = a `SecretKnowledge` you hold about the target) mints `Leverage`.
+  Spend it two ways: **`coerce`** (`CoerceAssetAction`) extracts an un-played NPC as a
+  `COERCION` `NPCAsset` of a chosen kind (a played/piloted target keeps agency — routed back to
+  the register); **`reveal_secret`** (`reveal_leveraged_secret`) exposes the secret to the
+  subject's societies and spends the leverage. Services in `world/secrets/services.py`
+  (`mint_leverage` / `has_leverage` / `character_knows_secret` / `reveal_leveraged_secret`) +
+  `world/assets/services.py` (`coerce_into_asset`).
 - **Invariant:** anchor-scales-with-level — only Level-1 player-flavor may be free-authored
   (it carries no mechanical effect, so its truth is moot); heavier secrets must be GM- or
   action-anchored, so player flavor can never masquerade as canon (`Secret.clean`)
@@ -2300,7 +2311,8 @@ ADR-0091.
 - **Models:** `NPCAsset` (`promoter_persona`, `asset_persona` — both FK
   `scenes.Persona`; `role_context`; `source_functionary` FK `Functionary`
   (nullable — NULL for CG-granted assets); `acquisition_source` enum
-  (`PROMOTION` runtime, `DISTINCTION_GRANT` CG); `source_distinction_grant` FK
+  (`PROMOTION` runtime, `DISTINCTION_GRANT` CG, `COERCION` blackmail — #1680, both source FKs
+  null); `source_distinction_grant` FK
   `DistinctionAssetGrant` (nullable — idempotency key for CG grants);
   `status`; `created_at`). No `standing` field — ongoing affection reads
   through the existing `NPCStanding` row for the same persona pair.
