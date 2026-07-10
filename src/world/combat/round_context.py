@@ -508,7 +508,16 @@ class CombatRoundContext(RoundContext):
 
         succorer = action.participant.character_sheet.character
         protected = target_participant.character_sheet.character
-        multiplier = dispatch_succor(succorer, protected, approach=None)
+
+        # Bond combat bonus (#2021): relationship-scaled protection.
+        from world.relationships.services import bond_bonus  # noqa: PLC0415
+
+        multiplier = dispatch_succor(
+            succorer,
+            protected,
+            approach=None,
+            extra_modifiers=bond_bonus(succorer, protected),
+        )
 
         action.succor_resolution = multiplier
         action.save(update_fields=["succor_resolution"])

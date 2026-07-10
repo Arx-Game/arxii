@@ -814,7 +814,8 @@ class TestSeedMagicDev(TestCase):
         # --- Task 1.3: thread pull catalog ---
         # 3 universal + 1 GIFT (imbue-only; ADR-0051) = 4.
         self.assertEqual(ThreadPullCost.objects.count(), 4)
-        self.assertEqual(ThreadPullEffect.objects.count(), 4)
+        # 4 TRAIT + 16 RELATIONSHIP_TRACK (4 resonances × 4 tiers, #2021) = 20.
+        self.assertEqual(ThreadPullEffect.objects.count(), 20)
 
         # --- Task 1.8: cantrip catalog ---
         # TechniqueStyle: 5 from cantrip catalog + 1 "Social" from MagicContent.create_all()

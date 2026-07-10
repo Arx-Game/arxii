@@ -150,7 +150,12 @@ not compel or provoke the target's behavior (ADR-0024).
 
 ## Integration
 - Achievement stats fired via `world.achievements.services.increment_stat()`
-- Mechanical bonus: cube root of developed absolute value (modest)
+- **Mechanical bonus (WIRED #2021):** cube root of developed absolute value — now
+  consumed by `bond_combat_bonus(sheet, encounter)` as the co-combat passive
+  magnitude. Returns `ModifierContribution(RELATIONSHIP)` entries (one per
+  qualifying bonded ACTIVE co-combatant). Config: `BondCombatConfig` singleton
+  (`min_developed_absolute_value`, `soul_tether_multiplier`). Directed (one-sided):
+  only the character who invested gets the bonus. ADR-0109.
 - Magical tethers (future PR): XP-gated power built around capstones
 - **Conditions gate modifier application in checks** — `relationship_gated_contributions(*,
   perceiver, perceived)` (#1696) reads the directed `CharacterRelationship(source=perceiver,

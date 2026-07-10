@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.db.models import Count
 
 from world.relationships.models import (
+    BondCombatConfig,
     CharacterRelationship,
     GrievanceOption,
     HybridRelationshipType,
@@ -213,3 +214,21 @@ class WriteupComplaintAdmin(admin.ModelAdmin):
         if writeup is None:
             return "—"
         return writeup.relationship.target
+
+
+@admin.register(BondCombatConfig)
+class BondCombatConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for relationship bond combat bonuses (#2021)."""
+
+    list_display = (
+        "pk",
+        "min_developed_absolute_value",
+        "soul_tether_multiplier",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not BondCombatConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False

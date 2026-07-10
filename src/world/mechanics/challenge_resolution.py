@@ -70,6 +70,8 @@ def resolve_challenge(
     challenge_instance: ChallengeInstance,
     approach: ChallengeApproach,
     capability_source: CapabilitySource,  # noqa: ARG001
+    *,
+    extra_modifiers: int = 0,
 ) -> ChallengeResolutionResult:
     """
     Resolve a character's action against a challenge.
@@ -91,7 +93,10 @@ def resolve_challenge(
 
     # 2. Perform check
     check_result = perform_check(
-        character, approach.check_type, target_difficulty=template.severity
+        character,
+        approach.check_type,
+        target_difficulty=template.severity,
+        extra_modifiers=extra_modifiers,
     )
 
     # 3. Select consequence and resolution metadata

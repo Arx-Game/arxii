@@ -42,7 +42,10 @@ def apply_target_modulation(
         )
 
         return court_regard_modulation(thread, target, effect_row, base_scaled)
-    if thread.target_kind == TargetKind.RELATIONSHIP_TRACK:
+    if thread.target_kind in (
+        TargetKind.RELATIONSHIP_TRACK,
+        TargetKind.RELATIONSHIP_CAPSTONE,
+    ):
         from world.magic.services.pull_modulation_relationship import (  # noqa: PLC0415
             relationship_bond_modulation,
         )

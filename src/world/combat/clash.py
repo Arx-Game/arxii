@@ -141,7 +141,7 @@ def outcome_to_delta(*, check_outcome: CheckOutcome, power: int, config: ClashCo
     return round(power * config.quality_multiplier_for(level) * config.power_scale)
 
 
-def commit_to_clash(  # noqa: PLR0913
+def commit_to_clash(  # noqa: PLR0913, PLR0915
     *,
     character_sheet: CharacterSheet,
     technique: Technique,
@@ -242,6 +242,11 @@ def commit_to_clash(  # noqa: PLR0913
                 value=check_modifier_extra,
             )
         )
+
+    # Bond combat bonus (#2021): relationship co-combatant passive.
+    from world.relationships.services import bond_combat_bonus  # noqa: PLC0415
+
+    extra_contributions.extend(bond_combat_bonus(character_sheet, clash.encounter))
 
     breakdown = collect_check_modifiers(
         character_sheet,

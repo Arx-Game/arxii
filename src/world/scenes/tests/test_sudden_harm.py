@@ -209,7 +209,14 @@ class ResolvePendingInterposeHarmTests(TestCase):
         declare_interpose_scene(interposer_participant, target_participant)
 
         def _dispatch_clean_block(  # noqa: PLR0913
-            actor, target_object, *, challenge_name, approach, error_msg, outcome_fn
+            actor,
+            target_object,
+            *,
+            challenge_name,
+            approach,
+            error_msg,
+            outcome_fn,
+            extra_modifiers=0,
         ):
             result = ChallengeResolutionResult(
                 challenge_instance_id=1,
@@ -272,7 +279,14 @@ class ResolvePendingInterposeHarmTests(TestCase):
         declare_interpose_scene(interposer_participant, target_participant)
 
         def _dispatch_clean_block(  # noqa: PLR0913
-            actor, target_object, *, challenge_name, approach, error_msg, outcome_fn
+            actor,
+            target_object,
+            *,
+            challenge_name,
+            approach,
+            error_msg,
+            outcome_fn,
+            extra_modifiers=0,
         ):
             result = ChallengeResolutionResult(
                 challenge_instance_id=1,

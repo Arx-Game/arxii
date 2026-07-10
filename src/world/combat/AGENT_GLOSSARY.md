@@ -125,3 +125,7 @@ _Avoid_: duel lock, mark, fixate (use for the pairing specifically), taunt (taun
 **Foil**:
 An NPC opponent designated to pair off against a specific PC in a rival duel within a group fight — the dramatic thread inside the melee. Marked by `has_foil_behavior=True` on `CombatOpponent` with a lower `auto_lock_threshold` so the pairing forms readily from threat accumulation.
 _Avoid_: rival, nemesis (narrative terms — use "foil" for the mechanical pairing)
+
+**BondCombatBonus**:
+The relationship co-combat passive (#2021, ADR-0109). While a PC and a bonded character (relationship above `BondCombatConfig.min_developed_absolute_value`) are co-combatants and the ally is `ParticipantStatus.ACTIVE`, the PC gains `int(mechanical_bonus)` (cube root of developed absolute value) as a `ModifierContribution(RELATIONSHIP)` on every combat check. Soul-tethered pairs get `soul_tether_multiplier × mechanical_bonus`. Directed (one-sided): only the character who invested gets the bonus. Drops when the ally falls (handing off to #2013's grief spike). Also scales INTERPOSE/SUCCOR capability checks via `bond_bonus(actor, protected)` → `extra_modifiers`.
+_Avoid_: bond buff, ally bonus (use "bond combat bonus" or "co-combat passive")

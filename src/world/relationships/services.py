@@ -55,10 +55,12 @@ from world.roster.selectors import get_account_for_character
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
+    from evennia_extensions.models import ObjectDB
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import ModifierContribution
+    from world.combat.models import CombatEncounter
     from world.relationships.constants import FirstImpressionColoring
-    from world.relationships.models import GrievanceOption
+    from world.relationships.models import BondCombatConfig, GrievanceOption, RelationshipTrack
     from world.scenes.models import Interaction, ReactionEmoji, Scene
 
 logger = logging.getLogger(__name__)
@@ -642,3 +644,133 @@ def clear_very_attracted(sheets) -> None:
     ).filter(
         Q(relationship__source_id__in=sheet_ids) | Q(relationship__target_id__in=sheet_ids)
     ).delete()
+
+
+def get_bond_combat_config() -> BondCombatConfig:
+    """Get-or-create the BondCombatConfig singleton (pk=1).
+
+    Lazy-creates the singleton on first access. Mirrors ``get_soul_tether_config()``.
+    """
+    from world.relationships.models import BondCombatConfig
+
+    cfg = BondCombatConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = BondCombatConfig.objects.get_or_create(pk=1)
+    return cfg
+
+
+def soul_tether_active(a_sheet: CharacterSheet, b_sheet: CharacterSheet) -> bool:
+    """Check whether two characters have an active Soul Tether bond.
+
+    Looks for a non-retired RELATIONSHIP_CAPSTONE Thread owned by either character
+    whose target_capstone.relationship points at the other character. The Sinner
+    owns the capstone thread; the Sineater may optionally have one too, so both
+    directions are checked.
+    """
+    from world.magic.constants import TargetKind
+    from world.magic.models import Thread
+
+    # Check a→b direction (Sinner owns the capstone thread)
+    if Thread.objects.filter(
+        owner=a_sheet,
+        target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+        target_capstone__relationship__source=a_sheet,
+        target_capstone__relationship__target=b_sheet,
+        retired_at__isnull=True,
+    ).exists():
+        return True
+
+    # Check b→a direction
+    return Thread.objects.filter(
+        owner=b_sheet,
+        target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+        target_capstone__relationship__source=b_sheet,
+        target_capstone__relationship__target=a_sheet,
+        retired_at__isnull=True,
+    ).exists()
+
+
+def bond_combat_bonus(
+    sheet: CharacterSheet, encounter: CombatEncounter
+) -> list[ModifierContribution]:
+    """Return ModifierContribution(RELATIONSHIP) entries for each bonded co-combatant.
+
+    For each ACTIVE co-combatant (other than ``sheet``), checks for a directed
+    CharacterRelationship(source=sheet, target=ally) that is active, non-pending,
+    and above the config's ``min_developed_absolute_value`` floor. If found,
+    appends a contribution with ``int(mechanical_bonus)`` as the value. When the
+    pair is soul-tethered, the bonus is multiplied by ``soul_tether_multiplier``.
+
+    Directed (one-sided) by design: only the character who invested in the
+    relationship gets the bonus. Mirrors the directed-allure pattern (#1696).
+
+    Returns an empty list when there are no qualifying bonds.
+    """
+    from world.checks.constants import ModifierSourceKind
+    from world.checks.types import ModifierContribution
+    from world.combat.constants import ParticipantStatus
+
+    config = get_bond_combat_config()
+    contributions: list[ModifierContribution] = []
+
+    participants = (
+        encounter.participants.filter(status=ParticipantStatus.ACTIVE)
+        .exclude(character_sheet=sheet)
+        .select_related("character_sheet")
+    )
+
+    for participant in participants:
+        ally_sheet = participant.character_sheet
+        bond = (
+            CharacterRelationship.objects.filter(
+                source=sheet,
+                target=ally_sheet,
+                is_active=True,
+                is_pending=False,
+            )
+            .prefetch_related("track_progress__track")  # noqa: PREFETCH_STRING
+            .first()
+        )
+        if bond is None:
+            continue
+        if bond.developed_absolute_value < config.min_developed_absolute_value:
+            continue
+
+        bonus = int(bond.mechanical_bonus)
+        if soul_tether_active(sheet, ally_sheet):
+            bonus *= config.soul_tether_multiplier
+
+        ally_name = str(ally_sheet)
+        contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.RELATIONSHIP,
+                source_label=f"Bond: {ally_name}",
+                value=bonus,
+            )
+        )
+    return contributions
+
+
+def bond_bonus(actor: ObjectDB, protected: ObjectDB) -> int:
+    """Return the bond bonus for protection checks (INTERPOSE/SUCCOR).
+
+    Looks up the directed relationship actor→protected and returns
+    ``int(mechanical_bonus)`` if above the config floor, else 0.
+    """
+    actor_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    protected_sheet = getattr(protected, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if actor_sheet is None or protected_sheet is None:
+        return 0
+
+    config = get_bond_combat_config()
+    bond = CharacterRelationship.objects.filter(
+        source=actor_sheet,
+        target=protected_sheet,
+        is_active=True,
+        is_pending=False,
+    ).first()
+    if bond is None:
+        return 0
+    if bond.developed_absolute_value < config.min_developed_absolute_value:
+        return 0
+    return int(bond.mechanical_bonus)

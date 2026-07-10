@@ -222,6 +222,7 @@ class DispatchCapabilityReactionSelectionTest(TestCase):
             tele_action.resolved_challenge_instance,
             tele_action.resolved_challenge_approach,
             tele_action.capability_source,
+            extra_modifiers=0,
         )
 
     def test_falls_back_to_first_action_when_approach_not_found(self) -> None:
@@ -272,6 +273,7 @@ class DispatchCapabilityReactionSelectionTest(TestCase):
             first_action.resolved_challenge_instance,
             first_action.resolved_challenge_approach,
             first_action.capability_source,
+            extra_modifiers=0,
         )
 
     def test_approach_none_falls_back_to_first_action(self) -> None:

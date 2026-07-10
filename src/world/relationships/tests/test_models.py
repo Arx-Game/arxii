@@ -385,3 +385,24 @@ class RelationshipUpdateInteractionReferenceTests(TestCase):
         """linked_interaction can be null."""
         update = RelationshipUpdateFactory(linked_interaction=None)
         self.assertIsNone(update.linked_interaction)
+
+
+class BondCombatConfigTests(TestCase):
+    """Tests for BondCombatConfig singleton (#2021)."""
+
+    def test_singleton_defaults(self):
+        """get_bond_combat_config lazy-creates with correct defaults."""
+        from world.relationships.services import get_bond_combat_config
+
+        config = get_bond_combat_config()
+        self.assertEqual(config.min_developed_absolute_value, 10)
+        self.assertEqual(config.soul_tether_multiplier, 2)
+        self.assertEqual(config.pk, 1)
+
+    def test_singleton_idempotent(self):
+        """Repeated calls return the same row."""
+        from world.relationships.services import get_bond_combat_config
+
+        config1 = get_bond_combat_config()
+        config2 = get_bond_combat_config()
+        self.assertEqual(config1.pk, config2.pk)

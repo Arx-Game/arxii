@@ -13,6 +13,7 @@ from django.utils.functional import cached_property
 from evennia.accounts.models import AccountDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.magic.constants import SoulTetherRole
 from world.relationships.constants import (
     DECAY_DAYS,
@@ -1059,3 +1060,40 @@ class TemporaryRelationshipCondition(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.condition.name} on {self.relationship} (until {self.expires_at:%Y-%m-%d})"
+
+
+class BondCombatConfig(SharedMemoryModel):
+    """Singleton tuning surface (pk=1) for relationship bond combat bonuses (#2021).
+
+    Controls the co-combat passive: while a PC and a bonded character (relationship
+    above ``min_developed_absolute_value``) are co-combatants and the ally is standing,
+    the PC gains ``int(mechanical_bonus)`` as a ``ModifierContribution(RELATIONSHIP)``
+    on every combat check. When the pair is soul-tethered, the bonus is multiplied by
+    ``soul_tether_multiplier``.
+
+    Access via ``get_bond_combat_config()`` — singleton-by-convention, no DB-level
+    uniqueness constraint (mirrors ``SoulTetherConfig``).
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    min_developed_absolute_value = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="Floor below which a relationship grants no combat bonus.",
+    )
+    soul_tether_multiplier = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="Multiplier on mechanical_bonus when the pair is soul-tethered.",
+    )
+
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="bond_combat_config_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"BondCombatConfig(pk={self.pk})"
