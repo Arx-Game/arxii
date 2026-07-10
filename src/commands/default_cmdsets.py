@@ -134,6 +134,7 @@ from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
 from commands.who import CmdWho
+from commands.windows import CmdCloseWindow, CmdOpenWindow
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -198,6 +199,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdTabletalk,
             CmdLock,
             CmdUnlock,
+            CmdOpenWindow,
+            CmdCloseWindow,
             CmdRitual,
             # #1700 — Durance status/intent/convene telnet namespace.
             CmdDurance,
