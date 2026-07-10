@@ -167,11 +167,17 @@ export const gameSlice = createSlice({
         }
       }
     },
+    // Deliberately does NOT touch `sceneBaselineId` (#2156 review fix 2): this
+    // reducer is dispatched on every ROOM_STATE broadcast (handleRoomStatePayload),
+    // which fires on ordinary room churn (anyone entering/leaving) — not just
+    // scene changes. Nulling the baseline here made it stick at null for the
+    // rest of the scene, since GamePage's one-shot baseline ref never re-fires
+    // for the same scene id. The scene-CHANGE reset lives in `setSessionScene`
+    // (guarded on an actual scene-id change), which pairs correctly with that ref.
     clearSceneInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const session = state.sessions[action.payload];
       if (session) {
         session.sceneInteractions = [];
-        session.sceneBaselineId = null;
       }
     },
     // Scene-load baseline scalar (#2156 review fix): set once by GamePage's

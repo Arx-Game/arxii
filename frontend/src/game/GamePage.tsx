@@ -86,6 +86,12 @@ export function GamePage() {
   // keys with no `threadLastSeen` entry, so pre-existing threads (which get a
   // `threadLastSeen` entry from the selected-thread effect below, or already
   // had one) stay zeroed while a genuinely new thread badges from message one.
+  // `maxId ?? 0` (not `?? null`, review fix 2): a scene with ZERO interactions
+  // at load must still baseline to a real number — interaction ids are DB pks
+  // and never 0, so 0 is a safe "baselined empty" sentinel. `null` would be
+  // indistinguishable from "baseline effect hasn't run yet", which would make
+  // `countUnread` fall through to its no-baseline branch and stay silently
+  // unbadged for that scene's first message.
   const sceneBaselinedRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!sceneId || !active) return;
@@ -96,7 +102,7 @@ export function GamePage() {
       const id = Number(interaction.id);
       if (maxId === undefined || id > maxId) maxId = id;
     }
-    dispatch(setSceneBaseline({ character: active, baselineId: maxId ?? null }));
+    dispatch(setSceneBaseline({ character: active, baselineId: maxId ?? 0 }));
   }, [sceneId, active, allInteractions, dispatch]);
 
   // Continuously mark the SELECTED thread seen as its interactions grow — this is

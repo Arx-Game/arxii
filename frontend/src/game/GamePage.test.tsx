@@ -6,7 +6,13 @@ import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
 import { mockAccount } from '@/test/mocks/account';
-import { startSession, setSessionScene, addSceneInteraction, resetGame } from '@/store/gameSlice';
+import {
+  startSession,
+  setSessionScene,
+  addSceneInteraction,
+  clearSceneInteractions,
+  resetGame,
+} from '@/store/gameSlice';
 import type { MyRosterEntry } from '@/roster/types';
 import type { InteractionWsPayload } from '@/hooks/types';
 
@@ -298,6 +304,119 @@ describe('GamePage', () => {
       await user.click(whisperButton());
       await waitFor(() => {
         expect(within(whisperButton()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
+      });
+    });
+
+    it('keeps the scene baseline across ordinary ROOM_STATE churn, so a first-ever whisper still badges (#2156 review fix 2)', async () => {
+      // Regression for a reviewer-caught defect: `clearSceneInteractions` used
+      // to null `sceneBaselineId` unconditionally, and
+      // `handleRoomStatePayload` dispatches it on EVERY ROOM_STATE broadcast —
+      // which the backend sends on ordinary room movement (anyone
+      // entering/leaving), not just scene changes. GamePage's one-shot
+      // baseline ref never re-fires for the same scene id, so the baseline
+      // stayed null for the rest of the scene and new-thread badging died.
+      // Fix: `clearSceneInteractions` no longer touches `sceneBaselineId` —
+      // only an actual scene-id change (via `setSessionScene`) resets it.
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+
+      // Simulate room churn: someone enters/leaves, the backend broadcasts
+      // ROOM_STATE for the SAME scene, and handleRoomStatePayload dispatches
+      // clearSceneInteractions.
+      store.dispatch(clearSceneInteractions(ACTIVE_NAME));
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+
+      // A first-ever whisper arrives after the churn, from someone other than
+      // the viewer, while it's unselected.
+      store.dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 5,
+            persona: { id: 42, name: 'Mysterious Stranger', thumbnail_url: '' },
+            content: 'psst -- a word, in private.',
+            mode: 'whisper',
+            timestamp: '2026-01-01T00:05:00Z',
+            scene_id: 100,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [7],
+            target_persona_ids: [],
+          },
+        })
+      );
+
+      const whisperButton = () =>
+        within(sidebar)
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+
+      // The new thread still badges unread from its first message — the
+      // scene baseline survived the churn.
+      await waitFor(() => {
+        expect(within(whisperButton()).getByText('1')).toBeInTheDocument();
+      });
+    });
+
+    it('badges the first message of a scene that had zero interactions at load (#2156 review fix 2)', async () => {
+      // Regression for a reviewer-caught defect: GamePage stored `null` as the
+      // baseline for a scene with zero interactions at load — indistinguishable
+      // from "the baseline effect hasn't run yet" — so `countUnread` fell
+      // through to its no-baseline branch (0 unread) and the scene's first
+      // message never badged. Fix: store `0` as the "baselined empty" sentinel
+      // (interaction ids are DB pks and never 0), and `countUnread` treats any
+      // number, including 0, as a live threshold.
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(startSession(ACTIVE_NAME));
+      store.dispatch(
+        setSessionScene({
+          character: ACTIVE_NAME,
+          scene: {
+            id: 200,
+            name: 'An Empty Hall',
+            description: '',
+            is_owner: false,
+            has_unseen_observer: false,
+          },
+        })
+      );
+      // No interactions seeded — the scene is empty at load.
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByLabelText('Thread sidebar');
+
+      store.dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 1,
+            persona: { id: 42, name: 'Mysterious Stranger', thumbnail_url: '' },
+            content: 'psst -- a word, in private.',
+            mode: 'whisper',
+            timestamp: '2026-01-01T00:00:01Z',
+            scene_id: 200,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [7],
+            target_persona_ids: [],
+          },
+        })
+      );
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperButton = () =>
+        within(sidebar)
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+
+      await waitFor(() => {
+        expect(within(whisperButton()).getByText('1')).toBeInTheDocument();
       });
     });
 
