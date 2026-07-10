@@ -394,6 +394,12 @@ class ActionRegistryTests(TestCase):
             # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
             "gm_find_situation",
             "gm_submit_catalog_suggestion",
+            # #2010 — GM battle staging: JUNIOR-gated catalog-pick-to-live-Battle actions.
+            "create_battle",
+            "stage_battle_map",
+            "spawn_battle_units",
+            "enlist_battle_participant",
+            "browse_battle_catalog",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

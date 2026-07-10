@@ -10,8 +10,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
+from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.utils.gm_resolution import resolve_account_or_none
+from world.gm.constants import GMLevel
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -361,3 +363,405 @@ class ChallengeChampionDuelAction(Action):
             message=f"You challenge the boss of {battle_place.name} to single combat!",
             data={"encounter_id": enc.pk},
         )
+
+
+# ---------------------------------------------------------------------------
+# #2010 — GM battle staging: JUNIOR-gated REGISTRY actions turning a catalog
+# pick (BattleMapBlueprint/BattleUnitTemplate) into a live Battle. Unlike the
+# room-scoped GM verbs above (target_type=AREA, "the active battle here"),
+# these five are target_type=SELF and kwargs-driven on explicit ids -- a GM
+# building a battle before it ever has a location bound to it (Battles are
+# otherwise location-less, ADR-0081).
+# ---------------------------------------------------------------------------
+
+_NO_SUCH_BATTLE = "No such battle."
+_NO_SUCH_BLUEPRINT = "No such active battle-map blueprint."
+_NO_SUCH_TEMPLATE = "No such active battle-unit template."
+_NO_SUCH_SIDE = "No such side on this battle."
+_NO_SUCH_PLACE = "No such place on this battle."
+
+
+def _format_catalog_row(pk: int, name: str, description: str) -> str:
+    snippet = (description or "").strip()
+    row = f"[{pk}] {name}"
+    return f"{row} -- {snippet}" if snippet else row
+
+
+@dataclass
+class CreateBattleAction(Action):
+    """Create a new Battle, optionally staged from a catalog blueprint (#2010).
+
+    JUNIOR-trust GM verb -- the entry point of the staging pipeline. Wraps
+    ``world.battles.staging.stage_battle``; when ``blueprint_id`` is given, the
+    blueprint's places/fortifications are cloned onto the new battle in the same
+    call. Also grants the creating account ``is_gm`` on the battle's backing
+    Scene (unrelated to a room -- see the module-level note above) so the later
+    battle-scoped actions' ``_actor_may_gm_battle`` recognizes this GM as the
+    battle's own, not merely staff.
+
+    ``blueprint_id``, when given, is resolved against ``is_active=True`` only --
+    mirroring ``InvokeCatalogCheckAction``'s ``CheckType`` resolution
+    (``gm_adjudication.py``): a catalog row retired from the browsing surface
+    stays unreachable by id too, not just hidden from search.
+    """
+
+    key: str = "create_battle"
+    name: str = "Create Battle"
+    icon: str = "flag"
+    category: str = "battle"
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(  # noqa: PLR0911, C901 - distinct guard failures read clearest as early returns
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.battles.exceptions import BattleStagingError  # noqa: PLC0415
+        from world.battles.models import BattleMapBlueprint  # noqa: PLC0415
+        from world.battles.staging import stage_battle  # noqa: PLC0415
+        from world.combat.constants import RiskLevel  # noqa: PLC0415
+        from world.scenes.models import SceneParticipation  # noqa: PLC0415
+
+        name = str(kwargs.get("name") or "").strip()
+        if not name:
+            return ActionResult(success=False, message="Name the battle.")
+
+        risk_level = kwargs.get("risk_level") or RiskLevel.LOW
+        if risk_level not in RiskLevel.values:
+            return ActionResult(
+                success=False,
+                message="Pick a risk level: " + ", ".join(RiskLevel.values) + ".",
+            )
+
+        blueprint = None
+        blueprint_id = kwargs.get("blueprint_id")
+        if blueprint_id is not None:
+            try:
+                blueprint = BattleMapBlueprint.objects.get(pk=blueprint_id, is_active=True)
+            except BattleMapBlueprint.DoesNotExist:
+                return ActionResult(success=False, message=_NO_SUCH_BLUEPRINT)
+
+        campaign_story = None
+        campaign_story_id = kwargs.get("campaign_story_id")
+        if campaign_story_id is not None:
+            from world.stories.models import Story  # noqa: PLC0415
+
+            try:
+                campaign_story = Story.objects.get(pk=campaign_story_id)
+            except Story.DoesNotExist:
+                return ActionResult(success=False, message="No such story.")
+
+        region = None
+        region_id = kwargs.get("region_id")
+        if region_id is not None:
+            from world.areas.models import Area  # noqa: PLC0415
+
+            try:
+                region = Area.objects.get(pk=region_id)
+            except Area.DoesNotExist:
+                return ActionResult(success=False, message="No such region.")
+
+        try:
+            battle = stage_battle(
+                name=name,
+                risk_level=risk_level,
+                blueprint=blueprint,
+                campaign_story=campaign_story,
+                region=region,
+            )
+        except BattleStagingError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        account = resolve_account_or_none(actor)
+        if account is not None:
+            SceneParticipation.objects.update_or_create(
+                scene=battle.scene,
+                account=account,
+                defaults={"is_gm": True},
+            )
+
+        return ActionResult(
+            success=True,
+            message=f"Battle '{battle.name}' created.",
+            data={"battle_id": battle.pk},
+        )
+
+
+@dataclass
+class StageBattleMapAction(Action):
+    """Clone a catalog BattleMapBlueprint's places/fortifications onto a Battle (#2010).
+
+    JUNIOR-trust GM verb, battle-scoped -- re-verifies ``_actor_may_gm_battle``
+    in ``execute`` since ``MinimumGMLevelPrerequisite`` alone only proves
+    general JUNIOR+ trust, not standing over *this* battle. A JUNIOR GM who
+    isn't staff and isn't this battle's own GM must not restage someone else's
+    battle. Wraps ``world.battles.staging.instantiate_battle_blueprint``.
+    """
+
+    key: str = "stage_battle_map"
+    name: str = "Stage Battle Map"
+    icon: str = "map"
+    category: str = "battle"
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.battles.exceptions import BattleStagingError  # noqa: PLC0415
+        from world.battles.models import Battle, BattleMapBlueprint  # noqa: PLC0415
+        from world.battles.staging import instantiate_battle_blueprint  # noqa: PLC0415
+
+        battle_id = kwargs.get("battle_id")
+        try:
+            battle = Battle.objects.select_related("scene").get(pk=battle_id)
+        except Battle.DoesNotExist:
+            return ActionResult(success=False, message=_NO_SUCH_BATTLE)
+
+        if not _actor_may_gm_battle(actor, battle):
+            return ActionResult(success=False, message=_NO_GM_PERMISSION)
+
+        blueprint_id = kwargs.get("blueprint_id")
+        try:
+            blueprint = BattleMapBlueprint.objects.get(pk=blueprint_id, is_active=True)
+        except BattleMapBlueprint.DoesNotExist:
+            return ActionResult(success=False, message=_NO_SUCH_BLUEPRINT)
+
+        replace = bool(kwargs.get("replace", False))
+
+        try:
+            places = instantiate_battle_blueprint(blueprint, battle, replace=replace)
+        except BattleStagingError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=f"Staged {len(places)} place(s) from '{blueprint.name}'.",
+            data={"place_ids": [place.pk for place in places]},
+        )
+
+
+@dataclass
+class SpawnBattleUnitsAction(Action):
+    """Spawn one or more BattleUnits from a catalog BattleUnitTemplate (#2010).
+
+    JUNIOR-trust GM verb, battle-scoped -- re-verifies ``_actor_may_gm_battle``
+    (see ``StageBattleMapAction``). Wraps
+    ``world.battles.staging.spawn_units_from_template``; ``count`` is clamped
+    server-side to ``MAX_TEMPLATE_SPAWN`` by that service.
+    """
+
+    key: str = "spawn_battle_units"
+    name: str = "Spawn Battle Units"
+    icon: str = "users"
+    category: str = "battle"
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.battles.models import (  # noqa: PLC0415
+            Battle,
+            BattlePlace,
+            BattleSide,
+            BattleUnitTemplate,
+        )
+        from world.battles.staging import spawn_units_from_template  # noqa: PLC0415
+
+        battle_id = kwargs.get("battle_id")
+        try:
+            battle = Battle.objects.select_related("scene").get(pk=battle_id)
+        except Battle.DoesNotExist:
+            return ActionResult(success=False, message=_NO_SUCH_BATTLE)
+
+        if not _actor_may_gm_battle(actor, battle):
+            return ActionResult(success=False, message=_NO_GM_PERMISSION)
+
+        template_id = kwargs.get("template_id")
+        try:
+            template = BattleUnitTemplate.objects.get(pk=template_id, is_active=True)
+        except BattleUnitTemplate.DoesNotExist:
+            return ActionResult(success=False, message=_NO_SUCH_TEMPLATE)
+
+        side_id = kwargs.get("side_id")
+        try:
+            side = BattleSide.objects.get(pk=side_id, battle=battle)
+        except BattleSide.DoesNotExist:
+            return ActionResult(success=False, message=_NO_SUCH_SIDE)
+
+        place = None
+        place_id = kwargs.get("place_id")
+        if place_id is not None:
+            try:
+                place = BattlePlace.objects.get(pk=place_id, battle=battle)
+            except BattlePlace.DoesNotExist:
+                return ActionResult(success=False, message=_NO_SUCH_PLACE)
+
+        count = int(kwargs.get("count") or 1)
+
+        units = spawn_units_from_template(
+            template, battle=battle, side=side, place=place, count=count
+        )
+
+        return ActionResult(
+            success=True,
+            message=f"Spawned {len(units)} unit(s) from '{template.name}'.",
+            data={"unit_ids": [unit.pk for unit in units]},
+        )
+
+
+@dataclass
+class EnlistBattleParticipantAction(Action):
+    """Enlist a player character in a Battle on one side (#2010).
+
+    JUNIOR-trust GM verb, battle-scoped -- re-verifies ``_actor_may_gm_battle``
+    (see ``StageBattleMapAction``). Thin wrapper over
+    ``world.battles.services.enlist_participant``; pre-checks for an existing
+    ``BattleParticipant`` row rather than surfacing the
+    ``unique_battle_participant`` constraint's IntegrityError.
+    """
+
+    key: str = "enlist_battle_participant"
+    name: str = "Enlist Battle Participant"
+    icon: str = "user-plus"
+    category: str = "battle"
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.battles.models import (  # noqa: PLC0415
+            Battle,
+            BattleParticipant,
+            BattlePlace,
+            BattleSide,
+        )
+        from world.battles.services import enlist_participant  # noqa: PLC0415
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        battle_id = kwargs.get("battle_id")
+        try:
+            battle = Battle.objects.select_related("scene").get(pk=battle_id)
+        except Battle.DoesNotExist:
+            return ActionResult(success=False, message=_NO_SUCH_BATTLE)
+
+        if not _actor_may_gm_battle(actor, battle):
+            return ActionResult(success=False, message=_NO_GM_PERMISSION)
+
+        character_sheet_id = kwargs.get("character_sheet_id")
+        try:
+            character_sheet = CharacterSheet.objects.get(pk=character_sheet_id)
+        except CharacterSheet.DoesNotExist:
+            return ActionResult(success=False, message="No such character sheet.")
+
+        side_id = kwargs.get("side_id")
+        try:
+            side = BattleSide.objects.get(pk=side_id, battle=battle)
+        except BattleSide.DoesNotExist:
+            return ActionResult(success=False, message=_NO_SUCH_SIDE)
+
+        place = None
+        place_id = kwargs.get("place_id")
+        if place_id is not None:
+            try:
+                place = BattlePlace.objects.get(pk=place_id, battle=battle)
+            except BattlePlace.DoesNotExist:
+                return ActionResult(success=False, message=_NO_SUCH_PLACE)
+
+        if BattleParticipant.objects.filter(
+            battle=battle, character_sheet=character_sheet
+        ).exists():
+            return ActionResult(
+                success=False,
+                message=f"{character_sheet} is already enlisted in this battle.",
+            )
+
+        participant = enlist_participant(
+            battle=battle, character_sheet=character_sheet, side=side, place=place
+        )
+
+        return ActionResult(
+            success=True,
+            message=f"{character_sheet} enlisted on {side.get_role_display()}.",
+            data={"participant_id": participant.pk},
+        )
+
+
+@dataclass
+class BrowseBattleCatalogAction(Action):
+    """Search the BattleMapBlueprint/BattleUnitTemplate catalogs by name (#2010).
+
+    JUNIOR-trust GM verb, read-only, not battle-scoped -- never selects,
+    composes, or writes any catalog id; a GM discovers a blueprint/template's
+    id here, then passes it to ``create_battle``/``stage_battle_map``/
+    ``spawn_battle_units``. Both catalogs are filtered ``is_active=True`` --
+    the one surface this feature's visibility rule is actually enforced on,
+    since the staging services underneath (Task 2) deliberately do not check
+    it themselves.
+    """
+
+    key: str = "browse_battle_catalog"
+    name: str = "Browse Battle Catalog"
+    icon: str = "search"
+    category: str = "battle"
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.db.models import Q  # noqa: PLC0415
+
+        from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
+
+        term = str(kwargs.get("term") or "").strip()
+
+        blueprints = BattleMapBlueprint.objects.filter(is_active=True)
+        templates = BattleUnitTemplate.objects.filter(is_active=True)
+        if term:
+            blueprints = blueprints.filter(Q(name__icontains=term) | Q(description__icontains=term))
+            templates = templates.filter(Q(name__icontains=term) | Q(descriptor__icontains=term))
+
+        lines: list[str] = []
+        if blueprints.exists():
+            lines.append("Battle-map blueprints:")
+            lines.extend(_format_catalog_row(bp.pk, bp.name, bp.description) for bp in blueprints)
+        if templates.exists():
+            if lines:
+                lines.append("")
+            lines.append("Battle-unit templates:")
+            lines.extend(
+                _format_catalog_row(tmpl.pk, tmpl.name, tmpl.descriptor) for tmpl in templates
+            )
+
+        if not lines:
+            message = f"No catalog entries matched {term!r}." if term else "The catalog is empty."
+            return ActionResult(success=True, message=message)
+
+        return ActionResult(success=True, message="\n".join(lines))
