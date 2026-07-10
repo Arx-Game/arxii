@@ -271,6 +271,7 @@ def instantiate_blueprint(
                     position=live_pos,
                     damage_type=bp_shelter.damage_type,
                     value=bp_shelter.value,
+                    applies_to_attacks=bp_shelter.applies_to_attacks,
                 )
                 for bp_shelter in bp_pos.shelters.all()
             ]
@@ -764,12 +765,21 @@ def maybe_emit_fall(objectdb: ObjectDB, position: Position) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def position_shelter_value(position: Position, damage_type: DamageType) -> int:
+def position_shelter_value(
+    position: Position, damage_type: DamageType, *, attacks_only: bool = False
+) -> int:
     """Sum of all PositionShelter.current_value() for (position, damage_type).
 
     Returns 0 if no shelter rows exist. Multiple rows stack additively.
+
+    Args:
+        attacks_only: When True, only sum rows with applies_to_attacks=True
+            (attack-cover). When False (default), sum ALL rows (hazard + attack).
     """
-    return sum(ps.current_value() for ps in position.shelters.filter(damage_type=damage_type))
+    qs = position.shelters.filter(damage_type=damage_type)
+    if attacks_only:
+        qs = qs.filter(applies_to_attacks=True)
+    return sum(ps.current_value() for ps in qs)
 
 
 def cleanup_position_shelters(*, now: datetime | None = None) -> int:
