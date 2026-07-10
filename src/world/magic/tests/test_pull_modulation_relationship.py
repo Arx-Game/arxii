@@ -14,9 +14,15 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.factories import ThreadFactory, ThreadPullEffectFactory
 from world.magic.models import RelationshipBondPullTuning
+from world.magic.services.pull_modulation_relationship import (
+    get_relationship_bond_pull_tuning,
+    relationship_bond_modulation,
+)
 from world.magic.services.resonance import resolve_pull_effects
+from world.relationships.constants import TrackSign
 from world.relationships.factories import (
     CharacterRelationshipFactory,
+    RelationshipTrackFactory,
     RelationshipTrackProgressFactory,
 )
 
@@ -37,6 +43,24 @@ def _relationship_track_thread(*, owner, threaded_sheet, developed_points: int =
         target_trait=None,
         level=10,
     )
+
+
+def _bond_with_signed_investment(*, owner, threaded_sheet, pos: int = 0, neg: int = 0):
+    """Build a RELATIONSHIP_TRACK thread anchored on an owner->threaded_sheet bond
+    carrying `pos` positive-track developed points and `neg` negative-track developed
+    points -- the owner's OWN bond magnitude the fraught/devotion terms key on."""
+    thread = _relationship_track_thread(
+        owner=owner, threaded_sheet=threaded_sheet, developed_points=0
+    )
+    bond = owner.relationships_as_source.get(target=threaded_sheet)
+    if pos:
+        RelationshipTrackProgressFactory(relationship=bond, developed_points=pos)
+    if neg:
+        negative_track = RelationshipTrackFactory(sign=TrackSign.NEGATIVE)
+        RelationshipTrackProgressFactory(
+            relationship=bond, track=negative_track, developed_points=neg
+        )
+    return thread
 
 
 class RelationshipBondModulationDirectTriggerTests(TestCase):
@@ -358,3 +382,137 @@ class RelationshipTrackPassthroughTests(TestCase):
 
         flat_rows = [r for r in resolved if r.kind == EffectKind.FLAT_BONUS]
         self.assertEqual(flat_rows[0].scaled_value, 4)
+
+
+class RelationshipBondModulationFraughtDevotionTests(TestCase):
+    """Acceptance matrix for the fraught + devotion differential terms (#2034).
+
+    All cases call ``relationship_bond_modulation`` directly (rather than through
+    ``resolve_pull_effects``) so the assertions isolate the bond-investment math
+    from the pull-tier/level-multiplier machinery -- ``effect_row`` is unused by
+    the function (kept only for call-site parity, see its ``# noqa: ARG001``) so
+    tests pass ``None``. Every case uses tuning defaults
+    (coefficient=1/cap=20/half=30; fraught_coefficient=1/cap=10/half=30;
+    devotion_threshold=60/coefficient=1/cap=10/half=30).
+    """
+
+    def test_mixed_valence_out_earns_single_valence_same_total(self) -> None:
+        """Same developed_absolute_value (80) split two ways: bond A mixes 40
+        pos + 40 neg (fraught term fires); bond B is pure 80 pos (fraught term
+        is 0). Base + devotion terms are identical for both -- only the mixed
+        bond's fraught bonus tips the total."""
+        RelationshipBondPullTuning.objects.create(pk=1)
+        owner_a = CharacterSheetFactory()
+        target_a = CharacterSheetFactory()
+        thread_a = _bond_with_signed_investment(
+            owner=owner_a, threaded_sheet=target_a, pos=40, neg=40
+        )
+        owner_b = CharacterSheetFactory()
+        target_b = CharacterSheetFactory()
+        thread_b = _bond_with_signed_investment(
+            owner=owner_b, threaded_sheet=target_b, pos=80, neg=0
+        )
+
+        total_a = relationship_bond_modulation(thread_a, target_a.character, None, base_scaled=0)
+        total_b = relationship_bond_modulation(thread_b, target_b.character, None, base_scaled=0)
+
+        # base: round(20*80/110) = 15; devotion: round(10*20/50) = 4 -- identical
+        # for both (same dav=80). fraught A: round(10*40/70) = 6; fraught B: 0.
+        self.assertEqual(total_a, 15 + 6 + 4)
+        self.assertEqual(total_b, 15 + 0 + 4)
+        self.assertGreater(total_a, total_b)
+
+    def test_beyond_threshold_depth_out_earns_at_threshold(self) -> None:
+        """A bond exactly at devotion_threshold (dav=60) gets no devotion bonus;
+        one 40 past it (dav=100) does, and the *total* gap between them exceeds
+        what the base curve's own delta would give alone."""
+        RelationshipBondPullTuning.objects.create(pk=1)
+        owner_at = CharacterSheetFactory()
+        target_at = CharacterSheetFactory()
+        thread_at_threshold = _bond_with_signed_investment(
+            owner=owner_at, threaded_sheet=target_at, pos=60, neg=0
+        )
+        owner_deep = CharacterSheetFactory()
+        target_deep = CharacterSheetFactory()
+        thread_deep = _bond_with_signed_investment(
+            owner=owner_deep, threaded_sheet=target_deep, pos=100, neg=0
+        )
+
+        total_at_threshold = relationship_bond_modulation(
+            thread_at_threshold, target_at.character, None, base_scaled=0
+        )
+        total_deep = relationship_bond_modulation(
+            thread_deep, target_deep.character, None, base_scaled=0
+        )
+
+        # base@60: round(20*60/90) = 13; base@100: round(20*100/130) = 15 (delta 2).
+        # devotion@60: max(0,0)=0 -> 0. devotion@100: round(10*40/70) = 6.
+        self.assertEqual(total_at_threshold, 13 + 0)
+        self.assertEqual(total_deep, 15 + 6)
+        base_curve_delta = 15 - 13
+        total_delta = total_deep - total_at_threshold
+        self.assertGreater(total_delta, base_curve_delta)
+
+    def test_shallow_bond_unchanged_from_baseline(self) -> None:
+        """A shallow single-valence bond (10 pos) is far below both the fraught
+        (needs both signs) and devotion (needs dav>60) gates -- the function
+        must return exactly today's pre-change value: base_scaled + soft_cap
+        on the base term alone."""
+        RelationshipBondPullTuning.objects.create(pk=1)
+        owner = CharacterSheetFactory()
+        target = CharacterSheetFactory()
+        thread = _bond_with_signed_investment(owner=owner, threaded_sheet=target, pos=10, neg=0)
+
+        total = relationship_bond_modulation(thread, target.character, None, base_scaled=4)
+
+        # Pre-change expectation: base_scaled + _soft_cap(1*10, 20, 30)
+        # = 4 + round(200/40) = 4 + 5 = 9.
+        self.assertEqual(total, 9)
+
+    def test_pure_negative_deep_gets_no_fraught_term(self) -> None:
+        """A deep bond invested entirely in negative tracks (80 neg) gets no
+        fraught term (needs both signs) and totals exactly the same as its
+        pure-positive twin (80 pos) -- the base term is sign-blind."""
+        RelationshipBondPullTuning.objects.create(pk=1)
+        owner_neg = CharacterSheetFactory()
+        target_neg = CharacterSheetFactory()
+        thread_neg = _bond_with_signed_investment(
+            owner=owner_neg, threaded_sheet=target_neg, neg=80
+        )
+        owner_pos = CharacterSheetFactory()
+        target_pos = CharacterSheetFactory()
+        thread_pos = _bond_with_signed_investment(
+            owner=owner_pos, threaded_sheet=target_pos, pos=80
+        )
+
+        total_neg = relationship_bond_modulation(
+            thread_neg, target_neg.character, None, base_scaled=0
+        )
+        total_pos = relationship_bond_modulation(
+            thread_pos, target_pos.character, None, base_scaled=0
+        )
+
+        # base: round(20*80/110) = 15; devotion: round(10*20/50) = 4; fraught: 0.
+        self.assertEqual(total_neg, 15 + 4)
+        self.assertEqual(total_neg, total_pos)
+
+    def test_tuning_row_edit_moves_the_fraught_bonus(self) -> None:
+        """Staff-tunable without deploy: bumping fraught_cap on the singleton
+        moves the bonus on the next call -- mirrors the get_*_config() /
+        mutate-in-place / .save() precedent used by other singleton tuning
+        tests (e.g. test_soul_tether_config.py)."""
+        RelationshipBondPullTuning.objects.create(pk=1)
+        owner = CharacterSheetFactory()
+        target = CharacterSheetFactory()
+        thread = _bond_with_signed_investment(owner=owner, threaded_sheet=target, pos=40, neg=40)
+
+        total_before = relationship_bond_modulation(thread, target.character, None, base_scaled=0)
+
+        cfg = get_relationship_bond_pull_tuning()
+        cfg.fraught_cap = 100
+        cfg.save()
+
+        total_after = relationship_bond_modulation(thread, target.character, None, base_scaled=0)
+
+        self.assertNotEqual(total_before, total_after)
+        self.assertGreater(total_after, total_before)

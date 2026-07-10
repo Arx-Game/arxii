@@ -807,9 +807,22 @@ class MagicProgressionMilestoneAdmin(admin.ModelAdmin):
 
 @admin.register(RelationshipBondPullTuning)
 class RelationshipBondPullTuningAdmin(admin.ModelAdmin):
-    """Singleton tuning config for relationship-bond thread-pull modulation (#1849)."""
+    """Singleton tuning config for relationship-bond thread-pull modulation (#1849)
+    plus the fraught/devotion differential terms (#2034)."""
 
-    list_display = ("pk", "coefficient", "cap", "half_saturation")
+    list_display = (
+        "pk",
+        "coefficient",
+        "cap",
+        "half_saturation",
+        "fraught_coefficient",
+        "fraught_cap",
+        "fraught_half_saturation",
+        "devotion_threshold",
+        "devotion_coefficient",
+        "devotion_cap",
+        "devotion_half_saturation",
+    )
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not RelationshipBondPullTuning.objects.exists()

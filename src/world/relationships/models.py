@@ -480,6 +480,22 @@ class CharacterRelationship(SharedMemoryModel):
         return sum(tp.developed_points for tp in self.cached_track_progress)
 
     @property
+    def developed_signed_sums(self) -> tuple[int, int]:
+        """Developed points split by track sign: (positive_sum, negative_sum).
+
+        Same points measure as developed_absolute_value (developed_points, not
+        total_points) — pos + neg always equals developed_absolute_value.
+        """
+        positive_sum = 0
+        negative_sum = 0
+        for tp in self.cached_track_progress:
+            if tp.track.sign == TrackSign.POSITIVE:
+                positive_sum += tp.developed_points
+            else:
+                negative_sum += tp.developed_points
+        return positive_sum, negative_sum
+
+    @property
     def mechanical_bonus(self) -> float:
         """Cube root of absolute developed value — modest mechanical bonus."""
         return round(math.pow(self.developed_absolute_value, 1 / 3), 1)

@@ -198,7 +198,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     RELATIONSHIP_TRACK pull by the owner's own `CharacterRelationship.developed_absolute_value`
     bond to the thread's threaded person, when the live target IS that person or is
     hostile toward them — no polarity gate, saturating-curve magnitude via
-    `RelationshipBondPullTuning` (staff-tunable singleton). The combat-UI picker
+    `RelationshipBondPullTuning` (staff-tunable singleton). Two additive valence-aware
+    terms (#2034, ADR-0110) layer on top: **fraught** (keyed on `min` of
+    `CharacterRelationship.developed_signed_sums`' positive/negative split — rewards a
+    bond invested in both valences at once) and **devotion** (keyed on
+    `max(0, developed_absolute_value - devotion_threshold)` — rewards depth alone, no
+    ritual gate), each with its own tuning columns on the same singleton. The combat-UI picker
     (`compute_thread_applicability`, `world/magic/services/pull_applicability.py`) surfaces
     `InapplicabilityReason.COURT_LEADER_NO_STAKE` / `RELATIONSHIP_NO_STAKE` respectively when
     no candidate effect would ever be empowered against the given `target_persona_id`.
@@ -3345,7 +3350,10 @@ writeup kudos/complaint feedback.
 - **Key Fields:** `CharacterRelationship.affection` (signed sum), track
   `capacity` / `developed_points`; `UpdateVisibility` (private/shared/gossip/public);
   `RelationshipTrack.system_key` (#1699 — `TrackSystemKey.REGARD`/`FRICTION` on the two
-  generic system tracks ambient bumps write to; null on authored tracks)
+  generic system tracks ambient bumps write to; null on authored tracks);
+  `CharacterRelationship.developed_signed_sums` (#2034 — `(positive_sum, negative_sum)`
+  split of `developed_absolute_value` by `track.sign`, cached path; consumed by
+  `world.magic`'s fraught pull term, see ADR-0110)
 - **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
 - **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
 - **Services:** `create_first_impression`, `create_development`, `create_capstone`,

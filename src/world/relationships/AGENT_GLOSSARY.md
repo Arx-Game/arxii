@@ -16,6 +16,18 @@ _Avoid_: intensity, total score, magnitude.
 The signed sum of a relationship's track points — positive-sign tracks add, negative-sign tracks subtract — expressing its net warmth or hostility.
 _Avoid_: sentiment, like/dislike, net score.
 
+**Developed Signed Sums** (`developed_signed_sums`, #2034):
+A `(positive_sum, negative_sum)` split of Developed Absolute Value by track sign — the two developed-points totals that Affection nets against each other, kept separate. Consumed by `world.magic`'s fraught pull term (see below); `pos + neg` always equals Developed Absolute Value.
+_Avoid_: recomputing from scratch — read via the cached `cached_track_progress` path, never a fresh query.
+
+**Fraughtness** (magic pull term, ADR-0110):
+A `world.magic` thread-pull bonus for a bond invested heavily in BOTH positive and negative tracks at once (love/hate) — keyed on the smaller of Developed Signed Sums' two values, so a bond lopsided entirely in one direction earns nothing. Not a relationships-app concept in itself; documented here because it reads this app's data.
+_Avoid_: conflating with Affection (net) or `HybridRelationshipType` (a display label, not this mechanic).
+
+**Devotion** (magic pull term, ADR-0110):
+A `world.magic` thread-pull bonus for a bond whose Developed Absolute Value clears a threshold well past the generic pull curve's own half-saturation point — depth alone, no ritual or ceremony gate. Distinct from the seeded "Devotion" `RelationshipTrack` row — the math never special-cases any specific track.
+_Avoid_: implying a gate or ceremony requirement; implying it's specific to the "Devotion" track.
+
 **Capacity**:
 The per-track ceiling on developed (permanent) points; it is raised by Updates and Capstones.
 _Avoid_: cap, max points, limit.

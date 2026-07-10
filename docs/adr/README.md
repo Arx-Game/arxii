@@ -153,6 +153,7 @@ treat those names as hints to confirm, not gospel.
 - [0086 — Thread pulls are target-aware via a per-target_kind modulation seam; regard attaches to the pull, not the Prerequisite system](0086-target-aware-pulls-court-regard-modulation-seam.md)
 - [0087 — Touchstone dynamic resonance-match via in-place RitualComponentRequirement extension](0087-touchstone-dynamic-resonance-match.md)
 - [0092 — Relationship Bond Pull Modulation is unsigned and saturating, deliberately diverging from Court Regard Modulation's signed-ratio shape](0092-relationship-bond-pull-modulation-is-unsigned-and-saturating.md)
+- [0110 — Fraughtness and devotion are additive, sign-aware terms on the relationship-bond pull, not new mechanics](0110-fraught-devotion-bond-pull-terms.md)
 - [0094 — Thread crossing ceremonies: every kind gets a resonance-matched personalization beat](0094-thread-crossing-ceremonies-every-kind-gets-a-beat.md)
 - [0063 — The level-3 (Prospect→Potential) semi-crossing lives in the Ritual of the Durance, not Audere Majora](0063-level-3-semi-crossing-lives-in-the-durance.md)
 - [0064 — Dispel is a technique payload row, not an EffectKind (thread-pull) entry](0064-dispel-is-a-technique-payload-not-an-effectkind.md)

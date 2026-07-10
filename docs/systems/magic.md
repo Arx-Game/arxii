@@ -634,6 +634,38 @@ check `_court_pull_would_have_effect` uses (a hostile third party's relationship
 to the threaded person must not leak to the owner via an observable tell when the
 owner can't perceive that third party).
 
+**Fraught + devotion differential terms (#2034, ADR-0110) [BUILT & WIRED]** — Two
+additive, valence-aware terms sit on top of the sign-blind base bonus above:
+
+- **Fraught** — `fraught_bonus = round(fraught_cap × S / (S + fraught_half_saturation))`
+  where `S = fraught_coefficient × min(pos_sum, neg_sum)`, and `(pos_sum, neg_sum) =
+  bond.developed_signed_sums` (`world/relationships/models.py` — a `(positive_sum,
+  negative_sum)` split of the same `developed_points` measure `developed_absolute_value`
+  sums, computed off the cached `cached_track_progress` path, never a fresh query).
+  Rewards a bond invested heavily in BOTH positive- and negative-sign tracks at once (a
+  love/hate dynamic); a bond lopsided entirely in one direction earns nothing here, no
+  matter how large.
+- **Devotion** — `devotion_bonus = round(devotion_cap × S / (S + devotion_half_saturation))`
+  where `S = devotion_coefficient × max(0, developed_absolute_value - devotion_threshold)`.
+  Rewards a bond so overwhelmingly deep it clears a threshold well past the base curve's
+  own half-saturation point; depth alone gates it, deliberately — no ritual/ceremony
+  requirement (Tehom, 2026-07-06).
+
+Both terms reuse `_soft_cap` and are computed unconditionally alongside the base bonus in
+`relationship_bond_modulation` (`base_scaled + bonus + fraught_bonus + devotion_bonus`);
+their tuning columns (`fraught_coefficient`/`fraught_cap`/`fraught_half_saturation`,
+`devotion_threshold`/`devotion_coefficient`/`devotion_cap`/`devotion_half_saturation`) live
+on the same `RelationshipBondPullTuning` singleton as the base curve's `coefficient`/`cap`/
+`half_saturation`. Defaults are conservative: both new caps are 10 (half the base `cap` of
+20); `devotion_threshold` is 60 (2× the base `half_saturation` of 30 — the point where the
+generic curve is already ≥⅔ saturated). Because both terms live inside the one modulation
+function, they surface in `preview_resonance_pull` automatically alongside the base bonus —
+no separate wiring — since preview and commit share the one `apply_target_modulation` seam
+(#2035). See ADR-0110 for the rejected alternatives (`HybridRelationshipType`-driven
+bonuses, sign-flip transition detection) and the cross-link to #1991 (the expression half —
+a ceremony beat at RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE thread crossings; this feature
+is the power half only).
+
 ### Mage Scars (renamed from Magical Scars — §7.2)
 
 Cosmetic rename only. Class names, table names, and migration code paths

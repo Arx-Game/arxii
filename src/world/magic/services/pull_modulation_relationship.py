@@ -3,10 +3,23 @@ own bond strength to the thread's threaded person, when the live target IS that
 person or is hostile toward them (#1849).
 
 Deliberately different in shape from Court modulation
-(`pull_modulation_court.py`): no `RegardPolarity` gate (this rewards ANY PC-to-PC
-relationship investment unconditionally — rival or lover alike — unlike Court's
-NPC-preference sign-matching), and a saturating curve rather than a fixed ratio
-(CharacterRelationship values are unbounded, unlike NpcRegard's 0..REGARD_MAX).
+(`pull_modulation_court.py`): no `RegardPolarity` gate on the base term (this
+rewards ANY PC-to-PC relationship investment unconditionally — rival or lover
+alike — unlike Court's NPC-preference sign-matching), and a saturating curve
+rather than a fixed ratio (CharacterRelationship values are unbounded, unlike
+NpcRegard's 0..REGARD_MAX).
+
+The base term is deliberately sign-blind — it rewards `developed_absolute_value`
+(magnitude only) regardless of how that magnitude splits across positive and
+negative tracks. Two additive, valence-aware terms (#2034) sit on top of it:
+
+- **Fraught** — a bond invested heavily in BOTH positive and negative tracks at
+  once (a love/hate dynamic) earns a bonus keyed on the smaller of the two
+  signed sub-sums (`developed_signed_sums`). A bond lopsided entirely in one
+  direction earns nothing here, no matter how large.
+- **Devotion** — a bond so overwhelmingly deep its `developed_absolute_value`
+  clears a threshold well past the base curve's own half-saturation point earns
+  a second-wind bonus on the excess above that threshold.
 """
 
 from __future__ import annotations
@@ -81,6 +94,18 @@ def relationship_bond_modulation(
     neither trigger condition holds, or the owner has no active/consented bond
     to the threaded person.
 
+    Three additive terms are layered on ``base_scaled`` when a bond is found
+    (#2034):
+
+    - ``bonus`` — the pre-existing sign-blind base term, keyed on the bond's
+      ``developed_absolute_value`` (magnitude only, any track sign).
+    - ``fraught_bonus`` — a love/hate term keyed on ``min(pos_sum, neg_sum)``
+      from ``developed_signed_sums``: nonzero only when the bond is invested in
+      BOTH positive and negative tracks at once.
+    - ``devotion_bonus`` — a second-wind term keyed on how far
+      ``developed_absolute_value`` clears ``devotion_threshold``: nonzero only
+      for bonds overwhelmingly deep enough to exceed that threshold.
+
     No ``can_perceive`` gate here, deliberately — mirrors ``court_regard_modulation``,
     which also has none. The privacy concern (#1849, #1831) is specific to the
     ADVISORY PICKER (`_relationship_pull_would_have_effect` / `_court_pull_would_have_effect`),
@@ -111,4 +136,14 @@ def relationship_bond_modulation(
     tuning = get_relationship_bond_pull_tuning()
     score = tuning.coefficient * bond.developed_absolute_value
     bonus = _soft_cap(score, tuning.cap, tuning.half_saturation)
-    return base_scaled + bonus
+
+    pos_sum, neg_sum = bond.developed_signed_sums
+    fraught_score = tuning.fraught_coefficient * min(pos_sum, neg_sum)
+    fraught_bonus = _soft_cap(fraught_score, tuning.fraught_cap, tuning.fraught_half_saturation)
+
+    devotion_score = tuning.devotion_coefficient * max(
+        0, bond.developed_absolute_value - tuning.devotion_threshold
+    )
+    devotion_bonus = _soft_cap(devotion_score, tuning.devotion_cap, tuning.devotion_half_saturation)
+
+    return base_scaled + bonus + fraught_bonus + devotion_bonus
