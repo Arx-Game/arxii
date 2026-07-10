@@ -1653,9 +1653,11 @@ class GarmentMitigation(SharedMemoryModel):
 # Crafting submodule — import last so all models above are registered first
 # ---------------------------------------------------------------------------
 from world.items.crafting.models import (  # noqa: E402,F401
+    CraftedItemRecipe,
     CraftingMaterialRequirement,
     CraftingRecipe,
     CraftingRecipeConsequence,
+    CraftingRecipeModifier,
     CraftingSkillCap,
 )
 
