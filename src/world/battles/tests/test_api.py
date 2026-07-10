@@ -45,6 +45,7 @@ from world.covenants.factories import CovenantFactory
 from world.roster.factories import PlayerMediaFactory
 from world.scenes.constants import RoundStatus, ScenePrivacyMode
 from world.scenes.factories import SceneParticipationFactory
+from world.societies.factories import LegendEntryFactory, LegendSourceTypeFactory
 
 
 class BattleApiJourneyTest(TestCase):
@@ -157,6 +158,13 @@ class BattleApiJourneyTest(TestCase):
         self._assert_units_shape(data["units"])
         self._assert_participants_shape(data["participants"])
 
+        # Writeup fields (#1735)
+        self.assertEqual(data["scene_id"], self.battle.scene_id)
+        self.assertIsNotNone(data["created_at"])
+        self.assertIsNone(data["concluded_at"])  # not concluded yet
+        self.assertIsNone(data["campaign_story_id"])  # no story linked
+        self.assertEqual(data["deeds"], [])  # no deeds yet
+
     def _assert_sides_shape(self, sides: list[dict]) -> None:
         sides_by_role = {side["role"]: side for side in sides}
         attacker = sides_by_role["attacker"]
@@ -262,6 +270,76 @@ class BattleApiJourneyTest(TestCase):
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         ids = [row["id"] for row in response.data["results"]]
         self.assertNotIn(self.battle.pk, ids)
+
+    def test_deeds_section_includes_only_this_battles_scene_deeds(self) -> None:
+        """LegendEntry deeds scoped to the battle's backing scene appear in detail."""
+        source_type = LegendSourceTypeFactory(name="Combat")
+        # A deed on the battle's scene — should appear
+        LegendEntryFactory(
+            persona=self.pc_sheet.primary_persona,
+            title="Slew the enemy commander",
+            description="A decisive strike.",
+            base_value=50,
+            source_type=source_type,
+            scene=self.battle.scene,
+            is_active=True,
+        )
+        # A deed on a different scene — must NOT appear
+        other_battle = BattleFactory(name="Other Battle")
+        LegendEntryFactory(
+            persona=self.pc_sheet.primary_persona,
+            title="Unrelated deed",
+            base_value=10,
+            source_type=source_type,
+            scene=other_battle.scene,
+            is_active=True,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.staff_account)
+        response = client.get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        deeds = response.data["deeds"]
+        self.assertEqual(len(deeds), 1)
+        deed = deeds[0]
+        self.assertEqual(deed["title"], "Slew the enemy commander")
+        self.assertEqual(deed["description"], "A decisive strike.")
+        self.assertEqual(deed["base_value"], 50)
+        self.assertIsNotNone(deed["persona"])
+        self.assertEqual(deed["persona"]["name"], self.pc_sheet.primary_persona.name)
+        self.assertNotIn("account", deed["persona"])
+        self.assertNotIn("username", deed["persona"])
+
+    def test_deeds_do_not_cause_n_plus_1_queries(self) -> None:
+        """Deeds prefetch must not scale query count with deed count."""
+        source_type = LegendSourceTypeFactory(name="Heroism")
+        for i in range(3):
+            LegendEntryFactory(
+                persona=self.pc_sheet.primary_persona,
+                title=f"Deed {i}",
+                base_value=10,
+                source_type=source_type,
+                scene=self.battle.scene,
+                is_active=True,
+            )
+
+        client = APIClient()
+        client.force_authenticate(user=self.staff_account)
+        # Warm up on a throwaway battle (one-time caching costs)
+        warmup = BattleFactory(name="Warmup")
+        client.get(f"/api/battles/{warmup.pk}/")
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = client.get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertEqual(len(response.data["deeds"]), 3)
+        query_count = len(ctx)
+        self.assertLess(
+            query_count,
+            15,
+            f"Expected deeds prefetch to keep queries flat; got {query_count} queries "
+            "-- the deeds SerializerMethodField may be issuing per-deed queries (N+1).",
+        )
 
     def _build_battle_with_participants(self, num_participants: int):
         """A standalone battle (own scene/side) enlisting `num_participants` PCs.
