@@ -33,6 +33,10 @@ class ProjectKind(models.TextChoices):
     TEST_KIND = "TEST_KIND", "Test Kind (framework tests only)"
     GANG_TURF = "GANG_TURF", "Gang Turf"
     ORGANIZATION_CAPABILITY = "ORGANIZATION_CAPABILITY", "Organization Capability"
+    # Money→prestige sink: the only kind whose completion fires a renown award
+    # (#1621). Details model + handler live in world.societies (mirroring how
+    # captivity owns RANSOM); instant-completion like RANSOM.
+    PROPAGANDA = "PROPAGANDA", "Propaganda Campaign"
 
 
 class ProjectStatus(models.TextChoices):

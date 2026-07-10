@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.magic.models.renown_config import RenownAwardConfig
+from world.societies.renown_config import RenownAwardConfig
 
 
 class DramaticMomentType(RenownAwardConfig):

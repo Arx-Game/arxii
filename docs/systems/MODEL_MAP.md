@@ -4629,6 +4629,7 @@
   - resonance_grants <- magic.ResonanceGrant
   - organization_gift_grants <- societies.OrganizationGiftGrant
   - gang_turf_details <- societies.GangTurfDetails
+  - propaganda_details <- societies.PropagandaDetails
   - domain_improvement_details <- societies.DomainImprovementDetails
   - org_capability_details <- societies.OrganizationCapabilityProjectDetails
   - research_details <- clues.ResearchProjectDetails
@@ -5779,6 +5780,8 @@
   - auderemajorathreshold_renown_configs <- magic.AudereMajoraThreshold
   - dramaticmomenttype_renown_configs <- magic.DramaticMomentType
   - legend_entries <- societies.LegendEntry
+  - propagandacampaigntier_renown_configs <- societies.PropagandaCampaignTier
+  - propagandadetails_renown_configs <- societies.PropagandaDetails
   - secrets <- secrets.Secret
   - mission_awards <- missions.MissionRenownAward
 
@@ -5798,6 +5801,18 @@
 ### GangTurfReputationAward
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
+
+### PropagandaCampaignTier
+**Foreign Keys:**
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
+**Pointed to by:**
+  - campaigns <- societies.PropagandaDetails
+
+### PropagandaDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - source_tier -> societies.PropagandaCampaignTier [FK] (nullable)
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
 
 ### NobiliaryParticle
 **Foreign Keys:**

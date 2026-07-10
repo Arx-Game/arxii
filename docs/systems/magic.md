@@ -912,13 +912,16 @@ tracked in **#1700** (under the telnet-E2E umbrella #1328).
 
 ---
 
-### Audere & Audere Majora (models/audere.py, audere_majora.py, models/renown_config.py)
+### Audere & Audere Majora (models/audere.py, audere_majora.py)
 
-**`RenownAwardConfig`** (`models/renown_config.py`) — abstract base (SharedMemoryModel)
-shared by `DramaticMomentType` and `AudereMajoraThreshold`. Carries `magnitude`,
-`risk`, `reach` (nullable override), and `archetypes` M2M to `societies.PhilosophicalArchetype`.
-Provides `as_renown_award_kwargs() -> dict`. When `risk == NONE`, `fire_renown_award`
-creates no `LegendEntry` — the invariant that gates deed creation.
+**`RenownAwardConfig`** (`world/societies/renown_config.py` — relocated from
+`world/magic/models/renown_config.py` in #1621 so any app can inherit it without a
+magic import cycle) — abstract base (SharedMemoryModel) shared by
+`DramaticMomentType`, `AudereMajoraThreshold`, and societies' propaganda models.
+Carries `magnitude`, `risk`, `reach` (nullable override), and `archetypes` M2M to
+`societies.PhilosophicalArchetype`. Provides `as_renown_award_kwargs() -> dict`.
+When `risk == NONE`, `fire_renown_award` creates no `LegendEntry` — the invariant
+that gates deed creation.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|

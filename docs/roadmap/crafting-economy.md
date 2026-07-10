@@ -113,6 +113,12 @@ coppers-only repair economy. Fully playable end-to-end (telnet + web).
 - **Repair economy** — `repair_station_durability` (`world.items.crafting.station`), a
   coppers-only sink through `currency.services.transfer` (no destination purse, #923);
   cost scales `LAB_REPAIR_COPPER_PER_POINT_PER_LEVEL × level × points_restored`.
+- **Propaganda campaigns (#1621, SHIPPED)** — the money→prestige sink: PROPAGANDA
+  `ProjectKind` funded via `project/donate`, instant-completing at threshold and firing
+  the sponsor's renown award (details/handler in `world.societies.propaganda`; 3
+  PLACEHOLDER campaign scales seeded by the `propaganda` cluster; launched via
+  `project/launch <tier>=<name>` / `LaunchPropagandaCampaignAction`). Under-funded
+  deadline resolutions keep the coin and award nothing.
 - **Station gate/wear pipeline** — `CraftingRecipe.requires_station` (default True) gates
   `run_crafting_recipe`: raises `CraftingStationRequired` / `CraftingStationBroken` before
   affordability-staging, then wears the station by 1 durability after the roll,

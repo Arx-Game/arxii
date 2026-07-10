@@ -228,6 +228,7 @@ from actions.definitions.progression_rewards import (
 from actions.definitions.projects import (
     CheckContributeAction,
     DonateToProjectAction,
+    LaunchPropagandaCampaignAction,
     StoryContributeAction,
 )
 from actions.definitions.relationships import (
@@ -336,6 +337,7 @@ _ALL_ACTIONS: list[Action] = [
     DonateToProjectAction(),
     CheckContributeAction(),
     StoryContributeAction(),
+    LaunchPropagandaCampaignAction(),
     SetActivePersonaAction(),
     # #1866 — Places join/leave telnet coverage.
     JoinPlaceAction(),

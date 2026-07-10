@@ -1,7 +1,11 @@
 """RenownAwardConfig — shared authored renown-award knobs (#953).
 
 Abstract base carrying the four inputs `fire_renown_award` consumes, so
-DramaticMomentType and AudereMajoraThreshold don't each re-declare them.
+DramaticMomentType, AudereMajoraThreshold, and the propaganda models (#1621)
+don't each re-declare them. Relocated from world.magic.models (#1621): the
+config belongs beside `fire_renown_award` in societies, and magic already
+imports societies (never the reverse), so consumers in any app can inherit it
+without an import cycle.
 """
 
 from __future__ import annotations

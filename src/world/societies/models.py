@@ -34,6 +34,7 @@ from world.societies.constants import (
     DeedKnowledgeSource,
     FameTier,
 )
+from world.societies.renown_config import RenownAwardConfig
 from world.societies.types import ReputationTier
 
 # Validators for principle fields (-5 to +5 range)
@@ -1868,6 +1869,70 @@ class GangTurfReputationAward(OutcomeTierAward):
 
     def __str__(self) -> str:
         return f"{self.outcome_tier}: +{self.reputation_delta}"
+
+
+class PropagandaCampaignTier(RenownAwardConfig):
+    """An authored propaganda-campaign scale (#1621): coin cost + renown levers.
+
+    Chosen at campaign launch and copied onto the campaign's PropagandaDetails
+    so later tier edits never mutate live campaigns. ``threshold_coppers`` is
+    the money→prestige exchange lever; magnitude/risk/reach/archetypes come
+    from the inherited RenownAwardConfig. PLACEHOLDER small/medium/grand rows
+    seeded by the ``propaganda`` cluster.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    threshold_coppers = models.PositiveIntegerField(
+        help_text="Total funding (coppers) required to complete a campaign at this scale.",
+    )
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive tiers disappear from the launch picker without deleting history.",
+    )
+
+    class Meta:
+        ordering = ["display_order", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.threshold_coppers}c)"
+
+
+class PropagandaDetails(RenownAwardConfig):
+    """Per-(PROPAGANDA Project) payload (#1621): the sponsor's renown award config.
+
+    The only sanctioned project→fame path: ``resolve_propaganda_project`` fires
+    ``fire_renown_award`` for the project's ``owner_persona`` with this row's
+    inherited config (copied from the chosen tier at launch; the sponsor's orgs
+    benefit via the existing membership-inflow stream). ``renown_fired`` guards
+    handler idempotence — a completed campaign never re-fires.
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="propaganda_details",
+        primary_key=True,
+    )
+    campaign_name = models.CharField(
+        max_length=200,
+        help_text="Sponsor-authored campaign title; becomes the renown deed's title.",
+    )
+    source_tier = models.ForeignKey(
+        PropagandaCampaignTier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="campaigns",
+        help_text="Provenance: the tier this campaign's config was copied from.",
+    )
+    renown_fired = models.BooleanField(
+        default=False,
+        help_text="Set by the kind handler after fire_renown_award; guards re-fires.",
+    )
+
+    def __str__(self) -> str:
+        return f"PropagandaDetails for {self.project}"
 
 
 # ---------------------------------------------------------------------------

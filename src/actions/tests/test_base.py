@@ -178,6 +178,7 @@ class ActionRegistryTests(TestCase):
             "project_donate",
             "project_check",
             "project_story",
+            "launch_propaganda_campaign",
             "put_in",
             "take_out",
             "steal",

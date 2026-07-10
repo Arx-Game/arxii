@@ -111,9 +111,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     TextField — the officiant's authored ceremonial words; public, non-spoiler).
     Seeded alongside the Ritual of the Durance via `RitualLiturgyFactory`.
   - **Audere Majora + legend-deed minting (#953):**
-    `RenownAwardConfig` (abstract base — `models/renown_config.py`; shared by
-    `AudereMajoraThreshold` and `DramaticMomentType`; carries `magnitude` /
-    `risk` / `reach` / `archetypes`; provides `as_renown_award_kwargs()`),
+    `RenownAwardConfig` (abstract base — relocated to
+    `world/societies/renown_config.py` in #1621 so any app can inherit it
+    without a magic import cycle; shared by `AudereMajoraThreshold`,
+    `DramaticMomentType`, and the societies propaganda models; carries
+    `magnitude` / `risk` / `reach` / `archetypes`; provides
+    `as_renown_award_kwargs()`),
     `AudereMajoraThreshold` (inherits `RenownAwardConfig`; adds `deed_title`
     public field),
     `AudereMajoraCrossing` (inherits `AbstractClassLevelAdvancement` from
@@ -1775,8 +1778,10 @@ Structural rule-tree evaluator + leaf-resolver registry. Consumers: missions
 
 ### Projects (delayed multi-tick endeavors)
 Project framework: kind-discriminated long-running endeavors with contributions and
-outcome rolls. Kinds: BUILDING_CONSTRUCTION, ROOM_FEATURE_PROGRESSION, RESEARCH, and
-RANSOM (#1500).
+outcome rolls. Kinds: BUILDING_CONSTRUCTION, ROOM_FEATURE_PROGRESSION, RESEARCH,
+RANSOM (#1500), and PROPAGANDA (#1621 — the money→prestige sink; the only kind whose
+completion fires a renown award; details/handler owned by `world.societies`, mirroring
+captivity's RANSOM ownership).
 
 - **Models:** `Project` (kind discriminator + status + completion_mode), `Contribution`
   (per-actor per-project contribution log; privacy-aware; `contribution_method` FK on
@@ -1792,10 +1797,19 @@ RANSOM (#1500).
   `project/check`, `project/story`); web via `DonateToProjectAction` /
   `CheckContributeAction` / `StoryContributeAction`.
 - **Instant-completion kinds (#1500):** `register_instant_completion_kind` marks a kind
-  (RANSOM) that resolves the moment its threshold is funded — `maybe_complete_immediately`
-  fires the kind handler post-contribution instead of waiting for the cron resolver. (The
-  generic RESOLVING→COMPLETED cron driver is not built yet; `scan_active_projects` only
-  marks projects RESOLVING.)
+  (RANSOM, PROPAGANDA) that resolves the moment its threshold is funded —
+  `maybe_complete_immediately` fires the kind handler post-contribution instead of
+  waiting for the cron resolver. (The generic RESOLVING→COMPLETED cron driver is not
+  built yet; `scan_active_projects` only marks projects RESOLVING.)
+- **Propaganda campaigns (#1621):** `PropagandaCampaignTier` + `PropagandaDetails`
+  (both inherit `RenownAwardConfig`; live in `world/societies/models.py`),
+  `launch_propaganda_campaign` / `resolve_propaganda_project`
+  (`world/societies/propaganda.py`; registered at societies app-ready). The handler
+  fires `fire_renown_award` for `owner_persona` exactly once (`renown_fired` guard),
+  only if the threshold was reached — under-funded deadline resolutions award nothing
+  and refund nothing. `LaunchPropagandaCampaignAction`
+  (key `"launch_propaganda_campaign"`); telnet `project/launch <tier>=<name>` (bare
+  form lists active scales). Seeds: `propaganda` cluster (3 PLACEHOLDER tiers).
 - **Stat definitions:** Project achievement stats are created lazily on first
   contribution (same pattern as combat achievement counters)
 - **Cross-app dependencies:** `world.scenes.Persona`, `societies.Organization`
