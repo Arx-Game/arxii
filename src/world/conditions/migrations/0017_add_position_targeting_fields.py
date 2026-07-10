@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("areas", "0013_blueprintpositionshelter_positionshelter"),
-        ("conditions", "0015_conditiondamageinteraction_narration_snippet"),
+        ("conditions", "0016_conditiontemplate_exploitable_tiers"),
     ]
 
     operations = [
