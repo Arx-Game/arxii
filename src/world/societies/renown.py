@@ -909,6 +909,29 @@ def apply_spread_fame_bump(
     return set_persona_fame(subject, subject.fame_points + bump)
 
 
+def apply_spread_prestige_bump(
+    deed,
+    *,
+    npc_audience: int = 0,
+    success_level: int = 1,
+) -> bool:
+    """#2168 — Grow the deed-subject's PERMANENT prestige on a successful spread.
+
+    Prestige's slow, permanent counterpart to :func:`apply_spread_fame_bump`:
+    fame and prestige spread in similar ways (Apostate's renown model), but
+    prestige is the smaller, non-decaying form. Same ``npc_audience *
+    success_level`` shape as fame; callers pass a *smaller* per-multiplier
+    audience so prestige grows slower than fame. Credits the deed subject via
+    ``award_deed_prestige`` (permanent ``prestige_from_deeds``; unlike fame it
+    never decays). Returns True iff any prestige was awarded.
+    """
+    bump = npc_audience * success_level
+    if bump <= 0 or deed.persona_id is None:
+        return False
+    award_deed_prestige(deed.persona, bump)
+    return True
+
+
 def _covenant_org_ids(org_ids: Sequence[int]) -> set[int]:
     """Return the subset of ``org_ids`` whose Organizations back a Covenant.
 

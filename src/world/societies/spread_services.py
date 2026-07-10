@@ -21,6 +21,9 @@ TIER_PAYOFF: dict[int, float] = {0: 0.0, 1: 0.10, 2: 0.30, 3: 0.60, 4: 1.00}
 
 # Maps a room's activity multiplier to the fame-bump "audience" magnitude.
 _FAME_AUDIENCE_PER_MULTIPLIER = 10
+# Same shape for the prestige bump, but smaller — prestige is the slow, permanent
+# counterpart to fame's fast, decaying spike (#2168). PLACEHOLDER magnitude.
+_PRESTIGE_AUDIENCE_PER_MULTIPLIER = 3
 
 
 def compute_spread_value(*, base_value: int, success_level: int, multiplier: float) -> int:
@@ -257,7 +260,10 @@ def _resolve_spread_tale(action_request, result) -> None:
 
     from world.locations.activity_services import room_activity_band  # noqa: PLC0415
     from world.societies.notifications import notify_spread_event  # noqa: PLC0415
-    from world.societies.renown import apply_spread_fame_bump  # noqa: PLC0415
+    from world.societies.renown import (  # noqa: PLC0415
+        apply_spread_fame_bump,
+        apply_spread_prestige_bump,
+    )
     from world.societies.services import spread_deed  # noqa: PLC0415
 
     deed = action_request.spread_deed_target
@@ -304,6 +310,15 @@ def _resolve_spread_tale(action_request, result) -> None:
     tier_changed = apply_spread_fame_bump(
         deed,
         npc_audience=int(band.multiplier * _FAME_AUDIENCE_PER_MULTIPLIER),
+        success_level=success_level,
+    )
+    # Prestige spreads like fame, as the slow permanent counterpart (#2168): same
+    # traffic-scaled shape, smaller audience, and it never decays. A social hub
+    # (#1694) amplifies it automatically via its traffic boost, exactly as it does
+    # fame — no room_features coupling here.
+    apply_spread_prestige_bump(
+        deed,
+        npc_audience=int(band.multiplier * _PRESTIGE_AUDIENCE_PER_MULTIPLIER),
         success_level=success_level,
     )
     notify_spread_event(deed, fame_tier_changed=tier_changed)
