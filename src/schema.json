@@ -1101,6 +1101,134 @@ paths:
               schema:
                 $ref: '#/components/schemas/BattleDetail'
           description: ''
+  /api/battles/map-blueprints/:
+    get:
+      operationId: battles_map_blueprints_list
+      description: |-
+        Read-only GM staging catalog of reusable battle-map layouts (#2010).
+
+        JUNIOR-trust GMs (or staff) browse this catalog rather than inventing
+        terrain/fortification layouts from scratch when staging a Battle; see
+        ``world.battles.models.BattleMapBlueprint``.
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - battles
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBattleMapBlueprintList'
+          description: ''
+  /api/battles/map-blueprints/{id}/:
+    get:
+      operationId: battles_map_blueprints_retrieve
+      description: |-
+        Read-only GM staging catalog of reusable battle-map layouts (#2010).
+
+        JUNIOR-trust GMs (or staff) browse this catalog rather than inventing
+        terrain/fortification layouts from scratch when staging a Battle; see
+        ``world.battles.models.BattleMapBlueprint``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this battle map blueprint.
+        required: true
+      tags:
+      - battles
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BattleMapBlueprint'
+          description: ''
+  /api/battles/unit-templates/:
+    get:
+      operationId: battles_unit_templates_list
+      description: |-
+        Read-only GM staging catalog of reusable unit stat blocks (#2010).
+
+        JUNIOR-trust GMs (or staff) browse this catalog rather than authoring
+        strength/morale/property/capability values from scratch when staging a
+        Battle; see ``world.battles.models.BattleUnitTemplate``.
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - battles
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBattleUnitTemplateList'
+          description: ''
+  /api/battles/unit-templates/{id}/:
+    get:
+      operationId: battles_unit_templates_retrieve
+      description: |-
+        Read-only GM staging catalog of reusable unit stat blocks (#2010).
+
+        JUNIOR-trust GMs (or staff) browse this catalog rather than authoring
+        strength/morale/property/capability values from scratch when staging a
+        Battle; see ``world.battles.models.BattleUnitTemplate``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this battle unit template.
+        required: true
+      tags:
+      - battles
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BattleUnitTemplate'
+          description: ''
   /api/beats/:
     get:
       operationId: beats_list
@@ -30030,6 +30158,32 @@ components:
       - id
       - name
       - scene_id
+    BattleMapBlueprint:
+      type: object
+      description: Admin-authored, reusable battle-map layout a GM stages a Battle
+        from (#2010).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        is_active:
+          type: boolean
+          description: Inactive blueprints are hidden from the GM staging catalog
+            but not deleted — existing data derived from them may still exist.
+        places:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlueprintBattlePlace'
+          readOnly: true
+      required:
+      - id
+      - name
+      - places
     BattleParticipant:
       type: object
       description: A player character enlisted in the battle, with their public persona
@@ -30232,6 +30386,88 @@ components:
         * `active` - Active
         * `routed` - Routed
         * `destroyed` - Destroyed
+    BattleUnitTemplate:
+      type: object
+      description: Admin-authored, reusable unit stat block a GM stages a Battle from
+        (#2010).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        descriptor:
+          type: string
+          maxLength: 200
+        quality:
+          $ref: '#/components/schemas/QualityEnum'
+        strength:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        morale:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        individual_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Population data point mirroring BattleUnit.individual_count
+            — null means 'not a swarm-style unit'.
+        is_active:
+          type: boolean
+          description: Inactive templates are hidden from the GM staging catalog but
+            not deleted.
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattleUnitTemplateProperty'
+          readOnly: true
+        capability_values:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattleUnitTemplateCapability'
+          readOnly: true
+      required:
+      - capability_values
+      - id
+      - name
+      - properties
+    BattleUnitTemplateCapability:
+      type: object
+      description: An authored (template, capability) -> magnitude row, with the capability's
+        name.
+      properties:
+        capability_id:
+          type: integer
+          readOnly: true
+        capability_name:
+          type: string
+          readOnly: true
+        value:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+      required:
+      - capability_id
+      - capability_name
+    BattleUnitTemplateProperty:
+      type: object
+      description: A Property tag on a BattleUnitTemplate, by name -- never a bare
+        id (#2010).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+      required:
+      - id
+      - name
     Beat:
       type: object
       description: Full serializer for Beat including all Phase 2 predicate config
@@ -30832,6 +31068,71 @@ components:
       - blocked_persona
       - blocker_persona
       - reason
+    BlueprintBattlePlace:
+      type: object
+      description: A named front/zone within a BattleMapBlueprint, with its fortifications.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        terrain_type:
+          $ref: '#/components/schemas/TerrainTypeEnum'
+        movement_cost:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Authored cost carried over onto the staged BattlePlace's own
+            movement_cost — see BattlePlace.movement_cost.
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+        footprint_radius:
+          type: number
+          format: double
+        fortifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlueprintFortification'
+          readOnly: true
+      required:
+      - footprint_radius
+      - fortifications
+      - id
+      - name
+      - x
+      - y
+    BlueprintFortification:
+      type: object
+      description: Catalog-time counterpart to FortificationSerializer (#2010).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/Kind989Enum'
+        max_integrity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Carried over onto the staged Fortification's max_integrity
+            (and starting integrity) — see Fortification.max_integrity.
+        defending_side_role:
+          allOf:
+          - $ref: '#/components/schemas/DefendingSideRoleEnum'
+          description: |-
+            Which staged BattleSide role this structure protects — resolved to a concrete BattleSide when the blueprint is staged onto a Battle.
+
+            * `attacker` - Attacker
+            * `defender` - Defender
+      required:
+      - defending_side_role
+      - id
     BoardPosting:
       type: object
       description: One eligible posting on a board (preview row).
@@ -35130,6 +35431,14 @@ components:
         * `until_used` - Until Used (consumed on trigger)
         * `end_combat` - Until End of Combat
         * `permanent` - Permanent (until removed)
+    DefendingSideRoleEnum:
+      enum:
+      - attacker
+      - defender
+      type: string
+      description: |-
+        * `attacker` - Attacker
+        * `defender` - Defender
     DeliveryEnum:
       enum:
       - pose
@@ -37817,7 +38126,7 @@ components:
           type: integer
           readOnly: true
         kind:
-          $ref: '#/components/schemas/FortificationKindEnum'
+          $ref: '#/components/schemas/Kind989Enum'
         integrity:
           type: integer
           maximum: 32767
@@ -37837,18 +38146,6 @@ components:
       required:
       - defending_side_id
       - id
-    FortificationKindEnum:
-      enum:
-      - wall
-      - gate
-      - battlement
-      - hull
-      type: string
-      description: |-
-        * `wall` - Wall
-        * `gate` - Gate
-        * `battlement` - Battlement
-        * `hull` - Hull
     Friendship:
       type: object
       description: A friend row — the friended character's name + which of your characters
@@ -40851,6 +41148,18 @@ components:
       - summary
       - tale
       - template_name
+    Kind989Enum:
+      enum:
+      - wall
+      - gate
+      - battlement
+      - hull
+      type: string
+      description: |-
+        * `wall` - Wall
+        * `gate` - Gate
+        * `battlement` - Battlement
+        * `hull` - Hull
     KnownSecret:
       type: object
       description: One known secret, from the viewer's side, with locked layers shown
@@ -44519,6 +44828,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BattleList'
+    PaginatedBattleMapBlueprintList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattleMapBlueprint'
+    PaginatedBattleUnitTemplateList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattleUnitTemplate'
     PaginatedBeatList:
       type: object
       required:

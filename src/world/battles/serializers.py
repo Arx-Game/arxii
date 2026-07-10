@@ -16,13 +16,19 @@ from rest_framework import serializers
 
 from world.battles.models import (
     Battle,
+    BattleMapBlueprint,
     BattleParticipant,
     BattlePlace,
     BattleSide,
     BattleUnit,
+    BattleUnitTemplate,
+    BattleUnitTemplateCapability,
     BattleVehicle,
+    BlueprintBattlePlace,
+    BlueprintFortification,
     Fortification,
 )
+from world.mechanics.models import Property
 from world.scenes.constants import PersonaType
 
 
@@ -241,3 +247,98 @@ class BattleDetailSerializer(serializers.ModelSerializer):
         if current is None:
             return None
         return {"number": current.round_number, "status": current.status}
+
+
+class BlueprintFortificationSerializer(serializers.ModelSerializer):
+    """Catalog-time counterpart to FortificationSerializer (#2010)."""
+
+    class Meta:
+        model = BlueprintFortification
+        fields = ["id", "kind", "max_integrity", "defending_side_role"]
+
+
+class BlueprintBattlePlaceSerializer(serializers.ModelSerializer):
+    """A named front/zone within a BattleMapBlueprint, with its fortifications."""
+
+    # DecimalField columns coerced to numbers -- mirrors BattlePlaceSerializer,
+    # since the same battle-map page (a numeric x/y plot) consumes this shape.
+    x = serializers.FloatField()
+    y = serializers.FloatField()
+    footprint_radius = serializers.FloatField()
+    # Sourced from the "cached_fortifications" to_attr the view's Prefetch
+    # populates (world/battles/views.py) -- never the bare "fortifications"
+    # manager, which would re-query.
+    fortifications = BlueprintFortificationSerializer(
+        many=True, read_only=True, source="cached_fortifications"
+    )
+
+    class Meta:
+        model = BlueprintBattlePlace
+        fields = [
+            "id",
+            "name",
+            "terrain_type",
+            "movement_cost",
+            "x",
+            "y",
+            "footprint_radius",
+            "fortifications",
+        ]
+
+
+class BattleMapBlueprintSerializer(serializers.ModelSerializer):
+    """Admin-authored, reusable battle-map layout a GM stages a Battle from (#2010)."""
+
+    # Sourced from the "cached_places" to_attr the view's Prefetch populates.
+    places = BlueprintBattlePlaceSerializer(many=True, read_only=True, source="cached_places")
+
+    class Meta:
+        model = BattleMapBlueprint
+        fields = ["id", "name", "description", "is_active", "places"]
+
+
+class BattleUnitTemplatePropertySerializer(serializers.ModelSerializer):
+    """A Property tag on a BattleUnitTemplate, by name -- never a bare id (#2010)."""
+
+    class Meta:
+        model = Property
+        fields = ["id", "name"]
+
+
+class BattleUnitTemplateCapabilitySerializer(serializers.ModelSerializer):
+    """An authored (template, capability) -> magnitude row, with the capability's name."""
+
+    capability_id = serializers.IntegerField(read_only=True)
+    capability_name = serializers.CharField(source="capability.name", read_only=True)
+
+    class Meta:
+        model = BattleUnitTemplateCapability
+        fields = ["capability_id", "capability_name", "value"]
+
+
+class BattleUnitTemplateSerializer(serializers.ModelSerializer):
+    """Admin-authored, reusable unit stat block a GM stages a Battle from (#2010)."""
+
+    # Sourced from the "cached_properties"/"cached_capability_values" to_attr
+    # the view's Prefetch populates (world/battles/views.py).
+    properties = BattleUnitTemplatePropertySerializer(
+        many=True, read_only=True, source="cached_properties"
+    )
+    capability_values = BattleUnitTemplateCapabilitySerializer(
+        many=True, read_only=True, source="cached_capability_values"
+    )
+
+    class Meta:
+        model = BattleUnitTemplate
+        fields = [
+            "id",
+            "name",
+            "descriptor",
+            "quality",
+            "strength",
+            "morale",
+            "individual_count",
+            "is_active",
+            "properties",
+            "capability_values",
+        ]
