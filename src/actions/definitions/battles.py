@@ -420,6 +420,8 @@ class CreateBattleAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from django.db import transaction  # noqa: PLC0415
+
         from world.battles.exceptions import BattleStagingError  # noqa: PLC0415
         from world.battles.models import BattleMapBlueprint  # noqa: PLC0415
         from world.battles.staging import stage_battle  # noqa: PLC0415
@@ -442,7 +444,7 @@ class CreateBattleAction(Action):
         if blueprint_id is not None:
             try:
                 blueprint = BattleMapBlueprint.objects.get(pk=blueprint_id, is_active=True)
-            except BattleMapBlueprint.DoesNotExist:
+            except (BattleMapBlueprint.DoesNotExist, TypeError, ValueError):
                 return ActionResult(success=False, message=_NO_SUCH_BLUEPRINT)
 
         campaign_story = None
@@ -452,7 +454,7 @@ class CreateBattleAction(Action):
 
             try:
                 campaign_story = Story.objects.get(pk=campaign_story_id)
-            except Story.DoesNotExist:
+            except (Story.DoesNotExist, TypeError, ValueError):
                 return ActionResult(success=False, message="No such story.")
 
         region = None
@@ -462,27 +464,28 @@ class CreateBattleAction(Action):
 
             try:
                 region = Area.objects.get(pk=region_id)
-            except Area.DoesNotExist:
+            except (Area.DoesNotExist, TypeError, ValueError):
                 return ActionResult(success=False, message="No such region.")
 
         try:
-            battle = stage_battle(
-                name=name,
-                risk_level=risk_level,
-                blueprint=blueprint,
-                campaign_story=campaign_story,
-                region=region,
-            )
+            with transaction.atomic():
+                battle = stage_battle(
+                    name=name,
+                    risk_level=risk_level,
+                    blueprint=blueprint,
+                    campaign_story=campaign_story,
+                    region=region,
+                )
+
+                account = resolve_account_or_none(actor)
+                if account is not None:
+                    SceneParticipation.objects.update_or_create(
+                        scene=battle.scene,
+                        account=account,
+                        defaults={"is_gm": True},
+                    )
         except BattleStagingError as exc:
             return ActionResult(success=False, message=exc.user_message)
-
-        account = resolve_account_or_none(actor)
-        if account is not None:
-            SceneParticipation.objects.update_or_create(
-                scene=battle.scene,
-                account=account,
-                defaults={"is_gm": True},
-            )
 
         return ActionResult(
             success=True,
@@ -524,7 +527,7 @@ class StageBattleMapAction(Action):
         battle_id = kwargs.get("battle_id")
         try:
             battle = Battle.objects.select_related("scene").get(pk=battle_id)
-        except Battle.DoesNotExist:
+        except (Battle.DoesNotExist, TypeError, ValueError):
             return ActionResult(success=False, message=_NO_SUCH_BATTLE)
 
         if not _actor_may_gm_battle(actor, battle):
@@ -533,7 +536,7 @@ class StageBattleMapAction(Action):
         blueprint_id = kwargs.get("blueprint_id")
         try:
             blueprint = BattleMapBlueprint.objects.get(pk=blueprint_id, is_active=True)
-        except BattleMapBlueprint.DoesNotExist:
+        except (BattleMapBlueprint.DoesNotExist, TypeError, ValueError):
             return ActionResult(success=False, message=_NO_SUCH_BLUEPRINT)
 
         replace = bool(kwargs.get("replace", False))
@@ -569,7 +572,7 @@ class SpawnBattleUnitsAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(
+    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -586,7 +589,7 @@ class SpawnBattleUnitsAction(Action):
         battle_id = kwargs.get("battle_id")
         try:
             battle = Battle.objects.select_related("scene").get(pk=battle_id)
-        except Battle.DoesNotExist:
+        except (Battle.DoesNotExist, TypeError, ValueError):
             return ActionResult(success=False, message=_NO_SUCH_BATTLE)
 
         if not _actor_may_gm_battle(actor, battle):
@@ -595,13 +598,13 @@ class SpawnBattleUnitsAction(Action):
         template_id = kwargs.get("template_id")
         try:
             template = BattleUnitTemplate.objects.get(pk=template_id, is_active=True)
-        except BattleUnitTemplate.DoesNotExist:
+        except (BattleUnitTemplate.DoesNotExist, TypeError, ValueError):
             return ActionResult(success=False, message=_NO_SUCH_TEMPLATE)
 
         side_id = kwargs.get("side_id")
         try:
             side = BattleSide.objects.get(pk=side_id, battle=battle)
-        except BattleSide.DoesNotExist:
+        except (BattleSide.DoesNotExist, TypeError, ValueError):
             return ActionResult(success=False, message=_NO_SUCH_SIDE)
 
         place = None
@@ -609,10 +612,13 @@ class SpawnBattleUnitsAction(Action):
         if place_id is not None:
             try:
                 place = BattlePlace.objects.get(pk=place_id, battle=battle)
-            except BattlePlace.DoesNotExist:
+            except (BattlePlace.DoesNotExist, TypeError, ValueError):
                 return ActionResult(success=False, message=_NO_SUCH_PLACE)
 
-        count = int(kwargs.get("count") or 1)
+        try:
+            count = int(kwargs.get("count") or 1)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Give a valid count.")
 
         units = spawn_units_from_template(
             template, battle=battle, side=side, place=place, count=count
@@ -663,7 +669,7 @@ class EnlistBattleParticipantAction(Action):
         battle_id = kwargs.get("battle_id")
         try:
             battle = Battle.objects.select_related("scene").get(pk=battle_id)
-        except Battle.DoesNotExist:
+        except (Battle.DoesNotExist, TypeError, ValueError):
             return ActionResult(success=False, message=_NO_SUCH_BATTLE)
 
         if not _actor_may_gm_battle(actor, battle):
@@ -672,13 +678,13 @@ class EnlistBattleParticipantAction(Action):
         character_sheet_id = kwargs.get("character_sheet_id")
         try:
             character_sheet = CharacterSheet.objects.get(pk=character_sheet_id)
-        except CharacterSheet.DoesNotExist:
+        except (CharacterSheet.DoesNotExist, TypeError, ValueError):
             return ActionResult(success=False, message="No such character sheet.")
 
         side_id = kwargs.get("side_id")
         try:
             side = BattleSide.objects.get(pk=side_id, battle=battle)
-        except BattleSide.DoesNotExist:
+        except (BattleSide.DoesNotExist, TypeError, ValueError):
             return ActionResult(success=False, message=_NO_SUCH_SIDE)
 
         place = None
@@ -686,7 +692,7 @@ class EnlistBattleParticipantAction(Action):
         if place_id is not None:
             try:
                 place = BattlePlace.objects.get(pk=place_id, battle=battle)
-            except BattlePlace.DoesNotExist:
+            except (BattlePlace.DoesNotExist, TypeError, ValueError):
                 return ActionResult(success=False, message=_NO_SUCH_PLACE)
 
         if BattleParticipant.objects.filter(

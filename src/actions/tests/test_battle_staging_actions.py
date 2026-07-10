@@ -113,6 +113,26 @@ class CreateBattleActionTests(BattleStagingActionsTestBase):
     def test_blank_name_rejected(self) -> None:
         result = CreateBattleAction().run(self.gm_actor, name="   ")
         self.assertFalse(result.success)
+        self.assertEqual(Battle.objects.count(), 0)
+
+    def test_malformed_blueprint_id_rejected(self) -> None:
+        result = CreateBattleAction().run(
+            self.gm_actor, name="Malformed Blueprint", blueprint_id=""
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(Battle.objects.filter(name="Malformed Blueprint").exists())
+
+    def test_malformed_campaign_story_id_rejected(self) -> None:
+        result = CreateBattleAction().run(
+            self.gm_actor, name="Malformed Story", campaign_story_id=""
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(Battle.objects.filter(name="Malformed Story").exists())
+
+    def test_malformed_region_id_rejected(self) -> None:
+        result = CreateBattleAction().run(self.gm_actor, name="Malformed Region", region_id="")
+        self.assertFalse(result.success)
+        self.assertFalse(Battle.objects.filter(name="Malformed Region").exists())
 
 
 class StageBattleMapActionTests(BattleStagingActionsTestBase):
@@ -156,6 +176,20 @@ class StageBattleMapActionTests(BattleStagingActionsTestBase):
             self.gm_actor, battle_id=999999, blueprint_id=self.blueprint.pk
         )
         self.assertFalse(result.success)
+
+    def test_malformed_battle_id_rejected(self) -> None:
+        result = StageBattleMapAction().run(
+            self.gm_actor, battle_id="", blueprint_id=self.blueprint.pk
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.places.count(), 0)
+
+    def test_malformed_blueprint_id_rejected(self) -> None:
+        result = StageBattleMapAction().run(
+            self.gm_actor, battle_id=self.battle.pk, blueprint_id=""
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.places.count(), 0)
 
 
 class SpawnBattleUnitsActionTests(BattleStagingActionsTestBase):
@@ -221,6 +255,49 @@ class SpawnBattleUnitsActionTests(BattleStagingActionsTestBase):
         )
         self.assertFalse(result.success)
 
+    def test_malformed_battle_id_rejected(self) -> None:
+        result = SpawnBattleUnitsAction().run(
+            self.gm_actor, battle_id="", template_id=self.template.pk, side_id=self.side.pk
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.units.count(), 0)
+
+    def test_malformed_template_id_rejected(self) -> None:
+        result = SpawnBattleUnitsAction().run(
+            self.gm_actor, battle_id=self.battle.pk, template_id="", side_id=self.side.pk
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.units.count(), 0)
+
+    def test_malformed_side_id_rejected(self) -> None:
+        result = SpawnBattleUnitsAction().run(
+            self.gm_actor, battle_id=self.battle.pk, template_id=self.template.pk, side_id=""
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.units.count(), 0)
+
+    def test_malformed_place_id_rejected(self) -> None:
+        result = SpawnBattleUnitsAction().run(
+            self.gm_actor,
+            battle_id=self.battle.pk,
+            template_id=self.template.pk,
+            side_id=self.side.pk,
+            place_id="",
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.units.count(), 0)
+
+    def test_non_numeric_count_rejected(self) -> None:
+        result = SpawnBattleUnitsAction().run(
+            self.gm_actor,
+            battle_id=self.battle.pk,
+            template_id=self.template.pk,
+            side_id=self.side.pk,
+            count="abc",
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.units.count(), 0)
+
 
 class EnlistBattleParticipantActionTests(BattleStagingActionsTestBase):
     def setUp(self) -> None:
@@ -285,6 +362,47 @@ class EnlistBattleParticipantActionTests(BattleStagingActionsTestBase):
             1,
         )
 
+    def test_malformed_battle_id_rejected(self) -> None:
+        result = EnlistBattleParticipantAction().run(
+            self.gm_actor,
+            battle_id="",
+            character_sheet_id=self.recruit_sheet.pk,
+            side_id=self.side.pk,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.participants.count(), 0)
+
+    def test_malformed_character_sheet_id_rejected(self) -> None:
+        result = EnlistBattleParticipantAction().run(
+            self.gm_actor,
+            battle_id=self.battle.pk,
+            character_sheet_id="",
+            side_id=self.side.pk,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.participants.count(), 0)
+
+    def test_malformed_side_id_rejected(self) -> None:
+        result = EnlistBattleParticipantAction().run(
+            self.gm_actor,
+            battle_id=self.battle.pk,
+            character_sheet_id=self.recruit_sheet.pk,
+            side_id="",
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.participants.count(), 0)
+
+    def test_malformed_place_id_rejected(self) -> None:
+        result = EnlistBattleParticipantAction().run(
+            self.gm_actor,
+            battle_id=self.battle.pk,
+            character_sheet_id=self.recruit_sheet.pk,
+            side_id=self.side.pk,
+            place_id="",
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.battle.participants.count(), 0)
+
 
 class CreateStageSpawnEnlistHappyPathTests(BattleStagingActionsTestBase):
     """The full staging pipeline, chained, mutates the expected rows end to end."""
@@ -348,4 +466,11 @@ class BrowseBattleCatalogActionTests(BattleStagingActionsTestBase):
         self.blueprint.save(update_fields=["is_active"])
         result = BrowseBattleCatalogAction().run(self.gm_actor)
         self.assertTrue(result.success, result.message)
+        self.assertNotIn(self.blueprint.name, result.message)
+
+    def test_term_filters_to_matching_template(self) -> None:
+        other_template = BattleUnitTemplateFactory(name="Sellswords", descriptor="Grim Mercenaries")
+        result = BrowseBattleCatalogAction().run(self.gm_actor, term="grim")
+        self.assertTrue(result.success, result.message)
+        self.assertIn(other_template.name, result.message)
         self.assertNotIn(self.blueprint.name, result.message)
