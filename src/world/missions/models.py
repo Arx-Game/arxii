@@ -356,6 +356,17 @@ class MissionNode(SharedMemoryModel):
             "per-option via ``MissionOption.locations``."
         ),
     )
+    target_area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "Target area for AREA location_mode. A room matches when its "
+            "RoomProfile.area is this area or any descendant via AreaClosure."
+        ),
+    )
     max_support = models.PositiveSmallIntegerField(
         default=2,
         help_text=(
