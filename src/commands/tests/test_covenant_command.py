@@ -43,9 +43,11 @@ def _capture(caller: Any) -> str:
 class CmdCovenantEngageTests(TestCase):
     """Engage/disengage subverbs run the real Actions and mutate the DB.
 
-    Uses a risen (non-dormant) BATTLE covenant so can_engage_membership passes.
-    DURANCE covenants require a co-present scene and another active member;
-    BATTLE only requires the covenant to be non-dormant.
+    The bare ``covenant engage`` happy path (DB mutation + success message) is
+    covered by the E2E journey test ``test_covenant_telnet_e2e.py``
+    (``CovenantMembershipRankStanddownTests.test_engage``). These tests retain
+    only the edge cases the journey does NOT cover: engaging by explicit
+    covenant name and the disengage subverb.
     """
 
     @classmethod
@@ -62,24 +64,11 @@ class CmdCovenantEngageTests(TestCase):
             covenant_role=cls.role,
         )
 
-    def test_engage_single_covenant(self) -> None:
-        caller = self.membership.character_sheet.character
-        _run(caller, "engage")
-        self.membership.refresh_from_db()
-        self.assertTrue(self.membership.engaged)
-        caller.msg.assert_called()
-
     def test_engage_by_covenant_name(self) -> None:
         caller = self.membership.character_sheet.character
         _run(caller, "engage The Ashen Pact")
         self.membership.refresh_from_db()
         self.assertTrue(self.membership.engaged)
-
-    def test_engage_sends_success_message(self) -> None:
-        caller = self.membership.character_sheet.character
-        _run(caller, "engage")
-        text = _capture(caller)
-        self.assertIn("engage", text.lower())
 
     def test_disengage_single_covenant(self) -> None:
         from world.covenants.services import set_engaged_membership

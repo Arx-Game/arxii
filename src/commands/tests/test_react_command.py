@@ -1,4 +1,10 @@
-"""Unit tests for CmdReact parsing + dispatch (#1341)."""
+"""Unit tests for CmdReact parsing + dispatch (#1341).
+
+The happy-path favorite/emoji/kudos/no-scene flows are covered by the E2E
+journey test ``test_reaction_journey_e2e.py``. These tests retain only the
+edge cases the journey does NOT cover: the entrance-window + resonance
+reaction, and the bare ``react`` hub listing.
+"""
 
 from __future__ import annotations
 
@@ -79,31 +85,6 @@ class CmdReactTests(TestCase):
     def _output(self) -> str:
         return " ".join(str(c[0][0]) for c in self.actor.msg.call_args_list if c[0])
 
-    def test_react_favorite_toggles_on(self) -> None:
-        self._run(f"favorite {self.target.name} #1")
-        from world.scenes.models import InteractionFavorite
-
-        self.assertEqual(InteractionFavorite.objects.count(), 1)
-
-    def test_react_favorite_toggles_off(self) -> None:
-        self._run(f"favorite {self.target.name} #1")
-        self._run(f"favorite {self.target.name} #1")
-        from world.scenes.models import InteractionFavorite
-
-        self.assertEqual(InteractionFavorite.objects.count(), 0)
-
-    def test_react_emoji_toggles(self) -> None:
-        self._run(f"emoji {self.target.name} #1 \U0001f389")
-        from world.scenes.models import InteractionReaction
-
-        self.assertEqual(InteractionReaction.objects.count(), 1)
-
-    def test_react_kudos_lazy_open(self) -> None:
-        self._run(f"kudos {self.target.name} #1")
-        from world.scenes.models import WindowReaction
-
-        self.assertEqual(WindowReaction.objects.count(), 1)
-
     def test_react_entrance_window(self) -> None:
         # Make an entry pose (auto-opens an entrance window on submit, but the
         # factory bypasses that, so open it explicitly):
@@ -129,14 +110,3 @@ class CmdReactTests(TestCase):
         self._run("")
         out = self._output().lower()
         self.assertIn("react", out)  # usage / hub content present
-
-    def test_react_no_active_scene_errors(self) -> None:
-        empty_room = ObjectDB.objects.create(
-            db_key="EmptyRoom", db_typeclass_path="typeclasses.rooms.Room"
-        )
-        self.actor.location = empty_room
-        self.actor.save()
-        self.actor.msg.reset_mock()
-        self._run(f"favorite {self.target.name} #1")
-        out = self._output().lower()
-        self.assertIn("scene", out)
