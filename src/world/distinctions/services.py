@@ -124,6 +124,11 @@ def grant_distinction(
     ``rank <= current.rank``); monotonic, matching the "rank-down never claws back" ethos
     already established by ``reconcile_distinction_resonance_grants``.
 
+    ``origin`` records the distinction's ORIGINAL acquisition provenance and is never
+    rewritten by a rank-up — a GM re-award of an endorsement-earned distinction keeps
+    ``ENDORSEMENT_THRESHOLD``. Deliberate (#2037 review): provenance is first-acquisition
+    history, not latest touch.
+
     Internally: mutual/variant exclusion check (raises ``DistinctionExclusionError``) ->
     branch on existing ``CharacterDistinction`` -> create
     (``world.mechanics.services.create_distinction_modifiers``) or bump-and-recalculate
