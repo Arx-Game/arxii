@@ -1,4 +1,10 @@
-"""Dispatch tests for clash-contribution ActionRefs."""
+"""Dispatch tests for clash-contribution ActionRefs.
+
+The happy-path clash declaration (writes ``ClashContributionDeclaration``) is
+covered by the E2E journey test ``test_combat_clash_telnet_e2e.py``. These
+tests retain only the error-path edge cases the journey does NOT cover:
+forged clash/technique IDs and missing technique_id kwarg.
+"""
 
 from django.test import TestCase
 
@@ -24,43 +30,6 @@ class ClashContributionDispatchTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.config = ClashConfigFactory()
-
-    def test_dispatch_writes_clash_contribution_declaration(self) -> None:
-        encounter = CombatEncounterFactory(
-            status=RoundStatus.DECLARING,
-            round_number=1,
-        )
-        sheet = CharacterSheetFactory()
-        participant = CombatParticipantFactory(
-            encounter=encounter,
-            character_sheet=sheet,
-        )
-        clash = ClashFactory(encounter=encounter, status=ClashStatus.ACTIVE)
-        technique = TechniqueFactory()
-
-        # Clash ActionRef carries clash_id + clash_action_slot only.
-        # technique_id lives in kwargs (the per-dispatch backend parameters),
-        # not in the ref — ActionRef.__post_init__ disallows both being set
-        # on a clash ref.
-        ref = ActionRef(
-            backend=ActionBackend.COMBAT,
-            clash_id=clash.pk,
-            clash_action_slot=ClashActionSlot.FOCUSED,
-        )
-
-        result = dispatch_player_action(
-            character=participant.character_sheet.character,
-            ref=ref,
-            kwargs={
-                "technique_id": technique.pk,
-                "strain_commitment": 2,
-            },
-        )
-
-        self.assertTrue(result.deferred)
-        decl = ClashContributionDeclaration.objects.get(participant=participant, clash=clash)
-        self.assertEqual(decl.technique_id, technique.pk)
-        self.assertEqual(decl.strain_commitment, 2)
 
     def test_forged_clash_id_raises_unknown_action_ref(self) -> None:
         """A clash_id that doesn't belong to the character's encounter is rejected."""

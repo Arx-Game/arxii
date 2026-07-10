@@ -1,4 +1,10 @@
-"""Tests for WeaveThreadAction — the action.run() seam over weave_thread (#1337)."""
+"""Tests for WeaveThreadAction — the action.run() seam over weave_thread (#1337).
+
+The happy-path weave (thread created + pending effect consumed) is covered by
+the E2E journey test ``test_weave_imbue_pull_journey_e2e.py`` (Step 2). These
+tests retain only the failure-path edge cases the journey does NOT cover:
+missing unlock, missing pending effect, and unsupported GIFT resonance.
+"""
 
 from __future__ import annotations
 
@@ -32,40 +38,6 @@ class WeaveThreadActionTests(TestCase):
     def setUp(self) -> None:
         # Each test needs a fresh PendingRitualEffect since the action consumes it.
         PendingRitualEffect.objects.get_or_create(character=self.sheet, ritual=self.weaving_ritual)
-
-    def test_run_creates_thread_and_returns_it_in_data(self) -> None:
-        action = WeaveThreadAction()
-        result = action.run(
-            actor=self.sheet.character,
-            target_kind=TargetKind.TRAIT,
-            target=self.trait,
-            resonance=self.resonance,
-            name="Test Weave",
-        )
-        self.assertTrue(result.success, result.message)
-        thread = result.data["thread"]
-        self.assertEqual(thread.owner, self.sheet)
-        self.assertEqual(thread.resonance, self.resonance)
-
-    def test_run_consumes_pending_effect_on_success(self) -> None:
-        action = WeaveThreadAction()
-        self.assertTrue(
-            PendingRitualEffect.objects.filter(
-                character=self.sheet, ritual=self.weaving_ritual
-            ).exists()
-        )
-        result = action.run(
-            actor=self.sheet.character,
-            target_kind=TargetKind.TRAIT,
-            target=self.trait,
-            resonance=self.resonance,
-        )
-        self.assertTrue(result.success, result.message)
-        self.assertFalse(
-            PendingRitualEffect.objects.filter(
-                character=self.sheet, ritual=self.weaving_ritual
-            ).exists()
-        )
 
     def test_run_returns_failure_when_unlock_missing(self) -> None:
         other_sheet = CharacterSheetFactory()

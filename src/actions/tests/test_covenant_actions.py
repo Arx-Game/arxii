@@ -1,3 +1,11 @@
+"""Tests for covenant Actions (#1346).
+
+The happy-path engage is covered by the E2E journey test
+``test_covenant_telnet_e2e.py`` (``CovenantMembershipRankStanddownTests.test_engage``).
+These tests retain only the edge cases the journey does NOT cover: engaging a
+dormant covenant, and kicking a member of equal or higher rank.
+"""
+
 from django.test import TestCase
 
 from actions.definitions.covenants import (
@@ -28,21 +36,9 @@ class CovenantActionTests(TestCase):
         )
         cls.role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
         cls.top = CovenantRankFactory(covenant=cls.covenant, tier=1, can_kick=True)
-        cls.low = CovenantRankFactory(covenant=cls.covenant, tier=2)
         cls.officer = CharacterCovenantRoleFactory(
             covenant=cls.covenant, covenant_role=cls.role, rank=cls.top
         )
-        cls.member = CharacterCovenantRoleFactory(
-            covenant=cls.covenant, covenant_role=cls.role, rank=cls.low
-        )
-
-    def test_engage_succeeds(self):
-        result = EngageCovenantMembershipAction().run(
-            actor=self.member.character_sheet.character, membership=self.member
-        )
-        self.member.refresh_from_db()
-        self.assertTrue(result.success)
-        self.assertTrue(self.member.engaged)
 
     def test_engage_dormant_battle_covenant_fails(self):
         """Engaging a dormant BATTLE covenant returns failure — gate protects the rise ceremony."""
@@ -55,6 +51,7 @@ class CovenantActionTests(TestCase):
         dormant_membership = CharacterCovenantRoleFactory(
             covenant=dormant_covenant, covenant_role=dormant_role
         )
+
         result = EngageCovenantMembershipAction().run(
             actor=dormant_membership.character_sheet.character,
             membership=dormant_membership,
