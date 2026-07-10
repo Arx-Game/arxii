@@ -812,6 +812,12 @@ resonance picker remains a needs-design follow-up. Proven end-to-end by
 **API surfaces (`views.py`):**
 - `PoseEndorsementViewSet` - POST /api/magic/pose-endorsements/ + DELETE-if-unsettled
 - `SceneEntryEndorsementViewSet` - POST-only (delete deferred with ResonanceGrantReversal)
+- `StylePresentationEndorsementViewSet` - POST /api/magic/style-presentation-endorsements/ +
+  GET detail (create + retrieve only; immutable, no delete/settlement). Frontend caller
+  (#2031): `EndorsementControl` (`kind='style'`, `frontend/src/scenes/components/`), mounted
+  in `PoseUnit` alongside the pose/entry kinds. Endorsed-✓ has no persisted per-viewer flag on
+  the `Interaction` payload (unlike entry's `entry_endorsed_by_me`), so the control derives it
+  from the create-mutation's own `isSuccess` for the session.
 - `ResonanceGrantViewSet` - Read-only, user-scoped. FilterSet on source/resonance/date range.
 
 **Telnet surfaces (`commands/endorse.py`, `commands/fashion.py` — #1340):**

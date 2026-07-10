@@ -180,7 +180,9 @@ describe('RelationshipsSection', () => {
 
   describe('Writeups sub-section', () => {
     it('renders nothing when there are no writeups', () => {
-      vi.mocked(useMyWriteups).mockReturnValue({ data: [] } as ReturnType<typeof useMyWriteups>);
+      vi.mocked(useMyWriteups).mockReturnValue({
+        data: [],
+      } as unknown as ReturnType<typeof useMyWriteups>);
 
       render(<RelationshipsSection isMyCharacter characterSheetId={42} />, {
         wrapper: createWrapper(),
