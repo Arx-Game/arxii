@@ -321,62 +321,73 @@ def _summon_military_unit(*, payload: Any) -> None:
 
 
 def move_position_on_condition(*, payload: Any, destination_position_id: int) -> None:
-    """CONDITION_APPLIED adapter: relocate ``payload.target`` to a seeded destination.
+    """CONDITION_APPLIED adapter: relocate payload.target to its cast-time destination.
 
-    Bridges the CONDITION_APPLIED payload shape to ``move_position``, which expects
-    ``payload.target`` (the objectdb to move) and ``payload.destination_position_id``
-    (the target Position pk).
+    Reads the destination from payload.instance.cast_destination (set by the cast
+    pipeline via position_params, #2019). Falls back to the static
+    destination_position_id step param for backward compatibility (the placeholder
+    is 0, so this is a no-op when no cast-time destination was set).
 
-    Used by the teleport (Phase Jump, SELF) and telekinesis (Force Grip, ENEMY) effect
-    bundles.  For SELF conditions ``payload.target`` is the caster; for ENEMY conditions
-    it is the enemy objectdb.
-
-    Note — ``destination_position_id`` is seeded as a placeholder (0) in the flow step.
-    Runtime destination selection (cast-time target picker) is a follow-up; until then
-    an unresolved placeholder makes the cast a **no-op** rather than crashing on a
-    ``Position(pk=0)`` lookup (the placeholder pk does not exist).
+    Used by the teleport (Phase Jump, SELF) and telekinesis (Force Grip, ENEMY)
+    effect bundles. For SELF conditions payload.target is the caster; for ENEMY
+    conditions it is the enemy objectdb.
     """
     from types import SimpleNamespace  # noqa: PLC0415
 
-    if destination_position_id <= 0:
-        return  # unresolved placeholder destination — no-op until runtime selection ships
+    # #2019: Prefer the cast-time destination on the instance.
+    try:
+        instance = payload.instance
+    except AttributeError:
+        instance = None
+    if instance is not None and instance.cast_destination_id is not None:
+        destination_pk = instance.cast_destination_id
+    elif destination_position_id > 0:
+        destination_pk = destination_position_id
+    else:
+        return  # no destination resolved — no-op
 
     move_position(
         payload=SimpleNamespace(
             target=payload.target,
-            destination_position_id=destination_position_id,
+            destination_position_id=destination_pk,
         )
     )
 
 
 def create_obstacle_on_condition(
     *,
-    payload: Any,  # noqa: ARG001
+    payload: Any,
     position_a_id: int,
     position_b_id: int,
 ) -> None:
-    """CONDITION_APPLIED adapter: seal the edge between two positions.
+    """CONDITION_APPLIED adapter: seal the edge between two cast-time positions.
 
-    Bridges the CONDITION_APPLIED payload shape to ``create_obstacle``, which
-    expects ``payload.position_a_id`` and ``payload.position_b_id`` (the two
-    adjacent Position pks to seal).  ``payload.target`` (the caster) is not
-    forwarded — ``create_obstacle`` only needs the position IDs.
+    Reads the positions from payload.instance.cast_position_a / cast_position_b
+    (set by the cast pipeline via position_params, #2019). Falls back to the
+    static step params for backward compatibility.
 
     Used by the obstacle (Barricade, SELF) effect bundle.
-
-    Note — ``position_a_id`` / ``position_b_id`` are seeded as placeholders (0, 0).
-    Runtime position selection is a follow-up; until then an unresolved placeholder
-    makes the cast a **no-op** rather than crashing on a ``Position(pk=0)`` lookup.
     """
     from types import SimpleNamespace  # noqa: PLC0415
 
-    if position_a_id <= 0 or position_b_id <= 0:
-        return  # unresolved placeholder positions — no-op until runtime selection ships
+    # #2019: Prefer the cast-time positions on the instance.
+    try:
+        instance = payload.instance
+    except AttributeError:
+        instance = None
+    if instance is not None and instance.cast_position_a_id is not None:
+        pos_a_pk = instance.cast_position_a_id
+        pos_b_pk = instance.cast_position_b_id
+    elif position_a_id > 0 and position_b_id > 0:
+        pos_a_pk = position_a_id
+        pos_b_pk = position_b_id
+    else:
+        return  # no positions resolved — no-op
 
     create_obstacle(
         payload=SimpleNamespace(
-            position_a_id=position_a_id,
-            position_b_id=position_b_id,
+            position_a_id=pos_a_pk,
+            position_b_id=pos_b_pk,
         )
     )
 
