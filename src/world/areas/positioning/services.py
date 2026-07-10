@@ -526,6 +526,100 @@ def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
     ]
 
 
+@dataclass(frozen=True)
+class PositionNode:
+    """One node in the tactical-map graph (#2006) — kind, elevation, and layout."""
+
+    id: int
+    name: str
+    kind: str
+    elevation_anchor_id: int | None
+    layout_x: int | None
+    layout_y: int | None
+
+
+@dataclass(frozen=True)
+class PositionEdgeInfo:
+    """One edge in the tactical-map graph (#2006) — obstacle/gate visibility.
+
+    Unlike PositionAdjacency (the ADJACENT-reach graph), this carries every
+    edge regardless of is_passable, plus the gating challenge's public name.
+    """
+
+    position_a_id: int
+    position_b_id: int
+    is_passable: bool
+    blocks_flight: bool
+    gating_challenge_name: str | None
+
+
+@dataclass(frozen=True)
+class PositionGraph:
+    """The full node+edge graph for one room's tactical map (#2006)."""
+
+    nodes: list[PositionNode] = field(default_factory=list)
+    edges: list[PositionEdgeInfo] = field(default_factory=list)
+
+
+def _position_node(position: Position) -> PositionNode:
+    return PositionNode(
+        id=position.pk,
+        name=position.name,
+        kind=position.kind,
+        elevation_anchor_id=position.elevation_anchor_id,
+        layout_x=position.layout_x,
+        layout_y=position.layout_y,
+    )
+
+
+def _position_edge_info(edge: PositionEdge) -> PositionEdgeInfo:
+    gating_name = edge.gating_challenge.template.name if edge.gating_challenge_id else None
+    return PositionEdgeInfo(
+        position_a_id=edge.position_a_id,
+        position_b_id=edge.position_b_id,
+        is_passable=edge.is_passable,
+        blocks_flight=edge.blocks_flight,
+        gating_challenge_name=gating_name,
+    )
+
+
+def position_graph(room: ObjectDB) -> PositionGraph:
+    """Return the full node+edge graph for *room* — the tactical map's data (#2006).
+
+    Unlike ``room_position_adjacency`` (the ADJACENT-reach graph, which drops
+    impassable edges and ignores gating), this returns every position and
+    every edge, with is_passable/blocks_flight/gating_challenge_name intact,
+    for obstacle/gate visibility.
+
+    When called via a viewset whose queryset prefetches ``room.positions_cached``
+    with each position's full edge set onto ``all_edges_as_a`` (a
+    ``Prefetch(to_attr=...)``), this function builds the graph in-memory with
+    zero extra queries. Falls back to 2 queries otherwise (positions + edges).
+
+    Because edges are stored canonically (position_a.pk < position_b.pk),
+    collecting only each position's edges_as_a across the whole room's
+    position set yields every edge exactly once — no dedup needed.
+    """
+    positions_cached = getattr(room, "positions_cached", None)  # noqa: GETATTR_LITERAL
+    if positions_cached is not None:
+        positions = sorted(positions_cached, key=lambda p: p.pk)
+        nodes = [_position_node(p) for p in positions]
+        edges = [
+            _position_edge_info(edge)
+            for p in positions
+            for edge in getattr(p, "all_edges_as_a", [])  # noqa: GETATTR_LITERAL
+        ]
+        return PositionGraph(nodes=nodes, edges=edges)
+
+    positions = list(Position.objects.filter(room=room).order_by("pk"))
+    nodes = [_position_node(p) for p in positions]
+    raw_edges = PositionEdge.objects.filter(position_a__room=room).select_related(
+        "gating_challenge__template"
+    )
+    edges = [_position_edge_info(edge) for edge in raw_edges]
+    return PositionGraph(nodes=nodes, edges=edges)
+
+
 def adjacent_open_positions(position: Position) -> list[PositionEdge]:
     """Return edges to adjacent passable, unblocked positions.
 
