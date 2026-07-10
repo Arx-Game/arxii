@@ -72,7 +72,7 @@ fi
 # 3. Infer type from labels
 LABELS=$(jq -r '.labels[].name' <<<"$ISSUE_JSON")
 TYPE=""
-for candidate in feature fix chore refactor test tests docs perf performance tech-debt; do
+for candidate in feature fix chore refactor test tests docs perf performance tech-debt tooling; do
   if grep -qx "$candidate" <<<"$LABELS"; then
     TYPE="$candidate"
     break
@@ -85,7 +85,7 @@ fi
 if [[ "$TYPE" == "tests" ]]; then
   TYPE="test"
 fi
-if [[ "$TYPE" == "tech-debt" ]]; then
+if [[ "$TYPE" == "tech-debt" || "$TYPE" == "tooling" ]]; then
   TYPE="chore"
 fi
 if [[ -z "$TYPE" ]]; then
@@ -103,10 +103,15 @@ for spec in \
   name="${spec%%|*}"; rest="${spec#*|}"; color="${rest%%|*}"; desc="${rest##*|}"
   gh label create "$name" --color "$color" --description "$desc" --force >/dev/null 2>&1 || true
 done
-# Claim: assign self and move to the spec-draft lane (drop legacy status:in-progress).
+# Claim: assign self and move to the spec-draft lane. Strip any OTHER status:*
+# lane first so the lane is idempotent — a re-pickup or a manually-labeled issue
+# can already carry status:spec-review / status:implementing / status:in-progress,
+# and stacking lanes confuses the project board (#2060).
 gh issue edit "$ISSUE" --add-assignee "$CURRENT_USER" >/dev/null
+for stale in status:spec-review status:implementing status:in-progress; do
+  gh issue edit "$ISSUE" --remove-label "$stale" >/dev/null 2>&1 || true
+done
 gh issue edit "$ISSUE" --add-label "status:spec-draft" >/dev/null
-gh issue edit "$ISSUE" --remove-label "status:in-progress" >/dev/null 2>&1 || true
 
 # 5. Build slug
 TITLE=$(jq -r '.title' <<<"$ISSUE_JSON")
@@ -125,7 +130,12 @@ git fetch origin main --quiet
 # Idempotent: reuse the branch if a prior start-work.sh run already created it
 # (re-invocation), instead of failing. Safe — the branch is still based on
 # origin/main only when first created.
-git show-ref --verify --quiet "refs/heads/$BRANCH" || git branch "$BRANCH" origin/main
+#
+# `git branch <name> origin/main` prints "branch '<name>' set up to track
+# 'origin/main'." to STDOUT — which would pollute this script's JSON contract and
+# crash the caller's jq ("Invalid numeric literal at line 1, column 7"). Route
+# that human notice to stderr so stdout stays JSON-only (#2060 root cause).
+git show-ref --verify --quiet "refs/heads/$BRANCH" || git branch "$BRANCH" origin/main >&2
 
 # 7. Emit JSON (includes model recommendation from complexity:* label)
 URL=$(jq -r '.url' <<<"$ISSUE_JSON")
@@ -142,7 +152,9 @@ case "$COMPLEXITY" in
   "complexity:low")    MODEL="${ISSUE_MODEL_LOW:-claude-sonnet-4-6}" ;;
   *)                   MODEL="" ;;
 esac
-jq -n \
+# Compact (single-line) JSON: the contract is one stdout line, so a caller can
+# safely take the last line and validate it (#2060 belt-and-suspenders).
+jq -nc \
   --arg type "$TYPE" \
   --arg slug "$SLUG" \
   --arg branch "$BRANCH" \

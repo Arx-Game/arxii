@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync-with-main.sh <branch>
+# sync-with-main.sh <branch> [worktree-path]
 #
 # Fetches origin/main and integrates it into the named branch. Strategy
 # depends on whether the branch has already been pushed to origin:
@@ -11,6 +11,12 @@
 #   fast-forward and doesn't need `--force-with-lease` (which requires
 #   user approval in restricted environments).
 #
+# **Cwd-independent (#2060):** the sync runs inside the branch's own worktree,
+# located via `git worktree list` (or given explicitly as the 2nd arg), NOT by
+# `git checkout <branch>` in the caller's cwd. The old checkout approach mutated
+# whichever checkout the caller stood in and failed when the branch was already
+# checked out in a worktree.
+#
 # On conflict: emits JSON listing conflicted files, conflict symbols
 # (function/class names extracted from `git diff --unified=0` hunk headers
 # against origin/main), and any open issues whose body/comments
@@ -19,36 +25,59 @@
 #
 # Exits:
 #   0  sync succeeded with no conflicts (no JSON emitted)
-#   1  usage / generic error
+#   1  usage / generic error (incl. branch not checked out in any worktree)
 #   4  sync produced conflicts (JSON emitted to stdout; sync left in progress)
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <branch>" >&2
+  echo "Usage: $0 <branch> [worktree-path]" >&2
   exit 1
 }
 
-[[ $# -eq 1 ]] || usage
+[[ $# -ge 1 && $# -le 2 ]] || usage
 BRANCH="$1"
+EXPLICIT_WT="${2:-}"
 
-git fetch origin --quiet
-git checkout "$BRANCH" --quiet
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Sourced at runtime via $SCRIPT_DIR; shellcheck can't resolve the dynamic path.
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_wt-helpers.sh"
+
+# Locate the branch's worktree (explicit arg wins). All working-tree git ops
+# then run there via g(), so the caller's cwd never matters.
+if [[ -n "$EXPLICIT_WT" ]]; then
+  WT="$EXPLICIT_WT"
+  [[ -d "$WT" ]] || { echo "ERROR: worktree path does not exist: $WT" >&2; exit 1; }
+else
+  WT=$(wt_for_branch "$BRANCH")
+fi
+if [[ -z "$WT" ]]; then
+  echo "ERROR: branch '$BRANCH' is not checked out in any worktree." >&2
+  echo "The issue-to-merged-pr flow creates one via start-work.sh; run sync from there," >&2
+  echo "pass the worktree path as the 2nd arg, or add one:" >&2
+  echo "  git worktree add .claude/worktrees/$BRANCH $BRANCH" >&2
+  exit 1
+fi
+g() { git -C "$WT" "$@"; }
+
+g fetch origin --quiet
+# No `checkout` — the worktree is already on $BRANCH.
 
 # Decide rebase vs merge based on whether the branch is published.
-if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+if g ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
   SYNC_STRATEGY="merge"
-  if git merge origin/main --no-edit; then
+  if g merge origin/main --no-edit; then
     exit 0
   fi
 else
   SYNC_STRATEGY="rebase"
-  if git rebase origin/main; then
+  if g rebase origin/main; then
     exit 0
   fi
 fi
 
 # Conflicts present. Collect conflicted files.
-CONFLICTS=$(git diff --name-only --diff-filter=U)
+CONFLICTS=$(g diff --name-only --diff-filter=U)
 
 # Collect conflict symbols from hunk headers vs origin/main.
 # `git diff --unified=0 origin/main -- <file>` emits hunks with headers like
@@ -56,7 +85,7 @@ CONFLICTS=$(git diff --name-only --diff-filter=U)
 SYMBOLS=""
 while IFS= read -r f; do
   [[ -z "$f" ]] && continue
-  HUNK_SYMBOLS=$(git diff --unified=0 origin/main -- "$f" 2>/dev/null \
+  HUNK_SYMBOLS=$(g diff --unified=0 origin/main -- "$f" 2>/dev/null \
     | grep -oE '@@[^@]+@@ .*' \
     | sed 's/^@@[^@]*@@ //' \
     | grep -oE '(def|class|function)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' \
