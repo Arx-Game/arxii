@@ -10,9 +10,11 @@ from world.gm.models import (
     GMLevelCap,
     GMLevelChange,
     GMProfile,
+    GMRewardConfig,
     GMRosterInvite,
     GMTable,
     GMTableMembership,
+    GMWeeklyRewardTracker,
     SituationDifficultyGuide,
     SituationKind,
 )
@@ -136,3 +138,60 @@ class CatalogSuggestionAdmin(admin.ModelAdmin):
     list_filter = ["proposal_kind", "status"]
     raw_id_fields = ["submitted_by", "situation_kind", "reviewer"]
     search_fields = ["proposal_text"]
+
+
+@admin.register(GMRewardConfig)
+class GMRewardConfigAdmin(admin.ModelAdmin):
+    """Admin interface for the GM Story Reward's tunable award values (#2123)."""
+
+    list_display = [
+        "beat_xp_per_player",
+        "beat_xp_cap",
+        "episode_xp_per_player",
+        "episode_xp_cap",
+        "story_completion_xp_per_player",
+        "story_completion_xp_cap",
+        "weekly_reward_cap",
+        "feedback_xp_per_rating_point",
+    ]
+
+    fieldsets = (
+        (
+            "Beat mark",
+            {"fields": ("beat_xp_per_player", "beat_xp_cap")},
+        ),
+        (
+            "Episode resolution",
+            {"fields": ("episode_xp_per_player", "episode_xp_cap")},
+        ),
+        (
+            "Story completion",
+            {"fields": ("story_completion_xp_per_player", "story_completion_xp_cap")},
+        ),
+        (
+            "Story feedback",
+            {"fields": ("feedback_xp_per_rating_point",)},
+        ),
+        (
+            "Weekly ceiling",
+            {"fields": ("weekly_reward_cap",)},
+        ),
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        """Singleton — no adding a second row via admin."""
+        return not GMRewardConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        """Singleton — never delete the row (services rely on it existing)."""
+        return False
+
+
+@admin.register(GMWeeklyRewardTracker)
+class GMWeeklyRewardTrackerAdmin(admin.ModelAdmin):
+    """Admin interface for the per-GM weekly reward ledger (#2123). Read-only audit."""
+
+    list_display = ["gm_profile", "game_week", "xp_awarded_this_week"]
+    list_filter = ["game_week"]
+    raw_id_fields = ["gm_profile", "game_week"]
+    search_fields = ["gm_profile__account__username"]

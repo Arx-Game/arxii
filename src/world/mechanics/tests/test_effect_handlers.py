@@ -17,6 +17,9 @@ from world.checks.types import ResolutionContext
 from world.combat.interpose_content import ensure_interpose_content
 from world.conditions.factories import ConditionTemplateFactory, DamageTypeFactory
 from world.conditions.models import ConditionInstance
+from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.distinctions.models import CharacterDistinction
+from world.distinctions.types import DistinctionOrigin
 from world.mechanics.effect_handlers import _resolve_target, apply_effect
 from world.missions.constants import OptionKind, OptionSource
 from world.missions.factories import (
@@ -416,6 +419,109 @@ class CaptureGroupingTests(TestCase):
         second = self._capture("grp_none_b", scene=None)
 
         assert first.cell_id != second.cell_id
+
+
+class GrantDistinctionHandlerTests(TestCase):
+    """Tests for the GRANT_DISTINCTION effect handler (#2037 Decision 7).
+
+    Mirrors the ADD_PROPERTY handler's shape: this suite proves the seam (dispatch,
+    authored fields, skip paths) — full grant/rank-up mechanics live in
+    world.distinctions.tests.test_services.
+    """
+
+    def _character_with_sheet(self, key: str):
+        character = CharacterFactory(db_key=key)
+        sheet = CharacterSheetFactory(character=character)
+        return character, sheet
+
+    def test_grant_distinction_grants_the_distinction(self) -> None:
+        character, _sheet = self._character_with_sheet("grant_dist_target")
+        distinction = DistinctionFactory(name="Silver Tongue_eff", max_rank=3)
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.GRANT_DISTINCTION,
+            distinction=distinction,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is True
+        cd = CharacterDistinction.objects.get(character=character, distinction=distinction)
+        assert cd.rank == 1
+        assert cd.origin == DistinctionOrigin.CONSEQUENCE_POOL
+
+    def test_null_distinction_rank_steps_the_rank(self) -> None:
+        character, _sheet = self._character_with_sheet("grant_dist_step")
+        distinction = DistinctionFactory(name="Silver Tongue_step", max_rank=3)
+        CharacterDistinctionFactory(character=character, distinction=distinction, rank=1)
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.GRANT_DISTINCTION,
+            distinction=distinction,
+            distinction_rank=None,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is True
+        cd = CharacterDistinction.objects.get(character=character, distinction=distinction)
+        assert cd.rank == 2
+
+    def test_explicit_distinction_rank_sets_that_rank(self) -> None:
+        character, _sheet = self._character_with_sheet("grant_dist_explicit")
+        distinction = DistinctionFactory(name="Silver Tongue_explicit", max_rank=5)
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.GRANT_DISTINCTION,
+            distinction=distinction,
+            distinction_rank=3,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is True
+        cd = CharacterDistinction.objects.get(character=character, distinction=distinction)
+        assert cd.rank == 3
+
+    def test_grant_distinction_skips_without_sheet(self) -> None:
+        bare = CharacterFactory(db_key="no_sheet_grant_dist")
+        distinction = DistinctionFactory(name="Silver Tongue_nosheet")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.GRANT_DISTINCTION,
+            distinction=distinction,
+        )
+        context = ResolutionContext(character=bare)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is False
+        assert result.skip_reason
+        assert not CharacterDistinction.objects.filter(distinction=distinction).exists()
+
+    def test_exclusion_conflict_skips_without_crashing(self) -> None:
+        character, _sheet = self._character_with_sheet("grant_dist_conflict")
+        alpha = DistinctionFactory(name="Alpha_eff")
+        beta = DistinctionFactory(name="Beta_eff")
+        alpha.mutually_exclusive_with.add(beta)
+        CharacterDistinctionFactory(character=character, distinction=alpha, rank=1)
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.GRANT_DISTINCTION,
+            distinction=beta,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is False
+        assert result.skip_reason
+        assert not CharacterDistinction.objects.filter(
+            character=character, distinction=beta
+        ).exists()
 
 
 class EscapeCaptivityHandlerTests(TestCase):

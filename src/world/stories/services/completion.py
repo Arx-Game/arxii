@@ -50,7 +50,35 @@ def complete_story(*, story: Story) -> Story:
         for progress in model.objects.filter(story=story, is_active=True):
             set_progress_status(progress, ProgressStatus.FORECLOSED)
     _dissolve_linked_campaigns(story)
+    _credit_story_completion_reward(story)
     return story
+
+
+def _credit_story_completion_reward(story: Story) -> None:
+    """Credit the story's Lead GM with GM Story Reward XP for completion (#2123).
+
+    The GM of record is ``story.primary_table.gm`` — no caller-supplied
+    ``resolved_by`` parameter exists on ``complete_story`` (staff or the owner
+    triggers completion; the *credited* GM is always the table's own GM, not
+    the completing actor). No-ops when the story is orphaned
+    (``primary_table`` is None).
+    """
+    from world.gm.models import GMRewardConfig  # noqa: PLC0415
+    from world.stories.services.gm_rewards import credit_gm_story_reward  # noqa: PLC0415
+
+    if story.primary_table is None:
+        return
+    gm = story.primary_table.gm
+    config = GMRewardConfig.load()
+    credit_gm_story_reward(
+        resolved_by=gm,
+        scope=story.scope,
+        character_sheet=story.character_sheet,
+        gm_table=story.primary_table,
+        per_player_xp=config.story_completion_xp_per_player,
+        event_cap=config.story_completion_xp_cap,
+        label=f"story '{story.title}' completed",
+    )
 
 
 def _dissolve_linked_campaigns(story: Story) -> None:

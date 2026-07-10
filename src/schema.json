@@ -3821,8 +3821,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Starting Area.
+          type: string
         required: true
       tags:
       - character-creation
@@ -5331,6 +5330,41 @@ paths:
     post:
       operationId: combat_upgrade_combo_create
       description: Upgrade own action to a combo.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
+  /api/combat/{id}/use_item/:
+    post:
+      operationId: combat_use_item_create
+      description: |-
+        Declare using a held on-use item as this round's action (#2023, #2120).
+
+        A primary maneuver with maneuver=USE_ITEM and item_instance set to the
+        named ``ItemInstance`` -- mutually exclusive with a declared focused
+        technique, unlike the passives-only cover/interpose declarations. At
+        most one of ``target_participant_id`` (an ally) / ``target_opponent_id``
+        (an NPC opponent) may be supplied.
       parameters:
       - in: path
         name: id

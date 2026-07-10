@@ -60,6 +60,38 @@ The GM system defines these role relationships; the stories app uses them for pe
 - Anti-abuse tracking: per-GM/per-week caps, unusual patterns flagged to staff
 - Rewards tie into existing XP/codex/kudos systems, not a new reward pipeline
 
+### GM Story Reward — GMs earn XP too ✅ (#2123)
+The section above is about GMs granting rewards *to players*. This one is the opposite
+direction: **GMs earning XP for themselves** by running stories — the incentive engine
+that makes GM-ing pay enough to pull players into GMing for each other (ADR-0109: "XP
+unlocks, never grants" makes XP scarce, so this is the pull). Built:
+
+- `world.gm.services.award_gm_story_reward(*, gm_profile, players_served, per_player_xp,
+  event_cap, description) -> XPTransaction | None` — the single choke point. Never
+  raises (log-and-continue); every convergence point below calls it the same way.
+- Every award value is a proper column on the `GMRewardConfig` singleton (pk=1,
+  `load()`), never a module constant — staff-tunable in admin, seeded via the `gm`
+  cluster seeder: `beat_xp_per_player`/`beat_xp_cap`, `episode_xp_per_player`/
+  `episode_xp_cap`, `story_completion_xp_per_player`/`story_completion_xp_cap`,
+  `weekly_reward_cap`, `feedback_xp_per_rating_point`.
+- `GMWeeklyRewardTracker` (mirrors `journals.WeeklyJournalXP`'s get-or-reset-by-week
+  shape) bounds total award XP per GM per `GameWeek`, regardless of which event kind
+  fired it.
+- Four convergence points, all riding real, reviewable story artifacts — never
+  self-attested activity: a GM-marked beat (`record_gm_marked_outcome`, `resolved_by`
+  param — the actual marking GM, Lead or an approved Assistant GM, never silently the
+  Lead), a resolved episode (`resolve_episode`, alongside the existing
+  `touch_gm_activity` stamp), a completed story (`complete_story`, credits
+  `story.primary_table.gm`), and a positive story-feedback rating on GM performance
+  (`world.stories.services.feedback.submit_story_feedback` — a served participant only,
+  never a spectator; self-feedback already excluded upstream).
+- Award magnitude scales by players served (`world.stories.services.gm_rewards
+  .players_served_for_scope`, capped at 8 for GROUP scope) and event weight (beat <
+  episode < story completion) — never flattened to a boolean. A GM running their own
+  solo CHARACTER-scope arc is a self-dealing no-op.
+- Machine-graded combat/mission outcome tiers (`record_outcome_tier_completion`) never
+  award — that path never passes a GM identity through, by construction.
+
 ### Trust and Feedback ✅ (#2000)
 - **`GMProfile.level` is the canonical trust ladder** — see ADR-0097. `GMLevelCap`
   (one row per `GMLevel`, seeded via `seed_default_gm_level_caps`) holds the

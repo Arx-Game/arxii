@@ -70,7 +70,7 @@ class CharacterSheetAdmin(admin.ModelAdmin):
     ]
     search_fields = ["character__db_key", "true_profile__concept", "true_profile__family__name"]
     readonly_fields = ["created_date", "updated_date", "decay_tier_display"]
-    raw_id_fields = ["true_profile"]
+    raw_id_fields = ["true_profile", "current_residence"]
 
     @admin.display(description="Decay tier (computed)")
     def decay_tier_display(self, obj: CharacterSheet) -> str:
@@ -107,6 +107,15 @@ class CharacterSheetAdmin(admin.ModelAdmin):
             {
                 "fields": ("additional_desc",),
                 "classes": ["collapse"],
+            },
+        ),
+        (
+            "Housing (#2036)",
+            {
+                "fields": ("current_residence",),
+                "description": "Declared residence — where the daily resonance trickle "
+                "reads its room-aura tags from. Staff fix-up for a stuck or wrong "
+                "declaration; players declare via `room/home` (set_primary_home).",
             },
         ),
         (

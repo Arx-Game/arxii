@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("actions", "0011_actiontemplate_difficulty_tier_modifier"),
         ("checks", "0021_consequenceeffect_affection_amount_and_more"),
-        ("gm", "0005_gmlevelcap_auto_clear_regional"),
+        ("gm", "0006_gmrewardconfig_gmweeklyrewardtracker"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

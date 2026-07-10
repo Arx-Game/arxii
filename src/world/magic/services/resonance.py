@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from decimal import Decimal
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -64,6 +65,8 @@ if TYPE_CHECKING:
     from world.magic.types import PullActionContext
     from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -191,6 +194,35 @@ def grant_resonance(  # noqa: PLR0913
     drift = recompute_aura(character_sheet)
     if drift is not None:
         fire_aura_threshold_crossings(character_sheet, drift)
+
+    # Endorsement/resonance-threshold distinction rank-up (#2037 Decision 8) — only
+    # for the "sustained endorsements" identity-reinforcing-play sources. Gating on
+    # ACCELERATED_GAIN_SOURCES also prevents a feedback loop: the DISTINCTION source
+    # itself (a distinction's own resonance seed) is never in that set, so ranking a
+    # distinction up here can't immediately re-trigger itself via its own seed grant.
+    if source in ACCELERATED_GAIN_SOURCES:
+        try:
+            from world.magic.services.distinction_resonance import (  # noqa: PLC0415
+                check_distinction_rank_thresholds,
+            )
+
+            check_distinction_rank_thresholds(character_sheet, resonance)
+        except Exception:
+            # A failed threshold check forfeits only the rank-up bonus, never the
+            # resonance grant it's layered on top of. This runs inside this
+            # function's own @transaction.atomic — an uncaught exception here would
+            # roll back the whole grant (mirrors the PROJECT_CONTRIBUTION precedent
+            # in world/projects/services.py). grant_distinction wraps its own writes
+            # in a nested `with transaction.atomic():` block (its own savepoint), so
+            # a failure there has already unwound cleanly by the time it propagates
+            # to this catch — the grant recorded above stands either way.
+            logger.exception(
+                "Endorsement-threshold distinction rank-up check failed for "
+                "character sheet #%s / resonance #%s — resonance grant stands, "
+                "rank-up forfeited.",
+                character_sheet.pk,
+                resonance.pk,
+            )
 
     return cr
 

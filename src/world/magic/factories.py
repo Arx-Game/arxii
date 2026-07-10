@@ -247,6 +247,18 @@ class DistinctionResonanceGrantFactory(factory.django.DjangoModelFactory):
     earn_rate_bonus_per_rank = Decimal(0)
 
 
+class DistinctionResonanceRankThresholdFactory(factory.django.DjangoModelFactory):
+    """Factory for DistinctionResonanceRankThreshold (#2037 reverse sidecar)."""
+
+    class Meta:
+        model = "magic.DistinctionResonanceRankThreshold"
+
+    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
+    rank = 2
+    lifetime_earned_threshold = 10
+
+
 class CharacterAuraFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterAura

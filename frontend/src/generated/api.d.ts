@@ -3608,6 +3608,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/use_item/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Declare using a held on-use item as this round's action (#2023, #2120).
+     *
+     *     A primary maneuver with maneuver=USE_ITEM and item_instance set to the
+     *     named ``ItemInstance`` -- mutually exclusive with a declared focused
+     *     technique, unlike the passives-only cover/interpose declarations. At
+     *     most one of ``target_participant_id`` (an ally) / ``target_opponent_id``
+     *     (an NPC opponent) may be supplied.
+     */
+    post: operations['combat_use_item_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/action-outcome-details/': {
     parameters: {
       query?: never;
@@ -36829,8 +36854,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Starting Area. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -38160,6 +38184,32 @@ export interface operations {
     };
   };
   combat_upgrade_combo_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_use_item_create: {
     parameters: {
       query?: never;
       header?: never;

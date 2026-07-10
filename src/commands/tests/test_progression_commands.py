@@ -12,6 +12,10 @@ from actions.types import ActionResult, DispatchResult
 from commands.progression import CmdProgressionUnlock, CmdTraining
 from world.action_points.models import ActionPointConfig
 from world.character_sheets.factories import CharacterSheetFactory
+from world.progression.factories import ExperiencePointsDataFactory, XPTransactionFactory
+from world.progression.models import ExperiencePointsData, XPTransaction
+from world.progression.types import ProgressionReason
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 from world.skills.factories import SkillFactory, SpecializationFactory
 from world.skills.models import TrainingAllocation
@@ -271,6 +275,92 @@ class CmdProgressionUnlockListTests(TestCase):
             ):
                 _make_progression_cmd(self.character, "unlocks").func()
         self.character.msg.assert_called_once()
+
+
+class CmdProgressionUnlockXPBalanceTests(TestCase):
+    """``progression unlocks`` shows the caller's XP balance + recent transactions (#2122)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+        entry = RosterEntryFactory(character_sheet=cls.sheet)
+        cls.tenure = RosterTenureFactory(roster_entry=entry)
+        cls.account = cls.tenure.player_data.account
+
+    def setUp(self):
+        ExperiencePointsData.flush_instance_cache()
+        XPTransaction.flush_instance_cache()
+        self.character.msg = MagicMock()
+
+    def _listing_text(self) -> str:
+        with (
+            patch(
+                "world.progression.services.spends.get_available_unlocks_for_character",
+                return_value={"available": [], "locked": []},
+            ),
+            patch("world.magic.services.threads.near_xp_lock_threads", return_value=[]),
+        ):
+            _make_progression_cmd(self.character).func()
+        return "\n".join(str(c.args[0]) for c in self.character.msg.call_args_list)
+
+    def test_no_active_character_reports_zero(self):
+        stray_sheet = CharacterSheetFactory()
+        cmd_text = ""
+        with (
+            patch(
+                "world.progression.services.spends.get_available_unlocks_for_character",
+                return_value={"available": [], "locked": []},
+            ),
+            patch("world.magic.services.threads.near_xp_lock_threads", return_value=[]),
+        ):
+            stray_sheet.character.msg = MagicMock()
+            _make_progression_cmd(stray_sheet.character, cmd_text).func()
+        sent = "\n".join(str(c.args[0]) for c in stray_sheet.character.msg.call_args_list)
+        self.assertIn("XP available: 0", sent)
+
+    def test_balance_shown_with_no_transactions(self):
+        ExperiencePointsDataFactory(account=self.account, total_earned=40, total_spent=15)
+        sent = self._listing_text()
+        self.assertIn("XP available: 25", sent)
+
+    def test_recent_transactions_rendered(self):
+        ExperiencePointsDataFactory(account=self.account, total_earned=100, total_spent=10)
+        XPTransactionFactory(
+            account=self.account,
+            amount=20,
+            reason=ProgressionReason.KUDOS_CLAIM,
+            description="Kudos claim",
+        )
+        XPTransactionFactory(
+            account=self.account,
+            amount=-10,
+            reason=ProgressionReason.XP_PURCHASE,
+            description="Unlock purchase",
+        )
+        sent = self._listing_text()
+        self.assertIn("XP available: 90", sent)
+        self.assertIn("Recent XP transactions:", sent)
+        self.assertIn("+20 XP", sent)
+        self.assertIn("-10 XP", sent)
+
+    def test_only_last_five_transactions_rendered(self):
+        # Rendering is "{sign}{amount} XP — {reason display} (...)" — no description field
+        # (per spec), so use uniquely-identifiable amounts (1001..1007) to tell rows apart.
+        ExperiencePointsDataFactory(account=self.account, total_earned=100, total_spent=0)
+        for index in range(7):
+            XPTransactionFactory(
+                account=self.account,
+                amount=1001 + index,
+                reason=ProgressionReason.KUDOS_CLAIM,
+            )
+        sent = self._listing_text()
+        # Most recently created 5 of 7 (highest amounts, since XPTransaction orders
+        # -transaction_date and the loop created them in ascending amount order).
+        rendered_count = sum(f"+{1001 + index} XP" in sent for index in range(7))
+        self.assertEqual(rendered_count, 5)
+        self.assertNotIn("+1001 XP", sent)
+        self.assertNotIn("+1002 XP", sent)
 
 
 class CmdProgressionUnlockDispatchTests(TestCase):

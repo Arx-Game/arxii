@@ -151,7 +151,8 @@ file `src/.env`; Django commands run from `src/`.
   existing functionality.
 - **Model map** — `docs/systems/MODEL_MAP.md` for cross-app FK relationships and
   service-function signatures. Auto-generated; regenerate after major model changes
-  via `uv run python tools/introspect_models.py`.
+  via `uv run python tools/introspect_models.py > docs/systems/MODEL_MAP.md` (the
+  script prints to stdout — the redirect is required, not optional).
 - **Django development** (models, views, APIs, tests) — `django_notes.md`.
 - **Evennia migration quirks** — `docs/evennia-quirks.md`. Use `arx manage
   makemigrations` (custom command that prevents phantom Evennia-library migrations).
@@ -183,8 +184,8 @@ service-function signatures, update the docs that describe them as part of the w
   `docs/systems/INDEX.md` when you add/rename/remove models, services, enums,
   exceptions, or endpoints.
 - **Model map** — regenerate `docs/systems/MODEL_MAP.md`
-  (`uv run python tools/introspect_models.py`) after model/FK or service-signature
-  changes.
+  (`uv run python tools/introspect_models.py > docs/systems/MODEL_MAP.md`) after
+  model/FK or service-signature changes.
 - **Architecture doc** — update the relevant `docs/architecture/*.md` (including its
   diagrams) when you change a pipeline, contract, or flow it documents.
 - **Roadmap** — mark the relevant `docs/roadmap/*.md` and record *what was built*.

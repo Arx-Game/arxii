@@ -55,3 +55,14 @@ _Avoid_: pool binding, pool selector (implies live application — this never ap
 **Catalog Suggestion**:
 `CatalogSuggestion` — a GM's proposed catalog growth (a new `SituationKind`, a check fit, a difficulty guide, or — at EXPERIENCED+ trust — a pool guide), routed through `world.staff_inbox` exactly like a `GMApplication`. Reuses `player_submissions.SubmissionStatus` (OPEN/REVIEWED/DISMISSED, Decision 8) rather than a new enum. `proposal_kind` is tiered by the submitting GM's `GMLevel` (`PROPOSAL_KIND_MIN_LEVEL`, Decision 9) — STARTING/JUNIOR may propose NEW_SITUATION/CHECK_FIT/OTHER only; GM+ additionally DIFFICULTY_GUIDE; EXPERIENCED+ additionally POOL_GUIDE. Staff acceptance is a manual admin action that separately authors the real catalog row(s) — accepting a suggestion never auto-creates them.
 _Avoid_: catalog proposal (use the model name), suggestion (ambiguous outside this context).
+
+**GM Story Reward**:
+The XP a GM earns (via `world.gm.services.award_gm_story_reward`, `ProgressionReason
+.GM_STORY_REWARD`) for running stories for other players — the opposite direction from
+"Rewards and Gating" above (a GM granting rewards to players). Fires at four
+convergence points that ride real, reviewable story artifacts (never self-attested):
+a GM-marked beat, a resolved episode, a completed story, and a positive story-feedback
+rating on GM performance. Scaled by players served (never a flat amount) and capped
+per event and per `GameWeek` (`GMWeeklyRewardTracker`); every award value lives on the
+`GMRewardConfig` singleton, never a module constant (#2123).
+_Avoid_: GM payout, GM stipend, session pay.

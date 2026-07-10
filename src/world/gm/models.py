@@ -1,6 +1,8 @@
 """GM system models."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -8,7 +10,7 @@ from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import CachedAllMixin
+from core.managers import ArxSharedMemoryManager, CachedAllMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.gm.constants import (
     CatalogSuggestionProposalKind,
@@ -20,6 +22,9 @@ from world.player_submissions.constants import SubmissionStatus
 from world.scenes.action_constants import DifficultyChoice
 from world.scenes.constants import PersonaType
 from world.societies.constants import RenownRisk
+
+if TYPE_CHECKING:
+    from world.game_clock.models import GameWeek
 
 
 class GMProfile(SharedMemoryModel):
@@ -574,3 +579,114 @@ class CatalogSuggestion(SharedMemoryModel):
     def __str__(self) -> str:
         kind_display = self.get_proposal_kind_display()
         return f"CatalogSuggestion({kind_display}, {self.submitted_by.username})"
+
+
+class GMRewardConfig(SharedMemoryModel):
+    """Singleton (pk=1) — tunable award values for the GM Story Reward (#2123).
+
+    Every value that used to be a hardcoded module constant lives here instead,
+    since these numbers will almost certainly require balance tuning: per-player
+    XP + per-event cap for each of the three story-artifact award events (a
+    GM-marked beat, a resolved episode, a completed story), the weekly ceiling
+    per GM, and the per-rating-point XP for positive player story-feedback.
+    Staff-editable in admin; ``world.gm.services.award_gm_story_reward`` and
+    ``world.stories.services.feedback`` read this row, never a module constant.
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    beat_xp_per_player = models.PositiveIntegerField(
+        default=6,
+        help_text="XP per player served, awarded to the GM who marks a GM_MARKED beat.",
+    )
+    beat_xp_cap = models.PositiveIntegerField(
+        default=48,
+        help_text="Maximum XP a single beat-mark award may pay, before the weekly ceiling.",
+    )
+    episode_xp_per_player = models.PositiveIntegerField(
+        default=15,
+        help_text="XP per player served, awarded to the GM who resolves an episode.",
+    )
+    episode_xp_cap = models.PositiveIntegerField(
+        default=120,
+        help_text="Maximum XP a single episode-resolution award may pay, before the weekly cap.",
+    )
+    story_completion_xp_per_player = models.PositiveIntegerField(
+        default=25,
+        help_text="XP per player served, awarded to the GM whose table completes a story.",
+    )
+    story_completion_xp_cap = models.PositiveIntegerField(
+        default=200,
+        help_text="Maximum XP a single story-completion award may pay, before the weekly ceiling.",
+    )
+    weekly_reward_cap = models.PositiveIntegerField(
+        default=300,
+        help_text="Ceiling on total GM Story Reward XP (all event kinds combined) per GM per week.",
+    )
+    feedback_xp_per_rating_point = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "XP per positive rating point, awarded to the GM when a served participant's "
+            "StoryFeedback on GM performance averages positive (rounded to the nearest "
+            "whole rating point, 1..2)."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "GM Reward Config"
+        verbose_name_plural = "GM Reward Config"
+
+    def __str__(self) -> str:
+        return "GM Reward defaults"
+
+    @classmethod
+    def load(cls) -> GMRewardConfig:
+        """Fetch (or lazily create) the singleton row."""
+        obj = cls.objects.cached_singleton()
+        if obj is None:
+            obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class GMWeeklyRewardTracker(SharedMemoryModel):
+    """Per-GM weekly GM Story Reward XP ledger (#2123).
+
+    Mirrors ``world.journals.models.WeeklyJournalXP``'s get-or-reset-by-``GameWeek``
+    shape: one row per GM, reset to zero whenever the tracked ``game_week`` no
+    longer matches the current week. Bounds cross-event farming (e.g. marking
+    many beats in one sitting) by the same ceiling regardless of which award
+    event fired.
+    """
+
+    gm_profile = models.OneToOneField(
+        "gm.GMProfile",
+        on_delete=models.CASCADE,
+        related_name="weekly_reward_tracker",
+    )
+    game_week = models.ForeignKey(
+        "game_clock.GameWeek",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="gm_reward_trackers",
+        help_text="GameWeek this counter belongs to.",
+    )
+    xp_awarded_this_week = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "GM Weekly Reward Tracker"
+        verbose_name_plural = "GM Weekly Reward Trackers"
+
+    def needs_reset(self, current_week: GameWeek) -> bool:
+        """Check if this tracker is for a different game week."""
+        return self.game_week_id != current_week.pk
+
+    def reset_week(self, current_week: GameWeek) -> None:
+        """Reset the weekly counter and set to the current game week."""
+        self.xp_awarded_this_week = 0
+        self.game_week = current_week
+        self.save(update_fields=["xp_awarded_this_week", "game_week"])
+
+    def __str__(self) -> str:
+        username = self.gm_profile.account.username
+        return f"GMWeeklyRewardTracker({username}: {self.xp_awarded_this_week})"

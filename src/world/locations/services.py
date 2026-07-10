@@ -1239,16 +1239,26 @@ def _has_chosen_residence(character: DefaultObject) -> bool:
 
 
 def maybe_default_residence(persona: Persona | None, room_profile: RoomProfile | None) -> None:
-    """Default a persona's character home to this room when it has none yet (#1514).
+    """Default a persona's character home to this room when it has none yet (#1514, #2036).
 
     Called when a persona accepts a room (tenancy/ownership). Per-character (Evennia ``home``),
     triggered by a persona grant; never overwrites a residence the player has already chosen.
+    Also defaults ``CharacterSheet.current_residence`` (#2036) the same way — the first room a
+    character rents or acquires becomes both their Evennia home and their declared residence,
+    with zero additional player action.
     """
     if persona is None or room_profile is None:
         return
     character = _character_for_persona(persona)
     if character is not None and not _has_chosen_residence(character):
         set_residence(character=character, room=room_profile.objectdb)
+    sheet = persona.character_sheet
+    if sheet.current_residence_id is None:
+        from world.magic.services.gain import (  # noqa: PLC0415
+            set_residence as set_current_residence,
+        )
+
+        set_current_residence(sheet, room_profile)
 
 
 def assign_room_tenant(
@@ -1287,14 +1297,22 @@ def end_room_tenancy(*, persona: Persona, tenancy: LocationTenancy) -> LocationT
     return end_tenancy(tenancy)
 
 
-def set_primary_home(*, persona: Persona, room: DefaultObject) -> LocationTenancy:
-    """Designate one of the persona's active room tenancies as their home (#670).
+def set_primary_home(*, persona: Persona, room: DefaultObject, notes: str = "") -> LocationTenancy:
+    """Designate one of the persona's active room tenancies as their home (#670, #2036).
 
     The Arx-1 ``addhome``: one active primary home per persona (partial unique
-    constraint); drives prestige-from-dwellings. Requires a *direct* persona
-    tenancy on the room — org/area standing isn't a home. Also syncs the
-    character-level residence (#1514 Evennia ``home``: recall + comfort regen)
-    so "home" stays one concept with two consumers.
+    constraint); drives prestige-from-dwellings. Also syncs the character-level
+    residence (#1514 Evennia ``home``: recall + comfort regen) and
+    ``CharacterSheet.current_residence`` (#2036) so "home" stays one concept with
+    multiple consumers.
+
+    Accepts org-derived tenant standing, not only a direct persona tenancy (#2036):
+    when the persona has no direct tenancy row on this room but has owner or tenant
+    standing (composed via org membership by ``is_owner``/``is_tenant``), a personal
+    tenancy is minted first — this is the only way "one residence per character"
+    stays meaningful when access to the room comes from a shared family/org/Academy
+    grant (multiple tenants of the same shared row can each declare their own home).
+    ``notes`` is forwarded to the minted tenancy (e.g. authoring "may be charged rent").
     """
     try:
         profile = room.room_profile
@@ -1309,8 +1327,10 @@ def set_primary_home(*, persona: Persona, room: DefaultObject) -> LocationTenanc
         .first()
     )
     if tenancy is None:
-        msg = "You'd need a tenancy here first — this room isn't yours to live in."
-        raise RoomEditError(msg)
+        if not (is_owner(persona, room) or is_tenant(persona, room)):
+            msg = "You'd need standing here first — this room isn't yours to live in."
+            raise RoomEditError(msg)
+        tenancy = grant_tenancy(room_profile=profile, tenant_persona=persona, notes=notes)
     with transaction.atomic():
         LocationTenancy.objects.filter(tenant_persona=persona, is_primary_home=True).update(
             is_primary_home=False
@@ -1320,6 +1340,9 @@ def set_primary_home(*, persona: Persona, room: DefaultObject) -> LocationTenanc
     character = _character_for_persona(persona)
     if character is not None:
         set_residence(character=character, room=room)
+    from world.magic.services.gain import set_residence as set_current_residence  # noqa: PLC0415
+
+    set_current_residence(persona.character_sheet, tenancy.room_profile)
     from world.buildings.polish_services import (  # noqa: PLC0415
         recompute_persona_prestige_from_dwellings,
     )
@@ -1342,10 +1365,30 @@ def end_tenancy(
     ``ends_at`` with the new value. The new value can be in the past
     (eviction effective immediately) or in the future (planned end of
     lease).
+
+    Clears the tenant's declared ``current_residence`` when the ended tenancy was it
+    (#2036) — a character shouldn't keep trickling resonance from a room they no
+    longer have any standing in. Evennia ``home`` (the recall-fallback location, #1514)
+    is left alone — surviving eviction is existing, separate behavior this fold-in
+    doesn't widen.
     """
     tenancy.ends_at = ended_at if ended_at is not None else timezone.now()
     tenancy.save()
+    _maybe_clear_residence_on_tenancy_end(tenancy)
     return tenancy
+
+
+def _maybe_clear_residence_on_tenancy_end(tenancy: LocationTenancy) -> None:
+    """Clear ``current_residence`` when ``tenancy`` was the tenant's declared residence."""
+    persona = tenancy.tenant_persona
+    if persona is None or tenancy.room_profile_id is None:
+        return
+    sheet = persona.character_sheet
+    if sheet.current_residence_id != tenancy.room_profile_id:
+        return
+    from world.magic.services.gain import set_residence as set_current_residence  # noqa: PLC0415
+
+    set_current_residence(sheet, None)
 
 
 def ownership_history_for(

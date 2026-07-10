@@ -31,6 +31,12 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
         ClueTargetKind.MISSION: "target_mission",
         ClueTargetKind.RESCUE: "target_captivity",
         ClueTargetKind.SECRET: "target_secret",
+        # PERSONA_LINK is a documented multi-discriminator exception (#2120): it
+        # needs BOTH target_persona AND target_persona_linked set together. The
+        # map only tracks target_persona (the primary discriminator target);
+        # clean() below folds in the second FK's requirement, per
+        # DiscriminatorMixin's own multi-discriminator override guidance.
+        ClueTargetKind.PERSONA_LINK: "target_persona",
     }
 
     target_kind = models.CharField(
@@ -70,6 +76,30 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
         related_name="clues",
         help_text="The character secret this clue points to (target_kind=SECRET, #1334).",
     )
+    target_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text=(
+            "One side of the masked-identity pair this clue pierces "
+            "(target_kind=PERSONA_LINK, #2120). Paired with target_persona_linked -- "
+            "both must be set together, see clean(). Per ADR-0010 clues depends on "
+            "the scenes primitive, never the reverse."
+        ),
+    )
+    target_persona_linked = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text=(
+            "The other side of the masked-identity pair this clue pierces "
+            "(target_kind=PERSONA_LINK, #2120). See target_persona."
+        ),
+    )
 
     name = models.CharField(
         max_length=200,
@@ -97,6 +127,14 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
     def clean(self) -> None:
         super().clean()
         errors = self._validate_discriminator(self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP)
+        # PERSONA_LINK multi-discriminator exception (#2120) -- see DISCRIMINATOR_MAP's
+        # comment above. target_persona is already validated by _validate_discriminator;
+        # fold in the matching requirement for target_persona_linked here.
+        if self.target_kind == ClueTargetKind.PERSONA_LINK:
+            if self._is_unset(self.target_persona_linked_id):
+                errors["target_persona_linked"] = "Required when target_kind is persona_link."
+        elif not self._is_unset(self.target_persona_linked_id):
+            errors["target_persona_linked"] = "Must be null when target_kind is not persona_link."
         if errors:
             raise ValidationError(errors)
 

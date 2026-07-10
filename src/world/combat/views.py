@@ -66,6 +66,7 @@ from world.combat.serializers import (
     RemoveParticipantSerializer,
     RoundActionSerializer,
     UpgradeComboSerializer,
+    UseItemSerializer,
 )
 from world.combat.services import (
     add_opponent,
@@ -78,6 +79,7 @@ from world.combat.services import (
 )
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
+from world.items.models import ItemInstance
 from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.models import Persona, Scene
 from world.stories.pagination import StandardResultsSetPagination
@@ -149,6 +151,7 @@ class CombatEncounterViewSet(ModelViewSet):
             "flee",
             "cover",
             "interpose",
+            "use_item",
             "leave",
             "rally",
             "demoralize",
@@ -750,6 +753,49 @@ class CombatEncounterViewSet(ModelViewSet):
             participant.character_sheet.character,
             "combat_cover",
             {"ally_participant_id": ally.pk},
+        )
+        if not self._action_succeeded(result):
+            return Response(
+                {"detail": _ERR_DECLARE_FAILED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def use_item(self, request: Request, pk: int | None = None) -> Response:
+        """Declare using a held on-use item as this round's action (#2023, #2120).
+
+        A primary maneuver with maneuver=USE_ITEM and item_instance set to the
+        named ``ItemInstance`` -- mutually exclusive with a declared focused
+        technique, unlike the passives-only cover/interpose declarations. At
+        most one of ``target_participant_id`` (an ally) / ``target_opponent_id``
+        (an NPC opponent) may be supplied.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = UseItemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        item_instance = get_object_or_404(
+            ItemInstance, pk=serializer.validated_data["item_instance_id"]
+        )
+        ally_id = serializer.validated_data.get("target_participant_id")
+        opponent_id = serializer.validated_data.get("target_opponent_id")
+        action_kwargs: dict = {"item_instance_id": item_instance.pk}
+        if ally_id is not None:
+            ally = get_object_or_404(CombatParticipant, pk=ally_id, encounter=encounter)
+            action_kwargs["ally_participant_id"] = ally.pk
+        elif opponent_id is not None:
+            opponent = get_object_or_404(CombatOpponent, pk=opponent_id, encounter=encounter)
+            action_kwargs["opponent_id"] = opponent.pk
+        result = self._dispatch_combat_action(
+            participant.character_sheet.character,
+            "combat_use",
+            action_kwargs,
         )
         if not self._action_succeeded(result):
             return Response(

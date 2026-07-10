@@ -20,7 +20,7 @@ from commands.evennia_overrides.items import CmdUndress, CmdWear, CmdWithdraw
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.exceptions import CommandError
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -33,7 +33,10 @@ from world.items.factories import (
     ItemTemplateFactory,
     OutfitFactory,
 )
+from world.locations.constants import HolderType, LocationParentType
+from world.locations.models import LocationTenancy
 from world.roster.factories import RosterEntryFactory
+from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 
 
 def _make_cmd(cls, caller, args="", obj=None):
@@ -859,22 +862,56 @@ class CmdHomeTests(TestCase):
             mock_run.assert_called_once_with(actor=caller)
 
     def test_home_set_requires_standing(self):
-        # home/set on a room you have no owner/tenant standing in is refused (#1514).
+        # home/set on a room you have no owner/tenant standing in is refused
+        # (#1514, widened owner-or-tenant gate #2036). CmdHome now delegates to
+        # SetPrimaryHomeAction's own prerequisite, so this exercises the real
+        # IsRoomTenantPrerequisite failure message, not a bespoke duplicate.
         room = ObjectDBFactory(
             db_key="HomeRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        caller = ObjectDBFactory(
-            db_key="Homeless",
-            db_typeclass_path="typeclasses.characters.Character",
-            location=room,
-        )
+        caller = CharacterFactory(location=room)
+        CharacterSheetFactory(character=caller)
         caller.msg = MagicMock()
         cmd = _make_cmd(CmdHome, caller)
         cmd.switches = [CmdHome.SET_SWITCH]
         cmd.func()
         sent = " ".join(str(c.args[0]) for c in caller.msg.call_args_list if c.args)
-        assert "own or rent" in sent
+        assert "no standing in this room" in sent
+
+    def test_home_set_via_org_standing_succeeds(self):
+        # Behavior test (#2036), not just a delegation assert: home/set now goes
+        # through set_primary_home, which mints a personal tenancy for an
+        # org-derived claimant (no direct persona LocationTenancy row) and writes
+        # both Evennia home and CharacterSheet.current_residence. The old
+        # hand-rolled CmdHome check never accepted org standing at all.
+        room_profile = RoomProfileFactory()
+        room = room_profile.objectdb
+        org = OrganizationFactory()
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=room_profile,
+            tenant_type=HolderType.ORGANIZATION,
+            tenant_organization=org,
+        )
+        caller = CharacterFactory(location=room)
+        sheet = CharacterSheetFactory(character=caller)
+        OrganizationMembershipFactory(organization=org, persona=sheet.primary_persona)
+        caller.msg = MagicMock()
+
+        cmd = _make_cmd(CmdHome, caller)
+        cmd.switches = [CmdHome.SET_SWITCH]
+        cmd.func()
+
+        sheet.refresh_from_db()
+        caller.refresh_from_db()
+        self.assertEqual(sheet.current_residence, room_profile)
+        self.assertEqual(caller.home, room)
+        self.assertTrue(
+            LocationTenancy.objects.filter(
+                tenant_persona=sheet.primary_persona, room_profile=room_profile
+            ).exists()
+        )
 
 
 class CmdUndressTests(TestCase):

@@ -22,6 +22,43 @@
   </div>
 </div>
 
+<h3>{% translate "GM Story Reward config" %}</h3>
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th scope="col">{% translate "Event" %}</th>
+      <th scope="col">{% translate "XP / player" %}</th>
+      <th scope="col">{% translate "Event cap" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>{% translate "Beat marked" %}</td>
+      <td>{{ reward_config.beat_xp_per_player }}</td>
+      <td>{{ reward_config.beat_xp_cap }}</td>
+    </tr>
+    <tr>
+      <td>{% translate "Episode resolved" %}</td>
+      <td>{{ reward_config.episode_xp_per_player }}</td>
+      <td>{{ reward_config.episode_xp_cap }}</td>
+    </tr>
+    <tr>
+      <td>{% translate "Story completed" %}</td>
+      <td>{{ reward_config.story_completion_xp_per_player }}</td>
+      <td>{{ reward_config.story_completion_xp_cap }}</td>
+    </tr>
+    <tr>
+      <td>{% translate "Story feedback (per rating point)" %}</td>
+      <td>{{ reward_config.feedback_xp_per_rating_point }}</td>
+      <td>&mdash;</td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  {% translate "Weekly ceiling per GM" %}: {{ reward_config.weekly_reward_cap }} XP —
+  <a href="{% url 'admin:gm_gmrewardconfig_change' reward_config.pk %}">{% translate "edit" %}</a>
+</p>
+
 {% for row in series %}
 <h3>{{ row.label }}</h3>
 <table class="tuning-table">

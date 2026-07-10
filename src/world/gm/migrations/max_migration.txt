@@ -1,1 +1,1 @@
-0006_situationkind_catalogsuggestion_and_more
+0007_situationkind_catalogsuggestion_and_more

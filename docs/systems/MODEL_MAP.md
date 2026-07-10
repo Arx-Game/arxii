@@ -451,6 +451,79 @@
   - scriptdb_set <- scripts.ScriptDB
 
 
+## world.achievements
+
+### StatDefinition
+**Pointed to by:**
+  - trackers <- achievements.StatTracker
+  - requirements <- achievements.AchievementRequirement
+  - condition_rules <- achievements.ConditionStatRule
+
+### StatTracker
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - stat -> achievements.StatDefinition [FK]
+
+### Achievement
+**Foreign Keys:**
+  - prerequisite -> achievements.Achievement [FK] (nullable)
+**Pointed to by:**
+  - achievementrequirement_set <- progression.AchievementRequirement
+  - aura_affinity_thresholds <- magic.AuraAffinityThreshold
+  - crossing_options <- magic.CrossingOption
+  - next_in_chain <- achievements.Achievement
+  - requirements <- achievements.AchievementRequirement
+  - discovery <- achievements.Discovery
+  - character_achievements <- achievements.CharacterAchievement
+  - rewards <- achievements.AchievementReward
+
+### AchievementRequirement
+**Foreign Keys:**
+  - achievement -> achievements.Achievement [FK]
+  - stat -> achievements.StatDefinition [FK]
+
+### Discovery
+**Foreign Keys:**
+  - achievement -> achievements.Achievement [OneToOne]
+**Pointed to by:**
+  - discoverers <- achievements.CharacterAchievement
+
+### CharacterAchievement
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - achievement -> achievements.Achievement [FK]
+  - discovery -> achievements.Discovery [FK] (nullable)
+
+### RewardDefinition
+**Foreign Keys:**
+  - modifier_target -> mechanics.ModifierTarget [FK] (nullable)
+  - distinction -> distinctions.Distinction [FK] (nullable)
+**Pointed to by:**
+  - achievement_rewards <- achievements.AchievementReward
+  - character_titles <- achievements.CharacterTitle
+
+### AchievementReward
+**Foreign Keys:**
+  - achievement -> achievements.Achievement [FK]
+  - reward -> achievements.RewardDefinition [FK]
+
+### ConditionStatRule
+**Foreign Keys:**
+  - stat -> achievements.StatDefinition [FK]
+  - condition -> conditions.ConditionTemplate [FK]
+
+### CharacterTitle
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - reward -> achievements.RewardDefinition [FK]
+
+### Service Functions
+- `apply_achievement_rewards(character_sheet: 'CharacterSheet', achievement: 'Achievement') -> 'None' — Apply an achievement's rewards to a character — title / bonus / prestige / distinction`
+- `get_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition') -> 'int' — Return current value of a stat tracker, 0 if it doesn't exist.`
+- `grant_achievement(achievement: 'Achievement', character_sheets: 'list[CharacterSheet]') -> 'list[CharacterAchievement]' — Grant an achievement to one or more characters simultaneously.`
+- `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
+
+
 ## world.areas
 
 ### Area
@@ -1314,6 +1387,7 @@
   - condition_template -> conditions.ConditionTemplate [FK] (nullable)
   - relationship_condition -> relationships.RelationshipCondition [FK] (nullable)
   - property -> mechanics.Property [FK] (nullable)
+  - distinction -> distinctions.Distinction [FK] (nullable)
   - damage_type -> conditions.DamageType [FK] (nullable)
   - flow_definition -> flows.FlowDefinition [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
@@ -1402,6 +1476,8 @@
   - target_mission -> missions.MissionTemplate [FK] (nullable)
   - target_captivity -> captivity.Captivity [FK] (nullable)
   - target_secret -> secrets.Secret [FK] (nullable)
+  - target_persona -> scenes.Persona [FK] (nullable)
+  - target_persona_linked -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
   - held_by <- clues.CharacterClue
   - research_projects <- clues.ResearchProjectDetails
@@ -2360,6 +2436,7 @@
   - tables <- gm.GMTable
   - invites_created <- gm.GMRosterInvite
   - level_changes <- gm.GMLevelChange
+  - weekly_reward_tracker <- gm.GMWeeklyRewardTracker
   - summonses_created <- npc_services.OfferSummons
 
 ### GMApplication
@@ -2426,9 +2503,17 @@
   - situation_kind -> gm.SituationKind [FK] (nullable)
   - reviewer -> accounts.AccountDB [FK] (nullable)
 
+### GMRewardConfig
+
+### GMWeeklyRewardTracker
+**Foreign Keys:**
+  - gm_profile -> gm.GMProfile [OneToOne]
+  - game_week -> game_clock.GameWeek [FK] (nullable)
+
 ### Service Functions
 - `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' — Approve a roster application on behalf of the overseeing GM.`
 - `archive_table(table: 'GMTable') -> 'None' — Mark a table archived. Sets archived_at timestamp.`
+- `award_gm_story_reward(*, gm_profile: 'GMProfile', players_served: 'int', per_player_xp: 'int', event_cap: 'int', description: 'str') -> 'XPTransaction | None' — Award GM Story Reward XP to ``gm_profile.account`` (#2123).`
 - `claim_invite(invite: 'GMRosterInvite', account: 'AccountDB') -> 'RosterApplication' — Mark an invite claimed and create (or reuse) a RosterApplication.`
 - `create_invite(gm: 'GMProfile', roster_entry: 'RosterEntry', is_public: 'bool' = False, invited_email: 'str' = '', expires_at: 'datetime | None' = None) -> 'GMRosterInvite' — Create a GMRosterInvite. Callers must validate GM oversight.`
 - `create_table(gm: 'GMProfile', name: 'str', description: 'str' = '') -> 'GMTable' — Create a new GM table owned by the given GM.`
@@ -2825,13 +2910,13 @@
 - `hazard_is_covered_for(character: 'DefaultObject', room: 'DefaultObject | None', damage_type: 'DamageType', *, threshold: 'int' = 1) -> 'bool' — Whether *character* in *room* is sheltered against *damage_type*.`
 - `is_owner(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``ownership_for(persona, room)`` returns a row.`
 - `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``tenancies_for(persona, room)`` has any rows.`
-- `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' — Default a persona's character home to this room when it has none yet (#1514).`
+- `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' — Default a persona's character home to this room when it has none yet (#1514, #2036).`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' — Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' — Return ALL LocationOwnership rows (active and ended) for a`
 - `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' — The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
 - `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' — Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
-- `set_primary_home(*, persona: 'Persona', room: 'DefaultObject') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670).`
+- `set_primary_home(*, persona: 'Persona', room: 'DefaultObject', notes: 'str' = '') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670, #2036).`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
 - `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
 - `tenancies_for(persona: 'Persona', room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return the QuerySet of currently-active tenancies that give this`
@@ -2909,6 +2994,7 @@
   - entry_flourish_records <- magic.EntryFlourishRecord
   - resonancegrant_set <- magic.ResonanceGrant
   - distinction_grants <- magic.DistinctionResonanceGrant
+  - distinction_rank_thresholds <- magic.DistinctionResonanceRankThreshold
   - motif_resonances <- magic.MotifResonance
   - imbuing_prose <- magic.ImbuingProseTemplate
   - sanctums <- magic.SanctumDetails
@@ -3313,6 +3399,11 @@
   - ritual -> magic.Ritual [FK]
 
 ### DistinctionResonanceGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - resonance -> magic.Resonance [FK]
+
+### DistinctionResonanceRankThreshold
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [FK]
   - resonance -> magic.Resonance [FK]

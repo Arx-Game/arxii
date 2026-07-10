@@ -74,6 +74,7 @@ def grant_clue_target(clue: Clue, roster_entry: RosterEntry) -> None:
     - CODEX: the character learns the entry (KNOWN, firing the codex reactivity hook).
     - RESCUE: the character is handed the rescue mission for the held captive.
     - SECRET: the character learns the secret's fact (#1334).
+    - PERSONA_LINK: the character pierces the masked-identity pair (#2120).
     The MISSION target kind is a documented extension point.
     """
     if clue.target_kind == ClueTargetKind.CODEX:
@@ -82,6 +83,8 @@ def grant_clue_target(clue: Clue, roster_entry: RosterEntry) -> None:
         _grant_rescue_target(clue, roster_entry)
     elif clue.target_kind == ClueTargetKind.SECRET:
         _grant_secret_target(clue, roster_entry)
+    elif clue.target_kind == ClueTargetKind.PERSONA_LINK:
+        _grant_persona_link_target(clue, roster_entry)
 
 
 def _grant_codex_target(clue: Clue, roster_entry: RosterEntry) -> None:
@@ -128,6 +131,31 @@ def _grant_secret_target(clue: Clue, roster_entry: RosterEntry) -> None:
     from world.secrets.services import grant_secret_knowledge  # noqa: PLC0415
 
     grant_secret_knowledge(roster_entry=roster_entry, secret=secret)
+
+
+def _grant_persona_link_target(clue: Clue, roster_entry: RosterEntry) -> None:
+    """Grant the discoverer a pierced masked-identity pair (#2120). No-op if untargeted.
+
+    Records a ``PersonaDiscovery`` linking ``target_persona``/``target_persona_linked``
+    for ``roster_entry``'s character sheet — the only in-game producer of
+    ``PersonaDiscovery`` rows (previously only test factories / django admin created
+    them). Piercing is GM-authored: the clue must exist and be planted (ADR-0033) —
+    there is no direct "study persona" roll against an arbitrary masked character.
+    Normalizes the pair to ``persona``=lower pk / ``linked_to``=higher pk, matching
+    ``PersonaDiscovery``'s own ``persona_discovery_normalized_order`` check constraint.
+    """
+    persona = clue.target_persona
+    linked = clue.target_persona_linked
+    if persona is None or linked is None or persona.pk == linked.pk:
+        return
+    from world.scenes.models import PersonaDiscovery  # noqa: PLC0415
+
+    lower, higher = (persona, linked) if persona.pk < linked.pk else (linked, persona)
+    PersonaDiscovery.objects.get_or_create(
+        persona=lower,
+        linked_to=higher,
+        discovered_by=roster_entry.character_sheet,
+    )
 
 
 def plant_rescue_clue(
