@@ -142,3 +142,47 @@ class CraftedModifierValueTests(TestCase):
         )
         _populate_caches(item)
         self.assertEqual(item.crafted_modifier_value(target), 0)
+
+
+class CraftedModifierHandlerTests(TestCase):
+    """CharacterEquipmentHandler.crafted_modifier_total aggregates equipped items."""
+
+    def test_no_equipped_items_returns_zero(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        character = CharacterFactory(db_key="CraftedModHandlerChar")
+        CharacterSheetFactory(character=character)
+        target = ModifierTargetFactory()
+        self.assertEqual(character.equipped_items.crafted_modifier_total(target), 0)
+
+    def test_equipped_item_crafted_mod_aggregated(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.constants import BodyRegion, EquipmentLayer
+        from world.items.factories import EquippedItemFactory
+
+        character = CharacterFactory(db_key="CraftedModHandlerChar2")
+        CharacterSheetFactory(character=character)
+        target = ModifierTargetFactory()
+        quality = QualityTierFactory(stat_multiplier=Decimal("1.20"))
+        item = ItemInstanceFactory()
+        crafted = CraftedItemRecipeFactory(
+            item_instance=item,
+            quality_tier=quality,
+        )
+        CraftingRecipeModifierFactory(
+            recipe=crafted.recipe,
+            target=target,
+            base_value=3,
+            quality_scale_factor=5,
+        )
+        EquippedItemFactory(
+            character=character,
+            item_instance=item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        # 3 + round(5 * 1.20) = 9
+        self.assertEqual(character.equipped_items.crafted_modifier_total(target), 9)
+        character.equipped_items.invalidate()
