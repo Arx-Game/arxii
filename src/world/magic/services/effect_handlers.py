@@ -393,6 +393,41 @@ def move_position_on_condition(*, payload: Any, destination_position_id: int) ->
     )
 
 
+def force_move_target_on_condition(*, payload: Any, destination_position_id: int) -> None:
+    """CONDITION_APPLIED adapter: force-move payload.target to its cast-time destination.
+
+    Like move_position_on_condition but uses ``force_move_to_position`` (bypasses
+    passability + capability gates) and fires landing checks (traps, chasm plummet)
+    after the move. Used by the telekinesis (Force Grip, ENEMY) effect bundle.
+
+    If the target becomes unplaced between declaration and resolution (KO, etc.),
+    the force-move is a no-op with a clean return (not a crash).
+    """
+    from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
+    from world.room_features.trap_services import check_traps_at_position  # noqa: PLC0415
+
+    # #2019: Prefer the cast-time destination on the instance.
+    try:
+        instance = payload.instance
+    except AttributeError:
+        instance = None
+    if instance is not None and instance.cast_destination_id is not None:
+        destination_pk = instance.cast_destination_id
+    elif destination_position_id > 0:
+        destination_pk = destination_position_id
+    else:
+        return  # no destination resolved — no-op
+
+    try:
+        destination = Position.objects.get(pk=destination_pk)
+        force_move_to_position(payload.target, destination)
+    except PositionError:
+        return  # target may have become invalid (unplaced, left room, etc.)
+
+    # Fire landing checks — traps, chasm plummet.
+    check_traps_at_position(payload.target, destination)
+
+
 def create_obstacle_on_condition(
     *,
     payload: Any,

@@ -153,6 +153,9 @@ _MOVE_POSITION_ADAPTER_PATH: str = "world.magic.services.effect_handlers.move_po
 _CREATE_OBSTACLE_ADAPTER_PATH: str = (
     "world.magic.services.effect_handlers.create_obstacle_on_condition"
 )
+_FORCE_MOVE_ADAPTER_PATH: str = (
+    "world.magic.services.effect_handlers.force_move_target_on_condition"
+)
 
 # --- Flow names ---
 _TELEPORT_FLOW_NAME: str = "teleport_on_condition_applied"
@@ -1000,7 +1003,7 @@ def ensure_telekinesis_content() -> None:
     # 1. Flow: single CALL_SERVICE_FUNCTION step with static destination placeholder.
     root_step = _seed_call_service_flow(
         _TELEKINESIS_FLOW_NAME,
-        _MOVE_POSITION_ADAPTER_PATH,
+        _FORCE_MOVE_ADAPTER_PATH,
         extra_params={"destination_position_id": _PLACEHOLDER_POSITION_ID},
     )
     telekinesis_flow = root_step.flow
