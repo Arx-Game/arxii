@@ -277,6 +277,9 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - cast_destination -> areas.Position [FK] (nullable)
+  - cast_position_a -> areas.Position [FK] (nullable)
+  - cast_position_b -> areas.Position [FK] (nullable)
   - detected_by -> character_sheets.CharacterSheet [M2M]
 **Pointed to by:**
   - triggers <- flows.Trigger
@@ -564,6 +567,9 @@
   - room -> objects.ObjectDB [FK]
   - elevation_anchor -> areas.Position [FK] (nullable)
 **Pointed to by:**
+  - cast_destination_instances <- conditions.ConditionInstance
+  - cast_position_a_instances <- conditions.ConditionInstance
+  - cast_position_b_instances <- conditions.ConditionInstance
   - elevated_over <- areas.Position
   - edges_as_a <- areas.PositionEdge
   - edges_as_b <- areas.PositionEdge
@@ -576,6 +582,7 @@
   - position_a -> areas.Position [FK]
   - position_b -> areas.Position [FK]
   - gating_challenge -> mechanics.ChallengeInstance [FK] (nullable)
+  - created_by_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### PositionBlueprint
 **Pointed to by:**
@@ -644,6 +651,7 @@
   - granted_assets <- assets.NPCAsset
 
 ### Service Functions
+- `coerce_into_asset(*, coercer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a blackmailed NPC as a COERCION ``NPCAsset`` (#1680).`
 - `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
 
 
@@ -1238,6 +1246,8 @@
   - companions <- companions.Companion
   - secrets <- secrets.Secret
   - secret_grievances <- secrets.SecretGrievance
+  - leverage_held <- secrets.Leverage
+  - leverage_against <- secrets.Leverage
   - detected_concealments <- conditions.ConditionInstance
   - modifiers <- mechanics.CharacterModifier
   - consequence_outcomes <- checks.ConsequenceOutcome
@@ -1250,6 +1260,7 @@
   - stat_trackers <- achievements.StatTracker
   - achievements <- achievements.CharacterAchievement
   - titles <- achievements.CharacterTitle
+  - conjured_obstacles <- areas.PositionEdge
   - owned_instances <- instances.InstancedRoom
   - captivities <- captivity.Captivity
   - journal_entries <- journals.JournalEntry
@@ -1282,6 +1293,7 @@
   - summoned_battle_units <- battles.BattleUnit
   - battle_participations <- battles.BattleParticipant
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
+  - conjured_hazards <- room_features.Trap
   - detected_traps <- room_features.Trap
 
 ### Gender
@@ -1828,6 +1840,9 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - cast_destination -> areas.Position [FK] (nullable)
+  - cast_position_a -> areas.Position [FK] (nullable)
+  - cast_position_b -> areas.Position [FK] (nullable)
   - detected_by -> character_sheets.CharacterSheet [M2M]
 **Pointed to by:**
   - triggers <- flows.Trigger
@@ -2919,6 +2934,7 @@
 - `set_primary_home(*, persona: 'Persona', room: 'DefaultObject', notes: 'str' = '') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670, #2036).`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
 - `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
+- `set_room_stat_modifier(room_profile: 'RoomProfile', stat_key: 'StatKey', *, source: 'str', value: 'int') -> 'LocationValueModifier | None' — Set the room-level ``(room_profile, stat_key, source)`` cascade row to ``value``.`
 - `tenancies_for(persona: 'Persona', room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return the QuerySet of currently-active tenancies that give this`
 - `tenancies_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, list[LocationTenancy]]' — Bulk-resolve currently-active tenancies for many rooms.`
 - `tenancy_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationTenancy]' — Return ALL LocationTenancy rows (active and ended) for a`
@@ -5554,6 +5570,7 @@
   - grievances <- secrets.SecretGrievance
   - known_by <- secrets.SecretKnowledge
   - gossip_heat <- secrets.SecretGossip
+  - leverage <- secrets.Leverage
 
 ### SecretVictim
 **Foreign Keys:**
@@ -5577,13 +5594,23 @@
   - secret -> secrets.Secret [FK]
   - region -> areas.Area [FK]
 
+### Leverage
+**Foreign Keys:**
+  - holder_sheet -> character_sheets.CharacterSheet [FK]
+  - subject_sheet -> character_sheets.CharacterSheet [FK]
+  - founded_on -> secrets.Secret [FK]
+
 ### Service Functions
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' — Author a Level-1 player-flavor secret (the only tier a player may free-write).`
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
+- `character_knows_secret(*, knower_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' — True if the character (by current tenure) holds knowledge of ``secret`` (#1680).`
 - `expose_secret(secret: 'Secret', *, societies: 'Iterable[Society]') -> 'SecretExposureResult' — Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).`
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' — Record that a character knows a secret, unlocking the given layers (idempotent).`
+- `has_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet') -> 'bool' — True if ``holder_sheet`` holds any standing leverage over ``subject_sheet`` (#1680).`
 - `known_secrets_for(roster_entry: 'RosterEntry', *, subject_sheet: 'CharacterSheet | None' = None, sort: 'str' = 'recent') -> 'QuerySet[SecretKnowledge]' — The secrets a character has **learned about others** — held records (#1334).`
+- `mint_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet', founded_on: 'Secret') -> 'Leverage' — Record standing leverage ``holder_sheet`` holds over ``subject_sheet`` (#1680).`
 - `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '') -> 'RelationshipCapstone' — A secret's victim registers a grievance against its subject (#1429).`
+- `reveal_leveraged_secret(*, revealer_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' — Play the blackmail card: expose ``secret`` and spend the leverage founded on it (#1680).`
 - `secret_known_to(secret: 'Secret', roster_entry: 'RosterEntry') -> 'bool' — Whether this character already holds the fact of this secret (#1334).`
 - `secrets_explaining(*, roster_entry: 'RosterEntry', legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'QuerySet[SecretKnowledge]' — The secrets a viewer KNOWS that are the hidden truth behind a given act (#1573).`
 - `secrets_owned_by(sheet: 'CharacterSheet', *, sort: 'str' = 'level') -> 'QuerySet[Secret]' — The secrets a character **owns** — its own shelf (#1334).`
