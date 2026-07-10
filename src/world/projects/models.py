@@ -233,3 +233,24 @@ class ContributionMethod(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"ContributionMethod<{self.kind}>({self.name})"
+
+
+class ProjectKindResonanceAward(SharedMemoryModel):
+    """Staff-authored opt-in: how much PROJECT_CONTRIBUTION resonance a contribution
+    to a project of this kind grants. Absence of a row (or resonance_award_amount=0)
+    means the kind does not pay out — fail-closed, matching OutcomeTierAward's
+    "missing row is a content gap, not a crash" precedent.
+    """
+
+    kind = models.CharField(max_length=40, choices=ProjectKind.choices, unique=True)
+    resonance_award_amount = models.PositiveIntegerField(
+        default=0,
+        help_text="Resonance granted to the contributor per contribution to a "
+        "project of this kind. 0 = no payout (opt-out).",
+    )
+
+    class Meta:
+        ordering = ["kind"]
+
+    def __str__(self) -> str:
+        return f"{self.kind}: +{self.resonance_award_amount} resonance/contribution"
