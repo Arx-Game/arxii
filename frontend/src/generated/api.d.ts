@@ -50195,6 +50195,7 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        role?: number;
       };
       header?: never;
       path?: never;

@@ -19986,6 +19986,10 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
+      - in: query
+        name: role
+        schema:
+          type: number
       tags:
       - npc-services
       security:
