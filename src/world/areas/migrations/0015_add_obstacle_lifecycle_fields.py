@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("areas", "0013_blueprintpositionshelter_positionshelter"),
+        ("areas", "0014_position_shelter_applies_to_attacks"),
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
     ]
 
