@@ -554,7 +554,7 @@ class EndRoomTenancyAction(Action):
 
 @dataclass
 class SetPrimaryHomeAction(Action):
-    """Make the room you're standing in your home (requires your active tenancy here)."""
+    """Make the room you're standing in your home (requires owner or tenant standing here)."""
 
     key: str = "set_primary_home"
     name: str = "Set Home"

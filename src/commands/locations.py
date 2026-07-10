@@ -51,6 +51,7 @@ _AFFIRMATIVE = frozenset({"yes", "y", "true", "on", "1", "public"})
 
 # #1930 condition verbs: the sole argument that flips a status quote into a payment.
 _CONFIRM_ARG = "confirm"
+_AURA_CLEAR_SUBVERB = "clear"
 
 
 def _split_trailing_kwargs(text: str, keys: tuple[str, ...]) -> tuple[str, dict[str, str]]:
@@ -298,9 +299,10 @@ class CmdRoom(ArxCommand):
 
         text = args.strip()
         clear = False
-        if text.lower().startswith("clear"):
+        first, _, rest = text.partition(" ")
+        if first.lower() == _AURA_CLEAR_SUBVERB:
             clear = True
-            text = text[len("clear") :].strip()
+            text = rest.strip()
         if not text:
             msg = "Usage: room/aura <resonance>  ·  room/aura clear <resonance>"
             raise CommandError(msg)
