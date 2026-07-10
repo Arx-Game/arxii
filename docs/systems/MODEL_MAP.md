@@ -130,6 +130,7 @@
   - battle_units <- battles.BattleUnit
   - battle_unit_values <- battles.BattleUnitCapability
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
+  - battle_unit_template_values <- battles.BattleUnitTemplateCapability
   - assist_patterns <- missions.MissionAssistPattern
 
 ### DamageType
@@ -782,18 +783,44 @@
   - companion_deployment <- companions.CompanionDeployment
   - ship_deployment <- ships.ShipDeployment
 
+### BattleMapBlueprint
+**Pointed to by:**
+  - places <- battles.BlueprintBattlePlace
+
+### BlueprintBattlePlace
+**Foreign Keys:**
+  - blueprint -> battles.BattleMapBlueprint [FK]
+**Pointed to by:**
+  - fortifications <- battles.BlueprintFortification
+
+### BlueprintFortification
+**Foreign Keys:**
+  - blueprint_place -> battles.BlueprintBattlePlace [FK]
+
+### BattleUnitTemplate
+**Foreign Keys:**
+  - properties -> mechanics.Property [M2M]
+  - capabilities -> conditions.CapabilityType [M2M]
+**Pointed to by:**
+  - capability_values <- battles.BattleUnitTemplateCapability
+
+### BattleUnitTemplateCapability
+**Foreign Keys:**
+  - template -> battles.BattleUnitTemplate [FK]
+  - capability -> conditions.CapabilityType [FK]
+
 ### Service Functions
 - `activate_stakes_for_battle(battle: 'Battle') -> 'None' — Lock any staked beats' contracts for this battle's enlisted party.`
-- `add_place(*, battle: 'Battle', name: 'str', terrain_type: 'str' = TerrainType.OPEN, movement_cost: 'int' = 1) -> 'BattlePlace' — Add a named front/zone to a battle.`
+- `add_place(*, battle: 'Battle', name: 'str', terrain_type: 'str' = TerrainType.OPEN, movement_cost: 'int' = 1, x: 'Decimal' = Decimal('0'), y: 'Decimal' = Decimal('0'), footprint_radius: 'Decimal' = Decimal('1')) -> 'BattlePlace' — Add a named front/zone to a battle.`
 - `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100, covenant: 'Covenant | None' = None) -> 'BattleSide' — Add a side (attacker or defender) to a battle.`
-- `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', descriptor: 'str' = '', quality: 'str' = UnitQuality.TRAINED, commander: 'CharacterSheet | None' = None, summoned_by: 'CharacterSheet | None' = None, strength: 'int' = 100, place: 'BattlePlace | None' = None, properties: 'Iterable[Property]' = (), capability_values: 'Iterable[tuple[CapabilityType, int]]' = (), individual_count: 'int | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
+- `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', descriptor: 'str' = '', quality: 'str' = UnitQuality.TRAINED, commander: 'CharacterSheet | None' = None, summoned_by: 'CharacterSheet | None' = None, strength: 'int' = 100, morale: 'int' = 70, place: 'BattlePlace | None' = None, properties: 'Iterable[Property]' = (), capability_values: 'Iterable[tuple[CapabilityType, int]]' = (), individual_count: 'int | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
 - `assign_unit_commander(*, unit: 'BattleUnit', commander: 'CharacterSheet | None') -> 'BattleUnit' — Assign (or clear, with ``commander=None``) a unit's commander (#1711).`
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' — Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
 - `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome, end the backing scene, and resolve any linked`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10, risk_level: 'str' = RiskLevel.LOW) -> 'Battle' — Create a new Battle (and its backing Scene).`
 - `create_battle_vehicle(*, battle: 'Battle', side: 'BattleSide', place_name: 'str', vehicle_kind: 'str' = VehicleKind.SHIP, is_structural: 'bool' = True) -> 'BattleVehicle' — Create a vessel/mount: a paired BattleUnit + BattlePlace, plus a hull`
-- `create_fortification(*, place: 'BattlePlace', defending_side: 'BattleSide', kind: 'str' = FortificationKind.WALL, building: 'Building | None' = None) -> 'Fortification' — Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).`
+- `create_fortification(*, place: 'BattlePlace', defending_side: 'BattleSide', kind: 'str' = FortificationKind.WALL, building: 'Building | None' = None, max_integrity: 'int | None' = None) -> 'Fortification' — Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).`
 - `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None, target_fortification: 'Fortification | None' = None, reposition_dx: 'Decimal | None' = None, reposition_dy: 'Decimal | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
 - `eject_vehicle_occupants(*, vehicle: 'BattleVehicle') -> 'None' — Eject every unit/participant embedded on *vehicle*'s place, applying the`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
@@ -1693,6 +1720,7 @@
   - battle_units <- battles.BattleUnit
   - battle_unit_values <- battles.BattleUnitCapability
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
+  - battle_unit_template_values <- battles.BattleUnitTemplateCapability
   - assist_patterns <- missions.MissionAssistPattern
 
 ### DamageType
@@ -2649,6 +2677,7 @@
   - ownership_events <- items.OwnershipEvent
   - item_facets <- items.ItemFacet
   - item_styles <- items.ItemStyle
+  - crafted_recipes <- items.CraftedItemRecipe
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
@@ -2791,6 +2820,8 @@
   - material_requirements <- items.CraftingMaterialRequirement
   - skill_caps <- items.CraftingSkillCap
   - consequence_rows <- items.CraftingRecipeConsequence
+  - modifier_outcomes <- items.CraftingRecipeModifier
+  - crafted_items <- items.CraftedItemRecipe
 
 ### CraftingMaterialRequirement
 **Foreign Keys:**
@@ -2807,6 +2838,17 @@
 **Foreign Keys:**
   - recipe -> items.CraftingRecipe [FK]
   - consequence -> checks.Consequence [FK]
+
+### CraftingRecipeModifier
+**Foreign Keys:**
+  - recipe -> items.CraftingRecipe [FK]
+  - target -> mechanics.ModifierTarget [FK]
+
+### CraftedItemRecipe
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [FK]
+  - recipe -> items.CraftingRecipe [FK]
+  - quality_tier -> items.QualityTier [FK]
 
 ### LabStationDetails
 **Foreign Keys:**

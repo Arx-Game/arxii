@@ -6,18 +6,34 @@ Core game interface for real-time RPG interaction with WebSocket communication a
 
 ### Main Interface
 
-- **`GamePage.tsx`**: Main game interface, composes the three-column layout
-- **`GameWindow.tsx`**: Central communication hub with session tabs, chat, and command input
+- **`GamePage.tsx`**: Composition root for `/game` (#2156). Derives the active
+  session's `sceneId`/`roomName`, calls `useSceneInteractions` +
+  `useThreading` once, owns `composerMode` state, and feeds the result down
+  as props to `ConversationSidebar` (left) and `GameWindow` (center) — no
+  duplicate roster/scene-interaction queries in the children.
+- **`GameWindow.tsx`**: Central communication hub with session tabs and
+  command input. When the composition root passes a `sceneFeed` prop (an
+  active scene), the center renders the structured chat-bubble feed
+  (`SceneMessages` + `SystemLane`) instead of the legacy `ChatWindow`.
 
 ### Layout (`components/`)
 
 - **`GameLayout.tsx`**: Three-column responsive grid (left sidebar, center, right sidebar)
 - **`GameTopBar.tsx`**: Character avatars, connection status, character switching
-- **`ConversationSidebar.tsx`**: Left sidebar for conversation channels (placeholder)
+- **`ConversationSidebar.tsx`**: Left sidebar. Renders the scene's
+  `ThreadSidebar` (room/place/whisper/target threads) when `GamePage` passes
+  threading state for an active scene; otherwise falls back to a static
+  "Room" button. Also owns the per-thread `ThreadFilterModal` (participant
+  mute list), mirroring `SceneInteractionPanel`'s composition on `/scenes/:id`.
 
 ### Communication (`components/`)
 
-- **`ChatWindow.tsx`**: Message display with auto-scroll and message type coloring
+- **`ChatWindow.tsx`**: Legacy raw message log (monospace, black background) —
+  the fallback center feed when there's no active scene to structure into
+  chat bubbles.
+- **`SystemLane.tsx`**: Muted, collapsible strip for system/channel/error
+  chatter shown alongside the structured scene feed (#2156) — no
+  `bg-black`/`font-mono`, just a quiet compact strip that expands on click.
 - **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for newline, command history
 - **`EvenniaMessage.tsx`**: Game message display and formatting
 

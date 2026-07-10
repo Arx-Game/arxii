@@ -37,10 +37,16 @@ def _seed_combat() -> None:
 
 def _seed_battles() -> None:
     from world.seeds.game_content.battles import (  # noqa: PLC0415
+        seed_battle_staging_catalog,
         seed_champion_duel_outcome_wiring,
     )
 
     seed_champion_duel_outcome_wiring()
+    # Starter GM battle-staging catalog: 2 BattleMapBlueprint + 3
+    # BattleUnitTemplate rows (#2010) — self-contained (get-or-creates its own
+    # Property/CapabilityType rows by name), no ordering dependency on another
+    # cluster.
+    seed_battle_staging_catalog()
 
 
 def _seed_checks() -> None:
@@ -385,6 +391,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     order so the admin hub lists clusters in their seed sequence.
     """
     from actions.models import ActionTemplate  # noqa: PLC0415
+    from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
@@ -449,9 +456,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Combat seeds check-types used by the resolution spine, not standalone
         # content rows; it still appears in the inventory as a seeded cluster.
         "combat": [],
-        # Battles seeds the ENCOUNTER_COMPLETED trigger wiring, not standalone
-        # content rows; it still appears in the inventory as a seeded cluster.
-        "battles": [],
+        # Battles seeds the ENCOUNTER_COMPLETED trigger wiring plus the starter
+        # GM battle-staging catalog: 2 BattleMapBlueprint + 3 BattleUnitTemplate
+        # rows (#2010).
+        "battles": [BattleMapBlueprint, BattleUnitTemplate],
         "consent": [SocialConsentCategory],
         "character_creation": [StartingArea, Beginnings, Species],
         # Missions: the starter notice board (#2121) — 1 BOARD MissionGiver +

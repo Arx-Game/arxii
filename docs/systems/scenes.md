@@ -668,6 +668,87 @@ informational note above, never to disable controls (#1476 cleared the old dange
 
 ---
 
+## UI Composition — `/game` One Play Surface (#2156)
+
+Before #2156, the scene toolset (threading, action attachment, places, consent,
+composer modes) was built but mounted only on the `/scenes/:id` record page; the
+live `/game` view rendered a flat monospace log with no threading. `/game` is now
+the one play surface — the full toolset composes there, and `/scenes/:id` remains
+the unchanged record/detail page (`SceneInteractionPanel`).
+
+**`GamePage`** (`frontend/src/game/GamePage.tsx`) is the composition root: it
+derives the active session's `sceneId`/`roomName`, calls `useSceneInteractions` +
+`useThreading` **once**, and threads the results down as props to
+`ConversationSidebar` (left column), `GameWindow` (center feed + composer), and the
+scene toolset (`ActionPanel`, `PlaceBar`, `ConsentPrompt`, `CharacterCardDrawer`) —
+no child re-fetches the same scene/roster data.
+
+**Feed presentation:** `PoseUnit` (`frontend/src/scenes/components/PoseUnit.tsx`)
+renders each interaction as a chat bubble — avatar thumbnail, author, timestamp,
+`FormattedContent`-rendered prose, and reactions — never monospace/terminal
+styling (ratified presentation bar; terminal-style rendering on the primary feed is
+a defect, not a variant). `GameWindow` renders this structured bubble feed plus
+`SystemLane` (muted, collapsible system/channel/error strip) whenever the active
+session has a scene; with no active scene it falls back to the legacy raw
+`ChatWindow` log (`frontend/src/game/components/ChatWindow.tsx`). This restyle also
+closes the markdown-rendering gap the #2155 audit flagged: the feed now renders
+`FormattedContent`, so `RichTextInput`'s markdown output actually displays as
+formatted prose instead of raw text.
+
+**Threading + per-thread unread:** `ConversationSidebar` renders `ThreadSidebar` +
+`ThreadFilterModal` from the `ThreadingState` `GamePage` composes, falling back to
+a static "Room" button with no active scene. Per-thread unread counts are backed by
+`Session.threadLastSeen` (per-thread last-seen **interaction ids**, persisted in
+Redux via `markThreadSeen`) rather than stubbed to 0. A thread key with no
+last-seen entry — i.e. a thread that's new since the session started — falls back
+to `Session.sceneBaselineId`, a single scene-load baseline scalar set once via
+`setSceneBaseline`; this is what lets a brand-new mid-session thread badge
+correctly as unread from its first message, rather than needing its own baseline
+established retroactively. Both `GamePage`'s baseline-capture effect and its
+threading-filter/mute reset (`useThreading.resetForNewScene`) are keyed on
+`[active, sceneId]`, so a puppet switch or scene change never strands a stale
+filter/mute or wipes an already-baselined puppet's accumulated unread (the
+baseline gate reads the per-puppet Redux `sceneBaselineId` directly, not a
+single scalar ref). With neither a per-thread entry nor a baseline (e.g.
+`/scenes/:id`, which passes no threading options at all), unread is 0 — unchanged
+behavior for the record page.
+
+**Character-card drawer:** clicking a `PoseUnit` avatar opens `CharacterCardDrawer`
+(`frontend/src/game/components/CharacterCardDrawer.tsx`) in place (a `Sheet`
+drawer over the conversation, not a page navigation) with Friend/Whisper quick
+actions. **Privacy rule:** the persona payload carried by an `Interaction` has no
+roster-entry or character-sheet id — only id/name/thumbnail — deliberately, so a
+disguised or temporary persona can't be de-anonymized through the card. The drawer
+resolves identity **only** via the public `AllowAny` roster search
+(`useRosterEntryByNameQuery`, the same endpoint `RosterListPage` uses) and requires
+an exact name match; no match (disguise, temporary persona, unlisted character)
+renders name + avatar + a "not on the public roster" notice with no sheet data and
+no `FriendButton`. Never resolve through `receiver_persona_ids`, scene
+participation, or any other non-public linkage.
+
+**Backend — pose co-location + place presence:** `PoseSubmitSerializer.validate`
+(`interaction_serializers.py`) rejects (400) a pose submitted with a `scene_id`
+whose scene has a room (`scene.location` set) that doesn't match the actor
+character's current location — a wrong-room pose is now a validation error instead
+of silently recording under the wrong scene. A scene with no location (`location`
+is `None`) skips the check. `PlaceSerializer.viewer_is_present`
+(`place_views.py`) is a `SerializerMethodField` reporting whether one of the
+requesting account's owned personas has a `PlacePresence` row at that place;
+memoized per serializer instance so a places-list response shares one owned-persona
+lookup across all rows instead of re-querying per row. Scene poses submitted from
+`/game` take the REST `submit-pose` path, keyed by `scene_id` — a pose belongs to
+a scene, not a room, so this is unrelated to room id.
+
+**Places query room-id vs scene-id (fold-in fix, unrelated to the above):**
+`PlaceBar`'s `sceneId` prop is actually used as the ROOM id by
+`fetchPlaces(?room=)` (confirmed by reading `PlaceBar.tsx` + `actionQueries.ts`)
+— so `/game` derives `placesRoomId`/`isAtPlace` from the scene's room
+(`roomData.id`), not the scene id. `SceneDetailPage` still passes the scene id
+there; that's a separate, pre-existing latent bug on that page, left untouched
+by this slate.
+
+---
+
 ## Permissions
 
 | Permission Class | Used For | Rule |

@@ -54,6 +54,54 @@ function ActionChip({ link, onExpandRequest }: ActionChipProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Avatar identity affordance (#2156)
+// ---------------------------------------------------------------------------
+
+interface PoseUnitAvatarProps {
+  interaction: Interaction;
+  onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
+}
+
+/**
+ * Avatar thumbnail in the bubble header. Identity click surface (#2156) — the
+ * name stays the PersonaContextMenu action surface; the avatar itself opens
+ * the character card. Renders as a plain (non-interactive) avatar when
+ * `onAvatarClick` isn't provided.
+ */
+function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
+  const avatar = (
+    <PersonaAvatar
+      source={{
+        name: interaction.persona.name,
+        thumbnailUrl: interaction.persona.thumbnail_url,
+      }}
+      size="sm"
+    />
+  );
+
+  if (!onAvatarClick) {
+    return avatar;
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={`View ${interaction.persona.name}`}
+      className="rounded-full transition-opacity hover:opacity-80"
+      onClick={() =>
+        onAvatarClick({
+          id: interaction.persona.id,
+          name: interaction.persona.name,
+          thumbnail_url: interaction.persona.thumbnail_url ?? null,
+        })
+      }
+    >
+      {avatar}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Reactions footer (mirrors SceneMessages pattern)
 // ---------------------------------------------------------------------------
 
@@ -108,6 +156,13 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
 // PoseUnit
 // ---------------------------------------------------------------------------
 
+/** Minimal persona identity payload forwarded by the avatar-click affordance (#2156). */
+export interface PoseUnitAvatarClickPersona {
+  id: number;
+  name: string;
+  thumbnail_url: string | null;
+}
+
 export interface PoseUnitProps {
   interaction: Interaction;
   sceneId: string;
@@ -115,6 +170,13 @@ export interface PoseUnitProps {
   onAttachAction?: (action: ActionAttachmentInfo) => void;
   /** When true, shows the "Tag dramatic moment" GM control (#1139). */
   canGm?: boolean;
+  /**
+   * Avatar-click identity affordance (#2156): fired with the interaction's
+   * persona when the avatar thumbnail is clicked. The avatar renders as a
+   * plain (non-interactive) image when this prop is absent — the name's
+   * PersonaContextMenu remains the action surface either way.
+   */
+  onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
 }
 
 export function PoseUnit({
@@ -123,6 +185,7 @@ export function PoseUnit({
   onAddTarget,
   onAttachAction,
   canGm = false,
+  onAvatarClick,
 }: PoseUnitProps) {
   const isAction = interaction.mode === 'action';
   const actionLinks = interaction.action_links ?? [];
@@ -141,15 +204,12 @@ export function PoseUnit({
   // -------------------------------------------------------------------------
   if (isAction) {
     return (
-      <div className="border-b py-2" data-testid="pose-unit-action-standalone">
+      <div
+        className="my-1.5 max-w-[85%] rounded-lg bg-muted/40 px-3 py-2"
+        data-testid="pose-unit-action-standalone"
+      >
         <div className="flex items-center gap-2">
-          <PersonaAvatar
-            source={{
-              name: interaction.persona.name,
-              thumbnailUrl: interaction.persona.thumbnail_url,
-            }}
-            size="sm"
-          />
+          <PoseUnitAvatar interaction={interaction} onAvatarClick={onAvatarClick} />
           <PersonaContextMenu
             personaId={interaction.persona.id}
             personaName={interaction.persona.name}
@@ -203,7 +263,7 @@ export function PoseUnit({
   if (interaction.mode === 'outcome') {
     return (
       <div
-        className="border-b py-1.5 pl-2 text-sm italic text-muted-foreground"
+        className="my-1 pl-2 text-sm italic text-muted-foreground"
         data-testid="pose-unit-outcome"
       >
         <FormattedContent content={interaction.content} />
@@ -215,16 +275,10 @@ export function PoseUnit({
   // State 1 + 2: POSE (with or without linked actions)
   // -------------------------------------------------------------------------
   return (
-    <div className="border-b py-2" data-testid="pose-unit">
+    <div className="my-1.5 max-w-[85%] rounded-lg bg-muted/40 px-3 py-2" data-testid="pose-unit">
       {/* Header: avatar + name + timestamp */}
       <div className="flex items-center gap-2">
-        <PersonaAvatar
-          source={{
-            name: interaction.persona.name,
-            thumbnailUrl: interaction.persona.thumbnail_url,
-          }}
-          size="sm"
-        />
+        <PoseUnitAvatar interaction={interaction} onAvatarClick={onAvatarClick} />
         <PersonaContextMenu
           personaId={interaction.persona.id}
           personaName={interaction.persona.name}

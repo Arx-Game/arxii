@@ -78,6 +78,27 @@ class StartSceneActionTests(TestCase):
             scene=scene, account=account_b, is_owner=True
         ).exists()
 
+    def test_start_scene_not_blocked_by_battle_only_scene(self):
+        """A room holding ONLY a staged battle's backing Scene gets a NEW RP scene (#2010).
+
+        ``_active_scene_for_room`` must exclude battle-backed scenes the same way the
+        SceneViewSet collision check does -- otherwise StartSceneAction reports
+        "already active" and enrolls actors into the battle scene instead of
+        creating the room's real RP scene.
+        """
+        from world.battles.staging import stage_battle
+
+        room = _make_room("Warfront")
+        actor, _account = _create_pc_with_account("Frida", location=room)
+        battle = stage_battle(name="Siege of the Hall", location=room)
+
+        result = StartSceneAction().execute(actor)
+
+        assert result.success is True
+        assert "already active" not in result.message
+        new_scene = Scene.objects.get(location=room, is_active=True, battle__isnull=True)
+        assert new_scene.pk != battle.scene_id
+
     def test_start_when_scene_exists_does_not_flip_ownership(self):
         """If a scene is already active, calling start_scene does NOT change ownership."""
         room = _make_room("Room4")

@@ -83,6 +83,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `/scenes/:id/battle` — see [battles.md](../systems/battles.md#web-surface-2009).
   Deferred: a post-conclusion battle writeup page (#1735), which should reuse
   `BattleDetailSerializer`'s aggregate shape rather than authoring a second one.
+  GM battle staging shipped (#2010, ADR-0111): the setup layer had **no** mutation
+  path at all before this (a Battle could only exist via admin/tests/factories). A
+  JUNIOR-trust GM now stands one up from an admin-authored catalog —
+  `BattleMapBlueprint`/`BlueprintBattlePlace`/`BlueprintFortification` and
+  `BattleUnitTemplate`/`BattleUnitTemplateCapability` — via `create_battle` /
+  `stage_battle_map` / `spawn_battle_units` / `enlist_battle_participant` /
+  `browse_battle_catalog` (`world.battles.staging`), the `battle create/stage/spawn/
+  enlist/maps/units` telnet subverbs, a read-only catalog REST API
+  (`world.gm.permissions.HasGMTrust`, new JUNIOR-tier DRF permission class), and a
+  minimal `StagingPanel` on the `/scenes/:id/battle` map page. A starter catalog (2
+  blueprints, 3 unit templates) ships via the "battles" seed cluster — see
+  [battles.md](../systems/battles.md#staging-2010).
 - Mounts / charging / flying (P2, no-improv-flagged). Ranged / archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
 
 ## Reserved term: "clash"

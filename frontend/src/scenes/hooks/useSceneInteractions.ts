@@ -34,7 +34,15 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
   };
 }
 
-export function useSceneInteractions(sceneId: string) {
+/**
+ * Backfills a scene's interactions via REST (paginated, cursor-based) and
+ * merges in any newer ones that have arrived over the WebSocket while the
+ * page was open. `sceneId` is optional so composition roots like `GamePage`
+ * (#2156) — which may render with no active scene — can call this hook
+ * unconditionally (satisfying the rules of hooks) without triggering a
+ * REST fetch or matching the WS selector against every session.
+ */
+export function useSceneInteractions(sceneId: string | undefined) {
   const activeCharacter = useAppSelector((state) => state.game.active);
 
   // Memoized selector: only recomputes when the sceneInteractions array reference changes,
@@ -44,9 +52,11 @@ export function useSceneInteractions(sceneId: string) {
       createSelector(
         (state: RootState) => state.game.sessions[activeCharacter ?? '']?.sceneInteractions,
         (interactions) =>
-          (interactions ?? []).filter(
-            (ws) => ws.scene_id !== null && ws.scene_id.toString() === sceneId
-          )
+          sceneId === undefined
+            ? []
+            : (interactions ?? []).filter(
+                (ws) => ws.scene_id !== null && ws.scene_id.toString() === sceneId
+              )
       ),
     [activeCharacter, sceneId]
   );
@@ -56,8 +66,9 @@ export function useSceneInteractions(sceneId: string) {
     results: Interaction[];
     next?: string;
   }>({
-    queryKey: ['scene-interactions', sceneId],
-    queryFn: ({ pageParam }) => fetchInteractions(sceneId, pageParam as string | undefined),
+    queryKey: ['scene-interactions', sceneId ?? 'none'],
+    queryFn: ({ pageParam }) =>
+      fetchInteractions(sceneId as string, pageParam as string | undefined),
     getNextPageParam: (lastPage) => {
       if (!lastPage.next) return undefined;
       try {
@@ -68,6 +79,7 @@ export function useSceneInteractions(sceneId: string) {
       }
     },
     initialPageParam: undefined as string | undefined,
+    enabled: sceneId !== undefined,
   });
 
   const allInteractions = useMemo(() => {

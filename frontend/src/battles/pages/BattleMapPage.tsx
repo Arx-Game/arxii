@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 
 import { BattleMapCanvas } from '../components/BattleMapCanvas';
 import { PlaceDetailPanel } from '../components/PlaceDetailPanel';
+import { StagingPanel } from '../components/StagingPanel';
 import { useBattleDetailQuery, useBattleForSceneQuery } from '../queries';
 import type { BattleRoundSummary } from '../types';
 
@@ -68,8 +69,11 @@ export function BattleMapPage() {
 
   if (!battle) {
     return (
-      <div className="p-6 text-center text-sm text-muted-foreground" data-testid="battle-map-empty">
-        No battle for this scene.
+      <div className="p-6" data-testid="battle-map-empty">
+        <p className="text-center text-sm text-muted-foreground">No battle for this scene.</p>
+        <div className="mx-auto mt-4 max-w-sm">
+          <StagingPanel sceneId={sceneId} battle={null} detail={null} />
+        </div>
       </div>
     );
   }
@@ -121,7 +125,8 @@ export function BattleMapPage() {
             onSelectPlace={setSelectedPlaceId}
           />
         </div>
-        <div className="min-h-0 overflow-y-auto" data-testid="battle-map-panel-column">
+        <div className="min-h-0 space-y-4 overflow-y-auto" data-testid="battle-map-panel-column">
+          <StagingPanel sceneId={sceneId} battle={battle} detail={detail} />
           <PlaceDetailPanel
             place={selectedPlace}
             sides={detail.sides}

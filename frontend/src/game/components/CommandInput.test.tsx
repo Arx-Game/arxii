@@ -1,4 +1,4 @@
-import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { RenderOptions } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -19,9 +19,14 @@ function render(ui: ReactElement, options?: RenderOptions) {
 const sendMock = vi.fn();
 const submitPoseMock = vi.fn(() => Promise.resolve());
 const fetchSceneMock = vi.fn();
+const toastErrorMock = vi.fn();
 
 vi.mock('@/hooks/useGameSocket', () => ({
   useGameSocket: () => ({ send: sendMock }),
+}));
+
+vi.mock('sonner', () => ({
+  toast: { error: (...args: unknown[]) => toastErrorMock(...args), success: vi.fn() },
 }));
 
 vi.mock('@/scenes/queries', () => ({
@@ -76,7 +81,9 @@ describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
     submitPoseMock.mockClear();
+    submitPoseMock.mockImplementation(() => Promise.resolve());
     fetchSceneMock.mockClear();
+    toastErrorMock.mockClear();
     queryClient.clear();
   });
 
@@ -277,7 +284,7 @@ describe('CommandInput', () => {
     });
   });
 
-  it('pose without detachments uses WebSocket send and skips REST submitPose', () => {
+  it('pose without detachments still uses REST submitPose (scene poses always take REST)', () => {
     const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
     render(
       <CommandInput
@@ -294,8 +301,90 @@ describe('CommandInput', () => {
     fireEvent.change(textarea, { target: { value: 'stands ready' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
-    expect(sendMock).toHaveBeenCalledWith('Alice', 'pose stands ready');
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 42,
+      scene_id: 1,
+      content: 'stands ready',
+    });
+  });
+
+  it('plain pose (no composerMode) with sceneId/personaId uses REST submitPose', () => {
+    render(<CommandInput character="Alice" sceneId="5" personaId={9} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'looks around' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 5,
+      content: 'looks around',
+    });
+  });
+
+  it('pose with no sceneId uses WebSocket send', () => {
+    const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
+    render(<CommandInput character="Alice" composerMode={mode} personaId={9} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'waves' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'pose waves');
     expect(submitPoseMock).not.toHaveBeenCalled();
+  });
+
+  it('whisper composer mode with sceneId still uses WebSocket send (non-pose commands keep WS)', () => {
+    const mode: ComposerMode = {
+      command: 'whisper',
+      targets: ['Bob'],
+      label: 'Whisper → Bob',
+    };
+    render(<CommandInput character="Alice" composerMode={mode} sceneId="5" personaId={9} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'secret message' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'whisper Bob=secret message');
+    expect(submitPoseMock).not.toHaveBeenCalled();
+  });
+
+  it('directed pose composer mode sends target_names on the REST path (#2156)', () => {
+    const mode: ComposerMode = { command: 'pose', targets: ['Bob'], label: 'Pose → Bob' };
+    render(<CommandInput character="Alice" composerMode={mode} sceneId="5" personaId={9} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'confronts' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 5,
+      content: 'confronts',
+      target_names: ['Bob'],
+    });
+  });
+
+  it('keeps the draft and surfaces an error toast when submitPose rejects (#2156)', async () => {
+    submitPoseMock.mockImplementation(() => Promise.reject(new Error('Not co-located.')));
+    const onPoseSubmitted = vi.fn();
+    render(
+      <CommandInput character="Alice" sceneId="5" personaId={9} onPoseSubmitted={onPoseSubmitted} />
+    );
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    fireEvent.change(textarea, { target: { value: 'looks around' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(submitPoseMock).toHaveBeenCalled();
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith('Not co-located.'));
+
+    // The draft survives the rejection — never silently eaten.
+    expect(textarea.value).toBe('looks around');
+    expect(onPoseSubmitted).not.toHaveBeenCalled();
   });
 });
 

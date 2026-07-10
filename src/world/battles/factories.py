@@ -6,6 +6,7 @@ import factory
 import factory.django as factory_django
 
 from world.battles.constants import (
+    DEFAULT_MORALE,
     DEFAULT_VICTORY_THRESHOLD,
     BattleActionKind,
     BattleActionScope,
@@ -13,17 +14,24 @@ from world.battles.constants import (
     BattleSideRole,
     BattleUnitStatus,
     FortificationKind,
+    TerrainType,
+    UnitQuality,
     VehicleKind,
 )
 from world.battles.models import (
     Battle,
     BattleActionDeclaration,
+    BattleMapBlueprint,
     BattleParticipant,
     BattlePlace,
     BattleRound,
     BattleSide,
     BattleUnit,
+    BattleUnitTemplate,
+    BattleUnitTemplateCapability,
     BattleVehicle,
+    BlueprintBattlePlace,
+    BlueprintFortification,
     Fortification,
     WeatherTypeCapabilityChallenge,
     WeatherTypePropertyEffect,
@@ -95,6 +103,57 @@ class BattleVehicleFactory(factory_django.DjangoModelFactory):
     place = factory.SubFactory(BattlePlaceFactory, battle=factory.SelfAttribute("..unit.battle"))
     vehicle_kind = VehicleKind.SHIP
     is_structural = True
+
+
+class BattleMapBlueprintFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = BattleMapBlueprint
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Blueprint {n}")
+    description = ""
+    is_active = True
+
+
+class BlueprintBattlePlaceFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = BlueprintBattlePlace
+
+    blueprint = factory.SubFactory(BattleMapBlueprintFactory)
+    name = factory.Sequence(lambda n: f"Blueprint Place {n}")
+    terrain_type = TerrainType.OPEN
+
+
+class BlueprintFortificationFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = BlueprintFortification
+
+    blueprint_place = factory.SubFactory(BlueprintBattlePlaceFactory)
+    kind = FortificationKind.WALL
+    max_integrity = 100
+    defending_side_role = BattleSideRole.DEFENDER
+
+
+class BattleUnitTemplateFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = BattleUnitTemplate
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Unit Template {n}")
+    descriptor = "generic"
+    quality = UnitQuality.TRAINED
+    strength = 100
+    morale = DEFAULT_MORALE
+    is_active = True
+
+
+class BattleUnitTemplateCapabilityFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = BattleUnitTemplateCapability
+
+    template = factory.SubFactory(BattleUnitTemplateFactory)
+    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    value = 1
 
 
 class BattleRoundFactory(factory_django.DjangoModelFactory):

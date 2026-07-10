@@ -197,7 +197,7 @@ class CmdScene(ArxCommand):
             self.msg("You are not in a room.")
             return
 
-        scene = Scene.objects.filter(location=room, is_active=True).first()
+        scene = Scene.objects.active_for_room(room).first()
         if scene is None:
             self.msg("No active scene here.")
             return

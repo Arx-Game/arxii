@@ -125,6 +125,36 @@ class ConcludeBattleTests(TestCase):
             conclude_battle(battle=self.battle, outcome=BattleOutcome.DEFENDER_MARGINAL)
         mock_resolve.assert_called_once_with(self.battle)
 
+    def test_conclude_invalidates_active_scene_cache(self) -> None:
+        """conclude_battle busts the room's in-memory active-scene cache (#2010 review).
+
+        Mirrors ``finish_scene_full``'s identical step
+        (``world/scenes/scene_admin_services.py``) -- every scene-ending path must bust
+        the room's cache, not just the room-scoped RP-scene resolvers this same review
+        wave taught to exclude battle-backed scenes (``Scene.objects.active_for_room``).
+        ``get_active_scene`` caches its result unconditionally -- including a ``None``
+        result -- so priming via a plain call is enough to observe the bust: the cache
+        attribute exists after priming and is gone after ``conclude_battle``.
+        """
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.scenes.interaction_services import get_active_scene
+
+        room = ObjectDBFactory(
+            db_key="ConcludeCacheRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.battle.scene.location = room
+        self.battle.scene.save(update_fields=["location"])
+
+        # Prime the cache the way any room-scoped resolver does.
+        get_active_scene(room)
+        assert hasattr(room, "_active_scene_cache")
+
+        conclude_battle(battle=self.battle, outcome=BattleOutcome.ATTACKER_MARGINAL)
+
+        # Cache entry busted -- a fresh lookup does not hit a stale cached value.
+        assert not hasattr(room, "_active_scene_cache")
+
 
 class MaybeConcludeOnTimerTests(TestCase):
     def setUp(self) -> None:

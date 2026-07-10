@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
@@ -56,6 +57,14 @@ interface CommandInputProps {
   detachedActionIds?: number[];
   /** Called after a successful pose submit so the parent can clear detachedActionIds. */
   onPoseSubmitted?: () => void;
+  /**
+   * Whether the viewer's active persona is currently present at a Place in
+   * this scene (#2156) — gates the `tt` (tabletalk) mode in `ModeSelector`.
+   * Derived by the composition root (`GamePage`/`SceneDetailPage`) from the
+   * shared `['scene-places', id]` query so it dedupes with `PlaceBar`'s own
+   * fetch. Defaults to `false` when omitted.
+   */
+  isAtPlace?: boolean;
 }
 
 export function CommandInput({
@@ -73,6 +82,7 @@ export function CommandInput({
   pendingActionIds,
   detachedActionIds,
   onPoseSubmitted,
+  isAtPlace,
 }: CommandInputProps) {
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -113,28 +123,32 @@ export function CommandInput({
       onSubmitAction(actionAttachment);
     }
 
-    // Determine submission path for scene poses.
-    // The REST path is used ONLY when the user has detached actions — this is
-    // the only case where we need an explicit action_link_ids override.
-    // For all other cases (no detachments, non-pose commands, outside a scene)
-    // the WebSocket path runs and server-side auto-link handles attachment.
+    // Determine submission path. The REST path (submit_pose) is now the
+    // canonical route for scene poses: it carries scene_id explicitly and the
+    // server enforces the co-location check (actor must be in the scene's
+    // room) that the WebSocket command protocol can't express. WS remains
+    // for non-pose commands (say, whisper, tt, ...) and for poses outside a
+    // scene (no sceneId/personaId — e.g. room-only poses with no active scene).
     const isPose = !composerMode || composerMode.command === 'pose';
     const detachedSet = new Set(detachedActionIds ?? []);
     const hasDetachments = detachedSet.size > 0;
-    // Entrance poses must take the REST path — pose_kind doesn't travel over
-    // the WebSocket command protocol.
-    const usesRestSubmit =
-      isPose && sceneId !== undefined && personaId != null && (hasDetachments || isEntrance);
+    const usesRestSubmit = isPose && sceneId !== undefined && personaId != null;
 
     if (usesRestSubmit) {
       // REST path: explicit action_link_ids override when the user has detached
       // one or more pending actions. WebSocket send() is intentionally skipped
-      // to avoid creating two POSE Interactions for the same pose.
+      // to avoid creating two POSE Interactions for the same pose. The draft
+      // is only cleared on success (#2156 review fix) — a rejected request
+      // (e.g. the co-location 400) must not silently eat the player's text;
+      // the composer keeps it and the server's error surfaces via toast so a
+      // retry doesn't mean retyping the whole pose.
+      const composerTargets = composerMode?.targets ?? [];
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
         content: trimmed,
         pose_kind: isEntrance ? 'entry' : undefined,
+        ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
         ...(hasDetachments
           ? {
               action_link_ids: (pendingActionIds ?? []).filter((id) => !detachedSet.has(id)),
@@ -143,14 +157,24 @@ export function CommandInput({
       })
         .then(() => {
           onPoseSubmitted?.();
+          setHistory((prev) => [...prev, trimmed]);
+          setHistoryIndex(-1);
+          setCommand('');
+          setIsEntrance(false);
         })
-        .catch(() => {});
-      setIsEntrance(false);
-    } else {
-      // WebSocket path: existing behavior. Server-side auto-link will attach
-      // any pending ACTION interactions when the POSE is created.
-      send(character, fullCommand);
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Failed to submit pose.';
+          toast.error(message);
+        })
+        .finally(() => {
+          submittingRef.current = false;
+        });
+      return;
     }
+
+    // WebSocket path: existing behavior. Server-side auto-link will attach
+    // any pending ACTION interactions when the POSE is created.
+    send(character, fullCommand);
 
     setHistory((prev) => [...prev, trimmed]);
     setHistoryIndex(-1);
@@ -255,8 +279,7 @@ export function CommandInput({
           <ModeSelector
             currentMode={composerMode?.command ?? 'pose'}
             onModeChange={handleModeChange}
-            // TODO: derive from PlacePresence when place system is integrated
-            isAtPlace={false}
+            isAtPlace={isAtPlace ?? false}
           />
         }
         rightSlot={

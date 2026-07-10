@@ -385,6 +385,110 @@ describe('PoseUnit', () => {
 
     expect(screen.queryByTestId('standalone-action-expand')).toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // Chat-bubble restyle + avatar identity click (#2156)
+  // ---------------------------------------------------------------------------
+
+  it('clicking the avatar fires onAvatarClick with the interaction persona (POSE)', () => {
+    const onAvatarClick = vi.fn();
+    const interaction = makeInteraction({
+      mode: 'pose',
+      persona: { id: 10, name: 'Alice', thumbnail_url: '/alice.png' },
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" onAvatarClick={onAvatarClick} />
+      </Wrapper>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Alice' }));
+    expect(onAvatarClick).toHaveBeenCalledWith({
+      id: 10,
+      name: 'Alice',
+      thumbnail_url: '/alice.png',
+    });
+  });
+
+  it('clicking the avatar fires onAvatarClick on the standalone ACTION branch', () => {
+    const onAvatarClick = vi.fn();
+    const interaction = makeInteraction({
+      mode: 'action',
+      persona: { id: 10, name: 'Alice', thumbnail_url: undefined },
+      action_links: [],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" onAvatarClick={onAvatarClick} />
+      </Wrapper>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Alice' }));
+    expect(onAvatarClick).toHaveBeenCalledWith({ id: 10, name: 'Alice', thumbnail_url: null });
+  });
+
+  it('avatar is not an interactive button when onAvatarClick is not provided', () => {
+    const interaction = makeInteraction({ mode: 'pose' });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    expect(screen.queryByRole('button', { name: 'View Alice' })).toBeNull();
+  });
+
+  it('POSE branch still exposes data-testid="pose-unit" as a chat bubble', () => {
+    const interaction = makeInteraction({ mode: 'pose' });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    const bubble = screen.getByTestId('pose-unit');
+    expect(bubble).toHaveClass('rounded-lg');
+    expect(bubble).toHaveClass('bg-muted/40');
+    expect(bubble).not.toHaveClass('border-b');
+  });
+
+  it('standalone ACTION branch also renders as a bubble', () => {
+    const interaction = makeInteraction({ mode: 'action', action_links: [] });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    const bubble = screen.getByTestId('pose-unit-action-standalone');
+    expect(bubble).toHaveClass('rounded-lg');
+    expect(bubble).toHaveClass('bg-muted/40');
+    expect(bubble).not.toHaveClass('border-b');
+  });
+
+  it('outcome branch keeps its muted-system-notice look with no border', () => {
+    const interaction = makeInteraction({
+      mode: 'outcome',
+      persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+      content: 'The dust settles.',
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    const notice = screen.getByTestId('pose-unit-outcome');
+    expect(notice).toHaveClass('italic');
+    expect(notice).toHaveClass('text-muted-foreground');
+    expect(notice).not.toHaveClass('border-b');
+  });
 });
 
 describe('PoseUnit outcome mode', () => {

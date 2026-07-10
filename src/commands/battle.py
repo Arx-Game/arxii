@@ -24,23 +24,60 @@ GM subverbs:
     battle resolve      — resolve the current round
     battle conclude     — force-conclude the battle
 
+GM staging subverbs (#2010 — turn a catalog pick into a live Battle):
+    battle create <name> [risk=<level>] [map=<blueprint>]
+    battle stage <blueprint> [replace]
+    battle spawn <template> [count=N] [at <front>] side=<role>
+    battle enlist <character> = <side>[, <front>]
+    battle maps [<term>]
+    battle units [<term>]
+
 No business logic lives here: parse, resolve model instances, call Action.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.parsing import parse_kv_and_flags
+from commands.utils.gm_resolution import (
+    resolve_account_or_none,
+    resolve_character_sheet_in_room,
+    resolve_model_by_pk_or_name,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from actions.types import ActionResult
-    from world.battles.models import BattleParticipant, BattleUnit
+    from world.battles.models import (
+        Battle,
+        BattleMapBlueprint,
+        BattleParticipant,
+        BattlePlace,
+        BattleSide,
+        BattleUnit,
+        BattleUnitTemplate,
+    )
 
 _PLACE_PREFIX = "place "
+_AT_MARKER = "at"  # noqa: STRING_LITERAL
+
+
+def _split_leading_positional(tokens: list[str]) -> tuple[list[str], list[str]]:
+    """Split *tokens* at the first ``key=value`` token (#2010).
+
+    Returns (positional tokens before the first key=value token, the
+    remaining tokens from that point on) — used to separate a free-text
+    leading name/label (which may contain spaces) from a trailing
+    ``key=value`` clause, e.g. ``battle create <name> [risk=<level>]``.
+    """
+    for index, token in enumerate(tokens):
+        if "=" in token and not token.startswith("="):
+            return tokens[:index], tokens[index:]
+    return tokens, []
 
 
 class CmdBattle(ArxCommand):
@@ -68,6 +105,14 @@ class CmdBattle(ArxCommand):
         battle resolve
         battle conclude
 
+    Syntax (GM staging, #2010):
+        battle create <name> [risk=<level>] [map=<blueprint>]
+        battle stage <blueprint> [replace]
+        battle spawn <template> [count=N] [at <front>] side=<role>
+        battle enlist <character> = <side>[, <front>]
+        battle maps [<term>]
+        battle units [<term>]
+
     Bare ``battle`` shows your current battle status. Supply a unit name for
     ``strike`` (matched within the active battle) or a character name for
     ``support``/``rescue``, plus the technique you know to cast with
@@ -93,6 +138,22 @@ class CmdBattle(ArxCommand):
     to a PLACE-scope local exception at that front only.
     ``duel <front> vs <boss name>`` opens a lethal Champion duel bound to that
     front — requires an engaged Champion role for your side's covenant.
+
+    The staging subverbs (#2010) turn a JUNIOR-GM catalog pick into a live
+    Battle: ``create`` makes a new Battle (optionally staging a named
+    ``BattleMapBlueprint`` at creation time via ``map=``) and binds its Scene
+    to your current room (#2010 Task 4), so ``battle round``/``resolve``/
+    ``conclude`` (which resolve "the active battle in this room") can act on
+    it right away; ``stage`` clones a named blueprint's fronts onto your
+    current staged battle (``replace`` tears down and re-stages an existing
+    map, when safe to do so); ``spawn`` mints one or more
+    ``BattleUnitTemplate`` copies onto a side, optionally at a named front;
+    ``enlist`` adds a player character to a side (and optionally a front).
+    ``maps``/``units`` browse the two catalogs by name (both search both
+    catalogs — a term matching only one shows only that section). ``create``/
+    ``stage``/``spawn``/``enlist``/``maps``/``units`` act on **your own
+    most-recently-created, unresolved battle** — the one ``create`` just made
+    you the GM of — addressed by id, not by room.
     """
 
     key = "battle"
@@ -117,22 +178,39 @@ class CmdBattle(ArxCommand):
         first = tokens[0].lower()
         rest = tokens[1:]
 
-        if first == "declare":  # noqa: STRING_LITERAL
-            self._declare(rest)
-        elif first == "round":  # noqa: STRING_LITERAL
-            self._begin_round()
-        elif first == "resolve":  # noqa: STRING_LITERAL
-            self._resolve_round()
-        elif first == "conclude":  # noqa: STRING_LITERAL
-            self._conclude()
-        elif first == "duel":  # noqa: STRING_LITERAL
-            self._challenge_duel(rest)
-        else:
-            msg = (
-                "Usage: battle [declare strike <unit>|declare support <char>"
-                "|declare rescue <ally>|duel <front> vs <boss name>|round|resolve|conclude]"
-            )
-            raise CommandError(msg)
+        # Dispatch tables keyed by subverb, mirroring _declare's dict pattern
+        # below -- keeps this method's cyclomatic complexity flat as new
+        # subverbs are added (#2010 added six).
+        arg_handlers: dict[str, Callable[[list[str]], None]] = {
+            "declare": self._declare,
+            "duel": self._challenge_duel,
+            "create": self._create_battle,
+            "stage": self._stage_map,
+            "spawn": self._spawn_units,
+            "enlist": self._enlist_participant,
+            "maps": self._browse_catalog,
+            "units": self._browse_catalog,
+        }
+        no_arg_handlers: dict[str, Callable[[], None]] = {
+            "round": self._begin_round,
+            "resolve": self._resolve_round,
+            "conclude": self._conclude,
+        }
+
+        if first in arg_handlers:
+            arg_handlers[first](rest)
+            return
+        if first in no_arg_handlers:
+            no_arg_handlers[first]()
+            return
+
+        msg = (
+            "Usage: battle [declare strike <unit>|declare support <char>"
+            "|declare rescue <ally>|duel <front> vs <boss name>|round|resolve|conclude"
+            "|create <name>|stage <blueprint>|spawn <template>|enlist <char> = <side>"
+            "|maps [<term>]|units [<term>]]"
+        )
+        raise CommandError(msg)
 
     # ------------------------------------------------------------------
     # Resolution helpers
@@ -635,4 +713,238 @@ class CmdBattle(ArxCommand):
             battle_place_id=place.pk,
             opponent_kwargs={"name": boss_name, "max_health": 300, "threat_pool": None},
         )
+        self._send(result)
+
+    # ------------------------------------------------------------------
+    # GM staging subverbs (#2010)
+
+    def _resolve_staging_battle(self) -> Battle:
+        """Resolve the caller's own most-recently-created, unresolved staged Battle.
+
+        Staged battles are location-less (ADR-0081) until something else
+        binds a scene location, so the staging subverbs (stage/spawn/enlist)
+        can't resolve "the battle" via the caller's room the way ``battle
+        round``/``resolve``/``conclude`` do (``_active_battle_in_room``).
+        Instead this resolves the newest UNRESOLVED battle whose Scene the
+        caller was granted ``is_gm=True`` on — the same grant
+        ``CreateBattleAction`` makes at creation time.
+        """
+        from world.battles.constants import BattleOutcome  # noqa: PLC0415
+        from world.battles.models import Battle  # noqa: PLC0415
+
+        account = resolve_account_or_none(self.caller)
+        if account is None:
+            msg = "No controlling account."
+            raise CommandError(msg)
+        battle = (
+            Battle.objects.filter(
+                scene__participations__account=account,
+                scene__participations__is_gm=True,
+                outcome=BattleOutcome.UNRESOLVED,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if battle is None:
+            msg = "You have no battle staged. Use 'battle create <name>' first."
+            raise CommandError(msg)
+        return battle
+
+    def _resolve_blueprint(self, value: str) -> BattleMapBlueprint:
+        from world.battles.models import BattleMapBlueprint  # noqa: PLC0415
+
+        return resolve_model_by_pk_or_name(
+            BattleMapBlueprint,
+            value,
+            qs=BattleMapBlueprint.objects.filter(is_active=True),
+            not_found_msg=f"No active battle-map blueprint named '{value}'.",
+        )
+
+    def _resolve_template(self, value: str) -> BattleUnitTemplate:
+        from world.battles.models import BattleUnitTemplate  # noqa: PLC0415
+
+        return resolve_model_by_pk_or_name(
+            BattleUnitTemplate,
+            value,
+            qs=BattleUnitTemplate.objects.filter(is_active=True),
+            not_found_msg=f"No active battle-unit template named '{value}'.",
+        )
+
+    def _resolve_battle_place(self, battle: Battle, value: str) -> BattlePlace:
+        from world.battles.models import BattlePlace  # noqa: PLC0415
+
+        return resolve_model_by_pk_or_name(
+            BattlePlace,
+            value,
+            qs=BattlePlace.objects.filter(battle=battle),
+            not_found_msg=f"No front named '{value}' in this battle.",
+        )
+
+    def _resolve_side(self, battle: Battle, value: str) -> BattleSide:
+        from world.battles.constants import BattleSideRole  # noqa: PLC0415
+        from world.battles.models import BattleSide  # noqa: PLC0415
+
+        role = value.strip().lower()
+        if role not in BattleSideRole.values:
+            msg = f"Unknown side '{value}'. Use 'attacker' or 'defender'."
+            raise CommandError(msg)
+        side = BattleSide.objects.filter(battle=battle, role=role).first()
+        if side is None:
+            msg = f"This battle has no {role} side."
+            raise CommandError(msg)
+        return side
+
+    def _create_battle(self, rest: list[str]) -> None:
+        """``battle create <name> [risk=<level>] [map=<blueprint>]`` (#2010)."""
+        from actions.definitions.battles import CreateBattleAction  # noqa: PLC0415
+
+        usage = "Usage: battle create <name> [risk=<level>] [map=<blueprint>]"
+        if not rest:
+            raise CommandError(usage)
+        name_tokens, kv_tokens = _split_leading_positional(rest)
+        name = " ".join(name_tokens).strip()
+        if not name:
+            raise CommandError(usage)
+        kwargs, _flags = parse_kv_and_flags(
+            " ".join(kv_tokens), multiword_keys=frozenset({"map"}), known_flags=frozenset()
+        )
+
+        action_kwargs: dict[str, Any] = {"name": name}
+        risk_level = kwargs.get("risk")
+        if risk_level:
+            action_kwargs["risk_level"] = risk_level
+        map_name = kwargs.get("map")
+        if map_name:
+            blueprint = self._resolve_blueprint(map_name)
+            action_kwargs["blueprint_id"] = blueprint.pk
+
+        result = CreateBattleAction().run(self.caller, **action_kwargs)
+        self._send(result)
+
+    def _stage_map(self, rest: list[str]) -> None:
+        """``battle stage <blueprint> [replace]`` (#2010)."""
+        from actions.definitions.battles import StageBattleMapAction  # noqa: PLC0415
+
+        usage = "Usage: battle stage <blueprint> [replace]"
+        if not rest:
+            raise CommandError(usage)
+        replace = False
+        if rest[-1].lower() == "replace":  # noqa: STRING_LITERAL
+            replace = True
+            rest = rest[:-1]
+        blueprint_name = " ".join(rest).strip()
+        if not blueprint_name:
+            raise CommandError(usage)
+
+        battle = self._resolve_staging_battle()
+        blueprint = self._resolve_blueprint(blueprint_name)
+
+        result = StageBattleMapAction().run(
+            self.caller, battle_id=battle.pk, blueprint_id=blueprint.pk, replace=replace
+        )
+        self._send(result)
+
+    def _spawn_units(self, rest: list[str]) -> None:
+        """``battle spawn <template> [count=N] [at <front>] side=<role>`` (#2010)."""
+        from actions.definitions.battles import SpawnBattleUnitsAction  # noqa: PLC0415
+
+        usage = "Usage: battle spawn <template> [count=N] [at <front>] side=<role>"
+        if not rest:
+            raise CommandError(usage)
+
+        template_tokens: list[str] = []
+        index = 0
+        while index < len(rest) and rest[index].lower() != _AT_MARKER and "=" not in rest[index]:
+            template_tokens.append(rest[index])
+            index += 1
+        template_name = " ".join(template_tokens).strip()
+        if not template_name:
+            raise CommandError(usage)
+
+        front_tokens: list[str] = []
+        kv_tokens: list[str] = []
+        while index < len(rest):
+            if rest[index].lower() == _AT_MARKER:
+                index += 1
+                while index < len(rest) and "=" not in rest[index]:
+                    front_tokens.append(rest[index])
+                    index += 1
+            else:
+                kv_tokens.append(rest[index])
+                index += 1
+        front_name = " ".join(front_tokens).strip()
+
+        kwargs, _flags = parse_kv_and_flags(
+            " ".join(kv_tokens), multiword_keys=frozenset(), known_flags=frozenset()
+        )
+        side_name = kwargs.get("side")
+        if not side_name:
+            raise CommandError(usage)
+
+        battle = self._resolve_staging_battle()
+        template = self._resolve_template(template_name)
+        side = self._resolve_side(battle, side_name)
+
+        action_kwargs: dict[str, Any] = {
+            "battle_id": battle.pk,
+            "template_id": template.pk,
+            "side_id": side.pk,
+        }
+        count = kwargs.get("count")
+        if count:
+            action_kwargs["count"] = count
+        if front_name:
+            place = self._resolve_battle_place(battle, front_name)
+            action_kwargs["place_id"] = place.pk
+
+        result = SpawnBattleUnitsAction().run(self.caller, **action_kwargs)
+        self._send(result)
+
+    def _enlist_participant(self, rest: list[str]) -> None:
+        """``battle enlist <character> = <side>[, <front>]`` (#2010)."""
+        from actions.definitions.battles import EnlistBattleParticipantAction  # noqa: PLC0415
+
+        usage = "Usage: battle enlist <character> = <side>[, <front>]"
+        text = " ".join(rest).strip()
+        if "=" not in text:
+            raise CommandError(usage)
+        character_part, _, remainder = text.partition("=")
+        character_name = character_part.strip()
+        side_part, _, front_part = remainder.partition(",")
+        side_name = side_part.strip()
+        front_name = front_part.strip()
+        if not character_name or not side_name:
+            raise CommandError(usage)
+
+        battle = self._resolve_staging_battle()
+
+        room = self.caller.location
+        if room is None:
+            msg = "You are not in a room."
+            raise CommandError(msg)
+        character_sheet = resolve_character_sheet_in_room(self.caller, character_name, room=room)
+
+        side = self._resolve_side(battle, side_name)
+
+        action_kwargs: dict[str, Any] = {
+            "battle_id": battle.pk,
+            "character_sheet_id": character_sheet.pk,
+            "side_id": side.pk,
+        }
+        if front_name:
+            place = self._resolve_battle_place(battle, front_name)
+            action_kwargs["place_id"] = place.pk
+
+        result = EnlistBattleParticipantAction().run(self.caller, **action_kwargs)
+        self._send(result)
+
+    def _browse_catalog(self, rest: list[str]) -> None:
+        """``battle maps [<term>]`` / ``battle units [<term>]`` (#2010)."""
+        from actions.definitions.battles import BrowseBattleCatalogAction  # noqa: PLC0415
+
+        term = " ".join(rest).strip()
+        kwargs: dict[str, Any] = {}
+        if term:
+            kwargs["term"] = term
+        result = BrowseBattleCatalogAction().run(self.caller, **kwargs)
         self._send(result)

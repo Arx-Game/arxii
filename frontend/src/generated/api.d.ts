@@ -784,6 +784,98 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/battles/map-blueprints/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only GM staging catalog of reusable battle-map layouts (#2010).
+     *
+     *     JUNIOR-trust GMs (or staff) browse this catalog rather than inventing
+     *     terrain/fortification layouts from scratch when staging a Battle; see
+     *     ``world.battles.models.BattleMapBlueprint``.
+     */
+    get: operations['battles_map_blueprints_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/battles/map-blueprints/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only GM staging catalog of reusable battle-map layouts (#2010).
+     *
+     *     JUNIOR-trust GMs (or staff) browse this catalog rather than inventing
+     *     terrain/fortification layouts from scratch when staging a Battle; see
+     *     ``world.battles.models.BattleMapBlueprint``.
+     */
+    get: operations['battles_map_blueprints_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/battles/unit-templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only GM staging catalog of reusable unit stat blocks (#2010).
+     *
+     *     JUNIOR-trust GMs (or staff) browse this catalog rather than authoring
+     *     strength/morale/property/capability values from scratch when staging a
+     *     Battle; see ``world.battles.models.BattleUnitTemplate``.
+     */
+    get: operations['battles_unit_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/battles/unit-templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only GM staging catalog of reusable unit stat blocks (#2010).
+     *
+     *     JUNIOR-trust GMs (or staff) browse this catalog rather than authoring
+     *     strength/morale/property/capability values from scratch when staging a
+     *     Battle; see ``world.battles.models.BattleUnitTemplate``.
+     */
+    get: operations['battles_unit_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/beats/': {
     parameters: {
       query?: never;
@@ -7669,11 +7761,18 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Create a POSE Interaction and auto-link prior ACTION Interactions.
+     * @description Create a POSE Interaction with full WS-pose-path parity (#2156).
      *
      *     Accepts ``action_link_ids`` for an explicit override:
      *     - Absent (key missing): auto-link is run.
      *     - Present as a list (even empty): exact links are created; auto-link skipped.
+     *
+     *     Mirrors ``actions.definitions.communication.PoseAction.execute``: broadcasts
+     *     the raw text via ``message_location`` (telnet visibility), records through the
+     *     shared ``record_interaction`` seam (ephemeral-scene gate, SceneParticipation +
+     *     covenant engagement), and flags blocked-contact attempts for any resolved
+     *     directed-pose targets. ``target_names`` (composer-mode ``@Name`` targets) are
+     *     resolved with the same semantics as the WS ``@Name``-prefix parser.
      */
     post: operations['interactions_submit_pose_create'];
     delete?: never;
@@ -17906,6 +18005,15 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    /** @description Admin-authored, reusable battle-map layout a GM stages a Battle from (#2010). */
+    BattleMapBlueprint: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description Inactive blueprints are hidden from the GM staging catalog but not deleted — existing data derived from them may still exist. */
+      is_active?: boolean;
+      readonly places: components['schemas']['BlueprintBattlePlace'][];
+    };
     /** @description A player character enlisted in the battle, with their public persona face. */
     BattleParticipant: {
       readonly id: number;
@@ -17992,6 +18100,32 @@ export interface components {
      * @enum {string}
      */
     BattleUnitStatusEnum: 'active' | 'routed' | 'destroyed';
+    /** @description Admin-authored, reusable unit stat block a GM stages a Battle from (#2010). */
+    BattleUnitTemplate: {
+      readonly id: number;
+      name: string;
+      descriptor?: string;
+      quality?: components['schemas']['QualityEnum'];
+      strength?: number;
+      morale?: number;
+      /** @description Population data point mirroring BattleUnit.individual_count — null means 'not a swarm-style unit'. */
+      individual_count?: number | null;
+      /** @description Inactive templates are hidden from the GM staging catalog but not deleted. */
+      is_active?: boolean;
+      readonly properties: components['schemas']['BattleUnitTemplateProperty'][];
+      readonly capability_values: components['schemas']['BattleUnitTemplateCapability'][];
+    };
+    /** @description An authored (template, capability) -> magnitude row, with the capability's name. */
+    BattleUnitTemplateCapability: {
+      readonly capability_id: number;
+      readonly capability_name: string;
+      value?: number;
+    };
+    /** @description A Property tag on a BattleUnitTemplate, by name -- never a bare id (#2010). */
+    BattleUnitTemplateProperty: {
+      readonly id: number;
+      name: string;
+    };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     Beat: {
       readonly id: number;
@@ -18301,6 +18435,35 @@ export interface components {
       blocker_persona: number;
       blocked_persona: number;
       reason: string;
+    };
+    /** @description A named front/zone within a BattleMapBlueprint, with its fortifications. */
+    BlueprintBattlePlace: {
+      readonly id: number;
+      name: string;
+      terrain_type?: components['schemas']['TerrainTypeEnum'];
+      /** @description Authored cost carried over onto the staged BattlePlace's own movement_cost — see BattlePlace.movement_cost. */
+      movement_cost?: number;
+      /** Format: double */
+      x: number;
+      /** Format: double */
+      y: number;
+      /** Format: double */
+      footprint_radius: number;
+      readonly fortifications: components['schemas']['BlueprintFortification'][];
+    };
+    /** @description Catalog-time counterpart to FortificationSerializer (#2010). */
+    BlueprintFortification: {
+      readonly id: number;
+      kind?: components['schemas']['Kind989Enum'];
+      /** @description Carried over onto the staged Fortification's max_integrity (and starting integrity) — see Fortification.max_integrity. */
+      max_integrity?: number;
+      /**
+       * @description Which staged BattleSide role this structure protects — resolved to a concrete BattleSide when the blueprint is staged onto a Battle.
+       *
+       *     * `attacker` - Attacker
+       *     * `defender` - Defender
+       */
+      defending_side_role: components['schemas']['DefendingSideRoleEnum'];
     };
     /** @description One eligible posting on a board (preview row). */
     BoardPosting: {
@@ -20262,6 +20425,12 @@ export interface components {
      */
     DefaultDurationTypeEnum: 'rounds' | 'until_cured' | 'until_used' | 'end_combat' | 'permanent';
     /**
+     * @description * `attacker` - Attacker
+     *     * `defender` - Defender
+     * @enum {string}
+     */
+    DefendingSideRoleEnum: 'attacker' | 'defender';
+    /**
      * @description * `pose` - Pose (whole room)
      *     * `whisper` - Whisper (target only)
      *     * `table_talk` - Table talk (your place)
@@ -21552,21 +21721,13 @@ export interface components {
     /** @description A defensible structure at a BattlePlace. */
     Fortification: {
       readonly id: number;
-      kind?: components['schemas']['FortificationKindEnum'];
+      kind?: components['schemas']['Kind989Enum'];
       integrity?: number;
       /** @description Snapshotted once at creation from BASE_INTEGRITY[kind] plus building.fortification_level * FORTIFICATION_LEVEL_INTEGRITY_BONUS, if building is set (#1713). See world.battles.services.create_fortification. */
       max_integrity?: number;
       breached?: boolean;
       readonly defending_side_id: number;
     };
-    /**
-     * @description * `wall` - Wall
-     *     * `gate` - Gate
-     *     * `battlement` - Battlement
-     *     * `hull` - Hull
-     * @enum {string}
-     */
-    FortificationKindEnum: 'wall' | 'gate' | 'battlement' | 'hull';
     /** @description A friend row — the friended character's name + which of your characters friended. */
     Friendship: {
       readonly id: number;
@@ -22948,6 +23109,14 @@ export interface components {
       can_tell_tale: boolean;
       readonly last_unseen_count: number;
     };
+    /**
+     * @description * `wall` - Wall
+     *     * `gate` - Gate
+     *     * `battlement` - Battlement
+     *     * `hull` - Hull
+     * @enum {string}
+     */
+    Kind989Enum: 'wall' | 'gate' | 'battlement' | 'hull';
     /** @description One known secret, from the viewer's side, with locked layers shown as "Unknown". */
     KnownSecret: {
       readonly id: number;
@@ -24829,6 +24998,36 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['BattleList'][];
+    };
+    PaginatedBattleMapBlueprintList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['BattleMapBlueprint'][];
+    };
+    PaginatedBattleUnitTemplateList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['BattleUnitTemplate'][];
     };
     PaginatedBeatList: {
       /** @example 123 */
@@ -28853,6 +29052,8 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
       readonly presence_count: number;
+      /** @description Whether one of the requesting account's personas is present at this place (#2156). */
+      readonly viewer_is_present: boolean;
     };
     PlaceRequest: {
       name: string;
@@ -34493,6 +34694,100 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['BattleDetail'];
+        };
+      };
+    };
+  };
+  battles_map_blueprints_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBattleMapBlueprintList'];
+        };
+      };
+    };
+  };
+  battles_map_blueprints_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this battle map blueprint. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BattleMapBlueprint'];
+        };
+      };
+    };
+  };
+  battles_unit_templates_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBattleUnitTemplateList'];
+        };
+      };
+    };
+  };
+  battles_unit_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this battle unit template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BattleUnitTemplate'];
         };
       };
     };

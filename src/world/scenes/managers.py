@@ -11,10 +11,24 @@ from world.scenes.constants import InteractionMode, InteractionVisibility, Scene
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
+    from evennia.objects.models import ObjectDB
 
 
 class SceneQuerySet(models.QuerySet):
     """Queryset helpers for Scene visibility."""
+
+    def active_for_room(self, location: ObjectDB | None) -> SceneQuerySet:
+        """Active, room-scoped RP scenes at *location* — excludes battle-backed scenes.
+
+        A staged ``Battle``'s backing Scene (``Battle`` is a 1:1 Scene extension, #2010)
+        is active + located + PUBLIC and typically the newest scene at the room too, so
+        an unfiltered ``Scene.objects.filter(location=room, is_active=True)`` lookup
+        would let it hijack every room-scoped active-scene resolver — the battle map is
+        not the room's RP scene. Every such resolver (``get_active_scene``,
+        ``ensure_scene_for_location``, the create-scene collision check, ``scene status``)
+        must go through this method rather than hand-rolling the filter (#2010 review).
+        """
+        return self.filter(location=location, is_active=True, battle__isnull=True)
 
     def viewable_by(self, account: AccountDB | None) -> SceneQuerySet:
         """Scenes ``account`` may view.

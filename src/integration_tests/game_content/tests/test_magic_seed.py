@@ -354,15 +354,15 @@ class TestSeedThreadPullCatalogCreation(TestCase):
 
         flat = self.result.pull_effects[EffectKind.FLAT_BONUS]
         self.assertEqual(flat.tier, 1)
-        self.assertEqual(flat.flat_bonus_amount, 2)
+        self.assertEqual(flat.flat_bonus_amount, 10)
 
         bump = self.result.pull_effects[EffectKind.INTENSITY_BUMP]
         self.assertEqual(bump.tier, 2)
-        self.assertEqual(bump.intensity_bump_amount, 1)
+        self.assertEqual(bump.intensity_bump_amount, 10)
 
         vital = self.result.pull_effects[EffectKind.VITAL_BONUS]
         self.assertEqual(vital.tier, 0)
-        self.assertEqual(vital.vital_bonus_amount, 5)
+        self.assertEqual(vital.vital_bonus_amount, 10)
         from world.magic.constants import VitalBonusTarget
 
         self.assertEqual(vital.vital_target, VitalBonusTarget.MAX_HEALTH)

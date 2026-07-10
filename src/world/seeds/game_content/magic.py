@@ -1837,9 +1837,9 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     - Resonance "Tideborne" — canonical reference resonance for the catalog
     - CapabilityType "endurance" — used by the CAPABILITY_GRANT effect
     - ThreadPullEffect rows:
-        - FLAT_BONUS (tier=1, min_thread_level=0, flat_bonus_amount=2)
-        - INTENSITY_BUMP (tier=2, min_thread_level=0, intensity_bump_amount=1)
-        - VITAL_BONUS (tier=0, min_thread_level=0, vital_bonus_amount=5, MAX_HEALTH)
+        - FLAT_BONUS (tier=1, min_thread_level=0, flat_bonus_amount=10)
+        - INTENSITY_BUMP (tier=2, min_thread_level=0, intensity_bump_amount=10)
+        - VITAL_BONUS (tier=0, min_thread_level=0, vital_bonus_amount=10, MAX_HEALTH)
         - CAPABILITY_GRANT (tier=3, min_thread_level=5, capability=endurance)
 
     Returns:
@@ -1899,7 +1899,7 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         min_thread_level=0,
         defaults={
             "effect_kind": EffectKind.FLAT_BONUS,
-            "flat_bonus_amount": 2,
+            "flat_bonus_amount": 10,
         },
     )
     pull_effects[EffectKind.FLAT_BONUS] = flat_bonus_effect
@@ -1911,7 +1911,7 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         min_thread_level=0,
         defaults={
             "effect_kind": EffectKind.INTENSITY_BUMP,
-            "intensity_bump_amount": 1,
+            "intensity_bump_amount": 10,
         },
     )
     pull_effects[EffectKind.INTENSITY_BUMP] = intensity_bump_effect
@@ -1923,7 +1923,7 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         min_thread_level=0,
         defaults={
             "effect_kind": EffectKind.VITAL_BONUS,
-            "vital_bonus_amount": 5,
+            "vital_bonus_amount": 10,
             "vital_target": VitalBonusTarget.MAX_HEALTH,
         },
     )
@@ -2245,7 +2245,10 @@ def ensure_relationship_pull_content() -> None:
         if resonance is None:
             continue
 
-        # Tier 0 (passive): VITAL_BONUS(DAMAGE_TAKEN_REDUCTION, 3)
+        # Tier 0 (passive): VITAL_BONUS(DAMAGE_TAKEN_REDUCTION, 10)
+        # Amount bumped from 3 → 10 per #1845: thread_level_multiplier(level 1) = 0.1
+        # (#1718's corrected ramp), so round(3 * 0.1) = round(0.3) = 0 — a no-op
+        # bonus at low thread levels. 10 clears the floor with margin.
         ThreadPullEffect.objects.get_or_create(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=resonance,
@@ -2253,13 +2256,15 @@ def ensure_relationship_pull_content() -> None:
             min_thread_level=0,
             defaults={
                 "effect_kind": EffectKind.VITAL_BONUS,
-                "vital_bonus_amount": 3,
+                "vital_bonus_amount": 10,
                 "vital_target": VitalBonusTarget.DAMAGE_TAKEN_REDUCTION,
                 "narrative_snippet": "The bond sustains you, reducing harm.",
             },
         )
 
-        # Tier 1 (paid): VITAL_BONUS(DEATH_SAVE, 5)
+        # Tier 1 (paid): VITAL_BONUS(DEATH_SAVE, 10)
+        # Amount bumped from 5 → 10 per #1845: round(5 * 0.1) = round(0.5) = 0
+        # (banker's rounding) at level 1. 10 clears the floor with margin.
         ThreadPullEffect.objects.get_or_create(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=resonance,
@@ -2267,7 +2272,7 @@ def ensure_relationship_pull_content() -> None:
             min_thread_level=0,
             defaults={
                 "effect_kind": EffectKind.VITAL_BONUS,
-                "vital_bonus_amount": 5,
+                "vital_bonus_amount": 10,
                 "vital_target": VitalBonusTarget.DEATH_SAVE,
                 "narrative_snippet": "Fighting for them steadies your hand against death.",
             },
@@ -2286,7 +2291,9 @@ def ensure_relationship_pull_content() -> None:
             },
         )
 
-        # Tier 3 (paid): VITAL_BONUS(KNOCKOUT_RESIST, 5)
+        # Tier 3 (paid): VITAL_BONUS(KNOCKOUT_RESIST, 10)
+        # Amount bumped from 5 → 10 per #1845: round(5 * 0.1) = round(0.5) = 0
+        # (banker's rounding) at level 1. 10 clears the floor with margin.
         ThreadPullEffect.objects.get_or_create(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=resonance,
@@ -2294,7 +2301,7 @@ def ensure_relationship_pull_content() -> None:
             min_thread_level=0,
             defaults={
                 "effect_kind": EffectKind.VITAL_BONUS,
-                "vital_bonus_amount": 5,
+                "vital_bonus_amount": 10,
                 "vital_target": VitalBonusTarget.KNOCKOUT_RESIST,
                 "narrative_snippet": "The deepest bond refuses to fall.",
             },

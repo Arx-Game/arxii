@@ -30,7 +30,7 @@ from rest_framework import serializers
 from actions.constants import ActionBackend, ActionCategory
 from actions.errors import ActionDispatchError
 from actions.result_extraction import extract_dispatch_message_data
-from actions.types import ActionRef, DispatchResult, PlayerAction
+from actions.types import ActionRef, ActionResult, DispatchResult, PlayerAction
 
 
 class CheckTypeMinimalSerializer(serializers.Serializer):
@@ -258,13 +258,19 @@ class DispatchActionSerializer(serializers.Serializer):
 class DispatchResultSerializer(serializers.Serializer):
     """Output serializer for POST dispatch endpoint.
 
-    Produces a clean minimal shape: ``{backend, deferred, message, data}``.
+    Produces a clean minimal shape: ``{backend, deferred, message, data, success}``.
     ``detail`` (``ChallengeResolutionResult | ActionResult | None``) is NOT
     deep-serialized to avoid leaking internal model structure.  Instead:
     - ``message`` carries a short human string extracted from ``detail``
       (``detail.challenge_name`` for challenge, ``detail.message`` for action result).
     - ``data`` is a nullable minimal jsonable dict with just a few identifying fields
       (challenge_instance_id, resolution_type for challenge; action-specific keys for others).
+    - ``success`` is ``instance.detail.success`` when ``detail`` is an ``ActionResult``
+      (the REGISTRY backend's result type); ``None`` for a deferred dispatch, a
+      ``ChallengeResolutionResult`` (no boolean success notion — see ``resolution_type``),
+      or no detail at all. The view always returns HTTP 200 for a business-rule
+      rejection (``ActionDispatchError`` is the only 400 path) — ``success`` is the wire
+      signal callers must check to distinguish an honest failure from a real success.
     - When deferred, message is a static "Action declared for round resolution." string.
 
     All new serializers here are plain ``Serializer`` (not DataclassSerializer) —
@@ -275,6 +281,7 @@ class DispatchResultSerializer(serializers.Serializer):
     deferred = serializers.BooleanField(read_only=True)
     message = serializers.CharField(read_only=True, allow_null=True)
     data = serializers.DictField(read_only=True, allow_null=True)
+    success = serializers.BooleanField(read_only=True, allow_null=True)
 
     def to_representation(self, instance: DispatchResult) -> dict[str, Any]:
         """Extract minimal wire representation from a DispatchResult dataclass."""
@@ -286,13 +293,16 @@ class DispatchResultSerializer(serializers.Serializer):
                 "deferred": True,
                 "message": "Action declared for round resolution.",
                 "data": None,
+                "success": None,
             }
 
         message, data = extract_dispatch_message_data(instance.detail)
+        success = instance.detail.success if isinstance(instance.detail, ActionResult) else None
 
         return {
             "backend": backend_value,
             "deferred": False,
             "message": message,
             "data": data,
+            "success": success,
         }

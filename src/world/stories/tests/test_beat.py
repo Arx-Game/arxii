@@ -4,6 +4,7 @@ from django.test import TestCase
 from world.achievements.factories import AchievementFactory
 from world.codex.factories import CodexEntryFactory
 from world.conditions.factories import ConditionTemplateFactory
+from world.societies.factories import OrganizationFactory, SocietyFactory
 from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
@@ -11,6 +12,7 @@ from world.stories.constants import (
     StoryMilestoneType,
 )
 from world.stories.factories import BeatFactory, ChapterFactory, EpisodeFactory, StoryFactory
+from world.stories.models import Beat
 
 
 class BeatTests(TestCase):
@@ -308,8 +310,6 @@ class BeatTests(TestCase):
             beat.full_clean()
 
     def test_faction_standing_predicate_rejects_both_society_and_org(self) -> None:
-        from world.societies.factories import OrganizationFactory, SocietyFactory
-
         episode = EpisodeFactory()
         beat = BeatFactory.build(
             episode=episode,
@@ -320,3 +320,150 @@ class BeatTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             beat.full_clean()
+
+
+class BeatSetNullOnDeleteTests(TestCase):
+    """Beat's predicate-config FKs use SET_NULL, not CASCADE (#1796).
+
+    A Beat is story-significant: deleting its config target must null the FK
+    rather than erase the beat. The beat becomes permanently UNSATISFIED
+    (evaluators return UNSATISFIED for a nulled config FK).
+
+    SharedMemoryModel's identity map caches FK values in-memory after first
+    access, so ``refresh_from_db()`` may still return the cached object. We
+    read the persisted FK id directly via ``values_list`` (same pattern as
+    ``test_models_required_mission.py``).
+    """
+
+    def test_achievement_held_survives_achievement_delete(self) -> None:
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.ACHIEVEMENT_HELD,
+            required_achievement=AchievementFactory(),
+        )
+        beat_pk = beat.pk
+        beat.required_achievement.delete()
+
+        fk_id = (
+            Beat.objects.filter(pk=beat_pk)
+            .values_list("required_achievement_id", flat=True)
+            .first()
+        )
+        self.assertIsNone(fk_id)
+        self.assertEqual(Beat.objects.get(pk=beat_pk).outcome, BeatOutcome.UNSATISFIED)
+
+    def test_condition_held_survives_condition_template_delete(self) -> None:
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.CONDITION_HELD,
+            required_condition_template=ConditionTemplateFactory(),
+        )
+        beat_pk = beat.pk
+        beat.required_condition_template.delete()
+
+        fk_id = (
+            Beat.objects.filter(pk=beat_pk)
+            .values_list("required_condition_template_id", flat=True)
+            .first()
+        )
+        self.assertIsNone(fk_id)
+        self.assertEqual(Beat.objects.get(pk=beat_pk).outcome, BeatOutcome.UNSATISFIED)
+
+    def test_codex_entry_unlocked_survives_codex_entry_delete(self) -> None:
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.CODEX_ENTRY_UNLOCKED,
+            required_codex_entry=CodexEntryFactory(),
+        )
+        beat_pk = beat.pk
+        beat.required_codex_entry.delete()
+
+        fk_id = (
+            Beat.objects.filter(pk=beat_pk)
+            .values_list("required_codex_entry_id", flat=True)
+            .first()
+        )
+        self.assertIsNone(fk_id)
+        self.assertEqual(Beat.objects.get(pk=beat_pk).outcome, BeatOutcome.UNSATISFIED)
+
+    def test_story_at_milestone_survives_referenced_story_delete(self) -> None:
+        story = StoryFactory()
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=story,
+            referenced_milestone_type=StoryMilestoneType.STORY_RESOLVED,
+        )
+        beat_pk = beat.pk
+        story.delete()
+
+        fk_id = (
+            Beat.objects.filter(pk=beat_pk).values_list("referenced_story_id", flat=True).first()
+        )
+        self.assertIsNone(fk_id)
+        self.assertEqual(Beat.objects.get(pk=beat_pk).outcome, BeatOutcome.UNSATISFIED)
+
+    def test_story_at_milestone_survives_referenced_chapter_delete(self) -> None:
+        story = StoryFactory()
+        chapter = ChapterFactory(story=story)
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=story,
+            referenced_milestone_type=StoryMilestoneType.CHAPTER_REACHED,
+            referenced_chapter=chapter,
+        )
+        beat_pk = beat.pk
+        chapter.delete()
+
+        fk_id = (
+            Beat.objects.filter(pk=beat_pk).values_list("referenced_chapter_id", flat=True).first()
+        )
+        self.assertIsNone(fk_id)
+        self.assertEqual(Beat.objects.get(pk=beat_pk).outcome, BeatOutcome.UNSATISFIED)
+
+    def test_story_at_milestone_survives_referenced_episode_delete(self) -> None:
+        story = StoryFactory()
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=story,
+            referenced_milestone_type=StoryMilestoneType.EPISODE_REACHED,
+            referenced_episode=episode,
+        )
+        beat_pk = beat.pk
+        episode.delete()
+
+        fk_id = (
+            Beat.objects.filter(pk=beat_pk).values_list("referenced_episode_id", flat=True).first()
+        )
+        self.assertIsNone(fk_id)
+        self.assertEqual(Beat.objects.get(pk=beat_pk).outcome, BeatOutcome.UNSATISFIED)
+
+    def test_faction_standing_survives_society_delete(self) -> None:
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            required_society=SocietyFactory(),
+            required_standing=100,
+        )
+        beat_pk = beat.pk
+        beat.required_society.delete()
+
+        fk_id = (
+            Beat.objects.filter(pk=beat_pk).values_list("required_society_id", flat=True).first()
+        )
+        self.assertIsNone(fk_id)
+        self.assertEqual(Beat.objects.get(pk=beat_pk).outcome, BeatOutcome.UNSATISFIED)
+
+    def test_faction_standing_survives_organization_delete(self) -> None:
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            required_organization=OrganizationFactory(),
+            required_standing=100,
+        )
+        beat_pk = beat.pk
+        beat.required_organization.delete()
+
+        fk_id = (
+            Beat.objects.filter(pk=beat_pk)
+            .values_list("required_organization_id", flat=True)
+            .first()
+        )
+        self.assertIsNone(fk_id)
+        self.assertEqual(Beat.objects.get(pk=beat_pk).outcome, BeatOutcome.UNSATISFIED)

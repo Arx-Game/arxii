@@ -237,4 +237,71 @@ describe('useThreading', () => {
     const hidden = result.current.getHiddenPersonaIds('nonexistent');
     expect(hidden.size).toBe(0);
   });
+
+  describe('unread counts', () => {
+    it('defaults unreadCount to 0 when no opts are passed at all', () => {
+      const interactions = [makeInteraction({ id: 1 }), makeInteraction({ id: 2 })];
+      const { result } = renderHook(() => useThreading(interactions, 'Room'));
+      expect(result.current.threads[0].unreadCount).toBe(0);
+    });
+
+    it('defaults unreadCount to 0 when lastSeenByThread has no entry for the thread (no stale badge wall on login)', () => {
+      const interactions = [makeInteraction({ id: 1 }), makeInteraction({ id: 2 })];
+      const { result } = renderHook(() =>
+        useThreading(interactions, 'Room', { lastSeenByThread: {}, viewerPersonaId: 999 })
+      );
+      expect(result.current.threads[0].unreadCount).toBe(0);
+    });
+
+    it("counts interactions newer than lastSeenByThread for that key, excluding the viewer's own", () => {
+      const interactions = [
+        makeInteraction({
+          id: 10,
+          mode: 'whisper',
+          persona: { id: 1, name: 'Viewer' },
+          receiver_persona_ids: [2],
+        }),
+        makeInteraction({
+          id: 11,
+          mode: 'whisper',
+          persona: { id: 2, name: 'Other' },
+          receiver_persona_ids: [1],
+        }),
+        makeInteraction({
+          id: 12,
+          mode: 'whisper',
+          persona: { id: 1, name: 'Viewer' },
+          receiver_persona_ids: [2],
+        }),
+      ];
+
+      const { result } = renderHook(() =>
+        useThreading(interactions, 'Room', {
+          lastSeenByThread: { 'whisper:1,2': 10 },
+          viewerPersonaId: 1,
+        })
+      );
+
+      const whisperThread = result.current.threads.find((t) => t.type === 'whisper');
+      // id 11 (persona 2) counts; id 12 is the viewer's own interaction and never counts.
+      expect(whisperThread?.unreadCount).toBe(1);
+    });
+
+    it('counts multiple unread interactions above the baseline', () => {
+      const interactions = [
+        makeInteraction({ id: 1, persona: { id: 10, name: 'Alice' } }),
+        makeInteraction({ id: 2, persona: { id: 20, name: 'Bob' } }),
+        makeInteraction({ id: 3, persona: { id: 20, name: 'Bob' } }),
+      ];
+
+      const { result } = renderHook(() =>
+        useThreading(interactions, 'Room', {
+          lastSeenByThread: { room: 1 },
+          viewerPersonaId: 10,
+        })
+      );
+
+      expect(result.current.threads[0].unreadCount).toBe(2);
+    });
+  });
 });

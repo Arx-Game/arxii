@@ -179,3 +179,20 @@ class MissingEnvironmentTargetError(BattleError):
         user_message: str = "That technique has no weather it can conjure.",
     ) -> None:
         super().__init__(user_message)
+
+
+class BattleStagingError(BattleError):
+    """Raised when a GM staging operation can't safely proceed (#2010).
+
+    Covers instantiate_battle_blueprint's guard rails: refusing to overwrite
+    an already-staged battle map without ``replace=True``, refusing to replace
+    once the battle has gone live (a round has opened, or a unit/participant
+    is already stationed on a place), and a blueprint fortification whose
+    authored ``defending_side_role`` has no matching BattleSide on the battle.
+    """
+
+    def __init__(
+        self,
+        user_message: str = "That battle map can't be staged the way you asked.",
+    ) -> None:
+        super().__init__(user_message)

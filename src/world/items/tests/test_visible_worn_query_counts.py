@@ -176,8 +176,8 @@ class VisibleWornServiceQueryCountTests(_SharedSetupMixin, TestCase):
         # Cold load: 1 query for EquippedItem (with select_related on
         # item_instance + template + quality_tier) + 1 prefetch for facets
         # + 1 prefetch for item styles (#1150) + 1 prefetch for template
-        # slots = 4.
-        with self.assertNumQueries(4):
+        # slots + 1 prefetch for crafted recipes (#1567) = 5.
+        with self.assertNumQueries(5):
             result = visible_worn_items_for(cold_character)
         self.assertEqual(len(result), 1)
 

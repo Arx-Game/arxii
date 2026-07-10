@@ -57,14 +57,12 @@ def parse_targets_from_text(
         name.strip().lstrip("@") for name in target_part.split(",") if name.strip().startswith("@")
     ]
 
-    # Resolve names against room contents (case-insensitive)
-    targets: list[ObjectDB] = []
-    for name in target_names:
-        lower_name = name.lower()
-        for obj in location.contents:
-            if obj.db_key.lower() == lower_name:
-                targets.append(obj)
-                break
+    # Resolve names against room contents (case-insensitive) — shared with the REST
+    # submit-pose `target_names` field so a directed pose resolves identically
+    # regardless of which surface sent it (#2156).
+    from world.scenes.interaction_services import resolve_characters_by_name  # noqa: PLC0415
+
+    targets = resolve_characters_by_name(target_names, location)
 
     return remaining, targets
 

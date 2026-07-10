@@ -1,6 +1,11 @@
 import { apiFetch } from '@/evennia_replacements/api';
 
-import type { BattleDetail, PaginatedBattleListList } from './types';
+import type {
+  BattleDetail,
+  PaginatedBattleListList,
+  PaginatedBattleMapBlueprintList,
+  PaginatedBattleUnitTemplateList,
+} from './types';
 
 async function getJson<T>(url: string, fallbackError: string): Promise<T> {
   const res = await apiFetch(url);
@@ -25,4 +30,22 @@ export function fetchBattlesForScene(sceneId: number): Promise<PaginatedBattleLi
 
 export function fetchBattleDetail(battleId: number): Promise<BattleDetail> {
   return getJson(`/api/battles/${battleId}/`, 'Failed to load the battle.');
+}
+
+/**
+ * GM staging catalogs (#2010, Task 5) — active-only, page_size=100 since
+ * these back a picker `<select>`, not a browsable/paginated list UI.
+ */
+export function fetchBattleMapBlueprints(): Promise<PaginatedBattleMapBlueprintList> {
+  return getJson(
+    '/api/battles/map-blueprints/?is_active=true&page_size=100',
+    'Failed to load battle-map blueprints.'
+  );
+}
+
+export function fetchBattleUnitTemplates(): Promise<PaginatedBattleUnitTemplateList> {
+  return getJson(
+    '/api/battles/unit-templates/?is_active=true&page_size=100',
+    'Failed to load battle-unit templates.'
+  );
 }

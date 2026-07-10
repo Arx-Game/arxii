@@ -148,7 +148,7 @@ class StartRoundAction(Action):
             actor_can_administer_scene,
         )
 
-        scene = _Scene.objects.filter(location=room, is_active=True).first()
+        scene = _Scene.objects.active_for_room(room).first()
         if scene is None or not actor_can_administer_scene(actor, scene):
             return None, (
                 "Only a scene GM/owner can choose the round mode at start (start a scene first)."
@@ -256,7 +256,7 @@ class SetRoundModeAction(Action):
         if room is None:
             return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
 
-        scene = _Scene.objects.filter(location=room, is_active=True).first()
+        scene = _Scene.objects.active_for_room(room).first()
         if scene is None:
             return ActionResult(
                 success=False,

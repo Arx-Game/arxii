@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PoseUnit } from './PoseUnit';
+import type { PoseUnitAvatarClickPersona } from './PoseUnit';
 import type { Interaction } from '../types';
 import type { ActionAttachmentInfo } from '../actionTypes';
 
@@ -10,6 +11,8 @@ interface Props {
   onAttachAction?: (action: ActionAttachmentInfo) => void;
   /** When true, shows the GM dramatic-moment tagging control on each pose (#1139). */
   canGm?: boolean;
+  /** Avatar identity-click affordance passthrough to PoseUnit (#2156). */
+  onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
 }
 
 /**
@@ -71,6 +74,7 @@ export function SceneMessages({
   onAddTarget,
   onAttachAction,
   canGm,
+  onAvatarClick,
 }: Props) {
   // Collect the set of ACTION interaction IDs that are already embedded inside
   // a POSE via action_links. These are rendered inside their parent PoseUnit
@@ -136,6 +140,7 @@ export function SceneMessages({
             onAddTarget={onAddTarget}
             onAttachAction={onAttachAction}
             canGm={canGm}
+            onAvatarClick={onAvatarClick}
           />
         );
       })}

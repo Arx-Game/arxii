@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from rest_framework.permissions import BasePermission
 
+from world.gm.constants import GMLevel, gm_level_index
 from world.gm.models import GMProfile
 
 if TYPE_CHECKING:
@@ -52,3 +53,29 @@ class IsGMOrStaff(BasePermission):
         except GMProfile.DoesNotExist:
             return False
         return True
+
+
+class HasGMTrust(BasePermission):
+    """Require at least JUNIOR-tier GM trust, with a staff bypass (#2010).
+
+    DRF counterpart to ``MinimumGMLevelPrerequisite``
+    (src/actions/prerequisites.py) for read-only GM staging catalog endpoints
+    (battle map blueprints, unit templates) -- STARTING GMs haven't earned
+    catalog browsing yet, so the floor sits one tier above ``IsGM``/
+    ``IsGMOrStaff``, which only check profile existence.
+    """
+
+    message = "You must hold at least Junior GM trust to use this endpoint."
+
+    minimum_level = GMLevel.JUNIOR
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.is_staff:
+            return True
+        try:
+            level = request.user.gm_profile.level
+        except GMProfile.DoesNotExist:
+            return False
+        return gm_level_index(level) >= gm_level_index(self.minimum_level)

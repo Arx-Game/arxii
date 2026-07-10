@@ -136,4 +136,21 @@ export interface DispatchResult {
   deferred: boolean;
   /** Short human string from the action's result (DispatchResultSerializer.message). */
   message?: string | null;
+  /**
+   * Business-rule outcome, distinct from HTTP status — the endpoint always
+   * resolves 200 for a rejected action (only a structural ref error is a 400).
+   * `false` on an honest failure (e.g. permission/validation rejection from a
+   * REGISTRY `ActionResult`); `true`/`null`/`undefined` reads as success —
+   * `null` covers a deferred dispatch or a backend with no boolean success
+   * notion (e.g. CHALLENGE), and `undefined` covers pre-#2010 callers that
+   * haven't been updated to read this field yet.
+   */
+  success?: boolean | null;
+  /**
+   * Minimal jsonable identifying-field bag from the action's result
+   * (`DispatchResultSerializer.data` — e.g. `{battle_id, scene_id}` for
+   * `create_battle`). `null`/absent when the action carries no such data or
+   * the dispatch was deferred.
+   */
+  data?: Record<string, unknown> | null;
 }

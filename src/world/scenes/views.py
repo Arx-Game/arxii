@@ -162,7 +162,7 @@ class SceneViewSet(viewsets.ModelViewSet):
 
         location = serializer.validated_data.get("location")
         name = serializer.validated_data.get("name")
-        if location and Scene.objects.filter(location=location, is_active=True).exists():
+        if location and Scene.objects.active_for_room(location).exists():
             raise serializers.ValidationError(
                 {"location": "An active scene already exists in this location."},
             )

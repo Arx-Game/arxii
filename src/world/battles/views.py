@@ -10,13 +10,25 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from world.battles.models import (
     Battle,
+    BattleMapBlueprint,
     BattleParticipant,
     BattlePlace,
     BattleSide,
     BattleUnit,
+    BattleUnitTemplate,
+    BattleUnitTemplateCapability,
+    BlueprintBattlePlace,
+    BlueprintFortification,
     Fortification,
 )
-from world.battles.serializers import BattleDetailSerializer, BattleListSerializer
+from world.battles.serializers import (
+    BattleDetailSerializer,
+    BattleListSerializer,
+    BattleMapBlueprintSerializer,
+    BattleUnitTemplateSerializer,
+)
+from world.gm.permissions import HasGMTrust
+from world.mechanics.models import Property
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona, Scene
 from world.stories.pagination import StandardResultsSetPagination
@@ -119,3 +131,62 @@ class BattleViewSet(ReadOnlyModelViewSet):
         if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
             return qs
         return qs.filter(scene__in=Scene.objects.viewable_by(user)).distinct()
+
+
+class BattleMapBlueprintViewSet(ReadOnlyModelViewSet):
+    """Read-only GM staging catalog of reusable battle-map layouts (#2010).
+
+    JUNIOR-trust GMs (or staff) browse this catalog rather than inventing
+    terrain/fortification layouts from scratch when staging a Battle; see
+    ``world.battles.models.BattleMapBlueprint``.
+    """
+
+    serializer_class = BattleMapBlueprintSerializer
+    permission_classes = [HasGMTrust]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["is_active"]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self) -> QuerySet[BattleMapBlueprint]:
+        return BattleMapBlueprint.objects.order_by("name").prefetch_related(
+            Prefetch(
+                "places",
+                queryset=BlueprintBattlePlace.objects.order_by("name").prefetch_related(
+                    Prefetch(
+                        "fortifications",
+                        queryset=BlueprintFortification.objects.all(),
+                        to_attr="cached_fortifications",
+                    ),
+                ),
+                to_attr="cached_places",
+            ),
+        )
+
+
+class BattleUnitTemplateViewSet(ReadOnlyModelViewSet):
+    """Read-only GM staging catalog of reusable unit stat blocks (#2010).
+
+    JUNIOR-trust GMs (or staff) browse this catalog rather than authoring
+    strength/morale/property/capability values from scratch when staging a
+    Battle; see ``world.battles.models.BattleUnitTemplate``.
+    """
+
+    serializer_class = BattleUnitTemplateSerializer
+    permission_classes = [HasGMTrust]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["is_active"]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self) -> QuerySet[BattleUnitTemplate]:
+        return BattleUnitTemplate.objects.order_by("name").prefetch_related(
+            Prefetch(
+                "properties",
+                queryset=Property.objects.order_by("name"),
+                to_attr="cached_properties",
+            ),
+            Prefetch(
+                "capability_values",
+                queryset=BattleUnitTemplateCapability.objects.select_related("capability"),
+                to_attr="cached_capability_values",
+            ),
+        )

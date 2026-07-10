@@ -49,6 +49,7 @@ if TYPE_CHECKING:
         Style,
     )
     from world.magic.models import Facet
+    from world.mechanics.models import ModifierTarget
 
 
 class CharacterEquipmentHandler:
@@ -66,6 +67,10 @@ class CharacterEquipmentHandler:
     @property
     def _equipped(self) -> list[EquippedItem]:
         if self._cached is None:
+            from world.items.crafting.models import (  # noqa: PLC0415
+                CraftedItemRecipe,
+                CraftingRecipeModifier,
+            )
             from world.items.models import (  # noqa: PLC0415
                 EquippedItem,
                 ItemFacet,
@@ -102,6 +107,20 @@ class CharacterEquipmentHandler:
                         queryset=TemplateSlot.objects.all(),
                         to_attr="cached_slots",
                     ),
+                    Prefetch(
+                        "item_instance__crafted_recipes",
+                        queryset=CraftedItemRecipe.objects.select_related(
+                            "recipe",
+                            "quality_tier",
+                        ).prefetch_related(
+                            Prefetch(
+                                "recipe__modifier_outcomes",
+                                queryset=CraftingRecipeModifier.objects.select_related("target"),
+                                to_attr="cached_modifier_outcomes",
+                            )
+                        ),
+                        to_attr="cached_crafted_recipes",
+                    ),
                 )
             )
             self._cached = list(qs)
@@ -129,6 +148,12 @@ class CharacterEquipmentHandler:
             for item_style in equipped.item_instance.cached_item_styles
             if item_style.style_id == style.pk
         ]
+
+    def crafted_modifier_total(self, target: ModifierTarget) -> int:
+        """Sum crafted modifier values for ``target`` across equipped items."""
+        return sum(
+            equipped.item_instance.crafted_modifier_value(target) for equipped in self._equipped
+        )
 
     def invalidate(self) -> None:
         self._cached = None
