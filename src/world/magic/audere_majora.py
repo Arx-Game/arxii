@@ -18,9 +18,9 @@ from world.magic.audere import (
     AbstractPendingOffer,
     _check_intensity_gate,
 )
-from world.magic.models.renown_config import RenownAwardConfig
 from world.progression.models.advancement import AbstractClassLevelAdvancement
 from world.progression.selectors import current_path_for_character
+from world.societies.renown_config import RenownAwardConfig
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet

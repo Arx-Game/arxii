@@ -111,3 +111,7 @@ _Avoid_: trait, flaw, house perk, custom aspect (there is no free-text path).
 **Feature (house)**:
 A structural cultural fact about houses of a template (#2079) — `HouseFeature` (unique slug = stable code anchor) stamped as `OrganizationFeature` at materialization. No player input; orients the founder at CG and anchors future systems (a ledger UI checks slug `black-ledger`).
 _Avoid_: perk, ability, house power (features may be flavor-only), aspect (that's the choice concept).
+
+**Propaganda Campaign** (`PropagandaCampaignTier` / `PropagandaDetails`, #1621):
+A funded PROPAGANDA-kind project that converts coin into the sponsor's fame/prestige — the ONLY sanctioned project→renown path (the #1574 resolution: ordinary project contribution never grants prestige). Launched at an authored scale (tier) whose renown config snapshots onto the campaign; instant-completes at threshold (RANSOM pattern) and fires `fire_renown_award` for `Project.owner_persona` exactly once; the sponsor's orgs benefit through the existing membership-inflow stream. Under-funded deadline resolution awards nothing and refunds nothing — the sink keeps what it swallowed. Distinct from the deed-spread "Propaganda" Persuasion form, which amplifies the telling of an EXISTING deed; the campaign *mints* a new award. They compose.
+_Avoid_: advertisement, PR campaign, prestige purchase (it is a project, funded like any other), conflating with spread-Propaganda.

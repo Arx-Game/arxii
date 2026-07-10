@@ -262,7 +262,6 @@
   - condition -> conditions.ConditionTemplate [FK]
   - damage_type -> conditions.DamageType [FK]
   - applies_condition -> conditions.ConditionTemplate [FK] (nullable)
-**Fields:** damage_modifier_percent, removes_condition, applied_condition_severity, narration_snippet (#2018 — flavor text for combat narration on condition transitions)
 
 ### ConditionConditionInteraction
 **Foreign Keys:**
@@ -3982,6 +3981,7 @@
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_facet_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum ConditionModifierEffect from FACET thread crossing choices (wear-gated).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
+- `passive_mantle_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum ConditionModifierEffect from MANTLE thread crossing choices (always-on).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
 - `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int') -> 'int' — Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
 - `prerequisites_met(prereqs: 'Iterable[Prerequisite]', caster: 'ObjectDB', target: 'ObjectDB') -> 'bool' — True if target satisfies every one of prereqs (all() semantics; empty = True).`
@@ -4627,6 +4627,7 @@
   - resonance_grants <- magic.ResonanceGrant
   - organization_gift_grants <- societies.OrganizationGiftGrant
   - gang_turf_details <- societies.GangTurfDetails
+  - propaganda_details <- societies.PropagandaDetails
   - domain_improvement_details <- societies.DomainImprovementDetails
   - org_capability_details <- societies.OrganizationCapabilityProjectDetails
   - research_details <- clues.ResearchProjectDetails
@@ -5550,9 +5551,12 @@
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' — A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' — Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
+- `is_skill_at_xp_boundary(value: 'int') -> 'bool' — Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
+- `purchase_skill_breakthrough(character: 'ObjectDB', skill: 'Skill') -> 'tuple[bool, str]' — Spend XP to break through a skill's XP-boundary plateau (#2115).`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
+- `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' — Return the character's skills currently parked at an XP boundary (#2115).`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
@@ -5774,6 +5778,8 @@
   - auderemajorathreshold_renown_configs <- magic.AudereMajoraThreshold
   - dramaticmomenttype_renown_configs <- magic.DramaticMomentType
   - legend_entries <- societies.LegendEntry
+  - propagandacampaigntier_renown_configs <- societies.PropagandaCampaignTier
+  - propagandadetails_renown_configs <- societies.PropagandaDetails
   - secrets <- secrets.Secret
   - mission_awards <- missions.MissionRenownAward
 
@@ -5793,6 +5799,18 @@
 ### GangTurfReputationAward
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
+
+### PropagandaCampaignTier
+**Foreign Keys:**
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
+**Pointed to by:**
+  - campaigns <- societies.PropagandaDetails
+
+### PropagandaDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - source_tier -> societies.PropagandaCampaignTier [FK] (nullable)
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
 
 ### NobiliaryParticle
 **Foreign Keys:**

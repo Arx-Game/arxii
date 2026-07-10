@@ -47,3 +47,10 @@ class SocietiesConfig(AppConfig):
         from world.societies.houses.services import complete_domain_improvement  # noqa: PLC0415
 
         register_kind_handler(ProjectKind.DOMAIN_IMPROVEMENT, complete_domain_improvement)
+
+        # #1621 — PROPAGANDA: kind handler + instant completion (funds→renown at threshold).
+        from world.projects.services import register_instant_completion_kind  # noqa: PLC0415
+        from world.societies.propaganda import resolve_propaganda_project  # noqa: PLC0415
+
+        register_kind_handler(ProjectKind.PROPAGANDA, resolve_propaganda_project)
+        register_instant_completion_kind(ProjectKind.PROPAGANDA)

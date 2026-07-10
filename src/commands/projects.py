@@ -14,6 +14,7 @@ from actions.base import Action
 from actions.definitions.projects import (
     CheckContributeAction,
     DonateToProjectAction,
+    LaunchPropagandaCampaignAction,
     StoryContributeAction,
 )
 from commands.command import ArxCommand
@@ -28,6 +29,8 @@ class CmdProject(ArxCommand):
       project/donate <id>=<amount>  — donate money from your purse
       project/check <id>=<method>   — make a check-based contribution (spends AP)
       project/story <id>=<text>     — record how you helped (your latest contribution)
+      project/launch <tier>=<name>  — launch a propaganda campaign (#1621);
+                                      bare project/launch lists the scales
     """
 
     key = "project"
@@ -55,7 +58,47 @@ class CmdProject(ArxCommand):
                 {"project_id": parsed["project_id"], "text": parsed["value"]},
             )
             return
+        if "launch" in switches:  # noqa: STRING_LITERAL — Evennia switch name
+            self._launch_campaign()
+            return
         self._show_status()
+
+    def _launch_campaign(self) -> None:
+        """``project/launch <tier>=<name>``; the bare form lists the active scales."""
+        from world.currency.constants import format_coppers  # noqa: PLC0415
+        from world.societies.models import PropagandaCampaignTier  # noqa: PLC0415
+
+        raw = (self.args or "").strip()
+        if not raw:
+            tiers = list(PropagandaCampaignTier.objects.filter(is_active=True))
+            if not tiers:
+                self.msg("No campaign scales are currently offered.")
+                return
+            lines = ["|wPropaganda campaign scales|n (project/launch <tier>=<name>):"]
+            lines.extend(
+                f"  {tier.name} — {format_coppers(tier.threshold_coppers)}" for tier in tiers
+            )
+            self.msg("\n".join(lines))
+            return
+        if "=" not in raw:
+            msg = "Usage: project/launch <tier>=<campaign name>"
+            raise CommandError(msg)
+        tier_part, name_part = (part.strip() for part in raw.split("=", 1))
+        if not tier_part or not name_part:
+            msg = "Usage: project/launch <tier>=<campaign name>"
+            raise CommandError(msg)
+        tier = (
+            PropagandaCampaignTier.objects.filter(pk=int(tier_part)).first()
+            if tier_part.isdigit()
+            else PropagandaCampaignTier.objects.filter(name__iexact=tier_part).first()
+        )
+        if tier is None:
+            msg = f"No campaign scale named '{tier_part}'. Bare project/launch lists them."
+            raise CommandError(msg)
+        self._dispatch(
+            LaunchPropagandaCampaignAction(),
+            {"tier_id": tier.pk, "campaign_name": name_part},
+        )
 
     def _dispatch(self, action: Action, kwargs: dict[str, Any]) -> None:
         result = action.run(actor=self.caller, **kwargs)

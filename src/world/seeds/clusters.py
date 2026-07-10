@@ -75,6 +75,12 @@ def _seed_relationship_scale() -> None:
     seed_relationship_scale_content()
 
 
+def _seed_propaganda() -> None:
+    from world.seeds.propaganda import seed_propaganda_content  # noqa: PLC0415
+
+    seed_propaganda_content()
+
+
 def _seed_social_actions() -> None:
     from world.seeds.social_actions import seed_social_action_content  # noqa: PLC0415
 
@@ -283,6 +289,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # archetype action scaling for the 3 canonical roles (#2022). After "items"
     # (creates the role rows + gear compat) and "magic" (EffectType/Style/Gift).
     "covenant_roles": _seed_covenant_roles,
+    # Propaganda: PLACEHOLDER campaign-tier catalog for the money→prestige
+    # project kind (#1621).
+    "propaganda": _seed_propaganda,
     # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's four
     # XP boundaries (20/30/40/50), so the #2115 breakthrough purchase is always
     # reachable instead of a landmine. Registered LAST — it iterates every
@@ -346,6 +355,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.scenes.models import ReactionEmoji  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.societies.houses.models import Title  # noqa: PLC0415
+    from world.societies.models import PropagandaCampaignTier  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
     from world.traits.models import ResultChart  # noqa: PLC0415
 
@@ -421,6 +431,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Covenant role catalog: granted gifts + techniques + capabilities +
         # archetype scaling for the 3 canonical roles (#2022).
         "covenant_roles": [],
+        # Propaganda: the PLACEHOLDER campaign-tier catalog (#1621).
+        "propaganda": [PropagandaCampaignTier],
         # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's
         # four XP boundaries (#2115).
         "skills": [TraitRatingUnlock],

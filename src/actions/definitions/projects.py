@@ -215,3 +215,74 @@ class StoryContributeAction(Action):
                 success=False, message="You have not contributed to that project yet."
             )
         return _ActionResult(success=True, message="Your contribution's story is recorded.")
+
+
+@dataclass
+class LaunchPropagandaCampaignAction(Action):
+    """Launch a propaganda campaign — the money→prestige sink (#1621).
+
+    Creates an ACTIVE PROPAGANDA project at a chosen authored tier; anyone may
+    then fund it via ``project/donate``. At threshold the campaign completes
+    instantly and fires the sponsor's renown award (the only project→fame
+    path). Telnet: ``project/launch <tier> name=<text>``.
+    """
+
+    key: str = "launch_propaganda_campaign"
+    name: str = "Launch Propaganda Campaign"
+    icon: str = "megaphone"
+    category: str = "projects"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        *,
+        tier_id: int | None = None,
+        campaign_name: str = "",
+        description: str = "",
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+        from world.societies.models import PropagandaCampaignTier  # noqa: PLC0415
+        from world.societies.propaganda import (  # noqa: PLC0415
+            PropagandaError,
+            launch_propaganda_campaign,
+        )
+
+        if tier_id is None or not campaign_name.strip():
+            return _ActionResult(
+                success=False, message="Pick a campaign scale and give the campaign a name."
+            )
+        sheet = actor.sheet_data
+        if sheet is None:
+            return _ActionResult(success=False, message=_MSG_NO_CHARACTER_SHEET)
+        try:
+            persona = active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
+            return _ActionResult(success=False, message="You have no active persona.")
+
+        tier = PropagandaCampaignTier.objects.filter(pk=tier_id).first()
+        if tier is None:
+            return _ActionResult(success=False, message="No such campaign scale.")
+
+        try:
+            project = launch_propaganda_campaign(
+                owner_persona=persona,
+                tier=tier,
+                campaign_name=campaign_name.strip(),
+                description=description,
+            )
+        except PropagandaError as exc:
+            return _ActionResult(success=False, message=exc.user_message)
+
+        return _ActionResult(
+            success=True,
+            message=(
+                f"Campaign '{campaign_name.strip()}' launched (project #{project.pk}). "
+                f"Fund it with project/donate {project.pk}=<amount>."
+            ),
+            data={"project_id": project.pk},
+        )
