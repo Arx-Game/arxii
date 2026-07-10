@@ -272,6 +272,15 @@ def enter_node(instance: MissionInstance, node: MissionNode) -> None:
 
     M1: operates on the ``node`` argument and only WRITES the FK; it never
     reads a possibly-stale cached ``instance.current_node``.
+
+    Finally fast-forwards any durable EXTERNAL_ACT option authored on *node*
+    (#1035) — a THREAD_WOVEN/COVENANT_SWORN beat the contract holder's sheet
+    already satisfies auto-resolves with no player action. Local import: this
+    module is the one ``resolve_option``/``enter_node`` live in, and
+    ``external_acts`` imports both of those at module scope, so importing it
+    back at module scope here would cycle — deferred to call time instead,
+    mirroring the existing ``activate_stakes_for_instance`` import in
+    ``services/play.py``.
     """
     for participant in instance.participants.all():
         MissionNodeSnapshot.objects.create(
@@ -281,6 +290,10 @@ def enter_node(instance: MissionInstance, node: MissionNode) -> None:
         )
     instance.current_node = node
     instance.save()
+
+    from world.missions.services.external_acts import fast_forward_external_acts  # noqa: PLC0415
+
+    fast_forward_external_acts(instance, node)
 
 
 def _resolve_check_type(option: MissionOption) -> CheckType:

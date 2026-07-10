@@ -17,7 +17,10 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
-from world.missions.constants import ExternalAct, OptionKind, OptionSource
+from world.character_sheets.factories import CharacterSheetFactory
+from world.covenants.factories import CharacterCovenantRoleFactory
+from world.magic.factories import ThreadFactory
+from world.missions.constants import ExternalAct, MissionStatus, OptionKind, OptionSource
 from world.missions.factories import (
     MissionInstanceFactory,
     MissionNodeFactory,
@@ -27,7 +30,8 @@ from world.missions.factories import (
     MissionTemplateFactory,
 )
 from world.missions.models import MissionDeedRecord
-from world.missions.services import build_option_list, resolve_option
+from world.missions.services import build_option_list, enter_node, resolve_option
+from world.missions.services.external_acts import satisfy_external_act
 from world.missions.services.multiplayer import build_group_option_list
 
 
@@ -142,3 +146,170 @@ class ExternalActNeverPickableTests(TestCase):
                 self.actor.character,
                 option_id=self.external_act_option.pk,
             )
+
+
+class SatisfyExternalActTests(TestCase):
+    """``satisfy_external_act`` resolves every ACTIVE instance waiting on the
+    matching act, on the acting participant's behalf, with actor-only
+    messaging (#1035 leak rule — no room emit)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character_sheet = CharacterSheetFactory()
+        cls.template = MissionTemplateFactory(name="satisfy-external-act-tmpl")
+        cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
+        cls.target = MissionNodeFactory(template=cls.template, key="target")
+
+    def _make_waiting_instance(self, *, required_act: str) -> tuple[object, object]:
+        instance = MissionInstanceFactory(template=self.template, current_node=self.entry)
+        MissionParticipantFactory(
+            instance=instance,
+            character=self.character_sheet.character,
+            is_contract_holder=True,
+        )
+        option = MissionOptionFactory(
+            node=self.entry,
+            order=0,
+            option_kind=OptionKind.EXTERNAL_ACT,
+            source_kind=OptionSource.AUTHORED,
+            required_act=required_act,
+            branch_target=self.target,
+        )
+        return instance, option
+
+    def test_matching_act_resolves_advances_and_messages_actor_only(self) -> None:
+        instance, _option = self._make_waiting_instance(required_act=ExternalAct.TECHNIQUE_CAST)
+
+        with patch("world.missions.services.external_acts.send_narrative_message") as sender:
+            deeds = satisfy_external_act(self.character_sheet, ExternalAct.TECHNIQUE_CAST)
+
+        self.assertEqual(len(deeds), 1)
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.target)
+        sender.assert_called_once()
+        _args, kwargs = sender.call_args
+        self.assertEqual(kwargs["recipients"], [self.character_sheet])
+
+    def test_wrong_act_is_a_noop(self) -> None:
+        instance, _option = self._make_waiting_instance(required_act=ExternalAct.TECHNIQUE_CAST)
+
+        deeds = satisfy_external_act(self.character_sheet, ExternalAct.THREAD_WOVEN)
+
+        self.assertEqual(deeds, [])
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.entry)
+
+    def test_no_active_instance_returns_empty_list(self) -> None:
+        lone_sheet = CharacterSheetFactory()
+
+        deeds = satisfy_external_act(lone_sheet, ExternalAct.TECHNIQUE_CAST)
+
+        self.assertEqual(deeds, [])
+
+    def test_two_active_instances_both_resolve(self) -> None:
+        instance_one, _ = self._make_waiting_instance(required_act=ExternalAct.COVENANT_SWORN)
+        instance_two, _ = self._make_waiting_instance(required_act=ExternalAct.COVENANT_SWORN)
+
+        deeds = satisfy_external_act(self.character_sheet, ExternalAct.COVENANT_SWORN)
+
+        self.assertEqual(len(deeds), 2)
+        instance_one.refresh_from_db()
+        instance_two.refresh_from_db()
+        self.assertEqual(instance_one.current_node, self.target)
+        self.assertEqual(instance_two.current_node, self.target)
+
+    def test_instance_without_external_act_option_is_untouched(self) -> None:
+        instance = MissionInstanceFactory(template=self.template, current_node=self.entry)
+        MissionParticipantFactory(
+            instance=instance,
+            character=self.character_sheet.character,
+            is_contract_holder=True,
+        )
+        MissionOptionFactory(
+            node=self.entry,
+            order=0,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            branch_target=self.target,
+        )
+
+        deeds = satisfy_external_act(self.character_sheet, ExternalAct.TECHNIQUE_CAST)
+
+        self.assertEqual(deeds, [])
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.entry)
+
+    def test_only_active_instances_are_considered(self) -> None:
+        instance, _option = self._make_waiting_instance(required_act=ExternalAct.TECHNIQUE_CAST)
+        instance.status = MissionStatus.COMPLETE
+        instance.save()
+
+        deeds = satisfy_external_act(self.character_sheet, ExternalAct.TECHNIQUE_CAST)
+
+        self.assertEqual(deeds, [])
+
+
+class FastForwardExternalActsTests(TestCase):
+    """``enter_node`` fast-forwards a durable EXTERNAL_ACT option the
+    contract-holder's sheet already satisfies (#1035); TECHNIQUE_CAST is
+    transient and never fast-forwards."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character_sheet = CharacterSheetFactory()
+        cls.template = MissionTemplateFactory(name="fast-forward-tmpl")
+        cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
+        cls.target = MissionNodeFactory(template=cls.template, key="target")
+
+    def _instance_with_option(self, *, required_act: str) -> tuple[object, object]:
+        instance = MissionInstanceFactory(template=self.template)
+        MissionParticipantFactory(
+            instance=instance,
+            character=self.character_sheet.character,
+            is_contract_holder=True,
+        )
+        option = MissionOptionFactory(
+            node=self.entry,
+            order=0,
+            option_kind=OptionKind.EXTERNAL_ACT,
+            source_kind=OptionSource.AUTHORED,
+            required_act=required_act,
+            branch_target=self.target,
+        )
+        return instance, option
+
+    def test_thread_woven_fast_forwards_on_live_thread(self) -> None:
+        instance, _option = self._instance_with_option(required_act=ExternalAct.THREAD_WOVEN)
+        ThreadFactory(owner=self.character_sheet)
+
+        enter_node(instance, self.entry)
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.target)
+
+    def test_covenant_sworn_fast_forwards_on_live_membership(self) -> None:
+        instance, _option = self._instance_with_option(required_act=ExternalAct.COVENANT_SWORN)
+        CharacterCovenantRoleFactory(character_sheet=self.character_sheet)
+
+        enter_node(instance, self.entry)
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.target)
+
+    def test_technique_cast_never_fast_forwards(self) -> None:
+        instance, _option = self._instance_with_option(required_act=ExternalAct.TECHNIQUE_CAST)
+        # No durable state can ever satisfy TECHNIQUE_CAST — it's transient.
+
+        enter_node(instance, self.entry)
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.entry)
+
+    def test_no_matching_durable_state_leaves_node_untouched(self) -> None:
+        instance, _option = self._instance_with_option(required_act=ExternalAct.THREAD_WOVEN)
+        # No live Thread for this character_sheet.
+
+        enter_node(instance, self.entry)
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.entry)
