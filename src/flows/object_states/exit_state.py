@@ -1,3 +1,5 @@
+from evennia_extensions.constants import ExitKind
+from evennia_extensions.models import ExitProfile
 from flows.object_states.base_state import BaseState
 
 
@@ -31,6 +33,10 @@ class ExitState(BaseState):
         Returns:
             bool: Whether traversal is permitted.
         """
+        profile = ExitProfile.objects.filter(objectdb=self.obj).first()
+        if profile and profile.exit_kind == ExitKind.WINDOW and not profile.is_open:
+            return False
+
         if self.obj.db.locked and actor is not None:
             from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
             from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
