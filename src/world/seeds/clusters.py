@@ -105,6 +105,18 @@ def _seed_character_creation() -> None:
     seed_character_creation_dev()
 
 
+def _seed_missions() -> None:
+    from world.seeds.game_content.missions import seed_missions_dev  # noqa: PLC0415
+
+    seed_missions_dev()
+
+
+def _seed_progression() -> None:
+    from world.progression.seeds import seed_durance_officiants  # noqa: PLC0415
+
+    seed_durance_officiants()
+
+
 def _seed_justice() -> None:
     from world.seeds.justice import seed_crime_kinds  # noqa: PLC0415
 
@@ -255,6 +267,18 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Gender/TarotCard/HeightBand/Build/stats/Rosters/Path) — after magic because
     # finalize_character picks the magic-seeded cantrip + resonance. (#1333)
     "character_creation": _seed_character_creation,
+    # Missions: the starter notice board (1 BOARD MissionGiver + 3 OPEN
+    # MissionTemplate rows) so `mission opportunities` isn't dead-on-arrival on
+    # a fresh DB (#2121). After "character_creation" (needs the canonical
+    # starting room the board sits in) and "checks"/"combat_checks" (the
+    # authored MissionOption's CheckType composition).
+    "missions": _seed_missions,
+    # Progression: one NPC Durance-training officiant + DuranceTrainingSite per
+    # PROSPECT path, at the canonical starting room, so the first-ever Ritual
+    # of the Durance is conductible without a live higher-level PC (#2121).
+    # After "character_creation" (the room) and "magic" (the Ritual of the
+    # Durance row + the 5 PROSPECT Path rows, both seeded by seed_magic_dev).
+    "progression": _seed_progression,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
@@ -361,7 +385,12 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance, Ritual  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
-    from world.progression.models import KudosSourceCategory, TraitRatingUnlock  # noqa: PLC0415
+    from world.missions.models import MissionGiver, MissionTemplate  # noqa: PLC0415
+    from world.progression.models import (  # noqa: PLC0415
+        DuranceTrainingSite,
+        KudosSourceCategory,
+        TraitRatingUnlock,
+    )
     from world.projects.models import (  # noqa: PLC0415
         ContributionMethod,
         ProjectKindResonanceAward,
@@ -415,6 +444,13 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "battles": [],
         "consent": [SocialConsentCategory],
         "character_creation": [StartingArea, Beginnings, Species],
+        # Missions: the starter notice board (#2121) — 1 BOARD MissionGiver +
+        # 3 OPEN MissionTemplate rows so `mission opportunities` isn't
+        # dead-on-arrival.
+        "missions": [MissionGiver, MissionTemplate],
+        # Progression: one Durance training officiant + site per PROSPECT path
+        # (#2121), so the first-ever Ritual of the Durance is conductible.
+        "progression": [DuranceTrainingSite],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under

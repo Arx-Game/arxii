@@ -232,6 +232,7 @@ from actions.definitions.progression_rewards import (
     ClearPathIntentAction,
     RemoveVoteAction,
     RerollRandomSceneAction,
+    SelectPathAction,
     SetPathIntentAction,
 )
 from actions.definitions.projects import (
@@ -494,6 +495,7 @@ _ALL_ACTIONS: list[Action] = [
     RerollRandomSceneAction(),
     SetPathIntentAction(),
     ClearPathIntentAction(),
+    SelectPathAction(),
     start_npc_interaction,
     resolve_npc_offer,
     end_npc_interaction,

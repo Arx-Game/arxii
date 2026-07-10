@@ -23,6 +23,8 @@ class TestClusterRegistry(TestCase):
                 "battles",
                 "consent",
                 "character_creation",
+                "missions",
+                "progression",
                 "justice",
                 "governance",
                 "scandal",

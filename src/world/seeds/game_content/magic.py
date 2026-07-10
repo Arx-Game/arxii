@@ -5,7 +5,8 @@ Exports:
   Composes all Phase 1 seed helpers into a single idempotent call. This is
   the magic-cluster contribution to Phase 3's ``seed_dev_database()``.
 - ``seed_magic_config()`` — Task 1.1 — singletons + IntensityTier + MishapPoolTier
-- ``seed_canonical_rituals()`` — Task 1.2 — Rite of Imbuing + Rite of Atonement
+- ``seed_canonical_rituals()`` — Task 1.2 — Rite of Imbuing + Rite of Atonement +
+  Ritual of the Durance (#2121)
 - ``seed_thread_pull_catalog()`` — Task 1.3 — ThreadPullCost + ThreadPullEffect catalog
 - ``seed_cantrip_starter_catalog()`` — Task 1.8 — 5 styles × 5 archetypes = 25 cantrips
 - ``MagicContent`` — static factory helpers for integration-test technique wiring
@@ -1741,37 +1742,51 @@ def seed_magic_config() -> MagicConfigResult:
 class RitualSeedResult:
     """Returned by seed_canonical_rituals().
 
-    Wraps the canonical Rite of Imbuing and Rite of Atonement rituals.
-    Both are lazy-created via factory django_get_or_create on name,
-    so re-running preserves any edits to existing rows (idempotent).
+    Wraps the canonical Rite of Imbuing, Rite of Atonement, and Ritual of the
+    Durance rituals. All are lazy-created via factory django_get_or_create on
+    name, so re-running preserves any edits to existing rows (idempotent).
     """
 
     rite_of_imbuing: Ritual
     rite_of_atonement: Ritual
+    ritual_of_the_durance: Ritual
 
 
 def seed_canonical_rituals() -> RitualSeedResult:
-    """Lazy-create the two canonical rituals: Imbuing and Atonement.
+    """Lazy-create the canonical rituals: Imbuing, Atonement, and the Durance.
 
-    Both factories use django_get_or_create(name=...) so re-running on a
+    All factories use django_get_or_create(name=...) so re-running on a
     populated DB is a no-op. Existing rows are never modified; staff edits
     survive repeated calls.
 
     Creates:
     - Ritual: "Rite of Imbuing" (SERVICE dispatch to spend_resonance_for_imbuing)
     - Ritual: "Rite of Atonement" (SERVICE dispatch to atonement service)
+    - Ritual: "Ritual of the Durance" (SERVICE dispatch to
+      advance_class_level_via_session, #1352/#2121) — as canonical as Imbuing/
+      Atonement: every character needs it eventually, not just covenant
+      members. Previously created only in test factories, so even a live
+      officiant's ``ritual draft "Ritual of the Durance"`` failed by name on a
+      fresh DB (RitualOfTheDuranceFactory also lazy-creates the companion
+      RitualLiturgy row via its post_generation hook).
 
     Returns:
-        RitualSeedResult dataclass with both ritual instances.
+        RitualSeedResult dataclass with all three ritual instances.
     """
     from world.magic.factories import (  # noqa: PLC0415
         AtonementRitualFactory,
         ImbuingRitualFactory,
+        RitualOfTheDuranceFactory,
     )
 
     imbuing = ImbuingRitualFactory()
     atonement = AtonementRitualFactory()
-    return RitualSeedResult(rite_of_imbuing=imbuing, rite_of_atonement=atonement)
+    durance = RitualOfTheDuranceFactory()
+    return RitualSeedResult(
+        rite_of_imbuing=imbuing,
+        rite_of_atonement=atonement,
+        ritual_of_the_durance=durance,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2558,7 +2573,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
 
     1. ``seed_magic_config()`` — AnimaConfig, SoulfrayConfig, ResonanceGainConfig,
        CorruptionConfig, AudereThreshold, IntensityTier × 3, MishapPoolTier
-    2. ``seed_canonical_rituals()`` — Rite of Imbuing, Rite of Atonement
+    2. ``seed_canonical_rituals()`` — Rite of Imbuing, Rite of Atonement, Ritual
+       of the Durance (#2121)
     3. ``seed_thread_pull_catalog()`` — ThreadPullCost × 3, ThreadPullEffect × 4,
        canonical Tideborne resonance; then ``seed_thread_survivability_tuning()`` —
        ThreadSurvivabilityTuning × 2 (DR + MAX_HEALTH baseline tuning rows, #1175)

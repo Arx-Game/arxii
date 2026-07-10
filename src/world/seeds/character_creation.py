@@ -15,7 +15,12 @@ Child of #651 / epic #1220 (Phase A). Registered in ``CLUSTER_SEEDERS`` after
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
+from world.character_creation.constants import (
+    FALLBACK_STARTING_ROOM_KEY,
+    FALLBACK_STARTING_ROOM_TYPECLASS,
+)
 from world.character_creation.models import Beginnings, StartingArea
 from world.character_sheets.models import Gender
 from world.classes.models import Path, PathStage
@@ -26,6 +31,9 @@ from world.species.models import Species
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 from world.traits.models import Trait, TraitType
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 # The canonical 12 stat names. Mirrors the set FinalizationTestMixin uses; kept
 # here as the single seed-time source (factories-as-seed-data). The test mixin's
@@ -45,6 +53,32 @@ DEFAULT_STAT_NAMES: tuple[str, ...] = (
     "perception",
     "willpower",
 )
+
+
+def ensure_canonical_fallback_room() -> ObjectDB:
+    """Get-or-create the canonical fallback starting Room (#2121).
+
+    Lazy-created via ``evennia_create.create_object`` the same way the magic
+    cluster's cascade rooms are (``world/seeds/game_content/magic.py``) —
+    ``ObjectDB.db_key`` is not unique in Evennia, so lookup uses
+    ``filter().first()`` for idempotency. Callable independently of cluster
+    order: any seeder needing "the" canonical starting room (character_creation,
+    missions, progression) calls this and gets the same row back.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+    from evennia.utils import create as evennia_create  # noqa: PLC0415
+
+    existing = ObjectDB.objects.filter(
+        db_key=FALLBACK_STARTING_ROOM_KEY,
+        db_typeclass_path=FALLBACK_STARTING_ROOM_TYPECLASS,
+    ).first()
+    if existing is not None:
+        return existing
+    return evennia_create.create_object(
+        typeclass=FALLBACK_STARTING_ROOM_TYPECLASS,
+        key=FALLBACK_STARTING_ROOM_KEY,
+        nohome=True,
+    )
 
 
 def seed_character_creation_dev() -> None:
@@ -68,6 +102,11 @@ def seed_character_creation_dev() -> None:
             "minimum_trust": 0,
         },
     )
+    # #2121 — every seeded StartingArea must resolve to a real room (never a
+    # silent None spawn). Never overwrite an already-wired room (staff edit).
+    if area.default_starting_room_id is None:
+        area.default_starting_room = ensure_canonical_fallback_room()
+        area.save(update_fields=["default_starting_room"])
     species, _ = Species.objects.get_or_create(
         name="Human",
         defaults={"description": "The default species.", "sort_order": 0},

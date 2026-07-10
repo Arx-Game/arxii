@@ -22398,6 +22398,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/RandomSceneTarget'
           description: ''
+  /api/progression/select-path/:
+    get:
+      operationId: progression_select_path_retrieve
+      description: GET — current path (usually null) + selectable PROSPECT paths.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: progression_select_path_create
+      description: POST — select a starting path; only succeeds with no path on record.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          description: No response body
   /api/progression/unlocks/:
     get:
       operationId: progression_unlocks_list

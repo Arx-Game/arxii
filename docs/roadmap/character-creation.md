@@ -1,5 +1,16 @@
 # Character Creation & Identity
 
+## Built (2026-07-09, #2121 — guaranteed starting room)
+
+- Every seeded `StartingArea`/`Beginnings` now resolves to a real room. The dev-seeded
+  "Arx City" `StartingArea` gets a canonical fallback `Room`
+  (`world.seeds.character_creation.ensure_canonical_fallback_room`) wired onto its
+  `default_starting_room` whenever that FK is unset. `CharacterDraft.get_starting_room()`
+  gained a third, loud-logged fallback tier (the same canonical room, looked up by its
+  stable `db_key`) for any hand-built `StartingArea`/`Beginnings` combo that's missing a
+  room — a freshly approved character never spawns with `location=None`; the prior
+  "valid for early testing" silent-`None` behavior is retired.
+
 ## Built (2026-07-07, #2062 — kinship graph; ADR-0097)
 
 - Person-node genealogy replaces the FamilyMember stub: `Kinsperson` at five

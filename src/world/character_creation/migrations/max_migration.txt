@@ -1,1 +1,1 @@
-0006_startingarea_grants_residence_tenancy
+0007_alter_startingarea_default_starting_room
