@@ -95,6 +95,7 @@ treat those names as hints to confirm, not gospel.
 - [0028 — Web-first: not wired into React = not implemented](0028-web-first-not-wired-into-react-is-not-implemented.md)
 - [0029 — Named/public faces are always shown by name](0029-named-public-faces-are-always-shown-by-name.md)
 - [0030 — GMs author story trees; outcomes resolve by player roll, not fiat](0030-gms-author-story-trees-outcomes-resolve-by-roll.md)
+- [0110 — GM content is catalog + adaptation, never invention](0110-gm-content-is-catalog-and-adaptation-never-invention.md)
 - [0031 — Exact numbers in the ledger, descriptive labels in the fiction](0031-exact-numbers-in-the-ledger-labels-in-the-fiction.md)
 - [0032 — Constrained bystander reactions](0032-constrained-bystander-reactions.md)
 - [0033 — Privacy / RP-leak prevention is MVP-gating](0033-privacy-is-mvp-gating.md)

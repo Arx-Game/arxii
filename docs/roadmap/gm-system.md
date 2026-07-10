@@ -101,6 +101,20 @@ The GM system defines these role relationships; the stories app uses them for pe
   blocker.
 - Frontend (evidence panel + promote action on a staff GM-review page) is a
   deliberate scope note, not a silent skip — it rides the GM dashboard work (#2004).
+- **GM adjudication toolkit ✅ (#2118, ADR-0110)** — the fast-follow promised in the
+  #2117 note above: `IsSceneGMPrerequisite` (`actions/prerequisites.py`) scopes three
+  new Actions to the actor's **own running scene** (`Scene.is_gm`, #2113), not the
+  orthogonal staff bit or general GM-trust alone. `InvokeCatalogCheckAction`
+  (`gm_invoke_check`) is the "umpire check-modifier tooling" Phase 4 called out as a
+  potential future phase — a GM invokes an authored `CheckType` at a
+  `DifficultyChoice` band via `perform_check`, with an optional ±1-band `edge`/
+  `setback` shift (a required, echoed reason) standing in for the "GM applies +2
+  difficulty" idea — never a free integer modifier, and never a stat/skill pair or a
+  consequence-pool selection (the governing invariant: catalog-only invocation,
+  never invention). `GMAwardAction` (`gm_award_progression`) and
+  `GMApplyConditionAction` (`gm_apply_condition`) round out the toolkit, both
+  additionally gated on `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`. Telnet: `gm
+  check`/`gm award`/`gm condition` on `CmdGMDashboard` (`commands/gm_ops.py`).
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system
@@ -170,9 +184,19 @@ Things that belong to Stories instead:
 - Audit trail via story beat history
 
 Potential GM-specific tooling that may warrant a future phase:
-- Umpire check-modifier tooling (GM applies `+2 difficulty` or
-  `+2 advantage` to an in-progress check based on RP context)
-- This is GM *shaping* outcomes without *deciding* them
+- ✅ **Umpire check-modifier tooling — delivered as #2118's `InvokeCatalogCheckAction`.**
+  A GM invokes an authored `CheckType` at a `DifficultyChoice` band, with an optional
+  ±1-band `edge`/`setback` shift (never a free integer modifier). This is GM *shaping*
+  outcomes without *deciding* them — `perform_check` still resolves by player roll
+  (ADR-0030), and the shift is catalog-bounded, not fiat (ADR-0110).
+- `GMAwardAction`/`GMApplyConditionAction` (#2118) are a deliberate, narrow exception
+  to "rewards are not a GM concern" above: they exist specifically because the
+  story-beat automatic-award pipeline (`award_scene_development_points`) has zero
+  production callers and is bug-for-bug broken (reads a nonexistent `scene.title`) —
+  see #2118's spec. They are fiat (JUNIOR-tier GM trust required, unlike the
+  no-floor check-invocation verb) and meant for improvised story moments the broken
+  pipeline can't reach, not a replacement for story-beat rewards once that pipeline
+  is fixed or reviving `award_scene_development_points` is designed properly.
 
 ### Phase 5 — Dashboards and UI (deferred until after Stories)
 The GM dashboard is story-shaped, not roster-shaped. What GMs actually

@@ -1184,14 +1184,32 @@ GM at a given level may author (#2000, ADR-0097).
   `gm_evidence_summary` services the web actions call. `gm dashboard` gains an
   "Open group requests: N" line + `gm claim <request-id>` (#2119), dispatching
   `stories.ClaimGroupStoryRequestAction`.
+- **Adjudication toolkit (#2118, ADR-0110):** `IsSceneGMPrerequisite` (`actions/prerequisites.py`
+  — staff bypass, else `Scene.is_gm(actor.active_account)` on the actor's active scene) gates
+  three catalog-only Actions in `actions/definitions/gm_adjudication.py`:
+  `InvokeCatalogCheckAction` (key `gm_invoke_check` — invokes an authored `CheckType` at a
+  `DifficultyChoice` band via `perform_check`, plus a `find`/list catalog-search mode; never an
+  integer difficulty or a consequence-pool reference), `GMAwardAction` (key
+  `gm_award_progression` — `award_xp`/`award_development_points` with
+  `ProgressionReason.GM_AWARD`, gated additionally on `MinimumGMLevelPrerequisite(GMLevel
+  .JUNIOR)`), `GMApplyConditionAction` (key `gm_apply_condition` — `apply_condition` against an
+  authored `ConditionTemplate` via `get_by_name`, same JUNIOR floor). Telnet: `gm check [find
+  <term>]` / `gm check <char> <check-type>=<band> [edge=<reason>|setback=<reason>]`, `gm award
+  <char> xp=<amount>|dev=<trait> amount=<n> [reason=<text>]`, `gm condition <char>
+  condition=<name> [severity=<n>] [duration=<n>] [note=<text>]` (`commands/gm_ops.py`'s
+  `CmdGMDashboard`).
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`), combat (`StakesLevelRequirement
   .minimum_gm_level`), roster (`GMRosterInvite` → `RosterApplication`), scenes
-  (`GMTableMembership` pinned to `Persona`)
+  (`GMTableMembership` pinned to `Persona`, `Scene.is_gm` for the adjudication
+  toolkit's gate), checks (`InvokeCatalogCheckAction` → `perform_check`),
+  progression (`GMAwardAction` → `award_xp`/`award_development_points`), conditions
+  (`GMApplyConditionAction` → `apply_condition`)
 - **Source:** `src/world/gm/`
 - **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
 - **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
+  [../adr/0110-gm-content-is-catalog-and-adaptation-never-invention.md](../adr/0110-gm-content-is-catalog-and-adaptation-never-invention.md),
   [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md)
 
 ### Scenes

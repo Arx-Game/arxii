@@ -382,6 +382,10 @@ class ActionRegistryTests(TestCase):
             "request_gm_for_covenant",
             "claim_group_story_request",
             "withdraw_group_story_request",
+            # #2118 — GM adjudication toolkit: catalog check invocation, awards, conditions.
+            "gm_invoke_check",
+            "gm_award_progression",
+            "gm_apply_condition",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

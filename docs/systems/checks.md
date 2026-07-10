@@ -163,7 +163,37 @@ All models registered with appropriate admin interfaces:
 - **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation, `CharacterClassLevel` for character level
 - **Progression app**: Uses `CharacterPathHistory` for current path lookup
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
-- **Callers** (goals, magic, combat, conditions): Compute `extra_modifiers` before calling `perform_check()`
+- **Callers** (goals, magic, combat, conditions, GM adjudication): Compute `extra_modifiers` before calling `perform_check()`
+
+---
+
+## GM Ad-Hoc Catalog Invocation (#2118)
+
+The one GM-invocable caller of `perform_check` for moments no pre-authored system covers.
+**Governing invariant (ADR-0110): catalog-only invocation — GMs can never invent checks or
+select/compose/fire a consequence pool.** `InvokeCatalogCheckAction`
+(`actions/definitions/gm_adjudication.py`, registry key `gm_invoke_check`) is the sole entry
+point:
+
+- **Check reference**: an authored `CheckType`, resolved pk-or-name against the shared catalog
+  only (`resolve_model_by_pk_or_name`, scoped to `is_active=True`); unresolvable refuses with a
+  hint back to the discovery surface (`gm check find <term>`) rather than accepting free text.
+- **Difficulty**: a `DifficultyChoice` band member only — no integer parameter exists on any
+  code path.
+- **Situational modifier**: at most one band of `edge` (easier) or `setback` (harder) shift, each
+  requiring a free-text reason that is echoed into the result. Never an integer offset.
+- **Result**: number-free — only `CheckResult.outcome_name` reaches the message (never
+  `total_points`/`trait_points`/`success_level`/the roll), and it goes to the invoking GM only
+  (ADR-0031). No audit model records the invocation; the GM narrates the outcome via pose.
+- **Discovery**: `find`/list mode (no target) searches the catalog by name, stat+skill trait, or
+  description snippet — the paved road to finding the right check instead of inventing one.
+
+Gated by `IsSceneGMPrerequisite` (`actions/prerequisites.py` — staff bypass, else
+`Scene.is_gm(actor.active_account)` on the actor's active scene). Telnet: `gm check [find
+<term>]` / `gm check <character> <check-type>=<band> [edge=<reason>|setback=<reason>]`
+(`commands/gm_ops.py`). Sibling actions `GMAwardAction` (`gm_award_progression`) and
+`GMApplyConditionAction` (`gm_apply_condition`) round out the GM adjudication toolkit — see
+`docs/systems/INDEX.md` and `docs/roadmap/gm-system.md`.
 
 ---
 
