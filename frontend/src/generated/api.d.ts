@@ -28198,6 +28198,7 @@ export interface components {
        *     * `everyone` - Everyone
        *     * `all_but_blacklist` - Everyone except my blacklist
        *     * `friends_whitelist` - Friends and my whitelist
+       *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
       mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
@@ -31201,6 +31202,7 @@ export interface components {
        *     * `everyone` - Everyone
        *     * `all_but_blacklist` - Everyone except my blacklist
        *     * `friends_whitelist` - Friends and my whitelist
+       *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
       mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
@@ -31209,6 +31211,7 @@ export interface components {
      * @description * `everyone` - Everyone
      *     * `all_but_blacklist` - Everyone except my blacklist
      *     * `friends_whitelist` - Friends and my whitelist
+     *     * `rivals` - My declared rivals (and whitelist)
      *     * `allowlist` - Allowlist only
      * @enum {string}
      */
@@ -31216,6 +31219,7 @@ export interface components {
       | 'everyone'
       | 'all_but_blacklist'
       | 'friends_whitelist'
+      | 'rivals'
       | 'allowlist';
     /** @description Serializer for per-category consent rules. */
     SocialConsentCategoryRuleRequest: {
@@ -31227,6 +31231,7 @@ export interface components {
        *     * `everyone` - Everyone
        *     * `all_but_blacklist` - Everyone except my blacklist
        *     * `friends_whitelist` - Friends and my whitelist
+       *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
       mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
