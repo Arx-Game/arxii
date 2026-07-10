@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import ModifierContribution
     from world.relationships.constants import FirstImpressionColoring
-    from world.relationships.models import GrievanceOption
+    from world.relationships.models import BondCombatConfig, GrievanceOption, RelationshipTrack
     from world.scenes.models import Interaction, ReactionEmoji, Scene
 
 logger = logging.getLogger(__name__)
@@ -642,3 +642,16 @@ def clear_very_attracted(sheets) -> None:
     ).filter(
         Q(relationship__source_id__in=sheet_ids) | Q(relationship__target_id__in=sheet_ids)
     ).delete()
+
+
+def get_bond_combat_config() -> BondCombatConfig:
+    """Get-or-create the BondCombatConfig singleton (pk=1).
+
+    Lazy-creates the singleton on first access. Mirrors ``get_soul_tether_config()``.
+    """
+    from world.relationships.models import BondCombatConfig
+
+    cfg = BondCombatConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = BondCombatConfig.objects.get_or_create(pk=1)
+    return cfg
