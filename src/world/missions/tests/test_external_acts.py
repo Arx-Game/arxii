@@ -359,6 +359,47 @@ class WeaveThreadExternalActWiringTests(TestCase):
         self.assertEqual(instance.current_node, target)
 
 
+class WeaveGiftThreadExternalActWiringTests(TestCase):
+    """``weave_thread``'s GIFT branch also calls ``satisfy_external_act(THREAD_WOVEN)``
+    on success (#1035 review fix) — the GIFT branch early-returns before the general
+    tail, so it needs its own wiring call (shared via ``_satisfy_thread_woven``)."""
+
+    def test_weave_gift_thread_resolves_waiting_thread_woven_mission(self) -> None:
+        from world.magic.constants import TargetKind
+        from world.magic.factories import GiftFactory, ResonanceFactory
+        from world.magic.services import weave_thread
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        gift = GiftFactory()
+        gift.resonances.add(resonance)
+
+        template = MissionTemplateFactory(name="weave-gift-wiring-tmpl")
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        target = MissionNodeFactory(template=template, key="target")
+        instance = MissionInstanceFactory(template=template, current_node=entry)
+        MissionParticipantFactory(
+            instance=instance,
+            character=sheet.character,
+            is_contract_holder=True,
+        )
+        MissionOptionFactory(
+            node=entry,
+            order=0,
+            option_kind=OptionKind.EXTERNAL_ACT,
+            source_kind=OptionSource.AUTHORED,
+            required_act=ExternalAct.THREAD_WOVEN,
+            branch_target=target,
+        )
+
+        thread = weave_thread(sheet, TargetKind.GIFT, gift, resonance)
+
+        self.assertEqual(thread.owner, sheet)
+        self.assertEqual(thread.target_kind, TargetKind.GIFT)
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, target)
+
+
 class CreateCovenantExternalActWiringTests(TestCase):
     """``create_covenant`` calls ``satisfy_external_act(COVENANT_SWORN)`` per founder (#1035)."""
 
@@ -407,6 +448,104 @@ class CreateCovenantExternalActWiringTests(TestCase):
         for instance in instances:
             instance.refresh_from_db()
             self.assertEqual(instance.current_node, target)
+
+
+class InductMemberExternalActWiringTests(TestCase):
+    """``induct_member_via_session`` calls ``satisfy_external_act(COVENANT_SWORN)``
+    for the inducted candidate (#1035 review fold-in), mirroring
+    ``CreateCovenantExternalActWiringTests`` for the induction path."""
+
+    def _build_induction_session(self):
+        """Minimal induction-session fixture, lifted from
+        ``InductMemberViaSessionTests._build_induction_session``
+        (``world/covenants/tests/test_services.py``) — trimmed to the one
+        shape this test needs (one existing member, candidate chooses a role).
+        Returns (session, candidate).
+        """
+        from datetime import UTC, datetime, timedelta
+
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+        from world.magic.constants import ParticipantState, ParticipationRule, ReferenceKind
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import (
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.INDUCTION)
+        covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        existing_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        existing_sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=existing_sheet,
+            covenant=covenant,
+            covenant_role=existing_role,
+        )
+        candidate = CharacterSheetFactory()
+        chosen_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=existing_sheet,
+            session_kwargs={},
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=None,
+            kind=ReferenceKind.COVENANT,
+            ref_covenant=covenant,
+        )
+        RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=existing_sheet,
+            state=ParticipantState.ACCEPTED,
+        )
+        candidate_p = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=candidate,
+            state=ParticipantState.ACCEPTED,
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=candidate_p,
+            kind=ReferenceKind.COVENANT_ROLE,
+            ref_covenant_role=chosen_role,
+        )
+        return session, candidate
+
+    def test_induct_member_resolves_waiting_covenant_sworn_mission(self) -> None:
+        from world.covenants.services import induct_member_via_session
+
+        session, candidate = self._build_induction_session()
+
+        template = MissionTemplateFactory(name="induction-wiring-tmpl")
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        target = MissionNodeFactory(template=template, key="target")
+        instance = MissionInstanceFactory(template=template, current_node=entry)
+        MissionParticipantFactory(
+            instance=instance,
+            character=candidate.character,
+            is_contract_holder=True,
+        )
+        MissionOptionFactory(
+            node=entry,
+            order=0,
+            option_kind=OptionKind.EXTERNAL_ACT,
+            source_kind=OptionSource.AUTHORED,
+            required_act=ExternalAct.COVENANT_SWORN,
+            branch_target=target,
+        )
+
+        induct_member_via_session(session=session)
+
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, target)
 
 
 class UseTechniqueExternalActWiringTests(TestCase):

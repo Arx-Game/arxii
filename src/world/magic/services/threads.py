@@ -460,6 +460,25 @@ def _weave_gift_thread(
     return thread
 
 
+def _satisfy_thread_woven(character_sheet: CharacterSheet) -> None:
+    """Fire the THREAD_WOVEN external-act beat for ``weave_thread`` (#1035).
+
+    Never abort the host act on tutorial failure. The call is wrapped in its
+    own savepoint (nested atomic) so a DB error inside satisfy_external_act
+    can't poison the caller's own ``@transaction.atomic`` block. Shared by
+    both ``weave_thread`` exit points (the GIFT early-return and the general
+    tail) so a successful GIFT weave fires the beat too.
+    """
+    from world.missions.constants import ExternalAct  # noqa: PLC0415
+    from world.missions.services.external_acts import satisfy_external_act  # noqa: PLC0415
+
+    try:
+        with transaction.atomic():
+            satisfy_external_act(character_sheet, ExternalAct.THREAD_WOVEN)
+    except Exception:  # log-and-continue by design (ADR-0111)
+        logger.exception("external-act satisfaction failed after weave_thread")
+
+
 @transaction.atomic
 def _has_weaving_unlock(
     character_sheet: CharacterSheet,
@@ -527,9 +546,11 @@ def weave_thread(  # noqa: PLR0913, PLR0912, PLR0915, C901
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
     if target_kind == TargetKind.GIFT:
-        return _weave_gift_thread(
+        thread = _weave_gift_thread(
             character_sheet, target, resonance, name=name, description=description
         )
+        _satisfy_thread_woven(character_sheet)
+        return thread
     if target_kind == TargetKind.COVENANT_ROLE:
         from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
 
@@ -634,17 +655,7 @@ def weave_thread(  # noqa: PLR0913, PLR0912, PLR0915, C901
         for technique in techniques:
             CharacterTechnique.objects.get_or_create(character=character_sheet, technique=technique)
 
-    # #1035 external-act beat: never abort the host act on tutorial failure. The
-    # call is wrapped in its own savepoint (nested atomic) so a DB error inside
-    # satisfy_external_act can't poison weave_thread's own @transaction.atomic block.
-    from world.missions.constants import ExternalAct  # noqa: PLC0415
-    from world.missions.services.external_acts import satisfy_external_act  # noqa: PLC0415
-
-    try:
-        with transaction.atomic():
-            satisfy_external_act(character_sheet, ExternalAct.THREAD_WOVEN)
-    except Exception:  # log-and-continue by design (ADR-0111)
-        logger.exception("external-act satisfaction failed after weave_thread")
+    _satisfy_thread_woven(character_sheet)
 
     return thread
 
