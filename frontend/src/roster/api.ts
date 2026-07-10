@@ -108,11 +108,15 @@ export async function updateTenureGallery(
 }
 
 export async function fetchRosterEntries(
-  rosterId: RosterData['id'],
+  rosterId: RosterData['id'] | undefined,
   page = 1,
   filters: Partial<Pick<CharacterData, 'name' | 'char_class' | 'gender'>> = {}
 ): Promise<PaginatedResponse<RosterEntryData>> {
-  const params = new URLSearchParams({ roster: String(rosterId), page: String(page) });
+  const params = new URLSearchParams({ page: String(page) });
+  // `roster` is optional server-side (world/roster/filters.py's RosterEntryFilterSet) —
+  // omitting it searches across every public roster, which the character-card drawer's
+  // identity resolution relies on (#2156): a persona name isn't scoped to a roster.
+  if (rosterId !== undefined) params.set('roster', String(rosterId));
   if (filters.name) params.set('name', filters.name);
   if (filters.char_class) params.set('char_class', filters.char_class);
   if (filters.gender) params.set('gender', filters.gender);

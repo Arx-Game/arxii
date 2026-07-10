@@ -24,7 +24,7 @@ from world.scenes.place_models import InteractionReceiver, Place
 from world.scenes.types import InteractionPayload, PersonaPayload
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
     from evennia.objects.models import ObjectDB
 
@@ -626,6 +626,46 @@ def resolve_audience(character: ObjectDB) -> list[Persona]:
     )
 
 
+def resolve_characters_by_name(names: Iterable[str], location: ObjectDB) -> list[ObjectDB]:
+    """Resolve bare character names against a room's contents (case-insensitive exact match).
+
+    Shared target-resolution semantics for directed communication: the telnet/WS
+    ``@Name``-prefix parser (``commands.parsing.parse_targets_from_text``) and the
+    REST submit-pose ``target_names`` field both resolve through this helper, so a
+    directed pose behaves identically regardless of which surface sent it.
+    Unresolvable names are silently skipped (not an error).
+    """
+    targets: list[ObjectDB] = []
+    for name in names:
+        lower_name = name.lower()
+        for obj in location.contents:
+            if obj.db_key.lower() == lower_name:
+                targets.append(obj)
+                break
+    return targets
+
+
+def personas_for_characters(characters: Iterable[ObjectDB]) -> list[Persona] | None:
+    """Resolve each character to its primary persona, for communication targeting.
+
+    Shared by the WS/telnet communication actions
+    (``actions.definitions.communication._characters_to_active_personas``) and the
+    REST submit-pose path, so both derive ``InteractionTargetPersona`` rows the same
+    way. Returns ``None`` (not an empty list) when nothing resolves, matching
+    ``create_interaction``/``record_interaction``'s "no explicit targets" contract.
+    """
+    personas: list[Persona] = []
+    for character in characters:
+        try:
+            sheet = character.sheet_data
+            primary = sheet.primary_persona
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        if primary is not None:
+            personas.append(primary)
+    return personas or None
+
+
 def record_interaction(  # noqa: PLR0913 - all fields needed for interaction creation
     *,
     character: ObjectDB,
@@ -635,23 +675,37 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     place: Place | None = None,
     receivers: list[Persona] | None = None,
     target_personas: list[Persona] | None = None,
+    persona: Persona | None = None,
+    pose_kind: str = PoseKind.STANDARD,
+    on_created: Callable[[Interaction], None] | None = None,
 ) -> Interaction | None:
     """Record an IC interaction to the database.
 
-    Reads the character's primary persona from their CharacterSheet. Skips
-    recording if the character has no CharacterSheet or no primary persona.
+    Reads the character's primary persona from their CharacterSheet, unless an
+    explicit ``persona`` override is supplied (the REST pose path lets the writer
+    pose as any owned persona — established/mask alt included — not just primary).
+    Skips recording if no persona could be resolved either way.
 
     For public interactions (no place, no receivers), the interaction is
     created without receiver rows. For place-scoped or whispered interactions,
     receiver rows are created from the place presences or explicit list.
 
+    ``pose_kind`` classifies the interaction (Spec C; only meaningful for POSE mode).
+    ``on_created``, if given, runs after the row is created and scene participation is
+    recorded, but *before* the real-time push — the seam callers use to attach
+    side effects that must exist before clients can react to the pushed payload
+    (e.g. opening a reaction window, bulk-creating InteractionAction links).
+
     After persisting, pushes the interaction payload to all objects in the
-    room via WebSocket for real-time delivery.
+    room via WebSocket for real-time delivery. Ephemeral scenes never persist —
+    they push in real-time and return None; ``on_created`` is never called in that
+    branch (there is no row to attach anything to).
     """
-    try:
-        persona = character.sheet_data.primary_persona
-    except ObjectDoesNotExist:
-        return None
+    if persona is None:
+        try:
+            persona = character.sheet_data.primary_persona
+        except ObjectDoesNotExist:
+            return None
 
     if scene is None:
         scene = get_active_scene(character.location)
@@ -674,10 +728,14 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
         place=place,
         receivers=receivers,
         target_personas=target_personas,
+        pose_kind=pose_kind,
     )
 
     if scene is not None:
         _ensure_scene_participation(scene, character)
+
+    if on_created is not None:
+        on_created(interaction)
 
     # Pass IDs we already know to avoid re-querying rows just created.
     # For receivers: if explicitly provided use those; if place-scoped,

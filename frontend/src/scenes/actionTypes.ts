@@ -252,6 +252,13 @@ export interface Place {
   id: number;
   name: string;
   description: string;
+  /**
+   * Whether one of the viewer's own personas is currently present at this
+   * place (#2156). Served by `PlaceSerializer.viewer_is_present` — hand-typed
+   * here because the generated `api.d.ts` from Task 1 doesn't carry it yet
+   * (schema regen deferred to Task 8).
+   */
+  viewer_is_present: boolean;
 }
 
 // ---------------------------------------------------------------------------

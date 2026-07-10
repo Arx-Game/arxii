@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchScene, SceneDetail } from '../queries';
-import { createActionRequest } from '../actionQueries';
+import { createActionRequest, fetchPlaces } from '../actionQueries';
 import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
@@ -16,6 +16,8 @@ import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePromp
 import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
 import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
+import { CharacterCardDrawer } from '@/game/components/CharacterCardDrawer';
+import type { PoseUnitAvatarClickPersona } from '../components/PoseUnit';
 import type { ActionAttachmentInfo } from '../actionTypes';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
@@ -44,6 +46,12 @@ export function SceneDetailPage() {
   );
   const characterSheetId = useMemo(
     () => myRosterEntries.find((e) => e.name === activeCharacter)?.character_id ?? 0,
+    [myRosterEntries, activeCharacter]
+  );
+  // The active character's own RosterEntry id (#2156 Task 7) — the FriendButton's
+  // `viewerEntryId` inside the character-card drawer.
+  const viewerEntryId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacter)?.id ?? null,
     [myRosterEntries, activeCharacter]
   );
 
@@ -117,6 +125,33 @@ export function SceneDetailPage() {
     setComposerMode(mode);
   }, []);
 
+  // Character-card drawer (#2156 Task 7): the clicked bubble's persona identity,
+  // or null when the drawer is closed. Mirrors GamePage's state — the drawer
+  // opens "in place" over this record page's feed, not as a route navigation.
+  const [cardPersona, setCardPersona] = useState<PoseUnitAvatarClickPersona | null>(null);
+  const handleWhisper = useCallback(
+    (name: string) => {
+      handleComposerModeChange({ command: 'whisper', targets: [name], label: `Whisper → ${name}` });
+      setCardPersona(null);
+    },
+    [handleComposerModeChange]
+  );
+
+  // `isAtPlace` (#2156, Task 6): derived from the SAME `['scene-places',
+  // placesRoomId]` query key `PlaceBar` uses below, so React Query dedupes the
+  // two fetches into one (query-reuse, matching GamePage's approach).
+  // `fetchPlaces` filters `?room=<id>` — a ROOM id, not the scene id — so this
+  // derives the room id from `scene.location.id` (fold-in fix, #2156: the
+  // earlier version passed the *scene* id here and to `PlaceBar`, which only
+  // worked by coincidence when scene pk === room pk).
+  const placesRoomId = scene?.location?.id != null ? String(scene.location.id) : undefined;
+  const { data: placesData } = useQuery({
+    queryKey: ['scene-places', placesRoomId],
+    queryFn: () => fetchPlaces(placesRoomId!),
+    enabled: !!placesRoomId,
+  });
+  const isAtPlace = placesData?.results?.some((place) => place.viewer_is_present) ?? false;
+
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 px-4 pt-4">
@@ -126,7 +161,7 @@ export function SceneDetailPage() {
         {isActive && <SoulTetherRescuePrompt />}
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
         {scene && <SceneLinesAndVeilsCard sceneId={id} />}
-        <PlaceBar sceneId={id} />
+        {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
         <RoomPositionsPanel sceneId={id} />
         <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
       </div>
@@ -139,6 +174,7 @@ export function SceneDetailPage() {
         onAddTarget={setPendingTarget}
         onAttachAction={handleActionAttach}
         canGm={scene?.viewer_can_gm}
+        onAvatarClick={setCardPersona}
       />
 
       {/* Composer + Action Panel */}
@@ -168,12 +204,19 @@ export function SceneDetailPage() {
                 pendingActionIds={pendingActionIds}
                 detachedActionIds={detachedActionIds}
                 onPoseSubmitted={handlePoseSubmitted}
+                isAtPlace={isAtPlace}
               />
             </>
           )}
           <ActionPanel sceneId={id} />
         </div>
       )}
+      <CharacterCardDrawer
+        persona={cardPersona}
+        onClose={() => setCardPersona(null)}
+        viewerEntryId={viewerEntryId}
+        onWhisper={handleWhisper}
+      />
     </div>
   );
 }

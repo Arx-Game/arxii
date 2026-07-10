@@ -166,6 +166,12 @@ export interface SubmitPoseBody {
   action_link_ids?: number[];
   /** PoseKind: 'entry' opens a Make-an-Entrance reaction window (#904). */
   pose_kind?: string;
+  /**
+   * Composer-mode @Name targets (#2156) — resolved server-side with the same
+   * semantics as the WS `@Name`-prefix parser (unresolvable names are silently
+   * skipped, not an error).
+   */
+  target_names?: string[];
 }
 
 export async function submitPose(body: SubmitPoseBody): Promise<void> {
@@ -173,7 +179,10 @@ export async function submitPose(body: SubmitPoseBody): Promise<void> {
     method: 'POST',
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to submit pose');
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(data?.detail || 'Failed to submit pose');
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,22 @@ export interface Thread {
   unreadCount: number;
 }
 
+export interface UseThreadingOpts {
+  /** Highest interaction id already seen per thread key (Redux `Session.threadLastSeen`). */
+  lastSeenByThread?: Record<string, number>;
+  /** The viewing persona's id — its own interactions never count toward its own unread. */
+  viewerPersonaId?: number | null;
+  /**
+   * Highest interaction id present at scene-load time (Redux
+   * `Session.sceneBaselineId`, #2156 review fix). Used as the unread
+   * threshold for any thread key with no `lastSeenByThread` entry — so a
+   * brand-new thread that appears mid-session (no baseline of its own yet)
+   * badges unread from its first message, rather than being silently marked
+   * seen the moment it's first observed.
+   */
+  sceneBaselineId?: number | null;
+}
+
 export interface ThreadingState {
   threads: Thread[];
   filteredInteractions: Interaction[];
@@ -21,6 +37,16 @@ export interface ThreadingState {
   showAll: () => void;
   togglePersonaHidden: (threadKey: string, personaId: number) => void;
   getHiddenPersonaIds: (threadKey: string) => Set<number>;
+  /**
+   * Clears the thread filter (enabledThreadKeys), selection, and every
+   * per-thread hidden-persona mute (#2156 review fix). `showAll` alone only
+   * clears the first two — this is the full reset a scene change or puppet
+   * switch needs so a filter/mute picked in the PREVIOUS scene/puppet
+   * context doesn't silently strand-hide interactions in a new one that
+   * happens to reuse the same thread key (e.g. two puppets in the same
+   * room, or a room re-entering an old scene id).
+   */
+  resetForNewScene: () => void;
 }
 
 export function getThreadKey(interaction: Interaction): string {
@@ -75,11 +101,44 @@ function getThreadLabel(
   return formatPersonaNames(personas);
 }
 
-export function useThreading(interactions: Interaction[], roomName: string): ThreadingState {
+// Ratified semantics (#2156, review-fixed): a thread key with a real
+// `lastSeenByThread` entry counts interactions newer than it, excluding the
+// viewer's own (an author never owes themself an unread badge for their own
+// words). A thread key with NO entry falls back to the scene-load baseline
+// scalar (`sceneBaselineId`) — this is what lets a brand-new thread that
+// appears mid-session (a first whisper, say) badge unread starting from its
+// very first message, instead of being silently marked "seen" the moment
+// it's first observed (the old per-thread-key baseline's bug). With no entry
+// AND no baseline (e.g. `/scenes/:id` passing no opts at all) unread is 0,
+// exactly as before.
+function countUnread(
+  threadInteractions: Interaction[],
+  threadKey: string,
+  lastSeenByThread: Record<string, number> | undefined,
+  viewerPersonaId: number | null | undefined,
+  sceneBaselineId: number | null | undefined
+): number {
+  const lastSeen = lastSeenByThread?.[threadKey];
+  const threshold = lastSeen !== undefined ? lastSeen : sceneBaselineId;
+  if (threshold === undefined || threshold === null) return 0;
+  return threadInteractions.filter((i) => {
+    if (viewerPersonaId != null && i.persona.id === viewerPersonaId) return false;
+    return Number(i.id) > threshold;
+  }).length;
+}
+
+export function useThreading(
+  interactions: Interaction[],
+  roomName: string,
+  opts?: UseThreadingOpts
+): ThreadingState {
   const [selectedThreadKey, setSelectedThread] = useState('room');
   const [enabledThreadKeys, setEnabledThreadKeys] = useState<Set<string>>(new Set());
   const [hiddenPersonaIds, setHiddenPersonaIds] = useState<Map<string, Set<number>>>(new Map());
   const isUnfiltered = enabledThreadKeys.size === 0;
+  const lastSeenByThread = opts?.lastSeenByThread;
+  const viewerPersonaId = opts?.viewerPersonaId;
+  const sceneBaselineId = opts?.sceneBaselineId;
 
   const { threads, threadKeyMap } = useMemo(() => {
     const groups = new Map<string, Interaction[]>();
@@ -106,7 +165,13 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
           label: getThreadLabel(key, type, threadInteractions, roomName),
           participantPersonas: getParticipantPersonas(threadInteractions),
           latestTimestamp: threadInteractions[threadInteractions.length - 1]?.timestamp ?? '',
-          unreadCount: 0, // TODO: track per-thread unread count (needs last-viewed timestamp per thread)
+          unreadCount: countUnread(
+            threadInteractions,
+            key,
+            lastSeenByThread,
+            viewerPersonaId,
+            sceneBaselineId
+          ),
         } as Thread;
       })
       .sort((a, b) => {
@@ -115,7 +180,7 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
         return b.latestTimestamp.localeCompare(a.latestTimestamp);
       });
     return { threads: threadList, threadKeyMap: keyMap };
-  }, [interactions, roomName]);
+  }, [interactions, roomName, lastSeenByThread, viewerPersonaId, sceneBaselineId]);
 
   const filteredInteractions = useMemo(() => {
     // Fast path: no thread filter and no hidden personas — return interactions as-is (Fix #6)
@@ -162,6 +227,12 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
     setSelectedThread('room');
   }, []);
 
+  const resetForNewScene = useCallback(() => {
+    setEnabledThreadKeys(new Set());
+    setSelectedThread('room');
+    setHiddenPersonaIds(new Map());
+  }, []);
+
   const togglePersonaHidden = useCallback((threadKey: string, personaId: number) => {
     setHiddenPersonaIds((prev) => {
       const next = new Map(prev);
@@ -194,5 +265,6 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
     showAll,
     togglePersonaHidden,
     getHiddenPersonaIds,
+    resetForNewScene,
   };
 }

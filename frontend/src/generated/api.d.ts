@@ -7669,11 +7669,18 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Create a POSE Interaction and auto-link prior ACTION Interactions.
+     * @description Create a POSE Interaction with full WS-pose-path parity (#2156).
      *
      *     Accepts ``action_link_ids`` for an explicit override:
      *     - Absent (key missing): auto-link is run.
      *     - Present as a list (even empty): exact links are created; auto-link skipped.
+     *
+     *     Mirrors ``actions.definitions.communication.PoseAction.execute``: broadcasts
+     *     the raw text via ``message_location`` (telnet visibility), records through the
+     *     shared ``record_interaction`` seam (ephemeral-scene gate, SceneParticipation +
+     *     covenant engagement), and flags blocked-contact attempts for any resolved
+     *     directed-pose targets. ``target_names`` (composer-mode ``@Name`` targets) are
+     *     resolved with the same semantics as the WS ``@Name``-prefix parser.
      */
     post: operations['interactions_submit_pose_create'];
     delete?: never;
@@ -28853,6 +28860,8 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
       readonly presence_count: number;
+      /** @description Whether one of the requesting account's personas is present at this place (#2156). */
+      readonly viewer_is_present: boolean;
     };
     PlaceRequest: {
       name: string;

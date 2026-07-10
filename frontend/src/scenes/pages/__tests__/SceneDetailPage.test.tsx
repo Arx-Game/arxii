@@ -16,25 +16,41 @@ import { Routes, Route } from 'react-router-dom';
 import { describe, it, vi, beforeEach, expect } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { SceneDetailPage } from '../SceneDetailPage';
+import { fetchPlaces } from '../../actionQueries';
 
 // ---------------------------------------------------------------------------
 // Mock scene queries
 // ---------------------------------------------------------------------------
 
+// Mutable so individual tests can override the scene detail payload (e.g. to
+// set `location`) while keeping the default shape for the other tests.
+let mockSceneData: Record<string, unknown> = {
+  id: '1',
+  name: 'Test Scene',
+  is_active: true,
+  description: '',
+};
+
 vi.mock('@tanstack/react-query', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-query')>();
   return {
     ...actual,
-    useQuery: vi.fn(() => ({
-      data: {
-        id: '1',
-        name: 'Test Scene',
-        is_active: true,
-        description: '',
-      },
-      isLoading: false,
-      refetch: vi.fn(),
-    })),
+    // SceneDetailPage makes two direct useQuery calls: the scene detail query
+    // (queryKey ['scene', id]) and the places-room-id derived query (queryKey
+    // ['scene-places', placesRoomId]). Route by queryKey so the second call
+    // actually invokes its queryFn (calling the mocked fetchPlaces) instead of
+    // returning a fixed canned value regardless of arguments.
+    useQuery: vi.fn(
+      (config: { queryKey: readonly unknown[]; queryFn?: () => unknown; enabled?: boolean }) => {
+        if (config.queryKey[0] === 'scene') {
+          return { data: mockSceneData, isLoading: false, refetch: vi.fn() };
+        }
+        if (config.enabled !== false) {
+          config.queryFn?.();
+        }
+        return { data: undefined, isLoading: false, refetch: vi.fn() };
+      }
+    ),
     useMutation: vi.fn(() => ({
       mutate: vi.fn(),
       isPending: false,
@@ -56,6 +72,7 @@ vi.mock('../../actionQueries', () => ({
   createActionRequest: vi.fn(),
   respondToRequest: vi.fn(),
   fetchActionPanelData: vi.fn(() => Promise.resolve({ techniques: [], pending_requests: [] })),
+  fetchPlaces: vi.fn(() => Promise.resolve({ results: [] })),
 }));
 
 // ---------------------------------------------------------------------------
@@ -71,6 +88,11 @@ vi.mock('@/roster/queries', () => ({
     isLoading: false,
     isError: false,
   })),
+  // The character-card drawer (#2156 Task 7) always mounts (persona is null
+  // unless an avatar was clicked) and calls these — stub them out since this
+  // test suite isn't exercising the drawer's own identity resolution.
+  useRosterEntryByNameQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useRosterEntryQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
 
 // ---------------------------------------------------------------------------
@@ -201,6 +223,12 @@ vi.mock('@/game/components/CommandInput', () => ({
 describe('SceneDetailPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSceneData = {
+      id: '1',
+      name: 'Test Scene',
+      is_active: true,
+      description: '',
+    };
   });
 
   it('renders without crashing', () => {
@@ -236,5 +264,26 @@ describe('SceneDetailPage', () => {
 
     // If the hook was called, the rescue prompt is mounted
     expect(mockUsePendingStageAdvanceOffers).toHaveBeenCalled();
+  });
+
+  it('fetches places by the scene’s room id, not the scene id (fold-in fix, #2156)', () => {
+    // The route/scene id is '5', but the scene's location (room) is 777 —
+    // fetchPlaces filters ?room=<id>, so it must be called with the room id.
+    mockSceneData = {
+      id: '5',
+      name: 'Test Scene',
+      is_active: true,
+      description: '',
+      location: { id: 777, name: 'The Hall' },
+    };
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/5'] }
+    );
+
+    expect(fetchPlaces).toHaveBeenCalledWith('777');
   });
 });

@@ -31,6 +31,17 @@ interface Session {
   room: RoomData | null;
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
+  /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
+  threadLastSeen: Record<string, number>;
+  /**
+   * Highest interaction id present the moment the current scene's threading
+   * was baselined (#2156 review fix). `countUnread` falls back to this scalar
+   * for any thread key with no `threadLastSeen` entry, so a brand-new thread
+   * that appears mid-session (e.g. a first whisper) badges unread starting
+   * from its first message, while threads that already existed at scene load
+   * stay zeroed. `null` before the baseline effect has run for this scene.
+   */
+  sceneBaselineId: number | null;
 }
 
 interface GameState {
@@ -58,6 +69,8 @@ export const gameSlice = createSlice({
           room: null,
           scene: null,
           sceneInteractions: [],
+          threadLastSeen: {},
+          sceneBaselineId: null,
         };
       }
       state.active = name;
@@ -126,6 +139,14 @@ export const gameSlice = createSlice({
       const { character, scene } = action.payload;
       const session = state.sessions[character];
       if (session) {
+        // A scene change (including a brand-new scene at the same room)
+        // invalidates any previous scene's baseline — the baseline effect
+        // must re-run for the new scene id (#2156 review fix).
+        const previousId = session.scene?.id ?? null;
+        const nextId = scene?.id ?? null;
+        if (previousId !== nextId) {
+          session.sceneBaselineId = null;
+        }
         session.scene = scene;
       }
     },
@@ -146,10 +167,52 @@ export const gameSlice = createSlice({
         }
       }
     },
+    // Deliberately does NOT touch `sceneBaselineId` (#2156 review fix 2): this
+    // reducer is dispatched on every ROOM_STATE broadcast (handleRoomStatePayload),
+    // which fires on ordinary room churn (anyone entering/leaving) — not just
+    // scene changes. Nulling the baseline here made it stick at null for the
+    // rest of the scene, since GamePage's one-shot baseline ref never re-fires
+    // for the same scene id. The scene-CHANGE reset lives in `setSessionScene`
+    // (guarded on an actual scene-id change), which pairs correctly with that ref.
     clearSceneInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const session = state.sessions[action.payload];
       if (session) {
         session.sceneInteractions = [];
+      }
+    },
+    // Scene-load baseline scalar (#2156 review fix): set once by GamePage's
+    // baseline effect the first time it runs for a given scene id. See the
+    // `sceneBaselineId` field doc for why this replaced the old per-thread-key
+    // baseline (it one-shotted per KEY, so a brand-new thread's first message
+    // got marked seen on arrival instead of badging unread).
+    setSceneBaseline: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; baselineId: number | null }>
+    ) => {
+      const { character, baselineId } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        session.sceneBaselineId = baselineId;
+      }
+    },
+    // Idempotent: never lowers an existing last-seen value for the thread key
+    // (ratified unread semantics, #2156) — a stale/out-of-order dispatch must
+    // not resurrect already-read interactions as unread.
+    markThreadSeen: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        threadKey: string;
+        interactionId: number;
+      }>
+    ) => {
+      const { character, threadKey, interactionId } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        const current = session.threadLastSeen[threadKey];
+        if (current === undefined || interactionId > current) {
+          session.threadLastSeen[threadKey] = interactionId;
+        }
       }
     },
     resetGame: () => initialState,
@@ -167,5 +230,7 @@ export const {
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,
+  markThreadSeen,
+  setSceneBaseline,
   resetGame,
 } = gameSlice.actions;

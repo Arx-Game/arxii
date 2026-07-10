@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
 import { useSceneInteractions } from '../hooks/useSceneInteractions';
 import { useThreading } from '../hooks/useThreading';
-import type { Thread } from '../hooks/useThreading';
+import { threadToComposerMode } from '../hooks/threadToComposerMode';
 import { ThreadSidebar } from './ThreadSidebar';
 import { ThreadFilterModal } from './ThreadFilterModal';
 import { SceneMessages } from './SceneMessages';
+import type { PoseUnitAvatarClickPersona } from './PoseUnit';
 import type { ComposerMode } from '@/game/components/CommandInput';
 import type { ActionAttachmentInfo } from '../actionTypes';
 
@@ -16,27 +17,8 @@ interface SceneInteractionPanelProps {
   onAttachAction?: (action: ActionAttachmentInfo) => void;
   /** When true, shows the GM dramatic-moment tagging control on each pose (#1139). */
   canGm?: boolean;
-}
-
-function threadToComposerMode(thread: Thread, roomName: string): ComposerMode {
-  switch (thread.type) {
-    case 'room':
-      return { command: 'pose', targets: [], label: `Pose \u2192 ${roomName}` };
-    case 'place':
-      return { command: 'tt', targets: [], label: `TT \u2192 ${thread.label}` };
-    case 'whisper':
-      return {
-        command: 'whisper',
-        targets: thread.participantPersonas.map((p) => p.name),
-        label: `Whisper \u2192 ${thread.label.replace('Whisper: ', '')}`,
-      };
-    case 'target':
-      return {
-        command: 'pose',
-        targets: thread.participantPersonas.map((p) => p.name),
-        label: `Pose \u2192 ${thread.label}`,
-      };
-  }
+  /** Avatar identity-click affordance passthrough to SceneMessages/PoseUnit (#2156). */
+  onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
 }
 
 export function SceneInteractionPanel({
@@ -46,6 +28,7 @@ export function SceneInteractionPanel({
   onAddTarget,
   onAttachAction,
   canGm,
+  onAvatarClick,
 }: SceneInteractionPanelProps) {
   const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId);
   const {
@@ -107,6 +90,7 @@ export function SceneInteractionPanel({
           onAddTarget={onAddTarget}
           onAttachAction={onAttachAction}
           canGm={canGm}
+          onAvatarClick={onAvatarClick}
         />
         {hasNextPage && (
           <button onClick={() => fetchNextPage()} className="mt-4 px-4">
