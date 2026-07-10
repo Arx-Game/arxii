@@ -3821,8 +3821,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Starting Area.
+          type: string
         required: true
       tags:
       - character-creation
@@ -49754,6 +49753,13 @@ components:
             * `same` - Same position
             * `adjacent` - Adjacent position
             * `any` - Anywhere in room
+            * `reach_n` - N-hop reach
+        reach_hops:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: When reach=REACH_N, the maximum number of passable edges BFS
+            may traverse. Ignored for SAME/ADJACENT/ANY.
     PatchedTenureGalleryRequest:
       type: object
       description: Serialize tenure galleries.
@@ -57966,6 +57972,13 @@ components:
             * `same` - Same position
             * `adjacent` - Adjacent position
             * `any` - Anywhere in room
+            * `reach_n` - N-hop reach
+        reach_hops:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: When reach=REACH_N, the maximum number of passable edges BFS
+            may traverse. Ignored for SAME/ADJACENT/ANY.
         tier:
           type: integer
           readOnly: true
@@ -58027,11 +58040,13 @@ components:
       - same
       - adjacent
       - any
+      - reach_n
       type: string
       description: |-
         * `same` - Same position
         * `adjacent` - Adjacent position
         * `any` - Anywhere in room
+        * `reach_n` - N-hop reach
     TechniqueRequest:
       type: object
       description: Serializer for Technique records with intensity and control stats.
@@ -58092,6 +58107,13 @@ components:
             * `same` - Same position
             * `adjacent` - Adjacent position
             * `any` - Anywhere in room
+            * `reach_n` - N-hop reach
+        reach_hops:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: When reach=REACH_N, the maximum number of passable edges BFS
+            may traverse. Ignored for SAME/ADJACENT/ANY.
       required:
       - anima_cost
       - effect_type
