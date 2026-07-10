@@ -21,8 +21,10 @@ consent preferences gating which social actions a character may receive (#1141).
 # EVERYONE          - Any actor may use this category against the owner (default)
 # ALL_BUT_BLACKLIST - Anyone EXCEPT tenures on the SocialConsentBlacklist for this category
 # FRIENDS_WHITELIST - Only OOC friends (scenes.Friendship) + tenures on the whitelist
-# ALLOWLIST         - Only tenures on the SocialConsentWhitelist (strict; friendship alone
-#                     is not enough)
+# RIVALS            - Only declared MUTUAL rivals (scenes.Rivalry) + tenures on the whitelist
+#                     (#2170 — double opt-in; both sides must have declared each other)
+# ALLOWLIST         - Only tenures on the SocialConsentWhitelist (strict; friendship/rivalry
+#                     alone is not enough)
 ```
 
 ---
@@ -50,6 +52,13 @@ consent preferences gating which social actions a character may receive (#1141).
 (`friend_services.is_friend`) — an OOC designation, category-independent, so an OOC friend
 passes every category. The owner having friended the actor (`friender_tenure=owner`) admits
 them; the reverse direction does not.
+
+**Rivals (`RIVALS`, #2170):** the rival check reads `scenes.Rivalry`
+(`friend_services.is_rival`) and requires a **mutual** declaration — both the owner and the
+actor must have declared the other a rival. Double opt-in by design (unlike one-directional
+friendship): the mode lets a character open an antagonism category to the people they have an
+IC rivalry with, and no one is dragged into that category one-sidedly. Telnet:
+`rival`/`unrival`/`rivals` (`commands/social/rivals.py`).
 
 **ActionTemplate link:** `ActionTemplate.consent_category` (nullable FK → `SocialConsentCategory`,
 `on_delete=SET_NULL`) tags each social template with its category. Uncategorized templates
@@ -239,10 +248,11 @@ The `frontend/src/consent/` module provides a **Privacy** tab at `/profile/priva
 
 1. **Global switch** — master `allow_social_actions` toggle.
 2. **Per-category rules** — one row per `SocialConsentCategory` with a mode selector spanning
-   all four `ConsentMode`s (Everyone / Everyone except blacklist / Friends + whitelist /
-   Allowlist only); collapses when the global switch is off.
-3. **Whitelist** — add/remove allowed tenures per category; shown under `ALLOWLIST` **and**
-   `FRIENDS_WHITELIST` (friends auto-pass, the whitelist is the extra-allow list).
+   all `ConsentMode`s (Everyone / Everyone except blacklist / Friends + whitelist / Rivals +
+   whitelist / Allowlist only); collapses when the global switch is off.
+3. **Whitelist** — add/remove allowed tenures per category; shown under `ALLOWLIST`,
+   `FRIENDS_WHITELIST`, **and** `RIVALS` (friends/mutual-rivals auto-pass, the whitelist is the
+   extra-allow list).
 4. **Blacklist** (#1698) — `BlacklistManager` (mirrors `WhitelistManager`, keyed on
    `blocked_tenure`); shown under `ALL_BUT_BLACKLIST`.
 
@@ -266,7 +276,8 @@ REGISTRY action through `dispatch_player_action()` — the same seam the web use
 | `consent` | — | Show the caller's social-consent summary. |
 | `consent on` | `set_social_consent_preference` | Allow all social actions. |
 | `consent off` | `set_social_consent_preference` | Block all social actions. |
-| `consent category <key>=<mode>` | `set_social_consent_category_rule` | `mode` is `everyone`, `whitelist`, `blacklist` (= ALL_BUT_BLACKLIST), `friends` (= FRIENDS_WHITELIST), or `default` (clear the rule). |
+| `consent category <key>=<mode>` | `set_social_consent_category_rule` | `mode` is `everyone`, `whitelist`, `blacklist` (= ALL_BUT_BLACKLIST), `friends` (= FRIENDS_WHITELIST), `rivals` (= RIVALS, mutual only), or `default` (clear the rule). |
+| `rival <name>` / `unrival <name>` / `rivals` | — (thin over `friend_services`) | Declare / withdraw / list your IC rivals (`commands/social/rivals.py`, #2170). Rivalry gates `RIVALS` mode and needs both sides to declare. |
 | `consent whitelist add\|remove\|list …` | `add`/`remove_social_consent_whitelist` | People you always allow. |
 | `consent blacklist add\|remove\|list …` (#1698) | `add`/`remove_social_consent_blacklist` | People barred under `blacklist` mode. |
 
