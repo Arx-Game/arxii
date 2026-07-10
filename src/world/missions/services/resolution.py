@@ -218,6 +218,17 @@ def present_options_for_character(
     """
     presented: list[PresentedOption] = []
     for option in options:
+        if option.option_kind == OptionKind.EXTERNAL_ACT:
+            # EXTERNAL_ACT resolves when the player performs a real non-mission
+            # act (satisfy_external_act calls resolve_option directly) — it is
+            # never player-pickable, so it never enters the presented list.
+            # This is the single shared seam: both build_option_list (solo) and
+            # build_group_option_list (Phase 4) call present_options_for_character,
+            # so excluding here covers every presentation surface and — because
+            # resolve_beat_option/submit_group_pick validate the chosen id against
+            # this same presented list — every pick entrypoint too (an
+            # EXTERNAL_ACT option id is rejected exactly like an unknown one).
+            continue
         if option.source_kind == OptionSource.CHALLENGE:
             challenge = option.challenge
             if challenge is None:
@@ -549,7 +560,7 @@ def resolve_option(  # noqa: PLR0913
     if option.spawns_instance:
         _spawn_mission_instance_room(instance, option, character)
 
-    if option.option_kind == OptionKind.BRANCH:
+    if option.option_kind in (OptionKind.BRANCH, OptionKind.EXTERNAL_ACT):
         return _resolve_branch(instance, node, option, character, advance=advance)
 
     # OptionKind.CHECK
