@@ -191,6 +191,7 @@ export function PoseUnit({
         {interaction.pose_kind === 'entry' && (
           <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
         )}
+        <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
       </div>
     );
   }
@@ -264,7 +265,11 @@ export function PoseUnit({
         <PoseUnitDetailPanel actionInteractionIds={actionInteractionIds} />
       )}
 
-      <ReactionStrip windows={interaction.reaction_windows ?? []} sceneId={sceneId} />
+      <ReactionStrip
+        windows={interaction.reaction_windows ?? []}
+        sceneId={sceneId}
+        interactionId={interaction.id}
+      />
 
       {/* Dramatic-moment tag badges (#1139) */}
       {dramaticTags.length > 0 && (
@@ -306,6 +311,7 @@ export function PoseUnit({
       {interaction.pose_kind === 'entry' && (
         <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
       )}
+      <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
     </div>
   );
 }

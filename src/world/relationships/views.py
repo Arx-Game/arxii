@@ -5,13 +5,15 @@ from django.db.models import Count, Exists, OuterRef, Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.mixins import ListModelMixin
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from world.mechanics.models import ModifierTarget
-from world.relationships.filters import RelationshipCapstoneFilter
+from world.relationships.constants import UpdateVisibility
+from world.relationships.filters import RelationshipCapstoneFilter, RelationshipUpdateFilter
 from world.relationships.models import (
     CharacterRelationship,
     HybridRelationshipType,
@@ -35,6 +37,7 @@ from world.relationships.serializers import (
     RelationshipCapstoneSerializer,
     RelationshipConditionSerializer,
     RelationshipTrackSerializer,
+    RelationshipUpdateSerializer,
     WriteupComplaintWriteSerializer,
     WriteupKudosWriteSerializer,
 )
@@ -167,19 +170,35 @@ class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
         )
 
 
-class RelationshipUpdateViewSet(GenericViewSet):
-    """Write-only endpoints for relationship-building verbs.
+class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
+    """Mutation actions for relationship-building verbs, plus a narrow list route.
 
-    List/detail relationship state remains on CharacterRelationshipViewSet;
-    this ViewSet only exposes the four mutation actions.
+    Detail/browsing of relationship state in general remains on
+    CharacterRelationshipViewSet; the ``list`` action here exists only to feed
+    the commend button on the requesting user's own writeups-about-them (the
+    subject side of ``give_writeup_kudos``'s rule) — it is not a general
+    writeup browser. Scoped to writeups where the caller's character is the
+    parent relationship's ``target`` (the writeup's commendable subject) and
+    visibility is SHARED or PUBLIC; PRIVATE and GOSSIP writeups never appear
+    here regardless of subject. Subject eligibility is tenure-based (current,
+    un-ended ``RosterTenure``, mirroring ``get_account_for_character``), not
+    Evennia's live-puppet ``db_account`` field, so a subject browsing while
+    not currently puppeting the character still sees writeups they can
+    legally commend. ``?subject_character=<CharacterSheet pk>`` narrows to one
+    owned character sheet (see ``RelationshipUpdateFilter``) for accounts with
+    several owned characters.
     """
 
     permission_classes = [IsAuthenticated]
     serializer_class = FirstImpressionWriteSerializer
+    pagination_class = PageNumberPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RelationshipUpdateFilter
 
     def get_serializer_class(self):  # type: ignore[override]
         """Return the write serializer matching the current action."""
         mapping = {
+            "list": RelationshipUpdateSerializer,
             "first_impression": FirstImpressionWriteSerializer,
             "develop": DevelopmentWriteSerializer,
             "capstone": CapstoneWriteSerializer,
@@ -188,6 +207,46 @@ class RelationshipUpdateViewSet(GenericViewSet):
             "complaint": WriteupComplaintWriteSerializer,
         }
         return mapping.get(self.action, FirstImpressionWriteSerializer)
+
+    def get_queryset(self):  # type: ignore[override]
+        """Return SHARED/PUBLIC writeups about the caller's tenure-owned subject character(s).
+
+        Subject eligibility mirrors ``world.roster.selectors.get_account_for_character``'s
+        tenure join — a current (``end_date__isnull=True``) ``RosterTenure`` — rather than
+        the live-puppet ``db_account`` field: a subject browsing their sheet while not
+        currently puppeting that character must still see (and be able to commend)
+        writeups about them.
+
+        The eligible subject pks are resolved via a separate ``.distinct()`` lookup and
+        applied to the annotated queryset with ``pk__in`` rather than joining ``tenures``
+        directly alongside the ``Count``/``Exists`` annotations — joining the to-many
+        ``tenures`` relation on the same query as those aggregates would risk inflating
+        ``kudos_count`` if a character ever had more than one current tenure row (should
+        not happen, but isn't DB-enforced).
+        """
+        user = self.request.user
+        eligible_ids = (
+            RelationshipUpdate.objects.filter(
+                relationship__target__roster_entry__tenures__player_data__account=user,
+                relationship__target__roster_entry__tenures__end_date__isnull=True,
+            )
+            .values_list("pk", flat=True)
+            .distinct()
+        )
+        return (
+            RelationshipUpdate.objects.filter(
+                pk__in=eligible_ids,
+                visibility__in=[UpdateVisibility.SHARED, UpdateVisibility.PUBLIC],
+            )
+            .select_related("author", "author__character", "track", "relationship")
+            .annotate(
+                kudos_count=Count("writeupkudos_set"),
+                viewer_has_kudosed=Exists(
+                    WriteupKudos.objects.filter(account_id=user.pk, update=OuterRef("pk"))
+                ),
+            )
+            .order_by("-created_at")
+        )
 
     def _resolve_target_sheet(self, target_persona_id: int):
         """Resolve a target persona ID to its CharacterSheet."""

@@ -256,6 +256,19 @@ Key service functions for scene round lifecycle:
   `world.scenes.reaction_toggle_services.toggle_interaction_reaction` (the sole mutator), the same
   seam telnet `CmdReact` reaches via `ToggleReactionAction` (#1341).
 
+### `reaction_views.py` (#904)
+- **`ReactionWindowViewSet`**: action-only viewset over `ReactionWindow`/`WindowReaction`
+  (`reaction_models.py`). `react` (detail POST) records a reaction on an existing window via
+  `react_to_window`; `react-to-interaction` (custom list POST, #911) lazily opens a
+  `lazy_open` window kind (e.g. `kudos`) on an `Interaction` that has none yet via
+  `react_to_interaction`, then records the reaction in one call. Reads ride the interaction
+  feed — windows serialize inline on their event; all eligibility lives in the two services.
+  Frontend caller (#2031): `ReactionStrip`'s first-kudos chip
+  (`frontend/src/scenes/components/ReactionStrip.tsx`) calls `POST
+  /api/reaction-windows/react-to-interaction/` with `kind: "kudos"` when the pose has no
+  kudos-kind window yet (including the previously-null empty-windows case); once a kudos
+  window exists the normal per-window row takes over and the chip disappears.
+
 ### `serializers.py`
 - Scene and persona serialization for API responses
 - Participant data serialization

@@ -128,11 +128,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     FK, `resonance` FK (PROTECT), `persona_snapshot` FK to `scenes.Persona` (SET_NULL),
     unique `(endorser_sheet, interaction)`), `SceneEntryEndorsement` (immediate flat
     grant; same FK shape, unique `(endorser_sheet, endorsee_sheet, scene)`),
-    `ResonanceGrant` (universal audit ledger — discriminator `source` + typed source FKs).
-    Read surface: `InteractionListSerializer` now nests `pose_kind`, `endorsee_sheet_id`,
-    `endorsable_resonances`, `pose_endorsers`/`my_pose_endorsement`,
-    `entry_endorsers`/`entry_endorsed_by_me` on every `GET /api/interactions/?scene=<id>`
-    row. Frontend: `EndorsementControl` in `PoseUnit` (`frontend/src/scenes/components/`).
+    `StylePresentationEndorsement` (#1152 — immediate flat grant like scene-entry, keyed
+    on the endorsee's claimed resonance rather than a pose; immutable, create+retrieve
+    only, no settlement/delete), `ResonanceGrant` (universal audit ledger —
+    discriminator `source` + typed source FKs). Read surface: `InteractionListSerializer`
+    now nests `pose_kind`, `endorsee_sheet_id`, `endorsable_resonances`,
+    `pose_endorsers`/`my_pose_endorsement`, `entry_endorsers`/`entry_endorsed_by_me` on
+    every `GET /api/interactions/?scene=<id>` row. Frontend: `EndorsementControl` in
+    `PoseUnit` (`frontend/src/scenes/components/`) — `kind` prop is `'pose' | 'entry' |
+    'style'` (style added #2031), POSTing to `pose-endorsements/` /
+    `scene-entry-endorsements/` / `style-presentation-endorsements/` respectively.
   - **Aura drift (#1737):** `CharacterAura`'s stored percentages recompute from
     `CharacterResonance.lifetime_earned` on every `grant_resonance()` call, firing
     achievements on authored `AuraAffinityThreshold` crossings; see magic.md
@@ -3358,6 +3363,16 @@ writeup kudos/complaint feedback.
   response). Both dispatch `RelationshipBumpAction` (key `"relationship_bump"`). Not
   consent-gated (private write to the actor's own regard, ADR-0024); bumps render only
   in the actor's own relationship views; the target is never notified.
+- **Writeup list route (#2031):** `RelationshipUpdateViewSet` also mixes in `ListModelMixin`
+  for `GET /api/relationships/relationship-updates/` — narrow (not a general writeup
+  browser): tenure-scoped to `RelationshipUpdate` rows whose parent relationship's `target`
+  is a character the requesting account currently holds a **RosterTenure** on, SHARED/PUBLIC
+  visibility only. `?relationship=`/`?track=`/`?subject_character=<CharacterSheet pk>`
+  filters (`RelationshipUpdateFilter`); the last narrows a multi-character account down to
+  one owned sheet. Frontend: the commend button on the "Writeups" subsection of
+  `RelationshipsSection` (`frontend/src/components/character/RelationshipsSection.tsx`, own-
+  sheet gated), fed by `frontend/src/relationships/` (`api.ts`/`queries.ts`), POSTs
+  `{writeup_type: "update", writeup_id}` to `.../kudos/`.
 - **Admin:** `WriteupComplaint` registered for staff triage (no player-facing complaint UI)
 - **Actions:** `GiveWriteupKudosAction` (key `"give_writeup_kudos"`),
   `FileWriteupComplaintAction` (key `"file_writeup_complaint"`),
@@ -3366,7 +3381,8 @@ writeup kudos/complaint feedback.
 - **Integrates with:** mechanics (modifier gating), character_sheets (CharacterSheet FK),
   scenes (optional `linked_scene` defaults to the caller's active scene), progression
   (XP + `award_kudos`)
-- **Source:** `src/world/relationships/`
+- **Source:** `src/world/relationships/`; frontend: `frontend/src/relationships/` +
+  `frontend/src/components/character/RelationshipsSection.tsx`
 
 ---
 

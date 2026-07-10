@@ -223,6 +223,23 @@ export async function reactToWindow(
   }
 }
 
+export async function reactToInteraction(body: {
+  persona_id: number;
+  interaction_id: number;
+  kind: string;
+  choice: string;
+}): Promise<void> {
+  const res = await apiFetch('/api/reaction-windows/react-to-interaction/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { detail?: string[] | string } | null;
+    const detail = Array.isArray(data?.detail) ? data.detail[0] : data?.detail;
+    throw new Error(detail || 'Failed to react');
+  }
+}
+
 export async function createPoseEndorsement(body: { interaction: number; resonance: number }) {
   const res = await apiFetch('/api/magic/pose-endorsements/', {
     method: 'POST',
@@ -270,6 +287,36 @@ export function useCreateSceneEntryEndorsement(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createSceneEntryEndorsement,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+  });
+}
+
+/**
+ * Style-presentation endorsement (#2031). Mirrors createSceneEntryEndorsement's
+ * shape — endorser is resolved server-side; immutable (no retract). Backend
+ * error messages are meaningful ("not wearing a bound style", etc.) and must
+ * surface verbatim, so the `detail` string is extracted like setRoundMode's idiom.
+ */
+export async function createStyleEndorsement(body: {
+  endorsee_sheet: number;
+  scene: number;
+  resonance: number;
+}) {
+  const res = await apiFetch('/api/magic/style-presentation-endorsements/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(data?.detail || 'Failed to endorse style');
+  }
+  return res.json();
+}
+
+export function useCreateStyleEndorsement(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createStyleEndorsement,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
   });
 }
