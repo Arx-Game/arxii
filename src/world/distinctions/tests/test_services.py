@@ -16,6 +16,7 @@ from world.magic.factories import DistinctionResonanceGrantFactory, ResonanceFac
 from world.magic.models import CharacterResonance
 from world.mechanics.factories import ModifierTargetFactory
 from world.mechanics.models import CharacterModifier
+from world.mechanics.services import create_distinction_modifiers
 
 
 class GrantDistinctionNewGrantTests(TestCase):
@@ -73,12 +74,41 @@ class GrantDistinctionRepeatGrantTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.distinction = DistinctionFactory(name="Silver Tongue", max_rank=3)
+        cls.target = ModifierTargetFactory(name="Allure")
+        DistinctionEffectFactory(distinction=cls.distinction, target=cls.target, value_per_rank=5)
+        cls.resonance = ResonanceFactory()
+        DistinctionResonanceGrantFactory(
+            distinction=cls.distinction, resonance=cls.resonance, flat_amount_per_rank=10
+        )
         cls.existing = CharacterDistinctionFactory(
             character=cls.sheet.character,
             distinction=cls.distinction,
             rank=1,
             origin=DistinctionOrigin.CHARACTER_CREATION,
         )
+        # The factory bypasses the CG-time cascade -- mirror it here so the
+        # rank-up regression test below has a real rank-1 modifier + resonance
+        # seed to recompute/top off (closes the stale-rank-regression blind
+        # spot: #2037 Task 1 review).
+        create_distinction_modifiers(cls.existing)
+
+    def test_rank_up_recomputes_modifier_and_tops_off_resonance(self) -> None:
+        """Ranking an EXISTING holder 1->2 must recompute stale modifiers/seeds.
+
+        Regression guard: ``update_distinction_rank`` only touches
+        ``CharacterModifier`` rows that already exist for this
+        ``CharacterDistinction`` -- if the rank-up path ever stopped calling it
+        (or called ``create_distinction_modifiers`` again instead), the modifier
+        would either stay frozen at its rank-1 value or duplicate.
+        """
+        cd = grant_distinction(self.sheet, self.distinction, origin=DistinctionOrigin.GM_AWARD)
+
+        self.assertEqual(cd.rank, 2)
+        modifier = CharacterModifier.objects.get(character=self.sheet, target=self.target)
+        self.assertEqual(modifier.value, 10)  # value_per_rank(5) * rank(2)
+
+        cr = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.resonance)
+        self.assertEqual(cr.lifetime_earned, 20)  # flat_amount_per_rank(10) * rank(2)
 
     def test_repeat_grant_advances_exactly_one(self) -> None:
         cd = grant_distinction(self.sheet, self.distinction, origin=DistinctionOrigin.GM_AWARD)

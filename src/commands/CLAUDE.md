@@ -465,6 +465,17 @@ actions, backends, and service functions.
   story-earned touchstones/reagents (a GM hand-awarding a specific item after a story beat).
   Gated on `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` (staff bypass preserved) — requires
   JUNIOR-tier GM trust or higher, not a staff flag. No business logic in the command.
+- **`grant_distinction.py`**: `CmdGrantDistinction` (`grant_distinction`, `cmd:all()`, #2037) —
+  the post-CG distinction award surface. `grant_distinction <character>=<distinction slug>[,rank]`
+  parses the raw text into `target_name`/`distinction_slug`/optional `rank` kwargs and delegates
+  to `GMAwardDistinctionAction` (key `gm_award_distinction`, REGISTRY backend,
+  `actions/definitions/distinctions.py`) via `action.run()`. The Action resolves the target by
+  name (`actor.search(..., global_search=True)`), looks up the catalog `Distinction` by slug
+  (case-insensitive, active only — never freehand), validates an explicit rank against
+  `max_rank` (reject, not clamp), and calls `world.distinctions.services.grant_distinction`
+  (origin `GM_AWARD`) — the shared acquisition seam; re-awarding a held distinction ranks it up.
+  Gated on `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` (staff bypass preserved). Mirrors
+  `grant_item.py` exactly. No business logic in the command.
 - **`setstage.py`**: `CmdSetStage` (`setstage`, `cmd:all()`, #1498/#2117) — telnet face of
   `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A STARTING-tier-or-higher GM (or
   staff) caller instantiates a `PositionBlueprint` into their current room: `setstage` shows this

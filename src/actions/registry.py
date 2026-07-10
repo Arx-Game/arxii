@@ -70,6 +70,7 @@ from actions.definitions.crafting import (
 from actions.definitions.crossing import resolve_crossing_offer
 from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
+from actions.definitions.distinctions import GMAwardDistinctionAction
 from actions.definitions.doors import LockAction, UnlockAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
@@ -367,6 +368,7 @@ _ALL_ACTIONS: list[Action] = [
     ActivatePermitAction(),
     UseItemAction(),
     GrantItemAction(),
+    GMAwardDistinctionAction(),
     # #1866 — crafting telnet coverage.
     AttachFacetAction(),
     DetachFacetAction(),
