@@ -388,6 +388,18 @@ actions, backends, and service functions.
   to a *reach*: `gemit <msg>` (game-wide), `gemit/society <a>,<b> = <msg>`, or `gemit/org <a>,<b> =
   <msg>` (members of those societies/orgs, by active persona). No body is ever generated. Player/
   covenant-targeted story emits are a separate, non-public tool — not this command.
+- **`gm_ops.py`**: `CmdGMDashboard` (`gm`, alias `gmdashboard`) — `gm dashboard` (#2004, the
+  GM's queue/tables/evidence read-out) plus the GM adjudication toolkit subverbs (#2118),
+  thin `parse_kv_and_flags` parsing + `action.run()` over the three Actions in
+  `actions/definitions/gm_adjudication.py`: `gm check [find <term>]` / `gm check <character>
+  <check-type>=<band> [edge=<reason>|setback=<reason>]` (`InvokeCatalogCheckAction` — a
+  multi-word check-type name must be referenced by pk, since the check-type name IS the
+  key token and can't be pre-registered as a multiword key), `gm award <character>
+  xp=<amount>|dev=<trait> amount=<n> [reason=<text>]` (`GMAwardAction`), `gm condition
+  <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]`
+  (`GMApplyConditionAction`). `CmdGMIdle` (`gmidle`, staff-only `perm(Admin)`) — idle GM
+  tables. No business logic in the command; permission gating (`IsSceneGMPrerequisite` +
+  `MinimumGMLevelPrerequisite` where applicable) lives entirely in the Actions.
 - **`gm_tables.py`**: `CmdGMTable` (`gmtable`, #1505) — basic telnet parity for GM-table admin
   (the React `frontend/src/tables/` module is the primary surface). Thin over `world.gm.services`,
   subverb-dispatched: `gmtable [list]`, `gmtable create <name>[=<desc>]`, `gmtable members <id>`,

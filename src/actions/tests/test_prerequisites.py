@@ -2,8 +2,12 @@
 
 from django.test import TestCase
 
-from actions.prerequisites import MinimumGMLevelPrerequisite, PendingRitualEffectPrerequisite
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from actions.prerequisites import (
+    IsSceneGMPrerequisite,
+    MinimumGMLevelPrerequisite,
+    PendingRitualEffectPrerequisite,
+)
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
@@ -11,6 +15,7 @@ from world.magic.constants import RitualExecutionKind
 from world.magic.factories import CharacterResonanceFactory, RitualFactory
 from world.magic.models import PendingRitualEffect
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 
 def _gm_actor(level: str, *, db_key: str = "GMActor") -> object:
@@ -75,6 +80,62 @@ class MinimumGMLevelPrerequisiteTests(TestCase):
         met, reason = MinimumGMLevelPrerequisite(GMLevel.JUNIOR).is_met(actor)
         self.assertFalse(met)
         self.assertIn("Junior GM", reason)
+
+
+def _room(*, db_key: str = "PrereqRoom") -> object:
+    return ObjectDBFactory(db_key=db_key, db_typeclass_path="typeclasses.rooms.Room")
+
+
+def _actor_in_room(room: object, *, db_key: str = "Actor") -> tuple[object, object]:
+    """Return (Character, Account) -- the character is located in *room*."""
+    char = CharacterFactory(db_key=db_key, location=room)
+    CharacterSheetFactory(character=char)
+    entry = RosterEntryFactory(character_sheet__character=char)
+    tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+    return char, tenure.player_data.account
+
+
+class IsSceneGMPrerequisiteTests(TestCase):
+    """IsSceneGMPrerequisite (#2118) -- staff bypass + Scene.is_gm on the actor's active scene."""
+
+    def setUp(self) -> None:
+        self.room = _room()
+        self.scene = SceneFactory(location=self.room)
+
+    def test_staff_bypasses_regardless_of_scene_gm_status(self) -> None:
+        actor = _plain_actor(db_key="StaffCheckBypass", is_staff=True)
+        met, reason = IsSceneGMPrerequisite().is_met(actor)
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_scene_gm_passes(self) -> None:
+        actor, account = _actor_in_room(self.room, db_key="SceneGM")
+        SceneParticipationFactory(scene=self.scene, account=account, is_gm=True)
+        met, reason = IsSceneGMPrerequisite().is_met(actor)
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_non_gm_scene_participant_is_refused(self) -> None:
+        actor, account = _actor_in_room(self.room, db_key="NonGMParticipant")
+        SceneParticipationFactory(scene=self.scene, account=account, is_gm=False)
+        met, reason = IsSceneGMPrerequisite().is_met(actor)
+        self.assertFalse(met)
+        self.assertEqual(reason, "Only the scene's GM or staff can do that.")
+
+    def test_scene_co_owner_without_gm_flag_is_refused(self) -> None:
+        """Administering a scene (co-owner) does not by itself grant adjudication power."""
+        actor, account = _actor_in_room(self.room, db_key="CoOwner")
+        SceneParticipationFactory(scene=self.scene, account=account, is_owner=True, is_gm=False)
+        met, reason = IsSceneGMPrerequisite().is_met(actor)
+        self.assertFalse(met)
+        self.assertEqual(reason, "Only the scene's GM or staff can do that.")
+
+    def test_no_active_scene_is_refused(self) -> None:
+        empty_room = _room(db_key="EmptyPrereqRoom")
+        actor, _account = _actor_in_room(empty_room, db_key="NoSceneActor")
+        met, reason = IsSceneGMPrerequisite().is_met(actor)
+        self.assertFalse(met)
+        self.assertEqual(reason, "Only the scene's GM or staff can do that.")
 
 
 class PendingRitualEffectPrerequisiteTests(TestCase):

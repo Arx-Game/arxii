@@ -161,6 +161,39 @@ class MinimumGMLevelPrerequisite(Prerequisite):
 
 
 @dataclass
+class IsSceneGMPrerequisite(Prerequisite):
+    """Actor must be staff, or the GM of the active scene at their location (#2118).
+
+    Staff bypass, else resolves the actor's active scene
+    (``get_active_scene``, ``world/scenes/interaction_services.py:38``) and requires
+    ``scene.is_gm(actor.active_account)``. Strict sibling of
+    ``actor_can_administer_scene`` -- deliberately excludes scene co-owners, so
+    administering a scene does not by itself grant catalog-check/award/condition
+    adjudication power. Mirrors ``_actor_may_gm_encounter``
+    (``actions/definitions/gm_combat.py:72-79``), including its refusal message.
+    """
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        if is_staff_observer(actor):
+            return True, ""
+
+        account = resolve_account_or_none(actor)
+        scene = get_active_scene(getattr(actor, "location", None))  # noqa: GETATTR_LITERAL
+        if scene is not None and scene.is_gm(account):
+            return True, ""
+        return False, "Only the scene's GM or staff can do that."
+
+
+@dataclass
 class IsRoomTenantPrerequisite(Prerequisite):
     """The actor's active persona must actively tenant the room they're standing in (#670)."""
 

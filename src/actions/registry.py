@@ -101,6 +101,11 @@ from actions.definitions.gift_acquisition import (
     AcceptThreadWeavingOfferAction,
     PurchaseGiftUnlockAction,
 )
+from actions.definitions.gm_adjudication import (
+    GMApplyConditionAction,
+    GMAwardAction,
+    InvokeCatalogCheckAction,
+)
 from actions.definitions.gm_combat import (
     AddEncounterParticipantAction,
     AddOpponentAction,
@@ -545,6 +550,10 @@ _ALL_ACTIONS: list[Action] = [
     PurchaseGiftUnlockAction(),
     AcceptTechniqueOfferAction(),
     AcceptThreadWeavingOfferAction(),
+    # #2118 — GM adjudication toolkit: catalog check invocation, awards, conditions.
+    InvokeCatalogCheckAction(),
+    GMAwardAction(),
+    GMApplyConditionAction(),
 ]
 
 # Lookup by key
