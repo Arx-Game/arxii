@@ -1055,8 +1055,21 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
 - `ROOM_RESIDENCE` — room residence trickle.
 - `OUTFIT_TRICKLE` — outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`).
 - `STAFF_GRANT` — manual staff grant.
-- `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `PROJECT_CONTRIBUTION` /
-  `SANCTUM_DISSOLUTION_RECOVERY` — Sanctum/Project income and dissolution recovery (Plan 4).
+- `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `SANCTUM_DISSOLUTION_RECOVERY` —
+  Sanctum income and dissolution recovery (Plan 4).
+- `PROJECT_CONTRIBUTION` — flat resonance per contribution to a project whose
+  `ProjectKind` has opted in (#2038). `ProjectKindResonanceAward`
+  (`world/projects/models.py`) is a staff-authored per-kind opt-in table
+  (`kind` unique, `resonance_award_amount`; a missing row or amount 0 means the
+  kind doesn't pay out — fail-closed, no `add_contribution` behavior change).
+  Seeded today: only `ORGANIZATION_CAPABILITY` → 5 (`ensure_project_kind_resonance_awards`,
+  `world/projects/seeds.py`, `project_resonance` cluster). The payout hook,
+  `_maybe_grant_project_contribution_resonance` (`world/projects/services.py`), runs
+  at the end of every `add_contribution` call regardless of `ContributionKind`;
+  it reads resonance off `Project.resonance` (the typed source FK is
+  `ResonanceGrant.source_project`) and is exception-guarded so a payout failure
+  never rolls back the contribution itself. Uncapped by design — every
+  contribution to an opted-in project's kind pays out again.
 - `ENTRY_FLOURISH` — see "Entry-Flourish Declaration" above.
 - `DRAMATIC_MOMENT` — see "Dramatic Moment Tagging" above.
 - `STYLE_PRESENTATION` — style presentation endorsement (#1152).

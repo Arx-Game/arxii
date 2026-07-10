@@ -1817,6 +1817,16 @@ captivity's RANSOM ownership).
   form lists active scales). Seeds: `propaganda` cluster (3 PLACEHOLDER tiers).
 - **Stat definitions:** Project achievement stats are created lazily on first
   contribution (same pattern as combat achievement counters)
+- **PROJECT_CONTRIBUTION resonance payout (#2038):** `ProjectKindResonanceAward`
+  (per-`ProjectKind` opt-in: `kind` unique, `resonance_award_amount`; missing
+  row/amount 0 = no payout) + `_maybe_grant_project_contribution_resonance`,
+  called at the end of `add_contribution` for every `ContributionKind`. Grants
+  `Project.resonance` via `grant_resonance(..., source=GainSource.PROJECT_CONTRIBUTION)`
+  (see "Resonance Gain Surfaces" in [magic.md](magic.md)); exception-guarded (a
+  payout failure never rolls back the contribution) and uncapped (repeat
+  contributions each grant again). Seeded via `ensure_project_kind_resonance_awards`
+  (`world/projects/seeds.py`, `project_resonance` cluster) — only
+  `ORGANIZATION_CAPABILITY` opts in today, at +5.
 - **Cross-app dependencies:** `world.scenes.Persona`, `societies.Organization`
 - **Source:** `src/world/projects/`
 
