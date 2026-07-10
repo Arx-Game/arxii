@@ -85,3 +85,6 @@ SOCIAL_HUB_FAME_BONUS_PCT_PER_LEVEL = 10
 #: Extra prestige granted for a renown-earning action in a hub room, percent
 #: bonus per level. Mirrors the fame bonus.
 SOCIAL_HUB_PRESTIGE_BONUS_PCT_PER_LEVEL = 10
+#: ``LocationValueModifier.source`` tag for a hub's crowd-draw TRAFFIC bonus.
+#: One hub per room (RoomFeatureInstance is OneToOne), so this is unique per room.
+SOCIAL_HUB_TRAFFIC_SOURCE = "social_hub"

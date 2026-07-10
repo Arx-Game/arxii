@@ -11,9 +11,13 @@ Slice 1 — the owner-upgradeable amplifier's designation layer:
 from django.test import TestCase
 
 from evennia_extensions.factories import RoomProfileFactory
+from world.locations.constants import KeyType, LocationParentType, StatKey
+from world.locations.models import LocationValueModifier
 from world.projects.factories import ProjectFactory
 from world.room_features.constants import (
+    SOCIAL_HUB_CROWD_DRAW_PER_LEVEL,
     SOCIAL_HUB_MAX_LEVEL,
+    SOCIAL_HUB_TRAFFIC_SOURCE,
     RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
     RoomFeatureServiceStrategy,
@@ -21,7 +25,11 @@ from world.room_features.constants import (
 from world.room_features.factories import RoomFeatureInstanceFactory
 from world.room_features.models import RoomFeatureInstance, RoomFeatureProgressionDetails
 from world.room_features.seeds import ensure_social_hub_kind
-from world.room_features.services import active_social_hub_in, handle_social_hub_progression
+from world.room_features.services import (
+    active_social_hub_in,
+    handle_social_hub_progression,
+    sync_social_hub_traffic,
+)
 
 
 class EnsureSocialHubKindTests(TestCase):
@@ -103,3 +111,62 @@ class HandleSocialHubProgressionTests(TestCase):
         # ... but the baseline gossip-hub designation is deliberately preserved.
         self.room_profile.refresh_from_db()
         self.assertTrue(self.room_profile.is_social_hub)
+
+
+class SocialHubTrafficTests(TestCase):
+    """Crowd draw (#1694 slice 2+3): the hub's TRAFFIC cascade modifier.
+
+    The bonus flows through the location cascade into ``room_activity_band``,
+    which the deed-spreading path already reads — so a bigger hub spreads deeds
+    further and earns more fame from the retelling, with no societies→locations
+    or societies→room_features coupling added.
+    """
+
+    def setUp(self) -> None:
+        self.kind = ensure_social_hub_kind()
+        self.room_profile = RoomProfileFactory(is_social_hub=False)
+
+    def _progression(self, target_level: int):
+        project = ProjectFactory()
+        RoomFeatureProgressionDetails.objects.create(
+            project=project,
+            target_room_profile=self.room_profile,
+            target_feature_kind=self.kind,
+            target_level=target_level,
+        )
+        return project
+
+    def _traffic_row(self) -> LocationValueModifier | None:
+        return LocationValueModifier.objects.filter(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.STAT,
+            stat_key=StatKey.TRAFFIC,
+            source=SOCIAL_HUB_TRAFFIC_SOURCE,
+        ).first()
+
+    def test_install_writes_traffic_modifier(self) -> None:
+        handle_social_hub_progression(self._progression(1), 1, None)
+        row = self._traffic_row()
+        self.assertIsNotNone(row)
+        self.assertEqual(row.value, 1 * SOCIAL_HUB_CROWD_DRAW_PER_LEVEL)
+        self.assertEqual(row.change_per_day, 0)  # permanent while the hub stands
+
+    def test_upgrade_updates_traffic_modifier_in_place(self) -> None:
+        handle_social_hub_progression(self._progression(1), 1, None)
+        handle_social_hub_progression(self._progression(3), 3, None)
+        rows = LocationValueModifier.objects.filter(
+            room_profile=self.room_profile,
+            stat_key=StatKey.TRAFFIC,
+            source=SOCIAL_HUB_TRAFFIC_SOURCE,
+        )
+        self.assertEqual(rows.count(), 1)  # reconciled in place, not duplicated
+        self.assertEqual(rows.get().value, 3 * SOCIAL_HUB_CROWD_DRAW_PER_LEVEL)
+
+    def test_reconcile_after_dissolve_clears_traffic(self) -> None:
+        handle_social_hub_progression(self._progression(2), 2, None)
+        instance = RoomFeatureInstance.objects.get(room_profile=self.room_profile)
+        instance.dissolved_at = instance.installed_at
+        instance.save(update_fields=["dissolved_at"])
+        sync_social_hub_traffic(self.room_profile)
+        self.assertIsNone(self._traffic_row())

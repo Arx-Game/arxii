@@ -15,7 +15,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from world.room_features.constants import RoomFeatureServiceStrategy
+from world.room_features.constants import (
+    SOCIAL_HUB_CROWD_DRAW_PER_LEVEL,
+    SOCIAL_HUB_TRAFFIC_SOURCE,
+    RoomFeatureServiceStrategy,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
@@ -386,25 +390,55 @@ def handle_captains_quarters_progression(
     _install_or_level_feature(project, target_level)
 
 
+def sync_social_hub_traffic(room_profile: RoomProfile) -> None:
+    """Reconcile the room's crowd-draw TRAFFIC modifier to its hub's current level.
+
+    Idiomatic crowd draw (#1694): the hub contributes a ``LocationValueModifier``
+    on the room's TRAFFIC stat, which flows through the location cascade into
+    ``room_activity_band`` — so a busier hub automatically draws bigger crowds AND
+    spreads deeds further (more fame from retelling, the spread-path amplification
+    Apostate ratified). Reconciled from the *current* active hub, so it is correct
+    after install, upgrade, OR dissolve (a future dissolve path need only call
+    this): no active hub → value 0 → the cascade row is deleted. Dependency
+    direction stays clean — room_features depends on locations, never the reverse.
+    """
+    from world.locations.constants import StatKey  # noqa: PLC0415
+    from world.locations.services import set_room_stat_modifier  # noqa: PLC0415
+
+    instance = active_social_hub_in(room_profile)
+    value = instance.level * SOCIAL_HUB_CROWD_DRAW_PER_LEVEL if instance else 0
+    set_room_stat_modifier(
+        room_profile,
+        StatKey.TRAFFIC,
+        source=SOCIAL_HUB_TRAFFIC_SOURCE,
+        value=value,
+    )
+
+
 def handle_social_hub_progression(
     project: Project,
     target_level: int,
     outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
 ) -> None:
-    """SOCIAL_HUB strategy (#1694): install/level the feature AND mark the hub.
+    """SOCIAL_HUB strategy (#1694): install/level the feature, mark the hub, draw crowds.
 
-    Beyond the row-only install every other #675 feature does, this flips the
-    room's ``is_social_hub`` designation on — an amplified hub implies a hub.
-    The bonuses (fame/prestige multiplier, crowd draw) are read-time via
-    ``active_social_hub_in(room)`` and scale with ``instance.level``.
+    Beyond the row-only install every other #675 feature does, this:
+    - flips the room's ``is_social_hub`` designation on — an amplified hub implies
+      a hub; and
+    - reconciles the room's crowd-draw TRAFFIC modifier to the new level
+      (``sync_social_hub_traffic``), which the deed-spreading path reads via
+      ``room_activity_band`` — so higher-level hubs spread deeds further and win
+      more fame from the retelling.
 
     Dissolving the feature does NOT clear ``is_social_hub``: the amplification
-    ends (no active instance) but the baseline gossip-hub designation — which
-    staff may also have set independently (#1572) — is deliberately left in
-    place rather than risk clobbering a staff-set baseline.
+    ends (no active instance; ``active_social_hub_in`` returns None and a
+    reconcile drops the TRAFFIC modifier) but the baseline gossip-hub
+    designation — which staff may also have set independently (#1572) — is
+    deliberately left in place rather than risk clobbering a staff-set baseline.
     """
     details = _install_or_level_feature(project, target_level)
     room_profile = details.target_room_profile
     if not room_profile.is_social_hub:
         room_profile.is_social_hub = True
         room_profile.save(update_fields=["is_social_hub"])
+    sync_social_hub_traffic(room_profile)

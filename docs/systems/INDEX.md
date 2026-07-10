@@ -2340,14 +2340,16 @@ via a strategy enum. Shipped kinds: **SANCTUM** (see Sanctum below),
 **COMMAND_CENTER** (#930), **LAB** (#1234), and the civic-hub readers
 **NOTICE_BOARD** / **TOWN_CRIER** (#1450 — `active_hub_feature(room_profile)`
 resolves a room's hub; crier install places a "Town Crier" `Functionary` via
-`handle_town_crier_progression`). Future kinds (Library, Training Room, etc. —
-#675) plug in by registering a service strategy + per-kind details model.
+`handle_town_crier_progression`), and **SOCIAL_HUB** (#1694 — the
+owner-upgradeable amplifier on top of `RoomProfile.is_social_hub`; see Social
+Hub below). Future kinds (Library, Training Room, etc. — #675) plug in by
+registering a service strategy + per-kind details model.
 
 - **Models** (`world.room_features.models`):
   - `RoomFeatureKind` — open catalog row. Carries `service_strategy`
     (TextChoices: `SANCTUM`, `LIBRARY`, `TRAINING_ROOM`, `LAB`,
     `COMMAND_CENTER`, `GRANARY`, `SIEGE_DECK`, `CAPTAINS_QUARTERS`,
-    `NOTICE_BOARD`, `TOWN_CRIER`), `max_level` (cap on
+    `NOTICE_BOARD`, `TOWN_CRIER`, `SOCIAL_HUB`), `max_level` (cap on
     `RoomFeatureInstance.level`), display copy, install-cost knobs.
   - `RoomFeatureKindInstallRitual` — M2M-shape: which Rituals can install
     this kind. Lets one kind admit multiple install rites
@@ -2519,10 +2521,23 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
   maritime-gated reachability feature (like Command Center). No numeric
   bonus; its "content" is that surfaces are reachable where it stands.
   Consumer hook deferred (`needs-design`).
+- **Social Hub** (`SOCIAL_HUB`, `max_level=5`, #1694): the owner-upgradeable
+  amplifier on top of `RoomProfile.is_social_hub` (#1572). Store/room owners
+  (`PERSONA` / `ORG_TRADE`) install it via the plain ROOM_FEATURE_PROGRESSION
+  project; `handle_social_hub_progression` flips `is_social_hub` on and
+  reconciles a crowd-draw `TRAFFIC` `LocationValueModifier`
+  (`sync_social_hub_traffic` → `world.locations.services.set_room_stat_modifier`,
+  `level * SOCIAL_HUB_CROWD_DRAW_PER_LEVEL`). That bonus flows through the
+  location cascade into `room_activity_band`, which the **deed-spreading path**
+  already reads (`world/societies/spread_services.py`) — so a bigger hub spreads
+  deeds further and earns more **fame** from the retelling. Prestige (awarded at
+  the deed, no room context) is intentionally not hub-amplified. Dissolving
+  clears the amplification (a reconcile drops the modifier; `active_social_hub_in`
+  returns None) but leaves the baseline hub bool. Magnitudes PLACEHOLDER.
 - **Helpers** (`world/room_features/services.py`): `active_library_in`,
   `active_training_room_in`, `active_siege_deck_in`,
-  `active_captains_quarters_in` — each filters by `service_strategy` +
-  `.active()`, mirroring `active_hub_feature`.
+  `active_captains_quarters_in`, `active_social_hub_in` — each filters by
+  `service_strategy` + `.active()`, mirroring `active_hub_feature`.
 - **Source:** `src/world/room_features/seeds.py`, `services.py`, `apps.py`.
 
 ### Mechanics
