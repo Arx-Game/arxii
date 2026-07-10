@@ -237,9 +237,22 @@ called `set_active_persona` directly (bypassing `action.run()`); telnet had no w
 ## What's Needed for MVP
 
 ### Frontend UX (highest priority)
-- **Rich text editor** — Modern compose experience with Discord/F-list-style formatting (bold, italic, links, maybe character mentions). Lower barrier for new players. Should feel like a modern chat room, not a text terminal
-- **Smart input composer** — MMO-style mode selector to the left of the chat input. Controls command (pose/emit), target (room/group/individual), with color coding. Defaults to the last conversational thread. Discreetly shows audience scope
-- **Conversation threading** — Frontend derives threads from target patterns in the interaction stream. Collapsible, expandable, filterable. In a room with 30 people, follow just the threads you care about
+
+> **Status correction (2026-07-10 audit, epic #2155):** much of this is now BUILT but
+> mounted only on `/scenes/:id`, not the live `/game` view — the two-surface split is
+> the core gap. See `docs/audits/2026-07-10-webclient-rp-ux-audit.md`; unifying the
+> surfaces is #2156.
+
+- **Rich text editor** — BUILT & WIRED (`RichTextInput`: toolbar, shortcuts, color picker,
+  `@name` autocomplete) — but `/game`'s feed (`EvenniaMessage`) never parses the markdown it
+  produces (#2156 fold-in bug)
+- **Smart input composer** — PARTIAL: `ModeSelector` (pose/say/emit/whisper/tabletalk) +
+  action attachment exist but mount only on the scene page; tabletalk is hardcoded off
+  (`isAtPlace={false}` TODO); no audience-scope hint in the bare `/game` composer (#2156)
+- **Conversation threading** — BUILT (`useThreading`/`ThreadSidebar`/`ThreadFilterModal`,
+  grouping by whisper-set/place/target) but only on `/scenes/:id`; per-thread unread is
+  stubbed to 0; the live `/game` view renders a flat log with a placeholder
+  `ConversationSidebar` (#2156)
 - **~~Scene scheduling and discovery~~** — Split into separate concerns:
   - **Events system** (`world/events`) — scheduled RP gatherings with calendar, invitations, room modifications. See [Events roadmap](events.md) and `docs/plans/2026-03-27-events-system-design.md`
   - **Grid presence** — "who's where" on public rooms for organic RP, future graphical map. Separate feature, not part of scenes or events
