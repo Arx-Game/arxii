@@ -11,6 +11,7 @@ from django.contrib import admin
 from world.battles.models import (
     Battle,
     BattleActionDeclaration,
+    BattleMapBlueprint,
     BattleOutcomeMapping,
     BattleParticipant,
     BattlePlace,
@@ -18,6 +19,10 @@ from world.battles.models import (
     BattleSide,
     BattleUnit,
     BattleUnitCapability,
+    BattleUnitTemplate,
+    BattleUnitTemplateCapability,
+    BlueprintBattlePlace,
+    BlueprintFortification,
     Fortification,
     TechniquePropertyAffinity,
     TerrainPropertyEffect,
@@ -127,3 +132,38 @@ class WeatherTypeCapabilityChallengeAdmin(admin.ModelAdmin):
 class BattleOutcomeMappingAdmin(admin.ModelAdmin):
     list_display = ["outcome", "check_outcome"]
     list_filter = ["outcome"]
+
+
+class BlueprintBattlePlaceInline(admin.TabularInline):
+    model = BlueprintBattlePlace
+    extra = 0
+
+
+@admin.register(BattleMapBlueprint)
+class BattleMapBlueprintAdmin(admin.ModelAdmin):
+    list_display = ("name", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+    inlines = [BlueprintBattlePlaceInline]
+
+
+@admin.register(BlueprintFortification)
+class BlueprintFortificationAdmin(admin.ModelAdmin):
+    list_display = ("blueprint_place", "kind", "defending_side_role", "max_integrity")
+    list_filter = ("kind", "defending_side_role")
+    raw_id_fields = ("blueprint_place",)
+
+
+class BattleUnitTemplateCapabilityInline(admin.TabularInline):
+    model = BattleUnitTemplateCapability
+    extra = 0
+    autocomplete_fields = ("capability",)
+
+
+@admin.register(BattleUnitTemplate)
+class BattleUnitTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "quality", "strength", "morale", "is_active")
+    list_filter = ("quality", "is_active")
+    search_fields = ("name", "descriptor")
+    filter_horizontal = ("properties",)
+    inlines = [BattleUnitTemplateCapabilityInline]
