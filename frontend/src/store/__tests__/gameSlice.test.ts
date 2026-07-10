@@ -16,6 +16,7 @@ import {
   setSessionCommands,
   setSessionRoom,
   setSessionScene,
+  markThreadSeen,
   resetGame,
 } from '../gameSlice';
 import type {
@@ -53,6 +54,7 @@ interface Session {
   room: RoomData | null;
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
+  threadLastSeen: Record<string, number>;
 }
 
 interface GameState {
@@ -68,6 +70,7 @@ const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   room: null,
   scene: null,
   sceneInteractions: [],
+  threadLastSeen: {},
   ...overrides,
 });
 
@@ -215,7 +218,16 @@ describe('gameSlice', () => {
           room: null,
           scene: null,
           sceneInteractions: [],
+          threadLastSeen: {},
         });
+      });
+
+      it('initializes threadLastSeen as an empty object', () => {
+        const initialState: GameState = { sessions: {}, active: null };
+
+        const result = reducer(initialState, startSession('TestCharacter'));
+
+        expect(result.sessions['TestCharacter'].threadLastSeen).toEqual({});
       });
 
       it('sets new session as active', () => {
@@ -975,6 +987,73 @@ describe('gameSlice', () => {
     });
   });
 
+  describe('markThreadSeen', () => {
+    it('sets the last-seen interaction id for a thread key on an existing session', () => {
+      const initialState = createStateWithSession('TestCharacter', { threadLastSeen: {} });
+
+      const result = reducer(
+        initialState,
+        markThreadSeen({ character: 'TestCharacter', threadKey: 'room', interactionId: 5 })
+      );
+
+      expect(result.sessions['TestCharacter'].threadLastSeen).toEqual({ room: 5 });
+    });
+
+    it('raises an existing value when the new interactionId is higher', () => {
+      const initialState = createStateWithSession('TestCharacter', {
+        threadLastSeen: { room: 5 },
+      });
+
+      const result = reducer(
+        initialState,
+        markThreadSeen({ character: 'TestCharacter', threadKey: 'room', interactionId: 10 })
+      );
+
+      expect(result.sessions['TestCharacter'].threadLastSeen.room).toBe(10);
+    });
+
+    it('is idempotent — never lowers an existing last-seen value', () => {
+      const initialState = createStateWithSession('TestCharacter', {
+        threadLastSeen: { room: 10 },
+      });
+
+      const result = reducer(
+        initialState,
+        markThreadSeen({ character: 'TestCharacter', threadKey: 'room', interactionId: 3 })
+      );
+
+      expect(result.sessions['TestCharacter'].threadLastSeen.room).toBe(10);
+    });
+
+    it('does not affect other thread keys on the same session', () => {
+      const initialState = createStateWithSession('TestCharacter', {
+        threadLastSeen: { room: 5, 'whisper:1,2': 20 },
+      });
+
+      const result = reducer(
+        initialState,
+        markThreadSeen({ character: 'TestCharacter', threadKey: 'room', interactionId: 8 })
+      );
+
+      expect(result.sessions['TestCharacter'].threadLastSeen).toEqual({
+        room: 8,
+        'whisper:1,2': 20,
+      });
+    });
+
+    it('does nothing if session does not exist', () => {
+      const initialState = createStateWithSession('ExistingCharacter', {});
+
+      const result = reducer(
+        initialState,
+        markThreadSeen({ character: 'NonExistent', threadKey: 'room', interactionId: 5 })
+      );
+
+      expect(result.sessions['NonExistent']).toBeUndefined();
+      expect(result).toEqual(initialState);
+    });
+  });
+
   describe('resetGame', () => {
     it('returns to initial state', () => {
       const initialState = createStateWithMultipleSessions(
@@ -1047,6 +1126,7 @@ describe('gameSlice', () => {
             ),
             scene: createSceneSummary(1, 'Battle', 'An epic battle', true),
             sceneInteractions: [],
+            threadLastSeen: { room: 5 },
           },
         },
         active: 'Hero',

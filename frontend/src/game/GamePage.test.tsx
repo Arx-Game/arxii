@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
 import { GamePage } from './GamePage';
@@ -181,6 +181,60 @@ describe('GamePage', () => {
       await user.click(within(sidebar).getByText('All'));
       expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
       expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+    });
+
+    it('marks the selected thread seen as it grows, while other threads accumulate unread badges (#2156)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+
+      // Baseline: both threads existed at scene load, so neither shows unread yet.
+      const roomButton = () =>
+        within(sidebar).getByText('The Grand Ballroom').closest('button') as HTMLElement;
+      const whisperButton = () =>
+        within(sidebar)
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+
+      await waitFor(() => {
+        expect(within(roomButton()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
+        expect(within(whisperButton()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
+      });
+
+      // Select the whisper thread — it's now the actively-viewed thread.
+      await user.click(whisperButton());
+
+      // A new pose arrives in the (unselected) room thread from someone else.
+      store.dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 3,
+            persona: { id: 99, name: 'Bystander', thumbnail_url: '' },
+            content: 'glances over curiously.',
+            mode: 'pose',
+            timestamp: '2026-01-01T00:02:00Z',
+            scene_id: 100,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [],
+            target_persona_ids: [],
+          },
+        })
+      );
+
+      // The room thread's badge increments; the selected whisper thread stays at 0.
+      await waitFor(() => {
+        expect(within(roomButton()).getByText('1')).toBeInTheDocument();
+      });
+      expect(within(whisperButton()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
     });
 
     it('falls back to the plain ChatWindow with no thread sidebar when there is no active scene', () => {

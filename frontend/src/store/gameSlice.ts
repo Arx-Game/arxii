@@ -31,6 +31,8 @@ interface Session {
   room: RoomData | null;
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
+  /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
+  threadLastSeen: Record<string, number>;
 }
 
 interface GameState {
@@ -58,6 +60,7 @@ export const gameSlice = createSlice({
           room: null,
           scene: null,
           sceneInteractions: [],
+          threadLastSeen: {},
         };
       }
       state.active = name;
@@ -152,6 +155,26 @@ export const gameSlice = createSlice({
         session.sceneInteractions = [];
       }
     },
+    // Idempotent: never lowers an existing last-seen value for the thread key
+    // (ratified unread semantics, #2156) — a stale/out-of-order dispatch must
+    // not resurrect already-read interactions as unread.
+    markThreadSeen: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        threadKey: string;
+        interactionId: number;
+      }>
+    ) => {
+      const { character, threadKey, interactionId } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        const current = session.threadLastSeen[threadKey];
+        if (current === undefined || interactionId > current) {
+          session.threadLastSeen[threadKey] = interactionId;
+        }
+      }
+    },
     resetGame: () => initialState,
   },
 });
@@ -167,5 +190,6 @@ export const {
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,
+  markThreadSeen,
   resetGame,
 } = gameSlice.actions;

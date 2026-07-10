@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
@@ -15,9 +15,10 @@ import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack'
 import { Toaster } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { markThreadSeen } from '@/store/gameSlice';
 import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
-import { useThreading } from '@/scenes/hooks/useThreading';
+import { useThreading, getThreadKey } from '@/scenes/hooks/useThreading';
 import { threadToComposerMode } from '@/scenes/hooks/threadToComposerMode';
 import type { ComposerMode } from './components/CommandInput';
 
@@ -27,8 +28,13 @@ const DEFAULT_ROOM_ENTRY: FocusEntry = {
   sceneSummary: null,
 };
 
+// Stable empty-object reference so `useThreading`'s memo doesn't see a "changed"
+// lastSeenByThread on every render when there's no active session yet (#2156).
+const EMPTY_THREAD_LAST_SEEN: Record<string, number> = {};
+
 export function GamePage() {
   const account = useAccount();
+  const dispatch = useAppDispatch();
   const { data: characters = [] } = useMyRosterEntriesQuery();
   const { sessions, active } = useAppSelector((state) => state.game);
 
@@ -59,8 +65,60 @@ export function GamePage() {
   // undefined with no active scene, which both hooks handle without firing
   // network calls or producing threads.
   const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId);
-  const threading = useThreading(allInteractions, roomName);
+  const threadLastSeen = activeSession?.threadLastSeen ?? EMPTY_THREAD_LAST_SEEN;
+  const threading = useThreading(allInteractions, roomName, {
+    lastSeenByThread: threadLastSeen,
+    viewerPersonaId: personaId,
+  });
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
+
+  // Per-thread unread badges (#2156): "no entry -> 0 unread" (useThreading) means a
+  // brand-new session would otherwise show every existing thread as fully unread on
+  // login. Baseline every thread's current max interaction id once per scene load
+  // (guarded per thread key so it never re-baselines — and thereby erases — a
+  // legitimately-accumulated unread count once that key has been seen this scene).
+  const baselinedRef = useRef<{ sceneId: string | undefined; keys: Set<string> }>({
+    sceneId: undefined,
+    keys: new Set(),
+  });
+  useEffect(() => {
+    if (!sceneId || !active) return;
+    if (baselinedRef.current.sceneId !== sceneId) {
+      baselinedRef.current = { sceneId, keys: new Set() };
+    }
+    const maxByThread = new Map<string, number>();
+    for (const interaction of allInteractions) {
+      const key = getThreadKey(interaction);
+      const id = Number(interaction.id);
+      const current = maxByThread.get(key);
+      if (current === undefined || id > current) {
+        maxByThread.set(key, id);
+      }
+    }
+    for (const [threadKey, interactionId] of maxByThread) {
+      if (!baselinedRef.current.keys.has(threadKey)) {
+        baselinedRef.current.keys.add(threadKey);
+        dispatch(markThreadSeen({ character: active, threadKey, interactionId }));
+      }
+    }
+  }, [sceneId, active, allInteractions, dispatch]);
+
+  // Continuously mark the SELECTED thread seen as its interactions grow — this is
+  // the thread the player is actively viewing, so it never accumulates unread.
+  // Unselected threads are left alone and accumulate unread from the baseline above.
+  useEffect(() => {
+    if (!sceneId || !active) return;
+    const selectedKey = threading.selectedThreadKey;
+    let maxId: number | undefined;
+    for (const interaction of allInteractions) {
+      if (getThreadKey(interaction) !== selectedKey) continue;
+      const id = Number(interaction.id);
+      if (maxId === undefined || id > maxId) maxId = id;
+    }
+    if (maxId !== undefined) {
+      dispatch(markThreadSeen({ character: active, threadKey: selectedKey, interactionId: maxId }));
+    }
+  }, [sceneId, active, allInteractions, threading.selectedThreadKey, dispatch]);
 
   // Mirrors SceneInteractionPanel's handleThreadClick (#2156 review fix): a
   // thread click toggles that thread's inclusion in the enabled-thread set

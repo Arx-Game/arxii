@@ -10,6 +10,13 @@ export interface Thread {
   unreadCount: number;
 }
 
+export interface UseThreadingOpts {
+  /** Highest interaction id already seen per thread key (Redux `Session.threadLastSeen`). */
+  lastSeenByThread?: Record<string, number>;
+  /** The viewing persona's id — its own interactions never count toward its own unread. */
+  viewerPersonaId?: number | null;
+}
+
 export interface ThreadingState {
   threads: Thread[];
   filteredInteractions: Interaction[];
@@ -75,11 +82,36 @@ function getThreadLabel(
   return formatPersonaNames(personas);
 }
 
-export function useThreading(interactions: Interaction[], roomName: string): ThreadingState {
+// No entry for a thread key means "0 unread" — ratified semantics (#2156):
+// on first load, before GamePage has baselined every thread, this avoids a
+// wall of stale unread badges. Once a baseline exists, count interactions
+// newer than it, excluding the viewer's own (an author never owes themself
+// an unread badge for their own words).
+function countUnread(
+  threadInteractions: Interaction[],
+  threadKey: string,
+  lastSeenByThread: Record<string, number> | undefined,
+  viewerPersonaId: number | null | undefined
+): number {
+  const lastSeen = lastSeenByThread?.[threadKey];
+  if (lastSeen === undefined) return 0;
+  return threadInteractions.filter((i) => {
+    if (viewerPersonaId != null && i.persona.id === viewerPersonaId) return false;
+    return Number(i.id) > lastSeen;
+  }).length;
+}
+
+export function useThreading(
+  interactions: Interaction[],
+  roomName: string,
+  opts?: UseThreadingOpts
+): ThreadingState {
   const [selectedThreadKey, setSelectedThread] = useState('room');
   const [enabledThreadKeys, setEnabledThreadKeys] = useState<Set<string>>(new Set());
   const [hiddenPersonaIds, setHiddenPersonaIds] = useState<Map<string, Set<number>>>(new Map());
   const isUnfiltered = enabledThreadKeys.size === 0;
+  const lastSeenByThread = opts?.lastSeenByThread;
+  const viewerPersonaId = opts?.viewerPersonaId;
 
   const { threads, threadKeyMap } = useMemo(() => {
     const groups = new Map<string, Interaction[]>();
@@ -106,7 +138,7 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
           label: getThreadLabel(key, type, threadInteractions, roomName),
           participantPersonas: getParticipantPersonas(threadInteractions),
           latestTimestamp: threadInteractions[threadInteractions.length - 1]?.timestamp ?? '',
-          unreadCount: 0, // TODO: track per-thread unread count (needs last-viewed timestamp per thread)
+          unreadCount: countUnread(threadInteractions, key, lastSeenByThread, viewerPersonaId),
         } as Thread;
       })
       .sort((a, b) => {
@@ -115,7 +147,7 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
         return b.latestTimestamp.localeCompare(a.latestTimestamp);
       });
     return { threads: threadList, threadKeyMap: keyMap };
-  }, [interactions, roomName]);
+  }, [interactions, roomName, lastSeenByThread, viewerPersonaId]);
 
   const filteredInteractions = useMemo(() => {
     // Fast path: no thread filter and no hidden personas — return interactions as-is (Fix #6)
