@@ -21,6 +21,7 @@ rhythm, no monster one-liner):
   room/renovate <kind name|id>
   room/settle [confirm]           room/refurbish [confirm]
   room/prepare [confirm]          room/ultraupkeep
+  room/aura <resonance>           room/aura clear <resonance>
 """
 
 from __future__ import annotations
@@ -42,7 +43,8 @@ _USAGE = (
     "  room/style <style name>  ·  room/fixture <kind>  ·  room/removefixture <kind>\n"
     "  room/renovate <kind name|id>\n"
     "  room/settle [confirm]  ·  room/refurbish [confirm]  ·  room/prepare [confirm]\n"
-    "  room/ultraupkeep"
+    "  room/ultraupkeep\n"
+    "  room/aura <resonance>  ·  room/aura clear <resonance>"
 )
 
 _AFFIRMATIVE = frozenset({"yes", "y", "true", "on", "1", "public"})
@@ -121,6 +123,7 @@ class CmdRoom(ArxCommand):
             "refurbish": lambda a: self._condition_verb("refurbish_building", a),
             "prepare": lambda a: self._condition_verb("prepare_building", a),
             "ultraupkeep": lambda a: self._run("toggle_ultra_upkeep"),  # noqa: ARG005
+            "aura": self._aura,
         }
         for switch in switches:
             handler = handlers.get(switch)
@@ -289,6 +292,24 @@ class CmdRoom(ArxCommand):
             msg = f"No decoration template named '{args}'."
             raise CommandError(msg)
         self._run("commission_decoration", template_id=template.pk, target_room=target_room)
+
+    def _aura(self, args: str) -> None:
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        text = args.strip()
+        clear = False
+        if text.lower().startswith("clear"):
+            clear = True
+            text = text[len("clear") :].strip()
+        if not text:
+            msg = "Usage: room/aura <resonance>  ·  room/aura clear <resonance>"
+            raise CommandError(msg)
+        resonance = Resonance.objects.filter(name__iexact=text).first()
+        if resonance is None:
+            msg = f"No resonance called '{text}'."
+            raise CommandError(msg)
+        action_key = "untag_room_resonance" if clear else "tag_room_resonance"
+        self._run(action_key, resonance_id=resonance.pk)
 
 
 # Back-compat import target — older cmdset registrations referenced CmdManageRoom.

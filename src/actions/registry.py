@@ -165,8 +165,10 @@ from actions.definitions.locations import (
     SettleBuildingArrearsAction,
     StartBuildingRenovationAction,
     StartExtensionAction,
+    TagRoomResonanceAction,
     ToggleUltraUpkeepAction,
     UnlinkRoomsAction,
+    UntagRoomResonanceAction,
 )
 from actions.definitions.market import (
     BuyStockAction,
@@ -332,6 +334,8 @@ _ALL_ACTIONS: list[Action] = [
     AssignRoomTenantAction(),
     EndRoomTenancyAction(),
     SetPrimaryHomeAction(),
+    TagRoomResonanceAction(),
+    UntagRoomResonanceAction(),
     CommissionDecorationAction(),
     StartExtensionAction(),
     StartBuildingRenovationAction(),

@@ -422,7 +422,11 @@ actions, backends, and service functions.
   [like=<room>] [size=<tier>]` → `DigRoomAction`; `room/size <tier>` → `ResizeRoomAction`;
   `room/drop confirm` → `RemoveRoomAction`; `room/addexit <room>=<there>,<back>` /
   `room/removeexit <exit>` / `room/renameexit <exit>=<name>` → the exit actions;
-  `room/home` → `SetPrimaryHomeAction` (tenant-gated); `room/tenant <char>` /
+  `room/home` → `SetPrimaryHomeAction` (owner-or-tenant standing, #2036 —
+  `IsRoomTenantPrerequisite` widened to `is_owner OR is_tenant`); `room/aura <resonance>` /
+  `room/aura clear <resonance>` → `TagRoomResonanceAction`/`UntagRoomResonanceAction` (#2036,
+  same owner-or-tenant gate; tagging additionally requires the caller has claimed that
+  resonance); `room/tenant <char>` /
   `room/evict <char>` → tenancy actions; `room/extend <units>` → `StartExtensionAction`;
   `room/decorate <template> [here]` → `CommissionDecorationAction`; `room/style <name>` →
   `SetBuildingStyleAction` (#1469, knowledge-gated throwback tier); `room/fixture <kind>` /
