@@ -10,9 +10,10 @@ in once per gating condition. This seeds the rows that the ``SET_RELATIONSHIP_CO
 - **Very Attracted** — the temporary gate (the doubling second application), set as an expiring
   ``TemporaryRelationshipCondition``.
 
-Idempotent ``get_or_create``. The allure *grant* (which distinction confers allure, and how much) is
-authored content — until a character is granted allure, the value is 0 and the engine contributes
-nothing. Flirt/Seduce success-effect wiring + the social Vulnerable condition are a follow-up.
+Idempotent ``get_or_create``/upserts. The allure *grant* is authored here too (#1697): the
+**Attractive** distinction confers base allure per rank via the existing distinction→modifier
+materialization; a character without allure modifiers stays at 0 and the engine contributes
+nothing. Flirt/Seduce success-effect wiring lives in ``social_actions`` (same cluster run).
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ ALLURE_TARGET_NAME = "allure"
 ATTRACTED_CONDITION_NAME = "Attracted To"
 VERY_ATTRACTED_CONDITION_NAME = "Very Attracted"
 _ROLL_MODIFIER_CATEGORY = "roll_modifier"
+
+# PLACEHOLDER base-allure grant per Attractive rank (#1697).
+_ATTRACTIVE_ALLURE_PER_RANK = 2
 
 _ATTRACTION_CONDITIONS = [
     (ATTRACTED_CONDITION_NAME, "Drawn to them — their allure colors your regard (permanent)."),
@@ -57,7 +61,50 @@ def ensure_attraction_conditions(allure_target) -> dict[str, object]:
     return conditions
 
 
+def ensure_attractive_distinction(allure_target) -> None:
+    """The Attractive distinction's allure grant (#1697) — closing the authored-content gap.
+
+    A character holding Attractive gets a base allure of
+    ``_ATTRACTIVE_ALLURE_PER_RANK × rank`` via the existing distinction→modifier
+    materialization (``create_distinction_modifiers``); everyone else stays at
+    0 — base allure is simply the sum of allure modifiers. PLACEHOLDER
+    magnitude + prose.
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionEffect,
+    )
+
+    category, _ = DistinctionCategory.objects.get_or_create(
+        slug="social",
+        defaults={"name": "Social", "description": "Social presence and reputation."},
+    )
+    distinction, _ = Distinction.objects.get_or_create(
+        slug="attractive",
+        defaults={
+            "name": "Attractive",
+            "category": category,
+            "description": (
+                "PLACEHOLDER: Heads turn when you enter the room — a natural magnetism "
+                "that colors how the attracted perceive you."
+            ),
+            "cost_per_rank": 1,
+            "max_rank": 3,
+        },
+    )
+    DistinctionEffect.objects.update_or_create(
+        distinction=distinction,
+        target=allure_target,
+        defaults={
+            "value_per_rank": _ATTRACTIVE_ALLURE_PER_RANK,
+            "description": "Directed allure — applies when a target is Attracted To you.",
+        },
+    )
+
+
 def seed_social_relationship_content() -> None:
-    """Cluster entry — seed the allure target + the Attracted To / Very Attracted conditions."""
+    """Cluster entry — allure target + attraction conditions + the Attractive grant (#1697)."""
     allure_target = ensure_allure_target()
     ensure_attraction_conditions(allure_target)
+    ensure_attractive_distinction(allure_target)

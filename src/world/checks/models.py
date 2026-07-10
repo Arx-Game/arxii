@@ -273,6 +273,11 @@ class ConsequenceEffect(SharedMemoryModel):
     )
     relationship_condition_duration = models.DurationField(null=True, blank=True)
 
+    # SHIFT_AFFECTION effects (#1697): signed track points applied to the TARGET's
+    # relationship toward the actor (positive → Regard, negative → Friction),
+    # first-per-scene-per-pair (see relationships.AffectionShift).
+    affection_amount = models.IntegerField(null=True, blank=True)
+
     # Property effects
     property = models.ForeignKey(
         "mechanics.Property",

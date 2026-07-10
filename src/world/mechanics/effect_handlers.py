@@ -167,6 +167,69 @@ def _set_relationship_condition(
     )
 
 
+def _shift_affection(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Shift the TARGET's affection toward the actor (#1697).
+
+    The generic valence-signed success consequence: Flirt (+5) / Seduce (+50)
+    warm the target's regard for the actor; future gated offensive actions
+    carry negative amounts onto Friction. Only the first success of a given
+    effect per scene per pair shifts (``apply_affection_shift`` returns None
+    on the dedup — the diminishing-returns rule). Sceneless resolutions skip
+    rather than allow undeduped spam.
+    """
+    from world.relationships.services import apply_affection_shift  # noqa: PLC0415
+
+    actor = context.character
+    recipient = _resolve_target(effect, context)
+    amount = effect.affection_amount or 0
+    if context.scene is None:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_AFFECTION,
+            description="No scene on the resolution context; affection shift skipped.",
+            applied=False,
+            skip_reason="no_scene",
+        )
+    try:
+        actor_sheet = actor.sheet_data
+        recipient_sheet = recipient.sheet_data
+    except ObjectDoesNotExist:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_AFFECTION,
+            description="Actor or target has no character sheet; skipped.",
+            applied=False,
+            skip_reason="missing_sheet",
+        )
+    if recipient_sheet.pk == actor_sheet.pk:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_AFFECTION,
+            description="Actor and target are the same character; skipped.",
+            applied=False,
+            skip_reason="self_target",
+        )
+    shift = apply_affection_shift(
+        source=recipient_sheet,
+        target=actor_sheet,
+        scene=context.scene,
+        effect=effect,
+        amount=amount,
+    )
+    if shift is None:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_AFFECTION,
+            description="Affection already shifted this scene; skipped.",
+            applied=False,
+            skip_reason="already_shifted",
+        )
+    return AppliedEffect(
+        effect_type=EffectType.SHIFT_AFFECTION,
+        description=f"{recipient.db_key}'s regard for {actor.db_key} shifts {amount:+d}",
+        applied=True,
+    )
+
+
 def _add_property(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -1019,6 +1082,7 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.APPLY_CONDITION: _apply_condition,
     EffectType.REMOVE_CONDITION: _remove_condition,
     EffectType.SET_RELATIONSHIP_CONDITION: _set_relationship_condition,
+    EffectType.SHIFT_AFFECTION: _shift_affection,
     EffectType.ADD_PROPERTY: _add_property,
     EffectType.REMOVE_PROPERTY: _remove_property,
     EffectType.DEAL_DAMAGE: _deal_damage,

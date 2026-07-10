@@ -1,1 +1,1 @@
-0015_conditiondamageinteraction_narration_snippet
+0016_conditiontemplate_exploitable_tiers

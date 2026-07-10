@@ -81,6 +81,20 @@ VERY_ATTRACTED_DURATION = timedelta(hours=16)
 
 SMITTEN_CONDITION_NAME = "Smitten"
 
+# Smitten's mechanical package (#1697) — all PLACEHOLDER magnitudes pending tuning.
+_SMITTEN_EXPLOITABLE_TIERS = 2
+_SMITTEN_DEFENSE_PENALTY = -10
+_SMITTEN_DAMAGE_TYPE = "Force"
+_SMITTEN_DAMAGE_BONUS_PCT = 100
+_MELEE_DEFENSE_CHECK_NAME = "Melee Defense"
+
+# Automatic affection shifts on success (#1697) — the first instances of the generic
+# valence-signed SHIFT_AFFECTION family. PLACEHOLDER magnitudes (#1699 scale: bump 1,
+# flirt 5, seduction 50, capstone 250). First-per-scene-per-pair dedup lives in
+# relationships.AffectionShift.
+FLIRT_AFFECTION_SHIFT = 5
+SEDUCE_AFFECTION_SHIFT = 50
+
 
 def _success_consequence(action_name: str):
     """Get-or-create the Success-tier Consequence for an action's pool, returning it + the pool."""
@@ -152,13 +166,32 @@ def ensure_social_action_templates() -> dict[str, object]:
 
 
 def ensure_smitten_condition():
-    """The social ``Smitten`` condition seduction applies (#1697).
+    """The social ``Smitten`` condition seduction applies, with its teeth (#1697).
 
-    A distinct social condition (the combat ``Vulnerable`` owns that name). PLACEHOLDER: it carries
-    no check-modifier yet — its mechanical lever (how much it eases further influence) is a tuning
-    pass. Applied by Seduce, not Flirt.
+    A distinct social condition (the combat ``Vulnerable`` owns that name). The
+    mechanical package (all PLACEHOLDER magnitudes pending tuning):
+
+    - ``exploitable_tiers=2`` — checks rolled AGAINST a Smitten bearer resolve two
+      difficulty tiers easier (the seduce-then-strike seam,
+      ``world.scenes.social_difficulty``).
+    - A ``ConditionCheckModifier`` penalizing the bearer's Melee Defense — they
+      defend worse while captivated.
+    - A ``ConditionDamageInteraction`` boosting Force damage against the bearer
+      (rides the #2018 wiring). PLACEHOLDER: keyed to Force until a generic
+      physical DamageType exists; full surprise-attack semantics are a combat
+      design question (TehomCD), deliberately not built here.
+
+    Applied by Seduce, not Flirt. Field updates are explicit writes / upserts so
+    re-seeding applies edits (#946).
     """
-    from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.conditions.models import (  # noqa: PLC0415
+        ConditionCategory,
+        ConditionCheckModifier,
+        ConditionDamageInteraction,
+        ConditionTemplate,
+        DamageType,
+    )
 
     category, _ = ConditionCategory.objects.get_or_create(
         name="Social",
@@ -171,14 +204,44 @@ def ensure_smitten_condition():
             "description": "Emotionally captivated by the seducer — more open to their influence.",
         },
     )
+    if template.exploitable_tiers != _SMITTEN_EXPLOITABLE_TIERS:
+        template.exploitable_tiers = _SMITTEN_EXPLOITABLE_TIERS
+        template.save(update_fields=["exploitable_tiers"])
+
+    defense_check = CheckType.objects.filter(name=_MELEE_DEFENSE_CHECK_NAME).first()
+    if defense_check is not None:
+        ConditionCheckModifier.objects.update_or_create(
+            condition=template,
+            check_type=defense_check,
+            defaults={"modifier_value": _SMITTEN_DEFENSE_PENALTY},
+        )
+    else:
+        logger.warning("Melee Defense CheckType not seeded; Smitten defense penalty skipped.")
+
+    force = DamageType.objects.filter(name=_SMITTEN_DAMAGE_TYPE).first()
+    if force is not None:
+        ConditionDamageInteraction.objects.update_or_create(
+            condition=template,
+            damage_type=force,
+            defaults={"damage_modifier_percent": _SMITTEN_DAMAGE_BONUS_PCT},
+        )
+    else:
+        logger.warning(
+            "%s DamageType not seeded; Smitten damage row skipped.", _SMITTEN_DAMAGE_TYPE
+        )
     return template
 
 
-def _attach_attraction_effects(consequence, *, include_smitten: bool) -> None:
+def _attach_attraction_effects(
+    consequence, *, include_smitten: bool, affection_shift: int = 0
+) -> None:
     """Attach the directed-allure write effects to a success Consequence (#1697).
 
     Sets the TARGET **Attracted To** the actor (permanent) + **Very Attracted** (temporary). When
-    ``include_smitten`` (Seduce), also applies the Smitten condition. Idempotent.
+    ``include_smitten`` (Seduce), also applies the Smitten condition. A nonzero
+    ``affection_shift`` attaches the SHIFT_AFFECTION effect — the automatic
+    target→actor regard shift (first-per-scene-per-pair; the first instances of
+    the generic valence-signed shift family). Idempotent + upserting.
     """
     from world.checks.constants import EffectTarget, EffectType  # noqa: PLC0415
     from world.checks.models import ConsequenceEffect  # noqa: PLC0415
@@ -218,14 +281,28 @@ def _attach_attraction_effects(consequence, *, include_smitten: bool) -> None:
                 "condition_severity": 1,
             },
         )
+    if affection_shift:
+        ConsequenceEffect.objects.update_or_create(
+            consequence=consequence,
+            effect_type=EffectType.SHIFT_AFFECTION,
+            defaults={
+                "target": EffectTarget.TARGET,
+                "execution_order": 3,
+                "affection_amount": affection_shift,
+            },
+        )
 
 
 def seed_social_action_content() -> None:
     """Cluster entry — seed social ActionTemplates + pools + Flirt/Seduce attraction effects."""
     ensure_social_action_templates()
     _, flirt_success = _success_consequence("Flirt")
-    _attach_attraction_effects(flirt_success, include_smitten=False)
+    _attach_attraction_effects(
+        flirt_success, include_smitten=False, affection_shift=FLIRT_AFFECTION_SHIFT
+    )
     # Seduce: same attraction, plus the Smitten condition (a deeper hold) — and it rolls one tier
     # harder than Flirt (difficulty_tier_modifier=1, set on the template above).
     _, seduce_success = _success_consequence("Seduce")
-    _attach_attraction_effects(seduce_success, include_smitten=True)
+    _attach_attraction_effects(
+        seduce_success, include_smitten=True, affection_shift=SEDUCE_AFFECTION_SHIFT
+    )

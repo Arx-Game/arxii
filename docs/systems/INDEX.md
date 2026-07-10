@@ -3397,6 +3397,25 @@ writeup kudos/complaint feedback.
   `RelationshipsSection` (`frontend/src/components/character/RelationshipsSection.tsx`, own-
   sheet gated), fed by `frontend/src/relationships/` (`api.ts`/`queries.ts`), POSTs
   `{writeup_type: "update", writeup_id}` to `.../kudos/`.
+- **Automatic affection shifts (#1697):** `AffectionShift` model +
+  `apply_affection_shift(*, source, target, scene, effect, amount)` — the generic
+  valence-signed success consequence (`EffectType.SHIFT_AFFECTION`, handler in
+  `world/mechanics/effect_handlers.py`, `ConsequenceEffect.affection_amount`): a
+  successful Flirt (+5) / Seduce (+50, PLACEHOLDER) moves the TARGET's regard toward
+  the actor on the system tracks; future gated offensive actions (insult/taunt) carry
+  negative amounts onto Friction. `UniqueConstraint(relationship, scene, effect)` is
+  the diminishing-returns rule — first success per scene per pair shifts, repeats
+  no-op. Seeded in `world/seeds/social_actions.py`.
+- **Affection-tier difficulty ladder (#1697):** `resolved_base_difficulty`
+  (`world/scenes/social_difficulty.py`) derives its bands from the #1699 system-track
+  `RelationshipTier` thresholds (Regard for warm, Friction for hostile) — one tier
+  easier/harder per band crossed, neutral = Normal (fallback constants when unseeded).
+  Also applies `ConditionTemplate.exploitable_tiers` — the exploitable-state seam:
+  checks rolled at a Smitten bearer resolve 2 tiers easier (PLACEHOLDER); Smitten's
+  other teeth (Melee Defense penalty via `ConditionCheckModifier`, Force ×2 damage via
+  `ConditionDamageInteraction` riding #2018) + the Attractive distinction's allure
+  grant (base allure = sum of allure modifiers) are seed rows in
+  `social_actions`/`social_relationships`.
 - **Admin:** `WriteupComplaint` registered for staff triage (no player-facing complaint UI)
 - **Actions:** `GiveWriteupKudosAction` (key `"give_writeup_kudos"`),
   `FileWriteupComplaintAction` (key `"file_writeup_complaint"`),
