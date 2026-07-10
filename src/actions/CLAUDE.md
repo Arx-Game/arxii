@@ -204,18 +204,21 @@ They do not use the command system, dispatchers, or handlers.
   auto-concludes via `check_victory` when a side crosses threshold),
   `ConcludeBattleAction` (`"conclude_battle"`, `target_type=AREA`, GM/staff; natural win →
   timer → DEFENDER_MARGINAL default), `DeclareBattleActionAction` (`"declare_battle_action"`,
-  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 10
+  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 11
   `BattleActionKind` values through the same generic `action_kind`/`target_unit`/
   `target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs it
-  always had — #1712 added ROUT/RALLY/REPEL/HOLD, #1713 added BREACH/FORTIFY, and #1715
-  added SET_ENVIRONMENT, all with zero new Action classes; all new-kind validation
+  always had — #1712 added ROUT/RALLY/REPEL/HOLD, #1713 added BREACH/FORTIFY, #1715
+  added SET_ENVIRONMENT, and #2007 added MOVE, all with zero new Action classes; all new-kind validation
   (command scope, `PlaceScopeRequiredError`, the #1713 Fortification target/ownership
   checks, `InvalidEnvironmentScopeError`/`MissingEnvironmentTargetError`) lives in
   `world.battles.services.declare_battle_action`. `ChallengeChampionDuelAction`
   (`"challenge_champion_duel"`, `target_type=AREA`, player, #1710) rounds out the file,
   binding a `BattlePlace` to a lethal duel via `open_champion_duel`. Shared by telnet
   `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`) — every `BattleActionKind`,
-  including SET_ENVIRONMENT, has a matching `battle declare` subverb. Five more
+  including SET_ENVIRONMENT, MOVE, and REPOSITION, has a matching `battle declare`
+  subverb (#2007 wired REPOSITION's, which had been declarable through this Action
+  since #1714 but never had a telnet subverb — a gap this doc used to paper over —
+  and added MOVE's alongside it). Five more
   JUNIOR-trust GM actions (#2010 — the staging pipeline, thin wrappers over
   `world.battles.staging`): `CreateBattleAction` (`"create_battle"`, `target_type=SELF`
   — stages a new Battle, optionally cloning a catalog `BattleMapBlueprint` in the same

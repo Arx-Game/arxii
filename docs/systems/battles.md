@@ -70,7 +70,7 @@ A named front or zone within a battle (e.g. "The Main Gates", "Eastern Flank").
 | `name` | CharField(120) | Human-readable front name |
 | `combat_encounter` | FK → `combat.CombatEncounter` (null) | Bridge seam: a discrete tactical combat at this front |
 | `terrain_type` | CharField | `TerrainType` — OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711); default OPEN. See ADR-0081 for why terrain lives here rather than on the room `Position`/`PositionEdge` graph. |
-| `movement_cost` | PositiveSmallIntegerField | Default 1 (#1711). Authored cost for a future reposition/movement action — not yet filed as an issue; #1712 explicitly did not build this. Data only. |
+| `movement_cost` | PositiveSmallIntegerField | Default 1 (#1711). Modifies the MOVE technique check's difficulty (#2007, `MOVE_COST_DIFFICULTY_PER_POINT`) — its first real consumer. Does not bound distance; MOVEMENT capability does that. |
 | `controlled_by` | FK → `BattleSide` (null, `related_name="controlled_places"`) | Which side holds this front as an objective (#1712); set by a successful HOLD declaration. `None` means uncontrolled/contested. |
 | `weather_override` | FK → `WeatherType` (null, `related_name="overriding_battle_places"`) | Local weather exception at this front (#1715); beats the Battle-level ambient weather here only. Cleared at round-boundary expiry. |
 | `weather_override_expires_round` | PositiveIntegerField (null) | Absolute round number `weather_override` expires at (#1715). Cleared alongside `weather_override` at round-boundary expiry. |
@@ -240,7 +240,7 @@ A participant's declared action for one round.
 | `battle_round` | FK → `BattleRound` (`related_name="declarations"`) | |
 | `participant` | FK → `BattleParticipant` (`related_name="declarations"`) | |
 | `technique` | FK → `magic.Technique` (`related_name="battle_declarations"`) | The technique cast for this declaration; required |
-| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / SET_ENVIRONMENT (#1715) / REPOSITION (#1714) |
+| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / SET_ENVIRONMENT (#1715) / REPOSITION (#1714) / MOVE (#2007) |
 | `target_unit` | FK → `BattleUnit` (null) | Strike target |
 | `target_ally` | FK → `BattleParticipant` (null, `related_name="support_declarations"`) | Support target, or the Surrounded ally being rescued (RESCUE, #1733) |
 | `target_fortification` | FK → `Fortification` (null) | Set when `action_kind` is BREACH or FORTIFY (#1713) |
@@ -549,6 +549,34 @@ writes `status` directly, so ROUT dropping morale to zero and STRIKE dropping st
 30 can both independently flip a unit to ROUTED without either handler needing to know
 about the other's resource.
 
+## Move (#2007)
+
+Reassigns `BattleParticipant.place`/`BattleUnit.place` to a different, already-
+existing `BattlePlace` — distinct from REPOSITION, which moves a `BattlePlace`'s
+own `x`/`y` coordinates (vehicles only). Two declaration shapes:
+
+- **Self-move** (`scope=UNIT`, no `target_unit`): no command-tier gate — a
+  participant may always move themselves. `target_place=None` means withdrawal:
+  sets `status=WITHDRAWN`, `place=None`.
+- **Commander-ordered unit move** (`scope=PLACE`, `target_unit` required): routed
+  through the same `_validate_command_scope` gate ROUT/RALLY use (engaged
+  SUBORDINATE+ `CovenantRole`). `BattleUnitStatus` has no WITHDRAWN equivalent, so
+  this path always requires a real `target_place`.
+
+Distance moved per round is bounded by the mover's effective MOVEMENT capability
+(`FoundationalCapability.MOVEMENT` for a participant via
+`get_effective_capability_value`; a `"movement"`-named `CapabilityType` via
+`BattleUnit.effective_capability` for a commander-ordered unit — the same lookup
+shape vehicle REPOSITION uses for SPEED). A move spanning more than one round's
+capability persists its progress on `transit_x`/`transit_y`/`transit_target_place`
+(new fields on both `BattleParticipant` and `BattleUnit`) and must be redeclared
+each round to continue — REPOSITION's existing precedent. `movement_cost` on the
+destination `BattlePlace` folds into the MOVE technique check's difficulty.
+
+Telnet: `battle declare move <place> with <technique>` (self-move),
+`battle declare move <unit> to <place> with <technique>` (commander order),
+`battle declare move withdraw with <technique>`.
+
 ## Stakes / Beat Wiring (#1785)
 
 `world.battles.beat_wiring` wires a concluded `Battle` into the same
@@ -636,7 +664,7 @@ Champion](#command-hierarchy--the-champion-1710)):
 | `begin_battle_round` | `BeginBattleRoundAction` | AREA | GM / staff | Opens a new DECLARING round |
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
-| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 11 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action (it takes `action_kind` generically, with no per-kind branching) and the `battle declare breach\|fortify` telnet grammar (#1713). REPOSITION (#1714) is reachable through this Action — its movement resolution is built (`_resolve_reposition_success`) — but has no dedicated `CmdBattle` telnet subcommand yet; that telnet grammar remains deferred. |
+| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 12 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action (it takes `action_kind` generically, with no per-kind branching) and the `battle declare breach\|fortify` telnet grammar (#1713). REPOSITION (#1714) is fully wired end-to-end (#2007): `DeclareBattleActionAction` forwards `reposition_dx`/`reposition_dy` (a pre-existing gap that made it silently inert above the service layer), and `CmdBattle`'s `battle declare reposition <place> <dx> <dy> with <technique>` subverb reaches it from telnet. |
 | `create_battle` | `CreateBattleAction` | SELF | GM (JUNIOR+) | Stages a new Battle, optionally from a catalog blueprint (#2010) — see [Staging (#2010)](#staging-2010) |
 | `stage_battle_map` | `StageBattleMapAction` | SELF | GM (JUNIOR+) | Clones a catalog blueprint's places/fortifications onto an existing Battle (#2010) |
 | `spawn_battle_units` | `SpawnBattleUnitsAction` | SELF | GM (JUNIOR+) | Spawns one or more `BattleUnit`s from a catalog unit template (#2010) |
@@ -706,7 +734,7 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
 | `BattleSideRole` | TextChoices | ATTACKER / DEFENDER |
 | `BattleUnitStatus` | TextChoices | ACTIVE / ROUTED / DESTROYED |
 | `BattleParticipantStatus` | TextChoices | ACTIVE / WITHDRAWN / INCAPACITATED |
-| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / SET_ENVIRONMENT (#1715) / REPOSITION (#1714) |
+| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / SET_ENVIRONMENT (#1715) / REPOSITION (#1714) / MOVE (#2007) |
 | `BattleOutcome` | TextChoices | UNRESOLVED / ATTACKER_DECISIVE / ATTACKER_MARGINAL / DEFENDER_MARGINAL / DEFENDER_DECISIVE |
 | `UnitQuality` | TextChoices | MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711) |
 | `TerrainType` | TextChoices | OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711) |
@@ -868,7 +896,7 @@ declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold 
 | What | Issue |
 |---|---|
 | Battle writeup / React page | partially built — the live strategic battle map (`/scenes/:id/battle`, [Web surface (#2009)](#web-surface-2009) below) shipped; a post-conclusion narrative writeup page is still deferred (#1735), and should reuse `BattleDetailSerializer`'s aggregate shape rather than authoring a second one |
-| Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating + movement resolution, hull-breach/living-mount-defeat ejection + drowning/falling hazard, see below); a player-facing embark action and a dedicated telnet `CmdBattle` subcommand for REPOSITION still deferred (#1714) |
+| Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating + movement resolution, hull-breach/living-mount-defeat ejection + drowning/falling hazard, see below; REPOSITION's telnet `CmdBattle` subcommand shipped with #2007); a player-facing embark action still deferred (#1714) |
 | Siege variants | **built, see [Sieges (#1713)](#sieges-1713) below** |
 
 Peril / rescue and the AFK knob are no longer deferred — see
@@ -890,11 +918,11 @@ below and `NotVehicleCommanderError` in [Exceptions](#exceptions-srcworldbattles
 Hull-breach and living-mount-defeat ejection, plus the drowning/falling hazard consequence, are
 also built — see the `eject_vehicle_occupants` row in
 [Services](#services-srcworldbattlesservicespy) above. Reposition movement resolution is also
-built — see `_resolve_reposition_success` in `world/battles/resolution.py`. A player-facing embark
-action (setting a unit/participant's `place` FK to a vehicle's place today requires direct model
-manipulation — no Action/telnet command exists) and a dedicated `CmdBattle` telnet subcommand for
-REPOSITION (the underlying `declare_battle_action`/`DeclareBattleActionAction` already supports
-REPOSITION generically) remain deferred (#1714).
+built — see `_resolve_reposition_success` in `world/battles/resolution.py`, and its `CmdBattle`
+telnet subcommand (`battle declare reposition <place> <dx> <dy> with <technique>`) shipped with
+#2007. A player-facing embark action (setting a unit/participant's `place` FK to a vehicle's
+place today requires direct model manipulation — no Action/telnet command exists) remains
+deferred (#1714).
 
 ## Command Hierarchy & the Champion (#1710)
 

@@ -3422,12 +3422,12 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   strength penalty unless they carry the matching `flying`/`aquatic` `Property`; real
   participants route damage through `resolve_damage_type_resistance` then
   `process_damage_consequences`. Reposition movement resolution is built
-  (`_resolve_reposition_success` in `resolution.py`); a player-facing embark action
-  (setting a unit/participant's `place` FK to a vehicle's place, today only doable
-  by direct model manipulation) and a dedicated telnet subcommand for REPOSITION
-  (the underlying `declare_battle_action`/`DeclareBattleActionAction` already
-  supports REPOSITION generically) remain deferred. See
-  [battles.md](battles.md#battlevehicle) for the full mechanism.
+  (`_resolve_reposition_success` in `resolution.py`), and its `CmdBattle` telnet
+  subcommand (`battle declare reposition <place> <dx> <dy> with <technique>`)
+  shipped with #2007; a player-facing embark action (setting a unit/participant's
+  `place` FK to a vehicle's place, today only doable by direct model manipulation)
+  remains deferred. See [battles.md](battles.md#battlevehicle) for the full
+  mechanism.
 - **REST/WS surface (#2009):** `BattleViewSet` (`IsAuthenticated`, scene-gated exactly like
   `CombatEncounterViewSet` — staff unfiltered, else `scene__in=Scene.objects.viewable_by`,
   404s a private battle rather than leaking a 403) exposes `GET /api/battles/` (list,
@@ -3473,15 +3473,15 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   for the full contract.
 - **Deferred follow-ups:** battle writeup page (#1735 — should reuse
   `BattleDetailSerializer`'s aggregate rather than authoring a second one; the live
-  strategic map itself shipped, #2009); naval/aerial embark actions
-  and a dedicated REPOSITION telnet subcommand remain deferred (#1714) — the vehicle
-  model, REPOSITION declaration and movement resolution, overlap-gated boarding, and
-  hull-breach/living-mount-defeat ejection are built (see the Vehicles subsection
-  above). Live narration of battle actions (any kind, not vehicle-specific)
-  is also unbuilt — `push_ephemeral_interaction` requires a player `persona` and
-  battle-linked Scenes are created with `location=None`, skipping room-based
-  broadcast entirely; see the narration-scope correction note in
-  [battles.md](battles.md#battlevehicle).
+  strategic map itself shipped, #2009); naval/aerial embark actions remain deferred
+  (#1714) — the vehicle model, REPOSITION declaration and movement resolution,
+  overlap-gated boarding, hull-breach/living-mount-defeat ejection, and REPOSITION's
+  telnet subcommand are built (see the Vehicles subsection above; the telnet gap
+  closed with #2007). Live narration of battle actions (any kind, not
+  vehicle-specific) is also unbuilt — `push_ephemeral_interaction` requires a
+  player `persona` and battle-linked Scenes are created with `location=None`,
+  skipping room-based broadcast entirely; see the narration-scope correction note
+  in [battles.md](battles.md#battlevehicle).
 - **Test coverage:** unit + integration tests in `src/world/battles/tests/`
   (including `test_siege.py`'s three E2E siege journeys, #1713, and
   `test_seed_staging_catalog.py`, #2010) and
