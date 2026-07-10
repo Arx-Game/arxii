@@ -871,6 +871,10 @@ class Beat(SharedMemoryModel):
     )
 
     # Predicate-type-specific config (nullable; populated based on predicate_type)
+    # These FKs are story-significant: a Beat must outlive the deletion of its
+    # config target. All are SET_NULL (never CASCADE) so deleting the referenced
+    # object nulls the FK rather than erasing the beat. Evaluators already return
+    # UNSATISFIED for a nulled config FK (services/beats.py).
     required_level = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -880,7 +884,7 @@ class Beat(SharedMemoryModel):
         "achievements.Achievement",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
         help_text="For ACHIEVEMENT_HELD predicates.",
     )
@@ -888,7 +892,7 @@ class Beat(SharedMemoryModel):
         "conditions.ConditionTemplate",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
         help_text="For CONDITION_HELD predicates.",
     )
@@ -896,7 +900,7 @@ class Beat(SharedMemoryModel):
         "codex.CodexEntry",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
         help_text="For CODEX_ENTRY_UNLOCKED predicates.",
     )
@@ -904,7 +908,7 @@ class Beat(SharedMemoryModel):
         "stories.Story",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="referenced_by_beats",
         help_text="For STORY_AT_MILESTONE predicates.",
     )
@@ -919,7 +923,7 @@ class Beat(SharedMemoryModel):
         "stories.Chapter",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
         help_text="For referenced_milestone_type=CHAPTER_REACHED.",
     )
@@ -927,7 +931,7 @@ class Beat(SharedMemoryModel):
         "stories.Episode",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
         help_text="For referenced_milestone_type=EPISODE_REACHED.",
     )
@@ -940,7 +944,7 @@ class Beat(SharedMemoryModel):
         "societies.Society",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
         help_text="For FACTION_STANDING_AT_LEAST predicates (society-level).",
     )
@@ -948,7 +952,7 @@ class Beat(SharedMemoryModel):
         "societies.Organization",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
         help_text="For FACTION_STANDING_AT_LEAST predicates (organization-level).",
     )
