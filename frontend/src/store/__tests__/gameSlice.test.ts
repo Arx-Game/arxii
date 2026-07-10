@@ -55,6 +55,7 @@ interface Session {
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
   threadLastSeen: Record<string, number>;
+  sceneBaselineId: number | null;
 }
 
 interface GameState {
@@ -71,6 +72,7 @@ const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   scene: null,
   sceneInteractions: [],
   threadLastSeen: {},
+  sceneBaselineId: null,
   ...overrides,
 });
 
@@ -1128,6 +1130,7 @@ describe('gameSlice', () => {
             scene: createSceneSummary(1, 'Battle', 'An epic battle', true),
             sceneInteractions: [],
             threadLastSeen: { room: 5 },
+            sceneBaselineId: null,
           },
         },
         active: 'Hero',

@@ -238,21 +238,39 @@ called `set_active_persona` directly (bypassing `action.run()`); telnet had no w
 
 ### Frontend UX (highest priority)
 
-> **Status correction (2026-07-10 audit, epic #2155):** much of this is now BUILT but
-> mounted only on `/scenes/:id`, not the live `/game` view — the two-surface split is
-> the core gap. See `docs/audits/2026-07-10-webclient-rp-ux-audit.md`; unifying the
-> surfaces is #2156.
+> **Status correction (2026-07-10 audit, epic #2155) — RESOLVED (#2156):** the
+> two-surface split flagged by the audit (built-on-`/scenes/:id`-only, absent from
+> `/game`) is closed. `GamePage` is now the composition root: it derives the active
+> session's scene, composes `useSceneInteractions` + `useThreading` once, and feeds
+> the result to `ConversationSidebar` (thread sidebar, unread badges, filter modal),
+> the center feed (chat-bubble `PoseUnit`s + `SystemLane`), and the scene toolset
+> (actions/places/consent/composer modes incl. tabletalk) — all on `/game`.
+> `/scenes/:id` remains the unchanged record/detail page (`SceneInteractionPanel`).
+> What was built: one-play-surface composition on `/game`; per-thread unread
+> backed by session last-seen (with a scene-load baseline scalar so mid-session
+> new threads badge correctly); `PoseUnit` restyled as avatar-bubble chat cards
+> (author, timestamp, prose, reactions — no monospace/terminal styling) with
+> avatar-click opening a `CharacterCardDrawer` in place (Friend/Whisper actions);
+> `viewer_is_present` on `PlaceSerializer`; pose co-location validation
+> (`submit-pose` rejects a pose into a located scene the actor isn't physically
+> in); and the `/game` places query fixed to key off the scene's room id rather
+> than the scene id. See `docs/systems/scenes.md` for the UI composition detail
+> and ADR-0111.
+>
+> The scene feed markdown gap the audit also flagged (`EvenniaMessage` never
+> parsing `RichTextInput`'s markdown) is closed by the same restyle: the
+> structured feed renders `FormattedContent`, not raw `EvenniaMessage`.
 
-- **Rich text editor** — BUILT & WIRED (`RichTextInput`: toolbar, shortcuts, color picker,
-  `@name` autocomplete) — but `/game`'s feed (`EvenniaMessage`) never parses the markdown it
-  produces (#2156 fold-in bug)
-- **Smart input composer** — PARTIAL: `ModeSelector` (pose/say/emit/whisper/tabletalk) +
-  action attachment exist but mount only on the scene page; tabletalk is hardcoded off
-  (`isAtPlace={false}` TODO); no audience-scope hint in the bare `/game` composer (#2156)
-- **Conversation threading** — BUILT (`useThreading`/`ThreadSidebar`/`ThreadFilterModal`,
-  grouping by whisper-set/place/target) but only on `/scenes/:id`; per-thread unread is
-  stubbed to 0; the live `/game` view renders a flat log with a placeholder
-  `ConversationSidebar` (#2156)
+- **Rich text editor** — DONE. `RichTextInput` (toolbar, shortcuts, color picker,
+  `@name` autocomplete) composes into scenes on `/game`; the feed renders it via
+  `FormattedContent`, not the legacy raw `EvenniaMessage` log
+- **Smart input composer** — DONE. `ModeSelector` (pose/say/emit/whisper/tabletalk)
+  plus action attachment mount on `/game`'s composer, wired to the same
+  `useSceneInteractions` session the feed and toolset share; tabletalk is live
+  (no longer hardcoded off)
+- **Conversation threading** — DONE. `useThreading`/`ThreadSidebar`/`ThreadFilterModal`
+  (grouping by whisper-set/place/target) render on `/game` via `ConversationSidebar`;
+  per-thread unread counts are backed by session last-seen, not stubbed to 0
 - **~~Scene scheduling and discovery~~** — Split into separate concerns:
   - **Events system** (`world/events`) — scheduled RP gatherings with calendar, invitations, room modifications. See [Events roadmap](events.md) and `docs/plans/2026-03-27-events-system-design.md`
   - **Grid presence** — "who's where" on public rooms for organic RP, future graphical map. Separate feature, not part of scenes or events

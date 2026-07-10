@@ -28853,6 +28853,8 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
       readonly presence_count: number;
+      /** @description Whether one of the requesting account's personas is present at this place (#2156). */
+      readonly viewer_is_present: boolean;
     };
     PlaceRequest: {
       name: string;

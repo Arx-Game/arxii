@@ -415,7 +415,7 @@ describe('PoseUnit', () => {
     const onAvatarClick = vi.fn();
     const interaction = makeInteraction({
       mode: 'action',
-      persona: { id: 10, name: 'Alice', thumbnail_url: null },
+      persona: { id: 10, name: 'Alice', thumbnail_url: undefined },
       action_links: [],
     });
 

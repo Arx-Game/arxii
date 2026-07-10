@@ -51142,11 +51142,17 @@ components:
         presence_count:
           type: integer
           readOnly: true
+        viewer_is_present:
+          type: boolean
+          description: Whether one of the requesting account's personas is present
+            at this place (#2156).
+          readOnly: true
       required:
       - created_at
       - id
       - name
       - presence_count
+      - viewer_is_present
     PlaceRequest:
       type: object
       properties:

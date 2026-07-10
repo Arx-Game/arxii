@@ -93,7 +93,7 @@ vi.mock('@/scenes/components/PendingActionAttachments', () => ({
   ),
 }));
 
-const mockFetchPlaces = vi.fn(() =>
+const mockFetchPlaces = vi.fn((_sceneId: string) =>
   Promise.resolve({
     results: [] as Array<{
       id: number;
