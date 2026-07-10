@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 # Seduce reuses the Seduction check but rolls one tier harder than Flirt (#1697).
 _SOCIAL_ACTION_TEMPLATES = [
     ("Intimidate", "Intimidation", "single", "skull", 0),
+    # Blackmail reuses the Intimidation check (coercion by threat), gated by the
+    # `blackmail` consent category and resolved by the defender's plausibility band; on
+    # success BlackmailAction mints Leverage founded on the pressed secret (#1680).
+    ("Blackmail", "Intimidation", "single", "lock", 0),
     ("Persuade", "Persuasion", "single", "handshake", 0),
     ("Deceive", "Deceive", "single", "mask", 0),
     ("Flirt", "Seduction", "single", "heart", 0),

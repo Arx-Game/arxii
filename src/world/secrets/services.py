@@ -482,3 +482,16 @@ def has_leverage(*, holder_sheet: CharacterSheet, subject_sheet: CharacterSheet)
     The read behind the ``has_leverage_over`` predicate leaf and the ``FAVOR`` offer gate.
     """
     return Leverage.objects.filter(holder_sheet=holder_sheet, subject_sheet=subject_sheet).exists()
+
+
+def character_knows_secret(*, knower_sheet: CharacterSheet, secret: Secret) -> bool:
+    """True if the character (by current tenure) holds knowledge of ``secret`` (#1680).
+
+    The ammo gate behind ``BlackmailAmmoPrerequisite`` — you can only press a secret you
+    actually know. ``SecretKnowledge`` is roster-scoped, so this resolves the sheet to its
+    current ``RosterEntry`` first (a sheet with no current tenure knows nothing).
+    """
+    roster_entry = _current_roster_entry_for(knower_sheet)
+    if roster_entry is None:
+        return False
+    return SecretKnowledge.objects.filter(roster_entry=roster_entry, secret=secret).exists()

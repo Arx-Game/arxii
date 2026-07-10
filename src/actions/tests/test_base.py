@@ -226,6 +226,7 @@ class ActionRegistryTests(TestCase):
             "deceive",
             "flirt",
             "seduce",
+            "blackmail",
             "perform",
             "entrance",
             "challenge",

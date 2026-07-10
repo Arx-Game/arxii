@@ -1,13 +1,14 @@
 """Consent seed — default SocialConsentCategory rows + ActionTemplate tagging (#1141).
 
-Seeds the four canonical social consent categories (Romantic, Hostile, Manipulative,
-General) and tags each social ActionTemplate with its category. Idempotent — all
-writes use ``get_or_create`` / ``update_fields``, so re-runs are no-ops and staff
+Seeds the canonical social consent categories (Romantic, Hostile, Blackmail,
+Manipulative, General) and tags each social ActionTemplate with its category. Idempotent
+— all writes use ``get_or_create`` / ``update_fields``, so re-runs are no-ops and staff
 edits to existing rows are preserved.
 
 Category → action mapping:
   Romantic     → Flirt
   Hostile      → Intimidate
+  Blackmail    → Blackmail (default_mode FRIENDS_WHITELIST — the opt-in antagonism default, #1680)
   Manipulative → Deceive, Persuade
   General      → Perform, Entrance, Restore to Sense
 """
@@ -16,34 +17,50 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.consent.constants import ConsentMode
+
 if TYPE_CHECKING:
     from world.consent.models import SocialConsentCategory
 
-# (key, name, description, display_order)
-_CATEGORIES: tuple[tuple[str, str, str, int], ...] = (
+# (key, name, description, display_order, default_mode)
+_CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
     (
         "romantic",
         "Romantic",
         "Flirtatious, romantic, or intimacy-adjacent social actions.",
         10,
+        ConsentMode.EVERYONE,
     ),
     (
         "hostile",
         "Hostile",
         "Threatening, coercive, or aggressive social actions.",
         20,
+        ConsentMode.EVERYONE,
+    ),
+    (
+        "blackmail",
+        "Blackmail",
+        "Coercion by threat of exposing a secret you hold about the target.",
+        25,
+        # Apostate's ratified opt-in default (#1680): only friends + whitelist may
+        # blackmail you unless you widen it. The register stays default-allow for the
+        # legacy categories; blackmail leads the antagonism categories to the new default.
+        ConsentMode.FRIENDS_WHITELIST,
     ),
     (
         "manipulative",
         "Manipulative",
         "Deceptive, persuasive, or psychologically influencing social actions.",
         30,
+        ConsentMode.EVERYONE,
     ),
     (
         "general",
         "General",
         "Public-facing social performances and recovery actions with broad audience.",
         40,
+        ConsentMode.EVERYONE,
     ),
 )
 
@@ -51,6 +68,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int], ...] = (
 _TEMPLATE_CATEGORY_MAP: dict[str, str] = {
     "Flirt": "romantic",
     "Intimidate": "hostile",
+    "Blackmail": "blackmail",
     "Deceive": "manipulative",
     "Persuade": "manipulative",
     "Perform": "general",
@@ -73,13 +91,14 @@ def seed_social_consent_categories() -> None:
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
 
     categories: dict[str, SocialConsentCategory] = {}
-    for key, name, description, display_order in _CATEGORIES:
+    for key, name, description, display_order, default_mode in _CATEGORIES:
         cat, _ = SocialConsentCategory.objects.get_or_create(
             key=key,
             defaults={
                 "name": name,
                 "description": description,
                 "display_order": display_order,
+                "default_mode": default_mode,
             },
         )
         categories[key] = cat
