@@ -1473,6 +1473,42 @@ def upsert_room_resonance_modifier(
     return row
 
 
+def set_room_stat_modifier(
+    room_profile: RoomProfile,
+    stat_key: StatKey,
+    *,
+    source: str,
+    value: int,
+) -> LocationValueModifier | None:
+    """Set the room-level ``(room_profile, stat_key, source)`` cascade row to ``value``.
+
+    Unlike :func:`upsert_room_resonance_modifier` (which *adds* a signed delta),
+    this *sets* an absolute magnitude — the natural shape for a source whose whole
+    contribution is recomputed from current state (e.g. a room feature's
+    ``level * per_level`` bonus). ``value == 0`` deletes the row, so an inactive
+    source leaves no trace in the cascade. ``change_per_day`` is 0 (permanent
+    while the source stands, overriding any per-stat decay default). Returns the
+    row, or ``None`` when the row is cleared.
+    """
+    base_filter = {
+        "parent_type": LocationParentType.ROOM,
+        "room_profile": room_profile,
+        "key_type": KeyType.STAT,
+        "stat_key": stat_key,
+        "source": source,
+    }
+    if value == 0:
+        LocationValueModifier.objects.filter(**base_filter).delete()
+        return None
+    row = LocationValueModifier.objects.select_for_update().filter(**base_filter).first()
+    if row is None:
+        return LocationValueModifier.objects.create(value=value, change_per_day=0, **base_filter)
+    if row.value != value:
+        row.value = value
+        row.save(update_fields=["value"])
+    return row
+
+
 def cleanup_decayed_modifiers(now: datetime | None = None) -> int:
     """Delete LocationValueModifier rows whose current_value() has
     decayed to zero.

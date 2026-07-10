@@ -1,1 +1,1 @@
-0008_add_zone_hazard_fields
+0009_alter_roomfeaturekind_service_strategy

@@ -10,7 +10,7 @@ The social hierarchy of the game world — from massive NPC-backed societies too
 - **Societies (large-scale):** Huge NPC-backed factions like the entire Umbros peerage or a magical tradition. Too big for any player to control — prevents bullying. Represent massive swaths of NPCs with shared principles
 - **Organizations (player-scale):** Noble houses, covens, adventuring companies, criminal gangs. Player-controllable with domains, armies, wealth, and power. Fit within larger societies
 - **Reputation system:** Characters build hidden reputation (-1000 to 1000) with societies and organizations, displayed as intuitive tiers. Actions, missions, and RP all affect reputation
-- **Legend:** Deeds and accomplishments tracked as LegendEntries with base value. Legend can be spread through retelling (LegendSpread) to increase its reach and impact
+- **Legend:** Deeds and accomplishments tracked as LegendEntries with base value. Legend can be spread through retelling (LegendSpread) to increase its reach and impact. Retelling reach scales with the room's traffic (`room_activity_band`), so an owner-upgradeable **Social Hub** room feature (#1694) draws bigger crowds and thereby wins more fame from deeds spread there
 - **Alter egos:** Characters can build reputation under masked/alternate identities. A sweet catgirl maid from Luxen might secretly be a terror in the underworld under her masked criminal name
 - **Political game:** Game of Thrones-style maneuvering between noble houses, societies, and factions. Territory control, alliances, betrayals
 - **Six principle axes:** Societies have values on 6 axes (-5 to +5), with organizations inheriting and optionally overriding them
