@@ -72,10 +72,13 @@ artist changes persona with an *identical* body; a curse changes the body and
   stays the real face's bio (presented by PRIMARY). `scenes.services.set_persona_profile` is the
   **sole mutator** (PRIMARY rejected; narrative text only — **lineage stays display-only**, every
   *mechanical* lineage read pinned to `true_profile` via the sheet's forwarding properties).
-  Authored on telnet via `persona profile <name> [concept=… quote=… personality=… background=…]`;
-  the web profile serializer already renders the *presented* face's profile cover-aware (slices
-  1–3), so a guise authored anywhere shows correctly — a dedicated **web authoring form** is the
-  remaining follow-up. (Telnet `@sheet` is self/staff-only, so a non-privileged viewer never sees
+  Authored on telnet via `persona profile <name> [concept=… quote=… personality=… background=…]`
+  and on the web (#1682) via `POST /api/personas/set-profile/` (`PersonaViewSet.set_profile` —
+  ownership-gated like set-active; absent fields stay untouched, blank fields clear), reached
+  from the persona switcher's "Edit guise sheet…" dialog (`GuiseSheetDialog`, prefilled from
+  the `guise_*` read fields now on `PersonaSerializer`). The web profile serializer renders the
+  *presented* face's profile cover-aware (slices 1–3), so a guise authored anywhere shows
+  correctly. (Telnet `@sheet` is self/staff-only, so a non-privileged viewer never sees
   another's cover there; the `<cover> (<real>)` reveal is a web-profile concern.)
 - **Named/public personas** (PRIMARY, ESTABLISHED) render **by name to everyone** —
   the accessibility guarantee.

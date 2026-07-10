@@ -21118,6 +21118,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/ActivePersonaResult'
           description: ''
+  /api/personas/set-profile/:
+    post:
+      operationId: personas_set_profile_create
+      description: |-
+        #1682 — author a cover persona's Guise Sheet from the web.
+
+        Wires the shipped #1270 service to the primary surface: the face must
+        be one of the played character's own personas (a foreign or unknown id
+        is rejected uniformly, mirroring set-active); PRIMARY is rejected by
+        the service (the real bio is the sheet's ``true_profile``). Absent
+        fields stay untouched (partial edits are safe); blank fields clear.
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPersonaProfileRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
   /api/personas/spread-specializations/:
     get:
       operationId: personas_spread_specializations_list
@@ -50633,9 +50661,25 @@ components:
             characters (#1181); the backend still enforces the full gate at dispatch.
             Defaults to True when there is no tenure or preference row.
           readOnly: true
+        guise_concept:
+          type: string
+          readOnly: true
+        guise_quote:
+          type: string
+          readOnly: true
+        guise_personality:
+          type: string
+          readOnly: true
+        guise_background:
+          type: string
+          readOnly: true
       required:
       - allow_social_actions
       - character_sheet
+      - guise_background
+      - guise_concept
+      - guise_personality
+      - guise_quote
       - id
       - name
       - roster_entry
@@ -54583,6 +54627,29 @@ components:
         persona_id:
           type: integer
           minimum: 1
+      required:
+      - persona_id
+    SetPersonaProfileRequestRequest:
+      type: object
+      description: |-
+        POST body for the #1682 set-profile endpoint — author a guise's bio.
+
+        Every bio field is optional and None-preserving: an ABSENT field leaves the
+        stored value untouched (the ``set_persona_profile`` contract, so partial
+        edits are safe), while a PRESENT-but-blank field explicitly clears it.
+      properties:
+        persona_id:
+          type: integer
+          minimum: 1
+        concept:
+          type: string
+          maxLength: 255
+        quote:
+          type: string
+        personality:
+          type: string
+        background:
+          type: string
       required:
       - persona_id
     SetRoundModeRequestRequest:

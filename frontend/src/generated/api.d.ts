@@ -12991,6 +12991,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/set-profile/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #1682 — author a cover persona's Guise Sheet from the web.
+     *
+     *     Wires the shipped #1270 service to the primary surface: the face must
+     *     be one of the played character's own personas (a foreign or unknown id
+     *     is rejected uniformly, mirroring set-active); PRIMARY is rejected by
+     *     the service (the real bio is the sheet's ``true_profile``). Absent
+     *     fields stay untouched (partial edits are safe); blank fields clear.
+     */
+    post: operations['personas_set_profile_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/spread-specializations/': {
     parameters: {
       query?: never;
@@ -28586,6 +28611,10 @@ export interface components {
        *     Defaults to True when there is no tenure or preference row.
        */
       readonly allow_social_actions: boolean;
+      readonly guise_concept: string;
+      readonly guise_quote: string;
+      readonly guise_personality: string;
+      readonly guise_background: string;
     };
     /**
      * @description One warrant row on the viewer's own crime tab — tiers only, never the raw number.
@@ -30462,6 +30491,20 @@ export interface components {
     /** @description POST body for the #981 set-active-persona endpoint. */
     SetActivePersonaRequestRequest: {
       persona_id: number;
+    };
+    /**
+     * @description POST body for the #1682 set-profile endpoint — author a guise's bio.
+     *
+     *     Every bio field is optional and None-preserving: an ABSENT field leaves the
+     *     stored value untouched (the ``set_persona_profile`` contract, so partial
+     *     edits are safe), while a PRESENT-but-blank field explicitly clears it.
+     */
+    SetPersonaProfileRequestRequest: {
+      persona_id: number;
+      concept?: string;
+      quote?: string;
+      personality?: string;
+      background?: string;
     };
     /**
      * @description POST body for the #1445 set-round-mode endpoint.
@@ -51351,6 +51394,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ActivePersonaResult'];
+        };
+      };
+    };
+  };
+  personas_set_profile_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetPersonaProfileRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
         };
       };
     };

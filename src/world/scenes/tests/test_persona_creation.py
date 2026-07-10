@@ -224,3 +224,72 @@ class CreatePersonaEndpointTests(TestCase):
             puppet=None,
         )
         assert resp.status_code == 400
+
+
+class SetPersonaProfileEndpointTests(TestCase):
+    """The #1682 set-profile endpoint — web authoring of a cover persona's Guise Sheet."""
+
+    URL = "/api/scenes/personas/set-profile/"
+
+    def setUp(self):
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.cover = create_persona(self.sheet, name="Cover Face", persona_type="established")
+        self.factory = APIRequestFactory()
+
+    def _post(self, body, *, puppet):
+        request = self.factory.post(self.URL, body, format="json")
+        user = SimpleNamespace(is_authenticated=True, is_staff=False, puppet=puppet)
+        force_authenticate(request, user=user)
+        return PersonaViewSet.as_view({"post": "set_profile"})(request)
+
+    def test_authors_the_guise_bio(self):
+        resp = self._post(
+            {
+                "persona_id": self.cover.pk,
+                "concept": "Wandering scholar",
+                "quote": "Knowledge owes no landlord.",
+            },
+            puppet=self.character,
+        )
+        assert resp.status_code == 200
+        self.cover.refresh_from_db()
+        assert self.cover.profile is not None
+        assert self.cover.profile.concept == "Wandering scholar"
+        assert self.cover.profile.quote == "Knowledge owes no landlord."
+
+    def test_partial_edit_preserves_other_fields(self):
+        set_persona_profile(self.cover, concept="Original", quote="Keep me")
+        resp = self._post(
+            {"persona_id": self.cover.pk, "concept": "Updated"}, puppet=self.character
+        )
+        assert resp.status_code == 200
+        self.cover.refresh_from_db()
+        assert self.cover.profile.concept == "Updated"
+        assert self.cover.profile.quote == "Keep me"
+
+    def test_blank_field_explicitly_clears(self):
+        set_persona_profile(self.cover, concept="Erase me")
+        resp = self._post({"persona_id": self.cover.pk, "concept": ""}, puppet=self.character)
+        assert resp.status_code == 200
+        self.cover.refresh_from_db()
+        assert self.cover.profile.concept == ""
+
+    def test_primary_rejected_with_user_message(self):
+        resp = self._post(
+            {"persona_id": self.sheet.primary_persona.pk, "concept": "nope"},
+            puppet=self.character,
+        )
+        assert resp.status_code == 400
+
+    def test_foreign_persona_rejected_uniformly(self):
+        other = CharacterSheetFactory()
+        foreign = create_persona(other, name="Not Yours", persona_type="established")
+        resp = self._post({"persona_id": foreign.pk, "concept": "hijack"}, puppet=self.character)
+        assert resp.status_code == 400
+        foreign.refresh_from_db()
+        assert foreign.profile is None
+
+    def test_no_played_character_400(self):
+        resp = self._post({"persona_id": self.cover.pk, "concept": "x"}, puppet=None)
+        assert resp.status_code == 400
