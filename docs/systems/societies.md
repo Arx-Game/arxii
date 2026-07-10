@@ -61,6 +61,15 @@ tier.range_description                       # "+250 to +499"
 | `LegendEntry` | A deed that earns legend for a persona | `persona`, `title`, `description`, `base_value`, `source_note`, `location_note`, `societies_aware` (M2M) |
 | `LegendSpread` | An instance of spreading/embellishing a deed | `legend_entry`, `spreader_persona`, `value_added`, `description`, `method`, `societies_reached` (M2M) |
 
+**Spreading a deed grows fame *and* prestige.** On a successful `spread_a_tale`
+retelling (`_resolve_spread_tale`), besides adding traffic-scaled legend, the deed
+subject's **fame** (`apply_spread_fame_bump` — fast, larger, and it decays) and
+**prestige** (`apply_spread_prestige_bump` — slow, smaller, permanent
+`prestige_from_deeds`; #2168) both grow, each scaled by the room's
+`room_activity_band` multiplier. A Social Hub (#1694) boosts that multiplier via
+room traffic, so it amplifies both. Fame tier separately acts as a display
+multiplier on prestige.
+
 **Audere Majora crossing → deed.** When a character completes an Audere Majora
 threshold crossing (`world/magic/audere_majora.py`), `_mint_crossing_deed` calls
 `fire_renown_award` using the threshold's authored `RenownAwardConfig` fields
