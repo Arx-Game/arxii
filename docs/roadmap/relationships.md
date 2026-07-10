@@ -31,6 +31,16 @@ Relationships are the heart of the game. A track-based system lets characters de
   telnet `relationship plus|neg <name>` (`rel/plus`, `rel/neg`) with backfill anchoring,
   and web valenced `ReactionEmoji` reactions (catalog endpoint `/api/reaction-emoji/`,
   catalog-driven scene footer). Shift sizes for Flirt/Seduce land with #1697.
+- **Automatic affection shifts + tier difficulty ladder (#1697, SHIPPED):**
+  `AffectionShift` + `apply_affection_shift` + the `SHIFT_AFFECTION` effect (Flirt +5 /
+  Seduce +50 PLACEHOLDER, first-per-scene-per-pair dedup — the generic valence-signed
+  family future offensive actions reuse with negative amounts); the affection-derived
+  social difficulty now reads its bands from the #1699 system-track tiers (one tier per
+  band, neutral = Normal); Smitten's teeth (`exploitable_tiers=2` easing checks against
+  the bearer, Melee Defense −10 `ConditionCheckModifier`, Force +100%
+  `ConditionDamageInteraction` riding #2018 — all PLACEHOLDER); the Attractive
+  distinction's allure grant (+2/rank PLACEHOLDER, `social_relationships` seed).
+  Surprise-attack semantics deliberately not built (combat design, TehomCD).
 - **Magic threads (new Thread model, Spec A):** Single `Thread` table with a discriminator
   and typed FKs per anchor kind. For relationships the two kinds are `RELATIONSHIP_TRACK`
   (anchored to a specific CharacterRelationship + track) and `RELATIONSHIP_CAPSTONE`

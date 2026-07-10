@@ -55,3 +55,7 @@ _Avoid_: like, rep, karma, rating, upvote (reactions are the *door*; the bump is
 **System track** (`RelationshipTrack.system_key`, #1699):
 One of the two seeded generic tracks — **Regard** (positive) and **Friction** (negative), names PLACEHOLDER — that ambient bumps write to, looked up by `TrackSystemKey` rather than name-string. Authored tracks (Friendship, Rivalry, …) have a null `system_key` and remain the deliberate layer players choose on the relationship screen.
 _Avoid_: default track, generic track (in code — "system track" is canonical), builtin track.
+
+**AffectionShift** (automatic affection shift, #1697):
+A social action's built-in regard consequence — the generic, valence-signed SHIFT_AFFECTION effect: on success, the TARGET's relationship toward the actor moves on the Regard/Friction system tracks (Flirt +5, Seduce +50, PLACEHOLDER; future consent-gated offensive actions carry negative amounts). One shift per (relationship, scene, effect) — the first success of a given action per scene per pair shifts, repeats no-op while conditions still refresh. Distinct from a Bump (the actor's own one-keystroke write) — a shift is done TO you by someone else's action, the grievance precedent generalized.
+_Avoid_: seduction bonus, auto-rep, per-action affection (it is per-scene-deduped), conflating with Bump.

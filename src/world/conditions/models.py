@@ -247,6 +247,19 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Number of rounds if duration_type is 'rounds'",
     )
 
+    # How many difficulty tiers EASIER checks against the bearer resolve while
+    # this condition is active (#1697): the "exploitable state" seam — Smitten
+    # eases social/scene actions rolled at its bearer by 2 tiers (PLACEHOLDER).
+    # 0 (the default) means the condition never eases anything. Consumed by
+    # world.scenes.social_difficulty.resolved_base_difficulty.
+    exploitable_tiers = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Difficulty tiers checks against the bearer are eased by while this "
+            "condition is active (0 = never eases; Smitten uses 2, PLACEHOLDER)."
+        ),
+    )
+
     # === Stacking Settings ===
     is_stackable = models.BooleanField(
         default=False,

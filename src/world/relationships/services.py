@@ -37,6 +37,7 @@ from world.relationships.exceptions import (
     WriteupNotVisibleError,
 )
 from world.relationships.models import (
+    AffectionShift,
     CharacterRelationship,
     RelationshipBump,
     RelationshipCapstone,
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
 
     from evennia_extensions.models import ObjectDB
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import ConsequenceEffect
     from world.checks.types import ModifierContribution
     from world.combat.models import CombatEncounter
     from world.relationships.constants import FirstImpressionColoring
@@ -370,6 +372,58 @@ def apply_relationship_bump(
     except IntegrityError:
         raise AlreadyAcknowledgedError from None
     return bump
+
+
+def apply_affection_shift(
+    *,
+    source: CharacterSheet,
+    target: CharacterSheet,
+    scene: Scene,
+    effect: ConsequenceEffect,
+    amount: int,
+) -> AffectionShift | None:
+    """Apply a social action's automatic affection shift, first-per-scene only (#1697).
+
+    Moves ``source``'s relationship toward ``target`` by ``amount`` on the
+    Regard (positive) or Friction (negative) system track, using the capstone
+    write-shape (capacity + developed together — the same as ambient bumps).
+    Returns ``None`` on the dedup no-op: only the first success of a given
+    effect per scene per pair shifts (the diminishing-returns rule); repeats
+    leave points untouched. Direction note: callers pass the social action's
+    TARGET as ``source`` — it is *their* regard for the actor that moves.
+    """
+    if amount == 0 or source.pk == target.pk:
+        return None
+    key = TrackSystemKey.REGARD if amount > 0 else TrackSystemKey.FRICTION
+    try:
+        track = RelationshipTrack.objects.get(system_key=key)
+    except RelationshipTrack.DoesNotExist:
+        raise SystemTracksNotSeededError from None
+    try:
+        with transaction.atomic():
+            relationship, _ = CharacterRelationship.objects.get_or_create(
+                source=source,
+                target=target,
+                defaults={"is_pending": True},
+            )
+            shift = AffectionShift.objects.create(
+                relationship=relationship,
+                scene=scene,
+                effect=effect,
+                amount=amount,
+            )
+            progress, _ = RelationshipTrackProgress.objects.select_for_update().get_or_create(
+                relationship=relationship,
+                track=track,
+                defaults={"capacity": 0, "developed_points": 0},
+            )
+            points = abs(amount)
+            progress.capacity += points
+            progress.developed_points += points
+            progress.save(update_fields=["capacity", "developed_points"])
+    except IntegrityError:
+        return None
+    return shift
 
 
 def _writeup_field_name(writeup) -> str:

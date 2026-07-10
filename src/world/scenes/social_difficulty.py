@@ -34,20 +34,46 @@ _TIER_ORDER = [
 ]
 _NORMAL_INDEX = _TIER_ORDER.index(DifficultyChoice.NORMAL)
 
-# PLACEHOLDER affection bands (signed track-point sum, target→actor).
-_WARM_AFFECTION = 100
-_VERY_HOSTILE_AFFECTION = -500
+# Fallback affection-band thresholds when the #1699 system-track tiers aren't
+# seeded (mirrors the relationship_scale seed values). PLACEHOLDER magnitudes.
+_FALLBACK_BAND_THRESHOLDS = [25, 100, 500, 2000]
+
+
+def _affection_band_thresholds(*, positive: bool) -> list[int]:
+    """The ladder's rungs: the system tracks' RelationshipTier thresholds (#1697/#1699).
+
+    Positive affection reads the Regard track's bands, negative the Friction
+    track's, so the difficulty ladder and the relationship screen share one
+    authored scale. Falls back to the seed constants when unseeded.
+    """
+    from world.relationships.constants import TrackSystemKey  # noqa: PLC0415
+    from world.relationships.models import RelationshipTier  # noqa: PLC0415
+
+    key = TrackSystemKey.REGARD if positive else TrackSystemKey.FRICTION
+    thresholds = list(
+        RelationshipTier.objects.filter(track__system_key=key)
+        .order_by("point_threshold")
+        .values_list("point_threshold", flat=True)
+    )
+    return thresholds or _FALLBACK_BAND_THRESHOLDS
 
 
 def _affection_base_index(affection: int) -> int:
-    """Map affection (target→actor) to a base difficulty-tier ordinal. PLACEHOLDER thresholds."""
-    if affection <= _VERY_HOSTILE_AFFECTION:
-        return _TIER_ORDER.index(DifficultyChoice.HARROWING)
-    if affection < 0:
-        return _TIER_ORDER.index(DifficultyChoice.HARD)
-    if affection >= _WARM_AFFECTION:
-        return _TIER_ORDER.index(DifficultyChoice.EASY)
-    return _NORMAL_INDEX
+    """Map affection (target→actor) to a base tier ordinal: one tier per band (#1697).
+
+    Neutral (0 — the stranger/NPC default) = NORMAL. Each positive band the
+    affection crosses eases one tier; each negative band crossed hardens one
+    tier; clamped to the tier range. Bands come from the seeded 25/100/500/2000
+    system-track ladder, so "how much they like you" reads off the same scale
+    players see on the relationship screen.
+    """
+    if affection == 0:
+        return _NORMAL_INDEX
+    thresholds = _affection_band_thresholds(positive=affection > 0)
+    magnitude = abs(affection)
+    crossed = sum(1 for threshold in thresholds if magnitude >= threshold)
+    shifted = _NORMAL_INDEX - crossed if affection > 0 else _NORMAL_INDEX + crossed
+    return max(0, min(len(_TIER_ORDER) - 1, shifted))
 
 
 def _affection_toward(perceiver: CharacterSheet, perceived: CharacterSheet) -> int:
@@ -55,6 +81,27 @@ def _affection_toward(perceiver: CharacterSheet, perceived: CharacterSheet) -> i
 
     relationship = CharacterRelationship.objects.filter(source=perceiver, target=perceived).first()
     return relationship.affection if relationship is not None else 0
+
+
+def _exploitable_easing(target_sheet: CharacterSheet) -> int:
+    """Max ``exploitable_tiers`` across the target's active conditions (#1697).
+
+    The Smitten seam: an exploitable state on the TARGET eases the roller's
+    difficulty by a data-configured tier count (max, not sum — two exploitable
+    conditions never stack). 0 when the target bears none or has no character.
+    """
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+    character = target_sheet.character
+    if character is None:
+        return 0
+    return max(
+        (
+            instance.condition.exploitable_tiers
+            for instance in get_active_conditions(character).select_related("condition")
+        ),
+        default=0,
+    )
 
 
 def resolved_base_difficulty(
@@ -73,12 +120,14 @@ def resolved_base_difficulty(
         return DIFFICULTY_VALUES[difficulty_choice]
 
     affection = 0
+    exploitable_easing = 0
     if target_sheet is not None:
         actor_sheet = action_request.initiator_persona.character_sheet
         affection = _affection_toward(target_sheet, actor_sheet)
+        exploitable_easing = _exploitable_easing(target_sheet)
 
     base_index = _affection_base_index(affection)
     defender_shift = _TIER_ORDER.index(DifficultyChoice(difficulty_choice)) - _NORMAL_INDEX
-    shifted = base_index + defender_shift + template.difficulty_tier_modifier
+    shifted = base_index + defender_shift + template.difficulty_tier_modifier - exploitable_easing
     final_index = max(0, min(len(_TIER_ORDER) - 1, shifted))
     return DIFFICULTY_VALUES[_TIER_ORDER[final_index]]

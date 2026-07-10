@@ -885,6 +885,54 @@ class RelationshipBump(SharedMemoryModel):
         return f"Bump {sign}1 on {self.relationship} @ interaction {self.interaction_id}"
 
 
+class AffectionShift(SharedMemoryModel):
+    """A social action's automatic affection shift on its target's regard (#1697).
+
+    The generic, valence-signed success consequence (SHIFT_AFFECTION): a
+    successful Flirt (+5) or Seduce (+50) — and future gated offensive actions
+    with negative amounts — moves the TARGET's relationship toward the actor
+    on the Regard/Friction system tracks. The unique constraint per
+    (relationship, scene, effect) is the diminishing-returns rule: only the
+    first success of a given effect per scene per pair shifts; repeats no-op
+    (conditions still refresh).
+    """
+
+    relationship = models.ForeignKey(
+        CharacterRelationship,
+        on_delete=models.CASCADE,
+        related_name="affection_shifts",
+        help_text="The directed (target→actor) relationship this shift moved",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.CASCADE,
+        related_name="affection_shifts",
+        help_text="The scene the shifting action resolved in (dedup key)",
+    )
+    effect = models.ForeignKey(
+        "checks.ConsequenceEffect",
+        on_delete=models.CASCADE,
+        related_name="affection_shifts",
+        help_text="The SHIFT_AFFECTION effect row that fired (dedup key + provenance)",
+    )
+    amount = models.IntegerField(
+        help_text="Signed points applied: positive → Regard, negative → Friction",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["relationship", "scene", "effect"],
+                name="unique_affection_shift_per_scene",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"AffectionShift {self.amount:+d} on {self.relationship} (scene {self.scene_id})"
+
+
 class RelationshipChange(SharedMemoryModel):
     """
     A narrative writeup that moves developed points from one track to another.
