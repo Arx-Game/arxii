@@ -28,6 +28,7 @@ import { JournalPage } from './missions/pages/JournalPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import { CombatScenePage } from './combat/pages/CombatScenePage';
 import { BattleMapPage } from './battles/pages/BattleMapPage';
+import { BattleWriteupPage } from './battles/pages/BattleWriteupPage';
 import MailPage from './mail/pages/MailPage';
 import { XpKudosPage } from './progression/XpKudosPage';
 import { EventsListPage } from '@/events/pages/EventsListPage';
@@ -326,6 +327,7 @@ function App() {
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
         <Route path="/scenes/:id/combat" element={<CombatScenePage />} />
         <Route path="/scenes/:id/battle" element={<BattleMapPage />} />
+        <Route path="/battles/:id" element={<BattleWriteupPage />} />
         <Route path="/events" element={<EventsListPage />} />
         <Route
           path="/events/new"
