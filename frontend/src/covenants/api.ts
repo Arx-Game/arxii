@@ -32,6 +32,8 @@ export interface ViewerCapabilities {
   can_invite: boolean;
   can_kick: boolean;
   can_manage_ranks: boolean;
+  /** May post an open ask for a GM to run a story for this covenant (#2119). */
+  can_request_gm: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -412,4 +414,105 @@ export async function reorderRanks(
   });
   if (!res.ok) await readErrorDetail(res, 'Failed to reorder ranks');
   return res.json() as Promise<CovenantRank[]>;
+}
+
+// ---------------------------------------------------------------------------
+// GroupStoryRequest (#2119) — player->GM recruitment loop
+// ---------------------------------------------------------------------------
+//
+// Hand-authored (not generated) — same reasoning as the block above: this is
+// a brand-new model/serializer/viewset, and regenerating the shared schema
+// file on this branch risks colliding with unrelated in-flight branches.
+// Mutation goes exclusively through the generic action-dispatch endpoint
+// (POST /api/actions/characters/{id}/dispatch/, see @/combat/api's
+// postDispatchAction) — never a bespoke @action here (Decision 8, #2119).
+
+export type GroupStoryRequestStatus = 'pending' | 'accepted' | 'withdrawn';
+
+/** One GroupStoryRequest row, from GET /api/group-story-requests/. */
+export interface GroupStoryRequest {
+  id: number;
+  covenant: number;
+  requested_by_account: number;
+  message: string;
+  status: GroupStoryRequestStatus;
+  claimed_by: number | null;
+  created_story: number | null;
+  created_at: string;
+  responded_at: string | null;
+  updated_at: string;
+}
+
+export interface PaginatedGroupStoryRequestList {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: GroupStoryRequest[];
+}
+
+const GROUP_STORY_REQUESTS_URL = '/api/group-story-requests';
+
+/**
+ * GET /api/group-story-requests/?covenant={covenantId}&status=pending
+ * Returns the covenant's current open (PENDING) request, if any.
+ */
+export async function getPendingGroupStoryRequestForCovenant(
+  covenantId: number
+): Promise<GroupStoryRequest | null> {
+  const res = await apiFetch(`${GROUP_STORY_REQUESTS_URL}/?covenant=${covenantId}&status=pending`);
+  if (!res.ok) throw new Error(`Failed to load GM requests for covenant ${covenantId}`);
+  const data = (await res.json()) as PaginatedGroupStoryRequestList;
+  return data.results[0] ?? null;
+}
+
+/** Shape of a dispatch-endpoint error/success body, local to this module. */
+async function dispatchDetail(res: Response): Promise<string | undefined> {
+  try {
+    const data = (await res.json()) as { detail?: string; message?: string | null };
+    return data.detail ?? data.message ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Dispatch RequestGMForCovenantAction as the actor's own character
+ * (actorCharacterId is the ObjectDB pk — doubles as the character_sheet pk,
+ * since CharacterSheet.character is a primary_key=True OneToOneField).
+ * Mirrors the generic-dispatch pattern in @/game/api/roomEditor.ts.
+ */
+export async function requestGMForCovenant(
+  actorCharacterId: number,
+  covenantId: number,
+  message: string
+): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${actorCharacterId}/dispatch/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'request_gm_for_covenant' },
+      kwargs: { covenant_id: covenantId, message },
+    }),
+  });
+  const detail = await dispatchDetail(res);
+  if (!res.ok) throw new Error(detail ?? 'Failed to post the GM request.');
+  return detail ?? 'GM request posted.';
+}
+
+/** Dispatch WithdrawGroupStoryRequestAction as the actor's own character. */
+export async function withdrawGroupStoryRequest(
+  actorCharacterId: number,
+  requestId: number
+): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${actorCharacterId}/dispatch/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'withdraw_group_story_request' },
+      kwargs: { request_id: requestId },
+    }),
+  });
+  const detail = await dispatchDetail(res);
+  if (!res.ok) throw new Error(detail ?? 'Failed to withdraw the GM request.');
+  return detail ?? 'GM request withdrawn.';
 }

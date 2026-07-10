@@ -20,6 +20,7 @@ export const covenantKeys = {
   powers: (covenantId: number) => [...covenantKeys.all, 'powers', covenantId] as const,
   subroles: (parentRoleId: number) => [...covenantKeys.all, 'subroles', parentRoleId] as const,
   ranks: (covenantId: number) => [...covenantKeys.all, 'ranks', covenantId] as const,
+  gmRequest: (covenantId: number) => [...covenantKeys.all, 'gm-request', covenantId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -71,6 +72,19 @@ export function useSubroles(parentRoleId: number | null) {
     queryFn: () => api.getCovenantRoles({ parent_role: parentRoleId as number }),
     enabled: parentRoleId != null,
     throwOnError: true,
+  });
+}
+
+/**
+ * The covenant's current open (PENDING) ask for a GM, if any (#2119).
+ * Returns null when there is none — not an error state.
+ */
+export function useCovenantGroupStoryRequest(covenantId: number) {
+  return useQuery({
+    queryKey: covenantKeys.gmRequest(covenantId),
+    queryFn: () => api.getPendingGroupStoryRequestForCovenant(covenantId),
+    enabled: covenantId > 0,
+    throwOnError: false,
   });
 }
 
@@ -229,6 +243,38 @@ export function useReorderRanks(covenantId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: covenantKeys.ranks(covenantId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// GroupStoryRequest mutations (#2119) — dispatch through the generic
+// action-dispatch endpoint (Decision 8), never a bespoke @action.
+// ---------------------------------------------------------------------------
+
+/**
+ * Post an open ask for a GM for this covenant.
+ * Dispatches RequestGMForCovenantAction as the actor's OWN character
+ * (actorCharacterId is the ObjectDB pk — doubles as the character_sheet pk).
+ */
+export function useRequestGMForCovenant(covenantId: number, actorCharacterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (message: string) =>
+      api.requestGMForCovenant(actorCharacterId, covenantId, message),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.gmRequest(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+/** Withdraw the covenant's pending open ask for a GM. */
+export function useWithdrawGroupStoryRequest(covenantId: number, actorCharacterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (requestId: number) => api.withdrawGroupStoryRequest(actorCharacterId, requestId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.gmRequest(covenantId) }).catch(() => {});
     },
   });
 }

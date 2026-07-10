@@ -65,8 +65,18 @@ The combat-power axis of membership: a role's archetype (Sword / Shield / Crown)
 _Avoid_: rank, position, office.
 
 **Covenant Rank**:
-The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
+The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.
+
+**GM Request (rank capability)**:
+`CovenantRank.can_request_gm` (#2119) — the authority to post an open, broadcast
+`GroupStoryRequest` asking any registered GM to run a story for the covenant.
+Deliberately a *separate* flag from `can_invite`: admitting a member into the
+covenant and petitioning an outside GM for oversight are different decisions,
+and conflating them would let a recruiter unilaterally commit the covenant to
+outside authority. See `world/stories/AGENT_GLOSSARY.md`'s "Group Story
+Request" for the request lifecycle this flag gates.
+_Avoid_: can_invite (a distinct, narrower authority — see above), recruiter flag.
 
 **Command Tier**:
 The battle-command hierarchy axis of a `CovenantRole` (`command_tier`, #1710) — a

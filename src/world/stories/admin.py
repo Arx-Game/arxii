@@ -17,6 +17,7 @@ from world.stories.models import (
     Era,
     GlobalStoryProgress,
     GroupStoryProgress,
+    GroupStoryRequest,
     PlayerTrustLevel,
     RiskCalibration,
     SessionRequest,
@@ -551,6 +552,19 @@ class StoryGMOfferAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("created_at", "updated_at", "responded_at")
     raw_id_fields = ("story", "offered_to", "offered_by_account")
+
+
+@admin.register(GroupStoryRequest)
+class GroupStoryRequestAdmin(admin.ModelAdmin):
+    list_display = ("covenant", "requested_by_account", "status", "claimed_by", "created_at")
+    list_filter = ("status",)
+    search_fields = (
+        "covenant__name",
+        "requested_by_account__username",
+        "claimed_by__account__username",
+    )
+    readonly_fields = ("created_at", "updated_at", "responded_at")
+    raw_id_fields = ("covenant", "requested_by_account", "claimed_by", "created_story")
 
 
 @admin.register(AssistantGMClaim)

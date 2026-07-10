@@ -89,6 +89,12 @@ vi.mock('@/covenants/components/RankManagementPanel', () => ({
   ),
 }));
 
+vi.mock('@/covenants/components/GroupStoryRequestPanel', () => ({
+  GroupStoryRequestPanel: (props: { covenantId: number }) => (
+    <div data-testid="group-story-request-panel">gm-request:{props.covenantId}</div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock Redux auth — provide a puppeted character for characterSheetId
 // ---------------------------------------------------------------------------

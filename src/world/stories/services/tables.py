@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import transaction
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from world.gm.constants import GMTableStatus
 from world.gm.models import GMProfile, GMTable
-from world.stories.constants import StoryGMOfferStatus, StoryScope
-from world.stories.exceptions import StoryGMOfferError
-from world.stories.models import Story, StoryGMOffer
+from world.stories.constants import GroupStoryRequestStatus, StoryGMOfferStatus, StoryScope
+from world.stories.exceptions import GroupStoryRequestError, StoryGMOfferError
+from world.stories.models import GroupStoryProgress, GroupStoryRequest, Story, StoryGMOffer
+
+if TYPE_CHECKING:
+    from world.covenants.models import Covenant
 
 # Notification kind constants for _send_offer_notification — internal identifiers only.
 _KIND_CREATED = "created"
@@ -193,3 +198,156 @@ def _send_offer_notification(offer: StoryGMOffer, *, kind: str) -> None:
         from world.player_submissions.services import report_error  # noqa: PLC0415
 
         report_error(exc, label="story_offer_notification")
+
+
+# ---------------------------------------------------------------------------
+# #2119 — GroupStoryRequest lifecycle: covenant-scoped broadcast GM asks.
+# ---------------------------------------------------------------------------
+
+
+def request_gm_for_covenant(
+    *,
+    covenant: Covenant,
+    requested_by_account: AccountDB,
+    message: str = "",
+) -> GroupStoryRequest:
+    """Post an open, broadcast ask for a GM to run a story for this covenant.
+
+    Pre-conditions (validated by caller; service performs defensive checks):
+    - covenant is not dissolved.
+
+    A DB-level partial unique constraint prevents a second PENDING request
+    for the same covenant; IntegrityError will surface if violated — the
+    service does not pre-check it (mirrors offer_story_to_gm).
+    """
+    if covenant.dissolved_at is not None:
+        msg = "A dissolved covenant cannot request a GM."
+        raise GroupStoryRequestError(msg)
+    return GroupStoryRequest.objects.create(
+        covenant=covenant,
+        requested_by_account=requested_by_account,
+        message=message,
+    )
+
+
+@transaction.atomic
+def claim_group_story_request(
+    *,
+    request: GroupStoryRequest,
+    gm_profile: GMProfile,
+    table: GMTable | None = None,
+    title: str = "",
+    description: str = "",
+) -> GroupStoryRequest:
+    """GM claims a covenant's open request: creates the GROUP-scope Story and
+    seats the covenant's active members at the GM's table in one step.
+
+    Raises GroupStoryRequestError if the request is not PENDING or the GM
+    has no ACTIVE table to receive it (table defaults to the GM's first
+    ACTIVE table, mirroring accept_story_offer).
+
+    Seating is best-effort: a TEMPORARY-persona rejection from join_table()
+    for one member does not fail the whole claim (Decision 4).
+    """
+    if request.status != GroupStoryRequestStatus.PENDING:
+        msg = "This request is no longer pending and cannot be claimed."
+        raise GroupStoryRequestError(msg)
+    table = table or gm_profile.tables.filter(status=GMTableStatus.ACTIVE).first()
+    if table is None:
+        msg = "You have no active table to run this story at."
+        raise GroupStoryRequestError(msg)
+
+    covenant = request.covenant
+    story = Story.objects.create(
+        scope=StoryScope.GROUP,
+        covenant=covenant,
+        primary_table=table,
+        title=title or f"{covenant.name}: a story begins",
+        description=description,
+    )
+    GroupStoryProgress.objects.create(story=story, gm_table=table)
+    _seat_covenant_members(covenant=covenant, table=table)
+
+    request.status = GroupStoryRequestStatus.ACCEPTED
+    request.claimed_by = gm_profile
+    request.created_story = story
+    request.responded_at = timezone.now()
+    request.save(
+        update_fields=["status", "claimed_by", "created_story", "responded_at", "updated_at"]
+    )
+    _send_group_request_claimed_notification(request)
+    return request
+
+
+def withdraw_group_story_request(*, request: GroupStoryRequest) -> GroupStoryRequest:
+    """Covenant officer rescinds a pending request."""
+    if request.status != GroupStoryRequestStatus.PENDING:
+        msg = "This request is no longer pending and cannot be withdrawn."
+        raise GroupStoryRequestError(msg)
+    with transaction.atomic():
+        request.status = GroupStoryRequestStatus.WITHDRAWN
+        request.responded_at = timezone.now()
+        request.save(update_fields=["status", "responded_at", "updated_at"])
+    return request
+
+
+def _seat_covenant_members(*, covenant: Covenant, table: GMTable) -> None:
+    """Best-effort seat every active covenant member's active persona at *table*.
+
+    Walks active CharacterCovenantRole rows, resolves each to
+    active_persona_for_sheet(), and calls the existing join_table() per
+    persona (Decision 4 — no covenant field on GMTableMembership; per-persona
+    rows achieve "join as a unit"). join_table() already rejects TEMPORARY
+    personas via ValidationError; that rejection is swallowed per-member so
+    one member's mask doesn't fail the whole claim.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+    from world.gm.services import join_table  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    active_roles = CharacterCovenantRole.objects.filter(
+        covenant=covenant, left_at__isnull=True
+    ).select_related("character_sheet")
+    for role in active_roles:
+        persona = active_persona_for_sheet(role.character_sheet)
+        try:
+            join_table(table, persona)
+        except ValidationError:
+            continue
+
+
+def _send_group_request_claimed_notification(request: GroupStoryRequest) -> None:
+    """Best-effort notify the covenant officer who authored the request of the claim."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    character_sheet = (
+        CharacterSheet.objects.filter(
+            character__db_account=request.requested_by_account,
+            personas__persona_type=PersonaType.PRIMARY,
+        )
+        .select_related("character")
+        .first()
+    )
+    if character_sheet is None:
+        # No resolvable character sheet — skip notification gracefully.
+        return
+    covenant = request.covenant
+    story = request.created_story
+    body = f"Your GM request for {covenant.name} has been claimed — '{story.title}' begins."
+    try:
+        send_narrative_message(
+            recipients=[character_sheet],
+            body=body,
+            category=NarrativeCategory.SYSTEM,
+            sender_account=None,
+            related_story=story,
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort notify; capture, don't propagate
+        from world.player_submissions.services import report_error  # noqa: PLC0415
+
+        report_error(exc, label="group_story_request_notification")

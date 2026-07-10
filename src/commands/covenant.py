@@ -8,6 +8,7 @@ No business logic lives here: parse, resolve model instances, call Action.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
@@ -31,6 +32,8 @@ class CmdCovenant(ArxCommand):
         covenant rank <char> <rank> [in <covenant>]
         covenant transfer <char> [in <covenant>]
         covenant standdown [<covenant>]
+        covenant request-gm <message> [in <covenant>]
+        covenant withdraw-gm-request [in <covenant>]
 
     Bare ``covenant`` shows your current memberships. Supply the covenant
     name when you belong to more than one.
@@ -60,23 +63,27 @@ class CmdCovenant(ArxCommand):
 
         if first == "list":  # noqa: STRING_LITERAL
             self._list()
-        elif first == "engage":  # noqa: STRING_LITERAL
-            self._engage(rest)
-        elif first == "disengage":  # noqa: STRING_LITERAL
-            self._disengage(rest)
-        elif first == "leave":  # noqa: STRING_LITERAL
-            self._leave(rest)
-        elif first == "kick":  # noqa: STRING_LITERAL
-            self._kick(rest)
-        elif first == "rank":  # noqa: STRING_LITERAL
-            self._rank(rest)
-        elif first == "transfer":  # noqa: STRING_LITERAL
-            self._transfer(rest)
-        elif first == "standdown":  # noqa: STRING_LITERAL
-            self._standdown(rest)
-        else:
-            msg = "Usage: covenant [list|engage|disengage|leave|kick|rank|transfer|standdown] ..."
+            return
+
+        handlers: dict[str, Callable[[list[str]], None]] = {
+            "engage": self._engage,
+            "disengage": self._disengage,
+            "leave": self._leave,
+            "kick": self._kick,
+            "rank": self._rank,
+            "transfer": self._transfer,
+            "standdown": self._standdown,
+            "request-gm": self._request_gm,
+            "withdraw-gm-request": self._withdraw_gm_request,
+        }
+        handler = handlers.get(first)
+        if handler is None:
+            msg = (
+                "Usage: covenant [list|engage|disengage|leave|kick|rank|transfer|standdown|"
+                "request-gm|withdraw-gm-request] ..."
+            )
             raise CommandError(msg)
+        handler(rest)
 
     # ------------------------------------------------------------------
     # Resolution helpers
@@ -295,4 +302,33 @@ class CmdCovenant(ArxCommand):
         result = StandDownBattleCovenantAction().run(
             actor=self.caller, covenant=membership.covenant
         )
+        self._send(result)
+
+    def _request_gm(self, rest: list[str]) -> None:
+        """``covenant request-gm <message> [in <covenant>]`` (#2119)."""
+        from actions.definitions.gm_stories import RequestGMForCovenantAction  # noqa: PLC0415
+
+        rest, covenant_name = self._parse_in_covenant(rest)
+        message = " ".join(rest).strip()
+        membership = self._resolve_covenant(covenant_name)
+        result = RequestGMForCovenantAction().run(
+            actor=self.caller, covenant_id=membership.covenant_id, message=message
+        )
+        self._send(result)
+
+    def _withdraw_gm_request(self, rest: list[str]) -> None:
+        """``covenant withdraw-gm-request [in <covenant>]`` (#2119)."""
+        from actions.definitions.gm_stories import WithdrawGroupStoryRequestAction  # noqa: PLC0415
+        from world.stories.constants import GroupStoryRequestStatus  # noqa: PLC0415
+        from world.stories.models import GroupStoryRequest  # noqa: PLC0415
+
+        rest, covenant_name = self._parse_in_covenant(rest)
+        membership = self._resolve_covenant(covenant_name)
+        pending = GroupStoryRequest.objects.filter(
+            covenant=membership.covenant, status=GroupStoryRequestStatus.PENDING
+        ).first()
+        if pending is None:
+            msg = "That covenant has no open request for a GM."
+            raise CommandError(msg)
+        result = WithdrawGroupStoryRequestAction().run(actor=self.caller, request_id=pending.pk)
         self._send(result)

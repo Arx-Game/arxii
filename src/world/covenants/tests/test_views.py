@@ -712,10 +712,12 @@ class CharacterCovenantRoleRankFieldTests(CovenantsViewTestCase):
         self.assertIn("can_invite", caps)
         self.assertIn("can_kick", caps)
         self.assertIn("can_manage_ranks", caps)
+        self.assertIn("can_request_gm", caps)
         # The user's own rank is the manager rank — all caps True.
         self.assertTrue(caps["can_invite"])
         self.assertTrue(caps["can_kick"])
         self.assertTrue(caps["can_manage_ranks"])
+        self.assertTrue(caps["can_request_gm"])
 
     def test_is_leadership_absent_from_membership_payload(self) -> None:
         """The CharacterCovenantRoleSerializer must NOT expose is_leadership."""

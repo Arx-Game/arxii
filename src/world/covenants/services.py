@@ -342,6 +342,35 @@ def can_invite_to_covenant(
     return qs.exists()
 
 
+def can_request_gm_for_covenant(
+    covenant: Covenant,
+    *,
+    character_sheet: CharacterSheet | None = None,
+    account: AccountDB | None = None,
+) -> bool:
+    """Return True if an active member with a can_request_gm rank grants that authority.
+
+    Mirrors ``can_invite_to_covenant`` line for line (#2119) — deliberately a
+    separate flag rather than reusing ``can_invite``: inviting members into
+    the covenant and petitioning an outside GM are different authorities, and
+    conflating them would let a recruiter unilaterally commit the covenant to
+    outside oversight.
+    """
+    qs = CharacterCovenantRole.objects.filter(
+        covenant=covenant,
+        left_at__isnull=True,
+        rank__can_request_gm=True,
+    )
+    if character_sheet is not None:
+        qs = qs.filter(character_sheet=character_sheet)
+    if account is not None:
+        qs = qs.filter(
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+            character_sheet__roster_entry__tenures__player_data__account=account,
+        )
+    return qs.exists()
+
+
 @transaction.atomic
 def change_role(
     *,

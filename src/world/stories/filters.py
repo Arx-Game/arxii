@@ -14,6 +14,7 @@ from world.stories.models import (
     Era,
     GlobalStoryProgress,
     GroupStoryProgress,
+    GroupStoryRequest,
     PlayerTrust,
     PlayerTrustLevel,
     SessionRequest,
@@ -458,6 +459,18 @@ class StoryGMOfferFilter(django_filters.FilterSet):
     class Meta:
         model = StoryGMOffer
         fields = ["story", "offered_to", "offered_by_account", "status"]
+
+
+class GroupStoryRequestFilter(django_filters.FilterSet):
+    """Filter for GroupStoryRequest model (#2119)."""
+
+    covenant = django_filters.NumberFilter(field_name="covenant_id")
+    status = django_filters.CharFilter(field_name="status")
+    claimed_by = django_filters.NumberFilter(field_name="claimed_by_id")
+
+    class Meta:
+        model = GroupStoryRequest
+        fields = ["covenant", "status", "claimed_by"]
 
 
 class SessionRequestFilter(django_filters.FilterSet):

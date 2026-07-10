@@ -1,1 +1,1 @@
-0025_vow_scaling_models
+0026_covenantrank_can_request_gm

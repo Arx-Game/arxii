@@ -748,6 +748,74 @@ be performed by an approved Assistant GM for that beat.
 | `story mark <beat-id> <success|failure> [notes]` | `mark_beat` | Record a GM-marked outcome on a beat. |
 | `story surrender <story-id>` | — (service-direct) | GM surrenders oversight; story enters "seeking GM" (#2004). |
 
+## Player→GM recruitment loop (#2119)
+
+A covenant that wants a GM has a discoverable action, web or telnet: an officer posts an
+open, **broadcast** ask (`GroupStoryRequest`), any registered GM sees it in their queue and
+claims it, and claiming creates the GROUP-scope `Story` and seats the covenant's active
+members at the claiming GM's table in one step. This is deliberately not an extension of
+`StoryGMOffer` — that model is a *directed* offer of a pre-existing player-owned CHARACTER
+story to one specific GM; a covenant ask has no story yet and is broadcast to the whole GM
+pool.
+
+**Model** (`world.stories.models.GroupStoryRequest`): `covenant` FK → `covenants.Covenant`
+(CASCADE), `requested_by_account` FK, `message` (broadcast pitch text), `status`
+(`GroupStoryRequestStatus`: PENDING/ACCEPTED/WITHDRAWN — no DECLINED, since an open
+broadcast has no single decliner), `claimed_by` FK → `gm.GMProfile` (nullable, SET_NULL),
+`created_story` FK → `Story` (nullable, SET_NULL), `created_at`/`responded_at`/`updated_at`.
+A partial-unique constraint enforces one PENDING request per covenant at a time; the
+service layer does not pre-check it — `IntegrityError` is the contract (mirrors
+`StoryGMOffer`'s per-(story, GM) constraint).
+
+**Authoring gate:** `covenants.CovenantRank.can_request_gm` (new rank flag, mirrors
+`can_lead_rituals`) — deliberately a separate authority from `can_invite`, since admitting
+a member and petitioning an outside GM for oversight are different decisions. Checked via
+`covenants.services.can_request_gm_for_covenant(covenant, *, character_sheet=None,
+account=None)`, the same shape as `can_invite_to_covenant`.
+
+**Services** (`world.stories.services.tables`):
+- `request_gm_for_covenant(*, covenant, requested_by_account, message="") ->
+  GroupStoryRequest` — rejects a dissolved covenant.
+- `claim_group_story_request(*, request, gm_profile, table=None, title="", description="")
+  -> GroupStoryRequest` — `table` defaults to the GM's first ACTIVE table (mirrors
+  `accept_story_offer`); creates `Story(scope=GROUP, covenant=request.covenant,
+  primary_table=table, ...)` + `GroupStoryProgress`; walks the covenant's active
+  `CharacterCovenantRole` rows, resolves each to `active_persona_for_sheet()`, and calls the
+  existing `gm.services.join_table()` per persona — **no schema change to
+  `GMTableMembership`**, which stays deliberately persona-anchored (#2119 Decision 4).
+  Seating is best-effort: a `ValidationError` from `join_table()` (TEMPORARY active persona)
+  is swallowed per-member rather than failing the whole claim. Sends a narrative
+  notification to the requesting account.
+- `withdraw_group_story_request(*, request) -> GroupStoryRequest` — PENDING → WITHDRAWN only.
+
+**Actions** (`actions/definitions/gm_stories.py`, REGISTRY backend, `target_type=SELF`,
+`costs_turn=False`): `RequestGMForCovenantAction` (`covenant_id`, `message`),
+`ClaimGroupStoryRequestAction` (`request_id`, optional `table_id`/`title`/`description`),
+`WithdrawGroupStoryRequestAction` (`request_id`). Registered in `actions/registry.py`.
+Reachable identically from web (`POST /api/actions/characters/<id>/dispatch/`) and telnet
+(`Action().run()`) — deliberately **not** a bespoke DRF `@action`, unlike `StoryGMOffer
+.accept/decline/withdraw`, which is precisely why `StoryGMOffer` has no telnet verb.
+
+**Web:** `GroupStoryRequestViewSet` (`GET /api/group-story-requests/`, read-only —
+mutation goes exclusively through the dispatch endpoint). Queryset scoping: staff see
+all; a GM sees the PENDING queue (any covenant) plus requests they claimed; everyone else
+sees only requests for covenants where they hold an active `CharacterCovenantRole`.
+`GMQueueView`/`GMDashboardView` gain `open_group_requests` — all PENDING requests,
+visible to **any** `IsGMProfile`, not scoped to the GM's existing tables (the discovery
+surface a brand-new GM uses to find their first table).
+
+**Telnet:** `commands/covenant.py` — `covenant request-gm <message> [in <covenant>]`,
+`covenant withdraw-gm-request [in <covenant>]`. `commands/gm_ops.py`'s `gm dashboard`
+gains an "Open group requests: N" line (`[id] <covenant name>`); `gm claim <request-id>`
+dispatches `ClaimGroupStoryRequestAction`.
+
+**Leak analysis** (binding — see the issue's spec for the full table): the request
+`message` is broadcast to the whole (staff-vetted) GM pool, same trust posture as other
+GM-queue fields. Auto-created `GMTableMembership` rows on claim are GM-unilateral — a
+pre-existing gap (`join_table`), not widened here; a member can `gmtable leave` /
+`covenant leave` afterward. Covenant identity in the open queue is not new exposure
+(already public via the covenant list/detail pages).
+
 ## GM surrender lifecycle (#2004)
 
 A Lead GM may surrender oversight of a story, clearing its `primary_table`

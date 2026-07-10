@@ -10,10 +10,12 @@
  * rather than blowing the error boundary.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch } from '@/evennia_replacements/api';
+import { useAccount } from '@/store/hooks';
 
 // ---------------------------------------------------------------------------
 // Types (manually authored — spectacular can't introspect this APIView)
@@ -38,11 +40,21 @@ interface GMDashboardEvidence {
   last_active_at: string | null;
 }
 
+/** One open (PENDING) GroupStoryRequest — the broadcast GM-recruitment queue (#2119). */
+interface GMDashboardOpenGroupRequest {
+  request_id: number;
+  covenant_id: number;
+  covenant_name: string;
+  message: string;
+  created_at: string;
+}
+
 interface GMDashboardResponse {
   episodes_ready_to_run: unknown[];
   pending_agm_claims: unknown[];
   assigned_session_requests: unknown[];
   waiting_for_gm: unknown[];
+  open_group_requests: GMDashboardOpenGroupRequest[];
   my_tables: GMDashboardTable[];
   pending_story_offers: GMDashboardOffer[];
   evidence_summary: GMDashboardEvidence;
@@ -58,6 +70,33 @@ async function getGMDashboard(): Promise<GMDashboardResponse> {
   return res.json() as Promise<GMDashboardResponse>;
 }
 
+/**
+ * Dispatch ClaimGroupStoryRequestAction as the actor's own character
+ * (characterId is the ObjectDB pk — doubles as the character_sheet pk, since
+ * CharacterSheet.character is a primary_key=True OneToOneField). Mirrors the
+ * generic-dispatch pattern in @/game/api/roomEditor.ts (#2119, Decision 8:
+ * the generic action-dispatch endpoint, never a bespoke @action).
+ */
+async function claimGroupStoryRequest(characterId: number, requestId: number): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'claim_group_story_request' },
+      kwargs: { request_id: requestId },
+    }),
+  });
+  let detail: string | undefined;
+  try {
+    const data = (await res.json()) as { detail?: string; message?: string | null };
+    detail = data.detail ?? data.message ?? undefined;
+  } catch {
+    detail = undefined;
+  }
+  if (!res.ok) throw new Error(detail ?? 'Failed to claim the request.');
+  return detail ?? 'Request claimed.';
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -71,10 +110,31 @@ export function GMDashboardPage() {
 }
 
 function GMDashboardContent() {
+  const account = useAccount();
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['gm-dashboard'],
     queryFn: getGMDashboard,
     throwOnError: false,
+  });
+
+  // The GM's active character's ObjectDB pk — doubles as the character_sheet
+  // pk (see claimGroupStoryRequest doc comment). Needed to dispatch the claim
+  // action as this GM's own character.
+  const activeCharacter =
+    account?.available_characters?.find((c) => c.currently_puppeted_in_session) ?? null;
+  const actorCharacterId = activeCharacter?.id ?? null;
+
+  const claimMutation = useMutation({
+    mutationFn: (requestId: number) => {
+      if (actorCharacterId === null) {
+        return Promise.reject(new Error('Puppet a character to claim a request.'));
+      }
+      return claimGroupStoryRequest(actorCharacterId, requestId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gm-dashboard'] }).catch(() => {});
+    },
   });
 
   if (isLoading) {
@@ -173,6 +233,45 @@ function GMDashboardContent() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      {/* Open group requests (#2119) — the broadcast covenant-GM recruitment queue */}
+      <section className="rounded-lg border p-4">
+        <h2 className="mb-2 text-lg font-semibold">
+          Open Group Requests ({data.open_group_requests.length})
+        </h2>
+        {data.open_group_requests.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No covenants are recruiting right now.</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {data.open_group_requests.map((request) => (
+              <li
+                key={request.request_id}
+                className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <span className="font-medium">{request.covenant_name}</span>
+                  {request.message && (
+                    <p className="truncate text-xs text-muted-foreground">{request.message}</p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => claimMutation.mutate(request.request_id)}
+                  disabled={claimMutation.isPending || actorCharacterId === null}
+                  data-testid="claim-group-request-button"
+                >
+                  {claimMutation.isPending && claimMutation.variables === request.request_id
+                    ? 'Claiming…'
+                    : 'Claim'}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {claimMutation.isError && (
+          <p className="mt-2 text-sm text-destructive">{(claimMutation.error as Error).message}</p>
         )}
       </section>
     </div>

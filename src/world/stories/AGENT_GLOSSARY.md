@@ -163,6 +163,19 @@ the affected player via a narrative SYSTEM message. Wired via
 `POST /api/stories/{id}/surrender/` and `story surrender <story-id>` telnet.
 _Avoid_: abandon, drop (use surrender for the GM-side release; detach for the player-side).
 
+**Group Story Request**:
+A `GroupStoryRequest` row (#2119) — a covenant officer's open, **broadcast** ask for a GM
+to run a story for their covenant, visible to the whole GM pool. `GroupStoryRequestStatus`
+(PENDING/ACCEPTED/WITHDRAWN — no DECLINED, since a broadcast ask has no single decliner);
+one PENDING request per covenant (partial unique constraint). Distinct from `StoryGMOffer`,
+which is *directed* at one specific GM and requires a pre-existing player-owned CHARACTER
+story — a Group Story Request has no story yet; claiming it (`claim_group_story_request`)
+is what creates the GROUP-scope `Story`, seating the covenant's active members at the
+claiming GM's table via the existing `join_table` seam (no `GMTableMembership` schema
+change). Gated by the covenant's `can_request_gm` rank capability (see
+`world/covenants/AGENT_GLOSSARY.md`).
+_Avoid_: story offer (that's `StoryGMOffer`, a directed CHARACTER-scope offer), recruitment post.
+
 **Idle Table**:
 An ACTIVE `GMTable` whose GM's `last_active_at` is older than a staff-tunable
 threshold (`IDLE_TABLE_THRESHOLD_DAYS`, default 14) or null — surfaced on

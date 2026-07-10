@@ -137,6 +137,18 @@ class StoryGMOfferStatus(models.TextChoices):
     WITHDRAWN = "withdrawn", "Withdrawn"
 
 
+class GroupStoryRequestStatus(models.TextChoices):
+    """Lifecycle of a GroupStoryRequest — a covenant's open broadcast ask for a GM (#2119).
+
+    No DECLINED: an open broadcast has no single decliner (unlike StoryGMOffer,
+    which is directed at one GM).
+    """
+
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    WITHDRAWN = "withdrawn", "Withdrawn"
+
+
 class CrossoverInviteStatus(models.TextChoices):
     """Lifecycle of a CrossoverInvite — Lead-GM consent to link a story (#2002)."""
 

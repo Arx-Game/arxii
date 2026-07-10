@@ -112,11 +112,14 @@ from actions.definitions.gm_combat import (
     ResolveEncounterRoundAction,
 )
 from actions.definitions.gm_stories import (
+    ClaimGroupStoryRequestAction,
     CompleteStoryAction,
     DeclareStakesAction,
     MarkBeatAction,
     PromoteEpisodeAction,
+    RequestGMForCovenantAction,
     ResolveEpisodeAction,
+    WithdrawGroupStoryRequestAction,
 )
 from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.definitions.imbue import ImbueAction
@@ -433,6 +436,9 @@ _ALL_ACTIONS: list[Action] = [
     PromoteEpisodeAction(),
     MarkBeatAction(),
     DeclareStakesAction(),
+    RequestGMForCovenantAction(),
+    ClaimGroupStoryRequestAction(),
+    WithdrawGroupStoryRequestAction(),
     ResolveAlterationAction(),
     RestAction(),
     ToggleFavoriteAction(),

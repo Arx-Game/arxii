@@ -15,6 +15,7 @@ from world.stories.constants import (
     CustodyClearanceStatus,
     CustodyScope,
     EraStatus,
+    GroupStoryRequestStatus,
     SessionRequestStatus,
     StakeOutcomeMethod,
     StakeResolutionColumn,
@@ -39,6 +40,7 @@ from world.stories.models import (
     Era,
     GlobalStoryProgress,
     GroupStoryProgress,
+    GroupStoryRequest,
     PlayerTrust,
     PlayerTrustLevel,
     RiskCalibration,
@@ -526,6 +528,26 @@ class StoryGMOfferFactory(factory_django.DjangoModelFactory):
     status = StoryGMOfferStatus.PENDING
     message = ""
     response_note = ""
+    responded_at = None
+
+
+class GroupStoryRequestFactory(factory_django.DjangoModelFactory):
+    """Factory for creating GroupStoryRequest instances (#2119).
+
+    Defaults to PENDING status, unclaimed. For accepted/withdrawn requests,
+    pass status=GroupStoryRequestStatus.ACCEPTED/WITHDRAWN, claimed_by, and
+    responded_at manually.
+    """
+
+    class Meta:
+        model = GroupStoryRequest
+
+    covenant = factory.SubFactory("world.covenants.factories.CovenantFactory")
+    requested_by_account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    status = GroupStoryRequestStatus.PENDING
+    message = ""
+    claimed_by = None
+    created_story = None
     responded_at = None
 
 
