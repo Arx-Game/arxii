@@ -20078,6 +20078,10 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
+      - in: query
+        name: role
+        schema:
+          type: number
       tags:
       - npc-services
       security:
@@ -48997,10 +49001,40 @@ components:
           type: string
     PatchedPermitOfferDetailsRequest:
       type: object
+      description: |-
+        Staff CRUD for permit-kind offer details (#1684, closing #728's residual).
+
+        ``building_kind`` and ``default_approved_wards`` are PK-related writes; the
+        FE feeds them from the existing ``/api/buildings/building-kinds/`` and
+        areas list endpoints.
       properties:
         offer:
           type: integer
           description: The NPCServiceOffer row this details model decorates.
+        building_kind:
+          type: integer
+          nullable: true
+          description: Which BuildingKind this offer issues permits for. Required
+            for kind=PERMIT offers in Plan 3 (nullable in the schema so existing rows
+            can migrate; runtime issuance asserts non-null).
+        default_approved_wards:
+          type: array
+          items:
+            type: integer
+          description: Default set of wards the issued permit is valid in. Snapshotted
+            onto BuildingPermitDetails.approved_wards at issuance time.
+        default_max_target_size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Default cap on ``target_size`` for buildings constructed under
+            permits from this offer.
+        permit_cost_currency:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Currency cost of the permit (approval fee — distinct from construction
+            cost). Charged to the PC's account at grant time.
     PatchedPlayerBoundaryRequest:
       type: object
       description: |-
@@ -50464,6 +50498,12 @@ components:
       - treasured_subject_ids
     PermitOfferDetails:
       type: object
+      description: |-
+        Staff CRUD for permit-kind offer details (#1684, closing #728's residual).
+
+        ``building_kind`` and ``default_approved_wards`` are PK-related writes; the
+        FE feeds them from the existing ``/api/buildings/building-kinds/`` and
+        areas list endpoints.
       properties:
         id:
           type: integer
@@ -50471,15 +50511,69 @@ components:
         offer:
           type: integer
           description: The NPCServiceOffer row this details model decorates.
+        building_kind:
+          type: integer
+          nullable: true
+          description: Which BuildingKind this offer issues permits for. Required
+            for kind=PERMIT offers in Plan 3 (nullable in the schema so existing rows
+            can migrate; runtime issuance asserts non-null).
+        default_approved_wards:
+          type: array
+          items:
+            type: integer
+          description: Default set of wards the issued permit is valid in. Snapshotted
+            onto BuildingPermitDetails.approved_wards at issuance time.
+        default_max_target_size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Default cap on ``target_size`` for buildings constructed under
+            permits from this offer.
+        permit_cost_currency:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Currency cost of the permit (approval fee — distinct from construction
+            cost). Charged to the PC's account at grant time.
       required:
       - id
       - offer
     PermitOfferDetailsRequest:
       type: object
+      description: |-
+        Staff CRUD for permit-kind offer details (#1684, closing #728's residual).
+
+        ``building_kind`` and ``default_approved_wards`` are PK-related writes; the
+        FE feeds them from the existing ``/api/buildings/building-kinds/`` and
+        areas list endpoints.
       properties:
         offer:
           type: integer
           description: The NPCServiceOffer row this details model decorates.
+        building_kind:
+          type: integer
+          nullable: true
+          description: Which BuildingKind this offer issues permits for. Required
+            for kind=PERMIT offers in Plan 3 (nullable in the schema so existing rows
+            can migrate; runtime issuance asserts non-null).
+        default_approved_wards:
+          type: array
+          items:
+            type: integer
+          description: Default set of wards the issued permit is valid in. Snapshotted
+            onto BuildingPermitDetails.approved_wards at issuance time.
+        default_max_target_size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Default cap on ``target_size`` for buildings constructed under
+            permits from this offer.
+        permit_cost_currency:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Currency cost of the permit (approval fee — distinct from construction
+            cost). Charged to the PC's account at grant time.
       required:
       - offer
     Persona:

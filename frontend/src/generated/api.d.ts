@@ -27641,9 +27641,24 @@ export interface components {
       name?: string;
       description?: string;
     };
+    /**
+     * @description Staff CRUD for permit-kind offer details (#1684, closing #728's residual).
+     *
+     *     ``building_kind`` and ``default_approved_wards`` are PK-related writes; the
+     *     FE feeds them from the existing ``/api/buildings/building-kinds/`` and
+     *     areas list endpoints.
+     */
     PatchedPermitOfferDetailsRequest: {
       /** @description The NPCServiceOffer row this details model decorates. */
       offer?: number;
+      /** @description Which BuildingKind this offer issues permits for. Required for kind=PERMIT offers in Plan 3 (nullable in the schema so existing rows can migrate; runtime issuance asserts non-null). */
+      building_kind?: number | null;
+      /** @description Default set of wards the issued permit is valid in. Snapshotted onto BuildingPermitDetails.approved_wards at issuance time. */
+      default_approved_wards?: number[];
+      /** @description Default cap on ``target_size`` for buildings constructed under permits from this offer. */
+      default_max_target_size?: number;
+      /** @description Currency cost of the permit (approval fee — distinct from construction cost). Charged to the PC's account at grant time. */
+      permit_cost_currency?: number;
     };
     /**
      * @description Owner-authored ``PlayerBoundary`` CRUD shape.
@@ -28496,14 +28511,44 @@ export interface components {
       readonly beat_id: number;
       readonly treasured_subject_ids: number[];
     };
+    /**
+     * @description Staff CRUD for permit-kind offer details (#1684, closing #728's residual).
+     *
+     *     ``building_kind`` and ``default_approved_wards`` are PK-related writes; the
+     *     FE feeds them from the existing ``/api/buildings/building-kinds/`` and
+     *     areas list endpoints.
+     */
     PermitOfferDetails: {
       readonly id: number;
       /** @description The NPCServiceOffer row this details model decorates. */
       offer: number;
+      /** @description Which BuildingKind this offer issues permits for. Required for kind=PERMIT offers in Plan 3 (nullable in the schema so existing rows can migrate; runtime issuance asserts non-null). */
+      building_kind?: number | null;
+      /** @description Default set of wards the issued permit is valid in. Snapshotted onto BuildingPermitDetails.approved_wards at issuance time. */
+      default_approved_wards?: number[];
+      /** @description Default cap on ``target_size`` for buildings constructed under permits from this offer. */
+      default_max_target_size?: number;
+      /** @description Currency cost of the permit (approval fee — distinct from construction cost). Charged to the PC's account at grant time. */
+      permit_cost_currency?: number;
     };
+    /**
+     * @description Staff CRUD for permit-kind offer details (#1684, closing #728's residual).
+     *
+     *     ``building_kind`` and ``default_approved_wards`` are PK-related writes; the
+     *     FE feeds them from the existing ``/api/buildings/building-kinds/`` and
+     *     areas list endpoints.
+     */
     PermitOfferDetailsRequest: {
       /** @description The NPCServiceOffer row this details model decorates. */
       offer: number;
+      /** @description Which BuildingKind this offer issues permits for. Required for kind=PERMIT offers in Plan 3 (nullable in the schema so existing rows can migrate; runtime issuance asserts non-null). */
+      building_kind?: number | null;
+      /** @description Default set of wards the issued permit is valid in. Snapshotted onto BuildingPermitDetails.approved_wards at issuance time. */
+      default_approved_wards?: number[];
+      /** @description Default cap on ``target_size`` for buildings constructed under permits from this offer. */
+      default_max_target_size?: number;
+      /** @description Currency cost of the permit (approval fee — distinct from construction cost). Charged to the PC's account at grant time. */
+      permit_cost_currency?: number;
     };
     Persona: {
       readonly id: number;
@@ -50405,6 +50450,7 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        role?: number;
       };
       header?: never;
       path?: never;

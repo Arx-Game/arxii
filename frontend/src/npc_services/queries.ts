@@ -6,15 +6,18 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import {
   createMissionDetails,
   createOffer,
+  createPermitDetails,
   createRole,
   deleteOffer,
   deleteRole,
   getRole,
   listMissionDetails,
   listOffers,
+  listPermitDetails,
   listRoles,
   patchMissionDetails,
   patchOffer,
+  patchPermitDetails,
   patchRole,
 } from './api';
 import type {
@@ -26,6 +29,8 @@ import type {
   NPCRole,
   NPCServiceOffer,
   MissionOfferDetails,
+  PermitOfferDetails,
+  PermitOfferDetailsRequest,
 } from './types';
 
 export const npcServiceKeys = {
@@ -38,6 +43,9 @@ export const npcServiceKeys = {
   missionDetails: () => [...npcServiceKeys.all, 'mission-details'] as const,
   missionDetailList: (roleId: number) =>
     [...npcServiceKeys.missionDetails(), 'list', roleId] as const,
+  permitDetails: () => [...npcServiceKeys.all, 'permit-details'] as const,
+  permitDetailList: (roleId: number) =>
+    [...npcServiceKeys.permitDetails(), 'list', roleId] as const,
 };
 
 export function useRoles(filters: NPCRoleFilters = {}): UseQueryResult<PaginatedResponse<NPCRole>> {
@@ -107,6 +115,34 @@ export function useDeleteRole() {
 function invalidateRoleOffers(qc: ReturnType<typeof useQueryClient>, roleId: number) {
   qc.invalidateQueries({ queryKey: npcServiceKeys.offerList(roleId) });
   qc.invalidateQueries({ queryKey: npcServiceKeys.missionDetailList(roleId) });
+  qc.invalidateQueries({ queryKey: npcServiceKeys.permitDetailList(roleId) });
+}
+
+export function usePermitDetailsForRole(
+  roleId: number | null
+): UseQueryResult<PaginatedResponse<PermitOfferDetails>> {
+  return useQuery({
+    queryKey: npcServiceKeys.permitDetailList(roleId ?? -1),
+    queryFn: () => listPermitDetails({ role: roleId as number, page_size: 200 }),
+    enabled: roleId !== null,
+  });
+}
+
+export function useCreatePermitDetails(roleId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PermitOfferDetailsRequest) => createPermitDetails(body),
+    onSuccess: () => invalidateRoleOffers(qc, roleId),
+  });
+}
+
+export function usePatchPermitDetails(roleId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Partial<PermitOfferDetailsRequest> }) =>
+      patchPermitDetails(id, body),
+    onSuccess: () => invalidateRoleOffers(qc, roleId),
+  });
 }
 
 export function useCreateOffer(roleId: number) {

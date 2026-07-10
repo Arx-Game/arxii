@@ -83,9 +83,23 @@ class OfferCooldownSerializer(serializers.ModelSerializer):
 
 
 class PermitOfferDetailsSerializer(serializers.ModelSerializer):
+    """Staff CRUD for permit-kind offer details (#1684, closing #728's residual).
+
+    ``building_kind`` and ``default_approved_wards`` are PK-related writes; the
+    FE feeds them from the existing ``/api/buildings/building-kinds/`` and
+    areas list endpoints.
+    """
+
     class Meta:
         model = PermitOfferDetails
-        fields = ["id", "offer"]
+        fields = [
+            "id",
+            "offer",
+            "building_kind",
+            "default_approved_wards",
+            "default_max_target_size",
+            "permit_cost_currency",
+        ]
         read_only_fields = ["id"]
 
 

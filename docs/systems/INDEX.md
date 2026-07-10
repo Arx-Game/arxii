@@ -1638,7 +1638,9 @@ per-kind effect handler dispatch. Covers permits today; missions/loans/training/
 register as additional kinds.
 
 - **Models:** `NPCRole`, `NPCServiceOffer` (kind discriminator + draw_mode + eligibility_rule),
-  `PermitOfferDetails` (1:1 per-kind details; mirrors `ItemFacet` composition),
+  `PermitOfferDetails` (1:1 per-kind details; mirrors `ItemFacet` composition; fully
+  authorable over `/api/npc-services/permit-details/` since #1684 — building_kind FK,
+  default_approved_wards M2M, size cap, permit cost; `role` filter walks `offer__role_id`),
   `NPCStanding` (per-(PC persona, NPC persona); relocated from `world.missions.MissionGiverStanding`),
   `Functionary` (#1766 — a class-1 NPC placement = `NPCRole` + `room` FK; the non-piloted room-feature
   anchor for gameplay loops; see ADR-0070 for the Functionary/Standing NPC/Story NPC ontology),
