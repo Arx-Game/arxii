@@ -475,7 +475,7 @@ def _satisfy_thread_woven(character_sheet: CharacterSheet) -> None:
     try:
         with transaction.atomic():
             satisfy_external_act(character_sheet, ExternalAct.THREAD_WOVEN)
-    except Exception:  # log-and-continue by design (ADR-0111)
+    except Exception:  # log-and-continue by design (ADR-0112)
         logger.exception("external-act satisfaction failed after weave_thread")
 
 

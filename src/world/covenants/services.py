@@ -248,7 +248,7 @@ def create_covenant(  # noqa: PLR0913, C901, PLR0912
         try:
             with transaction.atomic():
                 satisfy_external_act(founder.character_sheet, ExternalAct.COVENANT_SWORN)
-        except Exception:  # log-and-continue by design (ADR-0111)
+        except Exception:  # log-and-continue by design (ADR-0112)
             logger.exception("external-act satisfaction failed after create_covenant")
 
     return cov
@@ -1776,7 +1776,7 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
     try:
         with transaction.atomic():
             satisfy_external_act(candidate_participant.character_sheet, ExternalAct.COVENANT_SWORN)
-    except Exception:  # log-and-continue by design (ADR-0111)
+    except Exception:  # log-and-continue by design (ADR-0112)
         logger.exception("external-act satisfaction failed after induct_member_via_session")
 
     return membership

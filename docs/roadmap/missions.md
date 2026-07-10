@@ -41,6 +41,47 @@ Missions are branching narrative quest chains — the primary way characters int
   room binding**: #888.
 - **POOL count policy**: #726 ✅ shipped — `offer_policy.mission_pool_count` scales the POOL slate by NPC standing (stranger → 1, trusted → 5, wired into the live interaction render); `has_completed_mission` predicate leaf gates chained missions; `MissionOfferDetails.draw_priority` surfaces chain/high-stakes offers ahead of the general pool.
 - **Offer-policy enrichment**: #1020 ✅ shipped — org-reputation folded into the count (`max(npc_standing, org)` when the role fronts an org); Era arc-replace draws active-season offers (`created_in_era` + `percent_replace`) ahead of the general pool, behind explicit chains. Ordering/bands live in `npc_services/constants.py` for playtest retuning.
+- **Tutorial arc / External-Act Beats ✅ shipped (#1035, ADR-0112)**: `OptionKind.EXTERNAL_ACT`
+  + `MissionOption.required_act` (an `ExternalAct`: `TECHNIQUE_CAST`/`THREAD_WOVEN`/
+  `COVENANT_SWORN`) — an option presented like any other (authored framing shows) but never
+  pickable; it resolves only when the player performs the named non-mission act.
+  `resolve_option` routes it through the same branch path as `BRANCH` (deed `outcome=None`);
+  `play.py`'s presentation seam excludes it from the pickable list. `satisfy_external_act
+  (character_sheet, act)` (`world.missions.services.external_acts`) resolves every ACTIVE
+  instance waiting on that act and sends actor-only story text (no room emit — the leak
+  rule); it is called directly (log-and-continue inside a savepoint, ADR-0009/ADR-0112 style —
+  a tutorial-resolution failure can never abort the host act) from `weave_thread`
+  (`world.magic.services.threads`, both the ritual and GIFT-weave exits),
+  `create_covenant`/`induct_member_via_session` (`world.covenants.services`), and
+  `use_technique` (`world.magic.services.techniques`). Durable acts (`THREAD_WOVEN`/
+  `COVENANT_SWORN`) additionally fast-forward at `enter_node` when already true
+  (`fast_forward_external_acts`); `TECHNIQUE_CAST` is transient and never fast-forwards.
+  Durable-act options are authored on entry nodes only (a `clean()` guard enforces it).
+  Seven-template tutorial chain (T1 "Arrival" → T7 "The Long Dark", seeded by
+  `world.seeds.game_content.tutorial.seed_tutorial_dev`, the `"tutorial"` cluster) walks a
+  fresh character through a ROOM_TRIGGER grant, an ENVIRONMENTAL_DETAIL grant, an NPC-offered
+  External-Act Beat (TECHNIQUE_CAST), a Notice Board (`GiverKind.BOARD`) pickup with
+  `report_to_role` set, a `FOLLOW_ON_SUMMONS` Directed Summons into a THREAD_WOVEN beat, a
+  COVENANT_SWORN beat, and a `risk_tier=4` finale carrying the only LEGEND_POINTS reward line
+  in the chain (Legend-Risk Floor, ADR-0107) — each T(n+1) gated on T(n) via the ordinary
+  `has_completed_mission` predicate leaf. Journey-level acceptance test:
+  `src/integration_tests/pipeline/test_tutorial_chain_e2e.py`.
+  Two real pre-existing bugs the tutorial's live-play journey surfaced and fixed in-branch
+  (Fold In, Don't File): (1) trigger-giver and board-giver grants
+  (`trigger_dispatch._dispatch_from_giver`, `boards.take_from_board`) resolved the acting
+  persona for the `template_visible_to` eligibility gate, then dropped it when calling
+  `staff_assign_mission` — every trigger/board grant left `accepted_as_persona` null, so
+  `has_completed_mission` (the predicate backing every T(n+1) gate) could never see a
+  trigger/board-granted mission as complete; `staff_assign_mission` now takes a keyword-only
+  `persona` param and both call sites thread the persona they already resolved. (2) telnet
+  `mission take` (`CmdMission._handle_take`, `commands/missions.py`) filtered board givers by
+  `target=room`, but a BOARD giver's `target` is the board object *in* the room
+  (`target__db_location=room` per `MissionGiver.clean()`) — the command could never find any
+  board, seeded or authored, until fixed. Also fixed: `offer_handler.issue_mission`'s cooldown
+  resolution used `details.role_cooldown_duration or template.cooldown`, which silently
+  discarded an authored zero-cooldown override (`timedelta(0)` is falsy) — now an explicit
+  `is not None` check, needed for the tutor's zero-cooldown offers so the chain can be walked
+  in one session.
 - **Starter seed content ✅ shipped (#2121)**: `world/seeds/game_content/missions.py`
   (`seed_missions_dev`, the `"missions"` cluster in `world.seeds.clusters`) seeds one BOARD-kind
   `MissionGiver` (a notice board physically placed in the canonical fallback starting room) plus

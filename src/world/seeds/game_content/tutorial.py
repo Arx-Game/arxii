@@ -8,7 +8,7 @@ beats that anchor the chain to real non-mission acts (T5 THREAD_WOVEN, T6
 COVENANT_SWORN), ending in the first legend-risk mission (T7). Everything is
 mission content over existing machinery — no new tutorial engine, no
 TutorialProgress model (chain progress IS the sequence of ``MissionInstance``
-rows); see ADR-0111.
+rows); see ADR-0112.
 
 Chain gating (design decision, stated per the task brief's instruction to read
 ``visibility.py`` and choose a surface): every T(n+1) template's

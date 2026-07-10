@@ -1166,7 +1166,7 @@ def use_technique(  # noqa: PLR0913, PLR0915  — orchestrator; multiple small r
         try:
             with transaction.atomic():
                 satisfy_external_act(sheet, ExternalAct.TECHNIQUE_CAST)
-        except Exception:  # log-and-continue by design (ADR-0111)
+        except Exception:  # log-and-continue by design (ADR-0112)
             logger.exception("external-act satisfaction failed after use_technique")
 
     return technique_result

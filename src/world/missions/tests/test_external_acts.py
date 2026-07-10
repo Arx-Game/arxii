@@ -594,7 +594,7 @@ class UseTechniqueExternalActWiringTests(TestCase):
 
 
 class ExternalActFailureIsolationTests(TestCase):
-    """A raising ``satisfy_external_act`` never aborts the host act (#1035, ADR-0111)."""
+    """A raising ``satisfy_external_act`` never aborts the host act (#1035, ADR-0112)."""
 
     def test_weave_thread_still_succeeds_and_logs_when_satisfy_external_act_raises(
         self,

@@ -1,6 +1,6 @@
 """External-act beats: mission options satisfied by real non-mission acts (#1035).
 
-Direct service calls (ADR-0009, ADR-0111) — weave_thread / create_covenant /
+Direct service calls (ADR-0009, ADR-0112) — weave_thread / create_covenant /
 induct_member_via_session / use_technique call satisfy_external_act after their own
 success. Failure isolation is the CALLER's job (log-and-continue); this module may
 assume it runs post-commit of the host act.
