@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
 import { GamePage } from './GamePage';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -94,6 +95,25 @@ function seedActiveSceneWithPose() {
   store.dispatch(addSceneInteraction({ character: ACTIVE_NAME, interaction }));
 }
 
+// Seeds a second, distinct thread (a whisper to persona 9) alongside the room
+// pose from seedActiveSceneWithPose, so a test can click a thread and assert
+// the feed actually narrows to it (#2156 review fix).
+function seedWhisperThread() {
+  const interaction: InteractionWsPayload = {
+    id: 2,
+    persona: { id: 7, name: ACTIVE_NAME, thumbnail_url: '' },
+    content: 'meet me by the fountain at midnight.',
+    mode: 'whisper',
+    timestamp: '2026-01-01T00:01:00Z',
+    scene_id: 100,
+    place_id: null,
+    place_name: null,
+    receiver_persona_ids: [9],
+    target_persona_ids: [],
+  };
+  store.dispatch(addSceneInteraction({ character: ACTIVE_NAME, interaction }));
+}
+
 describe('GamePage', () => {
   beforeEach(() => {
     store.dispatch(setAccount(null));
@@ -129,6 +149,38 @@ describe('GamePage', () => {
 
       expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
       expect(screen.getByLabelText('Thread sidebar')).toBeInTheDocument();
+    });
+
+    it('clicking a thread in the sidebar actually filters the center feed (review fix)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+
+      // Both interactions show before any thread is selected.
+      expect(await screen.findByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperButton = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button');
+      expect(whisperButton).not.toBeNull();
+      await user.click(whisperButton as HTMLElement);
+
+      // Clicking the whisper thread must narrow the feed to just that thread —
+      // the room pose disappears and the whisper stays (GamePage's
+      // handleThreadClick must call toggleThreadVisibility, not just
+      // setSelectedThread, or filteredInteractions never changes).
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+
+      // "All" restores both threads.
+      await user.click(within(sidebar).getByText('All'));
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
     });
 
     it('falls back to the plain ChatWindow with no thread sidebar when there is no active scene', () => {

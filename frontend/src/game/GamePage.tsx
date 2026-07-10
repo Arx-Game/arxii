@@ -62,8 +62,12 @@ export function GamePage() {
   const threading = useThreading(allInteractions, roomName);
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
 
+  // Mirrors SceneInteractionPanel's handleThreadClick (#2156 review fix): a
+  // thread click toggles that thread's inclusion in the enabled-thread set
+  // (which is what useThreading.filteredInteractions actually narrows on),
+  // not just the "selected" highlight — otherwise the feed never changes.
   const handleThreadClick = (key: string) => {
-    threading.setSelectedThread(key);
+    threading.toggleThreadVisibility(key);
     const thread = threading.threads.find((t) => t.key === key);
     if (thread) {
       setComposerMode(threadToComposerMode(thread, roomName));
