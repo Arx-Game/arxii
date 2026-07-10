@@ -103,6 +103,99 @@ def disconnect_positions(a: Position, b: Position) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Conjured obstacles (#2019)
+# ---------------------------------------------------------------------------
+
+
+def create_conjured_obstacle(  # noqa: PLR0913
+    position_a: Position,
+    position_b: Position,
+    *,
+    caster_sheet: CharacterSheet | None,
+    duration_rounds: int | None = None,
+    gating_challenge: ChallengeInstance | None = None,
+    blocks_flight: bool = False,
+) -> PositionEdge:
+    """Seal the edge between two positions as a conjured obstacle.
+
+    Uses update_or_create: if an edge already exists (staff-authored passable
+    edge), updates it to impassable + sets duration/owner. At expiry/teardown,
+    the edge is restored to passable (preserving the base edge).
+
+    Last-writer-wins for concurrent barricades on the same edge.
+    """
+    if position_a.pk > position_b.pk:
+        position_a, position_b = position_b, position_a
+    edge, _created = PositionEdge.objects.update_or_create(
+        position_a=position_a,
+        position_b=position_b,
+        defaults={
+            "is_passable": False,
+            "duration_rounds": duration_rounds,
+            "created_by_sheet": caster_sheet,
+            "gating_challenge": gating_challenge,
+            "blocks_flight": blocks_flight,
+        },
+    )
+    return edge
+
+
+def teardown_conjured_obstacles(room: ObjectDB) -> None:
+    """Restore or delete all conjured obstacles in a room.
+
+    Edges that pre-existed (had an edge before the obstacle was created) are
+    restored to passable. Staff-authored edges (null created_by_sheet) are
+    never touched.
+    """
+    conjured = PositionEdge.objects.filter(
+        created_by_sheet__isnull=False,
+        position_a__room=room,
+    )
+    for edge in conjured:
+        edge.is_passable = True
+        edge.duration_rounds = None
+        edge.created_by_sheet = None
+        edge.gating_challenge = None
+        edge.save(
+            update_fields=[
+                "is_passable",
+                "duration_rounds",
+                "created_by_sheet",
+                "gating_challenge",
+            ]
+        )
+
+
+def expire_obstacle_rounds(room: ObjectDB) -> None:
+    """Decrement duration_rounds on conjured obstacles in the room.
+
+    At 0, restore-to-passable (preserve the base edge). Staff-authored edges
+    (null duration_rounds) are never decremented.
+    """
+    expiring = PositionEdge.objects.filter(
+        duration_rounds__isnull=False,
+        position_a__room=room,
+    )
+    for edge in expiring:
+        edge.duration_rounds -= 1
+        if edge.duration_rounds <= 0:
+            edge.is_passable = True
+            edge.duration_rounds = None
+            edge.created_by_sheet = None
+            edge.gating_challenge = None
+            edge.save(
+                update_fields=[
+                    "is_passable",
+                    "duration_rounds",
+                    "created_by_sheet",
+                    "gating_challenge",
+                ]
+            )
+        else:
+            edge.save(update_fields=["duration_rounds"])
+
+
+# ---------------------------------------------------------------------------
 # Blueprint authoring
 # ---------------------------------------------------------------------------
 

@@ -271,7 +271,7 @@ class EnsureTelekinesisContentTests(TestCase):
         )
         self.assertEqual(steps.count(), 1)
         step = steps.get()
-        self.assertIn("move_position_on_condition", step.variable_name)
+        self.assertIn("force_move_target_on_condition", step.variable_name)
         self.assertEqual(step.parameters.get("payload"), "@payload")
         self.assertIn("destination_position_id", step.parameters)
 

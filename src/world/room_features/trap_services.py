@@ -130,3 +130,45 @@ def _resolve_trap_pool(
     context = ResolutionContext(character=character, target=character)
     apply_resolution(pending, context)
     return pending
+
+
+# ---------------------------------------------------------------------------
+# Zone hazard lifecycle (#2019)
+# ---------------------------------------------------------------------------
+
+
+def tick_zone_hazards(room: ObjectDB) -> None:
+    """Decrement duration on all armed zone hazards in the room.
+
+    Zone hazards are Traps with ``duration_rounds`` not null. At 0, the hazard
+    is disarmed (``is_armed=False``). Does NOT deal damage — damage is handled
+    by the combat/scene round-tick applying the consequence_pool to occupants.
+
+    Staff-authored traps (null ``duration_rounds``) are never decremented.
+    """
+    from world.room_features.models import Trap  # noqa: PLC0415
+
+    hazards = Trap.objects.filter(
+        is_armed=True,
+        duration_rounds__isnull=False,
+        room_profile__objectdb=room,
+    )
+    for hazard in hazards:
+        hazard.duration_rounds -= 1
+        if hazard.duration_rounds <= 0:
+            hazard.is_armed = False
+        hazard.save(update_fields=["duration_rounds", "is_armed"])
+
+
+def teardown_conjured_hazards(room: ObjectDB) -> None:
+    """Disarm all conjured hazards (created_by_sheet not null) in a room.
+
+    Called at encounter-end / scene-end to prevent permanent hazards.
+    Staff-authored traps (null ``created_by_sheet``) are never touched.
+    """
+    from world.room_features.models import Trap  # noqa: PLC0415
+
+    Trap.objects.filter(
+        created_by_sheet__isnull=False,
+        room_profile__objectdb=room,
+    ).update(is_armed=False)

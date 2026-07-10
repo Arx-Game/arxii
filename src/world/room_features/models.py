@@ -365,6 +365,26 @@ class Trap(SharedMemoryModel):
         ),
     )
 
+    # === Zone hazard lifecycle (#2019) ===
+    duration_rounds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "For zone hazards: rounds until the hazard dissipates. "
+            "Null = permanent trap (one-shot entry trigger)."
+        ),
+    )
+    created_by_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="conjured_hazards",
+        help_text=(
+            "Provenance: the caster who conjured this hazard. Null for staff-authored traps."
+        ),
+    )
+
     class Meta:
         ordering = ["room_profile_id", "name"]
 

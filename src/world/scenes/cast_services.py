@@ -259,6 +259,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
+    position_params: dict[str, int] | None = None,
 ) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, Interaction | None]:
     """Resolve a persisted standalone-cast request, mark it RESOLVED, author the OUTCOME pose.
 
@@ -355,6 +356,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         eff_intensity=eff_intensity,
         targets_by_kind=targets_by_kind,
         source_character=character,
+        position_params=position_params,
     )
     # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
     # through the SAME shared seam, over the same resolved targets. No-op when the
@@ -559,6 +561,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
     supplied_personas: list[Persona],
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
+    position_params: dict[str, int] | None = None,
 ) -> CastResult:
     """Route a FILTERED_GROUP cast that has a player-supplied persona list.
 
@@ -592,6 +595,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
         supplied_personas=supplied_personas,
         confirm_soulfray_risk=confirm_soulfray_risk,
         use_base_form=use_base_form,
+        position_params=position_params,
     )
 
 
@@ -607,6 +611,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
     cast_pull: CastPullDeclaration | None,
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
+    position_params: dict[str, int] | None = None,
 ) -> CastResult:
     """Route a cast directed at another PC (not the caster's own sheet)."""
     if is_technique_hostile(technique):
@@ -642,6 +647,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
         use_base_form=use_base_form,
+        position_params=position_params,
     )
 
 
@@ -658,6 +664,7 @@ def request_technique_cast(  # noqa: PLR0913
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
+    position_params: dict[str, int] | None = None,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
 
@@ -727,6 +734,7 @@ def request_technique_cast(  # noqa: PLR0913
             supplied_personas=supplied_personas,
             confirm_soulfray_risk=confirm_soulfray_risk,
             use_base_form=use_base_form,
+            position_params=position_params,
         )
 
     # Inline the other-PC check (rather than a bool var) so the type checker can
@@ -746,6 +754,7 @@ def request_technique_cast(  # noqa: PLR0913
             cast_pull=cast_pull,
             confirm_soulfray_risk=confirm_soulfray_risk,
             use_base_form=use_base_form,
+            position_params=position_params,
         )
 
     return _route_immediate_cast(
@@ -759,6 +768,7 @@ def request_technique_cast(  # noqa: PLR0913
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
         use_base_form=use_base_form,
+        position_params=position_params,
     )
 
 
@@ -889,6 +899,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
+    position_params: dict[str, int] | None = None,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose.
 
@@ -930,6 +941,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             supplied_personas=supplied_personas,
             confirm_soulfray_risk=confirm_soulfray_risk,
             use_base_form=use_base_form,
+            position_params=position_params,
         )
 
     return CastResult(

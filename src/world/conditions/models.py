@@ -1258,6 +1258,43 @@ class ConditionInstance(SharedMemoryModel):
         ),
     )
 
+    # === Cast-time position targeting (#2019) ===
+    cast_destination = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cast_destination_instances",
+        help_text=(
+            "For position-targeting conditions (Phase Jump, Force Grip): the "
+            "destination Position chosen at cast time. Null for non-position "
+            "conditions. Set by the cast pipeline; read by the effect handler "
+            "via payload.instance.cast_destination."
+        ),
+    )
+    cast_position_a = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cast_position_a_instances",
+        help_text=(
+            "For obstacle conditions (Barricade): the first Position of the "
+            "edge to seal, chosen at cast time. Null for non-position conditions."
+        ),
+    )
+    cast_position_b = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cast_position_b_instances",
+        help_text=(
+            "For obstacle conditions (Barricade): the second Position of the "
+            "edge to seal, chosen at cast time. Null for non-position conditions."
+        ),
+    )
+
     class Meta:
         constraints = [
             models.UniqueConstraint(

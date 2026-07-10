@@ -60,6 +60,7 @@ class CastTechniqueAction(Action):
         confirm_soulfray_risk: bool = False,
         cast_pull: CastPullDeclaration | None = None,
         use_base_form: bool = False,
+        position_params: dict[str, int] | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         """Resolve or gate the cast.
@@ -108,6 +109,7 @@ class CastTechniqueAction(Action):
                 confirm_soulfray_risk=confirm_soulfray_risk,
                 cast_pull=cast_pull,
                 use_base_form=use_base_form,
+                position_params=position_params,
             )
         except Exception as exc:
             # Surface magic-layer exceptions (e.g. MagicError subclasses for
@@ -128,7 +130,7 @@ class CastTechniqueAction(Action):
                 PendingCast(
                     technique_id=technique_id,
                     target_persona_id=target_persona_id,
-                    kwargs=kwargs,
+                    kwargs={"position_params": position_params, **kwargs},
                 ),
             )
             warning = cast.soulfray_warning
