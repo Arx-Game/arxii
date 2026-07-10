@@ -282,3 +282,115 @@ class CraftedModifierInGetModifierTotalTests(TestCase):
         # 3 + round(5 * 1.20) = 9
         self.assertEqual(get_modifier_total(sheet, target), 9)
         character.equipped_items.invalidate()
+
+
+class CraftedModifierWriteTests(TestCase):
+    """run_crafting_recipe records a CraftedItemRecipe on successful craft."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import AccountFactory, RoomProfileFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import (
+            install_full_lab_station,
+            wire_enchanting_crafting,
+        )
+
+        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.sheet = CharacterSheetFactory()
+        self.account = AccountFactory()
+        self.character = self.sheet.character
+        room_profile = RoomProfileFactory()
+        self.character.location = room_profile.objectdb
+        self.character.save()
+        install_full_lab_station(room_profile)
+
+    def _item(self):
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        template = ItemTemplateFactory(facet_capacity=3)
+        return ItemInstanceFactory(template=template, holder_character_sheet=self.sheet)
+
+    def _facet(self):
+        from world.magic.factories import FacetFactory
+
+        return FacetFactory()
+
+    def test_successful_craft_creates_crafted_item_recipe(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.services import run_crafting_recipe
+        from world.traits.factories import CheckOutcomeFactory
+
+        success = CheckOutcomeFactory(name="CraftModSuccess", success_level=5)
+        item = self._item()
+        with force_check_outcome(success):
+            result = run_crafting_recipe(
+                kind=CraftingRecipeKind.FACET_ATTACH,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                target=self._facet(),
+            )
+
+        self.assertTrue(result.attached)
+        self.assertIsNotNone(result.crafted_recipe)
+        self.assertEqual(result.crafted_recipe.item_instance, item)
+        self.assertEqual(result.crafted_recipe.recipe, self.recipe)
+        self.assertEqual(result.crafted_recipe.quality_tier, result.quality_tier)
+
+    def test_recrafting_updates_quality_tier_in_place(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.models import CraftedItemRecipe
+        from world.items.crafting.services import run_crafting_recipe
+        from world.traits.factories import CheckOutcomeFactory
+
+        success = CheckOutcomeFactory(name="CraftModRecraft", success_level=5)
+        item = self._item()
+        with force_check_outcome(success):
+            result1 = run_crafting_recipe(
+                kind=CraftingRecipeKind.FACET_ATTACH,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                target=self._facet(),
+            )
+        self.assertEqual(result1.crafted_recipe.quality_tier, result1.quality_tier)
+
+        # Re-craft — update_or_create should not create a duplicate row.
+        success2 = CheckOutcomeFactory(name="CraftModRecraft2", success_level=5)
+        with force_check_outcome(success2):
+            run_crafting_recipe(
+                kind=CraftingRecipeKind.FACET_ATTACH,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                target=self._facet(),
+            )
+
+        self.assertEqual(
+            CraftedItemRecipe.objects.filter(item_instance=item, recipe=self.recipe).count(),
+            1,
+        )
+
+    def test_failed_craft_creates_no_crafted_item_recipe(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.models import CraftedItemRecipe
+        from world.items.crafting.services import run_crafting_recipe
+        from world.traits.factories import CheckOutcomeFactory
+
+        botch = CheckOutcomeFactory(name="CraftModBotch", success_level=-2)
+        item = self._item()
+        with force_check_outcome(botch):
+            result = run_crafting_recipe(
+                kind=CraftingRecipeKind.FACET_ATTACH,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                target=self._facet(),
+            )
+
+        self.assertFalse(result.attached)
+        self.assertIsNone(result.crafted_recipe)
+        self.assertFalse(CraftedItemRecipe.objects.filter(item_instance=item).exists())
