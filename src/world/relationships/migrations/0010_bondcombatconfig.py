@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("relationships", "0008_alter_relationshiptrack_fuels_escalation_spikes"),
+        ("relationships", "0009_relationshiptrack_system_key_relationshipbump"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
