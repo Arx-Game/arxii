@@ -12,7 +12,7 @@ from typing import Any
 from django.urls import reverse
 
 from world.gm.constants import GMApplicationStatus
-from world.gm.models import GMApplication
+from world.gm.models import CatalogSuggestion, GMApplication
 from world.player_submissions.constants import SubmissionCategory, SubmissionStatus
 from world.player_submissions.models import (
     BugReport,
@@ -138,6 +138,18 @@ def _gm_application_to_item(obj: GMApplication) -> InboxItem:
     )
 
 
+def _catalog_suggestion_to_item(obj: CatalogSuggestion) -> InboxItem:
+    return InboxItem(
+        source_type=SubmissionCategory.CATALOG_SUGGESTION,
+        source_pk=obj.pk,
+        title=f"Catalog Suggestion ({obj.get_proposal_kind_display()}): {obj.proposal_text[:60]}",
+        reporter_summary=f"GM: {obj.submitted_by.username}",
+        created_at=obj.created_at,
+        status=obj.status,
+        detail_url=reverse("gm:catalog-suggestion-detail", args=[obj.pk]),
+    )
+
+
 def get_staff_inbox(
     *,
     categories: list[str] | None = None,
@@ -204,6 +216,12 @@ def get_staff_inbox(
             status=GMApplicationStatus.PENDING,
         ).select_related("account")
         items.extend(_gm_application_to_item(app) for app in gm_app_qs)
+
+    if _include(SubmissionCategory.CATALOG_SUGGESTION):
+        suggestion_qs = CatalogSuggestion.objects.filter(
+            status=SubmissionStatus.OPEN,
+        ).select_related("submitted_by")
+        items.extend(_catalog_suggestion_to_item(s) for s in suggestion_qs)
 
     items.sort(key=lambda i: i.created_at, reverse=True)
     return items

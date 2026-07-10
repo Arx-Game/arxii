@@ -4,6 +4,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from world.gm.views import (
+    CatalogSuggestionViewSet,
     DemandRansomView,
     GMApplicationActionView,
     GMApplicationQueueView,
@@ -24,6 +25,7 @@ router.register("profiles", GMProfileViewSet, basename="gm-profile")
 router.register("tables", GMTableViewSet, basename="gm-table")
 router.register("table-memberships", GMTableMembershipViewSet, basename="gm-table-membership")
 router.register("invites", GMRosterInviteViewSet, basename="gm-invite")
+router.register("catalog-suggestions", CatalogSuggestionViewSet, basename="catalog-suggestion")
 
 # Ordering is load-bearing: ``invites/claim/`` MUST be registered before
 # ``router.urls``. DRF's default detail regex for the ``invites`` viewset

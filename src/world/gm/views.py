@@ -18,12 +18,14 @@ from rest_framework.views import APIView
 
 from world.gm.constants import GMApplicationStatus, GMTableStatus
 from world.gm.filters import (
+    CatalogSuggestionFilter,
     GMApplicationFilter,
     GMProfileFilter,
     GMTableFilter,
     GMTableMembershipFilter,
 )
 from world.gm.models import (
+    CatalogSuggestion,
     GMApplication,
     GMProfile,
     GMRosterInvite,
@@ -32,6 +34,7 @@ from world.gm.models import (
 )
 from world.gm.permissions import IsGM, IsGMOrStaff
 from world.gm.serializers import (
+    CatalogSuggestionDetailSerializer,
     DemandRansomSerializer,
     GMApplicationActionSerializer,
     GMApplicationCreateSerializer,
@@ -55,6 +58,7 @@ from world.gm.services import (
     promote_gm,
     transfer_ownership as transfer_ownership_service,
 )
+from world.player_submissions.constants import SubmissionStatus
 from world.roster.models.applications import RosterApplication
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -107,6 +111,40 @@ class GMApplicationViewSet(
                     "approved_by": self.request.user,
                 },
             )
+
+
+class CatalogSuggestionViewSet(
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Staff triage of GM scenario-catalog suggestions (#2127).
+
+    No create action — a suggestion is only ever created through
+    ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+    telnet's ``gm suggest`` and web already use), mirroring
+    ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+    are staff-only.
+    """
+
+    queryset = CatalogSuggestion.objects.select_related(
+        "submitted_by", "situation_kind", "reviewer"
+    ).order_by("-created_at")
+    filterset_class = CatalogSuggestionFilter
+    filter_backends = [DjangoFilterBackend]
+    pagination_class = StandardResultsSetPagination
+    serializer_class = CatalogSuggestionDetailSerializer
+    permission_classes = [IsAdminUser]
+
+    def perform_update(self, serializer: serializers.Serializer) -> None:
+        previous_status = CatalogSuggestion.objects.values_list("status", flat=True).get(
+            pk=serializer.instance.pk
+        )
+        instance = serializer.save(reviewer=self.request.user)
+        if instance.status != SubmissionStatus.OPEN and previous_status == SubmissionStatus.OPEN:
+            instance.resolved_at = timezone.now()
+            instance.save(update_fields=["resolved_at"])
 
 
 class GMProfileViewSet(

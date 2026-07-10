@@ -10407,6 +10407,152 @@ paths:
               schema:
                 $ref: '#/components/schemas/GMApplicationDetail'
           description: ''
+  /api/gm/catalog-suggestions/:
+    get:
+      operationId: gm_catalog_suggestions_list
+      description: |-
+        Staff triage of GM scenario-catalog suggestions (#2127).
+
+        No create action — a suggestion is only ever created through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet's ``gm suggest`` and web already use), mirroring
+        ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+        are staff-only.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: proposal_kind
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - dismissed
+          - open
+          - reviewed
+        description: |-
+          * `open` - Open
+          * `reviewed` - Reviewed
+          * `dismissed` - Dismissed
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCatalogSuggestionDetailList'
+          description: ''
+  /api/gm/catalog-suggestions/{id}/:
+    get:
+      operationId: gm_catalog_suggestions_retrieve
+      description: |-
+        Staff triage of GM scenario-catalog suggestions (#2127).
+
+        No create action — a suggestion is only ever created through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet's ``gm suggest`` and web already use), mirroring
+        ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+        are staff-only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Catalog Suggestion.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogSuggestionDetail'
+          description: ''
+    put:
+      operationId: gm_catalog_suggestions_update
+      description: |-
+        Staff triage of GM scenario-catalog suggestions (#2127).
+
+        No create action — a suggestion is only ever created through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet's ``gm suggest`` and web already use), mirroring
+        ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+        are staff-only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Catalog Suggestion.
+        required: true
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogSuggestionDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogSuggestionDetail'
+          description: ''
+    patch:
+      operationId: gm_catalog_suggestions_partial_update
+      description: |-
+        Staff triage of GM scenario-catalog suggestions (#2127).
+
+        No create action — a suggestion is only ever created through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet's ``gm suggest`` and web already use), mirroring
+        ``SystemErrorReportViewSet``'s system-authored shape. List/retrieve/update
+        are staff-only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Catalog Suggestion.
+        required: true
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCatalogSuggestionDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogSuggestionDetail'
+          description: ''
   /api/gm/dashboard/:
     get:
       operationId: gm_dashboard_retrieve
@@ -31197,6 +31343,93 @@ components:
       - target_spec
       - target_type
       - tier
+    CatalogSuggestionDetail:
+      type: object
+      description: |-
+        For staff triaging GM scenario-catalog suggestions (#2127).
+
+        No create serializer — creation only happens through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet and web use), never a direct DRF POST.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        submitted_by:
+          type: integer
+          readOnly: true
+          description: OOC authoring, not IC -- mirrors GMApplication.account, not
+            persona-anchored.
+        submitted_by_username:
+          type: string
+          readOnly: true
+        situation_kind:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The kind this suggestion relates to, if any (e.g. a check-fit
+            proposal).
+        situation_kind_name:
+          type: string
+          readOnly: true
+          nullable: true
+        proposal_kind:
+          allOf:
+          - $ref: '#/components/schemas/ProposalKindEnum'
+          readOnly: true
+        proposal_text:
+          type: string
+          readOnly: true
+          description: 'Freeform: what the GM is proposing, and why.'
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+        reviewer:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Staff account that reviewed this suggestion.
+        reviewer_username:
+          type: string
+          readOnly: true
+          nullable: true
+        review_notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - created_at
+      - id
+      - proposal_kind
+      - proposal_text
+      - reviewer
+      - reviewer_username
+      - situation_kind
+      - situation_kind_name
+      - submitted_by
+      - submitted_by_username
+    CatalogSuggestionDetailRequest:
+      type: object
+      description: |-
+        For staff triaging GM scenario-catalog suggestions (#2127).
+
+        No create serializer — creation only happens through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet and web use), never a direct DRF POST.
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+        review_notes:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
     CategoryC06Enum:
       enum:
       - harassment
@@ -44334,6 +44567,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BuildingKind'
+    PaginatedCatalogSuggestionDetailList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogSuggestionDetail'
     PaginatedChallengeInstanceList:
       type: object
       required:
@@ -47911,6 +48167,23 @@ components:
           nullable: true
         status:
           $ref: '#/components/schemas/StatusD66Enum'
+    PatchedCatalogSuggestionDetailRequest:
+      type: object
+      description: |-
+        For staff triaging GM scenario-catalog suggestions (#2127).
+
+        No create serializer — creation only happens through
+        ``SubmitCatalogSuggestionAction`` (the generic REGISTRY dispatch seam both
+        telnet and web use), never a direct DRF POST.
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+        review_notes:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
     PatchedChapterDetailRequest:
       type: object
       description: Full serializer for chapter details
@@ -51953,6 +52226,20 @@ components:
       - object
       - possessive
       - subject
+    ProposalKindEnum:
+      enum:
+      - new_situation
+      - check_fit
+      - difficulty_guide
+      - pool_guide
+      - other
+      type: string
+      description: |-
+        * `new_situation` - New Situation
+        * `check_fit` - Check Fit
+        * `difficulty_guide` - Difficulty Guide
+        * `pool_guide` - Pool Guide
+        * `other` - Other
     PublicFeedItem:
       type: object
       description: One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem``

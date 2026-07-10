@@ -8,7 +8,16 @@ from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.gm.constants import GMApplicationStatus, GMLevel, GMTableStatus
+from core.managers import CachedAllMixin
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.gm.constants import (
+    CatalogSuggestionProposalKind,
+    GMApplicationStatus,
+    GMLevel,
+    GMTableStatus,
+)
+from world.player_submissions.constants import SubmissionStatus
+from world.scenes.action_constants import DifficultyChoice
 from world.scenes.constants import PersonaType
 from world.societies.constants import RenownRisk
 
@@ -341,3 +350,227 @@ class GMLevelChange(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"GMLevelChange({self.profile.account.username}, {self.old_level}→{self.new_level})"
+
+
+# --- GM scenario catalog (#2127, ADR-0110) ---------------------------------
+#
+# "Discovery, never invention", extended past ad-hoc checks (#2118) to the rest
+# of the catalog: a cross-cutting SituationKind taxonomy other apps link *into*
+# (never the reverse -- ADR-0010, this app depends on checks/mechanics/actions),
+# plus the guidance rows a GM browses when adapting authored content. Every
+# model here is admin-authored (ADR-0022); nothing on this file writes a live
+# ``consequence_pool`` FK anywhere -- ConsequencePoolGuide is advisory text only.
+
+
+class SituationKindManager(CachedAllMixin, NaturalKeyManager):
+    """Manager for SituationKind with natural key support, plus cached_all() (#1871).
+
+    Small, admin-authored taxonomy table read on every ``FindSituationAction``
+    browse -- the same "cache the whole table forever" shape as
+    ``ConsequencePoolManager``.
+    """
+
+
+class SituationKind(NaturalKeyMixin, SharedMemoryModel):
+    """Cross-cutting scenario taxonomy tag ("Chase", "Negotiation", "Infiltration").
+
+    Not a reuse of ``mechanics.ChallengeCategory`` or ``checks.CheckCategory`` --
+    those are per-app display groupings that don't span situations/checks/
+    encounters/missions. This is the shared tag that lets the same label surface
+    consistent checks/difficulty/pool guidance across every per-type listing (the
+    "translatable across contexts" requirement, Decision 1). Deliberately holds
+    no FK to ``mechanics.SituationTemplate`` -- that would make ``mechanics``
+    depend on ``gm``, backwards per ADR-0010; a ``FindSituationAction`` browse
+    matches templates by name/description text and kinds by name independently,
+    presenting both under the same search term.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    minimum_gm_level = models.CharField(
+        max_length=20,
+        choices=GMLevel.choices,
+        default=GMLevel.STARTING,
+        db_index=True,
+        help_text=(
+            "Lowest GM trust tier that may find/browse this kind (breadth gating, "
+            "Decision 9) -- FindSituationAction filters server-side on this field."
+        ),
+    )
+
+    objects = SituationKindManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        verbose_name = "Situation Kind"
+        verbose_name_plural = "Situation Kinds"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CheckTypeSituationFit(SharedMemoryModel):
+    """A ``checks.CheckType`` proven to fit a ``SituationKind`` (through model).
+
+    The "translatable across contexts" record from Decision 1 -- the same check
+    can be proven to fit more than one kind, and a kind lists every check proven
+    to fit it, regardless of which app's per-type listing is browsing.
+    """
+
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.CASCADE,
+        related_name="situation_fits",
+    )
+    situation_kind = models.ForeignKey(
+        SituationKind,
+        on_delete=models.CASCADE,
+        related_name="check_fits",
+    )
+    fit_notes = models.TextField(
+        blank=True,
+        default="",
+        help_text="Why this check fits this kind of scene -- shown in browse results.",
+    )
+
+    class Meta:
+        verbose_name = "Check Type Situation Fit"
+        verbose_name_plural = "Check Type Situation Fits"
+        unique_together = ["check_type", "situation_kind"]
+        ordering = ["situation_kind__name", "check_type__name"]
+
+    def __str__(self) -> str:
+        return f"{self.check_type.name} fits {self.situation_kind.name}"
+
+
+class SituationDifficultyGuide(SharedMemoryModel):
+    """Authored difficulty recommendation for a ``SituationKind`` at a given risk.
+
+    Targets the live ``DifficultyChoice`` band surface a GM actually picks
+    (#2118's ``InvokeCatalogCheckAction``), not ``ChallengeTemplate.severity``
+    (a raw int baked into pre-authored Challenge content at authoring time,
+    never touched by a live GM -- Decision 6).
+    """
+
+    situation_kind = models.ForeignKey(
+        SituationKind,
+        on_delete=models.CASCADE,
+        related_name="difficulty_guides",
+    )
+    risk = models.CharField(max_length=20, choices=RenownRisk.choices)
+    recommended_difficulty = models.CharField(max_length=20, choices=DifficultyChoice.choices)
+    guidance_text = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Situation Difficulty Guide"
+        verbose_name_plural = "Situation Difficulty Guides"
+        unique_together = ["situation_kind", "risk"]
+        ordering = ["situation_kind__name", "risk"]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.situation_kind.name} @ {self.get_risk_display()} -> "
+            f"{self.get_recommended_difficulty_display()}"
+        )
+
+
+class ConsequencePoolGuide(SharedMemoryModel):
+    """Advisory text on which ``ConsequencePool`` fits a ``SituationKind`` (Decision 7).
+
+    ADVISORY ONLY -- nothing anywhere reads this row to select, compose, or
+    write a live ``consequence_pool`` FK. Staff keeps authoring
+    ``ActionTemplate.consequence_pool`` / ``ActionTemplateGate.consequence_pool``
+    / ``SituationTrapLink.consequence_pool`` by hand in admin (ADR-0022); this
+    model exists purely so a GM browsing a kind sees selection guidance text.
+    """
+
+    situation_kind = models.ForeignKey(
+        SituationKind,
+        on_delete=models.CASCADE,
+        related_name="pool_guides",
+    )
+    pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.CASCADE,
+        related_name="situation_guides",
+    )
+    selection_criteria = models.TextField(
+        blank=True,
+        default="",
+        help_text="Guidance on when to pick this pool for this kind of scene.",
+    )
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Whether this is the suggested default pool for this kind.",
+    )
+
+    class Meta:
+        verbose_name = "Consequence Pool Guide"
+        verbose_name_plural = "Consequence Pool Guides"
+        unique_together = ["situation_kind", "pool"]
+        ordering = ["situation_kind__name", "-is_default", "pool__name"]
+
+    def __str__(self) -> str:
+        return f"{self.situation_kind.name} -> {self.pool.name} (advisory)"
+
+
+class CatalogSuggestion(SharedMemoryModel):
+    """A GM's proposed catalog growth, routed through the staff inbox (#2127).
+
+    Mirrors ``GMApplication``'s exact "GM submits -> staff triages from the
+    shared inbox" shape (Decision 8): reuses ``player_submissions
+    .SubmissionStatus`` (OPEN/REVIEWED/DISMISSED) rather than a new enum, and is
+    mapped into ``world.staff_inbox`` alongside every other submission source.
+    Staff acceptance is a manual admin action that separately authors the real
+    catalog row(s) -- accepting a suggestion never auto-creates them (Decision
+    7/8); this row is a proposal, never a live catalog write.
+    """
+
+    submitted_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="catalog_suggestions",
+        help_text="OOC authoring, not IC -- mirrors GMApplication.account, not persona-anchored.",
+    )
+    situation_kind = models.ForeignKey(
+        SituationKind,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="suggestions",
+        help_text="The kind this suggestion relates to, if any (e.g. a check-fit proposal).",
+    )
+    proposal_kind = models.CharField(
+        max_length=20,
+        choices=CatalogSuggestionProposalKind.choices,
+    )
+    proposal_text = models.TextField(help_text="Freeform: what the GM is proposing, and why.")
+    status = models.CharField(
+        max_length=20,
+        choices=SubmissionStatus.choices,
+        default=SubmissionStatus.OPEN,
+        db_index=True,
+    )
+    reviewer = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Staff account that reviewed this suggestion.",
+    )
+    review_notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Catalog Suggestion"
+        verbose_name_plural = "Catalog Suggestions"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        kind_display = self.get_proposal_kind_display()
+        return f"CatalogSuggestion({kind_display}, {self.submitted_by.username})"

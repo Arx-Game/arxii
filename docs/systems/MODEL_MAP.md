@@ -23,6 +23,7 @@
   - situation_trap_links <- mechanics.SituationTrapLink
   - context_attachments <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
+  - situation_guides <- gm.ConsequencePoolGuide
   - traps <- room_features.Trap
 
 ### ConsequencePoolEntry
@@ -1274,6 +1275,7 @@
   - item_check_modifiers <- items.ItemCheckModifier
   - threat_pool_entries <- combat.ThreatPoolEntry
   - escalation_curves <- combat.EscalationCurve
+  - situation_fits <- gm.CheckTypeSituationFit
   - assist_patterns <- missions.MissionAssistPattern
   - project_contribution_methods <- projects.ContributionMethod
   - detect_traps <- room_features.Trap
@@ -2397,6 +2399,33 @@
   - profile -> gm.GMProfile [FK]
   - changed_by -> accounts.AccountDB [FK]
 
+### SituationKind
+**Pointed to by:**
+  - check_fits <- gm.CheckTypeSituationFit
+  - difficulty_guides <- gm.SituationDifficultyGuide
+  - pool_guides <- gm.ConsequencePoolGuide
+  - suggestions <- gm.CatalogSuggestion
+
+### CheckTypeSituationFit
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+  - situation_kind -> gm.SituationKind [FK]
+
+### SituationDifficultyGuide
+**Foreign Keys:**
+  - situation_kind -> gm.SituationKind [FK]
+
+### ConsequencePoolGuide
+**Foreign Keys:**
+  - situation_kind -> gm.SituationKind [FK]
+  - pool -> actions.ConsequencePool [FK]
+
+### CatalogSuggestion
+**Foreign Keys:**
+  - submitted_by -> accounts.AccountDB [FK]
+  - situation_kind -> gm.SituationKind [FK] (nullable)
+  - reviewer -> accounts.AccountDB [FK] (nullable)
+
 ### Service Functions
 - `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' — Approve a roster application on behalf of the overseeing GM.`
 - `archive_table(table: 'GMTable') -> 'None' — Mark a table archived. Sets archived_at timestamp.`
@@ -2413,6 +2442,7 @@
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' — Set profile.level (promotion OR demotion), writing the audit row.`
 - `revoke_invite(invite: 'GMRosterInvite') -> 'None' — Revoke an invite by setting expires_at to now.`
 - `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' — Future integration hook: called when a persona is retired.`
+- `submit_catalog_suggestion(account: 'AccountDB', *, proposal_kind: 'str', proposal_text: 'str', situation_kind: 'SituationKind | None' = None) -> 'CatalogSuggestion' — Create a ``CatalogSuggestion`` row, routed to the staff inbox (#2127).`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' — GM surrenders oversight of a story.`
 - `touch_gm_activity(gm_profile: 'GMProfile') -> 'None' — Stamp ``GMProfile.last_active_at`` to now (#2004).`
 - `transfer_ownership(table: 'GMTable', new_gm: 'GMProfile') -> 'None' — Reassign a table to a different GM. Staff-only action.`

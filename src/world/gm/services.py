@@ -12,7 +12,15 @@ from django.db.models import Q
 from django.utils import timezone
 
 from world.gm.constants import GMLevel, GMTableStatus
-from world.gm.models import GMLevelChange, GMProfile, GMRosterInvite, GMTable, GMTableMembership
+from world.gm.models import (
+    CatalogSuggestion,
+    GMLevelChange,
+    GMProfile,
+    GMRosterInvite,
+    GMTable,
+    GMTableMembership,
+    SituationKind,
+)
 from world.gm.types import CategoryFeedback, GMEvidenceSummary
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
@@ -450,4 +458,25 @@ def gm_evidence_summary(profile: GMProfile) -> GMEvidenceSummary:
         beats_completed_by_risk=beats_completed_by_risk,
         feedback_by_category=feedback_by_category,
         level_changes=list(profile.level_changes.select_related("changed_by").all()[:20]),
+    )
+
+
+def submit_catalog_suggestion(
+    account: AccountDB,
+    *,
+    proposal_kind: str,
+    proposal_text: str,
+    situation_kind: SituationKind | None = None,
+) -> CatalogSuggestion:
+    """Create a ``CatalogSuggestion`` row, routed to the staff inbox (#2127).
+
+    Pure creation -- no live catalog row is ever touched here (Decision 7/8).
+    Staff accepts a suggestion by hand-authoring the real catalog row(s)
+    separately (e.g. in admin); this function never does that itself.
+    """
+    return CatalogSuggestion.objects.create(
+        submitted_by=account,
+        situation_kind=situation_kind,
+        proposal_kind=proposal_kind,
+        proposal_text=proposal_text,
     )

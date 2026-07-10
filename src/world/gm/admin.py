@@ -3,6 +3,9 @@
 from django.contrib import admin
 
 from world.gm.models import (
+    CatalogSuggestion,
+    CheckTypeSituationFit,
+    ConsequencePoolGuide,
     GMApplication,
     GMLevelCap,
     GMLevelChange,
@@ -10,6 +13,8 @@ from world.gm.models import (
     GMRosterInvite,
     GMTable,
     GMTableMembership,
+    SituationDifficultyGuide,
+    SituationKind,
 )
 
 
@@ -95,3 +100,39 @@ class GMLevelChangeAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+@admin.register(SituationKind)
+class SituationKindAdmin(admin.ModelAdmin):
+    list_display = ["name", "minimum_gm_level"]
+    list_filter = ["minimum_gm_level"]
+    search_fields = ["name"]
+
+
+@admin.register(CheckTypeSituationFit)
+class CheckTypeSituationFitAdmin(admin.ModelAdmin):
+    list_display = ["situation_kind", "check_type"]
+    list_filter = ["situation_kind"]
+    raw_id_fields = ["check_type", "situation_kind"]
+
+
+@admin.register(SituationDifficultyGuide)
+class SituationDifficultyGuideAdmin(admin.ModelAdmin):
+    list_display = ["situation_kind", "risk", "recommended_difficulty"]
+    list_filter = ["risk", "recommended_difficulty"]
+    raw_id_fields = ["situation_kind"]
+
+
+@admin.register(ConsequencePoolGuide)
+class ConsequencePoolGuideAdmin(admin.ModelAdmin):
+    list_display = ["situation_kind", "pool", "is_default"]
+    list_filter = ["is_default"]
+    raw_id_fields = ["situation_kind", "pool"]
+
+
+@admin.register(CatalogSuggestion)
+class CatalogSuggestionAdmin(admin.ModelAdmin):
+    list_display = ["submitted_by", "proposal_kind", "status", "created_at", "reviewer"]
+    list_filter = ["proposal_kind", "status"]
+    raw_id_fields = ["submitted_by", "situation_kind", "reviewer"]
+    search_fields = ["proposal_text"]

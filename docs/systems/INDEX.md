@@ -1145,10 +1145,25 @@ GM at a given level may author (#2000, ADR-0097).
   (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`; seeded via
   `factories.seed_default_gm_level_caps`), `GMLevelChange` (audit row: `profile`,
   `old_level`, `new_level`, `changed_by`, `reason`, `created_at`; written only by
-  `promote_gm`, never edited by hand)
+  `promote_gm`, never edited by hand). **Scenario catalog (#2127, ADR-0110):**
+  `SituationKind` (`NaturalKeyMixin`, cross-cutting taxonomy tag — "Chase",
+  "Negotiation" — `minimum_gm_level` breadth-gates visibility; `objects` has
+  `cached_all()` via `CachedAllMixin`, mirrors `ConsequencePoolManager`; holds no FK
+  to `mechanics.SituationTemplate` — ADR-0010, `gm` depends on `mechanics`, not the
+  reverse), `CheckTypeSituationFit` (through, `checks.CheckType` ↔ `SituationKind`,
+  `fit_notes`), `SituationDifficultyGuide` (`situation_kind` + `risk: RenownRisk` +
+  `recommended_difficulty: DifficultyChoice` + `guidance_text`; `unique_together`),
+  `ConsequencePoolGuide` (`situation_kind` + `pool: actions.ConsequencePool` +
+  `selection_criteria` + `is_default`; ADVISORY TEXT ONLY — no code path reads it to
+  select/write a live `consequence_pool` FK, Decision 7), `CatalogSuggestion`
+  (`submitted_by: accounts.AccountDB`, `situation_kind` nullable, `proposal_kind`,
+  `proposal_text`, `status: player_submissions.SubmissionStatus` — reused directly,
+  Decision 8 — `reviewer`, `review_notes`, `resolved_at`)
 - **Enums (`constants.py`):** `GMLevel` (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR),
   `GM_LEVEL_ORDER` + `gm_level_index(level)` (position on the ladder, 0–4),
-  `GMApplicationStatus`, `GMTableStatus`
+  `GMApplicationStatus`, `GMTableStatus`, `CatalogSuggestionProposalKind`
+  (NEW_SITUATION/CHECK_FIT/DIFFICULTY_GUIDE/POOL_GUIDE/OTHER) + `PROPOSAL_KIND_MIN_LEVEL`
+  (dict: the minimum `GMLevel` required to submit each kind — Decision 9)
 - **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,
   `approved_at`, `last_active_at`, `stories_running`, `beats_completed_by_risk`,
   `feedback_by_category`, `level_changes`), `CategoryFeedback` (`category_name`,
@@ -1198,14 +1213,48 @@ GM at a given level may author (#2000, ADR-0097).
   <char> xp=<amount>|dev=<trait> amount=<n> [reason=<text>]`, `gm condition <char>
   condition=<name> [severity=<n>] [duration=<n>] [note=<text>]` (`commands/gm_ops.py`'s
   `CmdGMDashboard`).
+- **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
+  shape from checks to situations. `FindSituationAction` (key `gm_find_situation`,
+  read-only, gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` — lower than
+  `SetSituationAction`'s JUNIOR floor since browsing mutates nothing) searches
+  `mechanics.SituationTemplate` by name/description and, independently by the same
+  term, any matching `SituationKind` — returning its `CheckTypeSituationFit`,
+  `SituationDifficultyGuide`, and `ConsequencePoolGuide` rows as text.
+  `SituationKind` results are filtered server-side on `minimum_gm_level` against the
+  caller's own `GMLevel` (staff see everything) — a kind above a GM's tier never
+  appears, even on an exact name match. `SubmitCatalogSuggestionAction` (key
+  `gm_submit_catalog_suggestion`, same STARTING floor) creates a `CatalogSuggestion`
+  via `world.gm.services.submit_catalog_suggestion`, gated additionally on
+  `PROPOSAL_KIND_MIN_LEVEL[proposal_kind]` (Decision 9) — refuses a below-tier
+  `proposal_kind` with a level-appropriate message; staff bypass every gate. Both
+  live in `actions/definitions/gm_catalog.py`. Telnet: `setsituation find <term>`
+  (extends `commands/setsituation.py`, mirroring `gm check find`'s shape) and `gm
+  suggest <kind>=<text>` (`commands/gm_ops.py`'s `CmdGMDashboard`, kind one of
+  `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`). Web: the
+  same generic `DispatchActionView` seam `set_the_stage`/`gm_invoke_check` already
+  use — no dedicated endpoint. Suggestion inbox: `SubmissionCategory
+  .CATALOG_SUGGESTION` (`world.player_submissions.constants`) +
+  `_catalog_suggestion_to_item` in `world.staff_inbox.services.get_staff_inbox`,
+  mirroring `GMApplication`'s exact mapping shape (Decision 8); staff triage via
+  `CatalogSuggestionViewSet` (`/api/gm/catalog-suggestions/`, list/retrieve/update,
+  `IsAdminUser` — no create route, creation only through the Action). Starter
+  taxonomy (Chase/Negotiation/Infiltration + a `SituationDifficultyGuide` row per
+  `RenownRisk` tier) seeded idempotently by `world.gm.factories
+  .seed_catalog_starter_content`, composed into the `"gm"` cluster seeder
+  alongside `seed_default_gm_level_caps`.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`), combat (`StakesLevelRequirement
   .minimum_gm_level`), roster (`GMRosterInvite` → `RosterApplication`), scenes
   (`GMTableMembership` pinned to `Persona`, `Scene.is_gm` for the adjudication
-  toolkit's gate), checks (`InvokeCatalogCheckAction` → `perform_check`),
-  progression (`GMAwardAction` → `award_xp`/`award_development_points`), conditions
-  (`GMApplyConditionAction` → `apply_condition`)
+  toolkit's gate), checks (`InvokeCatalogCheckAction` → `perform_check`;
+  `CheckTypeSituationFit` → `checks.CheckType`), progression (`GMAwardAction` →
+  `award_xp`/`award_development_points`), conditions (`GMApplyConditionAction` →
+  `apply_condition`), mechanics (`FindSituationAction` →
+  `mechanics.SituationTemplate`, text-search only, no FK), actions
+  (`ConsequencePoolGuide.pool` → `actions.ConsequencePool`, advisory only),
+  player_submissions/staff_inbox (`CatalogSuggestion` → `SubmissionCategory
+  .CATALOG_SUGGESTION`)
 - **Source:** `src/world/gm/`
 - **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
 - **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),

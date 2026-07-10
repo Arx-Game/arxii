@@ -55,3 +55,31 @@ class GMTableViewerRole(models.TextChoices):
     MEMBER = "member", "Member"
     GUEST = "guest", "Guest (story participant, not a member)"
     NONE = "none", "None"
+
+
+class CatalogSuggestionProposalKind(models.TextChoices):
+    """What kind of catalog growth a GM is proposing (#2127).
+
+    Tiered by GM trust (Decision 9, ADR-0110): STARTING/JUNIOR may only propose
+    NEW_SITUATION/CHECK_FIT/OTHER; GM+ additionally unlocks DIFFICULTY_GUIDE;
+    EXPERIENCED+ additionally unlocks POOL_GUIDE -- consequence-pool guidance is
+    the single most guarded authoring surface (Decision 3).
+    """
+
+    NEW_SITUATION = "new_situation", "New Situation"
+    CHECK_FIT = "check_fit", "Check Fit"
+    DIFFICULTY_GUIDE = "difficulty_guide", "Difficulty Guide"
+    POOL_GUIDE = "pool_guide", "Pool Guide"
+    OTHER = "other", "Other"
+
+
+#: Minimum GMLevel required to submit each CatalogSuggestion.proposal_kind (Decision 9).
+#: Read by ``actions.definitions.gm_catalog.SubmitCatalogSuggestionAction`` -- staff
+#: always bypass (mirrors every other GM-tool gate in this line).
+PROPOSAL_KIND_MIN_LEVEL: dict[str, str] = {
+    CatalogSuggestionProposalKind.NEW_SITUATION: GMLevel.STARTING,
+    CatalogSuggestionProposalKind.CHECK_FIT: GMLevel.STARTING,
+    CatalogSuggestionProposalKind.OTHER: GMLevel.STARTING,
+    CatalogSuggestionProposalKind.DIFFICULTY_GUIDE: GMLevel.GM,
+    CatalogSuggestionProposalKind.POOL_GUIDE: GMLevel.EXPERIENCED,
+}
