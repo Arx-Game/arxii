@@ -13606,6 +13606,24 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/progression/select-path/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET — current path (usually null) + selectable PROSPECT paths. */
+    get: operations['progression_select_path_retrieve'];
+    put?: never;
+    /** @description POST — select a starting path; only succeeds with no path on record. */
+    post: operations['progression_select_path_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/progression/unlocks/': {
     parameters: {
       query?: never;
@@ -52449,6 +52467,42 @@ export interface operations {
         content: {
           'application/json': components['schemas']['RandomSceneTarget'];
         };
+      };
+    };
+  };
+  progression_select_path_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  progression_select_path_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
