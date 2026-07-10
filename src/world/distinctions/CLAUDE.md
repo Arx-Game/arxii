@@ -2,7 +2,8 @@
 
 Character advantages/disadvantages that mechanically modify stats, rolls, and abilities. CG-time
 acquisition is `character_creation`'s job (draft storage, point budget); this app owns the
-catalog (`Distinction`, `DistinctionEffect`, `DistinctionMutualExclusion`, ...), the per-character
+catalog (`Distinction` — including its `mutually_exclusive_with` symmetrical M2M for mutual
+exclusion, `DistinctionEffect`, ...), the per-character
 grant (`CharacterDistinction`), and — as of #2037 — the **single seam every post-CG acquisition
 goes through**. Full model/API reference: `docs/systems/distinctions.md`.
 

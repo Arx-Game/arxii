@@ -8,7 +8,8 @@ defining characteristics (merits/flaws equivalent):
 - Distinction: Individual advantages/disadvantages
 - DistinctionEffect: Mechanical effects of distinctions
 - DistinctionPrerequisite: Prerequisites for taking distinctions
-- DistinctionMutualExclusion: Mutually exclusive distinction pairs
+- Distinction.mutually_exclusive_with: symmetrical self-referential M2M for mutually
+  exclusive distinction pairs (not a separate model)
 - CharacterDistinction: A character's taken distinctions
 - CharacterDistinctionOther: Freeform "Other" entries pending staff mapping
 """

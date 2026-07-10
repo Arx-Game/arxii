@@ -214,10 +214,14 @@ def _grant_prestige(character_sheet: CharacterSheet, reward_value: str) -> None:
 def _grant_distinction(character_sheet: CharacterSheet, reward, reward_value: str) -> None:
     """Grant/rank-up a DISTINCTION reward through the shared acquisition seam (#2037).
 
-    ``reward_value`` optionally encodes an explicit rank: a valid int sets/raises to that rank;
-    blank or garbage parses as ``rank=None`` (advance one step) — deliberately NOT a no-op like
-    ``_grant_bonus``'s parse-or-skip, since a DISTINCTION reward with no authored rank should
-    still grant/rank-up the linked distinction.
+    ``reward_value`` optionally encodes an explicit rank: a valid positive int sets/raises to
+    that rank; blank, garbage, or non-positive (e.g. "-1", "0") parses as ``rank=None`` (advance
+    one step) — deliberately NOT a no-op like ``_grant_bonus``'s parse-or-skip, since a
+    DISTINCTION reward with no usable rank should still grant/rank-up the linked distinction.
+    A non-positive int must NOT reach ``grant_distinction`` unchanged: ``CharacterDistinction.rank``
+    is a ``PositiveIntegerField``, so a raw ``rank=-1`` on a new grant raises an uncaught
+    ``IntegrityError`` that rolls back the entire ``grant_achievement`` transaction — including
+    every sibling reward — on every re-trigger.
 
     A mutual/variant exclusion conflict (``DistinctionExclusionError``) is logged and skipped —
     one reward's conflict must never crash the surrounding achievement-award flow.
@@ -231,6 +235,13 @@ def _grant_distinction(character_sheet: CharacterSheet, reward, reward_value: st
     try:
         rank = int(reward_value)
     except (TypeError, ValueError):
+        rank = None
+    if rank is not None and rank <= 0:
+        # Non-positive parses (e.g. a staff-authored "-1") are unusable as an explicit
+        # rank -- treat them the same as garbage input and advance one step instead of
+        # letting a negative/zero rank reach grant_distinction (#2037 review fold-in).
+        # This is the trusted-authored-source fallback (advance-one), NOT the reject
+        # discipline _coerce_positive_int uses for player-facing GM input.
         rank = None
     try:
         grant_distinction(

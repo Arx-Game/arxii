@@ -146,6 +146,24 @@ class DistinctionRewardApplicationTests(TestCase):
         )
         assert cd.rank == 1
 
+    def test_negative_reward_value_steps_rank_and_sibling_rewards_still_apply(self) -> None:
+        # A staff-authored reward_value="-1" must not reach grant_distinction as a raw
+        # negative rank (rank is a PositiveIntegerField -> IntegrityError -> the whole
+        # grant_achievement transaction rolls back, including sibling rewards). Non-positive
+        # parses fall back to rank=None (advance-one), same as blank/garbage (#2037 review
+        # fold-in).
+        self._add_reward(value="-1")
+        title_reward = RewardDefinitionFactory(reward_type=RewardType.TITLE)
+        AchievementRewardFactory(achievement=self.achievement, reward=title_reward)
+
+        grant_achievement(self.achievement, [self.sheet])
+
+        cd = CharacterDistinction.objects.get(
+            character=self.sheet.character, distinction=self.distinction
+        )
+        assert cd.rank == 1
+        assert CharacterTitle.objects.filter(character_sheet=self.sheet).exists()
+
     def test_re_earning_does_not_double_rank_up(self) -> None:
         self._add_reward()
         grant_achievement(self.achievement, [self.sheet])

@@ -38,7 +38,11 @@ from world.distinctions.types import (
 | `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `secret_by_default`, `default_secret_level` |
 | `DistinctionEffect` | Mechanical effects | `distinction`, `target` (FK `mechanics.ModifierTarget`), `value_per_rank`, `scaling_values`, `amplifies_sources_by`, `grants_immunity_to_negative`, `description` |
 | `DistinctionPrerequisite` | Requirements (JSON rules) | `distinction`, `rule_json`, `description` |
-| `DistinctionMutualExclusion` | Incompatible pairs | `distinction_a`, `distinction_b` |
+
+**Mutual exclusion is not a separate model.** `Distinction.mutually_exclusive_with` is a
+symmetrical self-referential `ManyToManyField` — adding `a.mutually_exclusive_with.add(b)`
+automatically makes the pair conflict in both directions. There is no
+`DistinctionMutualExclusion` model/table.
 
 **There is no `effect_type` enum/column.** `DistinctionEffect` targets a single
 `mechanics.ModifierTarget` row, and the effect's *kind* is derived on read from
@@ -101,8 +105,8 @@ CG finalization and Django admin — no in-play caller re-implements the create/
 
 `_check_exclusions` (private to `services.py`) is a service-layer port of
 `DraftDistinctionViewSet._check_mutual_exclusions`/`_check_variant_exclusions` — the same
-`DistinctionMutualExclusion` and variant-sibling rules the CG draft view enforces, run against a
-character's **currently-held** distinctions instead of a draft. It raises
+`mutually_exclusive_with` (symmetrical M2M) and variant-sibling rules the CG draft view enforces,
+run against a character's **currently-held** distinctions instead of a draft. It raises
 `DistinctionExclusionError` (`world.distinctions.exceptions`, carries a `user_message`) instead
 of a DRF `ValidationError`, since `grant_distinction` has non-HTTP callers (GM action, telnet,
 achievement engine, consequence-effect handler, resonance-threshold check).
@@ -269,12 +273,12 @@ if distinction.is_variant_parent:
     variants = distinction.variants.filter(is_active=True)
 ```
 
-### DistinctionMutualExclusion
+### Mutual exclusion (`Distinction.mutually_exclusive_with`)
 
 ```python
 # Get all distinctions that conflict with a given distinction
-excluded = DistinctionMutualExclusion.get_excluded_for(distinction)
-# Returns QuerySet of Distinction objects that are mutually exclusive
+excluded = distinction.mutually_exclusive_with.all()
+# Symmetrical M2M — a.mutually_exclusive_with.add(b) makes each exclude the other.
 ```
 
 ### CharacterDistinction
