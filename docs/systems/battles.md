@@ -627,7 +627,9 @@ Multi-write operations use `@transaction.atomic`.
 
 ## Actions (`src/actions/definitions/battles.py`)
 
-Four REGISTRY actions, all registered in `src/actions/registry.py`:
+Nine battle actions, all registered in `src/actions/registry.py` (plus
+`ChallengeChampionDuelAction`, documented separately under [Command Hierarchy & the
+Champion](#command-hierarchy--the-champion-1710)):
 
 | Key | Class | target_type | Who | Effect |
 |---|---|---|---|---|
@@ -635,6 +637,11 @@ Four REGISTRY actions, all registered in `src/actions/registry.py`:
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
 | `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 11 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action (it takes `action_kind` generically, with no per-kind branching) and the `battle declare breach\|fortify` telnet grammar (#1713). REPOSITION (#1714) is reachable through this Action — its movement resolution is built (`_resolve_reposition_success`) — but has no dedicated `CmdBattle` telnet subcommand yet; that telnet grammar remains deferred. |
+| `create_battle` | `CreateBattleAction` | SELF | GM (JUNIOR+) | Stages a new Battle, optionally from a catalog blueprint (#2010) — see [Staging (#2010)](#staging-2010) |
+| `stage_battle_map` | `StageBattleMapAction` | SELF | GM (JUNIOR+) | Clones a catalog blueprint's places/fortifications onto an existing Battle (#2010) |
+| `spawn_battle_units` | `SpawnBattleUnitsAction` | SELF | GM (JUNIOR+) | Spawns one or more `BattleUnit`s from a catalog unit template (#2010) |
+| `enlist_battle_participant` | `EnlistBattleParticipantAction` | SELF | GM (JUNIOR+) | Enlists a PC in a Battle on one side (#2010) |
+| `browse_battle_catalog` | `BrowseBattleCatalogAction` | SELF | GM (JUNIOR+) | Read-only search over both staging catalogs (#2010) |
 
 GM actions are gated by `_actor_may_gm_battle` (staff or `battle.scene.is_gm(account)`).
 The active battle in the actor's room is resolved by `_active_battle_in_room` (newest
@@ -789,6 +796,11 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
     stays room-scoped) — the mechanism that makes "boarding" mean something: close
     range with REPOSITION before you can strike units aboard, or breach the hull of,
     another vehicle (#1714)
+  - `BattleStagingError` — a GM staging operation can't safely proceed: restaging a
+    battle that already has a map without `replace=True`, restaging once the battle
+    has gone live (a round has opened, or a unit/participant is already stationed),
+    or a blueprint fortification's `defending_side_role` has no matching `BattleSide`
+    on the target battle (#2010)
 
 ## Legend / Outcome Model and Stakes Wiring (#1785)
 
@@ -979,11 +991,130 @@ token since a front may carry more than one structure and a `Fortification` has 
 name of its own (#1713). `open_siege_engine_encounter` remains the one exception:
 it has no `ChallengeChampionDuelAction`-style Action or telnet counterpart yet.
 
+## Staging (#2010)
+
+Zero mutation path existed to *create* a Battle at all before #2010 — the round-flow
+Actions/telnet documented above (`begin_battle_round`/`declare_battle_action`/etc.)
+all operate on an existing `Battle`. A JUNIOR-trust GM now picks from an admin-authored
+catalog (`BattleMapBlueprint`/`BattleUnitTemplate`) rather than inventing terrain
+layouts or unit stat blocks from scratch — see **ADR-0111** and **ADR-0110** (GM
+content is catalog + adaptation, never invention).
+
+### Models
+
+- `BattleMapBlueprint` (`name` unique, `description`, `is_active`) — a reusable,
+  admin-authored battle-map layout.
+- `BlueprintBattlePlace` (`blueprint` FK, `name`, `terrain_type`, `movement_cost`,
+  `x`/`y`/`footprint_radius`) — catalog-time counterpart to `BattlePlace`; unique
+  `(blueprint, name)`.
+- `BlueprintFortification` (`blueprint_place` FK, `kind`, `max_integrity`,
+  `defending_side_role`) — catalog-time counterpart to `Fortification`; resolved to
+  a concrete `BattleSide` by role when the blueprint is staged.
+- `BattleUnitTemplate` (`name` unique, `descriptor`, `quality`, `strength`, `morale`,
+  `individual_count`, `is_active`, `properties` M2M → `mechanics.Property`,
+  `capabilities` M2M → `conditions.CapabilityType` through `BattleUnitTemplateCapability`)
+  — a reusable, admin-authored unit stat block; catalog-time counterpart to `BattleUnit`.
+- `BattleUnitTemplateCapability` (`template` FK, `capability` FK, `value`) — authored
+  `(template, capability) -> magnitude` row; unique `(template, capability)`.
+
+### Services (`src/world/battles/staging.py`)
+
+| Service | Signature | Effect |
+|---|---|---|
+| `stage_battle` | `(*, name, risk_level=RiskLevel.LOW, blueprint=None, campaign_story=None, region=None, location=None) -> Battle` | Creates a Battle with both sides pre-added (`create_battle` + `add_side` × 2); clones `blueprint`'s places/fortifications onto it if given. When `location` is given, binds `battle.scene.location` — battles are otherwise location-less by default (`Battle.save()` creates the backing Scene with `location=None`, ADR-0081), which would leave the battle unreachable by the room-scoped round-flow actions. |
+| `instantiate_battle_blueprint` | `(blueprint, battle, *, replace=False) -> list[BattlePlace]` | Clones `blueprint`'s `BlueprintBattlePlace`/`BlueprintFortification` rows onto `battle`'s own `BattlePlace`/`Fortification` rows. Raises `BattleStagingError` if `battle` already has places and `replace=False`; if `replace=True` but the battle already has a `BattleRound` or a stationed unit/participant (`_ensure_blueprint_replace_is_safe` — tearing down would silently orphan live state); or if a fortification's `defending_side_role` has no matching `BattleSide` on `battle`. |
+| `spawn_units_from_template` | `(template, *, battle, side, place=None, count=1) -> list[BattleUnit]` | Spawns `count` (clamped to `[1, MAX_TEMPLATE_SPAWN]` = 20) `BattleUnit` rows copying `template`'s `strength`/`morale`/`quality`/`descriptor`/`properties`/`capability_values`/`individual_count`, via `add_unit`. Names continue numbering past any existing `"<template.name> N"` units in the battle rather than restarting at 1. |
+
+`BattleStagingError` (`world.battles.exceptions`) is the exception type these raise;
+it surfaces as `ActionResult(success=False, message=exc.user_message)`, same as every
+other `BattleError` subclass.
+
+### Actions (`src/actions/definitions/battles.py`)
+
+Five JUNIOR-trust GM actions, all `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`:
+
+| Key | Class | target_type | Effect |
+|---|---|---|---|
+| `create_battle` | `CreateBattleAction` | SELF | Entry point of the staging pipeline — wraps `stage_battle` (passing `location=actor.location`, so the battle is immediately reachable by round-flow actions in the GM's own room); when `blueprint_id` is given (resolved `is_active=True` only), the blueprint is instantiated in the same call. Also grants the creating account `is_gm` on the battle's backing Scene via `SceneParticipation.objects.update_or_create` (a third writer of `SceneParticipation.is_gm`, alongside `_enroll_lead_gm_on_scene` and `enroll_present_table_gms` — see `world/scenes/CLAUDE.md`) so the battle-scoped actions below recognize this GM as the battle's own, not merely staff. |
+| `stage_battle_map` | `StageBattleMapAction` | SELF | Battle-scoped — wraps `instantiate_battle_blueprint`; takes `battle_id`/`blueprint_id`/`replace`. |
+| `spawn_battle_units` | `SpawnBattleUnitsAction` | SELF | Battle-scoped — wraps `spawn_units_from_template`; takes `battle_id`/`template_id`/`side_id`/`place_id`/`count`. |
+| `enlist_battle_participant` | `EnlistBattleParticipantAction` | SELF | Battle-scoped — thin wrapper over `world.battles.services.enlist_participant`; takes `battle_id`/`character_sheet_id`/`side_id`/`place_id`; pre-checks for an existing `BattleParticipant` row rather than surfacing the `unique_battle_participant` `IntegrityError`. |
+| `browse_battle_catalog` | `BrowseBattleCatalogAction` | SELF | Read-only, not battle-scoped — searches both catalogs by name/description (`term` kwarg), filtered `is_active=True` only (the one surface this feature's catalog-visibility rule is enforced on; the staging services above deliberately do not check it themselves). |
+
+The three battle-scoped actions (`stage_battle_map`/`spawn_battle_units`/
+`enlist_battle_participant`) re-verify `_actor_may_gm_battle` in `execute()` — a
+JUNIOR GM who isn't staff and isn't this battle's own GM must not touch someone
+else's battle; `MinimumGMLevelPrerequisite` alone only proves general JUNIOR+ trust,
+not standing over *this* battle. Every action resolves ids defensively
+(`DoesNotExist`/`TypeError`/`ValueError` all fold to the same "no such X" failure
+message) so a malformed or missing id never raises — always a clean `ActionResult
+(success=False)`.
+
+### Telnet: `CmdBattle` staging subverbs (`src/commands/battle.py`)
+
+GM staging subverbs, alongside the round-flow subverbs documented above:
+
+| Subverb | Effect |
+|---|---|
+| `battle create <name> [risk=<level>] [map=<blueprint>]` | `create_battle` |
+| `battle stage <blueprint> [replace]` | `stage_battle_map` (on the caller's active battle) |
+| `battle spawn <template> [count=N] [at <front>] [side=<role>]` | `spawn_battle_units` |
+| `battle enlist <character> = <side>[, <front>]` | `enlist_battle_participant` |
+| `battle maps [<term>]` / `battle units [<term>]` | `browse_battle_catalog`, pre-filtered to blueprints / templates only |
+
+E2E coverage: `src/integration_tests/pipeline/test_battle_staging_telnet_e2e.py`.
+
+### Catalog API (`world/battles/views.py`, `world/battles/serializers.py`, `world/battles/urls.py`)
+
+Two read-only `ReadOnlyModelViewSet`s under `/api/battles/`, both gated
+`HasGMTrust` (`world.gm.permissions` — DRF counterpart to
+`MinimumGMLevelPrerequisite`, JUNIOR-tier floor with a staff bypass; new in #2010):
+
+- `GET /api/battles/map-blueprints/` (`BattleMapBlueprintViewSet`) — `BattleMapBlueprintSerializer`,
+  filterable by `?is_active=`, `StandardResultsSetPagination`. Nests `places`
+  (`BlueprintBattlePlaceSerializer`) → `fortifications`
+  (`BlueprintFortificationSerializer`) via `Prefetch(..., to_attr=...)` — zero extra
+  queries per place.
+- `GET /api/battles/unit-templates/` (`BattleUnitTemplateViewSet`) — `BattleUnitTemplateSerializer`,
+  filterable by `?is_active=`. Nests `properties`
+  (`BattleUnitTemplatePropertySerializer`) and `capability_values`
+  (`BattleUnitTemplateCapabilitySerializer`) via the same prefetch-to_attr pattern.
+
+### Dispatch `success` field
+
+`DispatchResultSerializer.success` (`actions/serializers.py`) is now nullable on the
+wire (`instance.detail.success` for a REGISTRY `ActionResult`; `None` for a deferred
+dispatch, a `ChallengeResolutionResult`, or no detail at all) — added by this feature
+so the web `StagingPanel` (below) can distinguish an honest business-rule failure
+(HTTP 200, `success: false`) from a real success, since the dispatch endpoint always
+resolves 200 for a rejection.
+
+### Web: `StagingPanel` (`frontend/src/battles/components/StagingPanel.tsx`)
+
+Minimal GM staging controls on the `BattleMapPage` (#2009). Server-authoritative
+gating: renders only when the viewer's dispatchable registry actions include at
+least one staging ref (`create_battle`/`stage_battle_map`/`spawn_battle_units`/
+`enlist_battle_participant`) — no client-side GM-level check. Two render modes: no
+Battle yet for this scene shows the "Create Battle" form (dispatching
+`create_battle`); a Battle exists shows Apply Blueprint (with a replace-confirm step),
+Spawn Units, and Enlist Participant forms, each gated independently on its own action
+ref being present. Mirrors `RoomPositionsPanel`'s dispatch idiom exactly
+(`useDispatchPlayerAction`); a failed dispatch (`result.success === false`) shows
+error styling and leaves the form/state alone; a successful dispatch resets its form
+and invalidates the battle detail + for-scene queries so `BattleMapCanvas` refetches.
+
 ## Web surface (#2009)
 
-The strategic battle map is a web-first read surface layered on top of the round
-flow above — no new mutation path; the GM/player Actions and telnet grammar
-already documented remain the only way to change battle state.
+The strategic battle map itself is a web-first read surface layered on top of the
+round flow above — the `BattleViewSet` REST/WS surface documented in this section
+adds no mutation path of its own; the round-lifecycle GM/player Actions and telnet
+grammar already documented remain the only way to change an *existing* battle's
+state. The setup/staging layer (creating a Battle, giving it a map, populating it
+with units) had **no** mutation path at all before #2010 — not even telnet; a battle
+could only come into existence via Django admin/tests/factories. See
+[Staging (#2010)](#staging-2010) above for the Actions/telnet/catalog-API/`StagingPanel`
+that filled that gap; its dispatch goes through the exact same Action/telnet seam as
+every other mutation in this system, so the "no bypass of Actions" invariant still holds.
 
 ### REST: `BattleViewSet` (`world/battles/views.py`, `world/battles/urls.py`)
 
@@ -1183,7 +1314,10 @@ payload data is applied directly; invalidation alone triggers the refetch.
 - **Stories** — `Battle.campaign_story` FK (informational; not used for beat
   resolution); `world.battles.beat_wiring` resolves linked `Beat`s via
   `Scene → EpisodeScene → Episode` (#1785)
-- **Actions** — four REGISTRY actions, `BattleRoundContext` in `get_active_round_context`
+- **Actions** — nine battle actions (plus `ChallengeChampionDuelAction`), `BattleRoundContext`
+  in `get_active_round_context`
+- **GM system** — `world.gm.permissions.HasGMTrust` gates the two staging catalog
+  ViewSets (#2010) — see [Staging (#2010)](#staging-2010)
 
 ## Source
 
@@ -1191,12 +1325,14 @@ payload data is applied directly; invalidation alone triggers the refetch.
 - `models.py` — all battle models
 - `constants.py` — enums + tuning constants
 - `services.py` — all service functions (setup + declaration + conclusion)
+- `staging.py` — GM battle-staging services: `stage_battle`, `instantiate_battle_blueprint`,
+  `spawn_units_from_template` (#2010)
 - `resolution.py` — `resolve_battle_round` + `BattleRoundResult` + the #1711 modifier stack
 - `round_context.py` — `BattleRoundContext` + `resolve_battle_round_context`
-- `exceptions.py` — exception hierarchy
+- `exceptions.py` — exception hierarchy (`BattleStagingError`, #2010)
 - `factories.py` — FactoryBoy factories for all models + `ensure_battle_command_modifier_target` (#1711)
 - `admin.py` — Django admin registrations for every battle model (#1711)
 
-`src/actions/definitions/battles.py` — four REGISTRY actions
+`src/actions/definitions/battles.py` — nine REGISTRY actions (plus `ChallengeChampionDuelAction`)
 
 `src/commands/battle.py` — `CmdBattle` telnet namespace
