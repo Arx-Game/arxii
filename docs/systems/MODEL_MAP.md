@@ -1312,6 +1312,7 @@
   - condition_template -> conditions.ConditionTemplate [FK] (nullable)
   - relationship_condition -> relationships.RelationshipCondition [FK] (nullable)
   - property -> mechanics.Property [FK] (nullable)
+  - distinction -> distinctions.Distinction [FK] (nullable)
   - damage_type -> conditions.DamageType [FK] (nullable)
   - flow_definition -> flows.FlowDefinition [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)

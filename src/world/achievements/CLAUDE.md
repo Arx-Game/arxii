@@ -35,14 +35,19 @@ Conditions to earn an achievement. FK to StatDefinition with thresholds.
 Lookup table for rewards. Normalizes reward identifiers across game systems.
 - key (unique): dot-separated identifier, e.g., 'title.champion'
 - name: player-facing display name
-- reward_type: TextChoices (title, bonus, cosmetic, **prestige**)
+- reward_type: TextChoices (title, bonus, cosmetic, prestige, **distinction**)
 - modifier_target: FK to `mechanics.ModifierTarget` (nullable) — for BONUS rewards, *which* stat
   the bonus modifies (e.g. allure); the amount comes from `AchievementReward.reward_value`
+- distinction: FK to `distinctions.Distinction` (nullable, `SET_NULL`, mirrors `modifier_target`)
+  — for DISTINCTION rewards (#2037), *which* Distinction to grant/rank-up; the optional explicit
+  rank comes from `AchievementReward.reward_value`
 
 ### AchievementReward
 Links an achievement to a RewardDefinition with optional parameterization.
 - FK to Achievement, FK to RewardDefinition
-- reward_value: optional extra data — the **amount** for BONUS (e.g. "5") and PRESTIGE (e.g. "5000")
+- reward_value: optional extra data — the **amount** for BONUS (e.g. "5") and PRESTIGE (e.g.
+  "5000"), or an optional explicit **rank** for DISTINCTION (e.g. "3"; blank/invalid parses as
+  "advance one step")
 
 ### CharacterTitle (SharedMemoryModel)
 The cosmetic/display record of a title a character has earned (FK character_sheet, FK to a TITLE
@@ -67,9 +72,15 @@ by `reward_type`:
 - **BONUS** → a `CharacterModifier` on `reward.modifier_target` (amount = `reward_value`), sourced
   via the shared `mechanics.ModifierSource.achievement_reward` marker (mirrors `residence_comfort`).
 - **PRESTIGE** → `societies.renown.award_deed_prestige(persona, amount)` on the primary persona.
+- **DISTINCTION** (#2037) → `distinctions.services.grant_distinction(sheet, reward.distinction,
+  origin=DistinctionOrigin.ACHIEVEMENT_AUTO_GRANT, rank=...)` — `reward_value` parses as an
+  explicit rank when a valid int, else `rank=None` (advance one step; NOT a no-op, unlike
+  `_grant_bonus`'s parse-or-skip). A `DistinctionExclusionError` (mutual/variant conflict) is
+  caught and logged — the distinction leg is skipped, the rest of the award proceeds unharmed.
 - **COSMETIC** → no-op until that system exists.
 
-Cross-app deps (mechanics/societies) are **lazy-imported** so `achievements` stays low-coupled.
+Cross-app deps (mechanics/societies/distinctions) are **lazy-imported** so `achievements` stays
+low-coupled.
 
 Achievement-sourced BONUS modifiers ARE read by `get_modifier_total`: `get_modifier_breakdown`
 counts *recognized* non-distinction sources (`achievement_reward`, `residence_comfort`) as flat

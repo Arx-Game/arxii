@@ -1620,15 +1620,17 @@ gains a discoverable content item for the first time.
   `prerequisite` self-FK, `is_active`), `AchievementRequirement` (stat threshold comparison per
   achievement), `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp),
   `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a co-discoverer),
-  `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE reward catalog),
-  `AchievementReward` (per-achievement reward with optional `reward_value` amount),
+  `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION reward catalog;
+  `distinction` nullable FK → `distinctions.Distinction`, mirrors `modifier_target`, #2037),
+  `AchievementReward` (per-achievement reward with optional `reward_value` amount, or an
+  explicit rank for DISTINCTION),
   `CharacterTitle` (earned display-only title record; FK → TITLE `RewardDefinition`),
   `ConditionStatRule` (bridge: condition event type → stat increment),
   **`DiscoverableContent`** (abstract base — adds nullable `discovery_achievement` FK to any
   content model whose instances can be discovered for the first time; inherited by `Technique`
   and `CovenantRole`; null = not discoverable; see ADR-0061)
 - **Enums:** `NotificationLevel` (PERSONAL / ROOM / GAMEWIDE), `ComparisonType` (GTE / EQ / LTE),
-  `RewardType` (TITLE / BONUS / COSMETIC / PRESTIGE), `ConditionEventType` (GAINED),
+  `RewardType` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION), `ConditionEventType` (GAINED),
   `AccessChangeSource` (ASSUMED_ALTERNATE_SELF / REVERTED_ALTERNATE_SELF /
   COVENANT_ROLE_ENGAGED / COVENANT_ROLE_DISENGAGED / CHARACTER_CREATION)
 - **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
@@ -2437,6 +2439,13 @@ Unified modifier system — categories, types, sources, and per-character modifi
     `LEGEND_AWARD`, `CAPTURE`, `ESCAPE_CAPTIVITY`, `RESCUE_CAPTIVE`
   - Added in #1018: `CREATE_POSITION`, `MOVE_TO_POSITION`, `SEVER_EDGE`,
     `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT`
+  - Added in #1697: `SET_RELATIONSHIP_CONDITION`, `SHIFT_AFFECTION`
+  - Added in #2037: `GRANT_DISTINCTION` — `ConsequenceEffect.distinction` FK (CASCADE, mirrors
+    `property`) + `distinction_rank` (nullable, mirrors `property_value`; null = advance one
+    step). Handler `_grant_distinction` calls the shared `distinctions.grant_distinction` seam
+    with `origin=DistinctionOrigin.CONSEQUENCE_POOL`; a `DistinctionExclusionError` is caught
+    and turned into a skipped `AppliedEffect` (mirrors `_apply_capture`'s
+    `AlreadyCapturedError` skip pattern) — never crashes the surrounding resolution.
 - **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers),
   action_points (AP modifiers), goals (goal domains), positioning (reshape handlers in effect_handlers.py)
 - **Source:** `src/world/mechanics/`

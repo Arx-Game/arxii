@@ -8,6 +8,7 @@ and awards achievements when thresholds are met.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -25,6 +26,8 @@ from world.achievements.models import (
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+
+logger = logging.getLogger(__name__)
 
 
 def get_stat(character_sheet: CharacterSheet, stat: StatDefinition) -> int:
@@ -208,14 +211,53 @@ def _grant_prestige(character_sheet: CharacterSheet, reward_value: str) -> None:
     award_deed_prestige(persona, amount)
 
 
+def _grant_distinction(character_sheet: CharacterSheet, reward, reward_value: str) -> None:
+    """Grant/rank-up a DISTINCTION reward through the shared acquisition seam (#2037).
+
+    ``reward_value`` optionally encodes an explicit rank: a valid int sets/raises to that rank;
+    blank or garbage parses as ``rank=None`` (advance one step) — deliberately NOT a no-op like
+    ``_grant_bonus``'s parse-or-skip, since a DISTINCTION reward with no authored rank should
+    still grant/rank-up the linked distinction.
+
+    A mutual/variant exclusion conflict (``DistinctionExclusionError``) is logged and skipped —
+    one reward's conflict must never crash the surrounding achievement-award flow.
+    """
+    from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
+    from world.distinctions.services import grant_distinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    if reward.distinction_id is None:
+        return
+    try:
+        rank = int(reward_value)
+    except (TypeError, ValueError):
+        rank = None
+    try:
+        grant_distinction(
+            character_sheet,
+            reward.distinction,
+            origin=DistinctionOrigin.ACHIEVEMENT_AUTO_GRANT,
+            rank=rank,
+            source_description=f"Achievement reward: {reward.name}",
+        )
+    except DistinctionExclusionError:
+        logger.warning(
+            "Achievement reward %s: distinction grant skipped for sheet %s (exclusion conflict)",
+            reward.key,
+            character_sheet.pk,
+        )
+
+
 def apply_achievement_rewards(character_sheet: CharacterSheet, achievement: Achievement) -> None:
-    """Apply an achievement's rewards to a character — title / bonus / prestige (#1522).
+    """Apply an achievement's rewards to a character — title / bonus / prestige / distinction
+    (#1522, #2037).
 
     Called once per newly-earned (sheet, achievement) by ``grant_achievement``. Mechanical rewards
     attach to the *achievement*, not the title: TITLE records a ``CharacterTitle`` (cosmetic), BONUS
     materializes a ``CharacterModifier`` on the reward's target, PRESTIGE bumps the persona's
-    deed-prestige. COSMETIC is a no-op until that system lands. Cross-app deps are lazy-imported so
-    ``achievements`` stays low-coupled.
+    deed-prestige, DISTINCTION grants/ranks-up the linked Distinction via the shared
+    ``grant_distinction`` seam. COSMETIC is a no-op until that system lands. Cross-app deps are
+    lazy-imported so ``achievements`` stays low-coupled.
     """
     for achievement_reward in achievement.cached_rewards:
         reward = achievement_reward.reward
@@ -226,3 +268,5 @@ def apply_achievement_rewards(character_sheet: CharacterSheet, achievement: Achi
             _grant_bonus(character_sheet, reward, value)
         elif reward.reward_type == RewardType.PRESTIGE:
             _grant_prestige(character_sheet, value)
+        elif reward.reward_type == RewardType.DISTINCTION:
+            _grant_distinction(character_sheet, reward, value)

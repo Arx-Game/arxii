@@ -12,6 +12,7 @@ class EffectType(models.TextChoices):
     SHIFT_AFFECTION = "shift_affection", "Shift Affection"
     ADD_PROPERTY = "add_property", "Add Property"
     REMOVE_PROPERTY = "remove_property", "Remove Property"
+    GRANT_DISTINCTION = "grant_distinction", "Grant Distinction"
     DEAL_DAMAGE = "deal_damage", "Deal Damage"
     LAUNCH_ATTACK = "launch_attack", "Launch Attack"
     LAUNCH_FLOW = "launch_flow", "Launch Flow"

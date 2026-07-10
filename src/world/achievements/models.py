@@ -347,6 +347,17 @@ class RewardDefinition(SharedMemoryModel):
             "from AchievementReward.reward_value."
         ),
     )
+    distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reward_definitions",
+        help_text=(
+            "For DISTINCTION rewards: which Distinction to grant/rank-up (#2037). The optional "
+            "explicit rank comes from AchievementReward.reward_value."
+        ),
+    )
 
     class Meta:
         ordering = ["reward_type", "key"]
