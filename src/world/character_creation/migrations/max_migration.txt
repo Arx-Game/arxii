@@ -1,1 +1,1 @@
-0005_characterdraft_claimed_kin_pool_and_more
+0006_startingarea_grants_residence_tenancy

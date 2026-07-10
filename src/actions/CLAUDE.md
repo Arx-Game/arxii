@@ -67,7 +67,13 @@ They do not use the command system, dispatchers, or handlers.
   #1514 close-out — comfort fixtures over `place_decoration`/`remove_decoration`),
   `AssignRoomTenantAction` (`"assign_room_tenant"`), `EndRoomTenancyAction`
   (`"end_room_tenancy"`), `SetPrimaryHomeAction` (`"set_primary_home"`,
-  `IsRoomTenantPrerequisite`), `CommissionDecorationAction` (`"commission_decoration"`),
+  `IsRoomTenantPrerequisite` — widened #2036 to owner-OR-tenant standing, not a direct
+  tenancy row only), `TagRoomResonanceAction`/`UntagRoomResonanceAction`
+  (`"tag_room_resonance"`/`"untag_room_resonance"`, #2036 — thin wrappers over
+  `world.magic.services.gain.tag_room_resonance`/`untag_room_resonance`, same
+  `IsRoomTenantPrerequisite` gate; tagging also requires the caller has claimed the
+  resonance, mirroring the pose/scene-entry endorsement claimed-resonance check),
+  `CommissionDecorationAction` (`"commission_decoration"`),
   `StartExtensionAction` (`"start_building_extension"`), and the #1930 condition family
   `SettleBuildingArrearsAction` (`"settle_building_arrears"`), `RefurbishBuildingAction`
   (`"refurbish_building"` — the priced condition restore; distinct from the

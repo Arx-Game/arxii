@@ -8,6 +8,26 @@
 **Related:** Spec A §3.1 (earn interface), §8.2 (Spec C handoff), Scope 6 daily
 tick infrastructure.
 
+**Implementation note (as shipped — updated #2036):** the room-aura layer below
+(§2.5–2.6, `RoomAuraProfile`/`RoomResonance`) was never built as modeled. Room
+resonance tags are `LocationValueModifier` rows (`key_type=RESONANCE`,
+`source=ROOM_RESONANCE_TAG_SOURCE`) written by `tag_room_resonance`/
+`untag_room_resonance` (`world/magic/services/gain.py`) — no separate room-aura
+model exists; see `world/magic/CLAUDE.md` and `docs/systems/INDEX.md`. The
+residence-declaration API in §4.1/§4.2 (a raw `PATCH .../character-sheets/<id>/`
+writing `current_residence_id`) was never built either — the shipped seam is
+action-based: `world.locations.services.set_primary_home` (via
+`SetPrimaryHomeAction` — telnet `room/home` and `home/set`, and the web "Set as
+Home" button) writes `CharacterSheet.current_residence` alongside Evennia
+`home`, and additionally accepts org-derived owner/tenant standing (not only a
+direct `LocationTenancy` row) by minting a personal tenancy first (#2036). Room
+aura tagging itself reached telnet as `room/aura <resonance>` / `room/aura
+clear <resonance>` (Actions `tag_room_resonance`/`untag_room_resonance`, gated
+by the owner-or-tenant `IsRoomTenantPrerequisite`) and the web
+`RoomAuraPicker` — no REST endpoint for either. The rest of this spec (models
+§2.1–2.4, services §3.0–3.2/3.4–3.5, API §4.3–4.4, rules §5.1/5.2/5.4/5.5)
+matches what shipped.
+
 ---
 
 ## 1. Context & Design Intent

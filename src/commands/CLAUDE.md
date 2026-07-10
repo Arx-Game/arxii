@@ -54,7 +54,10 @@ actions, backends, and service functions.
   staff bypass preserved)
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive` (#1909: swaps to
   `GiveCoinsAction` when the item-name text parses as money via `parse_coppers`),
-  `CmdHome`
+  `CmdHome` (bare `home` recalls; `home/set` delegates to `SetPrimaryHomeAction` (#2036) —
+  the same seam `room/home` and the web "Set as Home" button use, replacing a hand-rolled
+  owner/tenant check that never accepted org-derived standing or wrote
+  `CharacterSheet.current_residence`)
 - **`evennia_overrides/items.py`**: `CmdWear`, `CmdUndress`, `CmdRemove`, `CmdPut`,
   `CmdWithdraw` (`withdraw <item> from <container>`; also the `withdraw coins <amount>`
   loose-cash branch, #1909 — the `withdraw` command key was already spoken for by
@@ -428,7 +431,11 @@ actions, backends, and service functions.
   [like=<room>] [size=<tier>]` → `DigRoomAction`; `room/size <tier>` → `ResizeRoomAction`;
   `room/drop confirm` → `RemoveRoomAction`; `room/addexit <room>=<there>,<back>` /
   `room/removeexit <exit>` / `room/renameexit <exit>=<name>` → the exit actions;
-  `room/home` → `SetPrimaryHomeAction` (tenant-gated); `room/tenant <char>` /
+  `room/home` → `SetPrimaryHomeAction` (owner-or-tenant standing, #2036 —
+  `IsRoomTenantPrerequisite` widened to `is_owner OR is_tenant`); `room/aura <resonance>` /
+  `room/aura clear <resonance>` → `TagRoomResonanceAction`/`UntagRoomResonanceAction` (#2036,
+  same owner-or-tenant gate; tagging additionally requires the caller has claimed that
+  resonance); `room/tenant <char>` /
   `room/evict <char>` → tenancy actions; `room/extend <units>` → `StartExtensionAction`;
   `room/decorate <template> [here]` → `CommissionDecorationAction`; `room/style <name>` →
   `SetBuildingStyleAction` (#1469, knowledge-gated throwback tier); `room/fixture <kind>` /

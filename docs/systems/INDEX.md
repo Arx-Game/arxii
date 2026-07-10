@@ -141,6 +141,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `PoseUnit` (`frontend/src/scenes/components/`) — `kind` prop is `'pose' | 'entry' |
     'style'` (style added #2031), POSTing to `pose-endorsements/` /
     `scene-entry-endorsements/` / `style-presentation-endorsements/` respectively.
+  - **Residence declaration + room aura, live end-to-end (#2036):** the `ROOM_RESIDENCE`
+    daily-trickle `GainSource` above is reachable via a full declare→tag→tick loop —
+    `SetPrimaryHomeAction` (`world.locations.services.set_primary_home`) writes
+    `CharacterSheet.current_residence`, `tag_room_resonance`/`untag_room_resonance`
+    (`world.magic.services.gain`) write/remove the room's aura as a
+    `LocationValueModifier(key_type=RESONANCE)` row, and `residence_trickle_tick()` grants
+    resonance for the intersection of tagged and claimed resonances. `StartingArea
+    .grants_residence_tenancy` auto-grants a CG starting tenancy so a new character reaches
+    the gate with zero manual step. A Sanctum's Ritual of Homecoming happens to write the same
+    row shape onto its own room, so a resident Sanctum owner trickles from Homecoming growth
+    for free — see `world/magic/CLAUDE.md` "Residence declaration + room aura tagging" for the
+    full mechanism.
   - **Aura drift (#1737):** `CharacterAura`'s stored percentages recompute from
     `CharacterResonance.lifetime_earned` on every `grant_resonance()` call, firing
     achievements on authored `AuraAffinityThreshold` crossings; see magic.md
@@ -640,7 +652,20 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
   readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/
   `is_tenant()` (ownership/tenancy lookups), `assign_room_tenant()`/`end_room_tenancy()`/
   `set_primary_home()` (#670 player tenancy seam — owner grants/evicts, tenant departs or
-  designates home; syncs the #1514 residence + recomputes prestige)
+  designates home; syncs the #1514 Evennia-`home` residence + recomputes prestige). #2036 widened
+  `set_primary_home()`: it now also writes `CharacterSheet.current_residence` (via
+  `world.magic.services.gain.set_residence`, the daily resonance-trickle gate) on every deliberate
+  declaration, accepts org-derived owner/tenant standing (not only a direct `LocationTenancy` row)
+  by minting a personal tenancy first via `grant_tenancy()`, and `end_tenancy()` clears
+  `current_residence` when the ended tenancy was the declared residence.
+  `maybe_default_residence()` was widened the same way — the first room a persona rents/acquires
+  now defaults both Evennia `home` and `current_residence`. Room aura tagging —
+  `tag_room_resonance()`/`untag_room_resonance()` (`world.magic.services.gain`) — writes/removes
+  the `LocationValueModifier(key_type=RESONANCE, source=ROOM_RESONANCE_TAG_SOURCE)` row a room's
+  resident resonances trickle from; reached via Actions `tag_room_resonance`/`untag_room_resonance`
+  (telnet `room/aura <resonance>` / `room/aura clear <resonance>`, web `RoomAuraPicker`), gated by
+  `IsRoomTenantPrerequisite` (widened #2036 to owner-OR-tenant standing, not a direct tenancy row
+  only — same widened gate now used by `SetPrimaryHomeAction` itself).
 - **API:** `GET /api/locations/comfort/?character_id=<id>` (`ComfortViewSet`) — personal comfort
   readout, tenure-gated
 - **Frontend:** `ComfortWidget` (`frontend/src/comfort/`) — silent unless something is biting
@@ -1087,8 +1112,16 @@ Character identity, appearance, demographics, and guise system.
 ### Character Creation
 Multi-stage character creation flow with draft system.
 
-- **Models:** `CharacterDraft`, `StartingArea`, `Beginnings`
-- **Key Functions:** Stage validation, draft progression
+- **Models:** `CharacterDraft`, `StartingArea` (`grants_residence_tenancy` BooleanField, default
+  True, #2036 — an authored per-area toggle for whether finalizing a character there grants a
+  `LocationTenancy` at the starting room), `Beginnings`
+- **Key Functions:** Stage validation, draft progression, `_grant_cg_residence_tenancy()` (#2036,
+  `world/character_creation/services.py`) — called from `finalize_character`; when
+  `starting_area.grants_residence_tenancy` and the starting room resolves a `RoomProfile`, calls
+  `world.locations.services.grant_tenancy()` for the new primary persona (notes="Academy
+  enrollment"), which auto-defaults both Evennia `home` and `CharacterSheet.current_residence` via
+  `maybe_default_residence()` — closes the "Academy auto-residence" story with zero manual player
+  step, making the daily residence-trickle gate reachable straight out of CG.
 - **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stat Traits/Rosters/Path so `finalize_character` runs on a fresh DB. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
