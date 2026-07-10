@@ -721,6 +721,12 @@ def wire_covenant_role_powers_catalog() -> "tuple[CovenantRole, list[CapabilityT
     # ------------------------------------------------------------------
     # Per resonance: tier-0 passive CAPABILITY_GRANT + a tier-1 active pull.
     # Keyed (target_kind, resonance, tier, min_thread_level) — the unique lookup.
+    #
+    # FLAT_BONUS/INTENSITY_BUMP amounts use 10 (not 3/1) per #1845:
+    # thread_level_multiplier(1) == 0.1 (#1718's corrected ramp) and
+    # scaled_value = round(authored * multiplier); amounts below 6 round to 0
+    # at low thread levels, silently defeating the pull. 10 clears the floor
+    # with margin — same rationale as the Court catalog below.
     # ------------------------------------------------------------------
     ThreadPullEffect.objects.get_or_create(
         target_kind=TargetKind.COVENANT_ROLE,
@@ -743,7 +749,7 @@ def wire_covenant_role_powers_catalog() -> "tuple[CovenantRole, list[CapabilityT
         min_thread_level=0,
         defaults={
             "effect_kind": EffectKind.FLAT_BONUS,
-            "flat_bonus_amount": 3,
+            "flat_bonus_amount": 10,
             "narrative_snippet": (
                 "You pull harder on the war-fire and it surges — a blaze of borrowed "
                 "fury behind the blow."
@@ -772,7 +778,7 @@ def wire_covenant_role_powers_catalog() -> "tuple[CovenantRole, list[CapabilityT
         min_thread_level=0,
         defaults={
             "effect_kind": EffectKind.INTENSITY_BUMP,
-            "intensity_bump_amount": 1,
+            "intensity_bump_amount": 10,
             "narrative_snippet": (
                 "You draw the singing edge taut and it answers — every line of the "
                 "strike sharpened a degree past mortal keenness."
