@@ -130,6 +130,25 @@ mail.mark_read()   # Sets read_date to now
 mail.get_thread_messages()
 ```
 
+---
+
+## Telnet Surface (#2122)
+
+Roster browsing and applying stay web-only, by design. The one telnet exception is
+**own-status only** — a player checking on applications they've already submitted, which
+needs no listing/browsing UI:
+
+- `roster` / `roster status` (`commands/account/account_info.py`, `CmdRoster`, registered in
+  `AccountCmdSet`) — reads `self.account.player_data.get_pending_applications()` (the same
+  `PlayerData` method the web `/api/user/` payload's `pending_applications` field already
+  calls). Scoped to the caller's own `PlayerData` — no id-based lookup exists on the command,
+  so one account's applications can never surface another's.
+
+The telnet front door itself (connection screen + the characterless post-login message,
+`server/conf/connection_screens.py` / `typeclasses/accounts.py::at_post_login`) now points at
+`settings.FRONTEND_URL` so a telnet-only player has a path to the web roster/application/chargen
+flow in the first place.
+
 ### FamilyMember
 
 ```python

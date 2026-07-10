@@ -210,6 +210,12 @@ FALL_IMPACT_PER_LEVEL = env.int("FALL_IMPACT_PER_LEVEL", default=5)
 # TEMPORARY masks are not capped here (throwaway). PLACEHOLDER magnitude.
 MAX_ESTABLISHED_PERSONAS_PER_SHEET = env.int("MAX_ESTABLISHED_PERSONAS_PER_SHEET", default=5)
 
+# Web frontend base URL — the React app's origin. Referenced by allauth's
+# headless redirect config below, CSRF_TRUSTED_ORIGINS, and telnet-side
+# signposts (connection screen, characterless post-login message; #2122)
+# so telnet players always have a pointer to the web front door.
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
+
 # Django Allauth configuration
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
@@ -224,23 +230,16 @@ ACCOUNT_LOGIN_METHODS = {"username", "email"}  # Support both username and email
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/"
-ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = (
-    env("FRONTEND_URL", default="http://localhost:3000") + "/login?verified=true"
-)
+ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = FRONTEND_URL + "/login?verified=true"
 
 # Django-allauth headless configuration
 HEADLESS_ONLY = True  # Use headless API mode with custom email verification
 HEADLESS_FRONTEND_URLS = {
-    "account_confirm_email": env("FRONTEND_URL", default="http://localhost:3000")
+    "account_confirm_email": FRONTEND_URL
     + "/verify-email/{key}",  # Go to frontend, which will call API
-    "account_reset_password": env("FRONTEND_URL", default="http://localhost:3000")
-    + "/reset-password",
-    "account_reset_password_from_key": env(
-        "FRONTEND_URL",
-        default="http://localhost:3000",
-    )
-    + "/reset-password/{key}",
-    "account_signup": env("FRONTEND_URL", default="http://localhost:3000") + "/signup",
+    "account_reset_password": FRONTEND_URL + "/reset-password",
+    "account_reset_password_from_key": FRONTEND_URL + "/reset-password/{key}",
+    "account_signup": FRONTEND_URL + "/signup",
 }
 
 # Social auth providers
@@ -436,6 +435,9 @@ if DEBUG:
     )
 
 # Add frontend URL if specified (for ngrok, production domains, etc.)
+# Kept as its own env() lookup (default="") rather than settings.FRONTEND_URL:
+# FRONTEND_URL defaults to http://localhost:3000, but CSRF_TRUSTED_ORIGINS should
+# only gain an entry when the operator has explicitly configured a frontend URL.
 frontend_url = env("FRONTEND_URL", default="")
 if frontend_url:
     CSRF_TRUSTED_ORIGINS.append(frontend_url)

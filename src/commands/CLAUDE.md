@@ -645,6 +645,10 @@ actions, backends, and service functions.
   precondition of the Durance advance — `advance_class_level_via_session`/
   `convene_durance_at_site` additionally require the purchased `CharacterUnlock` receipt
   alongside `check_requirements_for_unlock`; see `world/progression/CLAUDE.md`'s multi-gate rule.
+  **#2122:** `progression unlocks` also prepends the caller's XP balance
+  (`ExperiencePointsData.current_available`) + last-5 `XPTransaction` rows, mirroring
+  `CmdKudos._show_balance`'s account-scoped lookup pattern — previously the balance only
+  leaked into failed-purchase error text. Not duplicated onto `sheet`.
 - **`gift_learning.py`**: `CmdLearn` (`learn`, #2116) — the gift/technique/thread-weaving
   acquisition namespace. One `DispatchCommand` routes a leading subverb (`gift <id>` /
   `technique <id>` / `thread <id>`) through `dispatch_player_action` — the same seam the web
@@ -720,7 +724,28 @@ actions, backends, and service functions.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
-- **`account_info.py`**: `CmdAccount` — account information display
+- **`account_info.py`**: `CmdAccount` (`@account`/`account`) — bare shows account information
+  display; `account email <address>` (#2122) sets/updates the account's primary allauth
+  `EmailAddress` and (re)sends the confirmation email — the telnet path to satisfy
+  `can_apply_for_characters()`'s verified-email gate for `create <user> <pass>`-registered
+  accounts, which collect no email otherwise. Operates on `self.account` only (no
+  target-account argument — can't touch another account's email). Calls
+  `EmailAddress.set_as_primary()` + `EmailAddress.send_confirmation(request=None,
+  signup=False)` directly rather than the higher-level `EmailAddress.objects.add_email()` /
+  `send_verification_email_to_address()` helper — that helper additionally calls
+  `django.contrib.messages.add_message(request, ...)`, which requires a real `HttpRequest`
+  with message-storage middleware and raises `TypeError` on `request=None` outside an HTTP
+  request/response cycle (this project has `django.contrib.messages` installed via Evennia's
+  default settings). `send_confirmation(request=None, ...)` is itself a documented allauth
+  call shape (confirmations sent outside a request context) and is safe here because
+  `settings.FRONTEND_URL` / `HEADLESS_FRONTEND_URLS` is always an absolute URL, so allauth's
+  `render_url` never dereferences `request.build_absolute_uri`. `can_apply_for_characters()`
+  (`evennia_extensions/models.py`) is unchanged — this command only gives telnet-only accounts
+  a path to satisfy it. Also home to `CmdRoster` (`roster`/`roster status`, #2122) — read-only
+  status of the caller's own pending `RosterApplication` rows via `PlayerData
+  .get_pending_applications()`; roster browsing stays web-only (by design), scoped to the
+  caller's own `PlayerData` (no id-based lookup exists, so it can't leak another account's
+  applications).
 - **`character_switching.py`**: `CmdIC`, `CmdCharacters` — character switching
 - **`sheet.py`**: `CmdSheet` — the character sheet **hub**. Bare `sheet` shows the overview;
   `sheet/<section>` dispatches to a section (mirroring the web sheet tabs). The sheet is the

@@ -22,6 +22,7 @@ several more options for customizing the Guest account system.
 
 """
 
+from django.conf import settings
 from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 
@@ -296,7 +297,9 @@ class Account(DefaultAccount):
             session.msg("Use '@ic <character>' to control a character.")
         else:
             session.msg(
-                "You have no available characters. Contact staff for character access.",
+                "You have no available characters. Visit "
+                f"{settings.FRONTEND_URL} to browse the roster and apply for a "
+                "character, or contact staff for access.",
             )
 
     def at_post_create_character(self, character, **kwargs):

@@ -16,7 +16,7 @@ own cmdsets by inheriting from them or directly from `evennia.CmdSet`.
 
 from evennia import default_cmds
 
-from commands.account.account_info import CmdAccount
+from commands.account.account_info import CmdAccount, CmdRoster
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
@@ -392,6 +392,8 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         self.add(CmdSheet())
         self.add(CmdPage())
         self.add(CmdPromptReply())
+        # #2122 — own-status-only roster check (browsing stays web-first).
+        self.add(CmdRoster())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):

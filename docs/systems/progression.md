@@ -498,6 +498,14 @@ progression unlock skill=<id>    — purchase a skill's XP-boundary breakthrough
 for the skill-breakthrough purchase's mechanics (rust payoff, ephemeral dev points,
 `purchase_skill_breakthrough`).
 
+`progression unlocks` also prepends the caller's **XP balance** (`ExperiencePointsData
+.current_available`) and last-5 `XPTransaction` rows (#2122) — the only telnet display of
+account XP; previously it only leaked into failed-purchase error text. Account lookup mirrors
+`CmdKudos._show_balance`'s pattern exactly (`get_account_for_character`, `world.roster
+.selectors`), so a stray character with no active tenure reports a zero balance rather than
+erroring. Deliberately not duplicated onto `sheet` — one canonical place avoids two surfaces to
+keep in sync (see `CmdProgressionUnlock._render_xp_balance` in `commands/progression.py`).
+
 ### `kudos` — Claim kudos for XP (#1348)
 
 ```
