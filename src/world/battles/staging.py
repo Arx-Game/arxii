@@ -35,6 +35,8 @@ from world.battles.services import (
 from world.combat.constants import RiskLevel
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.areas.models import Area
     from world.stories.models import Story
 
@@ -44,13 +46,14 @@ MAX_TEMPLATE_SPAWN = 20
 
 
 @transaction.atomic
-def stage_battle(
+def stage_battle(  # noqa: PLR0913 - each param is a distinct staging facet
     *,
     name: str,
     risk_level: str = RiskLevel.LOW,
     blueprint: BattleMapBlueprint | None = None,
     campaign_story: Story | None = None,
     region: Area | None = None,
+    location: ObjectDB | None = None,
 ) -> Battle:
     """Create a Battle with both sides pre-added, optionally from a blueprint.
 
@@ -63,6 +66,15 @@ def stage_battle(
         region: Optional region anchor (``Battle.region``, #1715). ``create_battle``
             has no ``region`` kwarg, so this is set with a single extra save
             immediately after creation.
+        location: Optional room to bind the battle's backing Scene to (#2010).
+            ``Battle.save()`` creates that Scene with ``location=None`` (ADR-0081
+            location-less battles), which leaves the battle unreachable by the
+            room-scoped ``battle round``/``battle resolve``/``battle conclude``
+            actions (``_active_battle_in_room``, ``actions/definitions/battles.py``).
+            When given, binds ``battle.scene.location`` here so a GM who stages a
+            battle from their current room can immediately run rounds on it.
+            Defaults to None so direct service callers keep the location-less
+            default.
 
     Returns:
         The newly created ``Battle``, with an ATTACKER and DEFENDER side (and,
@@ -72,6 +84,10 @@ def stage_battle(
     if region is not None:
         battle.region = region
         battle.save(update_fields=["region"])
+
+    if location is not None:
+        battle.scene.location = location
+        battle.scene.save(update_fields=["location"])
 
     add_side(battle=battle, role=BattleSideRole.ATTACKER)
     add_side(battle=battle, role=BattleSideRole.DEFENDER)

@@ -370,8 +370,11 @@ class ChallengeChampionDuelAction(Action):
 # pick (BattleMapBlueprint/BattleUnitTemplate) into a live Battle. Unlike the
 # room-scoped GM verbs above (target_type=AREA, "the active battle here"),
 # these five are target_type=SELF and kwargs-driven on explicit ids -- a GM
-# building a battle before it ever has a location bound to it (Battles are
-# otherwise location-less, ADR-0081).
+# builds a battle via kwargs rather than by standing over it. Battles remain
+# location-less at the service layer by default (ADR-0081); CreateBattleAction
+# binds the new battle's backing Scene to the staging GM's current room
+# (``stage_battle(location=actor.location)``) so it is immediately reachable
+# by the room-scoped verbs above via ``_active_battle_in_room``.
 # ---------------------------------------------------------------------------
 
 _NO_SUCH_BATTLE = "No such battle."
@@ -475,6 +478,7 @@ class CreateBattleAction(Action):
                     blueprint=blueprint,
                     campaign_story=campaign_story,
                     region=region,
+                    location=actor.location,
                 )
 
                 account = resolve_account_or_none(actor)

@@ -1,23 +1,23 @@
 """Telnet E2E: GM battle-staging journey (#2010).
 
-Drives create -> spawn -> enlist -> browse-catalog through ``CmdBattle``'s new
-staging subverbs (``battle create``/``stage``/``spawn``/``enlist``/``maps``/
-``units``), asserting DB state after each step and telnet feedback via
-``caller.msg`` MagicMock — same command-harness pattern as
-``test_battle_telnet_e2e.py``.
+Drives create -> spawn -> enlist -> browse-catalog -> round through
+``CmdBattle``'s new staging subverbs (``battle
+create``/``stage``/``spawn``/``enlist``/``maps``/``units``/``round``),
+asserting DB state after each step and telnet feedback via ``caller.msg``
+MagicMock — same command-harness pattern as ``test_battle_telnet_e2e.py``.
 
-**Battle-resolution finding (carried from Task 3, settled empirically here):**
-a battle created via ``stage_battle``/``CreateBattleAction`` is deliberately
-location-less (ADR-0081) — ``Battle.save()`` always creates its backing Scene
-with ``location=None``, and neither ``create_battle`` nor ``stage_battle``
-take a location parameter. The existing ``battle round`` subverb
-(``BeginBattleRoundAction`` -> ``_active_battle_in_room``) resolves "the
-active battle" via ``Battle.objects.filter(scene__location=<actor's
-room>, ...)`` — a query a location-less Scene can never satisfy. So ``battle
-round`` cannot begin a round on a battle staged purely through this pipeline;
-the journey below proves this rather than assuming it (see
-``.superpowers/sdd/task-4-report.md`` for the full write-up). This task does
-NOT add location wiring to close that gap — see the report for why.
+**Battle-resolution fix (Task 4):** a battle created via
+``stage_battle``/``CreateBattleAction`` was found (Task 3) to be
+unreachable by ``battle round`` — ``Battle.save()`` always creates its
+backing Scene with ``location=None`` (ADR-0081), and the room-scoped
+round-lifecycle actions (``BeginBattleRoundAction`` ->
+``_active_battle_in_room``) resolve "the active battle" via
+``Battle.objects.filter(scene__location=<actor's room>, ...)`` — a query a
+location-less Scene can never satisfy. ``CreateBattleAction`` now passes
+``location=actor.location`` into ``stage_battle``, which binds
+``battle.scene.location`` to the staging GM's current room inside its own
+atomic block. The journey below proves ``battle round`` begins cleanly on a
+battle staged purely through this pipeline.
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ from world.conditions.factories import CapabilityTypeFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.scenes.constants import RoundStatus
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -169,12 +170,15 @@ class BattleStagingTelnetE2EJourneyTest(TestCase):
         self.assertIn("River Crossing", maps_msg)
 
         # ------------------------------------------------------------
-        # Step 5 (battle-resolution finding, see module docstring):
-        # `battle round` cannot find this staged battle -- it is
-        # location-less by design (ADR-0081). Proven here rather than
-        # assumed.
+        # Step 5 (Task 4 fix, see module docstring): `battle round` now
+        # begins cleanly on this staged battle -- `create` bound the
+        # battle's Scene to the GM's room, so `_active_battle_in_room`
+        # finds it.
         # ------------------------------------------------------------
         _run(self.gm_char, "round")
         round_msg = self.gm_char.msg.call_args[0][0]
-        self.assertIn("no active battle", round_msg.lower())
-        self.assertFalse(battle.rounds.exists())
+        self.assertIn("begins", round_msg.lower())
+
+        battle_round = battle.rounds.get()
+        self.assertIn(str(battle_round.round_number), round_msg)
+        self.assertEqual(battle_round.status, RoundStatus.DECLARING)

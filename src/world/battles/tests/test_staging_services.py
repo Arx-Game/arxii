@@ -8,6 +8,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.test import TestCase
+from evennia import create_object
 
 from world.battles.constants import (
     BattleSideRole,
@@ -79,6 +80,20 @@ class StageBattleTests(TestCase):
         self.assertEqual(battle.places.count(), 2)
         self.assertTrue(battle.places.filter(name="North Wall").exists())
         self.assertTrue(battle.places.filter(name="South Gate").exists())
+
+    def test_binds_scene_location_when_given(self) -> None:
+        room = create_object("typeclasses.rooms.Room", key="Staging Room", nohome=True)
+
+        battle = stage_battle(name="Located Siege", location=room)
+
+        battle.scene.refresh_from_db()
+        self.assertEqual(battle.scene.location, room)
+
+    def test_leaves_scene_location_none_by_default(self) -> None:
+        battle = stage_battle(name="Locationless Siege")
+
+        battle.scene.refresh_from_db()
+        self.assertIsNone(battle.scene.location)
 
 
 class InstantiateBattleBlueprintTests(TestCase):

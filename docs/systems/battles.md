@@ -1015,9 +1015,11 @@ non-viewer.
 
 ### WebSocket: `BATTLE_STATE` ping (`world.battles.services.notify_battle_state_changed`)
 
-Battles are location-less (`Battle.scene.location` is `None`), so the existing
-room/scene broadcast paths never reach participants — `BATTLE_STATE` is the
-dedicated seam. The payload (`web.webclient.message_types.BattleStatePayload`)
+Battles are location-less by default (`Battle.scene.location` is `None`)
+unless a GM staged one from their own room (#2010 — `CreateBattleAction` binds
+`stage_battle(location=actor.location)`); either way no existing room/scene
+broadcast path is guaranteed to reach every connected participant, so
+`BATTLE_STATE` is the dedicated seam. The payload (`web.webclient.message_types.BattleStatePayload`)
 carries only `{battle_id, round_number}` — no battle data itself; it is a slim
 "go refetch" ping, not a state push. Sent to every **connected** participant
 (`has_account` = live session), regardless of participant status

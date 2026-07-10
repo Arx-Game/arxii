@@ -93,6 +93,13 @@ class CreateBattleActionTests(BattleStagingActionsTestBase):
         # later battle-scoped actions' _actor_may_gm_battle recognizes them.
         self.assertTrue(battle.scene.is_gm(self.gm_account))
 
+    def test_binds_scene_location_to_actor_room(self) -> None:
+        result = CreateBattleAction().run(self.gm_actor, name="Rooted Siege")
+        self.assertTrue(result.success, result.message)
+        battle = Battle.objects.get(pk=result.data["battle_id"])
+        battle.scene.refresh_from_db()
+        self.assertEqual(battle.scene.location, self.room)
+
     def test_create_from_blueprint_stages_places(self) -> None:
         result = CreateBattleAction().run(
             self.gm_actor, name="Blueprinted Battle", blueprint_id=self.blueprint.pk

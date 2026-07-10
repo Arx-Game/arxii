@@ -503,8 +503,10 @@ def enlist_participant(
 def notify_battle_state_changed(battle: Battle) -> None:
     """Slim BATTLE_STATE ping -> connected participants; clients refetch the REST aggregate.
 
-    Battles are location-less (their backing scene has no ``location``), so the
-    existing scene/room broadcast paths never reach participants -- this is the
+    Battles are location-less by default (their backing scene has no
+    ``location``) unless a GM staged this one from their own room (#2010,
+    ``stage_battle(location=...)``) -- either way, no scene/room broadcast
+    path is guaranteed to reach every connected participant, so this is the
     dedicated seam. Called after round transitions (begin_battle_round,
     resolve_battle_round) and on conclusion (conclude_battle) -- always deferred
     via ``transaction.on_commit`` at each call site, so it runs post-commit and a

@@ -141,19 +141,19 @@ class CmdBattle(ArxCommand):
 
     The staging subverbs (#2010) turn a JUNIOR-GM catalog pick into a live
     Battle: ``create`` makes a new Battle (optionally staging a named
-    ``BattleMapBlueprint`` at creation time via ``map=``); ``stage`` clones a
-    named blueprint's fronts onto your current staged battle (``replace``
-    tears down and re-stages an existing map, when safe to do so); ``spawn``
-    mints one or more ``BattleUnitTemplate`` copies onto a side, optionally at
-    a named front; ``enlist`` adds a player character to a side (and
-    optionally a front). ``maps``/``units`` browse the two catalogs by name
-    (both search both catalogs — a term matching only one shows only that
-    section). These subverbs act on **your own most-recently-created,
-    unresolved battle** — the one ``create`` just made you the GM of — not a
-    room-scoped battle; staged battles have no location until something else
-    later binds one (ADR-0081), so ``battle round``/``resolve``/``conclude``
-    (which resolve "the active battle in this room") cannot yet act on a
-    battle staged purely through this pipeline.
+    ``BattleMapBlueprint`` at creation time via ``map=``) and binds its Scene
+    to your current room (#2010 Task 4), so ``battle round``/``resolve``/
+    ``conclude`` (which resolve "the active battle in this room") can act on
+    it right away; ``stage`` clones a named blueprint's fronts onto your
+    current staged battle (``replace`` tears down and re-stages an existing
+    map, when safe to do so); ``spawn`` mints one or more
+    ``BattleUnitTemplate`` copies onto a side, optionally at a named front;
+    ``enlist`` adds a player character to a side (and optionally a front).
+    ``maps``/``units`` browse the two catalogs by name (both search both
+    catalogs — a term matching only one shows only that section). ``create``/
+    ``stage``/``spawn``/``enlist``/``maps``/``units`` act on **your own
+    most-recently-created, unresolved battle** — the one ``create`` just made
+    you the GM of — addressed by id, not by room.
     """
 
     key = "battle"
