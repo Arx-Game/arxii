@@ -1,0 +1,500 @@
+/**
+ * StagingPanel — minimal GM battle-staging controls on the battle map page (#2010).
+ *
+ * Server-authoritative gating: renders only when the viewer's dispatchable
+ * registry actions include at least one staging ref (`create_battle`,
+ * `stage_battle_map`, `spawn_battle_units`, `enlist_battle_participant`) —
+ * no client-side GM-level check. Mirrors `RoomPositionsPanel`'s
+ * `setTheStageAction` pattern exactly: resolve the active character ->
+ * fetch available actions -> find refs by `registry_key` -> dispatch via
+ * `useDispatchPlayerAction` (`frontend/src/scenes/components/RoomPositionsPanel.tsx:69-139`).
+ *
+ * Two render modes:
+ *   - No Battle yet for this scene: the empty-battle "Create Battle" form
+ *     (name/risk/optional blueprint), dispatching `create_battle`.
+ *   - A Battle exists: Apply Blueprint (with a replace-confirm step when the
+ *     battle already has a staged map), Spawn Units, and Enlist Participant
+ *     forms — each gated independently on its own action ref being present.
+ *
+ * Every dispatch invalidates the battle detail + for-scene queries so
+ * BattleMapCanvas (#2009) refetches; the dispatch endpoint always resolves
+ * HTTP 200 (business failures come back as an actor-only message, not an
+ * HTTP error — see `actions/views.py` `DispatchActionView`), so invalidating
+ * unconditionally on resolve is safe.
+ */
+
+import { useMemo, useState, type FormEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useDispatchPlayerAction } from '@/combat/queries';
+import { fetchAvailableActions } from '@/scenes/actionQueries';
+import { fetchScene, sceneKeys } from '@/scenes/queries';
+import type { SceneDetail, ScenePersona } from '@/scenes/types';
+import type { PlayerAction } from '@/scenes/actionTypes';
+
+import { battleKeys, useBattleMapBlueprintsQuery, useBattleUnitTemplatesQuery } from '../queries';
+import { BATTLE_RISK_LEVELS } from '../types';
+import type { BattleDetail, BattleRiskLevel } from '../types';
+
+const SELECT_CLASS =
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+
+const DISPATCH_BUTTON_CLASS =
+  'w-full rounded border border-blue-500/40 bg-blue-500/5 px-3 py-1.5 text-xs font-medium text-blue-300 transition-colors hover:bg-blue-500/10 disabled:cursor-not-allowed disabled:opacity-50';
+
+const CREATE_BATTLE_KEY = 'create_battle';
+const STAGE_BATTLE_MAP_KEY = 'stage_battle_map';
+const SPAWN_BATTLE_UNITS_KEY = 'spawn_battle_units';
+const ENLIST_BATTLE_PARTICIPANT_KEY = 'enlist_battle_participant';
+
+function riskLabel(level: BattleRiskLevel): string {
+  return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+interface Props {
+  sceneId: number;
+  /** Slim battle summary (id only needed) — null when the scene has no Battle yet. */
+  battle: { id: number } | null;
+  /** Full aggregate — null while loading or when there's no battle yet. */
+  detail: BattleDetail | null;
+}
+
+export function StagingPanel({ sceneId, battle, detail }: Props) {
+  const queryClient = useQueryClient();
+
+  // ---------------------------------------------------------------------------
+  // Resolve active character -> characterId for the actions endpoint
+  // ---------------------------------------------------------------------------
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const characterId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
+    [myRosterEntries, activeCharacterName]
+  );
+
+  // ---------------------------------------------------------------------------
+  // Available actions -> the four staging refs
+  // ---------------------------------------------------------------------------
+  const { data: actionsData } = useQuery({
+    queryKey: ['available-actions', characterId],
+    queryFn: () => fetchAvailableActions(characterId!),
+    enabled: characterId !== null,
+  });
+  const availableActions: PlayerAction[] = actionsData?.results ?? [];
+
+  const findAction = (registryKey: string): PlayerAction | null =>
+    availableActions.find(
+      (a) => a.ref.backend === 'registry' && a.ref.registry_key === registryKey
+    ) ?? null;
+
+  const createBattleAction = findAction(CREATE_BATTLE_KEY);
+  const stageBattleMapAction = findAction(STAGE_BATTLE_MAP_KEY);
+  const spawnBattleUnitsAction = findAction(SPAWN_BATTLE_UNITS_KEY);
+  const enlistParticipantAction = findAction(ENLIST_BATTLE_PARTICIPANT_KEY);
+
+  const hasAnyStagingAction = Boolean(
+    createBattleAction || stageBattleMapAction || spawnBattleUnitsAction || enlistParticipantAction
+  );
+
+  // ---------------------------------------------------------------------------
+  // Dispatch
+  // ---------------------------------------------------------------------------
+  const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId ?? 0);
+
+  function invalidateBattleQueries() {
+    queryClient.invalidateQueries({ queryKey: battleKeys.forScene(sceneId) });
+    if (battle) {
+      queryClient.invalidateQueries({ queryKey: battleKeys.detail(battle.id) });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Scene detail — persona -> character_sheet id lookup for the enlist form
+  // ---------------------------------------------------------------------------
+  const { data: scene } = useQuery<SceneDetail>({
+    queryKey: sceneKeys.detail(sceneId),
+    queryFn: () => fetchScene(String(sceneId)),
+    enabled: hasAnyStagingAction,
+  });
+  const eligiblePersonas = (scene?.personas ?? []).filter(
+    (p): p is ScenePersona & { character_sheet: number } => p.character_sheet != null
+  );
+
+  // ---------------------------------------------------------------------------
+  // Catalog pickers — only fetched when the matching action is available
+  // ---------------------------------------------------------------------------
+  const { data: blueprintsData } = useBattleMapBlueprintsQuery(
+    Boolean(createBattleAction || stageBattleMapAction)
+  );
+  const blueprints = blueprintsData?.results ?? [];
+
+  const { data: templatesData } = useBattleUnitTemplatesQuery(Boolean(spawnBattleUnitsAction));
+  const templates = templatesData?.results ?? [];
+
+  // ---------------------------------------------------------------------------
+  // Create-battle form (empty-battle state)
+  // ---------------------------------------------------------------------------
+  const [newBattleName, setNewBattleName] = useState('');
+  const [newBattleRisk, setNewBattleRisk] = useState<BattleRiskLevel>('low');
+  const [newBattleBlueprintId, setNewBattleBlueprintId] = useState<number | ''>('');
+
+  function handleCreateBattle(event: FormEvent) {
+    event.preventDefault();
+    if (!createBattleAction || !newBattleName.trim()) return;
+    const kwargs: Record<string, unknown> = {
+      name: newBattleName.trim(),
+      risk_level: newBattleRisk,
+    };
+    if (newBattleBlueprintId !== '') kwargs.blueprint_id = newBattleBlueprintId;
+    dispatchAction({ ref: createBattleAction.ref, kwargs })
+      .then(() => {
+        setNewBattleName('');
+        setNewBattleBlueprintId('');
+        invalidateBattleQueries();
+      })
+      .catch(() => {});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Apply-blueprint form (replace requires a confirm step)
+  // ---------------------------------------------------------------------------
+  const [applyBlueprintId, setApplyBlueprintId] = useState<number | ''>('');
+  const [confirmingReplace, setConfirmingReplace] = useState(false);
+  const hasStagedMap = (detail?.places.length ?? 0) > 0;
+
+  function handleApplyBlueprint(replace: boolean) {
+    if (!stageBattleMapAction || !battle || applyBlueprintId === '') return;
+    dispatchAction({
+      ref: stageBattleMapAction.ref,
+      kwargs: { battle_id: battle.id, blueprint_id: applyBlueprintId, replace },
+    })
+      .then(() => {
+        setConfirmingReplace(false);
+        invalidateBattleQueries();
+      })
+      .catch(() => {});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Spawn-units form
+  // ---------------------------------------------------------------------------
+  const [spawnTemplateId, setSpawnTemplateId] = useState<number | ''>('');
+  const [spawnSideId, setSpawnSideId] = useState<number | ''>('');
+  const [spawnPlaceId, setSpawnPlaceId] = useState<number | ''>('');
+  const [spawnCount, setSpawnCount] = useState(1);
+
+  function handleSpawnUnits(event: FormEvent) {
+    event.preventDefault();
+    if (!spawnBattleUnitsAction || !battle || spawnTemplateId === '' || spawnSideId === '') {
+      return;
+    }
+    const kwargs: Record<string, unknown> = {
+      battle_id: battle.id,
+      template_id: spawnTemplateId,
+      side_id: spawnSideId,
+      count: spawnCount,
+    };
+    if (spawnPlaceId !== '') kwargs.place_id = spawnPlaceId;
+    dispatchAction({ ref: spawnBattleUnitsAction.ref, kwargs })
+      .then(() => invalidateBattleQueries())
+      .catch(() => {});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Enlist-participant form
+  // ---------------------------------------------------------------------------
+  const [enlistCharacterSheetId, setEnlistCharacterSheetId] = useState<number | ''>('');
+  const [enlistSideId, setEnlistSideId] = useState<number | ''>('');
+  const [enlistPlaceId, setEnlistPlaceId] = useState<number | ''>('');
+
+  function handleEnlistParticipant(event: FormEvent) {
+    event.preventDefault();
+    if (
+      !enlistParticipantAction ||
+      !battle ||
+      enlistCharacterSheetId === '' ||
+      enlistSideId === ''
+    ) {
+      return;
+    }
+    const kwargs: Record<string, unknown> = {
+      battle_id: battle.id,
+      character_sheet_id: enlistCharacterSheetId,
+      side_id: enlistSideId,
+    };
+    if (enlistPlaceId !== '') kwargs.place_id = enlistPlaceId;
+    dispatchAction({ ref: enlistParticipantAction.ref, kwargs })
+      .then(() => invalidateBattleQueries())
+      .catch(() => {});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Server-authoritative gate — nothing to show without any staging ref
+  // ---------------------------------------------------------------------------
+  if (!hasAnyStagingAction) return null;
+
+  // ---------------------------------------------------------------------------
+  // Empty-battle state — create-battle form only
+  // ---------------------------------------------------------------------------
+  if (!battle) {
+    if (!createBattleAction) return null;
+    return (
+      <div
+        className="space-y-2 rounded border border-dashed border-border p-3"
+        data-testid="staging-panel-create"
+      >
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Create Battle
+        </p>
+        <form className="space-y-2" onSubmit={handleCreateBattle}>
+          <input
+            className={SELECT_CLASS}
+            placeholder="Battle name"
+            value={newBattleName}
+            onChange={(e) => setNewBattleName(e.target.value)}
+            data-testid="staging-create-name"
+          />
+          <select
+            className={SELECT_CLASS}
+            value={newBattleRisk}
+            onChange={(e) => setNewBattleRisk(e.target.value as BattleRiskLevel)}
+            data-testid="staging-create-risk"
+          >
+            {BATTLE_RISK_LEVELS.map((level) => (
+              <option key={level} value={level}>
+                {riskLabel(level)}
+              </option>
+            ))}
+          </select>
+          <select
+            className={SELECT_CLASS}
+            value={newBattleBlueprintId}
+            onChange={(e) =>
+              setNewBattleBlueprintId(e.target.value === '' ? '' : Number(e.target.value))
+            }
+            data-testid="staging-create-blueprint"
+          >
+            <option value="">No blueprint</option>
+            {blueprints.map((bp) => (
+              <option key={bp.id} value={bp.id}>
+                {bp.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            disabled={isPending || !newBattleName.trim()}
+            className={DISPATCH_BUTTON_CLASS}
+            data-testid="staging-create-submit"
+          >
+            Create Battle
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Live-battle staging controls
+  // ---------------------------------------------------------------------------
+  const sides = detail?.sides ?? [];
+  const places = detail?.places ?? [];
+
+  return (
+    <div className="space-y-3" data-testid="staging-panel">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Staging</p>
+
+      {stageBattleMapAction && (
+        <div className="space-y-1 rounded bg-muted/30 p-2" data-testid="staging-apply-blueprint">
+          <p className="text-xs font-medium">Apply Blueprint</p>
+          <select
+            className={SELECT_CLASS}
+            value={applyBlueprintId}
+            onChange={(e) => {
+              setApplyBlueprintId(e.target.value === '' ? '' : Number(e.target.value));
+              setConfirmingReplace(false);
+            }}
+            data-testid="staging-apply-blueprint-select"
+          >
+            <option value="">Select a blueprint…</option>
+            {blueprints.map((bp) => (
+              <option key={bp.id} value={bp.id}>
+                {bp.name}
+              </option>
+            ))}
+          </select>
+          {confirmingReplace ? (
+            <div className="space-y-1">
+              <p className="text-xs text-destructive">
+                This battle already has a staged map — applying will replace it.
+              </p>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => handleApplyBlueprint(true)}
+                  className="flex-1 rounded border border-destructive/40 bg-destructive/5 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-testid="staging-confirm-replace"
+                >
+                  Confirm Replace
+                </button>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setConfirmingReplace(false)}
+                  className="flex-1 rounded border border-input px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={isPending || applyBlueprintId === ''}
+              onClick={() => {
+                if (hasStagedMap) {
+                  setConfirmingReplace(true);
+                } else {
+                  handleApplyBlueprint(false);
+                }
+              }}
+              className={DISPATCH_BUTTON_CLASS}
+              data-testid="staging-apply-blueprint-submit"
+            >
+              Apply
+            </button>
+          )}
+        </div>
+      )}
+
+      {spawnBattleUnitsAction && (
+        <form
+          className="space-y-1 rounded bg-muted/30 p-2"
+          onSubmit={handleSpawnUnits}
+          data-testid="staging-spawn-units"
+        >
+          <p className="text-xs font-medium">Spawn Units</p>
+          <select
+            className={SELECT_CLASS}
+            value={spawnTemplateId}
+            onChange={(e) =>
+              setSpawnTemplateId(e.target.value === '' ? '' : Number(e.target.value))
+            }
+            data-testid="staging-spawn-template"
+          >
+            <option value="">Select a unit template…</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className={SELECT_CLASS}
+            value={spawnSideId}
+            onChange={(e) => setSpawnSideId(e.target.value === '' ? '' : Number(e.target.value))}
+            data-testid="staging-spawn-side"
+          >
+            <option value="">Select a side…</option>
+            {sides.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.covenant_name ?? s.role ?? `Side ${s.id}`}
+              </option>
+            ))}
+          </select>
+          <select
+            className={SELECT_CLASS}
+            value={spawnPlaceId}
+            onChange={(e) => setSpawnPlaceId(e.target.value === '' ? '' : Number(e.target.value))}
+            data-testid="staging-spawn-place"
+          >
+            <option value="">No place</option>
+            {places.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min={1}
+            className={SELECT_CLASS}
+            value={spawnCount}
+            onChange={(e) => setSpawnCount(Math.max(1, Number(e.target.value) || 1))}
+            data-testid="staging-spawn-count"
+          />
+          <button
+            type="submit"
+            disabled={isPending || spawnTemplateId === '' || spawnSideId === ''}
+            className={DISPATCH_BUTTON_CLASS}
+            data-testid="staging-spawn-submit"
+          >
+            Spawn
+          </button>
+        </form>
+      )}
+
+      {enlistParticipantAction && (
+        <form
+          className="space-y-1 rounded bg-muted/30 p-2"
+          onSubmit={handleEnlistParticipant}
+          data-testid="staging-enlist-participant"
+        >
+          <p className="text-xs font-medium">Enlist Participant</p>
+          <select
+            className={SELECT_CLASS}
+            value={enlistCharacterSheetId}
+            onChange={(e) =>
+              setEnlistCharacterSheetId(e.target.value === '' ? '' : Number(e.target.value))
+            }
+            data-testid="staging-enlist-character"
+          >
+            <option value="">Select a character…</option>
+            {eligiblePersonas.map((p) => (
+              <option key={p.id} value={p.character_sheet}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className={SELECT_CLASS}
+            value={enlistSideId}
+            onChange={(e) => setEnlistSideId(e.target.value === '' ? '' : Number(e.target.value))}
+            data-testid="staging-enlist-side"
+          >
+            <option value="">Select a side…</option>
+            {sides.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.covenant_name ?? s.role ?? `Side ${s.id}`}
+              </option>
+            ))}
+          </select>
+          <select
+            className={SELECT_CLASS}
+            value={enlistPlaceId}
+            onChange={(e) => setEnlistPlaceId(e.target.value === '' ? '' : Number(e.target.value))}
+            data-testid="staging-enlist-place"
+          >
+            <option value="">No place</option>
+            {places.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            disabled={isPending || enlistCharacterSheetId === '' || enlistSideId === ''}
+            className={DISPATCH_BUTTON_CLASS}
+            data-testid="staging-enlist-submit"
+          >
+            Enlist
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}

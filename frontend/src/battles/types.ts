@@ -9,6 +9,33 @@ export type BattleParticipant = components['schemas']['BattleParticipant'];
 export type PaginatedBattleListList = components['schemas']['PaginatedBattleListList'];
 
 /**
+ * Staging catalog types (#2010, Task 5's read-only REST) — admin-authored
+ * blueprints/templates a GM stages a Battle from via the `create_battle`/
+ * `stage_battle_map`/`spawn_battle_units` registry actions (StagingPanel).
+ */
+export type BattleMapBlueprint = components['schemas']['BattleMapBlueprint'];
+export type PaginatedBattleMapBlueprintList =
+  components['schemas']['PaginatedBattleMapBlueprintList'];
+export type BattleUnitTemplate = components['schemas']['BattleUnitTemplate'];
+export type PaginatedBattleUnitTemplateList =
+  components['schemas']['PaginatedBattleUnitTemplateList'];
+
+/**
+ * `create_battle`'s `risk_level` kwarg (world/combat/constants.py RiskLevel,
+ * mirrored here as the generated `RiskLevelEnum` — same 5 values already
+ * used by `BattleDetail.risk_level`). No labels array: the staging form
+ * derives a label by title-casing the value.
+ */
+export type BattleRiskLevel = components['schemas']['RiskLevelEnum'];
+export const BATTLE_RISK_LEVELS: BattleRiskLevel[] = [
+  'low',
+  'moderate',
+  'high',
+  'extreme',
+  'lethal',
+];
+
+/**
  * Payload for the ``battle_state`` WS message (world/web/webclient/message_types.py
  * ``BattleStatePayload``). Not part of the REST OpenAPI schema — this is a
  * hand-authored mirror of the backend dataclass, same convention as
