@@ -4665,6 +4665,8 @@
 **Pointed to by:**
   - contributions <- projects.Contribution
 
+### ProjectKindResonanceAward
+
 ### Service Functions
 - `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, contribution_method: 'ContributionMethod | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
 - `clear_instant_completion_kinds() -> 'None' — Test-only: clear the instant-completion registry.`

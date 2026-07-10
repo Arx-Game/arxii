@@ -203,6 +203,12 @@ def _seed_skills() -> None:
     seed_skill_breakthrough_catalog()
 
 
+def _seed_project_resonance() -> None:
+    from world.projects.seeds import ensure_project_kind_resonance_awards  # noqa: PLC0415
+
+    ensure_project_kind_resonance_awards()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -299,6 +305,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # new skills (combat_checks/social/investigation/governance/stealth); safe to
     # re-run (idempotent) after authoring a skill outside those clusters.
     "skills": _seed_skills,
+    # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row for the
+    # PROJECT_CONTRIBUTION GainSource (#2038 — "projects to add gifts to
+    # organizations"). No dependencies on any other cluster.
+    "project_resonance": _seed_project_resonance,
 }
 
 
@@ -348,7 +358,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.magic.models import Affinity, Resonance, Ritual  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
     from world.progression.models import KudosSourceCategory, TraitRatingUnlock  # noqa: PLC0415
-    from world.projects.models import ContributionMethod  # noqa: PLC0415
+    from world.projects.models import (  # noqa: PLC0415
+        ContributionMethod,
+        ProjectKindResonanceAward,
+    )
     from world.relationships.models import RelationshipCondition, RelationshipTier  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.roster.models import Kinsperson  # noqa: PLC0415
@@ -436,4 +449,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's
         # four XP boundaries (#2115).
         "skills": [TraitRatingUnlock],
+        # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row
+        # (#2038).
+        "project_resonance": [ProjectKindResonanceAward],
     }

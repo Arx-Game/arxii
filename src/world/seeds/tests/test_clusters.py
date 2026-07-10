@@ -39,6 +39,7 @@ class TestClusterRegistry(TestCase):
                 "covenant_roles",
                 "propaganda",
                 "skills",
+                "project_resonance",
             },
         )
 
