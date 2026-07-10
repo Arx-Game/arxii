@@ -2880,6 +2880,7 @@
   - entry_flourish_records <- magic.EntryFlourishRecord
   - resonancegrant_set <- magic.ResonanceGrant
   - distinction_grants <- magic.DistinctionResonanceGrant
+  - distinction_rank_thresholds <- magic.DistinctionResonanceRankThreshold
   - motif_resonances <- magic.MotifResonance
   - imbuing_prose <- magic.ImbuingProseTemplate
   - sanctums <- magic.SanctumDetails
@@ -3284,6 +3285,11 @@
   - ritual -> magic.Ritual [FK]
 
 ### DistinctionResonanceGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - resonance -> magic.Resonance [FK]
+
+### DistinctionResonanceRankThreshold
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [FK]
   - resonance -> magic.Resonance [FK]

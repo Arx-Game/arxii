@@ -1110,6 +1110,17 @@ written; authored/system sources (`STAFF_GRANT`, `MISSION_REWARD`, `MISSION_REPO
 `STAKE_REWARD`, `PROJECT_CONTRIBUTION`, the three `SANCTUM_*` sources, and `DISTINCTION`
 itself — accelerating a distinction's own seed grant would be circular) are never accelerated.
 
+The same `ACCELERATED_GAIN_SOURCES` gate also drives the reverse distinction link (#2037):
+after an accelerated-source grant lands, `grant_resonance` calls
+`check_distinction_rank_thresholds(character_sheet, resonance)`
+(`world/magic/services/distinction_resonance.py`), which ranks up **held** distinctions whose
+authored `DistinctionResonanceRankThreshold` (`world/magic/models/grants.py`) at exactly
+`current_rank + 1` is crossed by the new `lifetime_earned` — looping to a fully caught-up
+final state per grant, exclusion conflicts logged and skipped, and the whole check
+failure-isolated (`logger.exception`) so the resonance grant itself always stands.
+`DISTINCTION`-source seeds never trigger it (feedback-loop guard). Details:
+`docs/systems/distinctions.md` "Reverse direction".
+
 ### Aura Drift (#1737)
 
 `CharacterAura`'s stored celestial/primal/abyssal percentages are a write-through cache,

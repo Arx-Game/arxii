@@ -111,6 +111,35 @@ Wired at both distinction-acquisition sites: gameplay grant/rank-up
 (`_create_distinction_modifiers_bulk` in `world/character_creation/services.py`, followed by
 `recompute_aura` after `CharacterAura` is created during `finalize_magic_data`).
 
+### Reverse direction — resonance thresholds rank up a held distinction (#2037)
+
+`DistinctionResonanceRankThreshold` (`world/magic/models/grants.py`, beside
+`DistinctionResonanceGrant`, same ADR-0010 placement) authors the opposite direction:
+`(distinction, resonance, rank)`-unique rows saying "reaching `lifetime_earned_threshold`
+lifetime-earned in this resonance unlocks this rank of this distinction."
+
+Consumer: `check_distinction_rank_thresholds(character_sheet, resonance)`
+(`world/magic/services/distinction_resonance.py`), called from `grant_resonance` **only when
+`source` is in `ACCELERATED_GAIN_SOURCES`** — the "sustained endorsements" identity-
+reinforcing-play cluster. Semantics:
+
+- **Ranks up held distinctions only** — never mints a new `CharacterDistinction`; only rows
+  whose threshold matches exactly `current_rank + 1` are candidates. That keying is also the
+  re-fire guard: once a threshold fires, `current_rank + 1` moves past it, so repeated
+  over-threshold grants are no-ops.
+- **Multi-level catch-up loops to the final state** — one grant that crosses several
+  thresholds ranks all the way up in that call (deterministic final state per grant), rather
+  than one rank per grant.
+- Rank-ups go through `grant_distinction(..., origin=DistinctionOrigin.ENDORSEMENT_THRESHOLD)`
+  (`world/distinctions/services.py`), so the modifier/resonance-seed cascade fires normally;
+  a `DistinctionExclusionError` is caught, logged, and skipped.
+- **Never fires for `DISTINCTION`-source grants** (that source is not in
+  `ACCELERATED_GAIN_SOURCES`), preventing a feedback loop where a distinction's own resonance
+  seed re-triggers its own rank-up. The whole check is one query when no thresholds match;
+  a crash in it is caught in `grant_resonance` (`logger.exception`) so the resonance grant
+  itself always stands — mirrors the `PROJECT_CONTRIBUTION` bonus-isolation precedent in
+  `world/projects/services.py`.
+
 ### Potency axis — POWER-category `DistinctionEffect`
 
 A distinction expresses **potency** for a resonance (as opposed to standing/currency above)

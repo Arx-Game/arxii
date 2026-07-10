@@ -153,7 +153,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     FK. `ACCELERATED_GAIN_SOURCES` / `NON_ACCELERATED_GAIN_SOURCES` (ADR-0041, total
     classification test) gate which `GainSource`s get the earn-rate accelerator. See
     `docs/systems/distinctions.md` "Distinctions grant/shape Resonance" for the two axes
-    (standing/currency vs. potency).
+    (standing/currency vs. potency). Reverse direction (#2037):
+    `DistinctionResonanceRankThreshold` (same module; unique `(distinction, resonance,
+    rank)`, field `lifetime_earned_threshold`) — sustained accelerated-source gains rank up
+    a **held** distinction via `check_distinction_rank_thresholds`; see distinctions.md
+    "Reverse direction".
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
@@ -178,7 +182,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `reconcile_distinction_resonance_grants(character_distinction)` (establish + idempotent
     seed top-off; called by `create_distinction_modifiers`/`update_distinction_rank`),
     `distinction_earn_rate_for(character_sheet, resonance) -> Decimal` (summed earn-rate
-    bonus; read by `grant_resonance` for `ACCELERATED_GAIN_SOURCES`). Potency (POWER axis):
+    bonus; read by `grant_resonance` for `ACCELERATED_GAIN_SOURCES`),
+    `check_distinction_rank_thresholds(character_sheet, resonance)` (#2037 reverse
+    direction — ranks up held distinctions past authored
+    `DistinctionResonanceRankThreshold` rows; called by `grant_resonance` for
+    `ACCELERATED_GAIN_SOURCES` only, failure-isolated). Potency (POWER axis):
     `power_flat_bonus_for_resonance(sheet, resonance_id) -> int`
     (`world/mechanics/services.py`) folded into a standalone pull by
     `_fold_distinction_pull_bonus` (`world/magic/services/resonance.py`); a cast already
