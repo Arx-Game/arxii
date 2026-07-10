@@ -79,3 +79,13 @@ class RoomFeaturesConfig(AppConfig):
             RoomFeatureServiceStrategy.CAPTAINS_QUARTERS,
             handle_captains_quarters_progression,
         )
+
+        # Owner-upgradeable social hub (#1694) — generic; home app is here.
+        from world.room_features.services import (  # noqa: PLC0415
+            handle_social_hub_progression,
+        )
+
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.SOCIAL_HUB,
+            handle_social_hub_progression,
+        )

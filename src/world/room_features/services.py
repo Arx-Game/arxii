@@ -314,6 +314,28 @@ def active_captains_quarters_in(room_profile: RoomProfile) -> RoomFeatureInstanc
     )
 
 
+def active_social_hub_in(room_profile: RoomProfile) -> RoomFeatureInstance | None:
+    """The room's active Social Hub feature, or None (#1694).
+
+    Consumed at read time by the renown award path (fame/prestige multiplier)
+    and the room-traffic substrate (crowd-draw bonus). ``level`` drives every
+    magnitude — see the ``SOCIAL_HUB_*`` constants. Returns None once the
+    feature is dissolved, so amplification auto-clears without touching
+    ``RoomProfile.is_social_hub`` (the baseline designation persists).
+    """
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    return (
+        RoomFeatureInstance.objects.filter(
+            room_profile=room_profile,
+            feature_kind__service_strategy=RoomFeatureServiceStrategy.SOCIAL_HUB,
+        )
+        .select_related("feature_kind")
+        .active()
+        .first()
+    )
+
+
 def handle_library_progression(
     project: Project,
     target_level: int,
@@ -362,3 +384,27 @@ def handle_captains_quarters_progression(
     Reachability-only feature (like Command Center). No numeric bonus.
     """
     _install_or_level_feature(project, target_level)
+
+
+def handle_social_hub_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """SOCIAL_HUB strategy (#1694): install/level the feature AND mark the hub.
+
+    Beyond the row-only install every other #675 feature does, this flips the
+    room's ``is_social_hub`` designation on — an amplified hub implies a hub.
+    The bonuses (fame/prestige multiplier, crowd draw) are read-time via
+    ``active_social_hub_in(room)`` and scale with ``instance.level``.
+
+    Dissolving the feature does NOT clear ``is_social_hub``: the amplification
+    ends (no active instance) but the baseline gossip-hub designation — which
+    staff may also have set independently (#1572) — is deliberately left in
+    place rather than risk clobbering a staff-set baseline.
+    """
+    details = _install_or_level_feature(project, target_level)
+    room_profile = details.target_room_profile
+    if not room_profile.is_social_hub:
+        room_profile.is_social_hub = True
+        room_profile.save(update_fields=["is_social_hub"])

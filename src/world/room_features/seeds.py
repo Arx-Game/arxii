@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.room_features.constants import (
+    SOCIAL_HUB_MAX_LEVEL,
     RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
     RoomFeatureServiceStrategy,
@@ -80,6 +81,7 @@ def ensure_plan_4_seeds() -> None:
     ensure_training_room_kind()
     ensure_siege_deck_kind()
     ensure_captains_quarters_kind()
+    ensure_social_hub_kind()
 
 
 COMMAND_CENTER_KIND_NAME = "Command Center"
@@ -317,4 +319,42 @@ def ensure_captains_quarters_kind() -> RoomFeatureKind:
     )
     ship_kind = ensure_ship_kind()
     kind.allowed_building_kinds.add(ship_kind)
+    return kind
+
+
+SOCIAL_HUB_KIND_NAME = "Social Hub"
+
+
+def ensure_social_hub_kind() -> RoomFeatureKind:
+    """Get-or-create the Social Hub ``RoomFeatureKind`` (#1694) + owner-type rules.
+
+    The owner-upgradeable amplifier on top of ``RoomProfile.is_social_hub``
+    (#1572): installing it (via the plain ROOM_FEATURE_PROGRESSION project)
+    marks the room a hub and, per level, draws bigger crowds and boosts the
+    fame/prestige earned for deeds that spread from the room. No per-kind
+    details model — every magnitude derives from ``instance.level`` (Apostate
+    ratified level→multiplier constants). Two ``RoomFeatureKindOwnerType`` rows
+    restrict installation to store/room owners: ``PERSONA`` and ``ORG_TRADE``.
+    """
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.SOCIAL_HUB,
+        defaults={
+            "name": SOCIAL_HUB_KIND_NAME,
+            "max_level": SOCIAL_HUB_MAX_LEVEL,
+            "install_mechanism": RoomFeatureInstallMechanism.PROJECT,
+            "description": (
+                "PLACEHOLDER — Social Hub kind: a room an owner cultivates into a "
+                "gathering place. Higher levels draw bigger crowds and win more "
+                "fame and prestige for deeds that happen and spread here."
+            ),
+        },
+    )
+    for owner_type in (
+        RoomFeatureOwnerType.PERSONA,
+        RoomFeatureOwnerType.ORGANIZATION_TRADE,
+    ):
+        RoomFeatureKindOwnerType.objects.get_or_create(
+            feature_kind=kind,
+            owner_type=owner_type,
+        )
     return kind
