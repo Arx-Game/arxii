@@ -94,7 +94,8 @@ class CmdHome(ArxCommand):
 
     Usage:
       home        - recall to your home location
-      home/set    - make the room you're standing in your home (you must own or rent it)
+      home/set    - make the room you're standing in your home (requires owner or tenant
+                    standing — directly, or via family/organization/Academy standing)
 
     Your home is where ``home`` recalls you to; a residence defaults to the first room you
     rent or acquire until you change it here (#1514).
@@ -117,22 +118,15 @@ class CmdHome(ArxCommand):
         super()._execute()
 
     def _set_home(self) -> None:
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+        """Delegate to ``SetPrimaryHomeAction`` (#2036) — the same seam ``room/home`` and
+        the web "Set as Home" button already use. Was previously a hand-rolled
+        owner/tenant check calling ``locations.services.set_residence`` directly, which
+        duplicated (and drifted from) the Action's own checks: it never accepted
+        org-derived standing and never wrote ``CharacterSheet.current_residence``. One
+        behavior now, reached from ``home/set``, ``room/home``, and the web button alike.
+        """
+        from actions.definitions.locations import SetPrimaryHomeAction  # noqa: PLC0415
 
-        from commands.exceptions import CommandError  # noqa: PLC0415
-        from world.locations.services import is_owner, is_tenant, set_residence  # noqa: PLC0415
-        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
-        room = self.caller.location
-        if room is None:
-            msg = "You aren't anywhere you could call home."
-            raise CommandError(msg)
-        try:
-            persona = active_persona_for_sheet(self.caller.sheet_data)
-        except (AttributeError, ObjectDoesNotExist):
-            persona = None
-        if persona is None or not (is_owner(persona, room) or is_tenant(persona, room)):
-            msg = "You can only set your home to a room you own or rent."
-            raise CommandError(msg)
-        set_residence(character=self.caller, room=room)
-        self.msg(f"Home set to {room.key}.")
+        result = SetPrimaryHomeAction().run(actor=self.caller)
+        if result.message:
+            self.msg(result.message)

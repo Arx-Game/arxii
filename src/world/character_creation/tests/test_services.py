@@ -1770,3 +1770,74 @@ class FinalizeVitalsTests(FinalizationTestMixin, TestCase):
             vitals.max_health,
             "health must equal max_health (full health) at character creation",
         )
+
+
+class FinalizeResidenceTests(FinalizationTestMixin, TestCase):
+    """Journey 7 (#2036): CG auto-residence via StartingArea.grants_residence_tenancy.
+
+    finalize_character grants a LocationTenancy at the starting room (auto-defaulting
+    current_residence via maybe_default_residence) when the chosen StartingArea authors
+    it. A False toggle or a missing starting room is a graceful no-op — matching the
+    pre-#2036 behavior of only ever setting Evennia ``home`` directly.
+    """
+
+    def setUp(self):
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username=f"residencetest_{id(self)}")
+        self._setup_finalization_base(self, prefix="Residence Test", height_min=700, height_max=800)
+
+    def test_finalize_grants_residence_tenancy_when_area_authors_it(self):
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.locations.models import LocationTenancy
+
+        room_profile = RoomProfileFactory()
+        self.area.default_starting_room = room_profile.objectdb
+        self.area.grants_residence_tenancy = True
+        self.area.save()
+        draft = self._create_base_draft()
+
+        character = finalize_character(draft)
+
+        sheet = character.sheet_data
+        persona = sheet.primary_persona
+        self.assertTrue(
+            LocationTenancy.objects.filter(
+                tenant_persona=persona, room_profile=room_profile
+            ).exists()
+        )
+        sheet.refresh_from_db()
+        self.assertEqual(sheet.current_residence, room_profile)
+        self.assertEqual(character.home, room_profile.objectdb)
+
+    def test_finalize_no_tenancy_when_area_does_not_grant_it(self):
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.locations.models import LocationTenancy
+
+        room_profile = RoomProfileFactory()
+        self.area.default_starting_room = room_profile.objectdb
+        self.area.grants_residence_tenancy = False
+        self.area.save()
+        draft = self._create_base_draft()
+
+        character = finalize_character(draft)
+
+        sheet = character.sheet_data
+        self.assertFalse(LocationTenancy.objects.filter(room_profile=room_profile).exists())
+        sheet.refresh_from_db()
+        self.assertIsNone(sheet.current_residence)
+        # Evennia home is still set directly — unaffected, matching pre-#2036 behavior.
+        self.assertEqual(character.home, room_profile.objectdb)
+
+    def test_finalize_with_no_starting_room_is_a_graceful_no_op(self):
+        from world.locations.models import LocationTenancy
+
+        self.area.default_starting_room = None
+        self.area.grants_residence_tenancy = True
+        self.area.save()
+        draft = self._create_base_draft()
+
+        character = finalize_character(draft)
+
+        sheet = character.sheet_data
+        self.assertIsNone(sheet.current_residence)
+        self.assertFalse(LocationTenancy.objects.exists())
