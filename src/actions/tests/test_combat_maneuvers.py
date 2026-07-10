@@ -18,17 +18,25 @@ from actions.definitions.combat_maneuvers import (
     ReadyAction,
     RevertComboAction,
     UpgradeComboAction,
+    UseItemManeuverAction,
 )
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     CombatManeuver,
     EncounterType,
+    OpponentTier,
+    PaceMode,
     ParticipantStatus,
 )
-from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+)
 from world.combat.models import CombatParticipant, CombatRoundAction
 from world.combat.services import declare_flee
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
@@ -111,6 +119,59 @@ class CoverInterposeActionTest(CombatManeuverActionTestBase):
         self.assertIsNone(action.focused_ally_target_id)
 
 
+class UseItemManeuverActionTest(CombatManeuverActionTestBase):
+    """Tests for UseItemManeuverAction (#2120), key ``combat_use``."""
+
+    def _held_item(self, key: str = "healing draught"):
+        item_obj = ObjectDBFactory(db_key=key, location=self.character)
+        return ItemInstanceFactory(template=ItemTemplateFactory(), game_object=item_obj)
+
+    def test_use_item_by_id_declares_use_item_maneuver(self) -> None:
+        item = self._held_item()
+        result = UseItemManeuverAction().run(self.character, item_instance_id=item.pk)
+        self.assertTrue(result.success, result.message)
+        action = CombatRoundAction.objects.get(participant=self.participant, round_number=1)
+        self.assertEqual(action.maneuver, CombatManeuver.USE_ITEM)
+        self.assertEqual(action.item_instance_id, item.pk)
+
+    def test_use_item_by_name_resolves_from_held_items(self) -> None:
+        item = self._held_item(key="smoke bomb")
+        result = UseItemManeuverAction().run(self.character, item_name="smoke bomb")
+        self.assertTrue(result.success, result.message)
+        action = CombatRoundAction.objects.get(participant=self.participant, round_number=1)
+        self.assertEqual(action.item_instance_id, item.pk)
+
+    def test_use_item_without_item_fails(self) -> None:
+        result = UseItemManeuverAction().run(self.character)
+        self.assertFalse(result.success)
+
+    def test_use_item_with_ally_target(self) -> None:
+        ally_sheet = CharacterSheetFactory(character=CharacterFactory(db_key="useitemally"))
+        ally = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=ally_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        item = self._held_item()
+        result = UseItemManeuverAction().run(
+            self.character, item_instance_id=item.pk, ally_participant_id=ally.pk
+        )
+        self.assertTrue(result.success, result.message)
+        action = CombatRoundAction.objects.get(participant=self.participant, round_number=1)
+        self.assertEqual(action.focused_ally_target_id, ally.pk)
+
+    def test_use_item_unheld_fails(self) -> None:
+        loose = ItemInstanceFactory(template=ItemTemplateFactory())  # no game_object -> unheld
+        result = UseItemManeuverAction().run(self.character, item_instance_id=loose.pk)
+        self.assertFalse(result.success)
+
+    def test_use_item_fails_when_not_in_combat(self) -> None:
+        loner = CharacterFactory(db_key="useitemloner")
+        CharacterSheetFactory(character=loner)
+        result = UseItemManeuverAction().run(loner, item_name="anything")
+        self.assertFalse(result.success)
+
+
 class ReadyActionTest(CombatManeuverActionTestBase):
     def test_ready_toggles_declared_action(self) -> None:
         declare_flee(self.participant)  # creates a round action with is_ready=True
@@ -125,6 +186,67 @@ class ReadyActionTest(CombatManeuverActionTestBase):
     def test_ready_without_declared_action_fails(self) -> None:
         result = ReadyAction().run(self.character)
         self.assertFalse(result.success)
+
+
+class PaceModeReadyActionTest(TestCase):
+    """ReadyAction wired to PaceMode.READY early resolution (#2120)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING,
+            pace_mode=PaceMode.READY,
+            round_number=1,
+        )
+        CombatOpponentFactory(encounter=self.encounter, tier=OpponentTier.MOOK)
+        self.first = CharacterFactory(db_key="readymodefirst")
+        self.first_sheet = CharacterSheetFactory(character=self.first)
+        self.first_participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.first_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        self.second = CharacterFactory(db_key="readymodesecond")
+        self.second_sheet = CharacterSheetFactory(character=self.second)
+        self.second_participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.second_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        for sheet in (self.first_sheet, self.second_sheet):
+            CharacterVitals.objects.get_or_create(
+                character_sheet=sheet, defaults={"health": 50, "max_health": 100}
+            )
+
+    def _declare_passive(self, participant, *, ready: bool) -> CombatRoundAction:
+        """A passives-only declaration — resolves as a no-op at round resolution.
+
+        Keeps these tests focused on the ready-count wiring without needing
+        FleeConfig or a seeded check pipeline at resolve time.
+        """
+        return CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=self.encounter.round_number,
+            is_ready=ready,
+        )
+
+    def test_both_readying_resolves_without_a_timer(self) -> None:
+        self._declare_passive(self.first_participant, ready=True)
+        self._declare_passive(self.second_participant, ready=False)
+        # Drive the wire under test: ReadyAction.execute -> toggle (False -> True)
+        # -> maybe_resolve_on_ready notices every ACTIVE participant is ready.
+        ReadyAction().run(self.second)
+
+        self.encounter.refresh_from_db()
+        self.assertNotEqual(self.encounter.status, RoundStatus.DECLARING)
+
+    def test_lone_ready_participant_does_not_resolve(self) -> None:
+        self._declare_passive(self.first_participant, ready=True)
+        self._declare_passive(self.second_participant, ready=True)
+        ReadyAction().run(self.second)  # toggle -> False; only first remains ready
+
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.status, RoundStatus.DECLARING)
 
 
 class ComboActionTest(CombatManeuverActionTestBase):
