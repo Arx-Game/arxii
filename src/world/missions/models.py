@@ -398,6 +398,7 @@ class MissionNode(SharedMemoryModel):
         errors: dict[str, str] = {}
         self._validate_single_entry_node(errors)
         self._validate_joint_mode_coupling(errors)
+        self._validate_target_area(errors)
 
         if errors:
             raise ValidationError(errors)
@@ -428,6 +429,13 @@ class MissionNode(SharedMemoryModel):
             errors["joint_count"] = "Required when joint_combine is COUNT."
         elif self.joint_combine != JointCombine.COUNT and self.joint_count is not None:
             errors["joint_count"] = "Must be null unless joint_combine is COUNT."
+
+    def _validate_target_area(self, errors: dict[str, str]) -> None:
+        """Enforce target_area is set only for AREA location_mode."""
+        if self.location_mode == NodeLocationMode.AREA and self.target_area_id is None:
+            errors["target_area"] = "AREA location mode requires a target area."
+        if self.location_mode != NodeLocationMode.AREA and self.target_area_id is not None:
+            errors["target_area"] = "target_area is only valid when location_mode is AREA."
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
