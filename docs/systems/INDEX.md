@@ -469,12 +469,27 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
-- **Enums:** `DistinctionOrigin`, `OtherStatus`
-- **Integrates with:** character_creation (draft storage), traits (stat modifiers), magic
+- **Enums:** `DistinctionOrigin` (`CHARACTER_CREATION`, `GAMEPLAY` vestigial, `GM_AWARD`,
+  `ACHIEVEMENT_AUTO_GRANT`, `CONSEQUENCE_POOL`, `ENDORSEMENT_THRESHOLD`), `OtherStatus`
+- **Key Services:** `grant_distinction(character, distinction, *, origin, rank=None,
+  source_description="") -> CharacterDistinction` (#2037) — the single seam every in-play
+  (post-CG) acquisition/rank-up goes through; `rank=None` advances one step, an explicit rank
+  only raises; `origin` is stamped once at creation and never rewritten by a rank-up; raises
+  `DistinctionExclusionError` on a mutual/variant conflict (service-layer port of the CG draft
+  view's checks). No XP path. See [distinctions.md](distinctions.md) "Post-CG acquisition" for
+  the four ratified sources (`GMAwardDistinctionAction`/telnet `grant_distinction`, achievement
+  `RewardType.DISTINCTION`, consequence-pool `EffectType.GRANT_DISTINCTION`, magic's
+  `ENDORSEMENT_THRESHOLD`) and the skip-on-conflict pattern each one uses.
+- **Integrates with:** character_creation (draft storage; CG-only writer besides this seam and
+  admin), traits (stat modifiers), gm/actions (`GMAwardDistinctionAction`, JUNIOR-tier),
+  commands (telnet `CmdGrantDistinction`), achievements (`RewardType.DISTINCTION` reward
+  dispatch), checks/mechanics (`EffectType.GRANT_DISTINCTION` consequence-pool dispatch), magic
   (`DistinctionResonanceGrant` — a distinction can grant/shape `Resonance` standing and
-  potency, #1834; the sidecar model itself lives in `world.magic` per ADR-0010 — see below
-  and [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
+  potency, #1834; `DistinctionResonanceRankThreshold` — the reverse direction, #2037; both
+  sidecar models live in `world.magic` per ADR-0010 — see below and
+  [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
 - **Source:** `src/world/distinctions/`
+- **Glossary:** `src/world/distinctions/AGENT_GLOSSARY.md`
 - **Details:** [distinctions.md](distinctions.md)
 
 ### Checks
@@ -1663,8 +1678,9 @@ gains a discoverable content item for the first time.
   FK), covenants (`CovenantRole` inherits `DiscoverableContent`), narrative
   (`send_narrative_message` with ABILITY category), roster (`active_player_character_sheets()`
   for gamewide first-ever recipient selection), mechanics (BONUS reward → `CharacterModifier`),
-  societies (PRESTIGE reward → `award_deed_prestige`), conditions (`ConditionStatRule` bridge),
-  stories (reactivity hook `on_achievement_earned`)
+  societies (PRESTIGE reward → `award_deed_prestige`), distinctions (DISTINCTION reward →
+  `grant_distinction(origin=ACHIEVEMENT_AUTO_GRANT)`, #2037), conditions (`ConditionStatRule`
+  bridge), stories (reactivity hook `on_achievement_earned`)
 - **Source:** `src/world/achievements/`
 - **Glossary:** `src/world/achievements/AGENT_GLOSSARY.md`
 
@@ -3482,7 +3498,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier GM distinction award/rank-up, telnet `grant_distinction`, wraps `distinctions.grant_distinction`, #2037), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `MinimumGMLevelPrerequisite` (#2117 — staff bypass + `GMProfile.level` >= a configured `GMLevel` tier, generalizing `world.combat.scaling.validate_stakes_requirement`'s pattern; gates `SetTheStageAction`/`PemitAction` at STARTING and `SetSituationAction`/`GrantItemAction` at JUNIOR), `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
