@@ -270,6 +270,8 @@ class DeclareBattleActionAction(Action):
         target_place = kwargs.get("target_place")
         target_side = kwargs.get("target_side")
         target_fortification = kwargs.get("target_fortification")
+        reposition_dx = kwargs.get("reposition_dx")
+        reposition_dy = kwargs.get("reposition_dy")
 
         try:
             decl = declare_battle_action(
@@ -282,6 +284,8 @@ class DeclareBattleActionAction(Action):
                 target_place=target_place,
                 target_side=target_side,
                 target_fortification=target_fortification,
+                reposition_dx=reposition_dx,
+                reposition_dy=reposition_dy,
             )
         except BattleError as exc:
             return ActionResult(success=False, message=exc.user_message)

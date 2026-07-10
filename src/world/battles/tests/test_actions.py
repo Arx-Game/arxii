@@ -473,6 +473,107 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         self.assertEqual(decl.action_kind, BattleActionKind.BREACH)
         self.assertEqual(decl.target_fortification_id, fort.pk)
 
+    def test_declare_battle_action_forwards_reposition_dx_dy(self) -> None:
+        from decimal import Decimal
+
+        from world.battles.constants import VehicleKind
+        from world.battles.services import create_battle_vehicle
+
+        vehicle = create_battle_vehicle(
+            battle=self.battle,
+            side=self.defender_side,
+            place_name="The Gull",
+            vehicle_kind=VehicleKind.SHIP,
+        )
+        vehicle.unit.commander = self.player_sheet
+        vehicle.unit.save(update_fields=["commander"])
+
+        result = DeclareBattleActionAction().run(
+            self.player_char,
+            action_kind=BattleActionKind.REPOSITION,
+            technique_id=self.technique.pk,
+            scope=BattleActionScope.PLACE,
+            target_place=vehicle.place,
+            reposition_dx=Decimal(10),
+            reposition_dy=Decimal(5),
+        )
+        self.assertTrue(result.success, result.message)
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.reposition_dx, Decimal(10))
+        self.assertEqual(decl.reposition_dy, Decimal(5))
+
+    def test_player_can_declare_move_self(self) -> None:
+        place = BattlePlaceFactory(battle=self.battle, name="The Ford")
+        result = DeclareBattleActionAction().run(
+            self.player_char,
+            action_kind=BattleActionKind.MOVE,
+            technique_id=self.technique.pk,
+            target_place=place,
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(
+            BattleActionDeclaration.objects.filter(
+                battle_round=self.battle_round,
+                participant=self.participant,
+                action_kind=BattleActionKind.MOVE,
+                scope=BattleActionScope.UNIT,
+                target_place=place,
+            ).exists()
+        )
+
+    def test_player_can_declare_move_withdraw(self) -> None:
+        result = DeclareBattleActionAction().run(
+            self.player_char,
+            action_kind=BattleActionKind.MOVE,
+            technique_id=self.technique.pk,
+            target_place=None,
+        )
+        self.assertTrue(result.success, result.message)
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.MOVE)
+        self.assertIsNone(decl.target_place)
+
+    def test_commander_can_declare_move_order(self) -> None:
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save(update_fields=["covenant"])
+        rank = CovenantRankFactory(covenant=covenant)
+        subordinate_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="action-test-move-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=subordinate_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+        own_unit = BattleUnitFactory(battle=self.battle, side=self.defender_side)
+        place = BattlePlaceFactory(battle=self.battle, name="The Ford")
+
+        result = DeclareBattleActionAction().run(
+            self.player_char,
+            action_kind=BattleActionKind.MOVE,
+            technique_id=self.technique.pk,
+            scope=BattleActionScope.PLACE,
+            target_unit=own_unit,
+            target_place=place,
+        )
+        self.assertTrue(result.success, result.message)
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.MOVE)
+        self.assertEqual(decl.target_unit_id, own_unit.pk)
+        self.assertEqual(decl.target_place_id, place.pk)
+
 
 class ChallengeChampionDuelActionTests(BattleActionTestBase):
     """ChallengeChampionDuelAction opens a lethal duel bound to a BattlePlace."""
