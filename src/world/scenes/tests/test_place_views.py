@@ -72,3 +72,33 @@ class PlaceViewerIsPresentTests(APITestCase):
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         }
+
+    def test_list_page_reuses_owned_persona_lookup_across_rows(self) -> None:
+        """A list page's N rows share ONE owned-persona lookup, not N (#2156 review fold-in).
+
+        Pinned to 18 queries for GET /api/places/?room=<room.id> with 3 places on the
+        page (observed via assertNumQueries's captured-query dump; composition below —
+        renumber this comment if the count ever legitimately changes):
+        1. session lookup (`force_authenticate`/session auth)
+        2-4. SAVEPOINT / INSERT / RELEASE SAVEPOINT (session-creation bookkeeping)
+        5. Place COUNT (pagination)
+        6. Place list SELECT (filtered/ordered/paginated)
+        7. PlacePresence COUNT for place 1 (`get_presence_count`)
+        8-10. get_account_personas' PlayerData -> RosterEntry -> Persona chain — runs
+           ONCE for the whole page (memoized by `PlaceSerializer._owned_persona_ids`);
+           this is the exact N-per-row duplication this test guards against
+        11. PlacePresence.exists() for place 1 (`get_viewer_is_present`)
+        12. PlacePresence COUNT for place 2
+        13. PlacePresence.exists() for place 2 (persona ids reused from cache, no re-query)
+        14. PlacePresence COUNT for place 3
+        15. PlacePresence.exists() for place 3 (persona ids reused from cache, no re-query)
+        16-18. SAVEPOINT / session UPDATE / RELEASE SAVEPOINT (session-teardown bookkeeping)
+        """
+        for name in ("Bar", "Corner", "Hearth"):
+            PlaceFactory(room=self.room, name=name)
+
+        with self.assertNumQueries(18):
+            response = self.client.get(self.url, {"room": self.room.pk})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) == 3

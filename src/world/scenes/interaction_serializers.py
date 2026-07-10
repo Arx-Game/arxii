@@ -566,9 +566,11 @@ class PoseSubmitSerializer(serializers.Serializer):
 
         scene_id = attrs.get("scene_id")
         if scene_id is not None and persona_id is not None:
-            scene = Scene.objects.filter(pk=scene_id).first()
-            persona = Persona.objects.filter(pk=persona_id).first()
-            if scene is not None and persona is not None and scene.location is not None:
+            # Field validators (validate_scene_id / validate_persona_id) already guarantee
+            # these rows exist by the time cross-field validation runs.
+            scene = Scene.objects.get(pk=scene_id)
+            persona = Persona.objects.get(pk=persona_id)
+            if scene.location is not None:
                 actor_room = persona.character_sheet.character.location
                 if actor_room is None or actor_room.pk != scene.location.pk:
                     raise serializers.ValidationError(
