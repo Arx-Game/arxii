@@ -188,7 +188,12 @@ const makeMembership = (overrides: Partial<CharacterCovenantRole> = {}): Charact
       parent_role: null,
     },
     rank: { id: 1, name: 'Founder', tier: 1 },
-    viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+    viewer_capabilities: {
+      can_invite: false,
+      can_kick: false,
+      can_manage_ranks: false,
+      can_request_gm: false,
+    },
     engaged: false,
     joined_at: '2026-01-01T00:00:00Z',
     left_at: null,
@@ -308,13 +313,23 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
         id: 100,
         character_sheet: OWN_SHEET_ID,
         rank: { id: 1, name: 'Founder', tier: 1 },
-        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: true,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
       makeMembership({
         id: 101,
         character_sheet: 999,
         rank: { id: 2, name: 'Member', tier: 2 },
-        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: true,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
     ]);
 
@@ -331,13 +346,23 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
         id: 100,
         character_sheet: OWN_SHEET_ID,
         rank: { id: 1, name: 'Elder', tier: 2 },
-        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: true,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
       makeMembership({
         id: 101,
         character_sheet: 999,
         rank: { id: 2, name: 'Elder', tier: 2 },
-        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: true,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
     ]);
 
@@ -354,13 +379,23 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
         id: 100,
         character_sheet: OWN_SHEET_ID,
         rank: { id: 3, name: 'Recruit', tier: 3 },
-        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: true,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
       makeMembership({
         id: 101,
         character_sheet: 999,
         rank: { id: 1, name: 'Founder', tier: 1 },
-        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: true,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
     ]);
 
@@ -376,13 +411,23 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
         id: 100,
         character_sheet: OWN_SHEET_ID,
         rank: { id: 1, name: 'Founder', tier: 1 },
-        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: false,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
       makeMembership({
         id: 101,
         character_sheet: 999,
         rank: { id: 2, name: 'Member', tier: 2 },
-        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: false,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
     ]);
 
@@ -423,13 +468,23 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
         id: 100,
         character_sheet: OWN_SHEET_ID,
         rank: { id: 1, name: 'Founder', tier: 1 },
-        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: true },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: false,
+          can_manage_ranks: true,
+          can_request_gm: false,
+        },
       }),
       makeMembership({
         id: 101,
         character_sheet: 999,
         rank: { id: 2, name: 'Member', tier: 2 },
-        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: true },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: false,
+          can_manage_ranks: true,
+          can_request_gm: false,
+        },
       }),
     ]);
 
@@ -448,7 +503,12 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
       makeMembership({
         id: 100,
         character_sheet: OWN_SHEET_ID,
-        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: false,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
     ]);
 
@@ -464,7 +524,12 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
       makeMembership({
         id: 100,
         character_sheet: OWN_SHEET_ID,
-        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: false,
+          can_kick: false,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
     ]);
 
@@ -480,7 +545,12 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
       makeMembership({
         id: 100,
         character_sheet: OWN_SHEET_ID,
-        viewer_capabilities: { can_invite: true, can_kick: false, can_manage_ranks: false },
+        viewer_capabilities: {
+          can_invite: true,
+          can_kick: false,
+          can_manage_ranks: false,
+          can_request_gm: false,
+        },
       }),
     ]);
 

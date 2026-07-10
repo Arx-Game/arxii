@@ -60,7 +60,12 @@ const makeMembership = (): CharacterCovenantRole =>
       parent_role: null,
     },
     rank: { id: 1, name: 'Vanguard', tier: 1 },
-    viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+    viewer_capabilities: {
+      can_invite: false,
+      can_kick: false,
+      can_manage_ranks: false,
+      can_request_gm: false,
+    },
     engaged: true,
     joined_at: '2026-01-01T00:00:00Z',
     left_at: null,
