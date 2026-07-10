@@ -7,6 +7,7 @@ from world.scenes.interaction_views import (
     InteractionFavoriteViewSet,
     InteractionReactionViewSet,
     InteractionViewSet,
+    ReactionEmojiViewSet,
 )
 from world.scenes.place_views import PlaceViewSet
 from world.scenes.reaction_views import ReactionWindowViewSet
@@ -30,6 +31,11 @@ router.register(
     r"interaction-reactions",
     InteractionReactionViewSet,
     basename="interactionreaction",
+)
+router.register(
+    r"reaction-emoji",
+    ReactionEmojiViewSet,
+    basename="reactionemoji",
 )
 router.register(
     r"summary-revisions",

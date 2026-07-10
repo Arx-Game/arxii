@@ -3274,23 +3274,34 @@ writeup kudos/complaint feedback.
   `HybridRelationshipType`), `CharacterRelationship`, `RelationshipTrackProgress`,
   `RelationshipUpdate` (temporary points + capacity), `RelationshipDevelopment`
   (permanent points, 7/week), `RelationshipCapstone` (permanent + capacity),
-  `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429);
+  `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429),
+  `RelationshipBump` (#1699 — ambient ±1 nudge anchored to an Interaction;
+  `UniqueConstraint(relationship, interaction)` is the whole anti-spam cap);
   **writeup feedback (#1537):** `WriteupKudos` (subject's non-revocable commendation;
   awards kudos to the author), `WriteupComplaint` (bad-faith-RP flag for staff triage;
   `resolved` bool; zero player signal)
 - **Key Fields:** `CharacterRelationship.affection` (signed sum), track
-  `capacity` / `developed_points`; `UpdateVisibility` (private/shared/gossip/public)
+  `capacity` / `developed_points`; `UpdateVisibility` (private/shared/gossip/public);
+  `RelationshipTrack.system_key` (#1699 — `TrackSystemKey.REGARD`/`FRICTION` on the two
+  generic system tracks ambient bumps write to; null on authored tracks)
 - **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
 - **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
 - **Services:** `create_first_impression`, `create_development`, `create_capstone`,
   `redistribute_points` (`services.py`) — the four positive relationship-building verbs;
+  `apply_relationship_bump(*, source, target, interaction, valence, source_emoji=None)`
+  (#1699) — permanent ungated `BUMP_POINTS` (±1) onto the Regard/Friction system track
+  (capstone write-shape: capacity + developed together), deduped per interaction;
   `give_writeup_kudos(*, giver_account, writeup)` — commend a writeup, awards kudos to
   author (warn-skips when `"relationship_writeup"` `KudosSourceCategory` not seeded);
   `file_writeup_complaint(*, complainant_account, writeup, reason)` — file a bad-faith-RP
   complaint for staff triage
 - **Exceptions:** `WriteupFeedbackError` base + `WriteupNotSharedError`,
   `NotWriteupSubjectError`, `CannotCommendOwnWriteupError`, `AlreadyCommendedError`,
-  `WriteupNotVisibleError` — each with `user_message` for 400 API responses
+  `WriteupNotVisibleError`; `RelationshipBumpError` base + `AlreadyAcknowledgedError`,
+  `SystemTracksNotSeededError` (#1699) — each with `user_message` for 400 API responses
+- **Seeds:** `relationship_scale` cluster (#1699, `world/seeds/relationship_scale.py`) —
+  Regard/Friction system tracks, 4 `RelationshipTier` bands each at 25/100/500/2000
+  (names PLACEHOLDER), starter `ReactionEmoji` rows (👍 neutral, ❤️ +1, 😠 −1)
 - **Player surface (#1485, #1537):** all four verbs plus kudos/complaint are reachable
   from both web and telnet — the web `RelationshipUpdateViewSet` POST endpoints
   (`first_impression` / `develop` / `capstone` / `redistribute` / `kudos` / `complaint`)
@@ -3299,9 +3310,17 @@ writeup kudos/complaint feedback.
   on every writeup row. No consent gate — these describe the caller's regard, they do not
   compel the target's behavior (ADR-0024). FK direction: feedback lives in relationships,
   not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014).
+- **Ambient bumps (#1699):** telnet `relationship plus|neg <name>` (aliases `rel/plus`,
+  `rel/neg`) backfill-anchor to the target's most recent unacknowledged visible pose in
+  the active scene; web valenced `ReactionEmoji` reactions bump the pose's author
+  directly (`InteractionReactionViewSet.create` side-effect, `bump_applied` in the
+  response). Both dispatch `RelationshipBumpAction` (key `"relationship_bump"`). Not
+  consent-gated (private write to the actor's own regard, ADR-0024); bumps render only
+  in the actor's own relationship views; the target is never notified.
 - **Admin:** `WriteupComplaint` registered for staff triage (no player-facing complaint UI)
 - **Actions:** `GiveWriteupKudosAction` (key `"give_writeup_kudos"`),
-  `FileWriteupComplaintAction` (key `"file_writeup_complaint"`)
+  `FileWriteupComplaintAction` (key `"file_writeup_complaint"`),
+  `RelationshipBumpAction` (key `"relationship_bump"`, #1699)
   (`actions/definitions/relationships.py`)
 - **Integrates with:** mechanics (modifier gating), character_sheets (CharacterSheet FK),
   scenes (optional `linked_scene` defaults to the caller's active scene), progression

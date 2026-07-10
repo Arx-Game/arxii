@@ -23,6 +23,14 @@ Relationships are the heart of the game. A track-based system lets characters de
 - **Writeup feedback (#1537):** WriteupKudos (subject's non-revocable commendation; awards kudos to the author via the existing `award_kudos` path; one per account+writeup), WriteupComplaint (bad-faith-RP flag for staff triage; `resolved` bool; no player signal)
 - **Services:** create_first_impression (with reciprocal activation), redistribute_points (atomic point movement between tracks), create_development (permanent points up to capacity), create_capstone (permanent + capacity), give_writeup_kudos (#1537), file_writeup_complaint (#1537)
 - **Writeup feedback player surface (#1537):** GiveWriteupKudosAction (key `give_writeup_kudos`) + FileWriteupComplaintAction (key `file_writeup_complaint`) wired to both web (`RelationshipUpdateViewSet` POST `kudos`/`complaint`) and telnet (`relationship kudos <ref>` / `relationship complain <ref>=<reason>`). Read serializers expose `kudos_count` + `viewer_has_kudosed`. Admin: WriteupComplaint registered for staff triage.
+- **Magnitude scale + ambient bumps (#1699, SHIPPED):** RelationshipBump (permanent ±1
+  anchored to an Interaction; unique per relationship+interaction = the whole anti-spam
+  cap), the Regard/Friction system tracks (`RelationshipTrack.system_key`), the seeded
+  25/100/500/2000 `RelationshipTier` bands (PLACEHOLDER names, `relationship_scale` seed
+  cluster), `apply_relationship_bump` + `RelationshipBumpAction` (key `relationship_bump`),
+  telnet `relationship plus|neg <name>` (`rel/plus`, `rel/neg`) with backfill anchoring,
+  and web valenced `ReactionEmoji` reactions (catalog endpoint `/api/reaction-emoji/`,
+  catalog-driven scene footer). Shift sizes for Flirt/Seduce land with #1697.
 - **Magic threads (new Thread model, Spec A):** Single `Thread` table with a discriminator
   and typed FKs per anchor kind. For relationships the two kinds are `RELATIONSHIP_TRACK`
   (anchored to a specific CharacterRelationship + track) and `RELATIONSHIP_CAPSTONE`
@@ -70,7 +78,7 @@ Relationships are the heart of the game. A track-based system lets characters de
 ### Relationship Advancement Mechanics
 - **Relationship tier calculation for training** — Training system mentor bonus uses `(relationship_tier + 1)` as multiplier. Need to define tier breakpoints from affection/impression values and expose via `get_relationship_tier(character_a, character_b)` helper. Currently stubbed at 0. See `docs/plans/2026-03-10-training-system-design.md`
 - **Development roll formula** — What stat/skill is used for the social roll in development updates, and how roll result maps to points earned. Currently create_development just takes points directly
-- **Tier point thresholds** — Exact point values for each tier on each track (Tier 1 easy, each subsequent much harder). Currently defined in fixture data but values may need tuning
+- **Tier point thresholds** — DONE for the system tracks (#1699): Regard/Friction seeded at 25/100/500/2000 via the `relationship_scale` cluster (PLACEHOLDER names, magnitudes tunable in data). Authored tracks (Friendship, Romance, …) still need their own tier rows
 - **XP reward formula** — How much XP a development update awards. xp_awarded field exists on RelationshipDevelopment but no formula calculates it
 - **Temporary point decay cron** — RelationshipUpdate.current_temporary_value() calculates decay on read, but there's no cron job to clean up fully-decayed updates or update cached totals
 - **RelationshipUpdate creation service** — No service function for creating relationship updates (only first impressions have a service). Need validation, achievement stat firing, capacity updates

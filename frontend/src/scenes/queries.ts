@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
-import type { HighlightReel, Interaction, SceneRoundModeValue } from './types';
+import type { HighlightReel, Interaction, ReactionEmojiEntry, SceneRoundModeValue } from './types';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -117,6 +117,14 @@ export async function postInteractionReaction(interactionId: number, emoji: stri
   // Toggle returns 201 (created) or 204 (removed) — both are success
   if (!res.ok && res.status !== 204) throw new Error('Failed to toggle reaction');
   return res.status === 204 ? null : res.json();
+}
+
+/** Fetch the active reaction-emoji catalog (#1699); valenced entries also nudge regard. */
+export async function fetchReactionEmojiCatalog(): Promise<ReactionEmojiEntry[]> {
+  const res = await apiFetch('/api/reaction-emoji/');
+  if (!res.ok) throw new Error('Failed to load reaction emoji catalog');
+  const data = (await res.json()) as { results: ReactionEmojiEntry[] };
+  return data.results;
 }
 
 export async function toggleInteractionFavorite(interactionId: number) {

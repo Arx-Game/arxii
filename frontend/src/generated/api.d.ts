@@ -7439,7 +7439,15 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    /** @description Toggle emoji reactions on interactions. */
+    /**
+     * @description Toggle emoji reactions on interactions.
+     *
+     *     A cataloged emoji with nonzero valence additionally fires an ambient
+     *     relationship bump at the pose's author (#1699). The chip toggle is the
+     *     primary behavior — a failed/deduped bump never blocks the reaction, and
+     *     un-reacting never reverts a bump (the per-interaction unique constraint
+     *     prevents re-farming).
+     */
     delete: operations['interaction_reactions_destroy'];
     options?: never;
     head?: never;
@@ -13727,6 +13735,40 @@ export interface paths {
      *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
      */
     patch: operations['protected_subjects_partial_update'];
+    trace?: never;
+  };
+  '/api/reaction-emoji/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The active reaction-emoji catalog the scene footer renders (#1699). */
+    get: operations['reaction_emoji_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/reaction-emoji/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The active reaction-emoji catalog the scene footer renders (#1699). */
+    get: operations['reaction_emoji_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/reaction-windows/{id}/react/': {
@@ -25871,6 +25913,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PublicFeedItem'][];
     };
+    PaginatedReactionEmojiList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ReactionEmoji'][];
+    };
     PaginatedRelationshipCapstoneList: {
       /** @example 123 */
       count: number;
@@ -29099,6 +29156,19 @@ export interface components {
      * @enum {string}
      */
     Reach83dEnum: 'game_wide' | 'specified';
+    /** @description Read serializer for the active reaction-emoji catalog (#1699). */
+    ReactionEmoji: {
+      emoji: string;
+      /**
+       * @description +1 fires a positive relationship bump, -1 negative, 0 cosmetic only
+       *
+       *     * `1` - Positive
+       *     * `0` - Neutral
+       *     * `-1` - Negative
+       */
+      valence?: components['schemas']['ValenceEnum'];
+      sort_order?: number;
+    };
     /** @description Serializer for redistributing relationship points between tracks. */
     RedistributeWrite: {
       target_persona_id: number;
@@ -32788,6 +32858,13 @@ export interface components {
     UserStoryMuteCreateRequest: {
       story: number;
     };
+    /**
+     * @description * `1` - Positive
+     *     * `0` - Neutral
+     *     * `-1` - Negative
+     * @enum {integer}
+     */
+    ValenceEnum: 1 | 0 | -1;
     /** @description Inline serializer for the viewer's capabilities in a covenant. */
     ViewerCapabilities: {
       can_invite: boolean;
@@ -52279,6 +52356,58 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['StoryProtectedSubject'];
+        };
+      };
+    };
+  };
+  reaction_emoji_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /**
+         * @description +1 fires a positive relationship bump, -1 negative, 0 cosmetic only
+         *
+         *     * `1` - Positive
+         *     * `0` - Neutral
+         *     * `-1` - Negative
+         */
+        valence?: -1 | 0 | 1;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedReactionEmojiList'];
+        };
+      };
+    };
+  };
+  reaction_emoji_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this reaction emoji. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReactionEmoji'];
         };
       };
     };

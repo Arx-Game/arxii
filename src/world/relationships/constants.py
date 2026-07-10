@@ -8,6 +8,23 @@ DECAY_DAYS = 10
 # Maximum development updates per character per week (across all relationships)
 MAX_DEVELOPMENTS_PER_WEEK = 7
 
+# Points applied per ambient relationship bump — rel plus/neg, valenced emoji reactions (#1699).
+BUMP_POINTS = 1
+
+
+class TrackSystemKey(models.TextChoices):
+    """Lookup keys for the generic system tracks that ambient bumps write to (#1699)."""
+
+    REGARD = "regard", "Regard"
+    FRICTION = "friction", "Friction"
+
+
+class BumpValence(models.IntegerChoices):
+    """Direction of an ambient relationship bump (#1699)."""
+
+    POSITIVE = 1, "Positive"
+    NEGATIVE = -1, "Negative"
+
 
 class TrackSign(models.TextChoices):
     """Whether a relationship track represents positive or negative feelings."""

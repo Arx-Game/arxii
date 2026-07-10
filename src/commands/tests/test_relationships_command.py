@@ -485,3 +485,86 @@ class CmdRelationshipShowWriteupsTests(TestCase):
         _make_cmd(self.caller, f"show #{self.rel.pk}").func()
         text = _capture(self.caller)
         self.assertIn(f"[c{capstone.pk}]", text)
+
+
+class CmdRelationshipBumpTests(TestCase):
+    """``relationship plus|neg <name>`` (+ switch form) runs the bump Action (#1699)."""
+
+    def setUp(self) -> None:
+        from evennia.objects.models import ObjectDB
+        from evennia.utils.idmapper.models import flush_cache
+
+        from world.relationships.constants import TrackSystemKey
+        from world.scenes.factories import SceneFactory, SceneParticipationFactory
+
+        flush_cache()
+        RelationshipTrackFactory(
+            name="Regard", sign=TrackSign.POSITIVE, system_key=TrackSystemKey.REGARD
+        )
+        RelationshipTrackFactory(
+            name="Friction", sign=TrackSign.NEGATIVE, system_key=TrackSystemKey.FRICTION
+        )
+        self.room = ObjectDB.objects.create(
+            db_key="BumpRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.caller = CharacterFactory()
+        self.caller.location = self.room
+        self.caller.save()
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
+        self.caller_tenure = RosterTenureFactory(roster_entry__character_sheet=self.caller_sheet)
+        self.caller.msg = MagicMock()
+        self.caller.search = MagicMock()
+        self.target = CharacterFactory()
+        self.target.location = self.room
+        self.target.save()
+        self.target_sheet = CharacterSheetFactory(character=self.target)
+        self.target_tenure = RosterTenureFactory(roster_entry__character_sheet=self.target_sheet)
+        SceneParticipationFactory(scene=self.scene, account=self.caller_tenure.player_data.account)
+        SceneParticipationFactory(scene=self.scene, account=self.target_tenure.player_data.account)
+        self.caller.search.side_effect = _search_returns(self.target)
+
+    def _target_pose(self):
+        from world.scenes.constants import InteractionMode
+        from world.scenes.factories import InteractionFactory
+
+        return InteractionFactory(
+            scene=self.scene,
+            persona=self.target_sheet.primary_persona,
+            mode=InteractionMode.POSE,
+        )
+
+    def test_plus_subverb_bumps_regard(self) -> None:
+        from world.relationships.models import RelationshipBump
+
+        pose = self._target_pose()
+        _make_cmd(self.caller, f"plus {self.target.db_key}").func()
+        bump = RelationshipBump.objects.get()
+        self.assertEqual(bump.interaction_id, pose.pk)
+        self.assertEqual(bump.valence, 1)
+        relationship = CharacterRelationship.objects.get(
+            source=self.caller_sheet, target=self.target_sheet
+        )
+        self.assertEqual(relationship.affection, 1)
+        self.assertIn("warms", _capture(self.caller))
+
+    def test_neg_switch_form_bumps_friction(self) -> None:
+        from world.relationships.models import RelationshipBump
+
+        self._target_pose()
+        cmd = _make_cmd(self.caller, self.target.db_key)
+        cmd.switches = ["neg"]
+        cmd.func()
+        bump = RelationshipBump.objects.get()
+        self.assertEqual(bump.valence, -1)
+        self.assertIn("cools", _capture(self.caller))
+
+    def test_budget_exhaustion_reports_cleanly(self) -> None:
+        self._target_pose()
+        _make_cmd(self.caller, f"plus {self.target.db_key}").func()
+        _make_cmd(self.caller, f"plus {self.target.db_key}").func()
+        self.assertIn("already acknowledged", _capture(self.caller))
+
+    def test_plus_requires_a_name(self) -> None:
+        _make_cmd(self.caller, "plus").func()
+        self.assertIn("Usage: relationship plus", _capture(self.caller))

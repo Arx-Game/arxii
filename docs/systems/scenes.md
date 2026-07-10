@@ -35,6 +35,7 @@ from world.scenes.constants import (
 | `SceneMessage` | A message sent during a scene | `scene` (FK), `persona` (FK), `content`, `context` (TextChoices), `mode` (TextChoices), `receivers` (M2M Persona), `timestamp`, `sequence_number` |
 | `SceneMessageSupplementalData` | Extra metadata for messages (1:1) | `message` (OneToOne, primary_key), `data` (JSONField) |
 | `SceneMessageReaction` | Emoji reaction to a message | `message` (FK), `account` (FK AccountDB), `emoji` |
+| `ReactionEmoji` | Staff-editable reaction-emoji catalog (#1699); nonzero valence also fires an ambient relationship bump at the pose's author | `emoji` (unique), `valence` (`ReactionValence` +1/0/−1), `is_active`, `sort_order` |
 
 ---
 
@@ -391,6 +392,14 @@ with `distinct_initiators >= MIN_ENGAGEMENT_BAR` (currently 2) are granted Kudos
 ### Reactions (`/api/reactions/`)
 - `POST /api/reactions/` - Toggle reaction (creates or removes based on existing state)
 - `DELETE /api/reactions/{id}/` - Remove reaction
+
+### Interaction reactions + emoji catalog (#1699)
+- `POST /api/interaction-reactions/` - Toggle an emoji reaction on an Interaction. When
+  the emoji is an active `ReactionEmoji` with nonzero valence, the create additionally
+  dispatches `RelationshipBumpAction` at the pose's author (response carries
+  `bump_applied`; a deduped bump never blocks the chip, un-reacting never reverts one)
+- `GET /api/reaction-emoji/` - The active catalog (`emoji`, `valence`, `sort_order`)
+  the scene footer renders; staff edit rows in admin, no deploy needed
 
 ### Action Requests (`/api/action-requests/`)
 - `GET /api/action-requests/` - List requests where the caller is initiator or primary target

@@ -19,25 +19,31 @@ from world.progression.services.awards import award_xp
 from world.progression.services.kudos import award_kudos
 from world.progression.types import ProgressionReason
 from world.relationships.constants import (
+    BUMP_POINTS,
     MAX_DEVELOPMENTS_PER_WEEK,
     RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
     WRITEUP_KUDOS_AMOUNT,
     TrackSign,
+    TrackSystemKey,
     UpdateVisibility,
 )
 from world.relationships.exceptions import (
+    AlreadyAcknowledgedError,
     AlreadyCommendedError,
     CannotCommendOwnWriteupError,
     NotWriteupSubjectError,
+    SystemTracksNotSeededError,
     WriteupNotSharedError,
     WriteupNotVisibleError,
 )
 from world.relationships.models import (
     CharacterRelationship,
+    RelationshipBump,
     RelationshipCapstone,
     RelationshipChange,
     RelationshipCondition,
     RelationshipDevelopment,
+    RelationshipTrack,
     RelationshipTrackProgress,
     RelationshipUpdate,
     TemporaryRelationshipCondition,
@@ -52,8 +58,8 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import ModifierContribution
     from world.relationships.constants import FirstImpressionColoring
-    from world.relationships.models import GrievanceOption, RelationshipTrack
-    from world.scenes.models import Scene
+    from world.relationships.models import GrievanceOption
+    from world.scenes.models import Interaction, ReactionEmoji, Scene
 
 logger = logging.getLogger(__name__)
 
@@ -307,6 +313,61 @@ def create_capstone(  # noqa: PLR0913
             visibility=visibility,
             linked_scene=linked_scene,
         )
+
+
+def apply_relationship_bump(
+    *,
+    source: CharacterSheet,
+    target: CharacterSheet,
+    interaction: Interaction,
+    valence: int,
+    source_emoji: ReactionEmoji | None = None,
+) -> RelationshipBump:
+    """Apply an ambient ±1 bump to source's regard toward target (#1699).
+
+    Permanent, ungated, tiny: adds BUMP_POINTS to both capacity and
+    developed_points (the capstone write-shape at bump scale) on the generic
+    Regard (positive) or Friction (negative) system track. The bump row's
+    unique constraint per (relationship, interaction) is the only cap — the
+    bump-row create runs first inside the transaction so a duplicate rolls
+    back cleanly with no points applied.
+
+    Raises ValidationError (self-target), SystemTracksNotSeededError, or
+    AlreadyAcknowledgedError.
+    """
+    if source.pk == target.pk:
+        msg = "You cannot record a relationship with yourself."
+        raise ValidationError(msg)
+    key = TrackSystemKey.REGARD if valence > 0 else TrackSystemKey.FRICTION
+    try:
+        track = RelationshipTrack.objects.get(system_key=key)
+    except RelationshipTrack.DoesNotExist:
+        raise SystemTracksNotSeededError from None
+    try:
+        with transaction.atomic():
+            relationship, _ = CharacterRelationship.objects.get_or_create(
+                source=source,
+                target=target,
+                defaults={"is_pending": True},
+            )
+            bump = RelationshipBump.objects.create(
+                relationship=relationship,
+                interaction=interaction,
+                timestamp=interaction.timestamp,
+                valence=1 if valence > 0 else -1,
+                source_emoji=source_emoji,
+            )
+            progress, _ = RelationshipTrackProgress.objects.select_for_update().get_or_create(
+                relationship=relationship,
+                track=track,
+                defaults={"capacity": 0, "developed_points": 0},
+            )
+            progress.capacity += BUMP_POINTS
+            progress.developed_points += BUMP_POINTS
+            progress.save(update_fields=["capacity", "developed_points"])
+    except IntegrityError:
+        raise AlreadyAcknowledgedError from None
+    return bump
 
 
 def _writeup_field_name(writeup) -> str:

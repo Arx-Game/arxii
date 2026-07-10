@@ -16,6 +16,7 @@ from world.scenes.constants import (
     InteractionVisibility,
     PersonaType,
     PoseKind,
+    ReactionValence,
     RoundStatus,
     ScenePrivacyMode,
     SceneRoundMode,
@@ -1065,6 +1066,34 @@ class InteractionReaction(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.account} reacted {self.emoji} to interaction {self.interaction_id}"
+
+
+class ReactionEmoji(SharedMemoryModel):
+    """Staff-editable catalog of reaction emoji and their relationship valence (#1699).
+
+    Valence NEUTRAL = cosmetic only (the pre-#1699 behavior). Nonzero valence
+    additionally fires an ambient relationship bump at the pose's author.
+    Playtest decides which emoji survive — that's a data edit here, not a
+    deploy.
+    """
+
+    emoji = models.CharField(max_length=32, unique=True)
+    valence = models.SmallIntegerField(
+        choices=ReactionValence.choices,
+        default=ReactionValence.NEUTRAL,
+        help_text="+1 fires a positive relationship bump, -1 negative, 0 cosmetic only",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive emoji disappear from the web picker without deleting history",
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "emoji"]
+
+    def __str__(self) -> str:
+        return f"{self.emoji} ({self.get_valence_display()})"
 
 
 class InteractionTargetPersona(SharedMemoryModel):

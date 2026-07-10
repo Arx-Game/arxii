@@ -3,12 +3,13 @@
 import factory
 from factory.django import DjangoModelFactory
 
-from world.relationships.constants import TrackSign
+from world.relationships.constants import BumpValence, TrackSign
 from world.relationships.models import (
     CharacterRelationship,
     GrievanceOption,
     HybridRelationshipType,
     HybridRequirement,
+    RelationshipBump,
     RelationshipCapstone,
     RelationshipChange,
     RelationshipCondition,
@@ -176,3 +177,15 @@ class RelationshipChangeFactory(DjangoModelFactory):
     source_track = factory.SubFactory(RelationshipTrackFactory)
     target_track = factory.SubFactory(RelationshipTrackFactory)
     points_moved = 5
+
+
+class RelationshipBumpFactory(DjangoModelFactory):
+    """Factory for creating RelationshipBump instances (#1699)."""
+
+    class Meta:
+        model = RelationshipBump
+
+    relationship = factory.SubFactory(CharacterRelationshipFactory)
+    interaction = factory.SubFactory("world.scenes.factories.InteractionFactory")
+    timestamp = factory.LazyAttribute(lambda o: o.interaction.timestamp)
+    valence = BumpValence.POSITIVE

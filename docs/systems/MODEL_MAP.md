@@ -4752,6 +4752,7 @@
   - updates <- relationships.RelationshipUpdate
   - developments <- relationships.RelationshipDevelopment
   - capstones <- relationships.RelationshipCapstone
+  - bumps <- relationships.RelationshipBump
   - changes <- relationships.RelationshipChange
   - temporary_conditions <- relationships.TemporaryRelationshipCondition
 
@@ -4795,6 +4796,12 @@
   - writeupkudos_set <- relationships.WriteupKudos
   - writeupcomplaint_set <- relationships.WriteupComplaint
 
+### RelationshipBump
+**Foreign Keys:**
+  - relationship -> relationships.CharacterRelationship [FK]
+  - interaction -> scenes.Interaction [FK]
+  - source_emoji -> scenes.ReactionEmoji [FK] (nullable)
+
 ### RelationshipChange
 **Foreign Keys:**
   - relationship -> relationships.CharacterRelationship [FK]
@@ -4823,6 +4830,7 @@
 
 ### Service Functions
 - `add_relationship_condition(*, source: 'CharacterSheet', target: 'CharacterSheet', condition: 'RelationshipCondition', duration: 'timedelta | None' = None) -> 'None' — Add a ``RelationshipCondition`` to the directed ``source → target`` relationship (#1697).`
+- `apply_relationship_bump(*, source: 'CharacterSheet', target: 'CharacterSheet', interaction: 'Interaction', valence: 'int', source_emoji: 'ReactionEmoji | None' = None) -> 'RelationshipBump' — Apply an ambient ±1 bump to source's regard toward target (#1699).`
 - `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
 - `clear_very_attracted(sheets) -> 'None' — Drop Very Attracted for the given characters — the scene-end early clear (#1697).`
@@ -5215,6 +5223,7 @@
   - reaction_windows <- scenes.ReactionWindow
   - consequence_outcomes <- checks.ConsequenceOutcome
   - referencing_updates <- relationships.RelationshipUpdate
+  - relationship_bumps <- relationships.RelationshipBump
   - combat_round_actions <- combat.CombatRoundAction
   - clash_contributions <- combat.ClashContribution
 
@@ -5227,6 +5236,8 @@
 **Foreign Keys:**
   - interaction -> scenes.Interaction [FK]
   - account -> accounts.AccountDB [FK]
+
+### ReactionEmoji
 
 ### InteractionTargetPersona
 **Foreign Keys:**

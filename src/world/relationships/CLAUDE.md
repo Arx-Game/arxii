@@ -15,7 +15,7 @@ mutual consent, deceit mechanics, and achievement integration.
 
 ## Progression System
 
-Three ways to add points:
+Four ways to add points:
 
 1. **Relationship Updates** (unlimited) — Add temporary points + capacity to a track.
    Temporary points decay linearly: 10% of original per day, zero after 10 days.
@@ -27,6 +27,19 @@ Three ways to add points:
 3. **Capstone Events** (unlimited) — Add both permanent points AND capacity.
    Represent monumental moments. Never gated. Real mechanical power comes from
    magical tethers (future PR) built around capstones.
+
+4. **Ambient Bumps** (#1699) — Permanent ±`BUMP_POINTS` (1) onto the generic
+   Regard/Friction **system tracks** (`RelationshipTrack.system_key`), using the
+   capstone write-shape (capacity + developed together). Anchored to the specific
+   Interaction that prompted them; `UniqueConstraint(relationship, interaction)` on
+   `RelationshipBump` is the entire anti-spam cap (the per-scene budget — no more
+   bumps than the target posed — emerges from it). Doors: telnet
+   `relationship plus|neg <name>` (`rel/plus`/`rel/neg`; backfill-anchors to the
+   target's newest unacknowledged visible pose) and valenced `ReactionEmoji` web
+   reactions at the pose's author. All via `RelationshipBumpAction`
+   (key `relationship_bump`). Not consent-gated (ADR-0024); the target is never
+   notified. Seeds: `relationship_scale` cluster (tracks + 25/100/500/2000 tier
+   bands + starter emoji catalog, PLACEHOLDER names).
 
 ## Models
 

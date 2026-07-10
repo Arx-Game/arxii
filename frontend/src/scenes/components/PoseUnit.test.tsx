@@ -29,6 +29,19 @@ vi.mock('./PoseUnitDetailPanel', () => ({
   ),
 }));
 
+// Mock the reaction-emoji catalog fetch (#1699) — the footer picker is
+// catalog-driven now; the mutation helper stays mocked so no real POST fires.
+vi.mock('../queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../queries')>();
+  return {
+    ...actual,
+    postInteractionReaction: vi.fn().mockResolvedValue(null),
+    fetchReactionEmojiCatalog: vi
+      .fn()
+      .mockResolvedValue([{ emoji: '\u{1F44D}', valence: 0, sort_order: 0 }]),
+  };
+});
+
 // Stub EndorsementControl so PoseUnit mount tests can assert presence/absence
 // without pulling in endorsement hook machinery. The stub renders data-* attributes
 // carrying the forwarded mode and visibility so tests can verify prop forwarding.
@@ -91,7 +104,7 @@ describe('PoseUnit', () => {
     vi.clearAllMocks();
   });
 
-  it('renders a POSE with two linked actions — header + 2 chips + body + reactions', () => {
+  it('renders a POSE with two linked actions — header + 2 chips + body + reactions', async () => {
     const interaction = makeInteraction({
       mode: 'pose',
       content: 'A well-crafted pose.',
@@ -137,8 +150,8 @@ describe('PoseUnit', () => {
     // Prose body
     expect(screen.getByText('A well-crafted pose.')).toBeInTheDocument();
 
-    // Reactions footer (thumbs-up button always rendered)
-    expect(screen.getByText('\u{1F44D}')).toBeInTheDocument();
+    // Reactions footer (picker buttons come from the reaction-emoji catalog, #1699)
+    expect(await screen.findByText('\u{1F44D}')).toBeInTheDocument();
   });
 
   it('renders a POSE without action links — narrative-only card, no chips', () => {

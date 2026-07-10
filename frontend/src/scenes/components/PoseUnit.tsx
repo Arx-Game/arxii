@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
@@ -21,7 +21,7 @@ import { ActionResult } from './ActionResult';
 import { ReactionStrip } from './ReactionStrip';
 import { DramaticMomentTagDialog } from './DramaticMomentTagDialog';
 import { EndorsementControl } from './EndorsementControl';
-import { postInteractionReaction } from '../queries';
+import { fetchReactionEmojiCatalog, postInteractionReaction } from '../queries';
 import type { Interaction, ActionLink } from '../types';
 import type { ActionAttachmentInfo } from '../actionTypes';
 import { PoseUnitDetailPanel } from './PoseUnitDetailPanel';
@@ -68,6 +68,14 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
     mutationFn: (emoji: string) => postInteractionReaction(interaction.id, emoji),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
   });
+  // Staff-editable catalog (#1699); valenced entries also nudge the author's regard.
+  const { data: catalog } = useQuery({
+    queryKey: ['reaction-emoji'],
+    queryFn: fetchReactionEmojiCatalog,
+    staleTime: 5 * 60 * 1000,
+  });
+  const existing = new Set(interaction.reactions.map((r) => r.emoji));
+  const pickerEntries = (catalog ?? []).filter((entry) => !existing.has(entry.emoji));
 
   return (
     <div className="mt-1 flex gap-2">
@@ -76,9 +84,22 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
           {r.emoji} {r.count}
         </button>
       ))}
-      <button className="text-sm" onClick={() => reactionMutation.mutate('\u{1F44D}')}>
-        {'\u{1F44D}'}
-      </button>
+      {pickerEntries.map((entry) => (
+        <button
+          key={entry.emoji}
+          className="text-sm opacity-60 transition-opacity hover:opacity-100"
+          title={
+            entry.valence > 0
+              ? 'Warms your regard for the author'
+              : entry.valence < 0
+                ? 'Cools your regard for the author'
+                : undefined
+          }
+          onClick={() => reactionMutation.mutate(entry.emoji)}
+        >
+          {entry.emoji}
+        </button>
+      ))}
     </div>
   );
 }
