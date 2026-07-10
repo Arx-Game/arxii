@@ -14,6 +14,7 @@ from actions.prerequisites import (
     CanStealPrerequisite,
     HoldsItemPrerequisite,
     ItemUsablePrerequisite,
+    MinimumGMLevelPrerequisite,
     OnUseTargetPrerequisite,
     Prerequisite,
 )
@@ -29,6 +30,7 @@ from flows.service_functions.inventory import (
     take_out,
     unequip,
 )
+from world.gm.constants import GMLevel
 from world.items.constants import ContainerAccessPolicy
 from world.items.exceptions import InventoryError, ItemError
 from world.items.services.usage import use_item
@@ -516,3 +518,79 @@ class UseItemAction(Action):
                 "applied_effect_count": len(result.applied_effects),
             },
         )
+
+
+@dataclass
+class GrantItemAction(Action):
+    """JUNIOR-tier GM action: grant an ItemTemplate to a target character (#707, #2117).
+
+    Ad-hoc narrative item grant -- for story-earned moments where a GM
+    hand-awards a specific touchstone or reagent. No shop/merchant system
+    exists in this codebase; this action IS the acquisition channel. Wraps
+    ``world.items.services.narrative_grants.grant_touchstone_item_to_character``
+    (the same service the Mission ITEM reward sink calls).
+
+    Dispatch convention
+    -------------------
+    REGISTRY ActionRef: ``registry_key="grant_item"``, ``target_name=<str>``,
+    ``template_name=<str>``. Resolution (target search + template lookup)
+    happens in ``execute()``, mirroring the pre-#2117 ``CmdGrantItem._run``
+    lookups exactly (including the global-search breadth, unchanged by this
+    fix -- see the #2117 spec's deferred-follow-up note).
+
+    Gated on ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`` (staff bypass
+    preserved) -- creates a permanent ItemInstance with no shop/economy
+    backstop to reverse it, the same "proven, not just approved" bar as
+    ``SetSituationAction``.
+    """
+
+    key: str = "grant_item"
+    name: str = "Grant Item"
+    icon: str = "gift"
+    category: str = "gm"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.items.models import ItemTemplate  # noqa: PLC0415
+        from world.items.services.narrative_grants import (  # noqa: PLC0415
+            grant_touchstone_item_to_character,
+        )
+
+        target_name = (kwargs.get("target_name") or "").strip()
+        template_name = (kwargs.get("template_name") or "").strip()
+        if not target_name or not template_name:
+            return ActionResult(
+                success=False,
+                message="Usage: grant_item <character>=<item template name>",
+            )
+
+        target = actor.search(target_name, global_search=True)
+        if target is None:
+            # search() already messaged the actor with a not-found/ambiguous notice.
+            return ActionResult(success=False)
+
+        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            return ActionResult(success=False, message="That is not a character.")
+
+        template = ItemTemplate.objects.filter(name__iexact=template_name).first()
+        if template is None:
+            return ActionResult(
+                success=False,
+                message=f"No item template found named '{template_name}'.",
+            )
+
+        granted_by = getattr(actor, "account", None)  # noqa: GETATTR_LITERAL
+        grant_touchstone_item_to_character(
+            character_sheet=sheet, template=template, granted_by=granted_by
+        )
+        return ActionResult(success=True, message=f"Granted '{template.name}' to {target.key}.")

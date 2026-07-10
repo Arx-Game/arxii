@@ -1,8 +1,10 @@
 """Telnet face of SetSituationAction (#1895).
 
-Thin command: a staff caller instantiates a SituationTemplate into their
-current room. Delegates to SetSituationAction via action.run() -- the same
-seam the web quick-action would reach.
+Thin command: a JUNIOR-tier-or-higher GM (or staff) caller instantiates a
+SituationTemplate into their current room. Delegates to SetSituationAction
+via action.run() -- the same seam the web quick-action would reach. The
+command lock is ``cmd:all()`` -- real authorization lives entirely in the
+Action's ``MinimumGMLevelPrerequisite`` (#2117).
 """
 
 from __future__ import annotations
@@ -18,7 +20,8 @@ from world.mechanics.models import SituationTemplate
 class CmdSetSituation(ArxCommand):
     """Instantiate an authored Situation in your current room.
 
-    Staff-only. You must be standing in the room to trigger it.
+    Requires JUNIOR-tier GM trust or higher (or staff). You must be standing
+    in the room to trigger it.
 
     Usage:
       setsituation <name|id>    -- instantiate <name|id> into this room
@@ -26,7 +29,7 @@ class CmdSetSituation(ArxCommand):
 
     key = "setsituation"
     aliases: list[str] = []
-    locks = "cmd:perm(Admin)"
+    locks = "cmd:all()"
     help_category = "Building"
     action = SetSituationAction()
 

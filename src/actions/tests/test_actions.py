@@ -15,13 +15,15 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.conditions.services import register_detection
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
 from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
 from world.items.factories import ItemInstanceFactory
 from world.items.models import EquippedItem, OwnershipEvent
 from world.mechanics.constants import ChallengeType
 from world.mechanics.factories import ChallengeTemplateFactory
 from world.mechanics.models import ChallengeInstance
-from world.roster.factories import RosterEntryFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
 class LookActionTests(TestCase):
@@ -225,7 +227,7 @@ class WhisperActionTests(TestCase):
 
 
 class PemitActionTests(TestCase):
-    """Staff-only private narrative emit (#906)."""
+    """GM private narrative emit, gated on STARTING-tier GM trust or staff (#906/#2117)."""
 
     def _staff_actor(self, room):
         account = AccountFactory(username="pemit_staff", is_staff=True)
@@ -236,6 +238,19 @@ class PemitActionTests(TestCase):
         )
         actor.db_account = account
         actor.save()
+        return actor
+
+    def _gm_actor(self, room, level, *, db_key="TrustGM"):
+        """Return a Character with a live roster tenure + GMProfile at ``level``."""
+        actor = ObjectDBFactory(
+            db_key=db_key,
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        CharacterSheetFactory(character=actor)
+        entry = RosterEntryFactory(character_sheet__character=actor)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        GMProfileFactory(account=tenure.player_data.account, level=level)
         return actor
 
     def test_pemit_delivers_to_receivers_only(self):
@@ -264,7 +279,7 @@ class PemitActionTests(TestCase):
         recv_msg.assert_called_once()
         bystander_msg.assert_not_called()
 
-    def test_pemit_rejects_non_staff(self):
+    def test_pemit_rejects_non_staff_non_gm(self):
         from actions.definitions.communication import PemitAction
 
         room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
@@ -284,9 +299,9 @@ class PemitActionTests(TestCase):
         action = PemitAction()
         result = action.run(actor, receivers=[receiver], text="sneaky")
         assert result.success is False
-        assert "Staff only" in result.message
+        assert "GM trust required." in result.message
 
-    def test_pemit_availability_requires_staff(self):
+    def test_pemit_availability_requires_gm_trust(self):
         from actions.definitions.communication import PemitAction
 
         room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
@@ -300,6 +315,22 @@ class PemitActionTests(TestCase):
         actor.save()
         availability = PemitAction().check_availability(actor)
         assert availability.available is False
+
+    def test_pemit_starting_gm_succeeds(self):
+        """A STARTING-tier GM (no staff flag) may pemit (#2117)."""
+        from actions.definitions.communication import PemitAction
+
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        actor = self._gm_actor(room, GMLevel.STARTING)
+        receiver = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        CharacterSheetFactory(character=receiver)
+        with patch.object(receiver, "msg"):
+            result = PemitAction().run(actor, receivers=[receiver], text="A whisper of magic.")
+        assert result.success is True
 
     def test_pemit_without_receivers_fails(self):
         from actions.definitions.communication import PemitAction

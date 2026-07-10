@@ -9,6 +9,7 @@ from django.test import TestCase
 from actions.constants import TargetKind
 from actions.definitions.items import (
     EquipAction,
+    GrantItemAction,
     PutInAction,
     TakeOutAction,
     UnequipAction,
@@ -27,14 +28,17 @@ from evennia_extensions.factories import (
     ObjectDBFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
     TemplateSlotFactory,
 )
-from world.items.models import EquippedItem
+from world.items.models import EquippedItem, ItemInstance
 from world.items.services import equip_item
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
 class EquipActionTests(TestCase):
@@ -640,3 +644,86 @@ class UseItemTechniqueGrantTests(TestCase):
         assert CharacterTechnique.objects.filter(
             character=self.sheet, technique=self.technique
         ).exists()
+
+
+class GrantItemActionTests(TestCase):
+    """JUNIOR-tier GM item grant (#707/#2117) -- the Action `grant_item` (formerly
+    `action = None` on ``CmdGrantItem``, business logic inline in the command)."""
+
+    def _gm_actor(self, level: str, *, db_key: str = "GrantItemGM") -> object:
+        actor = CharacterFactory(db_key=db_key)
+        CharacterSheetFactory(character=actor)
+        entry = RosterEntryFactory(character_sheet__character=actor)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        GMProfileFactory(account=tenure.player_data.account, level=level)
+        return actor
+
+    def _staff_actor(self, *, db_key: str = "GrantItemStaff") -> object:
+        account = AccountFactory(username=f"account_{db_key}", is_staff=True)
+        actor = CharacterFactory(db_key=db_key)
+        actor.db_account = account
+        actor.save()
+        return actor
+
+    def setUp(self) -> None:
+        self.target = CharacterFactory(db_key="GrantItemTarget")
+        self.target_sheet = CharacterSheetFactory(character=self.target)
+        self.template = ItemTemplateFactory(name="Ashen Betrayer's Blade")
+
+    def test_junior_gm_grants_item(self) -> None:
+        actor = self._gm_actor(GMLevel.JUNIOR)
+        with patch.object(actor, "search", return_value=self.target):
+            result = GrantItemAction().run(
+                actor, target_name=self.target.key, template_name=self.template.name
+            )
+        assert result.success is True
+        assert ItemInstance.objects.filter(
+            template=self.template, holder_character_sheet=self.target_sheet
+        ).exists()
+
+    def test_starting_gm_below_junior_tier_is_blocked(self) -> None:
+        actor = self._gm_actor(GMLevel.STARTING)
+        with patch.object(actor, "search", return_value=self.target):
+            result = GrantItemAction().run(
+                actor, target_name=self.target.key, template_name=self.template.name
+            )
+        assert result.success is False
+        assert "Junior GM" in result.message
+        assert not ItemInstance.objects.filter(holder_character_sheet=self.target_sheet).exists()
+
+    def test_missing_gm_profile_is_blocked(self) -> None:
+        actor = CharacterFactory(db_key="GrantItemNoProfile")
+        actor.db_account = AccountFactory(username="grant_item_no_profile", is_staff=False)
+        actor.save()
+        with patch.object(actor, "search", return_value=self.target):
+            result = GrantItemAction().run(
+                actor, target_name=self.target.key, template_name=self.template.name
+            )
+        assert result.success is False
+        assert result.message == "GM trust required."
+        assert not ItemInstance.objects.filter(holder_character_sheet=self.target_sheet).exists()
+
+    def test_staff_bypass_grants_item(self) -> None:
+        actor = self._staff_actor()
+        with patch.object(actor, "search", return_value=self.target):
+            result = GrantItemAction().run(
+                actor, target_name=self.target.key, template_name=self.template.name
+            )
+        assert result.success is True
+        assert ItemInstance.objects.filter(
+            template=self.template, holder_character_sheet=self.target_sheet
+        ).exists()
+
+    def test_unknown_template_fails(self) -> None:
+        actor = self._staff_actor(db_key="GrantItemStaffUnknown")
+        with patch.object(actor, "search", return_value=self.target):
+            result = GrantItemAction().run(
+                actor, target_name=self.target.key, template_name="Nonexistent Item"
+            )
+        assert result.success is False
+        assert "No item template found" in result.message
+
+    def test_missing_kwargs_fails(self) -> None:
+        actor = self._staff_actor(db_key="GrantItemStaffMissing")
+        result = GrantItemAction().run(actor)
+        assert result.success is False

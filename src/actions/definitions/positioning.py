@@ -9,7 +9,7 @@ from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.prerequisites import StaffOnlyPrerequisite
+from actions.prerequisites import MinimumGMLevelPrerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.utils.gm_resolution import resolve_account_or_none
 from flows.scene_data_manager import SceneDataManager
@@ -22,6 +22,7 @@ from world.areas.positioning.services import (
     place_in_position,
     take_position,
 )
+from world.gm.constants import GMLevel
 
 
 @dataclass
@@ -248,7 +249,7 @@ class GMPlaceInPositionAction(Action):
 
 @dataclass
 class SetTheStageAction(Action):
-    """Staff-only action: instantiate a PositionBlueprint into the actor's current room.
+    """STARTING-tier GM action: instantiate a PositionBlueprint into the actor's current room.
 
     Dispatch convention
     -------------------
@@ -258,6 +259,10 @@ class SetTheStageAction(Action):
     The dispatch layer passes ``ref.blueprint_id`` as a kwarg; this action
     resolves it to a ``PositionBlueprint`` instance and delegates to
     ``services.instantiate_blueprint``.
+
+    Gated on ``MinimumGMLevelPrerequisite(GMLevel.STARTING)`` (#2117; staff
+    bypass preserved) rather than staff alone -- a position blueprint carries
+    no mechanical consequence, so any approved GM may stage one.
     """
 
     key: str = "set_the_stage"
@@ -268,7 +273,7 @@ class SetTheStageAction(Action):
     target_type: TargetType = TargetType.SELF
 
     def get_prerequisites(self) -> list:
-        return [StaffOnlyPrerequisite()]
+        return [MinimumGMLevelPrerequisite(GMLevel.STARTING)]
 
     def execute(
         self,

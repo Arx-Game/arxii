@@ -95,7 +95,11 @@ class GetPlayerActionsEnhancementsTests(TestCase):
 
 
 class GetPlayerActionsQueryCountTests(TestCase):
-    """get_player_actions performs <= 13 queries for a non-trivial setup."""
+    """get_player_actions performs a bounded query count for a non-trivial setup.
+
+    See the inline comment on the assertion below for the running per-feature
+    budget breakdown and the current bound.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -142,9 +146,17 @@ class GetPlayerActionsQueryCountTests(TestCase):
         # now issues one Position query for PRIMARY/FEATURE entry positions in the room (instead
         # of returning [] with zero extra queries) — +1 over the prior baseline of 14. Raise only
         # with a documented justification — the goal remains a single-digit-ish cost.
+        # #2117 (GM-trust quick-action gate): _set_the_stage_actions used to short-circuit on
+        # the cheap, no-query is_staff_observer check for every non-staff caller. It now
+        # evaluates MinimumGMLevelPrerequisite(GMLevel.STARTING), which for a non-staff,
+        # non-GM actor chases active_account (sheet_data -> roster_entry, one failing
+        # RosterEntry lookup here since this character has no roster tenure at all) before
+        # concluding no quick action applies — +1 over the prior baseline of 15. Necessary:
+        # the surfacing gate must match the Action's own prerequisite, or a trust-tier GM
+        # could execute set_the_stage but never see the quick action.
         self.assertLessEqual(
             len(ctx.captured_queries),
-            15,
+            16,
             f"get_player_actions issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

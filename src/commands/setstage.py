@@ -1,8 +1,11 @@
 """Telnet face of SetTheStageAction (#1498).
 
-Thin command: a staff caller instantiates a ``PositionBlueprint`` into their
-current room. Delegates to ``SetTheStageAction`` via ``action.run()`` -- the
-same seam the web quick-action (``_set_the_stage_actions``) reaches.
+Thin command: a STARTING-tier-or-higher GM (or staff) caller instantiates a
+``PositionBlueprint`` into their current room. Delegates to
+``SetTheStageAction`` via ``action.run()`` -- the same seam the web
+quick-action (``_set_the_stage_actions``) reaches. The command lock is
+``cmd:all()`` -- real authorization lives entirely in the Action's
+``MinimumGMLevelPrerequisite`` (#2117).
 """
 
 from __future__ import annotations
@@ -21,7 +24,8 @@ _LIST_SUBVERB = "list"
 class CmdSetStage(ArxCommand):
     """Set the stage in your current room -- apply a position blueprint.
 
-    Staff-only. You must be standing in the room to stage.
+    Requires STARTING-tier GM trust or higher (or staff). You must be
+    standing in the room to stage.
 
     Usage:
       setstage                       -- show this room's positions
@@ -36,7 +40,7 @@ class CmdSetStage(ArxCommand):
 
     key = "setstage"
     aliases: list[str] = []
-    locks = "cmd:perm(Admin)"
+    locks = "cmd:all()"
     help_category = "Building"
     action = SetTheStageAction()
 

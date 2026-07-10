@@ -198,6 +198,7 @@ class ActionRegistryTests(TestCase):
             "home",
             "activate_permit",
             "use_item",
+            "grant_item",
             "craft_attach_facet",
             "craft_detach_facet",
             "craft_attach_style",

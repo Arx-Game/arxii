@@ -81,6 +81,24 @@ The GM system defines these role relationships; the stories app uses them for pe
   GM's level (staff bypass unchanged); `combat.StakesLevelRequirement.minimum_gm_level`
   gates a stakes-level requirement against `gm_account.gm_profile.level`
   (no profile → STARTING).
+- **Table-running tools ✅ (#2117)** — `setstage`/`setsituation`/`pemit`/`grant_item` used to gate
+  on the orthogonal Evennia staff bit, leaving a trust-tier GM with no staff flag unable to stage
+  positions, spawn a situation, narrate privately, or hand out story loot. All four now route
+  through `MinimumGMLevelPrerequisite(minimum_level)` (`actions/prerequisites.py`) — a reusable
+  Prerequisite generalizing `validate_stakes_requirement`'s staff-bypass + `gm_level_index`
+  compare, with a missing `GMProfile` always failing (unlike the stakes-requirement's
+  no-profile-treated-as-STARTING compromise, since these tools must also exclude non-GM accounts
+  outright). Tiered by risk: `SetTheStageAction`/`PemitAction` at STARTING (cosmetic/reversible),
+  `SetSituationAction`/`GrantItemAction` at JUNIOR (mints live `Challenge` rows / permanent
+  `ItemInstance` grants). `GrantItemAction` (`actions/definitions/items.py`) is new — `grant_item`
+  had no Action at all before this (`action = None`, business logic inline in the command,
+  violating the thin-command invariant). Each telnet command's Evennia lock also loosened from
+  `perm(Admin)`/`perm(Builder)` to `cmd:all()` (mirrors `commands/encounter.py`) since real
+  authorization now lives entirely in the Action's prerequisite. Deliberately NOT scoped to "the
+  scene the GM is running" (`Scene.is_gm`, #2113) — `setstage`/`setsituation` are legitimately used
+  before a scene exists (staging a room ahead of players arriving); scoping `grant_item`/
+  `setsituation` to the caller's own running scene is a fast-follow once #2113 ships, not a
+  blocker.
 - Frontend (evidence panel + promote action on a staff GM-review page) is a
   deliberate scope note, not a silent skip — it rides the GM dashboard work (#2004).
 

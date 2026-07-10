@@ -313,12 +313,14 @@ There is no `Shop`/`Vendor`/`Merchant` model or purchase service anywhere in thi
 codebase. Touchstones and reagents (and any other story-earned item) are acquired
 narratively, through two channels:
 
-- **GM staff grant** — `grant_touchstone_item_to_character(*, character_sheet, template,
+- **GM grant** — `grant_touchstone_item_to_character(*, character_sheet, template,
   granted_by=None)` (`world.items.services.narrative_grants`) creates one `ItemInstance`
   of a given `ItemTemplate`, held by the recipient's `CharacterSheet`. `granted_by` is
   audit-only (not surfaced to the recipient, mirroring `award_kudos`'s
-  don't-leak-the-staff-hand precedent). Staff-facing telnet command: `CmdGrantItem`
-  (`grant_item <character>=<item template name>`, `perm(Admin)`,
+  don't-leak-the-staff-hand precedent). Reached through `GrantItemAction`
+  (`actions/definitions/items.py`, registry key `grant_item`, gated on
+  `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`, staff bypass preserved, #2117)
+  via telnet `CmdGrantItem` (`grant_item <character>=<item template name>`,
   `src/commands/grant_item.py`).
 - **Mission reward** — `DeedRewardSink.ITEM` (`world.missions.constants`) on a
   `MissionDeedRewardLine` dispatches `IMMEDIATE` (not queued/cron): `_route_line`
