@@ -1,11 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchBattleDetail, fetchBattlesForScene } from './api';
+import {
+  fetchBattleDetail,
+  fetchBattleMapBlueprints,
+  fetchBattlesForScene,
+  fetchBattleUnitTemplates,
+} from './api';
 
 export const battleKeys = {
   all: ['battles'] as const,
   detail: (battleId: number) => [...battleKeys.all, 'detail', battleId] as const,
   forScene: (sceneId: number) => [...battleKeys.all, 'for-scene', sceneId] as const,
+  mapBlueprints: () => [...battleKeys.all, 'map-blueprints'] as const,
+  unitTemplates: () => [...battleKeys.all, 'unit-templates'] as const,
 };
 
 /**
@@ -31,5 +38,29 @@ export function useBattleDetailQuery(battleId: number | null | undefined) {
     queryFn: () => fetchBattleDetail(battleId!),
     enabled: battleId != null,
     staleTime: 15_000,
+  });
+}
+
+/**
+ * GM staging catalogs (#2010) — active blueprints/templates for StagingPanel's
+ * pickers. `enabled` lets the panel skip the fetch until the corresponding
+ * staging action (create_battle/stage_battle_map/spawn_battle_units) is
+ * actually present in the viewer's available-actions list.
+ */
+export function useBattleMapBlueprintsQuery(enabled = true) {
+  return useQuery({
+    queryKey: battleKeys.mapBlueprints(),
+    queryFn: fetchBattleMapBlueprints,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useBattleUnitTemplatesQuery(enabled = true) {
+  return useQuery({
+    queryKey: battleKeys.unitTemplates(),
+    queryFn: fetchBattleUnitTemplates,
+    enabled,
+    staleTime: 60_000,
   });
 }

@@ -3441,6 +3441,36 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   Frontend: `/scenes/:id/battle` — a read-only React Flow `BattleMapPage`, refetching
   the aggregate via React Query on `BATTLE_STATE` receipt. See
   [battles.md](battles.md#web-surface-2009) for the full contract.
+- **Staging (#2010):** the setup layer had no mutation path at all before this — a Battle
+  could only exist via admin/tests/factories. New parallel catalog models:
+  `BattleMapBlueprint` (`name` unique, `is_active`) → `BlueprintBattlePlace`
+  (`terrain_type`/`movement_cost`/`x`/`y`/`footprint_radius`, unique `(blueprint, name)`)
+  → `BlueprintFortification` (`kind`/`max_integrity`/`defending_side_role`) —
+  catalog-time counterparts to `BattlePlace`/`Fortification`, copied onto a live
+  `Battle` by `instantiate_battle_blueprint`; `BattleUnitTemplate` (`name` unique,
+  `quality`/`strength`/`morale`/`individual_count`/`properties` M2M/`capabilities` M2M
+  through `BattleUnitTemplateCapability`) — catalog-time counterpart to `BattleUnit`,
+  copied by `spawn_units_from_template`. **Services** (`world.battles.staging`):
+  `stage_battle` (creates a Battle + both sides, optionally cloning a blueprint;
+  `location` kwarg binds `battle.scene.location` — battles stay location-less by
+  default, ADR-0081), `instantiate_battle_blueprint` (`replace=True` guarded against
+  an already-live battle — a round opened, or a unit/participant stationed —
+  `BattleStagingError`), `spawn_units_from_template` (clamped to
+  `MAX_TEMPLATE_SPAWN=20`). **Actions** (all `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`,
+  `target_type=SELF`): `create_battle`, `stage_battle_map`, `spawn_battle_units`,
+  `enlist_battle_participant` (the latter three battle-scoped, re-verifying
+  `_actor_may_gm_battle`), `browse_battle_catalog` (read-only, `is_active=True` only —
+  the one surface the catalog-visibility rule is enforced on). `CreateBattleAction` is
+  a third writer of `SceneParticipation.is_gm` (see the "Scenes" section). **Telnet**:
+  `battle create/stage/spawn/enlist/maps/units` subverbs (`CmdBattle`). **Catalog API**:
+  `GET /api/battles/map-blueprints/` / `GET /api/battles/unit-templates/`
+  (`ReadOnlyModelViewSet`s gated `world.gm.permissions.HasGMTrust` — new JUNIOR-tier
+  DRF permission class, staff bypass). **Web**: `StagingPanel`
+  (`frontend/src/battles/components/`) on `BattleMapPage`, gated by dispatchable-action
+  presence, dispatching through the same generic Action seam
+  (`DispatchResultSerializer.success` is now nullable on the wire to distinguish an
+  honest failure from a real success). See ADR-0111 and [battles.md](battles.md#staging-2010)
+  for the full contract.
 - **Deferred follow-ups:** battle writeup page (#1735 — should reuse
   `BattleDetailSerializer`'s aggregate rather than authoring a second one; the live
   strategic map itself shipped, #2009); naval/aerial embark actions
@@ -3453,9 +3483,11 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   broadcast entirely; see the narration-scope correction note in
   [battles.md](battles.md#battlevehicle).
 - **Test coverage:** unit + integration tests in `src/world/battles/tests/`
-  (including `test_siege.py`'s three E2E siege journeys, #1713) and
+  (including `test_siege.py`'s three E2E siege journeys, #1713, and
+  `test_seed_staging_catalog.py`, #2010) and
   `src/world/buildings/tests/test_fortification_upgrade_kind.py` (#1713); E2E journeys
-  `src/integration_tests/pipeline/test_battle_telnet_e2e.py`, `test_battle_peril_rescue_e2e.py`
+  `src/integration_tests/pipeline/test_battle_telnet_e2e.py`, `test_battle_peril_rescue_e2e.py`,
+  `test_battle_staging_telnet_e2e.py` (#2010)
 - **Integrates with:** scenes (1:1 extension), character_sheets (participant/commander FK),
   vitals (damage consequences; shared `_resolve_peril_via_pool` core for Surrounded, #1733),
   conditions (the "Surrounded" staged `ConditionTemplate`, #1733; `CapabilityType` via
@@ -3479,7 +3511,9 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   campaign-stakes propagation, #1785), buildings (`Fortification.building` FK, nullable,
   #1713 — `create_fortification` reads `Building.fortification_level` once at creation;
   this app does not import `world.buildings` beyond that FK),
-  actions (REGISTRY + `get_active_round_context` seam)
+  actions (REGISTRY + `get_active_round_context` seam), gm (`world.gm.permissions.HasGMTrust`
+  gates the two staging catalog `ReadOnlyModelViewSet`s; `MinimumGMLevelPrerequisite
+  (GMLevel.JUNIOR)` gates the 5 staging Actions, #2010)
 - **Source:** `src/world/battles/`
 - **Details:** [battles.md](battles.md)
 

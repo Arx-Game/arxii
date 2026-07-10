@@ -918,3 +918,194 @@ class BattleVehicle(SharedMemoryModel):
         super().save(*args, **kwargs)
         if is_new:
             self.unit.battle.state_cache.register_vehicle(self)
+
+
+class BattleMapBlueprint(SharedMemoryModel):
+    """Admin-authored, reusable battle-map layout a GM stages a Battle from (#2010).
+
+    JUNIOR-trust GMs pick from this catalog rather than inventing terrain and
+    fortification layouts from scratch — later tasks copy a blueprint's
+    BlueprintBattlePlace/BlueprintFortification rows onto a live Battle's
+    BattlePlace/Fortification rows.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive blueprints are hidden from the GM staging catalog "
+        "but not deleted — existing data derived from them may still exist.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class BlueprintBattlePlace(SharedMemoryModel):
+    """A named front/zone within a BattleMapBlueprint (#2010).
+
+    Catalog-time counterpart to BattlePlace, copied onto a live Battle's
+    BattlePlace rows when a GM stages a battle from this blueprint.
+    """
+
+    blueprint = models.ForeignKey(
+        BattleMapBlueprint,
+        on_delete=models.CASCADE,
+        related_name="places",
+    )
+    name = models.CharField(max_length=100)
+    terrain_type = models.CharField(
+        max_length=20,
+        choices=TerrainType.choices,
+        default=TerrainType.OPEN,
+    )
+    movement_cost = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Authored cost carried over onto the staged BattlePlace's own "
+        "movement_cost — see BattlePlace.movement_cost.",
+    )
+    x = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0,
+        help_text="Position on the blueprint's battle-map coordinate plane, "
+        "carried over onto the staged BattlePlace's own x/y (#1714).",
+    )
+    y = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    footprint_radius = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=1,
+        help_text="How much of the battle-map grid this place occupies — see "
+        "BattlePlace.footprint_radius.",
+    )
+
+    class Meta:
+        ordering = ["blueprint", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["blueprint", "name"],
+                name="unique_blueprint_place_name",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.blueprint.name} / {self.name}"
+
+
+class BlueprintFortification(SharedMemoryModel):
+    """Catalog-time counterpart to Fortification, owned by a BlueprintBattlePlace (#2010)."""
+
+    blueprint_place = models.ForeignKey(
+        BlueprintBattlePlace,
+        on_delete=models.CASCADE,
+        related_name="fortifications",
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=FortificationKind.choices,
+        default=FortificationKind.WALL,
+    )
+    max_integrity = models.PositiveIntegerField(
+        default=100,
+        help_text="Carried over onto the staged Fortification's max_integrity "
+        "(and starting integrity) — see Fortification.max_integrity.",
+    )
+    defending_side_role = models.CharField(
+        max_length=20,
+        choices=BattleSideRole.choices,
+        help_text="Which staged BattleSide role this structure protects — resolved "
+        "to a concrete BattleSide when the blueprint is staged onto a Battle.",
+    )
+
+    class Meta:
+        ordering = ["blueprint_place", "kind", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.blueprint_place.name} {self.get_kind_display()}"
+
+
+class BattleUnitTemplate(SharedMemoryModel):
+    """Admin-authored, reusable unit stat block a GM stages a Battle from (#2010).
+
+    Catalog-time counterpart to BattleUnit — copied onto a live Battle's
+    BattleUnit rows (along with properties/capabilities) when a GM stages a
+    unit from this template.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    descriptor = models.CharField(max_length=200, blank=True, default="")
+    quality = models.CharField(
+        max_length=20,
+        choices=UnitQuality.choices,
+        default=UnitQuality.TRAINED,
+    )
+    strength = models.PositiveIntegerField(default=100)
+    morale = models.PositiveIntegerField(default=DEFAULT_MORALE)
+    individual_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Population data point mirroring BattleUnit.individual_count — "
+        "null means 'not a swarm-style unit'.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive templates are hidden from the GM staging catalog but not deleted.",
+    )
+    properties = models.ManyToManyField(
+        Property,
+        blank=True,
+        related_name="+",
+        help_text="Descriptive tags carried over onto the staged BattleUnit's own "
+        "properties — see BattleUnit.properties.",
+    )
+    capabilities = models.ManyToManyField(
+        CapabilityType,
+        through="BattleUnitTemplateCapability",
+        blank=True,
+        related_name="+",
+        help_text="What a unit staged from this template can DO, at an authored "
+        "per-template magnitude via BattleUnitTemplateCapability — see "
+        "BattleUnit.capabilities.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class BattleUnitTemplateCapability(SharedMemoryModel):
+    """Authored (template, capability) -> magnitude row (#2010).
+
+    Catalog-time counterpart to BattleUnitCapability — carried over onto the
+    staged BattleUnit's own BattleUnitCapability rows.
+    """
+
+    template = models.ForeignKey(
+        BattleUnitTemplate,
+        on_delete=models.CASCADE,
+        related_name="capability_values",
+    )
+    capability = models.ForeignKey(
+        CapabilityType,
+        on_delete=models.PROTECT,
+        related_name="battle_unit_template_values",
+    )
+    value = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["template", "capability"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "capability"],
+                name="unique_battle_unit_template_capability",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.template.name} {self.capability.name}: {self.value}"

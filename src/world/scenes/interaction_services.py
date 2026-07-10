@@ -43,6 +43,8 @@ def get_active_scene(location: ObjectDB | None) -> Scene | None:
     they never hand-roll a parallel ``Scene.objects.filter(...)`` query. Caches the result on
     the location object (which persists in memory via SharedMemoryModel's identity map);
     invalidated by ``invalidate_active_scene_cache()`` when a scene starts or ends.
+    Excludes battle-backed scenes (``Scene.objects.active_for_room``, #2010 review) — a
+    staged Battle's backing Scene must never hijack the room's RP scene resolution.
     """
     if location is None:
         return None
@@ -51,7 +53,7 @@ def get_active_scene(location: ObjectDB | None) -> Scene | None:
         return cached
     except AttributeError:
         pass
-    scene = Scene.objects.filter(location=location, is_active=True).first()
+    scene = Scene.objects.active_for_room(location).first()
     location._active_scene_cache = scene  # noqa: SLF001
     return scene
 

@@ -316,12 +316,20 @@ actions, backends, and service functions.
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`. `succor <ally>` always names a specific ally to shelter from
   environmental hazards this round (resolved at round-tick DoT application, not declaration).
-- **`battle.py`**: `CmdBattle` (`battle`, #1592/#1710/#1712/#1713/#1715) — the large-scale-battle
-  namespace. One `ArxCommand` routes a leading subverb (`battle declare
+- **`battle.py`**: `CmdBattle` (`battle`, #1592/#1710/#1712/#1713/#1715/#2010) — the
+  large-scale-battle namespace. One `ArxCommand` routes a leading subverb (`battle declare
   strike/support/rescue/rout/rally/repel/hold/breach/fortify/set_environment ... with
   <technique>` / `battle duel <front> vs <boss name>` / `round` / `resolve` / `conclude`) to
-  the four REGISTRY actions in `actions/definitions/battles.py`, all via `Action().run()`
-  directly. Bare `battle` prints a status hub (battle name, side VP, front, current round).
+  the four round-lifecycle REGISTRY actions in `actions/definitions/battles.py`, all via
+  `Action().run()` directly. GM staging subverbs (#2010 — turn a catalog pick into a live
+  Battle): `battle create <name> [risk=<level>] [map=<blueprint>]` → `CreateBattleAction`;
+  `battle stage <blueprint> [replace]` → `StageBattleMapAction`; `battle spawn <template>
+  [count=N] [at <front>] side=<role>` → `SpawnBattleUnitsAction`; `battle enlist
+  <character> = <side>[, <front>]` → `EnlistBattleParticipantAction`; `battle maps [<term>]`
+  / `battle units [<term>]` → `BrowseBattleCatalogAction` — both subverbs search BOTH
+  catalogs (blueprints + templates); there is no kind filter.
+  See `docs/systems/battles.md#staging-2010` for the full contract. Bare
+  `battle` prints a status hub (battle name, side VP, front, current round).
   All 10 `declare` kinds share one dispatch (a `dict[str, Callable]` lookup, not an if/elif
   chain): `strike`/`rout` resolve a named unit on either side (ACTIVE only) or accept
   `side`/`place <name>` for command-tier-gated SIDE/PLACE-scope fan-out (#1710); `rally`

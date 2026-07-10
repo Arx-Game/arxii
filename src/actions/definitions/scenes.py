@@ -21,10 +21,10 @@ if TYPE_CHECKING:
 
 
 def _active_scene_for_room(room: ObjectDB) -> Scene | None:
-    """Return the active Scene for a room, or None."""
+    """Return the active RP Scene for a room, or None (excludes battle-backed scenes, #2010)."""
     from world.scenes.models import Scene as SceneModel  # noqa: PLC0415
 
-    return SceneModel.objects.filter(location=room, is_active=True).first()
+    return SceneModel.objects.active_for_room(room).first()
 
 
 @dataclass

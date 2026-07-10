@@ -198,7 +198,7 @@ They do not use the command system, dispatchers, or handlers.
   instead of calling the service directly). Shared by telnet `CmdLearn`
   (`commands/gift_learning.py`) and two new web endpoints (`POST
   /api/magic/gift-unlocks/purchase/`, `POST /api/magic/technique-offers/accept/`).
-  `battles.py` (#1592/#1710/#1712/#1713) — four REGISTRY actions, all `category="battle"`:
+  `battles.py` (#1592/#1710/#1712/#1713/#2010) — nine REGISTRY actions, all `category="battle"`:
   `BeginBattleRoundAction` (key `"begin_battle_round"`, `target_type=AREA`, GM/staff),
   `ResolveBattleRoundAction` (`"resolve_battle_round"`, `target_type=AREA`, GM/staff;
   auto-concludes via `check_victory` when a side crosses threshold),
@@ -215,7 +215,21 @@ They do not use the command system, dispatchers, or handlers.
   (`"challenge_champion_duel"`, `target_type=AREA`, player, #1710) rounds out the file,
   binding a `BattlePlace` to a lethal duel via `open_champion_duel`. Shared by telnet
   `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`) — every `BattleActionKind`,
-  including SET_ENVIRONMENT, has a matching `battle declare` subverb.
+  including SET_ENVIRONMENT, has a matching `battle declare` subverb. Five more
+  JUNIOR-trust GM actions (#2010 — the staging pipeline, thin wrappers over
+  `world.battles.staging`): `CreateBattleAction` (`"create_battle"`, `target_type=SELF`
+  — stages a new Battle, optionally cloning a catalog `BattleMapBlueprint` in the same
+  call; also grants the creator `is_gm` on the battle's backing Scene),
+  `StageBattleMapAction` (`"stage_battle_map"`), `SpawnBattleUnitsAction`
+  (`"spawn_battle_units"`), `EnlistBattleParticipantAction`
+  (`"enlist_battle_participant"`) — all `target_type=SELF`, battle-scoped, re-verifying
+  `_actor_may_gm_battle` in `execute()` since `MinimumGMLevelPrerequisite` alone only
+  proves general JUNIOR+ trust, not standing over the specific battle — and
+  `BrowseBattleCatalogAction` (`"browse_battle_catalog"`, `target_type=SELF`, read-only,
+  not battle-scoped). Shared by telnet `CmdBattle`'s `create`/`stage`/`spawn`/`enlist`/
+  `maps`/`units` subverbs and the web `StagingPanel`
+  (`frontend/src/battles/components/StagingPanel.tsx`) via the generic dispatch seam.
+  See `docs/systems/battles.md#staging-2010` for the full contract.
   `room_features.py` (#1234) — two REGISTRY actions, both `target_type=SELF`,
   `category="items"`: `StartRoomFeatureProjectAction` (key `"start_room_feature_project"`)
   — generic install/upgrade project starter for any PROJECT-mechanism `RoomFeatureKind`

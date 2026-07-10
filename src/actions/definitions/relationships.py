@@ -47,7 +47,7 @@ class BaseRelationshipAction(Action):
             return None
         if character is None or character.location_id != actor.location.id:
             return None
-        return Scene.objects.filter(location=actor.location, is_active=True).first()
+        return Scene.objects.active_for_room(actor.location).first()
 
     def _relationship(self, source: Any, target: Any) -> Any:
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415

@@ -200,3 +200,32 @@ the frontend treats receipt as cache invalidation only (`battleKeys.all`),
 then reads the real state back from `GET /api/battles/<pk>/`
 (`BattleDetailSerializer`). See ADR-0095.
 _Avoid_: battle update, state push (implies the payload itself carries state).
+
+**Battle-Map Blueprint**:
+A `BattleMapBlueprint` (#2010) — a reusable, admin-authored catalog row a JUNIOR-trust
+GM stages a `Battle`'s map from, rather than inventing terrain/fortification layouts
+from scratch. Owns `BlueprintBattlePlace`/`BlueprintFortification` rows — catalog-time
+counterparts to `BattlePlace`/`Fortification` — copied onto a live `Battle` by
+`instantiate_battle_blueprint`. See ADR-0111.
+_Avoid_: battle template, setup wizard (this is a catalog row a GM picks and copies,
+not an authoring flow).
+
+**Unit Template**:
+A `BattleUnitTemplate` (#2010) — a reusable, admin-authored catalog stat block (quality/
+strength/morale/properties/capability values) a JUNIOR-trust GM spawns one or more
+`BattleUnit`s from via `spawn_units_from_template`, rather than authoring a unit's stat
+block from scratch each time. Catalog-time counterpart to `BattleUnit`, mirroring
+**Battle-Map Blueprint**'s shape.
+_Avoid_: army preset, unit preset (implies a bundled army composition, not a single
+reusable stat block).
+
+**Staging**:
+The JUNIOR-trust GM workflow (#2010) that turns a catalog pick (**Battle-Map
+Blueprint** / **Unit Template**) into a live `Battle`: `create_battle` (optionally
+cloning a blueprint in the same call) → `stage_battle_map` / `spawn_battle_units` →
+`enlist_battle_participant`, discoverable via `browse_battle_catalog`. Wraps
+`world.battles.staging`'s services (`stage_battle`/`instantiate_battle_blueprint`/
+`spawn_units_from_template`); never accepts free-form terrain/fortification/unit-stat
+authoring at stage time (ADR-0110, ADR-0111).
+_Avoid_: setup wizard (implies a bespoke multi-step authoring UI, not a catalog-pick
+action pipeline), army preset (see **Unit Template**).

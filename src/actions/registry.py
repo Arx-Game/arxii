@@ -6,10 +6,15 @@ from actions.base import Action
 from actions.definitions.alterations import ResolveAlterationAction
 from actions.definitions.battles import (
     BeginBattleRoundAction,
+    BrowseBattleCatalogAction,
     ChallengeChampionDuelAction,
     ConcludeBattleAction,
+    CreateBattleAction,
     DeclareBattleActionAction,
+    EnlistBattleParticipantAction,
     ResolveBattleRoundAction,
+    SpawnBattleUnitsAction,
+    StageBattleMapAction,
 )
 from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.combat_maneuvers import (
@@ -568,6 +573,12 @@ _ALL_ACTIONS: list[Action] = [
     # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
     FindSituationAction(),
     SubmitCatalogSuggestionAction(),
+    # #2010 — GM battle staging: JUNIOR-gated catalog-pick-to-live-Battle actions.
+    CreateBattleAction(),
+    StageBattleMapAction(),
+    SpawnBattleUnitsAction(),
+    EnlistBattleParticipantAction(),
+    BrowseBattleCatalogAction(),
 ]
 
 # Lookup by key
