@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerMedia
     from world.conditions.models import DamageType
+    from world.mechanics.models import ModifierTarget
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
@@ -694,6 +695,23 @@ class ItemInstance(SharedMemoryModel):
     def display_description(self) -> str:
         """Return custom description if set, otherwise template description."""
         return self.custom_description or self.template.description
+
+    def crafted_modifier_value(self, target: ModifierTarget) -> int:
+        """Total crafted modifier value for ``target`` across all recipes on this item.
+
+        Iterates the prefetched ``cached_crafted_recipes`` (set by
+        ``CharacterEquipmentHandler``) and their nested
+        ``recipe.cached_modifier_outcomes``, computing each value as:
+            base_value + round(quality_scale_factor * quality_tier.stat_multiplier)
+        """
+        total = 0
+        for crafted in self.cached_crafted_recipes:
+            for outcome in crafted.recipe.cached_modifier_outcomes:
+                if outcome.target == target:
+                    total += outcome.base_value + round(
+                        outcome.quality_scale_factor * crafted.quality_tier.stat_multiplier
+                    )
+        return total
 
     @property
     def display_image(self) -> PlayerMedia | None:
