@@ -255,3 +255,75 @@ class CmdCovenantRankTests(TestCase):
         cmd.func()
         text = "\n".join(str(c.args[0]) for c in caller.msg.call_args_list if c.args)
         self.assertIn("Usage", text)
+
+
+class CmdCovenantRequestGMTests(TestCase):
+    """``covenant request-gm`` / ``covenant withdraw-gm-request`` (#2119)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import RosterTenureFactory
+
+        cls.covenant = CovenantFactory(name="The Ember Circle")
+        cls.recruiter_rank = CovenantManagerRankFactory(covenant=cls.covenant)
+        cls.base_rank = CovenantRankFactory(covenant=cls.covenant)  # can_request_gm=False
+
+        cls.recruiter_sheet = CharacterSheetFactory()
+        cls.recruiter_membership = CharacterCovenantRoleFactory(
+            character_sheet=cls.recruiter_sheet,
+            covenant=cls.covenant,
+            rank=cls.recruiter_rank,
+        )
+        cls.recruiter_tenure = RosterTenureFactory(
+            roster_entry__character_sheet=cls.recruiter_sheet,
+            end_date=None,
+        )
+
+        cls.rankless_sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=cls.rankless_sheet,
+            covenant=cls.covenant,
+            rank=cls.base_rank,
+        )
+        RosterTenureFactory(
+            roster_entry__character_sheet=cls.rankless_sheet,
+            end_date=None,
+        )
+
+    def test_request_gm_posts_open_request(self) -> None:
+        from world.stories.constants import GroupStoryRequestStatus
+        from world.stories.models import GroupStoryRequest
+
+        caller = self.recruiter_sheet.character
+        _run(caller, "request-gm We seek a GM to guide our covenant.")
+        request = GroupStoryRequest.objects.get(covenant=self.covenant)
+        self.assertEqual(request.status, GroupStoryRequestStatus.PENDING)
+        self.assertIn("We seek a GM", request.message)
+
+    def test_rankless_member_cannot_request_gm(self) -> None:
+        from world.stories.models import GroupStoryRequest
+
+        caller = self.rankless_sheet.character
+        _run(caller, "request-gm please help")
+        self.assertFalse(GroupStoryRequest.objects.filter(covenant=self.covenant).exists())
+
+    def test_withdraw_gm_request_rescinds_pending(self) -> None:
+        from world.stories.constants import GroupStoryRequestStatus
+        from world.stories.factories import GroupStoryRequestFactory
+
+        request = GroupStoryRequestFactory(
+            covenant=self.covenant,
+            requested_by_account=self.recruiter_tenure.player_data.account,
+        )
+        caller = self.recruiter_sheet.character
+        _run(caller, "withdraw-gm-request")
+        request.refresh_from_db()
+        self.assertEqual(request.status, GroupStoryRequestStatus.WITHDRAWN)
+
+    def test_withdraw_with_no_open_request_shows_error(self) -> None:
+        caller = self.recruiter_sheet.character
+        cmd = _run(caller, "withdraw-gm-request")
+        text = _capture(caller)
+        self.assertIn("no open request", text.lower())
+        self.assertIsNotNone(cmd)

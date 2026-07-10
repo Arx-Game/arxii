@@ -121,6 +121,7 @@ class CovenantRankFactory(factory_django.DjangoModelFactory):
     can_kick = False
     can_manage_ranks = False
     can_lead_rituals = False
+    can_request_gm = False
 
 
 class CovenantManagerRankFactory(CovenantRankFactory):
@@ -131,6 +132,7 @@ class CovenantManagerRankFactory(CovenantRankFactory):
     can_kick = True
     can_manage_ranks = True
     can_lead_rituals = True
+    can_request_gm = True
 
 
 class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):

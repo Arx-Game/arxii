@@ -30,6 +30,7 @@ class GMDashboardViewTest(APITestCase):
             "pending_agm_claims",
             "assigned_session_requests",
             "waiting_for_gm",
+            "open_group_requests",
             "my_tables",
             "pending_story_offers",
             "evidence_summary",
@@ -46,3 +47,19 @@ class GMDashboardViewTest(APITestCase):
         url = reverse("gm:gm-dashboard")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_open_group_requests_surfaces_pending_covenant_asks(self) -> None:
+        """#2119: any GM sees the broadcast open-request queue, not just their own tables."""
+        from world.covenants.factories import CovenantFactory
+        from world.stories.factories import GroupStoryRequestFactory
+
+        covenant = CovenantFactory(name="The Watching Circle")
+        requester = AccountFactory()
+        request = GroupStoryRequestFactory(covenant=covenant, requested_by_account=requester)
+
+        self.client.force_authenticate(user=self.gm_account)
+        url = reverse("gm:gm-dashboard")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        request_ids = [row["request_id"] for row in resp.data["open_group_requests"]]
+        self.assertIn(request.pk, request_ids)

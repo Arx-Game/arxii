@@ -17,17 +17,19 @@ from django.db.models import Model
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.utils.gm_resolution import resolve_account_or_none
+from world.covenants.models import Covenant
 from world.gm.models import GMProfile
 from world.stories.constants import (
     AssistantClaimStatus,
     BeatOutcome,
     StoryMaturity,
 )
-from world.stories.exceptions import StoryError
+from world.stories.exceptions import GroupStoryRequestError, StoryError
 from world.stories.models import (
     AssistantGMClaim,
     Beat,
     Episode,
+    GroupStoryRequest,
     Story,
     Transition,
 )
@@ -55,6 +57,9 @@ _NO_DECLARE_PERMISSION = (
     "or this scene's GM may declare stakes."
 )
 _NO_PROGRESS = "No active progress record found for this story."
+_NO_REQUEST_GM_PERMISSION = "You lack the authority to request a GM for this covenant."
+_NO_CLAIM_PERMISSION = "You must have a GM profile to claim a group story request."
+_NO_WITHDRAW_REQUEST_PERMISSION = "You lack the authority to withdraw this covenant's GM request."
 
 
 def _story_for_object(instance: Story | Episode | Beat) -> Story:
@@ -155,6 +160,28 @@ def _episode_or_error(episode_id: Any) -> tuple[Episode | None, ActionResult | N
         episode_id,
         missing_msg="An episode is required.",
         not_found_msg="No episode with that ID exists.",
+    )
+
+
+def _covenant_or_error(covenant_id: Any) -> tuple[Covenant | None, ActionResult | None]:
+    """Fetch a ``Covenant`` by id, returning ``(covenant, error_result)``."""
+    return _load_or_error(
+        Covenant,
+        covenant_id,
+        missing_msg="A covenant is required.",
+        not_found_msg="No covenant with that ID exists.",
+    )
+
+
+def _group_story_request_or_error(
+    request_id: Any,
+) -> tuple[GroupStoryRequest | None, ActionResult | None]:
+    """Fetch a ``GroupStoryRequest`` by id, returning ``(request, error_result)``."""
+    return _load_or_error(
+        GroupStoryRequest,
+        request_id,
+        missing_msg="A group story request is required.",
+        not_found_msg="No group story request with that ID exists.",
     )
 
 
@@ -511,3 +538,162 @@ class DeclareStakesAction(Action):
         message_location(caller_state, text)
 
         return ActionResult(success=True, message=text)
+
+
+# ---------------------------------------------------------------------------
+# #2119 — Player→GM recruitment loop: GroupStoryRequest lifecycle actions.
+#
+# Web and telnet both dispatch through these Action subclasses (Decision 8) —
+# NOT a bespoke DRF @action like StoryGMOffer.accept/decline/withdraw, which
+# is precisely why StoryGMOffer has no telnet verb today.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RequestGMForCovenantAction(Action):
+    """Post an open, broadcast ask for a GM to run a story for a covenant."""
+
+    key: str = "request_gm_for_covenant"
+    name: str = "Request a GM"
+    icon: str = "megaphone"
+    category: str = "story"
+    target_type: TargetType = TargetType.SELF
+    costs_turn: bool = False
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.covenants.services import can_request_gm_for_covenant  # noqa: PLC0415
+        from world.stories.services.tables import request_gm_for_covenant  # noqa: PLC0415
+
+        account = resolve_account_or_none(actor)
+        covenant, error = _covenant_or_error(kwargs.get("covenant_id"))
+        if error:
+            return error
+
+        allowed = account is not None and (
+            account.is_staff or can_request_gm_for_covenant(covenant, account=account)
+        )
+        if not allowed:
+            return ActionResult(success=False, message=_NO_REQUEST_GM_PERMISSION)
+
+        try:
+            request = request_gm_for_covenant(
+                covenant=covenant,
+                requested_by_account=account,
+                message=kwargs.get("message", ""),
+            )
+        except GroupStoryRequestError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=f"Your covenant's request for a GM has been posted (#{request.pk}).",
+        )
+
+
+@dataclass
+class ClaimGroupStoryRequestAction(Action):
+    """A GM claims a covenant's open request, creating the GROUP-scope story."""
+
+    key: str = "claim_group_story_request"
+    name: str = "Claim Group Story Request"
+    icon: str = "flag-triangle-right"
+    category: str = "story"
+    target_type: TargetType = TargetType.SELF
+    costs_turn: bool = False
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.gm.models import GMTable  # noqa: PLC0415
+        from world.stories.services.tables import claim_group_story_request  # noqa: PLC0415
+
+        account = resolve_account_or_none(actor)
+        try:
+            gm_profile = account.gm_profile if account is not None else None
+        except GMProfile.DoesNotExist:
+            gm_profile = None
+        if gm_profile is None:
+            return ActionResult(success=False, message=_NO_CLAIM_PERMISSION)
+
+        request, error = _group_story_request_or_error(kwargs.get("request_id"))
+        if error:
+            return error
+
+        table = None
+        table_id = kwargs.get("table_id")
+        if table_id is not None:
+            try:
+                table = GMTable.objects.get(pk=table_id, gm=gm_profile)
+            except (GMTable.DoesNotExist, ValueError):
+                return ActionResult(success=False, message="No such table.")
+
+        try:
+            claimed = claim_group_story_request(
+                request=request,
+                gm_profile=gm_profile,
+                table=table,
+                title=kwargs.get("title", ""),
+                description=kwargs.get("description", ""),
+            )
+        except GroupStoryRequestError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=(
+                f"You claim {claimed.covenant.name}'s request; "
+                f"'{claimed.created_story.title}' begins."
+            ),
+        )
+
+
+@dataclass
+class WithdrawGroupStoryRequestAction(Action):
+    """Withdraw a covenant's pending open ask for a GM."""
+
+    key: str = "withdraw_group_story_request"
+    name: str = "Withdraw Group Story Request"
+    icon: str = "x-circle"
+    category: str = "story"
+    target_type: TargetType = TargetType.SELF
+    costs_turn: bool = False
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.covenants.services import can_request_gm_for_covenant  # noqa: PLC0415
+        from world.stories.services.tables import withdraw_group_story_request  # noqa: PLC0415
+
+        account = resolve_account_or_none(actor)
+        request, error = _group_story_request_or_error(kwargs.get("request_id"))
+        if error:
+            return error
+
+        is_author = account is not None and request.requested_by_account_id == account.id
+        is_staff = account is not None and account.is_staff
+        has_authority = account is not None and can_request_gm_for_covenant(
+            request.covenant, account=account
+        )
+        if not (is_author or is_staff or has_authority):
+            return ActionResult(success=False, message=_NO_WITHDRAW_REQUEST_PERMISSION)
+
+        try:
+            withdrawn = withdraw_group_story_request(request=request)
+        except GroupStoryRequestError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=f"You withdraw {withdrawn.covenant.name}'s request for a GM.",
+        )

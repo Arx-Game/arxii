@@ -52,6 +52,10 @@ class StoryGMOfferError(StoryError):
     _SAFE_MESSAGE = "This story-GM offer cannot be processed in its current state."
 
 
+class GroupStoryRequestError(StoryError):
+    _SAFE_MESSAGE = "This group story request cannot be processed in its current state."
+
+
 class StoryNotAssignedError(StoryError):
     """Raised when creating progress against an UNASSIGNED-scope story."""
 

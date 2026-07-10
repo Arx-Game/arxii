@@ -262,7 +262,6 @@
   - condition -> conditions.ConditionTemplate [FK]
   - damage_type -> conditions.DamageType [FK]
   - applies_condition -> conditions.ConditionTemplate [FK] (nullable)
-**Fields:** damage_modifier_percent, removes_condition, applied_condition_severity, narration_snippet (#2018 — flavor text for combat narration on condition transitions)
 
 ### ConditionConditionInteraction
 **Foreign Keys:**
@@ -1906,6 +1905,7 @@
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
   - storylines <- stories.Story
+  - gm_requests <- stories.GroupStoryRequest
   - legend_credits <- societies.CovenantLegendCredit
   - legend_summary <- societies.CovenantLegendSummary
   - ranks <- covenants.CovenantRank
@@ -2040,6 +2040,7 @@
 - `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None) -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
 - `assign_rank(*, membership: 'CharacterCovenantRole', actor: 'CharacterCovenantRole', rank: 'CovenantRank') -> 'CharacterCovenantRole' — Assign a new rank to a member. Requires can_manage_ranks.`
 - `can_invite_to_covenant(covenant: 'Covenant', *, character_sheet: 'CharacterSheet | None' = None, account: 'AccountDB | None' = None) -> 'bool' — Return True if an active member with a can_invite rank grants invite authority.`
+- `can_request_gm_for_covenant(covenant: 'Covenant', *, character_sheet: 'CharacterSheet | None' = None, account: 'AccountDB | None' = None) -> 'bool' — Return True if an active member with a can_request_gm rank grants that authority.`
 - `change_role(*, membership: 'CharacterCovenantRole', new_role: 'CovenantRole') -> 'CharacterCovenantRole' — Close the existing membership row; create a new active row in the same covenant.`
 - `clear_engaged_for_type(*, character_sheet: 'CharacterSheet', covenant_type: 'str') -> 'None' — Un-engage every engaged active membership of the given type for the character.`
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Un-engage this membership. Idempotent.`
@@ -3982,6 +3983,7 @@
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_facet_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum ConditionModifierEffect from FACET thread crossing choices (wear-gated).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
+- `passive_mantle_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum ConditionModifierEffect from MANTLE thread crossing choices (always-on).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
 - `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int') -> 'int' — Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
 - `prerequisites_met(prereqs: 'Iterable[Prerequisite]', caster: 'ObjectDB', target: 'ObjectDB') -> 'bool' — True if target satisfies every one of prereqs (all() semantics; empty = True).`
@@ -5550,9 +5552,12 @@
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' — A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' — Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
+- `is_skill_at_xp_boundary(value: 'int') -> 'bool' — Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
+- `purchase_skill_breakthrough(character: 'ObjectDB', skill: 'Skill') -> 'tuple[bool, str]' — Spend XP to break through a skill's XP-boundary plateau (#2115).`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
+- `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' — Return the character's skills currently parked at an XP boundary (#2115).`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
@@ -6181,6 +6186,13 @@
   - story -> stories.Story [FK]
   - offered_to -> gm.GMProfile [FK]
   - offered_by_account -> accounts.AccountDB [FK]
+
+### GroupStoryRequest
+**Foreign Keys:**
+  - covenant -> covenants.Covenant [FK]
+  - requested_by_account -> accounts.AccountDB [FK]
+  - claimed_by -> gm.GMProfile [FK] (nullable)
+  - created_story -> stories.Story [FK] (nullable)
 
 ### CrossoverInvite
 **Foreign Keys:**

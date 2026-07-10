@@ -49,6 +49,7 @@ from world.stories.models import (
     Era,
     GlobalStoryProgress,
     GroupStoryProgress,
+    GroupStoryRequest,
     PlayerTrust,
     PlayerTrustLevel,
     RiskCalibration,
@@ -2074,6 +2075,26 @@ class StoryGMOfferSerializer(serializers.ModelSerializer):
             "status",
             "message",
             "response_note",
+            "created_at",
+            "responded_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class GroupStoryRequestSerializer(serializers.ModelSerializer):
+    """Read serializer for GroupStoryRequest — the covenant-GM recruitment queue (#2119)."""
+
+    class Meta:
+        model = GroupStoryRequest
+        fields = [
+            "id",
+            "covenant",
+            "requested_by_account",
+            "message",
+            "status",
+            "claimed_by",
+            "created_story",
             "created_at",
             "responded_at",
             "updated_at",

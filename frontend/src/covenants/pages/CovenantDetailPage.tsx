@@ -45,6 +45,7 @@ import {
 import { useRituals } from '@/rituals/queries';
 import { RitualSessionDraftDialog } from '@/rituals/components/RitualSessionDraftDialog';
 import { BattleStateBanner } from '@/covenants/components/BattleStateBanner';
+import { GroupStoryRequestPanel } from '@/covenants/components/GroupStoryRequestPanel';
 import { RitesPanel } from '@/covenants/components/RitesPanel';
 import { RolePowersPanel } from '@/covenants/components/RolePowersPanel';
 import { PromoteRoleDialog } from '@/covenants/components/PromoteRoleDialog';
@@ -336,11 +337,16 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
   const isActiveMember = ownMembership !== null;
 
   // viewer_capabilities is the same value on every row in one covenant (server memoizes it);
-  // read it from the first result. Now typed directly from the generated schema.
-  const viewerCapabilities: ViewerCapabilities = membersPage?.results?.[0]?.viewer_capabilities ?? {
+  // read it from the first result. The generated schema type (ViewerCapabilitiesSerializer)
+  // hasn't been regenerated on this branch to include can_request_gm (#2119) yet — cast to
+  // the hand-extended local type; the backend already serializes the field at runtime.
+  const viewerCapabilities: ViewerCapabilities = (membersPage?.results?.[0]?.viewer_capabilities as
+    | ViewerCapabilities
+    | undefined) ?? {
     can_invite: false,
     can_kick: false,
     can_manage_ranks: false,
+    can_request_gm: false,
   };
 
   // Viewer's own rank tier (or Infinity = lowest authority if not a member).
@@ -426,6 +432,15 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
             ))}
           </div>
         )}
+      </section>
+
+      {/* Recruiting a GM (#2119) */}
+      <section>
+        <GroupStoryRequestPanel
+          covenantId={covenantId}
+          viewerCapabilities={viewerCapabilities}
+          actorCharacterId={characterSheetId}
+        />
       </section>
 
       {/* Covenant rites */}

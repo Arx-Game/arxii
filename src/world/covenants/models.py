@@ -507,6 +507,14 @@ class CovenantRank(SharedMemoryModel):
         default=False,
         help_text="May lead this covenant's group rituals (e.g. Covenant Sanctification).",
     )
+    can_request_gm = models.BooleanField(
+        default=False,
+        help_text=(
+            "May post an open ask for a GM to run a story for this covenant "
+            "(GroupStoryRequest, #2119). Distinct from can_invite — petitioning "
+            "an outside GM commits the covenant to outside oversight."
+        ),
+    )
 
     class Meta:
         ordering = ["covenant", "tier"]

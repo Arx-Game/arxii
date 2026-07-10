@@ -61,6 +61,7 @@ class CovenantRankSerializer(serializers.ModelSerializer):
             "can_kick",
             "can_manage_ranks",
             "can_lead_rituals",
+            "can_request_gm",
         ]
         read_only_fields = ["id"]
 
@@ -107,6 +108,7 @@ class ViewerCapabilitiesSerializer(serializers.Serializer):
     can_invite = serializers.BooleanField()
     can_kick = serializers.BooleanField()
     can_manage_ranks = serializers.BooleanField()
+    can_request_gm = serializers.BooleanField()
 
 
 class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
@@ -193,7 +195,12 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
         """
         request = self.context.get("request")
         if request is None or not request.user.is_authenticated:
-            return {"can_invite": False, "can_kick": False, "can_manage_ranks": False}
+            return {
+                "can_invite": False,
+                "can_kick": False,
+                "can_manage_ranks": False,
+                "can_request_gm": False,
+            }
 
         # Memoize per-covenant in the serializer context dict.
         cache_key = f"_viewer_caps_{obj.covenant_id}"
@@ -213,12 +220,14 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
                     "can_invite": False,
                     "can_kick": False,
                     "can_manage_ranks": False,
+                    "can_request_gm": False,
                 }
             else:
                 self.context[cache_key] = {
                     "can_invite": viewer_membership.rank.can_invite,
                     "can_kick": viewer_membership.rank.can_kick,
                     "can_manage_ranks": viewer_membership.rank.can_manage_ranks,
+                    "can_request_gm": viewer_membership.rank.can_request_gm,
                 }
         return self.context[cache_key]  # type: ignore[return-value]
 

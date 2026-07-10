@@ -16,6 +16,10 @@ vi.mock('@/evennia_replacements/api', () => ({
   apiFetch: vi.fn(),
 }));
 
+vi.mock('@/store/hooks', () => ({
+  useAccount: vi.fn(() => null),
+}));
+
 import { apiFetch } from '@/evennia_replacements/api';
 
 function withProviders(children: ReactNode) {
@@ -34,6 +38,7 @@ const mockDashboard = {
   pending_agm_claims: [],
   assigned_session_requests: [],
   waiting_for_gm: [],
+  open_group_requests: [],
   my_tables: [{ id: 1, name: 'Test Table', membership_count: 3 }],
   pending_story_offers: [],
   evidence_summary: {
@@ -71,5 +76,32 @@ describe('GMDashboardPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/You must be a GM/i)).toBeInTheDocument();
     });
+  });
+
+  it('renders the open group requests section (#2119)', async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          ...mockDashboard,
+          open_group_requests: [
+            {
+              request_id: 1,
+              covenant_id: 5,
+              covenant_name: 'The Open Circle',
+              message: 'Seeking a GM!',
+              created_at: '2026-07-08T00:00:00Z',
+            },
+          ],
+        }),
+    } as Response);
+
+    render(withProviders(<GMDashboardPage />));
+
+    await waitFor(() => {
+      expect(screen.getByText('Open Group Requests (1)')).toBeInTheDocument();
+    });
+    expect(screen.getByText('The Open Circle')).toBeInTheDocument();
+    expect(screen.getByTestId('claim-group-request-button')).toBeInTheDocument();
   });
 });

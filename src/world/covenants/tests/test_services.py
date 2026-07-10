@@ -1752,6 +1752,71 @@ class CanInviteToCovenantPredicateTests(TestCase):
         self.assertFalse(can_invite_to_covenant(cov2, account=account2))
 
 
+class CanRequestGMForCovenantPredicateTests(TestCase):
+    """Tests for can_request_gm_for_covenant() (#2119) — mirrors can_invite_to_covenant."""
+
+    def test_character_with_can_request_gm_rank_returns_true(self):
+        from world.covenants.services import can_request_gm_for_covenant
+
+        cov = CovenantFactory()
+        rank = CovenantManagerRankFactory(covenant=cov)  # can_request_gm=True
+        sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, rank=rank)
+        self.assertTrue(can_request_gm_for_covenant(cov, character_sheet=sheet))
+
+    def test_character_without_can_request_gm_rank_returns_false(self):
+        from world.covenants.services import can_request_gm_for_covenant
+
+        cov = CovenantFactory()
+        rank = CovenantRankFactory(covenant=cov)  # all caps False
+        sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, rank=rank)
+        self.assertFalse(can_request_gm_for_covenant(cov, character_sheet=sheet))
+
+    def test_can_invite_rank_alone_does_not_grant_request_gm(self):
+        """can_invite and can_request_gm are deliberately separate authorities (Decision 3)."""
+        from world.covenants.services import can_request_gm_for_covenant
+
+        cov = CovenantFactory()
+        rank = CovenantRankFactory(covenant=cov, can_invite=True, can_request_gm=False)
+        sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, rank=rank)
+        self.assertFalse(can_request_gm_for_covenant(cov, character_sheet=sheet))
+
+    def test_non_member_returns_false(self):
+        from world.covenants.services import can_request_gm_for_covenant
+
+        cov = CovenantFactory()
+        self.assertFalse(can_request_gm_for_covenant(cov, character_sheet=CharacterSheetFactory()))
+
+    def test_account_branch_true_for_active_tenure_with_can_request_gm_rank(self):
+        """account= path: resolves sheet via active RosterTenure (the Action permission gate)."""
+        from evennia.accounts.models import AccountDB
+
+        from world.covenants.services import can_request_gm_for_covenant
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        cov = CovenantFactory()
+        rank = CovenantManagerRankFactory(covenant=cov)  # can_request_gm=True
+        sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, rank=rank)
+
+        account = AccountDB.objects.create_user(
+            username="request-gm-account-test",
+            email="request-gm-account-test@test.com",
+            password="testpass",
+        )
+        entry = RosterEntryFactory(character_sheet=sheet)
+        player_data = PlayerDataFactory(account=account)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data, end_date=None)
+
+        self.assertTrue(can_request_gm_for_covenant(cov, account=account))
+
+
 class AssertInitiatorCanInductTests(TestCase):
     def _session_with_cov_ref(self, *, initiator, covenant):
         from datetime import UTC, datetime, timedelta

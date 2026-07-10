@@ -12,6 +12,7 @@ from commands.exceptions import CommandError
 
 _USAGE_DASHBOARD = "Usage: gm dashboard"
 _USAGE_IDLE = "Usage: gm idle"
+_USAGE_CLAIM = "Usage: gm claim <request-id>"
 
 
 class CmdGMDashboard(ArxCommand):
@@ -19,6 +20,7 @@ class CmdGMDashboard(ArxCommand):
 
     Usage:
       gm dashboard
+      gm claim <request-id>
     """
 
     key = "gm"
@@ -28,11 +30,26 @@ class CmdGMDashboard(ArxCommand):
     action = None
 
     def func(self) -> None:
-        """Render a text summary of the GM dashboard."""
+        """Render a text summary of the GM dashboard, or claim a group story request."""
         try:
-            self._render()
+            raw = (self.args or "").strip()
+            tokens = raw.split(None, 1)
+            if tokens and tokens[0].lower() == "claim":  # noqa: STRING_LITERAL
+                self._claim(tokens[1] if len(tokens) > 1 else "")
+            else:
+                self._render()
         except CommandError as err:
             self.msg(str(err))
+
+    def _claim(self, rest: str) -> None:
+        """``gm claim <request-id>`` — claim an open group story request (#2119)."""
+        rest = rest.strip()
+        if not rest.isdigit():
+            raise CommandError(_USAGE_CLAIM)
+        from actions.definitions.gm_stories import ClaimGroupStoryRequestAction  # noqa: PLC0415
+
+        result = ClaimGroupStoryRequestAction().run(actor=self.caller, request_id=int(rest))
+        self.msg(result.message)
 
     def _render(self) -> None:
         raw = (self.args or "").strip().lower()
@@ -72,6 +89,12 @@ class CmdGMDashboard(ArxCommand):
             offered_to=gm_profile, status=StoryGMOfferStatus.PENDING
         ).count()
         lines.append(f"  Pending story offers: {pending_offers}")
+
+        lines.append(f"  Open group requests: {len(buckets.open_group_requests)}")
+        lines.extend(
+            f"    [{req['request_id']}] {req['covenant_name']}"
+            for req in buckets.open_group_requests
+        )
 
         evidence = gm_evidence_summary(gm_profile)
         lines.append(f"  Level: {evidence.level} | Stories running: {evidence.stories_running}")

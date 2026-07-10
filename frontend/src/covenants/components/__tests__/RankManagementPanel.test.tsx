@@ -41,11 +41,17 @@ function createWrapper() {
 
 const COVENANT_ID = 3;
 
-const NO_CAPS: ViewerCapabilities = { can_invite: false, can_kick: false, can_manage_ranks: false };
+const NO_CAPS: ViewerCapabilities = {
+  can_invite: false,
+  can_kick: false,
+  can_manage_ranks: false,
+  can_request_gm: false,
+};
 const MANAGE_CAPS: ViewerCapabilities = {
   can_invite: false,
   can_kick: false,
   can_manage_ranks: true,
+  can_request_gm: false,
 };
 
 function makeRank(overrides: Partial<CovenantRank>): CovenantRank {
@@ -58,6 +64,7 @@ function makeRank(overrides: Partial<CovenantRank>): CovenantRank {
     can_invite: false,
     can_kick: false,
     can_manage_ranks: false,
+    can_request_gm: false,
     ...overrides,
   };
 }
@@ -120,6 +127,7 @@ describe('RankManagementPanel', () => {
         can_invite: true,
         can_kick: true,
         can_manage_ranks: true,
+        can_request_gm: false,
       }),
       makeRank({
         id: 2,
@@ -128,6 +136,7 @@ describe('RankManagementPanel', () => {
         can_invite: false,
         can_kick: false,
         can_manage_ranks: false,
+        can_request_gm: false,
       }),
     ]);
 

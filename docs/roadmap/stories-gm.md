@@ -363,6 +363,37 @@ story's protected asset for a crossover.
 - ADR-0098 (custody vs. player boundaries axis), ADR-0099 (identity-based clearance
   requests); full detail in `docs/systems/custody.md`
 
+### #2119 — Player→GM recruitment loop: covenant-scoped GM requests (complete)
+
+A covenant that wants a GM had no discoverable action anywhere, web or telnet — the only
+path was a GM proactively authoring a GROUP-scope story via admin. Closes that gap for
+journey 2 (form a covenant → recruit a GM → play) without imitating `StoryGMOffer`'s
+web-only pattern.
+
+- `GroupStoryRequest(covenant, requested_by_account, message, status, claimed_by,
+  created_story, responded_at)` — a covenant officer's open, broadcast ask (not directed
+  at one GM, unlike `StoryGMOffer`); one PENDING request per covenant (partial unique)
+- `CovenantRank.can_request_gm` — new rank capability gating who may author a request,
+  deliberately separate from `can_invite` (`can_request_gm_for_covenant` service)
+- Services: `request_gm_for_covenant`, `claim_group_story_request` (creates the GROUP
+  `Story` + `GroupStoryProgress`, seats every active `CharacterCovenantRole`'s persona at
+  the claiming GM's table via the existing `join_table` — no `GMTableMembership` schema
+  change), `withdraw_group_story_request`
+- Three REGISTRY Actions (`RequestGMForCovenantAction`/`ClaimGroupStoryRequestAction`/
+  `WithdrawGroupStoryRequestAction`) dispatched through the generic
+  `POST /api/actions/characters/<id>/dispatch/` endpoint — **not** a bespoke `@action`,
+  which is precisely why `StoryGMOffer` never got a telnet verb; this flow works
+  identically from web and telnet from day one
+- Read-only `GroupStoryRequestViewSet` (`/api/group-story-requests/`); `GMQueueView`/
+  `GMDashboardView` gain `open_group_requests` (visible to any GM, not scoped to their
+  existing tables/stories)
+- Telnet: `covenant request-gm`/`withdraw-gm-request` (`commands/covenant.py`), `gm claim
+  <request-id>` + an "Open group requests" dashboard line (`commands/gm_ops.py`)
+- Frontend: `GroupStoryRequestPanel` on `CovenantDetailPage` (Request/Withdraw, gated on
+  `viewer_capabilities.can_request_gm`); "Open Group Requests" section with a Claim
+  control on `GMDashboardPage`
+- Full detail: `docs/systems/stories.md`'s "Player→GM recruitment loop" section
+
 ## What's Needed for MVP
 
 ### Phase 6+
@@ -372,7 +403,7 @@ All MVP-blocking items from Phase 5's "What's Needed for MVP" section have lande
 - **Covenant / organization chat channels** — broader feature beyond stories scope; will land alongside the organizations system
 - **MISSION_COMPLETE predicate UI** — blocked by the Missions system; the `Beat.required_mission` FK scaffold exists in backend but Missions does not yet exist. Will land alongside missions.
 - **DAG advanced editing** — multi-select, copy/paste, layout templates, drag-position persistence; Phase 5 delivered drag-to-add; richer graph editing is Phase 6+
-- **Cross-table GM availability marketplace** — searchable directory of GMs accepting story offers; Phase 6+ feature
+- **Cross-table GM availability marketplace** — the *player→GM* discovery direction shipped as #2119 (`GroupStoryRequest`, a covenant's broadcast ask any GM can browse/claim). A GM-directed (browse *players*/covenants wanting a GM, headhunting a specific one) direction remains a possible follow-up with no evidence of demand yet.
 - **Notification settings UI beyond story mute** — per-category toggles for atmosphere / visions / happenstance / system; Phase 6+
 - **Persona ID in account payload** — for GM/staff persona selection (surfaces in `TableBulletin` `gmPersonaId` stub); requires account payload expansion
 - **Profile-driven role-aware navigation** — eliminate 403 fallbacks for GM-only routes; requires GMProfile presence in the account payload

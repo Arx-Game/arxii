@@ -11538,6 +11538,98 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/group-story-requests/:
+    get:
+      operationId: group_story_requests_list
+      description: |-
+        Read-only ViewSet for GroupStoryRequest — the covenant-GM recruitment queue (#2119).
+
+        Mutation goes exclusively through ``POST /actions/characters/<id>/dispatch/``
+        (``RequestGMForCovenantAction`` / ``ClaimGroupStoryRequestAction`` /
+        ``WithdrawGroupStoryRequestAction``), never a custom ``@action`` here —
+        unlike ``StoryGMOffer``, per Decision 8.
+
+        Queryset scoping (mirrors ``StoryGMOfferViewSet.get_queryset``):
+          - Staff: all requests.
+          - GM: PENDING requests (the open queue) + requests they claimed.
+          - Everyone else: requests for covenants where they hold an active
+            ``CharacterCovenantRole``.
+      parameters:
+      - in: query
+        name: claimed_by
+        schema:
+          type: number
+      - in: query
+        name: covenant
+        schema:
+          type: number
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+      tags:
+      - group-story-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGroupStoryRequestList'
+          description: ''
+  /api/group-story-requests/{id}/:
+    get:
+      operationId: group_story_requests_retrieve
+      description: |-
+        Read-only ViewSet for GroupStoryRequest — the covenant-GM recruitment queue (#2119).
+
+        Mutation goes exclusively through ``POST /actions/characters/<id>/dispatch/``
+        (``RequestGMForCovenantAction`` / ``ClaimGroupStoryRequestAction`` /
+        ``WithdrawGroupStoryRequestAction``), never a custom ``@action`` here —
+        unlike ``StoryGMOffer``, per Decision 8.
+
+        Queryset scoping (mirrors ``StoryGMOfferViewSet.get_queryset``):
+          - Staff: all requests.
+          - GM: PENDING requests (the open queue) + requests they claimed.
+          - Everyone else: requests for covenants where they hold an active
+            ``CharacterCovenantRole``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this group story request.
+        required: true
+      tags:
+      - group-story-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupStoryRequest'
+          description: ''
   /api/homepage/:
     get:
       operationId: homepage_retrieve
@@ -33723,6 +33815,11 @@ components:
         can_lead_rituals:
           type: boolean
           description: May lead this covenant's group rituals (e.g. Covenant Sanctification).
+        can_request_gm:
+          type: boolean
+          description: 'May post an open ask for a GM to run a story for this covenant
+            (GroupStoryRequest, #2119). Distinct from can_invite — petitioning an
+            outside GM commits the covenant to outside oversight.'
       required:
       - covenant
       - id
@@ -33783,6 +33880,11 @@ components:
         can_lead_rituals:
           type: boolean
           description: May lead this covenant's group rituals (e.g. Covenant Sanctification).
+        can_request_gm:
+          type: boolean
+          description: 'May post an open ask for a GM to run a story for this covenant
+            (GroupStoryRequest, #2119). Distinct from can_invite — petitioning an
+            outside GM commits the covenant to outside oversight.'
       required:
       - covenant
       - name
@@ -38585,6 +38687,74 @@ components:
       required:
       - gm_table
       - story
+    GroupStoryRequest:
+      type: object
+      description: Read serializer for GroupStoryRequest — the covenant-GM recruitment
+        queue (#2119).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        covenant:
+          type: integer
+          readOnly: true
+        requested_by_account:
+          type: integer
+          readOnly: true
+          description: The covenant officer who posted this request.
+        message:
+          type: string
+          readOnly: true
+          description: Optional pitch text. Visible to the whole (staff-vetted) GM
+            pool.
+        status:
+          allOf:
+          - $ref: '#/components/schemas/GroupStoryStatusEnum'
+          readOnly: true
+        claimed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The GM who claimed this request, once ACCEPTED.
+        created_story:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The GROUP-scope Story created on claim.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        responded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - claimed_by
+      - covenant
+      - created_at
+      - created_story
+      - id
+      - message
+      - requested_by_account
+      - responded_at
+      - status
+      - updated_at
+    GroupStoryStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - withdrawn
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `withdrawn` - Withdrawn
     GroupVoteRequestRequest:
       type: object
       description: 'POST body for the #1036 group-vote endpoint.'
@@ -44967,6 +45137,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GroupStoryProgress'
+    PaginatedGroupStoryRequestList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupStoryRequest'
     PaginatedHeldClueList:
       type: object
       required:
@@ -47839,6 +48032,11 @@ components:
         can_lead_rituals:
           type: boolean
           description: May lead this covenant's group rituals (e.g. Covenant Sanctification).
+        can_request_gm:
+          type: boolean
+          description: 'May post an open ask for a GM to run a story for this covenant
+            (GroupStoryRequest, #2119). Distinct from can_invite — petitioning an
+            outside GM commits the covenant to outside oversight.'
     PatchedEncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.
@@ -59170,10 +59368,13 @@ components:
           type: boolean
         can_manage_ranks:
           type: boolean
+        can_request_gm:
+          type: boolean
       required:
       - can_invite
       - can_kick
       - can_manage_ranks
+      - can_request_gm
     VisibilityF91Enum:
       enum:
       - default

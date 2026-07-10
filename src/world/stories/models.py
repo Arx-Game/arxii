@@ -19,6 +19,7 @@ from world.stories.constants import (
     CustodyClearanceStatus,
     CustodyScope,
     EraStatus,
+    GroupStoryRequestStatus,
     ImpactTier,
     ProgressStatus,
     SessionRequestStatus,
@@ -1957,6 +1958,85 @@ class StoryGMOffer(SharedMemoryModel):
         return (
             f"StoryGMOffer(story=#{self.story_id}, gm=#{self.offered_to_id}, status={self.status})"
         )
+
+
+class GroupStoryRequest(SharedMemoryModel):
+    """A covenant's open, broadcast ask for a GM to run a story for them (#2119).
+
+    Unlike ``StoryGMOffer`` (a directed offer of a pre-existing player-owned
+    story to one specific GM), this is a broadcast: any registered GM may see
+    and claim it from the open queue. Claiming creates the GROUP-scope
+    ``Story`` (see ``claim_group_story_request``) — there is no story until
+    claim.
+
+    FK direction (ADR-0010): this is the specific/dependent request model; it
+    points at the general primitives (``Covenant``, ``GMProfile``) with no
+    back-reference from either.
+
+    Lifecycle:
+        PENDING -> ACCEPTED   (a GM claims the request; GROUP Story created)
+                -> WITHDRAWN  (the covenant rescinds before a claim)
+
+    Only one PENDING request per covenant at a time (partial unique
+    constraint) — the DB constraint is the contract; the service layer does
+    not pre-check it.
+    """
+
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.CASCADE,
+        related_name="gm_requests",
+    )
+    requested_by_account = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The covenant officer who posted this request.",
+    )
+    message = models.TextField(
+        blank=True,
+        help_text="Optional pitch text. Visible to the whole (staff-vetted) GM pool.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=GroupStoryRequestStatus.choices,
+        default=GroupStoryRequestStatus.PENDING,
+    )
+    claimed_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The GM who claimed this request, once ACCEPTED.",
+    )
+    created_story = models.ForeignKey(
+        Story,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The GROUP-scope Story created on claim.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant"],
+                condition=models.Q(status=GroupStoryRequestStatus.PENDING),
+                name="unique_pending_group_story_request_per_covenant",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"GroupStoryRequest(covenant=#{self.covenant_id}, status={self.status})"
 
 
 class CrossoverInvite(SharedMemoryModel):

@@ -514,6 +514,7 @@ class GMDashboardView(APIView):
                 "pending_agm_claims": buckets.pending_claims,
                 "assigned_session_requests": buckets.assigned_requests,
                 "waiting_for_gm": buckets.waiting_for_gm,
+                "open_group_requests": buckets.open_group_requests,
                 "my_tables": my_tables,
                 "pending_story_offers": pending_offers,
                 "evidence_summary": {

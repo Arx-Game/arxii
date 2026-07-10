@@ -46,6 +46,7 @@ from world.stories.filters import (
     EraFilter,
     GlobalStoryProgressFilter,
     GroupStoryProgressFilter,
+    GroupStoryRequestFilter,
     PlayerTrustFilter,
     SessionRequestFilter,
     StakeContractActivationFilter,
@@ -78,6 +79,7 @@ from world.stories.models import (
     Era,
     GlobalStoryProgress,
     GroupStoryProgress,
+    GroupStoryRequest,
     PlayerTrust,
     RiskCalibration,
     SessionRequest,
@@ -201,6 +203,7 @@ from world.stories.serializers import (
     EraSerializer,
     GlobalStoryProgressSerializer,
     GroupStoryProgressSerializer,
+    GroupStoryRequestSerializer,
     MarkBeatInputSerializer,
     OfferStoryToGMInputSerializer,
     PendingTreasuredSignoffsSerializer,
@@ -264,6 +267,7 @@ from world.stories.types import (
     EligibleTransitionEntry,
     EpisodeReadyEntry,
     FrontierStoryEntry,
+    OpenGroupRequestEntry,
     PendingCanonReviewEntry,
     PendingClaimEntry,
     PerGMQueueDepthEntry,
@@ -1761,6 +1765,57 @@ class StoryGMOfferViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(StoryGMOfferSerializer(updated).data, status=status.HTTP_200_OK)
 
 
+class GroupStoryRequestViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for GroupStoryRequest — the covenant-GM recruitment queue (#2119).
+
+    Mutation goes exclusively through ``POST /actions/characters/<id>/dispatch/``
+    (``RequestGMForCovenantAction`` / ``ClaimGroupStoryRequestAction`` /
+    ``WithdrawGroupStoryRequestAction``), never a custom ``@action`` here —
+    unlike ``StoryGMOffer``, per Decision 8.
+
+    Queryset scoping (mirrors ``StoryGMOfferViewSet.get_queryset``):
+      - Staff: all requests.
+      - GM: PENDING requests (the open queue) + requests they claimed.
+      - Everyone else: requests for covenants where they hold an active
+        ``CharacterCovenantRole``.
+    """
+
+    serializer_class = GroupStoryRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = GroupStoryRequestFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at", "updated_at", "status"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self) -> models.QuerySet[GroupStoryRequest]:
+        user = self.request.user
+        if not user.is_authenticated:
+            return GroupStoryRequest.objects.none()
+        if user.is_staff:
+            return GroupStoryRequest.objects.all()
+
+        from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.stories.constants import GroupStoryRequestStatus  # noqa: PLC0415
+
+        try:
+            gm_profile = user.gm_profile
+            gm_q = models.Q(status=GroupStoryRequestStatus.PENDING) | models.Q(
+                claimed_by=gm_profile
+            )
+        except GMProfile.DoesNotExist:
+            gm_q = models.Q()
+
+        member_q = models.Q(
+            covenant__memberships__left_at__isnull=True,
+            covenant__memberships__character_sheet__roster_entry__tenures__end_date__isnull=True,
+            covenant__memberships__character_sheet__roster_entry__tenures__player_data__account=(
+                user
+            ),
+        )
+        return GroupStoryRequest.objects.filter(gm_q | member_q).distinct()
+
+
 class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for CrossoverInvite — co-GM consent to link stories to a shared event (#2002).
 
@@ -2104,6 +2159,7 @@ class GMQueueBuckets:
     pending_claims: list[PendingClaimEntry] = field(default_factory=list)
     assigned_requests: list[AssignedRequestEntry] = field(default_factory=list)
     waiting_for_gm: list[WaitingForGMEntry] = field(default_factory=list)
+    open_group_requests: list[OpenGroupRequestEntry] = field(default_factory=list)
 
 
 def _eligible_transitions_from_prefetched(
@@ -2423,6 +2479,35 @@ def _append_story_claims_and_requests(
         )
 
 
+def _open_group_requests_entries() -> list[OpenGroupRequestEntry]:
+    """All PENDING GroupStoryRequest rows — the broadcast GM-recruitment queue (#2119).
+
+    Visible to any GM regardless of whether they lead a table or story yet —
+    unlike the rest of the GM queue, this bucket does not depend on
+    ``gm_profile`` at all (it's the discovery surface a brand-new GM uses to
+    find their first table).
+    """
+    from world.stories.constants import GroupStoryRequestStatus  # noqa: PLC0415
+
+    return [
+        _open_group_request_entry(row)
+        for row in GroupStoryRequest.objects.filter(
+            status=GroupStoryRequestStatus.PENDING
+        ).select_related("covenant")
+    ]
+
+
+def _open_group_request_entry(row: GroupStoryRequest) -> OpenGroupRequestEntry:
+    """Serialize one PENDING ``GroupStoryRequest`` row for the GM queue (#2119)."""
+    return {
+        "request_id": row.pk,
+        "covenant_id": row.covenant_id,
+        "covenant_name": row.covenant.name,
+        "message": row.message,
+        "created_at": row.created_at,
+    }
+
+
 def _collect_gm_queue(gm_profile: "GMProfile | None") -> GMQueueBuckets:
     """Build the GM queue with a bounded number of queries.
 
@@ -2436,6 +2521,7 @@ def _collect_gm_queue(gm_profile: "GMProfile | None") -> GMQueueBuckets:
     returned an unspecified DB order, so no test asserts that ordering.
     """
     buckets = GMQueueBuckets()
+    buckets.open_group_requests = _open_group_requests_entries()
 
     # Stories where this GMProfile is Lead GM (via primary_table.gm).
     lead_stories = list(
@@ -2487,6 +2573,7 @@ class GMQueueView(APIView):
                 "pending_agm_claims": buckets.pending_claims,
                 "assigned_session_requests": buckets.assigned_requests,
                 "waiting_for_gm": buckets.waiting_for_gm,
+                "open_group_requests": buckets.open_group_requests,
             }
         )
 

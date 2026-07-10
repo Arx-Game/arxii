@@ -1168,10 +1168,14 @@ GM at a given level may author (#2000, ADR-0097).
   #2000) — `gmtrust show [account]` (self-service; naming another is staff-only),
   `gmtrust evidence <account>` (staff-only), `gmtrust promote <account>=<level>
   reason=<why>` (staff-only; `reason` required) — thin over the same `promote_gm` /
-  `gm_evidence_summary` services the web actions call.
-- **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates),
-  combat (`StakesLevelRequirement.minimum_gm_level`), roster (`GMRosterInvite` →
-  `RosterApplication`), scenes (`GMTableMembership` pinned to `Persona`)
+  `gm_evidence_summary` services the web actions call. `gm dashboard` gains an
+  "Open group requests: N" line + `gm claim <request-id>` (#2119), dispatching
+  `stories.ClaimGroupStoryRequestAction`.
+- **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
+  `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
+  Story and seats the covenant via `join_table`), combat (`StakesLevelRequirement
+  .minimum_gm_level`), roster (`GMRosterInvite` → `RosterApplication`), scenes
+  (`GMTableMembership` pinned to `Persona`)
 - **Source:** `src/world/gm/`
 - **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
 - **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
@@ -1334,7 +1338,7 @@ action consent flow, and a three-mode non-combat round framework.
 ### Stories
 Player-driven narrative campaign system with hierarchical structure and task-gated progression.
 
-- **Models:** `Story` (incl. `summary` — player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat`, `BeatCompletion`, `EpisodeResolution`, `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`
+- **Models:** `Story` (incl. `summary` — player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat`, `BeatCompletion`, `EpisodeResolution`, `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 — see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`
 - **Authoring backbone enums:** `StoryScope.UNASSIGNED` (new default), `StoryMaturity` (PITCH/OUTLINE/PLOT — per-node authoring completeness on Story/Chapter/Episode), `BeatKind` (SITUATION/ENCOUNTER/TASK/REQUIREMENT), `ProgressStatus` (ACTIVE/WAITING_FOR_GM/RESTING/COMPLETED on the three Progress models; **not currently exposed to the frontend** — see stories.md follow-ups)
 - **`BeatPredicateType.FACTION_STANDING_AT_LEAST` (#1760):** a Beat gates on accumulated `SocietyReputation`/`OrganizationReputation.value` — `Beat.required_society`/`required_organization` (exactly one) + `required_standing`; evaluator `_evaluate_faction_standing_at_least` (`world.stories.services.beats`). Read-side complement to the Stakes Contract Engine's `FACTION` `subject_standing_delta` writer (below)
 - **GM↔player visibility contract:** `description`/`consequences` are GM/staff-only; `summary` is player-facing ("The Story So Far"), blanked while node `maturity == PITCH`. Enforced server-side in two places: the three Detail serializers' `to_representation` (via `_gm_text_gate`, default-deny when no request) **and** `serialize_story_log` (per-beat internals gated to privileged roles). No dedicated `pitch` field by design — `description`=GM pitch, `summary`=player recap
@@ -1343,6 +1347,22 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 - **API Endpoints:** `POST /api/episodes/{id}/promote/` (set node maturity; PLOT-gate mirrored in `PromoteEpisodeInputSerializer` → 400 on gate violation), `POST /api/stories/{id}/assign-to-scope/` (lift a story out of UNASSIGNED; sets scope + creates the matching progress record; 400 if already-assigned or scope↔target invariant violated), `GET /api/stories/gm-queue/` + `GET /api/stories/staff-workload/` (now query-bounded with `assertNumQueries` locks; staff-workload per-GM membership is status-agnostic), plus standard ViewSet CRUD and the existing `log/` / `my-active/` / `resolve-episode/` / beat-`mark`/`contribute` / AGM-claim / session-request actions, and append-only `/api/story-notes/`
 - **Authoring/run-control UI:** `StoryAuthorPage` carries the run-control surface — `PromoteMaturityButton` (inline PLOT-gate 400), `ScopeAssignDialog`, GM Notes tab (StoryNote), inline `ProgressStateBanner`, Resolve/Mark run-control, nimble +Beat/+Branch quick-add; `BeatFormDialog` exposes kind/advances/risk (risk staff-gated); forms use "Internal GM Description" / "The Story So Far" labels + episode `resting_conclusion`/`is_ending`
 - **Integrates with:** scenes (episode content), roster (participants), achievements / conditions / codex / classes (predicate evaluation + reactivity hooks fire from their services), narrative (beat completions and episode resolutions emit NarrativeMessages)
+- **Player→GM recruitment loop (#2119):** `GroupStoryRequest` — a covenant officer's open,
+  broadcast ask for a GM (PENDING/ACCEPTED/WITHDRAWN; one PENDING per covenant, DB partial-unique
+  constraint). Authoring gated by `covenants.CovenantRank.can_request_gm` (new flag, mirrors
+  `can_lead_rituals`) via `covenants.services.can_request_gm_for_covenant`. Services
+  (`stories.services.tables`): `request_gm_for_covenant`, `claim_group_story_request` (creates the
+  GROUP-scope `Story` + `GroupStoryProgress` bound to the claiming GM's table, and seats every
+  active `CharacterCovenantRole`'s persona at that table via the existing `gm.services.join_table`
+  — no schema change to `GMTableMembership`), `withdraw_group_story_request`. Actions
+  (`actions/definitions/gm_stories.py`): `RequestGMForCovenantAction`, `ClaimGroupStoryRequestAction`,
+  `WithdrawGroupStoryRequestAction` — REGISTRY backend, reachable from web via the generic
+  `POST /actions/characters/<id>/dispatch/` **and** telnet (`covenant request-gm`/
+  `withdraw-gm-request`, `gm claim <id>`) — deliberately not a bespoke DRF `@action` (the gap that
+  left `StoryGMOffer` telnet-less). Read-only `GroupStoryRequestViewSet`
+  (`/api/group-story-requests/`; staff see all, any GM sees the PENDING queue + their own claims,
+  others see only their own covenants' requests). `GMQueueView`/`GMDashboardView` gain
+  `open_group_requests` (visible to any GM, not scoped to existing tables/stories).
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md)
 
@@ -2605,8 +2625,11 @@ These two axes are orthogonal — never re-merge them.
     `char_level × bonus_per_level`; no row → 0. Admin-registered.
   - `CovenantRank` — per-covenant administrative authority tier.
     Fields: `covenant` FK, `name`, `tier` (1 = top authority), `description`,
-    `can_invite`, `can_kick`, `can_manage_ranks`. Unique `(covenant, tier)` and
-    `(covenant, name)`.
+    `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals` (may lead
+    this covenant's group rituals), `can_request_gm` (#2119 — may post an open
+    ask for a GM via `GroupStoryRequest`; deliberately separate from `can_invite`
+    — petitioning an outside GM is a different authority from admitting members).
+    Unique `(covenant, tier)` and `(covenant, name)`.
   - **`Covenant.leader`** (#1589) — FK → `character_sheets.CharacterSheet`
     (`null=True`, `on_delete=SET_NULL`). Required for COURT covenants, forbidden for others.
     Identifies the master character.
@@ -2671,6 +2694,10 @@ These two axes are orthogonal — never re-merge them.
       calls `can_invite_to_covenant`, and raises `NotAuthorizedToInviteError` when
       the initiator's rank lacks `can_invite`. Wired on the Covenant Induction ritual
       factory as `draft_validator_path = "world.covenants.services.assert_initiator_can_induct"`.
+    - `can_request_gm_for_covenant(covenant, *, character_sheet=None, account=None) -> bool`
+      (#2119) — same shape as `can_invite_to_covenant` but filters
+      `rank__can_request_gm=True`; gates `RequestGMForCovenantAction` in
+      `world.stories.services.tables.request_gm_for_covenant`.
   - **Mentor's Vow services** (`world.covenants.mentorship`, #1165):
     - `effective_combat_level(sheet) -> int` — bond-adjusted combat level used by
       `compute_party_profile`; returns the raw primary level when no active
@@ -2748,7 +2775,10 @@ These two axes are orthogonal — never re-merge them.
   `transfer_covenant_top_rank`, `stand_down_battle_covenant`
   (`actions/definitions/covenants.py`, #1346)
 - **Telnet:** `covenant <subverb>` command (`commands/covenant.py`, #1346) for
-  engage/disengage/leave/kick/rank/transfer/standdown; covenant induction via
+  engage/disengage/leave/kick/rank/transfer/standdown; `covenant request-gm
+  <message> [in <covenant>]` / `covenant withdraw-gm-request [in <covenant>]`
+  (#2119) dispatch `RequestGMForCovenantAction`/`WithdrawGroupStoryRequestAction`;
+  covenant induction via
   `ritual draft ... covenant=<name>` / `ritual join <id> role=<role>` / `ritual fire <id>`,
   banner-call rise via `ritual draft ... covenant=<name>` / `ritual join <id>` /
   `ritual fire <id>` — both adapter-dispatched from `CmdRitual` via
@@ -2760,7 +2790,11 @@ These two axes are orthogonal — never re-merge them.
   - `GET /api/covenants/gear-compatibilities/` — read-only authored content
   - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
     currently-played sheets; exposes nested `rank` + `viewer_capabilities`
-    (includes `can_invite` bool for the "Induct New Member" CTA)
+    (`can_invite`/`can_kick`/`can_manage_ranks`/`can_request_gm` bools — the last
+    gates the "Request a GM" CTA, #2119)
+  - `GET /api/group-story-requests/` (`world.stories`, #2119) — read-only
+    `GroupStoryRequestViewSet`; staff see all, any GM sees the PENDING queue +
+    their own claims, everyone else sees only their own covenants' requests
   - `GET|POST /api/covenants/ranks/` — list / create ranks (#1027)
   - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/` — retrieve / update / delete
   - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
@@ -2780,8 +2814,15 @@ These two axes are orthogonal — never re-merge them.
   picker, and converts `emits_reference: "COVENANT_ROLE"` into a typed reference on
   accept — completing the draft → accept-with-role → fire → `CharacterCovenantRole`
   round-trip. Covered by `RitualInductionRoundTripTests` (backend) + `RitualSessionPages`
-  component tests (frontend).
-- **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`;
+  component tests (frontend). `GroupStoryRequestPanel` (#2119) on `CovenantDetailPage`
+  shows the covenant's open GM ask (if any) with a Withdraw control, or a "Request a GM"
+  form gated on `viewer_capabilities.can_request_gm`; `GMDashboardPage` gets an "Open Group
+  Requests" section with a Claim control per row. Both dispatch through the generic
+  `POST /api/actions/characters/{id}/dispatch/` endpoint (REGISTRY actions), not a
+  bespoke `@action`.
+- **Integrates with:** stories (`GroupStoryRequest` → `Covenant`/claiming `GMProfile`,
+  #2119 — claim seats every active `CharacterCovenantRole`'s persona at the GM's table),
+  magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`;
   `MentorsVowRitualFactory`; `Ritual.draft_validator_path` for induction gate;
   `spend_resonance_for_imbuing` hooks `fire_subrole_discoveries` after each imbue),
   mechanics (`covenant_role_bonus` in modifier walk; `level_override` via `bond_adjusted_level`),

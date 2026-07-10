@@ -397,9 +397,11 @@ class GMQueueQueryBoundTest(APITestCase):
         # Constant bound, independent of the number of stories. Pre-refactor the
         # implementation issued queries per-story (N=3 -> 32, N=6 -> 56: ~8/story);
         # post-refactor it is a fixed batched count (N=6 -> 16, N=12 -> 16:
-        # verified N-independent). 16 is the constant the bounded implementation
-        # hits; this test failed pre-refactor (56 > 16) and passes after.
-        with self.assertNumQueries(16):
+        # verified N-independent). 16 was the constant the bounded implementation
+        # hit; #2119 added one more query for the open_group_requests bucket
+        # (visible to any GM regardless of story count), bringing it to 17 —
+        # still a fixed constant, still N-independent.
+        with self.assertNumQueries(17):
             resp = self.client.get(GM_QUEUE_URL)
         self.assertEqual(resp.status_code, 200)
         # Sanity: all 6 ready stories surfaced (behavior preserved).

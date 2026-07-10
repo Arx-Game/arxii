@@ -60,7 +60,10 @@ axes are orthogonal — never re-merge them.
 - **`CovenantRank`** — per-covenant administrative authority tier. Fields: `covenant`
   FK (CASCADE, `related_name="ranks"`), `name` (max 60, player-chosen), `tier`
   (PositiveInt; 1 = top authority), `description`, `can_invite` bool, `can_kick` bool,
-  `can_manage_ranks` bool. Unique `(covenant, tier)` and `(covenant, name)`. Ordered by
+  `can_manage_ranks` bool, `can_lead_rituals` bool (may lead this covenant's group
+  rituals), `can_request_gm` bool (#2119 — may post an open `GroupStoryRequest` ask
+  for a GM; deliberately separate from `can_invite`, see stories.md's "Player→GM
+  recruitment loop"). Unique `(covenant, tier)` and `(covenant, name)`. Ordered by
   `["covenant", "tier"]`.
 
 ### Mentor's Vow models (#1165)

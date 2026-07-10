@@ -223,6 +223,16 @@ class AssignedRequestEntry(TypedDict):
     event_id: int | None
 
 
+class OpenGroupRequestEntry(TypedDict):
+    """An open (PENDING) GroupStoryRequest in GMQueueView.open_group_requests (#2119)."""
+
+    request_id: int
+    covenant_id: int
+    covenant_name: str
+    message: str
+    created_at: datetime
+
+
 class WaitingForGMEntry(TypedDict):
     """A WAITING_FOR_GM progress row in GMQueueView.waiting_for_gm."""
 

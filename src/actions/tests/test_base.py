@@ -377,6 +377,10 @@ class ActionRegistryTests(TestCase):
             "purchase_gift_unlock",
             "accept_technique_offer",
             "accept_thread_weaving_offer",
+            # #2119 — player-GM recruitment loop: GroupStoryRequest lifecycle.
+            "request_gm_for_covenant",
+            "claim_group_story_request",
+            "withdraw_group_story_request",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
