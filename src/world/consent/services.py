@@ -124,13 +124,14 @@ def remove_social_consent_blacklist(
     return deleted > 0
 
 
-def decide_consent_block(
+def decide_consent_block(  # noqa: PLR0913 — keyword-only signal flags, one per consent input
     rule_mode: str | None,
     *,
     actor_present: bool,
     whitelisted: bool,
     blacklisted: bool,
     is_friend: bool,
+    is_rival: bool,
 ) -> bool:
     """Per-category consent decision, given a pref exists with the master switch on.
 
@@ -144,6 +145,8 @@ def decide_consent_block(
       actor (general-visibility probe) is allowed.
     - ``FRIENDS_WHITELIST`` → allowed only for an OOC friend or a whitelisted actor;
       everyone else — including an unknown actor — is blocked.
+    - ``RIVALS`` → allowed only for a declared *mutual* rival or a whitelisted actor;
+      everyone else blocked (#2170).
     - ``ALLOWLIST`` → allowed only for a whitelisted actor; everyone else blocked.
     """
     if rule_mode is None or rule_mode == ConsentMode.EVERYONE:
@@ -152,7 +155,10 @@ def decide_consent_block(
         return actor_present and blacklisted
     if rule_mode == ConsentMode.FRIENDS_WHITELIST:
         return not (actor_present and (is_friend or whitelisted))
-    # ALLOWLIST — strict default-deny; friendship alone is not enough.
+    if rule_mode == ConsentMode.RIVALS:
+        # Only a declared *mutual* rival (or a whitelisted actor) may target here (#2170).
+        return not (actor_present and (is_rival or whitelisted))
+    # ALLOWLIST — strict default-deny; friendship/rivalry alone is not enough.
     return not (actor_present and whitelisted)
 
 
@@ -174,6 +180,7 @@ def _decide_default(category: SocialConsentCategory | None, actor_tenure: object
         whitelisted=False,
         blacklisted=False,
         is_friend=False,
+        is_rival=False,
     )
 
 
@@ -193,7 +200,10 @@ def consent_blocks_targeting(
     like theft blocks by default). The scene-wide picker sweep batches the same
     decision in ``actions.player_interface._consent_excluded_persona_ids``.
     """
-    from world.scenes.friend_services import is_friend as _is_friend  # noqa: PLC0415
+    from world.scenes.friend_services import (  # noqa: PLC0415
+        is_friend as _is_friend,
+        is_rival as _is_rival,
+    )
 
     try:
         pref = owner_tenure.social_consent_preference
@@ -215,6 +225,7 @@ def consent_blocks_targeting(
             whitelisted=False,
             blacklisted=False,
             is_friend=False,
+            is_rival=False,
         )
 
     whitelisted = SocialConsentWhitelist.objects.filter(
@@ -224,12 +235,14 @@ def consent_blocks_targeting(
         owner_tenure=owner_tenure, blocked_tenure=actor_tenure, category=category
     ).exists()
     friended = _is_friend(owner_tenure=owner_tenure, friend_tenure=actor_tenure)
+    rivaled = _is_rival(owner_tenure=owner_tenure, rival_tenure=actor_tenure)
     return _decide_consent_block(
         rule_mode,
         actor_present=True,
         whitelisted=whitelisted,
         blacklisted=blacklisted,
         is_friend=friended,
+        is_rival=rivaled,
     )
 
 

@@ -125,6 +125,7 @@ from commands.social.entrance_flourish import CmdEnter, CmdFlourish
 from commands.social.friends import CmdFriend, CmdFriends, CmdUnfriend
 from commands.social.gossip import CmdGossip
 from commands.social.grievance import CmdGrievance
+from commands.social.rivals import CmdRival, CmdRivals, CmdUnrival
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.story import CmdStory
@@ -260,6 +261,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdFriend,
             CmdUnfriend,
             CmdFriends,
+            CmdRival,
+            CmdUnrival,
+            CmdRivals,
             # #1463 — public presence/navigation: who's about, in coloured area paths.
             CmdWhere,
             # #1463 — online roster: who's online, by active persona, coarse idle.
