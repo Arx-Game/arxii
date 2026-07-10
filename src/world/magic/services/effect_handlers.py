@@ -6,9 +6,8 @@ its dotted path from a seeded FlowDefinition's CALL_SERVICE_FUNCTION step.
 
 from typing import Any
 
-from world.areas.positioning.models import Position
+from world.areas.positioning.models import Position, PositionEdge
 from world.areas.positioning.services import (
-    connect_positions,
     create_conjured_obstacle,
     force_move_to_position,
     position_of,
@@ -54,7 +53,14 @@ def create_obstacle(*, payload: Any) -> None:
             blocks_flight=blocks_flight,
         )
     else:
-        connect_positions(a, b, is_passable=False, blocks_flight=blocks_flight)
+        # Fallback: update_or_create so sealing an existing edge doesn't crash.
+        if a.pk > b.pk:
+            a, b = b, a
+        PositionEdge.objects.update_or_create(
+            position_a=a,
+            position_b=b,
+            defaults={"is_passable": False, "blocks_flight": blocks_flight},
+        )
 
 
 def _caster_sheet_from_instance(instance: ConditionInstance | None):
