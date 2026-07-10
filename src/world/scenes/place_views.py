@@ -21,6 +21,7 @@ from world.scenes.place_models import Place, PlacePresence
 
 class PlaceSerializer(serializers.ModelSerializer):
     presence_count = serializers.SerializerMethodField()
+    viewer_is_present = serializers.SerializerMethodField()
 
     class Meta:
         model = Place
@@ -32,11 +33,22 @@ class PlaceSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
             "presence_count",
+            "viewer_is_present",
         ]
         read_only_fields = ["id", "created_at"]
 
     def get_presence_count(self, obj: Place) -> int:
         return PlacePresence.objects.filter(place=obj).count()
+
+    def get_viewer_is_present(self, obj: Place) -> bool:
+        """Whether one of the requesting account's personas is present at this place (#2156)."""
+        request = self.context.get("request")
+        if not (request and request.user and request.user.is_authenticated):
+            return False
+        owned = get_account_personas(request)
+        if not owned:
+            return False
+        return PlacePresence.objects.filter(place=obj, persona_id__in=owned).exists()
 
 
 class PlacePresenceSerializer(serializers.ModelSerializer):

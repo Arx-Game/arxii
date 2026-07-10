@@ -436,6 +436,53 @@ class PoseSubmitViewTests(APITestCase):
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["scene"] == scene.pk
 
+    def test_submit_pose_rejects_when_actor_not_in_scenes_room(self) -> None:
+        """A located scene rejects a pose from a persona whose character is elsewhere (#2156)."""
+        other_room = ObjectDBFactory(
+            db_key="Other Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        scene = SceneFactory(location=other_room)
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "A pose from the wrong room.",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "not present" in str(response.data["scene_id"][0])
+
+    def test_submit_pose_accepts_when_actor_in_scenes_room(self) -> None:
+        """A located scene accepts a pose when the actor's character is co-located (#2156)."""
+        scene = SceneFactory(location=self.room)
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "A pose from the right room.",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_submit_pose_skips_colocation_check_for_locationless_scene(self) -> None:
+        """A scene with no location (e.g. scene-less RP) never gates on co-location (#2156)."""
+        scene = SceneFactory(location=None)
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "A pose in a scene-less location.",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
     def test_submit_entry_pose_opens_reaction_window(self) -> None:
         """pose_kind=entry persists and opens a Make-an-Entrance window (#904)."""
         from world.scenes.constants import PoseKind, ReactionWindowKind

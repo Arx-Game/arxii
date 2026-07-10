@@ -537,30 +537,42 @@ class PoseSubmitSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs: dict) -> dict:
-        """Cross-field: persona must own the action_link_ids (same character)."""
+        """Cross-field: persona must own the action_link_ids (same character);
+
+        persona's character must be co-located with a located scene (#2156).
+        """
         action_link_ids = attrs.get("action_link_ids")
-        if not action_link_ids:
-            return attrs
-
         persona_id = attrs.get("persona_id")
-        if persona_id is None:
-            return attrs  # persona_id error will be surfaced by its own validator
 
-        try:
-            persona = Persona.objects.get(pk=persona_id)
-        except Persona.DoesNotExist:
-            return attrs  # surfaced by validate_persona_id
+        if action_link_ids and persona_id is not None:
+            try:
+                persona = Persona.objects.get(pk=persona_id)
+            except Persona.DoesNotExist:
+                persona = None  # surfaced by validate_persona_id
 
-        # All action interactions must belong to the same persona as this pose.
-        wrong_persona = Interaction.objects.filter(
-            pk__in=action_link_ids,
-        ).exclude(persona=persona)
-        if wrong_persona.exists():
-            raise serializers.ValidationError(
-                {
-                    "action_link_ids": (
-                        "All action_link_ids must belong to the same persona as the pose."
+            if persona is not None:
+                # All action interactions must belong to the same persona as this pose.
+                wrong_persona = Interaction.objects.filter(
+                    pk__in=action_link_ids,
+                ).exclude(persona=persona)
+                if wrong_persona.exists():
+                    raise serializers.ValidationError(
+                        {
+                            "action_link_ids": (
+                                "All action_link_ids must belong to the same persona as the pose."
+                            )
+                        }
                     )
-                }
-            )
+
+        scene_id = attrs.get("scene_id")
+        if scene_id is not None and persona_id is not None:
+            scene = Scene.objects.filter(pk=scene_id).first()
+            persona = Persona.objects.filter(pk=persona_id).first()
+            if scene is not None and persona is not None and scene.location is not None:
+                actor_room = persona.character_sheet.character.location
+                if actor_room is None or actor_room.pk != scene.location.pk:
+                    raise serializers.ValidationError(
+                        {"scene_id": "Your character is not present in this scene's room."}
+                    )
+
         return attrs
