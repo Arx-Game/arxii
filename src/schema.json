@@ -30133,12 +30133,41 @@ components:
           items:
             $ref: '#/components/schemas/BattleParticipant'
           readOnly: true
+        concluded_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        campaign_story_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        scene_id:
+          type: integer
+          readOnly: true
+        deeds:
+          type: array
+          items: {}
+          description: |-
+            Legendary deeds scoped to this battle's backing scene (#1735).
+
+            Reads from the ``cached_deeds`` to_attr the view's Prefetch populates
+            on the battle's Scene (world/battles/views.py) — never a fresh query.
+          readOnly: true
       required:
+      - campaign_story_id
+      - concluded_at
+      - created_at
+      - deeds
       - id
       - name
       - participants
       - places
       - round
+      - scene_id
       - sides
       - units
     BattleList:

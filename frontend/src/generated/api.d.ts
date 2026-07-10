@@ -17995,6 +17995,19 @@ export interface components {
       readonly places: components['schemas']['BattlePlace'][];
       readonly units: components['schemas']['BattleUnit'][];
       readonly participants: components['schemas']['BattleParticipant'][];
+      /** Format: date-time */
+      readonly concluded_at: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly campaign_story_id: number | null;
+      readonly scene_id: number;
+      /**
+       * @description Legendary deeds scoped to this battle's backing scene (#1735).
+       *
+       *     Reads from the ``cached_deeds`` to_attr the view's Prefetch populates
+       *     on the battle's Scene (world/battles/views.py) — never a fresh query.
+       */
+      readonly deeds: unknown[];
     };
     /** @description Slim row for the battle list endpoint. */
     BattleList: {

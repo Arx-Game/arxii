@@ -73,3 +73,17 @@ export interface BattlePersonaSummary {
   thumbnail_url: string | null;
   thumbnail_media_url: string | null;
 }
+
+/**
+ * Hand-authored mirror of `BattleDeedSerializer`'s output (SerializerMethodField
+ * — OpenAPI can't describe the ad-hoc dict shape). Same convention as
+ * `BattleRoundSummary` / `BattlePersonaSummary` above. See #1735.
+ */
+export interface BattleDeed {
+  id: number;
+  title: string;
+  description: string;
+  base_value: number;
+  created_at: string;
+  persona: { id: number; name: string } | null;
+}
