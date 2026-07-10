@@ -59,6 +59,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from world.missions.constants import (
+    DeedRewardKind,
     DeedRewardSink,
     ExternalAct,
     GiverKind,
@@ -543,9 +544,15 @@ def _seed_t7(gate_template: MissionTemplate) -> MissionTemplate:
             contract_holder_only=True,
         )
         # #2051 legend guard: LEGEND_POINTS requires risk_tier >= LEGEND_RISK_FLOOR_TIER
-        # (4) — satisfied here since this template's risk_tier is 4.
+        # (4) — satisfied here since this template's risk_tier is 4. LEGEND_POINTS
+        # is a queued sink (rewards.py's _QUEUE_SINKS) — it ONLY routes under
+        # kind=POST_CRON; the factory's IMMEDIATE default has no dispatch target
+        # for this sink and raises MissionRewardRoutingError at report time (a gap
+        # only the Task 6 journey E2E — the first thing to actually report T7 —
+        # surfaced; test_tutorial_seed.py only checked the template row existed).
         MissionOptionRouteRewardFactory(
             route=route,
+            kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.LEGEND_POINTS,
             amount=10,
             contract_holder_only=True,
