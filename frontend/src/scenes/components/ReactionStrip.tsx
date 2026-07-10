@@ -52,8 +52,6 @@ export function ReactionStrip({ windows, sceneId, interactionId }: ReactionStrip
 
   const hasKudosWindow = windows.some((window) => window.kind === KUDOS_KIND);
 
-  if (windows.length === 0 && hasKudosWindow) return null;
-
   return (
     <div data-testid="reaction-strip" className="mt-1 flex flex-col gap-1">
       {windows.map((window) => {
