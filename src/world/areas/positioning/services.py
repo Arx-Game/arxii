@@ -285,24 +285,64 @@ def instantiate_blueprint(
 # ---------------------------------------------------------------------------
 
 
-def position_reachable(origin: Position, target: Position, reach: str) -> bool:
-    """Whether `target` is reachable from `origin` under a TechniqueReach value.
+def _reachable_within_hops(origin: Position, max_hops: int) -> set[Position]:
+    """Positions reachable from ``origin`` within ``max_hops`` passable edges.
+
+    Hop-limited BFS following reach semantics: traverses edges where
+    ``edge.is_passable`` is True, ignoring active gating challenges (mirrors
+    ADJACENT — gating challenges gate movement, not reach). The starting
+    position is not included in the result.
+    """
+    seen: set[int] = {origin.pk}
+    frontier: deque[tuple[Position, int]] = deque([(origin, 0)])
+    result: set[Position] = set()
+    while frontier:
+        current, depth = frontier.popleft()
+        if depth >= max_hops:
+            continue
+        edges = PositionEdge.objects.filter(
+            Q(position_a=current) | Q(position_b=current),
+            is_passable=True,
+        )
+        for edge in edges:
+            other = edge.position_b if edge.position_a_id == current.pk else edge.position_a
+            if other.pk not in seen:
+                seen.add(other.pk)
+                result.add(other)
+                frontier.append((other, depth + 1))
+    return result
+
+
+def position_reachable(
+    origin: Position,
+    target: Position,
+    reach: str,
+    *,
+    reach_hops: int | None = None,
+) -> bool:
+    """Whether ``target`` is reachable from ``origin`` under a TechniqueReach value.
 
     SAME     -> target is the same position.
     ADJACENT -> same position, or a directly-connected passable edge exists.
                 (Gating challenges gate movement, not reach — an ADJACENT
                 technique can strike across a movement-gated edge.)
+    REACH_N  -> same position, or target is within ``reach_hops`` passable edges
+                via BFS. Follows reach semantics (is_passable only, ignores
+                active gating challenges — same as ADJACENT).
     ANY      -> any position in the same room.
     """
     from world.magic.constants import TechniqueReach
 
     if reach == TechniqueReach.SAME:
         return origin.pk == target.pk
-    if reach == TechniqueReach.ADJACENT:
+    if reach in (TechniqueReach.ADJACENT, TechniqueReach.REACH_N):
         if origin.pk == target.pk:
             return True
-        edge = edge_between(origin, target)
-        return edge is not None and edge.is_passable
+        if reach == TechniqueReach.ADJACENT:
+            edge = edge_between(origin, target)
+            return edge is not None and edge.is_passable
+        max_hops = reach_hops if reach_hops is not None else 1
+        return target in _reachable_within_hops(origin, max_hops)
     if reach == TechniqueReach.ANY:
         return origin.room_id == target.room_id
     # Unknown reach value — conservative fallback.
