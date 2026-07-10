@@ -295,6 +295,17 @@ FLEE_COVER_BONUS: int = 10
 FLEE_PARTIAL_SUCCESS_LEVEL: int = -1
 
 # ---------------------------------------------------------------------------
+# Elevation advantage (#2011)
+#
+# Name of the seeded ModifierTarget for the offensive-only elevation bonus.
+# When an attacker is at an ELEVATED or AERIAL position and the target is
+# not, this flat bonus feeds into the combat check's extra_modifiers.
+# Lives in the 'stat' category (same as weapon_damage/armor_soak).
+# ---------------------------------------------------------------------------
+
+ELEVATION_ADVANTAGE_TARGET_NAME: str = "elevation_advantage"
+
+# ---------------------------------------------------------------------------
 # Interpose
 # ---------------------------------------------------------------------------
 

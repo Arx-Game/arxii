@@ -83,7 +83,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `/scenes/:id/battle` — see [battles.md](../systems/battles.md#web-surface-2009).
   Deferred: a post-conclusion battle writeup page (#1735), which should reuse
   `BattleDetailSerializer`'s aggregate shape rather than authoring a second one.
-- Mounts / charging / flying (P2, no-improv-flagged); ranged / archery enforcement.
+- Mounts / charging / flying (P2, no-improv-flagged). Ranged / archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
 
 ## Reserved term: "clash"
 
