@@ -48,8 +48,10 @@ from world.battles.exceptions import (
     FortificationTargetRequiredError,
     InsufficientCommandTierError,
     InvalidEnvironmentScopeError,
+    InvalidMoveScopeError,
     MissingEnvironmentTargetError,
     MissingScopeTargetError,
+    MoveOrderRequiresTargetUnitError,
     NoCommandHierarchyError,
     NotAChampionError,
     NotVehicleCommanderError,
@@ -638,6 +640,10 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + ch
             technique.target_weather_type is None.
         NotVehicleCommanderError: If action_kind is REPOSITION and the participant
             is not the target vehicle's BattleUnit.commander.
+        InvalidMoveScopeError: If action_kind is MOVE and scope is not UNIT or
+            PLACE.
+        MoveOrderRequiresTargetUnitError: If action_kind is MOVE, scope is PLACE,
+            and target_unit is None.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -664,6 +670,12 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + ch
     ):
         raise PlaceScopeRequiredError
 
+    if action_kind == BattleActionKind.MOVE and scope not in (
+        BattleActionScope.UNIT,
+        BattleActionScope.PLACE,
+    ):
+        raise InvalidMoveScopeError
+
     if action_kind == BattleActionKind.SET_ENVIRONMENT:
         _validate_environment_action(scope=scope, technique=technique)
 
@@ -673,6 +685,13 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + ch
         _validate_command_scope(participant=participant, scope=scope)
 
     _validate_scope_target(scope=scope, target_place=target_place, target_side=target_side)
+
+    if (
+        action_kind == BattleActionKind.MOVE
+        and scope == BattleActionScope.PLACE
+        and target_unit is None
+    ):
+        raise MoveOrderRequiresTargetUnitError
 
     if (
         action_kind in (BattleActionKind.STRIKE, BattleActionKind.ROUT)
