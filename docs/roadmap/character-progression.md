@@ -88,11 +88,32 @@ The central spine connecting every system in the game. Characters develop throug
     - `convene_durance_at_site(*, inductee_sheet, room) -> RitualSession` in
       `services/advancement.py`; `NoDuranceSiteError` exception.
     - `CmdDurance` (`durance`, Progression) in `commands/durance.py`: status hub,
-      `durance intent <path|clear>`, `durance convene`.
+      `durance intent <path|clear>`, `durance convene`, `durance selectpath <path>` (#2121).
     - `CmdRitual` gains `_maybe_auto_fire`, `_handle_fire`,
       `_advancement_error_message` for auto-fire + error surfacing.
     - E2E tests: `integration_tests/pipeline/test_durance_telnet_e2e.py`.
     - ADR-0065: trainer-of-record-bound-to-room enables automated self-conduct.
+  - **Launch bootstrap ✅ shipped (#2121).** Three real launch-blocking gaps closed:
+    - `seed_canonical_rituals()` (`world/seeds/game_content/magic.py`) now also calls
+      `RitualOfTheDuranceFactory()` — the Ritual of the Durance itself was previously seeded
+      only in test factories, so even a live officiant's
+      `ritual draft "Ritual of the Durance"` failed by name on a fresh DB.
+    - `seed_durance_officiants()` (`world/progression/seeds.py`, the `"progression"` cluster)
+      seeds one NPC officiant `CharacterSheet` per CG-selectable PROSPECT `Path` (built via
+      `create_character_with_sheet`, the same non-CG path NPCAsset promotion uses — not a full
+      CG run), each bound as trainer-of-record via a `DuranceTrainingSite` at the canonical
+      fallback starting room (see character-creation.md) — so the first-ever Durance is
+      conductible without a live higher-level PC.
+    - `SelectPathAction` (key `select_path`, `actions/definitions/progression_rewards.py`) +
+      `select_initial_path(character, path)` service (`services/advancement.py`) — a late-Path-
+      selection recovery surface for characters created via a CG-bypassing path
+      (`finalize_gm_character` GM-quickstart, NPCAsset → PC promotion) that never write a
+      `CharacterPathHistory` row and so are permanently Durance-blocked
+      (`current_path_for_character` returns `None`, `assert_can_officiate` can never establish
+      lineage). One-time only — `PathAlreadySelectedError` if a path is already on record.
+      Deliberately does NOT grant the path's magic (unlike `cross_into_path`) — narrower scope
+      than a full CG replay. Telnet `durance selectpath <path>`; REST
+      `GET`/`POST /api/progression/select-path/` (`SelectPathViewSet`).
 - Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest). The Audere Majora crossing itself is built (see What Exists); this engine adds the legend/XP/trainer prerequisites for the non-boundary steps and feeds the boundary steps
 - Trainer system — finding trainers, training costs, trainer tiers
 - Path switching/discovery mechanics

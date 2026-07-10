@@ -98,7 +98,10 @@ CGPointBudget.get_active_conversion_rate() # Returns int (default 2 XP per CG po
 from world.character_creation.models import CharacterDraft
 
 draft.is_expired                        # True if > 60 days inactive (staff exempt)
-draft.get_starting_room()               # Beginnings override -> area default -> None
+draft.get_starting_room()               # Beginnings override -> area default -> canonical
+                                         # fallback room (logged loudly) -> None (#2121);
+                                         # see world.seeds.character_creation.
+                                         # ensure_canonical_fallback_room
 draft.get_stage_completion()            # Dict[int, bool] for all stages
 draft.can_submit()                      # True if all stages (except Review) complete
 draft.calculate_cg_points_remaining()   # starting_budget - total_spent

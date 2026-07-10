@@ -268,3 +268,42 @@ class PathIntentDeclareSerializer(serializers.Serializer):
             msg = "Call is_valid() before accessing validated_path."
             raise AssertionError(msg)
         return self._path
+
+
+# --- SelectPath (late-selection recovery) serializers (#2121) --------------
+
+
+class InitialPathOptionsSerializer(serializers.Serializer):
+    """Read serializer for GET /select-path/: current path (usually null) + PROSPECT options."""
+
+    current_path = PathListSerializer(allow_null=True)
+    options = PathListSerializer(many=True)
+
+
+class SelectPathSerializer(serializers.Serializer):
+    """Input serializer for POST /select-path/.
+
+    Only the 5 CG-selectable PROSPECT paths are valid — this recovery surface
+    mirrors the initial CG choice, not a jump to an advanced stage.
+    """
+
+    path_id = serializers.IntegerField()
+
+    def validate_path_id(self, value: int) -> int:
+        from world.classes.models import PathStage  # noqa: PLC0415
+
+        try:
+            path = Path.objects.get(pk=value, is_active=True, stage=PathStage.PROSPECT)
+        except Path.DoesNotExist as exc:
+            msg = "Path does not exist, is not active, or is not a starting (Prospect) path."
+            raise serializers.ValidationError(msg) from exc
+        self._path = path
+        return value
+
+    @property
+    def validated_path(self) -> Path:
+        """Return the resolved Path instance after validation."""
+        if not hasattr(self, "_path"):
+            msg = "Call is_valid() before accessing validated_path."
+            raise AssertionError(msg)
+        return self._path

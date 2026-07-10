@@ -15,6 +15,7 @@ from world.progression.exceptions import (
     AdvancementUnlockNotPurchasedError,
     NoDuranceSiteError,
     OfficiantIneligibleError,
+    PathAlreadySelectedError,
     TierBoundaryRequiresCrossing,
 )
 
@@ -28,7 +29,11 @@ if TYPE_CHECKING:
     from world.classes.models import CharacterClassLevel, Path
     from world.magic.models.sessions import RitualSession, RitualSessionParticipant
     from world.magic.types.path_magic import PathMagicGrantResult
-    from world.progression.models import ClassLevelAdvancement, ClassLevelUnlock
+    from world.progression.models import (
+        CharacterPathHistory,
+        ClassLevelAdvancement,
+        ClassLevelUnlock,
+    )
     from world.scenes.models import Interaction, Scene
 
 
@@ -86,6 +91,38 @@ def cross_into_path(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
 
     CharacterPathHistory.objects.create(character=sheet.character, path=path)
     return grant_path_magic(sheet, path)
+
+
+def select_initial_path(character: ObjectDB, path: Path) -> CharacterPathHistory:  # noqa: OBJECTDB_PARAM
+    """Late-selection recovery: write the first CharacterPathHistory row (#2121).
+
+    For characters created via a CG-bypassing path — GM-finalize quickstart
+    (``finalize_gm_character``, which never writes ``CharacterPathHistory`` and
+    has no ``can_submit()`` gate) or NPCAsset -> PC promotion
+    (``world/assets/effects.py``, which calls ``create_character_with_sheet``
+    directly) — ``current_path_for_character`` returns ``None``, which
+    **permanently** blocks the Ritual of the Durance: ``assert_can_officiate``
+    can never establish path lineage with no path on record. This is the
+    one-time recovery surface.
+
+    Deliberately mirrors the CG finalize step exactly
+    (``CharacterPathHistory.objects.create`` only) — NOT ``cross_into_path``,
+    which also grants the path's magic (gift + starter techniques via
+    ``grant_path_magic``). That is a bigger side effect than this narrow
+    recovery is meant to have; a bypassing character's magic provisioning (or
+    lack of it) is a separate concern from "unblock the Durance."
+
+    Raises:
+        PathAlreadySelectedError: the character already has a
+            CharacterPathHistory row — this is not a general path-change tool
+            (use ``cross_into_path`` for that).
+    """
+    from world.progression.models import CharacterPathHistory
+    from world.progression.selectors import current_path_for_character
+
+    if current_path_for_character(character) is not None:
+        raise PathAlreadySelectedError
+    return CharacterPathHistory.objects.create(character=character, path=path)
 
 
 # =============================================================================

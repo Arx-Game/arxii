@@ -41,7 +41,18 @@ Missions are branching narrative quest chains — the primary way characters int
   room binding**: #888.
 - **POOL count policy**: #726 ✅ shipped — `offer_policy.mission_pool_count` scales the POOL slate by NPC standing (stranger → 1, trusted → 5, wired into the live interaction render); `has_completed_mission` predicate leaf gates chained missions; `MissionOfferDetails.draw_priority` surfaces chain/high-stakes offers ahead of the general pool.
 - **Offer-policy enrichment**: #1020 ✅ shipped — org-reputation folded into the count (`max(npc_standing, org)` when the role fronts an org); Era arc-replace draws active-season offers (`created_in_era` + `percent_replace`) ahead of the general pool, behind explicit chains. Ordering/bands live in `npc_services/constants.py` for playtest retuning.
-- **Zero seed content**: a fresh DB has no missions (part of the seed/content pass).
+- **Starter seed content ✅ shipped (#2121)**: `world/seeds/game_content/missions.py`
+  (`seed_missions_dev`, the `"missions"` cluster in `world.seeds.clusters`) seeds one BOARD-kind
+  `MissionGiver` (a notice board physically placed in the canonical fallback starting room) plus
+  3 `OPEN`-visibility `MissionTemplate` rows spanning distinct risk_tier/level_band, each a
+  single-entry-node graph with one CHECK-sourced `MissionOption` covering every canonical
+  `CheckOutcome` tier. Reachable from the Big Button. Fixed a real pre-existing bug found while
+  wiring this: `opportunities_for_character`'s `_here_postings`/`_nearby_givers`
+  (`services/opportunities.py`) compared a BOARD giver's `target` directly to the room, but a
+  BOARD giver's `target` is the examinable board object itself (physically located IN a room via
+  `target.db_location`) — `MissionGiver.clean()` forbids a Room-typeclass target for BOARD, so
+  no valid BOARD giver could ever have satisfied the old comparison. `mission opportunities`
+  could never have surfaced a BOARD giver's postings for ANY BOARD content, seeded or authored.
 
 ## Notes
 - The 2026-05-18/05-22 design + implementation plans remain the architecture of record (option-level challenge attachment is the decision-of-record).

@@ -138,6 +138,7 @@ All carry a `user_message` attribute for safe API responses (no `str(exc)` in vi
 | `AdvancementUnlockNotPurchasedError` | The `CharacterUnlock` XP purchase for this class/target_level is missing (#2116) — an additional gate stacked alongside `AdvancementRequirementsNotMet`, never a substitute |
 | `OfficiantIneligibleError` | Officiant level ≤ target level or wrong Path lineage |
 | `NoDuranceSiteError` | `convene_durance_at_site` — no active `DuranceTrainingSite` with an eligible trainer in the room |
+| `PathAlreadySelectedError` | `select_initial_path` — the character already has a `CharacterPathHistory` row; this is a one-time recovery, not a general path-change tool (#2121) |
 
 ---
 
@@ -354,6 +355,40 @@ from world.progression.exceptions import NoDuranceSiteError
 session = convene_durance_at_site(inductee_sheet=sheet, room=room)
 ```
 
+### Launch Bootstrap + Late-Selection Recovery (#2121)
+
+`seed_canonical_rituals()` (`world/seeds/game_content/magic.py`, the `"magic"` cluster) now
+also creates `RitualOfTheDuranceFactory()` — previously the Ritual of the Durance row itself
+existed only in test factories, so a fresh DB's `ritual draft "Ritual of the Durance"` failed
+by name even with a live officiant present.
+
+`seed_durance_officiants()` (`world/progression/seeds.py`, the `"progression"` cluster, after
+`"character_creation"` and `"magic"`) seeds one NPC officiant `CharacterSheet` per
+CG-selectable PROSPECT `Path` — built via `create_character_with_sheet` (the same non-CG path
+NPCAsset promotion uses), given a level comfortably above the first Durance target (2) via
+`set_primary_class_level`, and a matching `CharacterPathHistory` — each bound as
+trainer-of-record via a `DuranceTrainingSite` at the canonical fallback starting room (see
+`docs/roadmap/character-creation.md`). Idempotent and staff-edit-preserving: the officiant's
+level/path-history are written only at first creation, never re-clobbered on a later seed run.
+
+```python
+from world.progression.services.advancement import select_initial_path
+from world.progression.exceptions import PathAlreadySelectedError
+
+# Late-selection recovery for a character created via a CG-bypassing path
+# (finalize_gm_character GM-quickstart, NPCAsset -> PC promotion) that never
+# writes CharacterPathHistory — permanently Durance-blocked otherwise
+# (current_path_for_character stays None; assert_can_officiate can never
+# establish lineage). Raises PathAlreadySelectedError if a path is already
+# on record — one-time only, NOT a general path-change tool (cross_into_path
+# is that seam). Deliberately does NOT call grant_path_magic.
+select_initial_path(character, path)
+```
+
+`SelectPathAction` (key `select_path`, `actions/definitions/progression_rewards.py`) is the
+action.run() seam both telnet (`durance selectpath <path name or id>`) and the web converge
+on; only the 5 PROSPECT paths are offered.
+
 ### Path Selectors (`selectors.py` — #1700)
 
 ```python
@@ -400,6 +435,11 @@ transactions = award_scene_development_points(scene, participants, awards)
 - `DELETE /api/progression/path-intent/` — Clear declared intent (character via `X-Character-ID` header)
 
 **Crossing pre-selection wire:** `PendingAudereMajoraOfferSerializer.get_intended_path_id` (`src/world/magic/serializers.py:2353`) reads the character's `PathIntent` and returns `intended_path_id` only when it is among the offer's `eligible_paths` — ensuring the Audere Majora dialog pre-selects the declared path.
+
+### Select Path (late-selection recovery, #2121)
+
+- `GET /api/progression/select-path/` — Returns `{ current_path, options }` (`InitialPathOptionsSerializer`) — `current_path` should be `null` for a character that needs this; `options` are the 5 PROSPECT paths (character via `X-Character-ID` header)
+- `POST /api/progression/select-path/` — Select a starting path; body `{ path_id }` (PROSPECT-stage only); dispatches `SelectPathAction`; 400 when the character already has a `CharacterPathHistory` row (`PathAlreadySelectedError`) — a one-time recovery, not `PathIntentViewSet`'s general declare/replace
 
 ### Unlock Shop
 
@@ -538,6 +578,8 @@ durance [status]                      — show level, unlock gate, eligible path
 durance intent <path name or id>      — declare path intent (reuses SetPathIntentAction)
 durance intent clear                  — clear path intent (reuses ClearPathIntentAction)
 durance convene                       — open a site-convened Durance session at this room
+durance selectpath <path name or id>  — one-time recovery: pick a path when you have none on
+                                         record at all (SelectPathAction, #2121)
 ```
 
 `durance convene` calls `convene_durance_at_site` and echoes the session pk. The inductee

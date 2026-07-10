@@ -31,12 +31,14 @@ from actions.definitions.progression_rewards import (
     ClearPathIntentAction,
     RemoveVoteAction,
     RerollRandomSceneAction,
+    SelectPathAction,
     SetPathIntentAction,
 )
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
 from web.api.mixins import CharacterContextMixin
 from world.character_sheets.models import CharacterSheet
+from world.classes.serializers import PathListSerializer
 from world.game_clock.week_services import get_current_game_week
 from world.magic.services.threads import near_xp_lock_threads
 from world.progression.models import (
@@ -55,10 +57,12 @@ from world.progression.serializers import (
     AccountProgressionSerializer,
     CastVoteResponseSerializer,
     CastVoteSerializer,
+    InitialPathOptionsSerializer,
     PathIntentDeclareSerializer,
     PathIntentSerializer,
     PathOptionsSerializer,
     RandomSceneTargetSerializer,
+    SelectPathSerializer,
     VoteBudgetSerializer,
     WeeklyVoteSerializer,
 )
@@ -480,6 +484,65 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         PathIntent.flush_instance_cache()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# --- SelectPath (late-selection recovery) view (#2121) ---------------------
+
+
+class SelectPathViewSet(CharacterContextMixin, viewsets.ViewSet):
+    """Late-selection Path recovery for CG-bypassing characters (#2121).
+
+    For characters created via GM-finalize quickstart or NPCAsset -> PC
+    promotion — paths that never write a ``CharacterPathHistory`` row — so
+    ``current_path_for_character`` stays permanently ``None`` and the Ritual
+    of the Durance is unreachable with no in-play recourse.
+
+    GET  select-path/  — current path (should be null for a character that
+        needs this) + the 5 selectable PROSPECT paths.
+    POST select-path/  — body {"path_id": <int>}; fails when the character
+        already has a path on record (this is a one-time recovery, not a
+        general path-change tool — ``PathIntentViewSet``/path advancement
+        cover the "already on a path" case).
+
+    Ownership enforced via CharacterContextMixin: the X-Character-ID header
+    must refer to a character in the requesting account's available roster.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request: Request) -> Response:
+        """GET — current path (usually null) + selectable PROSPECT paths."""
+        from world.classes.models import Path, PathStage  # noqa: PLC0415
+
+        character = self._get_character(request)
+        if character is None:
+            return Response(
+                {"detail": NO_CHARACTER_FOUND_MESSAGE}, status=status.HTTP_404_NOT_FOUND
+            )
+        payload = {
+            "current_path": current_path_for_character(character),
+            "options": Path.objects.filter(stage=PathStage.PROSPECT, is_active=True),
+        }
+        return Response(InitialPathOptionsSerializer(payload).data)
+
+    def create(self, request: Request) -> Response:
+        """POST — select a starting path; only succeeds with no path on record."""
+        character = self._get_character(request)
+        if character is None:
+            return Response(
+                {"detail": NO_CHARACTER_FOUND_MESSAGE}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = SelectPathSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        path = serializer.validated_path
+
+        result = SelectPathAction().run(actor=character, path_id=path.pk)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"current_path": PathListSerializer(path).data}, status=status.HTTP_201_CREATED
+        )
 
 
 # --- Unlock shop views ---

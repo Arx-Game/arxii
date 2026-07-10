@@ -23,6 +23,17 @@ AGE_MAX = 65
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 
+# Canonical fallback starting room (#2121). Seeded by
+# ``world.seeds.character_creation.ensure_canonical_fallback_room`` and wired onto
+# the dev-seeded "Arx City" StartingArea's ``default_starting_room``. Also the
+# last-resort read ``CharacterDraft.get_starting_room()`` falls back to when
+# neither a Beginnings override nor a StartingArea default is set — so a freshly
+# approved character never spawns with ``location=None``. Both the seeder and the
+# runtime fallback key off this same (name, typeclass) pair so they always agree
+# on the same room, regardless of which seed cluster ran first.
+FALLBACK_STARTING_ROOM_KEY = "The Wanderer's Rest"
+FALLBACK_STARTING_ROOM_TYPECLASS = "typeclasses.rooms.Room"
+
 
 class Stage(models.IntegerChoices):
     """Character creation stages."""

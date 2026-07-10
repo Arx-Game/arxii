@@ -30,6 +30,43 @@ from world.species.factories import SpeciesFactory
 from world.traits.models import Trait, TraitType
 
 
+class GetStartingRoomFallbackTests(TestCase):
+    """CharacterDraft.get_starting_room() loud-fallback branch (#2121)."""
+
+    def test_returns_beginnings_override_first(self) -> None:
+        from evennia_extensions.factories import ObjectDBFactory
+
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        beginnings = BeginningsFactory(starting_room_override=room)
+        draft = CharacterDraftFactory(selected_beginnings=beginnings)
+        self.assertEqual(draft.get_starting_room(), room)
+
+    def test_returns_starting_area_default_second(self) -> None:
+        from evennia_extensions.factories import ObjectDBFactory
+
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        area = StartingAreaFactory(default_starting_room=room)
+        draft = CharacterDraftFactory(selected_area=area, selected_beginnings=None)
+        self.assertEqual(draft.get_starting_room(), room)
+
+    def test_falls_back_to_canonical_seeded_room_when_unwired(self) -> None:
+        """No Beginnings override, no StartingArea default -> the seeded fallback."""
+        from world.seeds.character_creation import ensure_canonical_fallback_room
+
+        fallback_room = ensure_canonical_fallback_room()
+        area = StartingAreaFactory(default_starting_room=None)
+        draft = CharacterDraftFactory(selected_area=area, selected_beginnings=None)
+
+        self.assertEqual(draft.get_starting_room(), fallback_room)
+
+    def test_returns_none_when_fallback_room_not_yet_seeded(self) -> None:
+        """Never raises — a config gap the player can't fix degrades to None."""
+        area = StartingAreaFactory(default_starting_room=None)
+        draft = CharacterDraftFactory(selected_area=area, selected_beginnings=None)
+
+        self.assertIsNone(draft.get_starting_room())
+
+
 class AppearanceStageCompletionTest(TestCase):
     """Test appearance stage completion logic."""
 

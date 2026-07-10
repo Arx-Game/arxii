@@ -142,3 +142,110 @@ def seed_kudos_content() -> None:
     seed_spread_assist_kudos_category()
     seed_relationship_writeup_kudos_category()
     seed_xp_kudos_claim_category()
+
+
+# --- Durance officiant bootstrap (#2121) -----------------------------------
+
+#: PLACEHOLDER class stamped on every seeded Durance training officiant.
+#: assert_can_officiate never reads CharacterClass — only current_level (any
+#: class) and Path lineage — so one shared class suffices for all 5.
+_DURANCE_OFFICIANT_CLASS_NAME = "Adventurer"
+#: Comfortably above the only within-PROSPECT-stage Durance target (level 2 —
+#: PROSPECT covers levels 1-2; level 3 crosses to POTENTIAL via Audere Majora,
+#: not the Durance). assert_can_officiate only requires officiant > target.
+_DURANCE_OFFICIANT_LEVEL = 5
+
+#: The 5 CG-selectable PROSPECT paths, seeded by
+#: world.seeds.game_content.magic.seed_cantrip_starter_catalog. One officiant
+#: per path — see world/progression/CLAUDE.md's PROSPECT/style mapping.
+_DURANCE_OFFICIANT_PATH_NAMES: tuple[str, ...] = (
+    "Path of Steel",
+    "Path of Whispers",
+    "Path of Voice",
+    "Path of the Chosen",
+    "Path of Tomes",
+)
+
+_OFFICIANT_TYPECLASS = "typeclasses.characters.Character"
+
+
+def seed_durance_officiants() -> list:
+    """Seed one NPC officiant + DuranceTrainingSite per PROSPECT path (#2121).
+
+    Without this, no character can ever take the first-ever Ritual of the
+    Durance: ``assert_can_officiate`` (``services/advancement.py``) requires a
+    same-path-lineage officiant strictly above the inductee's target level,
+    and none exists on a fresh DB — ``durance convene`` always raises
+    ``NoDuranceSiteError``. Each officiant is a non-CG NPC built via
+    ``create_character_with_sheet`` (the same non-CG creation path NPCAsset
+    promotion uses, ``world/assets/effects.py``) — not a full CG run — placed
+    at the canonical fallback starting room (``ensure_canonical_fallback_room``,
+    #2121) so a freshly finalized character can always reach one.
+
+    Idempotent and staff-edit-preserving: officiants are looked up by a
+    stable ``ObjectDB.db_key`` (mirrors the cascade-room lookup pattern —
+    ``db_key`` is not unique in Evennia, so ``.filter().first()``). The
+    officiant's class level and path history are written ONLY at first
+    creation (never re-clobbered on a later run, unlike a tuning-knob
+    singleton) — a staff-adjusted officiant level survives re-seeding. The
+    ``CharacterClass``/``DuranceTrainingSite`` rows are ordinary
+    ``get_or_create``.
+
+    Skips a path silently if the magic cluster hasn't seeded it yet — cluster
+    ordering (``world.seeds.clusters``, "progression" after "magic") guarantees
+    this can't happen via the Big Button; defensive only.
+
+    Returns:
+        The list of DuranceTrainingSite rows (created or fetched), one per
+        successfully-resolved PROSPECT path.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    from world.areas.services import get_room_profile  # noqa: PLC0415
+    from world.character_sheets.services import create_character_with_sheet  # noqa: PLC0415
+    from world.classes.models import CharacterClass, Path  # noqa: PLC0415
+    from world.classes.services import set_primary_class_level  # noqa: PLC0415
+    from world.progression.models import CharacterPathHistory, DuranceTrainingSite  # noqa: PLC0415
+    from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
+
+    room = ensure_canonical_fallback_room()
+    room_profile = get_room_profile(room)
+    officiant_class, _ = CharacterClass.objects.get_or_create(
+        name=_DURANCE_OFFICIANT_CLASS_NAME,
+        defaults={
+            "description": "PLACEHOLDER class stamped on seeded Durance training officiants.",
+        },
+    )
+
+    sites: list[DuranceTrainingSite] = []
+    for path_name in _DURANCE_OFFICIANT_PATH_NAMES:
+        try:
+            path = Path.objects.get(name=path_name)
+        except Path.DoesNotExist:
+            continue
+
+        officiant_key = f"{path_name} Trainer"
+        character = ObjectDB.objects.filter(
+            db_key=officiant_key, db_typeclass_path=_OFFICIANT_TYPECLASS
+        ).first()
+        is_new = character is None
+        if is_new:
+            character, _sheet, _persona = create_character_with_sheet(
+                character_key=officiant_key,
+                primary_persona_name=officiant_key,
+                home=room,
+            )
+            character.location = room
+            character.save()
+            set_primary_class_level(character, officiant_class, _DURANCE_OFFICIANT_LEVEL)
+            CharacterPathHistory.objects.create(character=character, path=path)
+
+        sheet = character.sheet_data
+        site, _ = DuranceTrainingSite.objects.get_or_create(
+            room_profile=room_profile,
+            officiant=sheet,
+            defaults={"training_path": path, "is_active": True},
+        )
+        sites.append(site)
+
+    return sites

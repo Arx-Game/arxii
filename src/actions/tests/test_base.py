@@ -320,6 +320,7 @@ class ActionRegistryTests(TestCase):
             "reroll_random_scene",
             "set_path_intent",
             "clear_path_intent",
+            "select_path",
             "give_writeup_kudos",
             "file_writeup_complaint",
             "author_technique",

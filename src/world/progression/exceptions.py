@@ -68,3 +68,20 @@ class NoDuranceSiteError(ClassLevelAdvancementError):
     """No active DuranceTrainingSite in this room has an eligible trainer."""
 
     user_message = "There is no Durance training site with an eligible trainer here."
+
+
+class PathAlreadySelectedError(ClassLevelAdvancementError):
+    """The character already has a CharacterPathHistory row on record.
+
+    Raised by ``select_initial_path`` (#2121) — the late-selection recovery
+    surface for characters created via a CG-bypassing path (GM-finalize
+    quickstart, NPCAsset -> PC promotion). It is a one-time recovery, not a
+    general path-change tool: ``cross_into_path`` (Audere Majora crossings,
+    the Durance POTENTIAL semi-crossing) is the seam for changing an
+    already-set path.
+    """
+
+    user_message = (
+        "You have already selected a path. This recovery action is only for "
+        "characters with no path on record."
+    )

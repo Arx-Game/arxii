@@ -3406,10 +3406,21 @@ class RitualOfTheDuranceFactory(factory.django.DjangoModelFactory):
 
     @factory.post_generation
     def liturgy(self, create: bool, extracted: object, **kwargs: object) -> None:
-        """Create the companion RitualLiturgy row after the Ritual is saved."""
+        """Create the companion RitualLiturgy row after the Ritual is saved.
+
+        Idempotency guard (#2121): ``RitualOfTheDuranceFactory`` uses
+        ``django_get_or_create`` on ``name``, so a second call in the same DB
+        state (e.g. a seed idempotency test calling the seeder twice) returns
+        the SAME ritual row — but this ``post_generation`` hook still fires on
+        every call. Without the existence check, it would try to insert a
+        second ``RitualLiturgy`` for the same ritual and hit the OneToOne
+        ``ritual`` unique constraint.
+        """
         if not create:
             return
         if extracted is not None:
+            return
+        if RitualLiturgy.objects.filter(ritual=self).exists():
             return
         RitualLiturgyFactory(ritual=self)
 

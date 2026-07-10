@@ -92,7 +92,9 @@ Checks if account can create characters (verified, positive trust, under limit).
 
 ## Important Notes
 
-- Starting rooms may be None during early testing before the grid is built
+- Starting rooms always resolve to a real room (#2121): a `Beginnings`/`StartingArea`
+  override, or `CharacterDraft.get_starting_room()`'s canonical-fallback-room branch
+  (logged loudly) — never a silent `location=None` spawn
 - Commoner families are created only at final submission to avoid orphaned records
 - Staff bypass all access restrictions and limits
 - Navigation between stages is free; incomplete stages are highlighted but not blocked

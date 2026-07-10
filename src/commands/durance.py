@@ -1,12 +1,16 @@
 """Telnet command for the Ritual of the Durance — status / intent / convene (#1700).
 
-A single command routes three verbs through the Durance lifecycle:
+A single command routes verbs through the Durance lifecycle:
 - bare ``durance`` / ``durance status`` — readiness hub: level, unlock gate, eligible paths,
   declared intent, and whether a training site is present.
 - ``durance intent <path|clear>`` — declare (or clear) a path intent via the existing
   ``SetPathIntentAction`` / ``ClearPathIntentAction`` actions.
 - ``durance convene`` — open a site-convened Durance session via ``convene_durance_at_site``;
   the inductee then joins via ``ritual join <session_pk>``.
+- ``durance selectpath <path name or id>`` — late-selection recovery for a character with no
+  path on record at all (GM-finalize quickstart, NPCAsset promotion, #2121) via
+  ``SelectPathAction``. Distinct from ``intent`` (which requires an existing path to compute
+  the *next*-stage options from) — this is the one-time initial pick.
 
 This is setup + status only — never a ceremony bypass. The rite itself runs through
 the existing ``ritual`` verbs (``ritual join <id> testament=<oration> path=<name>``).
@@ -22,6 +26,7 @@ from commands.exceptions import CommandError
 _STATUS_SUBVERB = "status"
 _INTENT_SUBVERB = "intent"
 _CONVENE_SUBVERB = "convene"
+_SELECTPATH_SUBVERB = "selectpath"
 _CLEAR_TOKEN = "clear"  # noqa: S105
 
 
@@ -34,6 +39,8 @@ class CmdDurance(ArxCommand):
         durance intent <path name or id>    — declare your intended next path
         durance intent clear                — clear your declared path intent
         durance convene                     — open a site-convened Durance session
+        durance selectpath <path name or id> — one-time recovery: pick a path when
+                                                you have none on record at all
     """
 
     key = "durance"
@@ -59,9 +66,11 @@ class CmdDurance(ArxCommand):
                 self._intent(rest)
             elif subverb == _CONVENE_SUBVERB:
                 self._convene()
+            elif subverb == _SELECTPATH_SUBVERB:
+                self._selectpath(rest)
             else:
                 self.caller.msg(
-                    f"Unknown durance action '{subverb}'. Try: status, intent, convene."
+                    f"Unknown durance action '{subverb}'. Try: status, intent, convene, selectpath."
                 )
         except CommandError as err:
             self.caller.msg(str(err))
@@ -205,6 +214,30 @@ class CmdDurance(ArxCommand):
             path_id = matched[0].pk
 
         result = SetPathIntentAction().run(actor=self.caller, path_id=path_id)
+        self.caller.msg(result.message)
+
+    def _selectpath(self, rest: str) -> None:
+        """One-time recovery: pick a Path when the caller has none on record (#2121)."""
+        from actions.definitions.progression_rewards import SelectPathAction  # noqa: PLC0415
+        from world.classes.models import Path, PathStage  # noqa: PLC0415
+
+        if not rest:
+            msg = "Usage: durance selectpath <path name or id>."
+            raise CommandError(msg)
+
+        prospect_paths = Path.objects.filter(stage=PathStage.PROSPECT, is_active=True)
+        if rest.isdigit():
+            path_id = int(rest)
+        else:
+            needle = rest.casefold()
+            matched = [p for p in prospect_paths if p.name.casefold() == needle]
+            if not matched:
+                names = ", ".join(p.name for p in prospect_paths)
+                msg = f"No starting path named '{rest}'. Options: {names}."
+                raise CommandError(msg)
+            path_id = matched[0].pk
+
+        result = SelectPathAction().run(actor=self.caller, path_id=path_id)
         self.caller.msg(result.message)
 
     def _convene(self) -> None:

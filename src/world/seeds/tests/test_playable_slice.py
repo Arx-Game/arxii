@@ -149,3 +149,7 @@ class TestSeededCharacterCreation(TestCase):
 
         self.assertIsNotNone(character)
         self.assertTrue(CharacterSheet.objects.filter(character=character).exists())
+        # #2121 — the seeded "Arx City" StartingArea now carries a wired
+        # default_starting_room; finalize_character() never produces
+        # location=None on a Big-Button-seeded DB.
+        self.assertIsNotNone(character.location)

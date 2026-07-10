@@ -10,6 +10,7 @@ Models for the staged character creation flow:
 from __future__ import annotations
 
 from datetime import timedelta
+import logging
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -38,6 +39,8 @@ from world.character_creation.types import (
     StageValidationErrors,
 )
 from world.classes.models import PathStage
+
+logger = logging.getLogger(__name__)
 
 
 class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
@@ -99,7 +102,10 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
     Each area gates which heritage options, species, and families are available.
     Maps to an Evennia room for character starting location.
 
-    Note: Rooms may be None during early testing before grid is built.
+    Note: ``default_starting_room`` may be unset on a hand-built row (a staff
+    config gap) — ``CharacterDraft.get_starting_room()`` falls back to the
+    canonical seeded room + logs a warning in that case (#2121); it never
+    silently spawns a character with ``location=None``.
     """
 
     # Alias for backward compatibility — canonical definition is in constants.py
@@ -135,7 +141,8 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         related_name="starting_area_default",
         help_text="Default Evennia room where characters from this area start. "
-        "Can be None during early testing.",
+        "A staff config gap if unset — get_starting_room() falls back to the "
+        "canonical seeded room (#2121).",
     )
     is_active = models.BooleanField(
         default=True,
@@ -681,7 +688,15 @@ class CharacterDraft(SharedMemoryModel):
         Priority:
         1. Beginnings starting_room_override (e.g., Sleeper wake room)
         2. StartingArea default_starting_room
-        3. None (valid for Evennia, used during early testing)
+        3. The canonical fallback room seeded by
+           ``world.seeds.character_creation.ensure_canonical_fallback_room`` (#2121)
+           — logged loudly, since it means a staff config gap (an unwired
+           Beginnings/StartingArea), not expected steady-state. Never
+           ``location=None``: a config gap the player can't fix must not
+           block their finalize.
+        4. None — only when even the canonical fallback room hasn't been
+           seeded (e.g. a raw DB that never ran the Big Button). Logged as an
+           error; callers must not assume this can't happen.
         """
         if self.selected_beginnings and self.selected_beginnings.starting_room_override:
             return self.selected_beginnings.starting_room_override
@@ -689,6 +704,30 @@ class CharacterDraft(SharedMemoryModel):
         if self.selected_area and self.selected_area.default_starting_room:
             return self.selected_area.default_starting_room
 
+        from world.character_creation.constants import (  # noqa: PLC0415
+            FALLBACK_STARTING_ROOM_KEY,
+            FALLBACK_STARTING_ROOM_TYPECLASS,
+        )
+
+        fallback = ObjectDB.objects.filter(
+            db_key=FALLBACK_STARTING_ROOM_KEY,
+            db_typeclass_path=FALLBACK_STARTING_ROOM_TYPECLASS,
+        ).first()
+        if fallback is not None:
+            logger.warning(
+                "CharacterDraft %s has no Beginnings/StartingArea starting room "
+                "wired — falling back to the canonical seeded room %r.",
+                self.pk,
+                fallback.db_key,
+            )
+            return fallback
+
+        logger.error(
+            "CharacterDraft %s has no Beginnings/StartingArea starting room, and "
+            "the canonical fallback room is not seeded — character will spawn "
+            "with location=None. Run the Big Button seed to fix this.",
+            self.pk,
+        )
         return None
 
     def get_stage_completion(self) -> dict[int, bool]:

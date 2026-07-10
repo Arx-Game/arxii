@@ -18,6 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
+from django.db.models import Q
+
 from world.missions.constants import GiverKind
 from world.missions.models import MissionGiver
 from world.missions.services.boards import postings_for_giver
@@ -67,11 +69,18 @@ def opportunities_for_character(character: ObjectDB) -> OpportunitiesResult:
 
 
 def _here_postings(character: ObjectDB, room: ObjectDB | None) -> list[OpportunityRow]:
-    """Boards in the current room — list their eligible postings."""
+    """Boards in the current room — list their eligible postings.
+
+    A BOARD giver's ``target`` is the examinable board object itself (an
+    Object typeclass; ``clean()`` forbids Room), never the room — a board is
+    physically located IN a room via ``target.db_location``, not equal to it
+    (#2121; matches the ``target=obj`` lookup ``_maybe_render_board_postings``
+    uses when a player examines the board directly).
+    """
     if room is None:
         return []
     boards = MissionGiver.objects.filter(
-        target=room, giver_kind=GiverKind.BOARD, is_active=True
+        target__db_location=room, giver_kind=GiverKind.BOARD, is_active=True
     ).prefetch_related("templates")  # noqa: PREFETCH_STRING
     rows: list[OpportunityRow] = []
     for board in boards:
@@ -109,8 +118,13 @@ def _nearby_givers(character: ObjectDB, room: ObjectDB | None) -> list[Opportuni
     area_room_ids = set(
         RoomProfile.objects.filter(area_id=profile.area_id).values_list("objectdb_id", flat=True)
     )
+    # BOARD givers' target is the board object, physically located IN a room
+    # (target.db_location) — never the room itself. ROOM_TRIGGER givers' target
+    # IS the room. Matches ``_here_postings``' fix (#2121).
     givers = MissionGiver.objects.filter(
-        target_id__in=area_room_ids, is_active=True
+        Q(giver_kind=GiverKind.BOARD, target__db_location_id__in=area_room_ids)
+        | (~Q(giver_kind=GiverKind.BOARD) & Q(target_id__in=area_room_ids)),
+        is_active=True,
     ).prefetch_related("templates")  # noqa: PREFETCH_STRING
     try:
         persona = persona_for_character(cast("Character", character))
