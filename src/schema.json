@@ -3821,7 +3821,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Starting Area.
         required: true
       tags:
       - character-creation
