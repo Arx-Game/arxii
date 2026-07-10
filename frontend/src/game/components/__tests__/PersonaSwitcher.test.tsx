@@ -12,6 +12,13 @@ const { state, mutate } = vi.hoisted(() => ({
 vi.mock('../../personaQueries', () => ({
   useCharacterPersonasQuery: () => ({ data: state.personas }),
   useSetActivePersonaMutation: () => ({ mutate, isPending: false }),
+  useSetPersonaProfileMutation: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
 }));
 
 function persona(
