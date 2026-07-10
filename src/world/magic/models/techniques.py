@@ -316,6 +316,13 @@ class Technique(DiscoverableContent, SharedMemoryModel):
             "(SAME=melee, ADJACENT=reach, ANY=ranged)."
         ),
     )
+    reach_hops = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "When reach=REACH_N, the maximum number of passable edges "
+            "BFS may traverse. Ignored for SAME/ADJACENT/ANY."
+        ),
+    )
     target_type = models.CharField(
         max_length=20,
         choices=ActionTargetType.choices,
@@ -433,6 +440,13 @@ class Technique(DiscoverableContent, SharedMemoryModel):
     class Meta:
         verbose_name = "Technique"
         verbose_name_plural = "Techniques"
+
+    def clean(self) -> None:
+        """Validate reach_hops is meaningful when reach=REACH_N."""
+        super().clean()
+        if self.reach == TechniqueReach.REACH_N and self.reach_hops < 1:
+            msg = "reach_hops must be >= 1 when reach is REACH_N."
+            raise ValidationError({"reach_hops": msg})
 
     @cached_property
     def cached_restrictions(self) -> list:

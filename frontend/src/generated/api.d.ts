@@ -28261,8 +28261,11 @@ export interface components {
        *     * `same` - Same position
        *     * `adjacent` - Adjacent position
        *     * `any` - Anywhere in room
+       *     * `reach_n` - N-hop reach
        */
       reach?: components['schemas']['TechniqueReachEnum'];
+      /** @description When reach=REACH_N, the maximum number of passable edges BFS may traverse. Ignored for SAME/ADJACENT/ANY. */
+      reach_hops?: number;
     };
     /** @description Serialize tenure galleries. */
     PatchedTenureGalleryRequest: {
@@ -32345,8 +32348,11 @@ export interface components {
        *     * `same` - Same position
        *     * `adjacent` - Adjacent position
        *     * `any` - Anywhere in room
+       *     * `reach_n` - N-hop reach
        */
       reach?: components['schemas']['TechniqueReachEnum'];
+      /** @description When reach=REACH_N, the maximum number of passable edges BFS may traverse. Ignored for SAME/ADJACENT/ANY. */
+      reach_hops?: number;
       readonly tier: number;
       readonly target_spec: components['schemas']['TargetSpec'];
     };
@@ -32369,9 +32375,10 @@ export interface components {
      * @description * `same` - Same position
      *     * `adjacent` - Adjacent position
      *     * `any` - Anywhere in room
+     *     * `reach_n` - N-hop reach
      * @enum {string}
      */
-    TechniqueReachEnum: 'same' | 'adjacent' | 'any';
+    TechniqueReachEnum: 'same' | 'adjacent' | 'any' | 'reach_n';
     /** @description Serializer for Technique records with intensity and control stats. */
     TechniqueRequest: {
       /** @description Name of the technique (not unique - different characters can have same name). */
@@ -32401,8 +32408,11 @@ export interface components {
        *     * `same` - Same position
        *     * `adjacent` - Adjacent position
        *     * `any` - Anywhere in room
+       *     * `reach_n` - N-hop reach
        */
       reach?: components['schemas']['TechniqueReachEnum'];
+      /** @description When reach=REACH_N, the maximum number of passable edges BFS may traverse. Ignored for SAME/ADJACENT/ANY. */
+      reach_hops?: number;
     };
     /** @description Serializer for TechniqueStyle lookup records. */
     TechniqueStyle: {

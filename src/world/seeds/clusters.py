@@ -18,6 +18,9 @@ def _seed_items() -> None:
 
 
 def _seed_combat() -> None:
+    from world.combat.factories import (  # noqa: PLC0415
+        wire_elevation_advantage_modifier_target,
+    )
     from world.seeds.game_content.combat import (  # noqa: PLC0415
         seed_dramatic_surge_content,
         seed_encounter_beat_wiring,
@@ -29,6 +32,7 @@ def _seed_combat() -> None:
     seed_flee_check()
     seed_encounter_beat_wiring()
     seed_dramatic_surge_content()
+    wire_elevation_advantage_modifier_target()
 
 
 def _seed_battles() -> None:

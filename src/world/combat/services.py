@@ -68,6 +68,7 @@ from world.combat.constants import (
     DEFENSE_NO_DAMAGE_THRESHOLD,
     DEFENSE_REDUCED_MULTIPLIER,
     DEFENSE_REDUCED_THRESHOLD,
+    ELEVATION_ADVANTAGE_TARGET_NAME,
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     FLEE_PARTIAL_SUCCESS_LEVEL,
@@ -3993,6 +3994,9 @@ def apply_damage_to_participant(  # noqa: PLR0913
     # armor is their only soak source, and absorbing pieces take durability wear.
     effective_damage = apply_equipped_armor_soak(character, effective_damage)
 
+    # Attack-cover from PositionShelter (applies_to_attacks=True rows, #2011).
+    effective_damage = apply_position_cover(character, effective_damage, damage_type)
+
     # Condition-damage interactions (#2018). Final percentage multiplier on
     # net damage, after resistance + armor soak. May consume/transform conditions.
     interaction_result = None
@@ -7626,6 +7630,56 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> int:
         decrement_item_durability(item_instance=inst)
 
     return max(0, damage - soak)
+
+
+def apply_position_cover(character: Character, damage: int, damage_type: DamageType | None) -> int:
+    """Subtract attack-cover from damage.
+
+    Reads the character's current position and sums PositionShelter rows with
+    applies_to_attacks=True for the given damage type. No-op when the character
+    is unpositioned (lenient — matching technique_can_reach) or when damage_type
+    is None (untyped damage has no cover).
+
+    Args:
+        character: The target character taking damage.
+        damage: The incoming damage amount (after armor soak, before condition interactions).
+        damage_type: The damage type of the incoming attack (None = untyped, no cover).
+
+    Returns:
+        The damage after cover reduction, floored at 0.
+    """
+    if damage <= 0 or damage_type is None:
+        return damage
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        position_of,
+        position_shelter_value,
+    )
+
+    position = position_of(character)
+    if position is None:
+        return damage
+    cover = position_shelter_value(position, damage_type, attacks_only=True)
+    return max(0, damage - cover)
+
+
+def elevation_bonus(
+    attacker_sheet: CharacterSheet, attacker_pos: Position, target_pos: Position
+) -> int:
+    """Flat to-hit bonus when attacker is elevated/aerial and target is not.
+
+    Returns 0 in all other cases (both elevated, both ground, attacker
+    ground / target elevated). Offensive-only — no penalty for firing up.
+    The magnitude comes from the 'elevation_advantage' ModifierTarget
+    (staff-authored via CharacterModifier).
+    """
+    from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
+
+    elevated_kinds = {PositionKind.ELEVATED, PositionKind.AERIAL}
+    if attacker_pos.kind not in elevated_kinds:
+        return 0
+    if target_pos.kind in elevated_kinds:
+        return 0
+    return _combat_target_bonus(attacker_sheet, ELEVATION_ADVANTAGE_TARGET_NAME)
 
 
 def _select_equipped_weapon(character: Character) -> ItemInstance | None:

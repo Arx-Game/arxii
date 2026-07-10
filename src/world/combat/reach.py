@@ -34,4 +34,9 @@ def technique_can_reach(attacker: ObjectDB, technique: Technique, target: Object
     if target_pos is None:
         return True
 
-    return position_reachable(attacker_pos, target_pos, technique.reach)
+    return position_reachable(
+        attacker_pos,
+        target_pos,
+        technique.reach,
+        reach_hops=technique.reach_hops,
+    )

@@ -271,6 +271,7 @@ def instantiate_blueprint(
                     position=live_pos,
                     damage_type=bp_shelter.damage_type,
                     value=bp_shelter.value,
+                    applies_to_attacks=bp_shelter.applies_to_attacks,
                 )
                 for bp_shelter in bp_pos.shelters.all()
             ]
@@ -285,24 +286,64 @@ def instantiate_blueprint(
 # ---------------------------------------------------------------------------
 
 
-def position_reachable(origin: Position, target: Position, reach: str) -> bool:
-    """Whether `target` is reachable from `origin` under a TechniqueReach value.
+def _reachable_within_hops(origin: Position, max_hops: int) -> set[Position]:
+    """Positions reachable from ``origin`` within ``max_hops`` passable edges.
+
+    Hop-limited BFS following reach semantics: traverses edges where
+    ``edge.is_passable`` is True, ignoring active gating challenges (mirrors
+    ADJACENT — gating challenges gate movement, not reach). The starting
+    position is not included in the result.
+    """
+    seen: set[int] = {origin.pk}
+    frontier: deque[tuple[Position, int]] = deque([(origin, 0)])
+    result: set[Position] = set()
+    while frontier:
+        current, depth = frontier.popleft()
+        if depth >= max_hops:
+            continue
+        edges = PositionEdge.objects.filter(
+            Q(position_a=current) | Q(position_b=current),
+            is_passable=True,
+        )
+        for edge in edges:
+            other = edge.position_b if edge.position_a_id == current.pk else edge.position_a
+            if other.pk not in seen:
+                seen.add(other.pk)
+                result.add(other)
+                frontier.append((other, depth + 1))
+    return result
+
+
+def position_reachable(
+    origin: Position,
+    target: Position,
+    reach: str,
+    *,
+    reach_hops: int | None = None,
+) -> bool:
+    """Whether ``target`` is reachable from ``origin`` under a TechniqueReach value.
 
     SAME     -> target is the same position.
     ADJACENT -> same position, or a directly-connected passable edge exists.
                 (Gating challenges gate movement, not reach — an ADJACENT
                 technique can strike across a movement-gated edge.)
+    REACH_N  -> same position, or target is within ``reach_hops`` passable edges
+                via BFS. Follows reach semantics (is_passable only, ignores
+                active gating challenges — same as ADJACENT).
     ANY      -> any position in the same room.
     """
     from world.magic.constants import TechniqueReach
 
     if reach == TechniqueReach.SAME:
         return origin.pk == target.pk
-    if reach == TechniqueReach.ADJACENT:
+    if reach in (TechniqueReach.ADJACENT, TechniqueReach.REACH_N):
         if origin.pk == target.pk:
             return True
-        edge = edge_between(origin, target)
-        return edge is not None and edge.is_passable
+        if reach == TechniqueReach.ADJACENT:
+            edge = edge_between(origin, target)
+            return edge is not None and edge.is_passable
+        max_hops = reach_hops if reach_hops is not None else 1
+        return target in _reachable_within_hops(origin, max_hops)
     if reach == TechniqueReach.ANY:
         return origin.room_id == target.room_id
     # Unknown reach value — conservative fallback.
@@ -724,12 +765,21 @@ def maybe_emit_fall(objectdb: ObjectDB, position: Position) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def position_shelter_value(position: Position, damage_type: DamageType) -> int:
+def position_shelter_value(
+    position: Position, damage_type: DamageType, *, attacks_only: bool = False
+) -> int:
     """Sum of all PositionShelter.current_value() for (position, damage_type).
 
     Returns 0 if no shelter rows exist. Multiple rows stack additively.
+
+    Args:
+        attacks_only: When True, only sum rows with applies_to_attacks=True
+            (attack-cover). When False (default), sum ALL rows (hazard + attack).
     """
-    return sum(ps.current_value() for ps in position.shelters.filter(damage_type=damage_type))
+    qs = position.shelters.filter(damage_type=damage_type)
+    if attacks_only:
+        qs = qs.filter(applies_to_attacks=True)
+    return sum(ps.current_value() for ps in qs)
 
 
 def cleanup_position_shelters(*, now: datetime | None = None) -> int:

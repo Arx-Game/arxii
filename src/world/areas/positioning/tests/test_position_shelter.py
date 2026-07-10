@@ -164,3 +164,62 @@ class CleanupPositionSheltersTests(TestCase):
         deleted = cleanup_position_shelters(now=now)
         self.assertEqual(deleted, 1)
         self.assertEqual(PositionShelter.objects.count(), 0)
+
+
+class PositionShelterAttacksOnlyTests(TestCase):
+    """Tests for the applies_to_attacks flag and attacks_only filter."""
+
+    def setUp(self):
+        from evennia import create_object
+
+        from world.areas.positioning.services import create_position
+
+        self.room = create_object("typeclasses.rooms.Room", key="ShelterAtkRoom", nohome=True)
+        self.pos = create_position(self.room, "shelter_atk_pos")
+        self.radiant = ensure_radiant_damage_type()
+
+    def test_attack_shelter_included_by_default(self):
+        """position_shelter_value returns attack-cover when attacks_only=False."""
+        PositionShelter.objects.create(
+            position=self.pos,
+            damage_type=self.radiant,
+            value=20,
+            applies_to_attacks=True,
+        )
+        self.assertEqual(position_shelter_value(self.pos, self.radiant), 20)
+
+    def test_attacks_only_returns_attack_cover(self):
+        """position_shelter_value(attacks_only=True) returns only attack-cover rows."""
+        PositionShelter.objects.create(
+            position=self.pos,
+            damage_type=self.radiant,
+            value=20,
+            applies_to_attacks=True,
+        )
+        PositionShelter.objects.create(
+            position=self.pos,
+            damage_type=self.radiant,
+            value=50,
+            applies_to_attacks=False,
+        )
+        self.assertEqual(position_shelter_value(self.pos, self.radiant, attacks_only=True), 20)
+        self.assertEqual(position_shelter_value(self.pos, self.radiant), 70)
+
+    def test_no_attack_shelter_returns_zero(self):
+        """position_shelter_value(attacks_only=True) returns 0 when no attack-cover rows."""
+        PositionShelter.objects.create(
+            position=self.pos,
+            damage_type=self.radiant,
+            value=50,
+            applies_to_attacks=False,
+        )
+        self.assertEqual(position_shelter_value(self.pos, self.radiant, attacks_only=True), 0)
+
+    def test_default_applies_to_attacks_is_false(self):
+        """New PositionShelter rows default applies_to_attacks=False (hazard-only)."""
+        shelter = PositionShelter.objects.create(
+            position=self.pos,
+            damage_type=self.radiant,
+            value=10,
+        )
+        self.assertFalse(shelter.applies_to_attacks)
