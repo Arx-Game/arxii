@@ -237,7 +237,10 @@ export function GamePage() {
       }),
     onSuccess: () => {
       setActionAttachment(null);
-      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+      // No 'scene-messages' invalidation here (#2156 review fix): nothing in
+      // this codebase ever queries that key — the scene feed here is
+      // `useSceneInteractions`, which merges the WS-pushed interaction with no
+      // React Query cache to invalidate. The stale call was dead on arrival.
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
     },
     onError: () => {

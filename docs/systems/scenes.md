@@ -698,13 +698,18 @@ formatted prose instead of raw text.
 **Threading + per-thread unread:** `ConversationSidebar` renders `ThreadSidebar` +
 `ThreadFilterModal` from the `ThreadingState` `GamePage` composes, falling back to
 a static "Room" button with no active scene. Per-thread unread counts are backed by
-`Session.threadLastSeen` (per-thread last-seen timestamps, persisted in Redux via
-`markThreadSeen`) rather than stubbed to 0. A thread key with no last-seen entry —
-i.e. a thread that's new since the session started — falls back to
-`Session.sceneBaselineId`, a single scene-load baseline scalar set once via
+`Session.threadLastSeen` (per-thread last-seen **interaction ids**, persisted in
+Redux via `markThreadSeen`) rather than stubbed to 0. A thread key with no
+last-seen entry — i.e. a thread that's new since the session started — falls back
+to `Session.sceneBaselineId`, a single scene-load baseline scalar set once via
 `setSceneBaseline`; this is what lets a brand-new mid-session thread badge
 correctly as unread from its first message, rather than needing its own baseline
-established retroactively. With neither a per-thread entry nor a baseline (e.g.
+established retroactively. Both `GamePage`'s baseline-capture effect and its
+threading-filter/mute reset (`useThreading.resetForNewScene`) are keyed on
+`[active, sceneId]`, so a puppet switch or scene change never strands a stale
+filter/mute or wipes an already-baselined puppet's accumulated unread (the
+baseline gate reads the per-puppet Redux `sceneBaselineId` directly, not a
+single scalar ref). With neither a per-thread entry nor a baseline (e.g.
 `/scenes/:id`, which passes no threading options at all), unread is 0 — unchanged
 behavior for the record page.
 
@@ -731,9 +736,16 @@ is `None`) skips the check. `PlaceSerializer.viewer_is_present`
 requesting account's owned personas has a `PlacePresence` row at that place;
 memoized per serializer instance so a places-list response shares one owned-persona
 lookup across all rows instead of re-querying per row. Scene poses submitted from
-`/game` take the REST `submit-pose` path keyed by `scene_id` (not the scene's
-room id) — the fold-in fix that had `/game`'s places query using the scene id
-instead of the scene's room id is also folded into this slate.
+`/game` take the REST `submit-pose` path, keyed by `scene_id` — a pose belongs to
+a scene, not a room, so this is unrelated to room id.
+
+**Places query room-id vs scene-id (fold-in fix, unrelated to the above):**
+`PlaceBar`'s `sceneId` prop is actually used as the ROOM id by
+`fetchPlaces(?room=)` (confirmed by reading `PlaceBar.tsx` + `actionQueries.ts`)
+— so `/game` derives `placesRoomId`/`isAtPlace` from the scene's room
+(`roomData.id`), not the scene id. `SceneDetailPage` still passes the scene id
+there; that's a separate, pre-existing latent bug on that page, left untouched
+by this slate.
 
 ---
 
