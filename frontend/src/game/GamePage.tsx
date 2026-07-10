@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
@@ -16,6 +16,10 @@ import { Toaster } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useAppSelector } from '@/store/hooks';
+import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
+import { useThreading } from '@/scenes/hooks/useThreading';
+import { threadToComposerMode } from '@/scenes/hooks/threadToComposerMode';
+import type { ComposerMode } from './components/CommandInput';
 
 const DEFAULT_ROOM_ENTRY: FocusEntry = {
   kind: 'room',
@@ -38,6 +42,33 @@ export function GamePage() {
     [characters, active]
   );
   const activeCharacterId = activeEntry?.character_id ?? null;
+  // Lifted from GameWindow (#2156 review fold-in) — dedupes the roster query
+  // that both GamePage and GameWindow used to call independently.
+  const personaId = activeEntry?.primary_persona_id ?? null;
+
+  const activeSession = active ? sessions[active] : null;
+  const roomData = activeSession?.room ?? null;
+  const sceneData = activeSession?.scene ?? null;
+  const sceneId = sceneData ? String(sceneData.id) : undefined;
+  const roomName = sceneData?.name ?? roomData?.name ?? 'Room';
+
+  // GamePage is the composition root (#2156): it calls the scene-feed +
+  // threading hooks once for the active session's scene and feeds both the
+  // left column (ThreadSidebar via ConversationSidebar) and the center
+  // (SceneMessages + composer). Called unconditionally — sceneId is simply
+  // undefined with no active scene, which both hooks handle without firing
+  // network calls or producing threads.
+  const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId);
+  const threading = useThreading(allInteractions, roomName);
+  const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
+
+  const handleThreadClick = (key: string) => {
+    threading.setSelectedThread(key);
+    const thread = threading.threads.find((t) => t.key === key);
+    if (thread) {
+      setComposerMode(threadToComposerMode(thread, roomName));
+    }
+  };
 
   if (!account) {
     return (
@@ -54,10 +85,6 @@ export function GamePage() {
       </div>
     );
   }
-
-  const activeSession = active ? sessions[active] : null;
-  const roomData = activeSession?.room ?? null;
-  const sceneData = activeSession?.scene ?? null;
 
   // The tab label mirrors whatever is currently focused. While focused
   // on the room, fall back to the room name; defaults to "Room" when
@@ -79,8 +106,30 @@ export function GamePage() {
     <>
       <GameLayout
         topBar={<GameTopBar characters={characters} />}
-        leftSidebar={<ConversationSidebar />}
-        center={<GameWindow characters={characters} />}
+        leftSidebar={
+          <ConversationSidebar
+            threading={sceneId ? threading : undefined}
+            onThreadClick={handleThreadClick}
+          />
+        }
+        center={
+          <GameWindow
+            characters={characters}
+            sceneFeed={
+              sceneId
+                ? {
+                    sceneId,
+                    interactions: threading.filteredInteractions,
+                    hasNextPage,
+                    fetchNextPage,
+                  }
+                : undefined
+            }
+            composerMode={composerMode}
+            onModeChange={setComposerMode}
+            personaId={personaId}
+          />
+        }
         rightSidebar={
           <SidebarTabPanel
             roomTabLabel={roomTabLabel}

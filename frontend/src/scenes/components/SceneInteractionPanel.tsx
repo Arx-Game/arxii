@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useSceneInteractions } from '../hooks/useSceneInteractions';
 import { useThreading } from '../hooks/useThreading';
-import type { Thread } from '../hooks/useThreading';
+import { threadToComposerMode } from '../hooks/threadToComposerMode';
 import { ThreadSidebar } from './ThreadSidebar';
 import { ThreadFilterModal } from './ThreadFilterModal';
 import { SceneMessages } from './SceneMessages';
@@ -16,27 +16,6 @@ interface SceneInteractionPanelProps {
   onAttachAction?: (action: ActionAttachmentInfo) => void;
   /** When true, shows the GM dramatic-moment tagging control on each pose (#1139). */
   canGm?: boolean;
-}
-
-function threadToComposerMode(thread: Thread, roomName: string): ComposerMode {
-  switch (thread.type) {
-    case 'room':
-      return { command: 'pose', targets: [], label: `Pose \u2192 ${roomName}` };
-    case 'place':
-      return { command: 'tt', targets: [], label: `TT \u2192 ${thread.label}` };
-    case 'whisper':
-      return {
-        command: 'whisper',
-        targets: thread.participantPersonas.map((p) => p.name),
-        label: `Whisper \u2192 ${thread.label.replace('Whisper: ', '')}`,
-      };
-    case 'target':
-      return {
-        command: 'pose',
-        targets: thread.participantPersonas.map((p) => p.name),
-        label: `Pose \u2192 ${thread.label}`,
-      };
-  }
 }
 
 export function SceneInteractionPanel({
