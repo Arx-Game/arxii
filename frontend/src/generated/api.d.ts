@@ -7359,6 +7359,66 @@ export interface paths {
     patch: operations['group_story_progress_partial_update'];
     trace?: never;
   };
+  '/api/group-story-requests/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for GroupStoryRequest — the covenant-GM recruitment queue (#2119).
+     *
+     *     Mutation goes exclusively through ``POST /actions/characters/<id>/dispatch/``
+     *     (``RequestGMForCovenantAction`` / ``ClaimGroupStoryRequestAction`` /
+     *     ``WithdrawGroupStoryRequestAction``), never a custom ``@action`` here —
+     *     unlike ``StoryGMOffer``, per Decision 8.
+     *
+     *     Queryset scoping (mirrors ``StoryGMOfferViewSet.get_queryset``):
+     *       - Staff: all requests.
+     *       - GM: PENDING requests (the open queue) + requests they claimed.
+     *       - Everyone else: requests for covenants where they hold an active
+     *         ``CharacterCovenantRole``.
+     */
+    get: operations['group_story_requests_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/group-story-requests/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for GroupStoryRequest — the covenant-GM recruitment queue (#2119).
+     *
+     *     Mutation goes exclusively through ``POST /actions/characters/<id>/dispatch/``
+     *     (``RequestGMForCovenantAction`` / ``ClaimGroupStoryRequestAction`` /
+     *     ``WithdrawGroupStoryRequestAction``), never a custom ``@action`` here —
+     *     unlike ``StoryGMOffer``, per Decision 8.
+     *
+     *     Queryset scoping (mirrors ``StoryGMOfferViewSet.get_queryset``):
+     *       - Staff: all requests.
+     *       - GM: PENDING requests (the open queue) + requests they claimed.
+     *       - Everyone else: requests for covenants where they hold an active
+     *         ``CharacterCovenantRole``.
+     */
+    get: operations['group_story_requests_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/homepage/': {
     parameters: {
       query?: never;
@@ -19516,6 +19576,8 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description May lead this covenant's group rituals (e.g. Covenant Sanctification). */
       can_lead_rituals?: boolean;
+      /** @description May post an open ask for a GM to run a story for this covenant (GroupStoryRequest, #2119). Distinct from can_invite — petitioning an outside GM commits the covenant to outside oversight. */
+      can_request_gm?: boolean;
     };
     /**
      * @description Minimal nested representation of a CovenantRank (id, name, tier) for embedding
@@ -19549,6 +19611,8 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description May lead this covenant's group rituals (e.g. Covenant Sanctification). */
       can_lead_rituals?: boolean;
+      /** @description May post an open ask for a GM to run a story for this covenant (GroupStoryRequest, #2119). Distinct from can_invite — petitioning an outside GM commits the covenant to outside oversight. */
+      can_request_gm?: boolean;
     };
     /** @description Read-only serializer for CovenantRite authored definitions. */
     CovenantRite: {
@@ -21832,6 +21896,33 @@ export interface components {
       current_episode?: number | null;
       is_active?: boolean;
     };
+    /** @description Read serializer for GroupStoryRequest — the covenant-GM recruitment queue (#2119). */
+    GroupStoryRequest: {
+      readonly id: number;
+      readonly covenant: number;
+      /** @description The covenant officer who posted this request. */
+      readonly requested_by_account: number;
+      /** @description Optional pitch text. Visible to the whole (staff-vetted) GM pool. */
+      readonly message: string;
+      readonly status: components['schemas']['GroupStoryStatusEnum'];
+      /** @description The GM who claimed this request, once ACCEPTED. */
+      readonly claimed_by: number | null;
+      /** @description The GROUP-scope Story created on claim. */
+      readonly created_story: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly responded_at: string | null;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `withdrawn` - Withdrawn
+     * @enum {string}
+     */
+    GroupStoryStatusEnum: 'pending' | 'accepted' | 'withdrawn';
     /** @description POST body for the #1036 group-vote endpoint. */
     GroupVoteRequestRequest: {
       option_id: number;
@@ -25155,6 +25246,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['GroupStoryProgress'][];
     };
+    PaginatedGroupStoryRequestList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['GroupStoryRequest'][];
+    };
     PaginatedHeldClueList: {
       /** @example 123 */
       count: number;
@@ -26960,6 +27066,8 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description May lead this covenant's group rituals (e.g. Covenant Sanctification). */
       can_lead_rituals?: boolean;
+      /** @description May post an open ask for a GM to run a story for this covenant (GroupStoryRequest, #2119). Distinct from can_invite — petitioning an outside GM commits the covenant to outside oversight. */
+      can_request_gm?: boolean;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     PatchedEncounterDetailRequest: {
@@ -32870,6 +32978,7 @@ export interface components {
       can_invite: boolean;
       can_kick: boolean;
       can_manage_ranks: boolean;
+      can_request_gm: boolean;
     };
     /**
      * @description * `default` - Default
@@ -42830,6 +42939,57 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GroupStoryProgress'];
+        };
+      };
+    };
+  };
+  group_story_requests_list: {
+    parameters: {
+      query?: {
+        claimed_by?: number;
+        covenant?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGroupStoryRequestList'];
+        };
+      };
+    };
+  };
+  group_story_requests_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this group story request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GroupStoryRequest'];
         };
       };
     };
