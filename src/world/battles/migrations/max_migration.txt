@@ -1,1 +1,1 @@
-0026_add_move_transit_fields
+0027_alter_battleactiondeclaration_action_kind

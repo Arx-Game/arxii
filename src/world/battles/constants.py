@@ -57,6 +57,7 @@ class BattleActionKind(models.TextChoices):
     FORTIFY = "fortify", "Fortify a structure"
     SET_ENVIRONMENT = "set_environment", "Set battlefield weather"
     REPOSITION = "reposition", "Reposition a vehicle"
+    MOVE = "move", "Move to a front"
 
 
 class BattleActionScope(models.TextChoices):
@@ -136,6 +137,12 @@ REPEL_VP = 4
 HOLD_CAPTURE_VP = 8
 HOLD_SUSTAIN_VP = 3
 REPEL_DEFENSE_BONUS = 15
+
+# MOVE tuning (#2007). Distance/arrival is bounded by effective MOVEMENT
+# capability (see world.battles.resolution._resolve_move_success); movement_cost
+# only affects the MOVE technique check's difficulty, not the distance math —
+# its first real consumer (previously authored-but-inert, models.py:243).
+MOVE_COST_DIFFICULTY_PER_POINT = 5
 
 # Fortification BREACH/FORTIFY tuning (#1713). BREACH scales like STRIKE's attrition
 # (both grind a depletable resource); FORTIFY scales like ROUT/RALLY's morale
