@@ -23,6 +23,20 @@ def seed_champion_duel_outcome_wiring() -> None:
     wire_champion_duel_trigger()
 
 
+def seed_place_encounter_outcome_wiring() -> None:
+    """Seed the ENCOUNTER_COMPLETED -> place-encounter-outcome TriggerDefinition (#2008).
+
+    Creates (get_or_create) the encounter_completed_place_encounter_outcome
+    FlowDefinition (one CALL_SERVICE_FUNCTION step -> apply_place_encounter_outcome)
+    and its TriggerDefinition. Idempotent. The per-room Trigger is installed at
+    encounter-open time by ``open_place_encounter`` (via
+    ``install_place_encounter_trigger``), not here.
+    """
+    from world.battles.place_encounter_wiring import wire_place_encounter_trigger  # noqa: PLC0415
+
+    wire_place_encounter_trigger()
+
+
 # ---------------------------------------------------------------------------
 # Starter GM battle-staging catalog (#2010)
 # ---------------------------------------------------------------------------
