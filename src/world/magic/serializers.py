@@ -237,6 +237,7 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "source_cantrip",
             "target_type",
             "reach",
+            "reach_hops",
             "tier",
             "target_spec",
         ]
