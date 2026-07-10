@@ -36,7 +36,7 @@ export function SceneDetailPage() {
   const isActive = scene?.is_active ?? false;
   const roomName = scene?.name ?? 'Room';
   const activeCharacter = useAppSelector((state) => state.game.active);
-  const { data: battle } = useBattleForSceneQuery(id || null);
+  const { data: battle } = useBattleForSceneQuery(id ? Number(id) : null);
 
   // Resolve the active character's primary persona id for submit_pose REST calls.
   // Also derives characterSheetId: CharacterSheet uses OneToOneField(primary_key=True)

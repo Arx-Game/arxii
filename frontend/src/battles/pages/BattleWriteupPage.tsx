@@ -12,7 +12,7 @@
 import { Link, useParams } from 'react-router-dom';
 
 import { useBattleDetailQuery } from '../queries';
-import type { BattleDeed, BattleDetail } from '../types';
+import type { BattleDeed } from '../types';
 
 const OUTCOME_LABELS: Record<string, string> = {
   unresolved: 'Unresolved',
@@ -60,7 +60,7 @@ export function BattleWriteupPage() {
     );
   }
 
-  const deeds = (battle as BattleDetail & { deeds?: BattleDeed[] }).deeds ?? [];
+  const deeds = (battle.deeds as BattleDeed[] | undefined) ?? [];
   const outcomeLabel =
     OUTCOME_LABELS[battle.outcome ?? 'unresolved'] ?? battle.outcome ?? 'Unknown';
   const concluded = formatDate(battle.concluded_at as string | null | undefined);

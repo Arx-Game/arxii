@@ -310,7 +310,7 @@ describe('SceneDetailPage', () => {
 
   it('shows a Battle Writeup link when a battle exists for the scene (#1735)', () => {
     mockUseBattleForSceneQuery.mockReturnValue({
-      data: { id: 42 },
+      data: { id: 42 } as { id: number },
       isLoading: false,
       isError: false,
     });
