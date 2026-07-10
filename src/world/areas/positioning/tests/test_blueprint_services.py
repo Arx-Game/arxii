@@ -237,6 +237,24 @@ class InstantiateBlueprintTests(TestCase):
         instantiate_blueprint(self.bp, self.room, replace=True)
         self.assertEqual(PositionEdge.objects.filter(position_a__room=self.room).count(), 1)
 
+    def test_copies_layout_coordinates_to_the_live_position(self):
+        from evennia import create_object
+
+        from world.areas.positioning.services import instantiate_blueprint
+
+        bp = create_blueprint("Coordinate Test")
+        bp_position = add_blueprint_position(bp, "Anchor")
+        bp_position.layout_x = 5
+        bp_position.layout_y = -3
+        bp_position.save()
+
+        room = create_object("typeclasses.rooms.Room", key="Coord Room", nohome=True)
+        positions = instantiate_blueprint(bp, room)
+
+        live_position = positions[0]
+        self.assertEqual(live_position.layout_x, 5)
+        self.assertEqual(live_position.layout_y, -3)
+
 
 class InstantiateBlueprintGatedEdgeTests(TestCase):
     """instantiate_blueprint must mint a live ChallengeInstance for gated edges."""

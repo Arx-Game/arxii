@@ -325,6 +325,8 @@ def instantiate_blueprint(
                 name=bp_pos.name,
                 kind=bp_pos.kind,
                 description=bp_pos.description,
+                layout_x=bp_pos.layout_x,
+                layout_y=bp_pos.layout_y,
             )
             for bp_pos in blueprint_positions
         ]
