@@ -282,19 +282,27 @@ class FastForwardExternalActsTests(TestCase):
         instance, _option = self._instance_with_option(required_act=ExternalAct.THREAD_WOVEN)
         ThreadFactory(owner=self.character_sheet)
 
-        enter_node(instance, self.entry)
+        with patch("world.missions.services.external_acts.send_narrative_message") as sender:
+            enter_node(instance, self.entry)
 
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.target)
+        sender.assert_called_once()
+        _args, kwargs = sender.call_args
+        self.assertEqual(kwargs["recipients"], [self.character_sheet])
 
     def test_covenant_sworn_fast_forwards_on_live_membership(self) -> None:
         instance, _option = self._instance_with_option(required_act=ExternalAct.COVENANT_SWORN)
         CharacterCovenantRoleFactory(character_sheet=self.character_sheet)
 
-        enter_node(instance, self.entry)
+        with patch("world.missions.services.external_acts.send_narrative_message") as sender:
+            enter_node(instance, self.entry)
 
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.target)
+        sender.assert_called_once()
+        _args, kwargs = sender.call_args
+        self.assertEqual(kwargs["recipients"], [self.character_sheet])
 
     def test_technique_cast_never_fast_forwards(self) -> None:
         instance, _option = self._instance_with_option(required_act=ExternalAct.TECHNIQUE_CAST)

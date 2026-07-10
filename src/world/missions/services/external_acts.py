@@ -112,17 +112,20 @@ def fast_forward_external_acts(instance: MissionInstance, node: MissionNode) -> 
     already durably satisfies a THREAD_WOVEN/COVENANT_SWORN option on *node*
     (``_DURABLE_ACTS`` — TECHNIQUE_CAST is transient and NEVER fast-forwards;
     a fresh cast is the point), resolves it immediately via ``resolve_option``
-    on the contract holder's behalf — no actor-only message is sent here
-    (that's ``satisfy_external_act``'s job for the real-act path; a
-    fast-forward is a silent graph shortcut, not a player action).
+    on the contract holder's behalf and sends the actor-only acknowledging
+    STORY text via ``_send_actor_story`` (approved spec: e.g. "the mentor
+    nods — you are already sworn") — no room emit; a fast-forward is a
+    silent-to-everyone-else graph shortcut, not a player action, but the
+    holder still learns the mission-side consequence.
 
     Recursion: resolving the option can advance the run into a new node whose
     own durable act is ALSO already satisfied (e.g. two durable-gated nodes
     authored back to back). Re-entering ``enter_node`` on that new node calls
     this function again, so the fast-forward naturally walks the whole
-    already-satisfied prefix of the chain. Termination is guaranteed because
-    authored chains are finite (graph authoring, not player input, bounds the
-    depth) — no defensive counter added; it would be untestable dead code.
+    already-satisfied prefix of the chain (sending one acknowledging message
+    per fast-forwarded node). Termination is guaranteed because authored
+    chains are finite (graph authoring, not player input, bounds the depth)
+    — no defensive counter added; it would be untestable dead code.
     """
     holder = instance.participants.filter(is_contract_holder=True).first()
     if holder is None:
@@ -136,8 +139,8 @@ def fast_forward_external_acts(instance: MissionInstance, node: MissionNode) -> 
     ).first()
     if option is None or not _sheet_satisfies_durable_act(sheet, option.required_act):
         return
-    resolve_option(instance, node, option, holder)
-    instance.refresh_from_db()
+    deed = resolve_option(instance, node, option, holder)
+    _send_actor_story(sheet, instance, option, deed)
     if instance.current_node is not None:
         from world.missions.services.resolution import enter_node  # noqa: PLC0415
 

@@ -237,3 +237,25 @@ class MissionOptionRouteQueryHelperTests(TestCase):
             option = entry.options.get()
             route = MissionOptionRoute.objects.get(option=option, outcome_tier__isnull=True)
             self.assertIsNone(route.target_node_id)
+
+
+class AuditLegendFloorTutorialChainTests(TestCase):
+    """``audit_legend_floor`` (#2051 risk-floor guard) reports no violations
+    for the seeded T1-T7 chain templates (#1035 review fold-in F2) — a
+    regression guard so a future edit to the chain's legend-paying rewards
+    can't silently drop below ``LEGEND_RISK_FLOOR_TIER`` without a test
+    failing loudly."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_dev_database()
+
+    def test_no_legend_floor_violations_for_tutorial_chain(self) -> None:
+        from world.missions.management.commands.audit_legend_floor import Command
+
+        command = Command()
+        violations = command._check_route_rewards() + command._check_renown_awards()
+
+        chain_names = (_T1_NAME, _T2_NAME, _T3_NAME, _T4_NAME, _T5_NAME, _T6_NAME, _T7_NAME)
+        chain_violations = [v for v in violations if any(f"'{name}'" in v for name in chain_names)]
+        self.assertEqual(chain_violations, [])
