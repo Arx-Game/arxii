@@ -56,6 +56,14 @@ interface CommandInputProps {
   detachedActionIds?: number[];
   /** Called after a successful pose submit so the parent can clear detachedActionIds. */
   onPoseSubmitted?: () => void;
+  /**
+   * Whether the viewer's active persona is currently present at a Place in
+   * this scene (#2156) — gates the `tt` (tabletalk) mode in `ModeSelector`.
+   * Derived by the composition root (`GamePage`/`SceneDetailPage`) from the
+   * shared `['scene-places', id]` query so it dedupes with `PlaceBar`'s own
+   * fetch. Defaults to `false` when omitted.
+   */
+  isAtPlace?: boolean;
 }
 
 export function CommandInput({
@@ -73,6 +81,7 @@ export function CommandInput({
   pendingActionIds,
   detachedActionIds,
   onPoseSubmitted,
+  isAtPlace,
 }: CommandInputProps) {
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -253,8 +262,7 @@ export function CommandInput({
           <ModeSelector
             currentMode={composerMode?.command ?? 'pose'}
             onModeChange={handleModeChange}
-            // TODO: derive from PlacePresence when place system is integrated
-            isAtPlace={false}
+            isAtPlace={isAtPlace ?? false}
           />
         }
         rightSlot={

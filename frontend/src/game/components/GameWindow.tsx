@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ChatWindow } from './ChatWindow';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
@@ -5,6 +6,7 @@ import { SystemLane } from './SystemLane';
 import { SceneMessages } from '@/scenes/components/SceneMessages';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { Interaction } from '@/scenes/types';
+import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
@@ -29,6 +31,29 @@ interface GameWindowProps {
   personaId: number | null;
   /** Avatar identity-click affordance (#2156) — not wired up until the character-card task (Task 7). */
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
+  /**
+   * Scene toolset plumbing (#2156, Task 6) — GamePage is the composition root
+   * that owns this state (mirroring `SceneDetailPage`'s handler state); these
+   * are threaded straight through to `SceneMessages` and `CommandInput` since
+   * both live inside this component.
+   */
+  onAddTarget?: (personaName: string) => void;
+  onAttachAction?: (action: ActionAttachmentInfo) => void;
+  targetToAppend?: string | null;
+  onTargetConsumed?: () => void;
+  actionAttachment?: ActionAttachmentInfo | null;
+  onActionAttach?: (action: ActionAttachmentInfo) => void;
+  onActionDetach?: () => void;
+  onSubmitAction?: (action: ActionAttachmentInfo) => void;
+  pendingActionIds?: number[];
+  detachedActionIds?: number[];
+  onPoseSubmitted?: () => void;
+  /** Whether the viewer's persona is present at a Place in this scene (#2156) — gates `tt`. */
+  isAtPlace?: boolean;
+  /** `PlaceBar`, rendered directly above the composer (#2156). */
+  placeBar?: ReactNode;
+  /** `PendingActionAttachments`, rendered directly above the composer (#2156). */
+  pendingAttachments?: ReactNode;
 }
 
 export function GameWindow({
@@ -38,6 +63,20 @@ export function GameWindow({
   onModeChange,
   personaId,
   onAvatarClick,
+  onAddTarget,
+  onAttachAction,
+  targetToAppend,
+  onTargetConsumed,
+  actionAttachment,
+  onActionAttach,
+  onActionDetach,
+  onSubmitAction,
+  pendingActionIds,
+  detachedActionIds,
+  onPoseSubmitted,
+  isAtPlace,
+  placeBar,
+  pendingAttachments,
 }: GameWindowProps) {
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
@@ -102,6 +141,8 @@ export function GameWindow({
               sceneId={sceneFeed.sceneId}
               filteredInteractions={sceneFeed.interactions}
               onAvatarClick={onAvatarClick}
+              onAddTarget={onAddTarget}
+              onAttachAction={onAttachAction}
             />
             {sceneFeed.hasNextPage && (
               <button onClick={() => sceneFeed.fetchNextPage()} className="mt-4 px-4">
@@ -114,12 +155,24 @@ export function GameWindow({
       ) : (
         <ChatWindow messages={session.messages} />
       )}
+      {placeBar}
+      {pendingAttachments}
       <CommandInput
         character={active}
         sceneId={sceneFeed?.sceneId}
         personaId={personaId}
         composerMode={composerMode}
         onModeChange={onModeChange}
+        targetToAppend={targetToAppend}
+        onTargetConsumed={onTargetConsumed}
+        actionAttachment={actionAttachment}
+        onActionAttach={onActionAttach}
+        onActionDetach={onActionDetach}
+        onSubmitAction={onSubmitAction}
+        pendingActionIds={pendingActionIds}
+        detachedActionIds={detachedActionIds}
+        onPoseSubmitted={onPoseSubmitted}
+        isAtPlace={isAtPlace}
       />
     </div>
   );

@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchScene, SceneDetail } from '../queries';
-import { createActionRequest } from '../actionQueries';
+import { createActionRequest, fetchPlaces } from '../actionQueries';
 import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
@@ -117,6 +117,21 @@ export function SceneDetailPage() {
     setComposerMode(mode);
   }, []);
 
+  // `isAtPlace` (#2156, Task 6): derived from the SAME `['scene-places', id]`
+  // query key `PlaceBar` uses below, so React Query dedupes the two fetches
+  // into one (query-reuse, matching GamePage's approach). NOTE: `id` here is
+  // the *scene* id, not a room id — `fetchPlaces` treats its argument as the
+  // ROOM id in its `?room=` query param (confirmed by reading PlaceBar.tsx +
+  // actionQueries.ts). This mirrors `PlaceBar sceneId={id}` above unchanged
+  // (a pre-existing latent bug in this page's places query, not introduced or
+  // fixed by this task — see the task report), so `isAtPlace` will only ever
+  // be `true` here in the coincidental case scene id === room id.
+  const { data: placesData } = useQuery({
+    queryKey: ['scene-places', id],
+    queryFn: () => fetchPlaces(id),
+  });
+  const isAtPlace = placesData?.results?.some((place) => place.viewer_is_present) ?? false;
+
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 px-4 pt-4">
@@ -168,6 +183,7 @@ export function SceneDetailPage() {
                 pendingActionIds={pendingActionIds}
                 detachedActionIds={detachedActionIds}
                 onPoseSubmitted={handlePoseSubmitted}
+                isAtPlace={isAtPlace}
               />
             </>
           )}

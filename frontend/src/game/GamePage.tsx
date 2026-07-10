@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
@@ -20,6 +21,13 @@ import { markThreadSeen, setSceneBaseline } from '@/store/gameSlice';
 import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
 import { useThreading, getThreadKey } from '@/scenes/hooks/useThreading';
 import { threadToComposerMode } from '@/scenes/hooks/threadToComposerMode';
+import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
+import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
+import { PlaceBar } from '@/scenes/components/PlaceBar';
+import { ActionPanel } from '@/scenes/components/ActionPanel';
+import { PendingActionAttachments } from '@/scenes/components/PendingActionAttachments';
+import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
+import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import type { ComposerMode } from './components/CommandInput';
 
 const DEFAULT_ROOM_ENTRY: FocusEntry = {
@@ -134,6 +142,87 @@ export function GamePage() {
     }
   };
 
+  // Scene toolset (#2156 Task 6) — GamePage is the composition root, so it
+  // owns the same handler state SceneDetailPage.tsx:120-178 owns, mirrored
+  // exactly: consent, places, pending action attachments, and the action
+  // panel. `PlaceBar`'s `sceneId` prop is actually used as the ROOM id in its
+  // `fetchPlaces(?room=)` query (confirmed by reading PlaceBar.tsx +
+  // actionQueries.ts) — so /game passes the real room id (`roomData.id`),
+  // not the scene id. (`SceneDetailPage` passes the scene id, which is a
+  // pre-existing latent bug in the places query on that page — left
+  // untouched here; see the task report.)
+  const placesRoomId = sceneId && roomData ? String(roomData.id) : undefined;
+
+  // `isAtPlace` (#2156): derived from the SAME `['scene-places', placesRoomId]`
+  // query key `PlaceBar` uses below, so React Query's cache dedupes the two
+  // fetches into one (query-reuse, chosen over a callback-prop approach per
+  // the task brief).
+  const { data: placesData } = useQuery({
+    queryKey: ['scene-places', placesRoomId],
+    queryFn: () => fetchPlaces(placesRoomId!),
+    enabled: !!placesRoomId,
+  });
+  const isAtPlace = placesData?.results?.some((place) => place.viewer_is_present) ?? false;
+
+  // Pending unlinked actions for the chip strip — only fetched once a scene
+  // is active (personaId gated to null otherwise disables the query).
+  const { data: pendingActions } = usePendingUnlinkedActions(
+    sceneId ?? '',
+    sceneId ? personaId : null
+  );
+  const pendingActionIds = useMemo(() => pendingActions.map((a) => a.id), [pendingActions]);
+
+  const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
+  const handleDetach = useCallback((actionId: number) => {
+    setDetachedActionIds((prev) => (prev.includes(actionId) ? prev : [...prev, actionId]));
+  }, []);
+  const handleUndoDetach = useCallback((actionId: number) => {
+    setDetachedActionIds((prev) => prev.filter((id) => id !== actionId));
+  }, []);
+  const handlePoseSubmitted = useCallback(() => {
+    setDetachedActionIds([]);
+  }, []);
+
+  const [targetToAppend, setPendingTarget] = useState<string | null>(null);
+  const [actionAttachment, setActionAttachment] = useState<ActionAttachmentInfo | null>(null);
+  const queryClient = useQueryClient();
+
+  const submitAction = useMutation({
+    mutationFn: (action: ActionAttachmentInfo) =>
+      createActionRequest(sceneId ?? '', {
+        action_key: action.actionKey,
+        target_persona_id: action.targetPersonaId,
+        technique_id: action.techniqueId,
+      }),
+    onSuccess: () => {
+      setActionAttachment(null);
+      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+      queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
+    },
+    onError: () => {
+      // Keep the attachment so the user can retry.
+    },
+  });
+
+  const handleSubmitAction = useCallback(
+    (action: ActionAttachmentInfo) => {
+      submitAction.mutate(action);
+    },
+    [submitAction]
+  );
+
+  const handleTargetConsumed = useCallback(() => {
+    setPendingTarget(null);
+  }, []);
+
+  const handleActionAttach = useCallback((action: ActionAttachmentInfo) => {
+    setActionAttachment(action);
+  }, []);
+
+  const handleActionDetach = useCallback(() => {
+    setActionAttachment(null);
+  }, []);
+
   if (!account) {
     return (
       <div className="mx-auto max-w-sm text-center">
@@ -177,22 +266,56 @@ export function GamePage() {
           />
         }
         center={
-          <GameWindow
-            characters={characters}
-            sceneFeed={
-              sceneId
-                ? {
-                    sceneId,
-                    interactions: threading.filteredInteractions,
-                    hasNextPage,
-                    fetchNextPage,
-                  }
-                : undefined
-            }
-            composerMode={composerMode}
-            onModeChange={setComposerMode}
-            personaId={personaId}
-          />
+          <>
+            {/* Scene toolset (#2156 Task 6) — mirrors SceneDetailPage.tsx:120-178's
+                props exactly. Placement differs deliberately from the record page:
+                ConsentPrompt sits above the center feed here; PlaceBar sits directly
+                above the composer (passed into GameWindow, rendered just before
+                CommandInput); ActionPanel is a `fixed` floating panel, so its DOM
+                position doesn't matter. */}
+            {sceneId && <ConsentPrompt sceneId={sceneId} />}
+            <GameWindow
+              characters={characters}
+              sceneFeed={
+                sceneId
+                  ? {
+                      sceneId,
+                      interactions: threading.filteredInteractions,
+                      hasNextPage,
+                      fetchNextPage,
+                    }
+                  : undefined
+              }
+              composerMode={composerMode}
+              onModeChange={setComposerMode}
+              personaId={personaId}
+              onAddTarget={setPendingTarget}
+              onAttachAction={handleActionAttach}
+              targetToAppend={targetToAppend}
+              onTargetConsumed={handleTargetConsumed}
+              actionAttachment={actionAttachment}
+              onActionAttach={handleActionAttach}
+              onActionDetach={handleActionDetach}
+              onSubmitAction={handleSubmitAction}
+              pendingActionIds={pendingActionIds}
+              detachedActionIds={detachedActionIds}
+              onPoseSubmitted={handlePoseSubmitted}
+              isAtPlace={isAtPlace}
+              placeBar={placesRoomId ? <PlaceBar sceneId={placesRoomId} /> : undefined}
+              pendingAttachments={
+                sceneId ? (
+                  <PendingActionAttachments
+                    sceneId={sceneId}
+                    personaId={personaId}
+                    detachedIds={detachedActionIds}
+                    onDetach={handleDetach}
+                    onUndoDetach={handleUndoDetach}
+                  />
+                ) : undefined
+              }
+            />
+            {sceneId && <ActionPanel sceneId={sceneId} />}
+          </>
         }
         rightSidebar={
           <SidebarTabPanel

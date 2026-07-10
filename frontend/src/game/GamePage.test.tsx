@@ -8,6 +8,7 @@ import { setAccount } from '@/store/authSlice';
 import { mockAccount } from '@/test/mocks/account';
 import {
   startSession,
+  setSessionRoom,
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,
@@ -55,6 +56,54 @@ vi.mock('@/scenes/queries', async (importOriginal) => {
     fetchInteractions: vi.fn(() => Promise.resolve({ results: [], next: undefined })),
     postInteractionReaction: vi.fn().mockResolvedValue(null),
     fetchReactionEmojiCatalog: vi.fn().mockResolvedValue([]),
+    fetchPendingUnlinkedActions: vi.fn(() => Promise.resolve([])),
+  };
+});
+
+// ---------------------------------------------------------------------------
+// Scene toolset (#2156 Task 6): ConsentPrompt/ActionPanel/PendingActionAttachments
+// are self-fetching components with heavy internal query machinery unrelated to
+// this test's concern (toolset mounting + isAtPlace wiring) — stubbed out as
+// lightweight divs, mirroring SceneDetailPage.test.tsx's proven pattern. PlaceBar
+// is stubbed too: `isAtPlace` is derived by GamePage's OWN `['scene-places', ...]`
+// query (query-reuse, not a callback prop), so exercising it only requires
+// controlling `fetchPlaces` — it doesn't require PlaceBar's real render tree.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/scenes/components/ConsentPrompt', () => ({
+  ConsentPrompt: () => <div data-testid="consent-prompt">ConsentPrompt</div>,
+}));
+
+vi.mock('@/scenes/components/PlaceBar', () => ({
+  PlaceBar: () => <div data-testid="place-bar">PlaceBar</div>,
+}));
+
+vi.mock('@/scenes/components/ActionPanel', () => ({
+  ActionPanel: () => <div data-testid="action-panel">ActionPanel</div>,
+}));
+
+vi.mock('@/scenes/components/PendingActionAttachments', () => ({
+  PendingActionAttachments: () => (
+    <div data-testid="pending-action-attachments">PendingActionAttachments</div>
+  ),
+}));
+
+const mockFetchPlaces = vi.fn(() =>
+  Promise.resolve({
+    results: [] as Array<{
+      id: number;
+      name: string;
+      description: string;
+      viewer_is_present: boolean;
+    }>,
+  })
+);
+
+vi.mock('@/scenes/actionQueries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/scenes/actionQueries')>();
+  return {
+    ...actual,
+    fetchPlaces: (...args: Parameters<typeof actual.fetchPlaces>) => mockFetchPlaces(...args),
   };
 });
 
@@ -118,6 +167,43 @@ function seedWhisperThread() {
     target_persona_ids: [],
   };
   store.dispatch(addSceneInteraction({ character: ACTIVE_NAME, interaction }));
+}
+
+// Seeds both room AND scene (#2156 Task 6) — real ROOM_STATE broadcasts always
+// carry both together (see handleRoomStatePayload.ts), and GamePage derives the
+// Place-bar/isAtPlace room id from `session.room.id`, so the toolset needs a
+// seeded room to mount PlaceBar and derive `isAtPlace` at all.
+function seedActiveSceneWithRoom() {
+  store.dispatch(startSession(ACTIVE_NAME));
+  store.dispatch(
+    setSessionRoom({
+      character: ACTIVE_NAME,
+      room: {
+        id: 55,
+        name: 'The Grand Ballroom',
+        description: '',
+        thumbnail_url: null,
+        characters: [],
+        objects: [],
+        exits: [],
+        is_owner: false,
+        is_public: true,
+        hub: null,
+      },
+    })
+  );
+  store.dispatch(
+    setSessionScene({
+      character: ACTIVE_NAME,
+      scene: {
+        id: 100,
+        name: 'The Grand Ballroom',
+        description: '',
+        is_owner: false,
+        has_unseen_observer: false,
+      },
+    })
+  );
 }
 
 describe('GamePage', () => {
@@ -429,6 +515,73 @@ describe('GamePage', () => {
       expect(screen.getByText(/no messages yet/i)).toBeInTheDocument();
       expect(screen.queryByLabelText('Thread sidebar')).not.toBeInTheDocument();
       expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scene toolset on /game + live tabletalk (#2156 Task 6)
+  // ---------------------------------------------------------------------------
+
+  describe('scene toolset', () => {
+    beforeEach(() => {
+      mockFetchPlaces.mockClear();
+      mockFetchPlaces.mockResolvedValue({ results: [] });
+    });
+
+    it('renders ConsentPrompt/PlaceBar/ActionPanel/PendingActionAttachments when a scene is active', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('consent-prompt')).toBeInTheDocument();
+      expect(screen.getByTestId('place-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('action-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('pending-action-attachments')).toBeInTheDocument();
+    });
+
+    it('does not render the scene toolset when there is no active scene', () => {
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(startSession(ACTIVE_NAME));
+
+      renderWithProviders(<GamePage />);
+
+      expect(screen.queryByTestId('consent-prompt')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('place-bar')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('action-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pending-action-attachments')).not.toBeInTheDocument();
+    });
+
+    it('passes isAtPlace=true to ModeSelector, offering the tt mode, when a place has viewer_is_present:true', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockFetchPlaces.mockResolvedValue({
+        results: [{ id: 9, name: 'The Fountain', description: '', viewer_is_present: true }],
+      });
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+
+      const trigger = await screen.findByRole('button', { name: 'Pose' });
+      await user.click(trigger);
+
+      expect(await screen.findByText('Tabletalk')).toBeInTheDocument();
+    });
+
+    it('does not offer the tt mode when the viewer is not present at any place', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockFetchPlaces.mockResolvedValue({
+        results: [{ id: 9, name: 'The Fountain', description: '', viewer_is_present: false }],
+      });
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+
+      const trigger = await screen.findByRole('button', { name: 'Pose' });
+      await user.click(trigger);
+
+      expect(screen.queryByText('Tabletalk')).not.toBeInTheDocument();
     });
   });
 });
