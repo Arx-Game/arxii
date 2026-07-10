@@ -104,15 +104,23 @@ Details: `docs/systems/roster.md`'s "Telnet Surface (#2122)" section, `docs/syst
 /progression.md`'s Telnet Commands section, `commands/CLAUDE.md`.
 
 ## What's Needed for MVP
-- Friend list system — explicit friend tracking with online status
+- ~~Friend list system~~ — SHIPPED (#1727): `FriendsTab`/`FriendButton` over
+  `world/scenes/friend_views.py`
 - Player finder — who's online, who's in scenes, who's looking for RP
 - Visibility control UI — managing who can see you, your status, your activity
 - Consent group management UI — creating, joining, managing content visibility groups
 - Kudos expansion — more categories of positive behavior to reward
-- Voting system — pose-of-the-scene, writing awards, community recognition
-- New player onboarding flow — guided introduction to the game and its systems
+- Voting system — pose-of-the-scene, writing awards, community recognition. `WeeklyVote` +
+  `VoteButton`/`VotesPanel` are built but unwired; reconciling the three applause axes
+  (kudos/reactions/votes) is #2161
+- New player onboarding flow — #1035 (spec-approved, mission-chain tutorial); web funnel
+  polish is #2162
 - Anti-harassment tools — blocking, muting, reporting
-- Scene discovery — finding active public scenes to join
+- Scene discovery — finding active public scenes to join; the discovery→presence bridge
+  is #2163
 - Social feed — what's happening in the game right now (new achievements, notable events, active scenes)
+
+See `docs/audits/2026-07-10-webclient-rp-ux-audit.md` (epic #2155) for the full
+webclient RP UX audit backing these issue references.
 
 ## Notes

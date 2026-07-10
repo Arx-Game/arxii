@@ -139,9 +139,12 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 - WEB-ONLY (telnet-parity, secondary): accept thread-weaving teaching offer (acquire the unlock); sever
   thread; cross-xp-lock. **Note:** thread *rename* is already web-wired via the default `ThreadViewSet`
   PATCH; the `update_thread_narrative` service is an unwired stub *duplicating* it — remove, don't wire.
-- **NO-SURFACE:** **the entire relationship-building loop** — create_first_impression / create_development
-  / create_capstone / redistribute_points (built+tested, reachable from neither UI, absent from #1328
-  until now). Only register_grievance is wired.
+- ~~**NO-SURFACE:** **the entire relationship-building loop**~~ — **superseded by PR #1536
+  (2026-06-26):** create_first_impression / create_development / create_capstone /
+  redistribute_points now TELNET+WEB at the action layer (`relationship <subverb>` +
+  viewsets). The remaining gap is a *web UI* one (viewset has zero frontend consumers;
+  `RelationshipsSection.tsx` still renders a "TBD" stub) — tracked as #2159 in the
+  2026-07-10 webclient RP UX audit.
 - **PLANNED-UNBUILT (→ registry):** relationship mechanical-bonus consumed in checks; teamwork / combo /
   coordination gating; RelationshipUpdate service + decay/freeze; relationship consent/deceit safety
   (privacy MVP-gating); adventuring-party model; NPC reputation model.
