@@ -8129,6 +8129,48 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/styles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for the Style catalog (#2030).
+     *
+     *     Player-facing lookup for the Motif style-binding picker.
+     */
+    get: operations['items_styles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/styles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for the Style catalog (#2030).
+     *
+     *     Player-facing lookup for the Motif style-binding picker.
+     */
+    get: operations['items_styles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/templates/': {
     parameters: {
       query?: never;
@@ -9215,6 +9257,105 @@ export interface paths {
      *     Note: technique_count is annotated to avoid N+1 queries in serializer.
      */
     patch: operations['magic_gifts_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/motif-styles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List, bind, and unbind the acting character's Motif style bindings.
+     *
+     *     ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+     *     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
+     *     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
+     *
+     *     Character scoping (#2030 review fix): a request carrying an
+     *     ``X-Character-ID`` header is scoped to *that* character — validated as
+     *     owned by the requesting account via ``CharacterContextMixin`` (the same
+     *     header/ownership contract ``PathIntentViewSet``/``CharacterGoalViewSet``
+     *     use) — so viewing a non-puppeted alt's sheet reads/writes that alt's
+     *     bindings instead of silently acting as the currently puppeted character.
+     *     A header naming a character the account doesn't own is rejected outright
+     *     (404) rather than falling back to the puppet. No header at all preserves
+     *     the original behavior: resolve the caller's active puppet.
+     */
+    get: operations['magic_motif_styles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/motif-styles/bind/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description List, bind, and unbind the acting character's Motif style bindings.
+     *
+     *     ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+     *     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
+     *     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
+     *
+     *     Character scoping (#2030 review fix): a request carrying an
+     *     ``X-Character-ID`` header is scoped to *that* character — validated as
+     *     owned by the requesting account via ``CharacterContextMixin`` (the same
+     *     header/ownership contract ``PathIntentViewSet``/``CharacterGoalViewSet``
+     *     use) — so viewing a non-puppeted alt's sheet reads/writes that alt's
+     *     bindings instead of silently acting as the currently puppeted character.
+     *     A header naming a character the account doesn't own is rejected outright
+     *     (404) rather than falling back to the puppet. No header at all preserves
+     *     the original behavior: resolve the caller's active puppet.
+     */
+    post: operations['magic_motif_styles_bind_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/motif-styles/unbind/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description List, bind, and unbind the acting character's Motif style bindings.
+     *
+     *     ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+     *     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
+     *     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
+     *
+     *     Character scoping (#2030 review fix): a request carrying an
+     *     ``X-Character-ID`` header is scoped to *that* character — validated as
+     *     owned by the requesting account via ``CharacterContextMixin`` (the same
+     *     header/ownership contract ``PathIntentViewSet``/``CharacterGoalViewSet``
+     *     use) — so viewing a non-puppeted alt's sheet reads/writes that alt's
+     *     bindings instead of silently acting as the currently puppeted character.
+     *     A header naming a character the account doesn't own is rejected outright
+     *     (404) rather than falling back to the puppet. No header at all preserves
+     *     the original behavior: resolve the caller's active puppet.
+     */
+    post: operations['magic_motif_styles_unbind_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/magic/pending-alterations/': {
@@ -26240,6 +26381,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['StoryProtectedSubject'][];
     };
+    PaginatedStyleList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Style'][];
+    };
     PaginatedSystemErrorReportDetailList: {
       /** @example 123 */
       count: number;
@@ -31346,6 +31502,13 @@ export interface components {
     StrainAvailability: {
       readonly cap: number;
       readonly default: number;
+    };
+    /** @description Serializer for the Style catalog (#2030 — player-facing Motif style-binding). */
+    Style: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly audacity: string;
     };
     /** @description Response for a style-craft attempt: rolled outcome + resolved tier + the row. */
     StyleCraftResult: {
@@ -43720,6 +43883,52 @@ export interface operations {
       };
     };
   };
+  items_styles_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStyleList'];
+        };
+      };
+    };
+  };
+  items_styles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this style. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Style'];
+        };
+      };
+    };
+  };
   items_templates_list: {
     parameters: {
       query?: {
@@ -45192,6 +45401,60 @@ export interface operations {
         content: {
           'application/json': components['schemas']['GiftCreate'];
         };
+      };
+    };
+  };
+  magic_motif_styles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_motif_styles_bind_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_motif_styles_unbind_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

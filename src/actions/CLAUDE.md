@@ -165,6 +165,13 @@ They do not use the command system, dispatchers, or handlers.
   (resolves `RoomProfile` from an Evennia location). Shared by telnet `CmdSanctum` and the
   web `SanctumViewSet` (`world/magic/views_sanctum.py`), which now dispatches all 7 ops
   through `Action().run(actor=request.user.puppet, ...)` (#1497).
+  `motif_style.py` (#2030) — three REGISTRY actions, all `target_type=SELF`,
+  `category="magic"`: `BindMotifStyleAction` (key `"bind_motif_style"`),
+  `UnbindMotifStyleAction` (`"unbind_motif_style"`), `ListMotifStylesAction`
+  (`"list_motif_styles"`). Thin wrappers over `world.magic.services.motif_style`
+  (`bind_motif_style`/`unbind_motif_style`/`motif_style_bindings`). Shared by telnet
+  `CmdMotif` (`commands/motif.py`, `motif <subverb>`) and the web `MotifStyleViewSet`
+  (`world/magic/views_motif_style.py`).
   `gift_acquisition.py` (#2116) — 3 REGISTRY actions, all `target_type=SELF`,
   `category="magic"`, thin wrappers over previously-uncalled acquisition services:
   `PurchaseGiftUnlockAction` (key `"purchase_gift_unlock"`, kwargs `gift_unlock_id` +

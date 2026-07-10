@@ -32,6 +32,8 @@ export interface CharacterSheetGift {
 export interface CharacterSheetMotifResonance {
   name: string;
   facets: string[];
+  /** Styles bound to this resonance (#2030) — `Style.name` for each MotifStyleBinding. */
+  styles: string[];
 }
 
 /** Mirrors `world.character_sheets.types.MotifSection`. */

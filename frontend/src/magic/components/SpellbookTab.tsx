@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import type { CharacterSheetAura } from '@/character_sheets/api';
+import { MotifStylePanel } from './MotifStylePanel';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
@@ -126,11 +127,18 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
                     {facet}
                   </Badge>
                 ))}
+                {resonance.styles.map((style) => (
+                  <Badge key={style} variant="default" data-testid="motif-resonance-style">
+                    {style}
+                  </Badge>
+                ))}
               </div>
             ))}
           </CardContent>
         </Card>
       )}
+
+      {isMyCharacter && magic && <MotifStylePanel characterSheetId={characterId} />}
 
       {magic?.aura && (
         <Card data-testid="spellbook-aura">

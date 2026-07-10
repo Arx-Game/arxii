@@ -354,6 +354,47 @@ export function getTierCaps(pending: PendingAlteration): AlterationTierCaps {
 /** Mirrors MIN_ALTERATION_DESCRIPTION_LENGTH in src/world/magic/constants.py. */
 export const MIN_ALTERATION_DESCRIPTION_LENGTH = 40;
 
+// ---------------------------------------------------------------------------
+// Motif style bindings, #2030
+//
+// GET /api/magic/motif-styles/, POST .../bind/, POST .../unbind/ are plain
+// viewsets with hand-built Response bodies (no @extend_schema yet), so the
+// generated schema records them as "No response body" — these are local,
+// hand-rolled to mirror MotifStyleViewSet / ListMotifStylesAction's `data`
+// dict (src/actions/definitions/motif_style.py). The Style catalog
+// (`GET /api/items/styles/`) IS a generated ReadOnlyModelViewSet, so its
+// types are re-exported from the schema instead.
+// ---------------------------------------------------------------------------
+
+export type StyleCatalogEntry = components['schemas']['Style'];
+export type PaginatedStyleList = components['schemas']['PaginatedStyleList'];
+
+/** One bound style row, as returned inside GET /api/magic/motif-styles/'s `bindings` array. */
+export interface MotifStyleBinding {
+  style_id: number;
+  style_name: string;
+  /** Display string, e.g. "Bold" — Style.get_audacity_display(). */
+  audacity: string;
+  resonance_id: number;
+  resonance_name: string;
+}
+
+/** Response for GET /api/magic/motif-styles/. */
+export interface MotifStyleBindingsResponse {
+  bindings: MotifStyleBinding[];
+}
+
+/** Request body for POST /api/magic/motif-styles/bind/. */
+export interface BindMotifStyleRequest {
+  style_id: number;
+  resonance_id: number;
+}
+
+/** Request body for POST /api/magic/motif-styles/unbind/. */
+export interface UnbindMotifStyleRequest {
+  style_id: number;
+}
+
 /** Request body for POST /api/magic/techniques/price/ and /api/magic/techniques/author/. */
 export interface TechniqueDesignRequest {
   name: string;

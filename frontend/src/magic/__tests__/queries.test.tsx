@@ -28,6 +28,9 @@ import {
   useCrossXPLock,
   useAcceptTeachingOffer,
   useNextPathOptions,
+  useMotifStyleBindings,
+  useBindMotifStyle,
+  useUnbindMotifStyle,
   magicKeys,
 } from '../queries';
 import { __resetImbuingRitualIdCacheForTests } from '../api';
@@ -58,6 +61,9 @@ vi.mock('../api', () => ({
   acceptTeachingOffer: vi.fn(),
   __resetImbuingRitualIdCacheForTests: vi.fn(),
   getNextPathOptions: vi.fn(),
+  getMotifStyleBindings: vi.fn(),
+  bindMotifStyle: vi.fn(),
+  unbindMotifStyle: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -874,5 +880,64 @@ describe('useNextPathOptions', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(api.getNextPathOptions).toHaveBeenCalledWith(7);
     expect(result.current.data).toEqual(options);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Motif style bindings — cross-character scoping (#2030 review fix)
+// ---------------------------------------------------------------------------
+
+describe('useMotifStyleBindings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fetches bindings scoped to the given character id', async () => {
+    const bindings = { bindings: [{ style_id: 1, resonance_id: 2 }] };
+    vi.mocked(api.getMotifStyleBindings).mockResolvedValue(bindings as never);
+
+    const { result } = renderHook(() => useMotifStyleBindings(11), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(api.getMotifStyleBindings).toHaveBeenCalledWith(11);
+    expect(result.current.data).toEqual(bindings);
+  });
+
+  it('query key includes the character id, so different characters cache separately', () => {
+    expect(magicKeys.motifStyleBindings(11)).toEqual(['magic', 'motif-styles', 'bindings', 11]);
+    expect(magicKeys.motifStyleBindings(12)).toEqual(['magic', 'motif-styles', 'bindings', 12]);
+    expect(magicKeys.motifStyleBindings(11)).not.toEqual(magicKeys.motifStyleBindings(12));
+  });
+
+  it('is disabled for a non-positive character id', () => {
+    const { result } = renderHook(() => useMotifStyleBindings(0), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(api.getMotifStyleBindings).not.toHaveBeenCalled();
+  });
+});
+
+describe('useBindMotifStyle', () => {
+  it('calls bindMotifStyle with the character id (X-Character-ID scoping)', async () => {
+    vi.mocked(api.bindMotifStyle).mockResolvedValue({ style_id: 1, resonance_id: 2 });
+
+    const { result } = renderHook(() => useBindMotifStyle(11), { wrapper: createWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({ style_id: 1, resonance_id: 2 });
+    });
+
+    expect(api.bindMotifStyle).toHaveBeenCalledWith(11, { style_id: 1, resonance_id: 2 });
+  });
+});
+
+describe('useUnbindMotifStyle', () => {
+  it('calls unbindMotifStyle with the character id (X-Character-ID scoping)', async () => {
+    vi.mocked(api.unbindMotifStyle).mockResolvedValue({ style_id: 1 });
+
+    const { result } = renderHook(() => useUnbindMotifStyle(11), { wrapper: createWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({ style_id: 1 });
+    });
+
+    expect(api.unbindMotifStyle).toHaveBeenCalledWith(11, { style_id: 1 });
   });
 });

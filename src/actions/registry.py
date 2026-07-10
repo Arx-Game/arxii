@@ -168,6 +168,11 @@ from actions.definitions.market import (
     ServiceCraftAction,
     SetServiceOfferAction,
 )
+from actions.definitions.motif_style import (
+    BindMotifStyleAction,
+    ListMotifStylesAction,
+    UnbindMotifStyleAction,
+)
 from actions.definitions.movement import (
     DropAction,
     GetAction,
@@ -503,6 +508,9 @@ _ALL_ACTIONS: list[Action] = [
     SignatureSetAction(),
     SignatureClearAction(),
     SignatureListAction(),
+    BindMotifStyleAction(),
+    UnbindMotifStyleAction(),
+    ListMotifStylesAction(),
     StartRoomFeatureProjectAction(),
     RepairLabStationAction(),
     BuyStockAction(),

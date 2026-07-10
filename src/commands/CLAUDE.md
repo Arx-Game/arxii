@@ -528,6 +528,16 @@ actions, backends, and service functions.
   `sanctum dissolve`, `sanctum absorb`, `sanctum sever <thread name|id>`.
   Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdCombat`). No
   business logic in the command.
+- **`motif.py`**: `CmdMotif` (`motif`, #2030) — the player-facing Motif style-binding
+  namespace. One `DispatchCommand` routes a leading subverb to a REGISTRY `ActionRef`
+  and dispatches through `dispatch_player_action` — the same seam the web
+  `MotifStyleViewSet` uses — reaching the 3 Actions in
+  `actions/definitions/motif_style.py`. Bare `motif`/`motif list` lists the caller's
+  current style bindings. Grammar: `motif bindstyle <style>=<resonance>`,
+  `motif unbindstyle <style>`. Style/resonance lookup is exact-name matching
+  (case-insensitive), since Evennia's partial/fuzzy search is broken on PostgreSQL.
+  Namespaced subverbs avoid exit/channel/alias collisions (mirrors
+  `CmdSignature`/`CmdSanctum`). No business logic in the command.
 - **`companion.py`**: `CmdCompanion` (`companion`, #1918) — the companion lifecycle namespace. One
   `DispatchCommand` routes a leading subverb (`bind` / `fight` / `deploy` / `release`) through
   `dispatch_player_action` — the same seam the web `CompanionViewSet` uses — reaching the Actions in

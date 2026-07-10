@@ -140,6 +140,11 @@ from world.magic.views_signature import SignatureViewSet  # noqa: E402
 
 router.register("signatures", SignatureViewSet, basename="signature")
 
+# #2030 Task 4 — Motif style-binding web surface
+from world.magic.views_motif_style import MotifStyleViewSet  # noqa: E402
+
+router.register("motif-styles", MotifStyleViewSet, basename="motif-style")
+
 
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is

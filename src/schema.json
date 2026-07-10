@@ -12759,6 +12759,62 @@ paths:
               schema:
                 $ref: '#/components/schemas/ServiceOffer'
           description: ''
+  /api/items/styles/:
+    get:
+      operationId: items_styles_list
+      description: |-
+        Read-only ViewSet for the Style catalog (#2030).
+
+        Player-facing lookup for the Motif style-binding picker.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStyleList'
+          description: ''
+  /api/items/styles/{id}/:
+    get:
+      operationId: items_styles_retrieve
+      description: |-
+        Read-only ViewSet for the Style catalog (#2030).
+
+        Player-facing lookup for the Motif style-binding picker.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this style.
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Style'
+          description: ''
   /api/items/templates/:
     get:
       operationId: items_templates_list
@@ -14464,6 +14520,84 @@ paths:
       - cookieAuth: []
       responses:
         '204':
+          description: No response body
+  /api/magic/motif-styles/:
+    get:
+      operationId: magic_motif_styles_retrieve
+      description: |-
+        List, bind, and unbind the acting character's Motif style bindings.
+
+        ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+        the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
+        dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
+
+        Character scoping (#2030 review fix): a request carrying an
+        ``X-Character-ID`` header is scoped to *that* character — validated as
+        owned by the requesting account via ``CharacterContextMixin`` (the same
+        header/ownership contract ``PathIntentViewSet``/``CharacterGoalViewSet``
+        use) — so viewing a non-puppeted alt's sheet reads/writes that alt's
+        bindings instead of silently acting as the currently puppeted character.
+        A header naming a character the account doesn't own is rejected outright
+        (404) rather than falling back to the puppet. No header at all preserves
+        the original behavior: resolve the caller's active puppet.
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/magic/motif-styles/bind/:
+    post:
+      operationId: magic_motif_styles_bind_create
+      description: |-
+        List, bind, and unbind the acting character's Motif style bindings.
+
+        ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+        the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
+        dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
+
+        Character scoping (#2030 review fix): a request carrying an
+        ``X-Character-ID`` header is scoped to *that* character — validated as
+        owned by the requesting account via ``CharacterContextMixin`` (the same
+        header/ownership contract ``PathIntentViewSet``/``CharacterGoalViewSet``
+        use) — so viewing a non-puppeted alt's sheet reads/writes that alt's
+        bindings instead of silently acting as the currently puppeted character.
+        A header naming a character the account doesn't own is rejected outright
+        (404) rather than falling back to the puppet. No header at all preserves
+        the original behavior: resolve the caller's active puppet.
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/magic/motif-styles/unbind/:
+    post:
+      operationId: magic_motif_styles_unbind_create
+      description: |-
+        List, bind, and unbind the acting character's Motif style bindings.
+
+        ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+        the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
+        dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
+
+        Character scoping (#2030 review fix): a request carrying an
+        ``X-Character-ID`` header is scoped to *that* character — validated as
+        owned by the requesting account via ``CharacterContextMixin`` (the same
+        header/ownership contract ``PathIntentViewSet``/``CharacterGoalViewSet``
+        use) — so viewing a non-puppeted alt's sheet reads/writes that alt's
+        bindings instead of silently acting as the currently puppeted character.
+        A header naming a character the account doesn't own is rejected outright
+        (404) rather than falling back to the puppet. No header at all preserves
+        the original behavior: resolve the caller's active puppet.
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
           description: No response body
   /api/magic/pending-alterations/:
     get:
@@ -46760,6 +46894,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StoryProtectedSubject'
+    PaginatedStyleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Style'
     PaginatedSystemErrorReportDetailList:
       type: object
       required:
@@ -56560,6 +56717,27 @@ components:
       required:
       - cap
       - default
+    Style:
+      type: object
+      description: Serializer for the Style catalog (#2030 — player-facing Motif style-binding).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        audacity:
+          type: string
+          readOnly: true
+      required:
+      - audacity
+      - description
+      - id
+      - name
     StyleCraftResult:
       type: object
       description: 'Response for a style-craft attempt: rolled outcome + resolved

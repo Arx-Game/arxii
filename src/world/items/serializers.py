@@ -15,6 +15,7 @@ from world.items.models import (
     Outfit,
     OutfitSlot,
     QualityTier,
+    Style,
     TemplateInteraction,
     TemplateSlot,
 )
@@ -35,6 +36,17 @@ class QualityTierSerializer(serializers.ModelSerializer):
             "stat_multiplier",
             "sort_order",
         ]
+        read_only_fields = fields
+
+
+class StyleSerializer(serializers.ModelSerializer):
+    """Serializer for the Style catalog (#2030 — player-facing Motif style-binding)."""
+
+    audacity = serializers.CharField(source="get_audacity_display", read_only=True)
+
+    class Meta:
+        model = Style
+        fields = ["id", "name", "description", "audacity"]
         read_only_fields = fields
 
 

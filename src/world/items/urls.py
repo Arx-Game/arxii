@@ -15,6 +15,7 @@ from world.items.views import (
     OutfitSlotViewSet,
     OutfitViewSet,
     QualityTierViewSet,
+    StyleViewSet,
     VisibleItemDetailViewSet,
     VisibleWornItemViewSet,
 )
@@ -22,6 +23,7 @@ from world.items.views_station import LabStationViewSet
 
 router = DefaultRouter()
 router.register("quality-tiers", QualityTierViewSet, basename="quality-tier")
+router.register("styles", StyleViewSet, basename="style")
 router.register("market-squares", MarketSquareViewSet, basename="market-square")
 router.register("service-offers", ServiceOfferViewSet, basename="service-offer")
 router.register("interaction-types", InteractionTypeViewSet, basename="interaction-type")

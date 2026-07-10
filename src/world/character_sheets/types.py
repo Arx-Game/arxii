@@ -145,10 +145,11 @@ class GiftEntry(TypedDict):
 
 
 class MotifResonanceEntry(TypedDict):
-    """A resonance within a character's motif, with assigned facets."""
+    """A resonance within a character's motif, with assigned facets and bound styles."""
 
     name: str
     facets: list[str]
+    styles: list[str]
 
 
 class MotifSection(TypedDict):
