@@ -10,6 +10,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import GiverKind, MissionStatus, MissionVisibility
 from world.missions.factories import (
     MissionGiverFactory,
@@ -23,6 +24,7 @@ from world.missions.services.trigger_dispatch import (
     maybe_dispatch_on_enter,
     maybe_dispatch_on_examine,
 )
+from world.missions.services.visibility import template_visible_to
 
 
 def _template_with_entry(name: str) -> object:
@@ -48,7 +50,11 @@ class TriggerDispatchTests(TestCase):
         instance = maybe_dispatch_on_enter(self.character, self.room)
         self.assertIsNotNone(instance)
         self.assertEqual(instance.template_id, self.template.pk)
-        # Trigger-sourced runs carry no offer/persona context.
+        # Trigger-sourced runs carry no offer context (not NPC-mediated); this
+        # character has no CharacterSheet/persona in this test, so
+        # accepted_as_persona is None too — see
+        # test_grant_sets_accepted_as_persona_when_character_has_one below
+        # for the case where a persona IS resolved.
         self.assertIsNone(instance.source_offer)
         self.assertTrue(
             MissionInstance.objects.filter(
@@ -106,3 +112,52 @@ class TriggerDispatchTests(TestCase):
         giver.templates.add(_template_with_entry("examine-mission"))
         instance = maybe_dispatch_on_examine(self.character, detail)
         self.assertIsNotNone(instance)
+
+    def test_grant_sets_accepted_as_persona_when_character_has_one(self) -> None:
+        """Review fix (#1035): the persona already resolved for the
+        visibility gate (#870) is threaded into ``accepted_as_persona`` —
+        previously dropped, leaving ``has_completed_mission`` unable to find
+        trigger-granted runs."""
+        sheet = CharacterSheetFactory(character=self.character)
+        instance = maybe_dispatch_on_enter(self.character, self.room)
+        self.assertIsNotNone(instance)
+        self.assertEqual(instance.accepted_as_persona_id, sheet.primary_persona.pk)
+
+
+class ChainGateOpensAfterFixedGrantTests(TestCase):
+    """Regression for the review finding: a trigger-dispatched grant must
+    thread the presenting persona so a chained ``has_completed_mission`` gate
+    actually opens in live play, not just via staff/NPC-offer grants (#1035).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.sheet.primary_persona
+        cls.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        cls.t1 = _template_with_entry("chain-gate-t1")
+        cls.giver = MissionGiverFactory(
+            name="chain-gate-t1-trigger",
+            giver_kind=GiverKind.ROOM_TRIGGER,
+            target=cls.room,
+        )
+        cls.giver.templates.add(cls.t1)
+        cls.t2 = MissionTemplateFactory(
+            name="chain-gate-t2",
+            visibility=MissionVisibility.RESTRICTED,
+            availability_rule={
+                "leaf": "has_completed_mission",
+                "params": {"template_id": cls.t1.pk},
+            },
+        )
+
+    def test_gate_closed_before_t1_completion(self) -> None:
+        self.assertFalse(template_visible_to(self.t2, self.character, persona=self.persona))
+
+    def test_gate_opens_after_trigger_granted_t1_completes(self) -> None:
+        instance = maybe_dispatch_on_enter(self.character, self.room)
+        self.assertIsNotNone(instance)
+        instance.status = MissionStatus.COMPLETE
+        instance.save(update_fields=["status"])
+        self.assertTrue(template_visible_to(self.t2, self.character, persona=self.persona))

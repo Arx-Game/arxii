@@ -86,6 +86,20 @@ class SeedTutorialDevTests(TestCase):
         self.t1.refresh_from_db()
         self.assertEqual(self.t1.summary, "Staff-rewritten arrival summary.")
 
+    # -- risk-tier ladder (review fold-in: T6 was mis-seeded at 3) -------
+
+    def test_risk_tier_ladder_across_all_seven_templates(self) -> None:
+        """Approved chain table: T1-T7 risk tiers are 1/1/1/2/2/2/4.
+
+        Asserted as a single ladder (rather than one assertion per template
+        scattered across this file) so the full shape can't silently drift —
+        a future edit to any one template's risk_tier breaks this test loudly.
+        """
+        self.assertEqual(
+            [t.risk_tier for t in (self.t1, self.t2, self.t3, self.t4, self.t5, self.t6, self.t7)],
+            [1, 1, 1, 2, 2, 2, 4],
+        )
+
     # -- T1 Arrival ------------------------------------------------------
 
     def test_t1_arrival_shape(self) -> None:

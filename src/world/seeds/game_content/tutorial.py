@@ -26,18 +26,15 @@ trigger dispatch (``trigger_dispatch._dispatch_from_giver``), board postings
 authoring to also cover T2's ENVIRONMENTAL_DETAIL giver and T4's BOARD giver.
 T1 carries no predecessor, so it alone stays OPEN with an empty rule.
 
-KNOWN GAP (out of this seeder's scope — flagged for follow-up, not fixed
-here): ``has_completed_mission`` is scoped to
-``MissionInstance.accepted_as_persona`` (set only by the NPC-offer issuance
-path, ``npc_services.services``/``offer_handler``). Trigger-dispatched and
-board-taken runs (T1, T2, T4) are granted via ``staff_assign_mission``, which
-never sets ``accepted_as_persona`` — so a T(n+1) gate keyed on a
-trigger/board-granted T(n) will not open via the persona-scoped predicate
-until that gap is closed in ``trigger_dispatch.py``/``boards.py``. This
-affects the T1→T2, T2→T3, and (for the availability_rule leg only, not the
-FOLLOW_ON_SUMMONS leg) T4→T5 transitions. Recorded here rather than silently
-"fixed" by this seeder, since the fix lives in the dispatch services, not the
-content.
+FIXED (review follow-up to this seeder, #1035): ``has_completed_mission`` is
+scoped to ``MissionInstance.accepted_as_persona``. Trigger-dispatched
+(``trigger_dispatch._grant``) and board-taken (``boards.take_from_board``)
+runs now thread the persona already resolved for the visibility gate into
+``staff_assign_mission(..., persona=...)``, so ``accepted_as_persona`` is set
+on T1/T2/T4-style grants exactly as it already was for NPC-offer grants
+(``offer_handler.issue_mission``) — the T1→T2, T2→T3, and T4→T5
+(availability_rule leg) transitions all open via the persona-scoped
+predicate in live play, not just under staff/NPC-offer grants.
 
 Tutor NPC: mirrors ``world.npc_services.seeds.ensure_builders_guild_clerk_role``'s
 idempotent (role, label)-keyed offer pattern (get_or_create on
@@ -482,7 +479,7 @@ def _seed_t6(gate_template: MissionTemplate) -> MissionTemplate:
             '"None of us stand for long alone," the Warden says. "Swear '
             'yourself to a covenant, and see what holds you up."'
         ),
-        risk_tier=3,
+        risk_tier=2,
         level_band_min=1,
         level_band_max=5,
         visibility=MissionVisibility.RESTRICTED,

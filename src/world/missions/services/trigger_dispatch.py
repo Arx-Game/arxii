@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
     from typeclasses.characters import Character
     from world.missions.models import MissionTemplate
+    from world.scenes.models import Persona
 
 # Default re-offer cooldown when a drawn template carries no cooldown of its own.
 _DEFAULT_COOLDOWN = timezone.timedelta(hours=12)
@@ -119,7 +120,7 @@ def _dispatch_from_giver(giver: MissionGiver, character: ObjectDB) -> MissionIns
     # falls back to weight 1 for every entry. (Delegates the RNG to the codebase's
     # reviewed selection helper rather than a fresh random.* call.)
     template = select_weighted(eligible)
-    instance = _grant(template, character)
+    instance = _grant(template, character, persona)
     _write_cooldown(giver, character, template, now)
     _announce(character, template)
     return instance
@@ -136,11 +137,15 @@ def _holds_active_trigger_mission(character: ObjectDB) -> bool:
     ).exists()
 
 
-def _grant(template: MissionTemplate, character: ObjectDB) -> MissionInstance:
-    """Start the run via the canonical no-context primitive (no offer/persona)."""
+def _grant(
+    template: MissionTemplate, character: ObjectDB, persona: Persona | None
+) -> MissionInstance:
+    """Start the run via the canonical no-context primitive, stamping the
+    persona already resolved for the visibility gate (#870/#1035) so
+    ``has_completed_mission`` can find this run later."""
     from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
 
-    return staff_assign_mission(template, character)
+    return staff_assign_mission(template, character, persona=persona)
 
 
 def _write_cooldown(

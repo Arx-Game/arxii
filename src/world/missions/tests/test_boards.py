@@ -11,6 +11,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import GiverKind, MissionVisibility
 from world.missions.factories import (
     MissionGiverFactory,
@@ -149,6 +150,17 @@ class TakeFromBoardTests(TestCase):
         giver.templates.add(self.template_open)
         with self.assertRaises(BoardTakeError):
             take_from_board(giver, self.character, self.template_open.pk)
+
+    def test_take_from_board_sets_accepted_as_persona(self) -> None:
+        """Review fix (#1035): ``take_from_board`` threads the presenting
+        persona (already resolved for the visibility gate) into
+        ``accepted_as_persona`` — previously dropped, leaving
+        ``has_completed_mission`` unable to find board-granted runs."""
+        sheet = CharacterSheetFactory(character=self.character)
+        giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+        giver.templates.add(self.template_open)
+        instance = take_from_board(giver, self.character, self.template_open.pk)
+        self.assertEqual(instance.accepted_as_persona_id, sheet.primary_persona.pk)
 
 
 class BoardExamineTests(TestCase):
