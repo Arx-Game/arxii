@@ -7,7 +7,12 @@ its dotted path from a seeded FlowDefinition's CALL_SERVICE_FUNCTION step.
 from typing import Any
 
 from world.areas.positioning.models import Position
-from world.areas.positioning.services import connect_positions, force_move_to_position, position_of
+from world.areas.positioning.services import (
+    connect_positions,
+    create_conjured_obstacle,
+    force_move_to_position,
+    position_of,
+)
 from world.conditions.constants import (
     BLINK_CONDITION_NAME,
     FORCE_FIELD_CONDITION_NAME,
@@ -30,13 +35,47 @@ def move_position(*, payload: Any) -> None:
 def create_obstacle(*, payload: Any) -> None:
     """Make the edge between two positions impassable (an obstacle).
 
-    Connects payload.position_a_id and payload.position_b_id with is_passable=False.
-    Passes blocks_flight from payload if present (defaults False).
+    Delegates to create_conjured_obstacle when a caster_sheet is available on
+    the payload (conjured obstacle with lifecycle). Falls back to the bare
+    connect_positions for backward compatibility.
     """
     a = Position.objects.get(pk=payload.position_a_id)
     b = Position.objects.get(pk=payload.position_b_id)
     blocks_flight = getattr(payload, "blocks_flight", False)  # noqa: GETATTR_LITERAL
-    connect_positions(a, b, is_passable=False, blocks_flight=blocks_flight)
+    caster_sheet = getattr(payload, "caster_sheet", None)  # noqa: GETATTR_LITERAL
+    duration_rounds = getattr(payload, "duration_rounds", None)  # noqa: GETATTR_LITERAL
+
+    if caster_sheet is not None:
+        create_conjured_obstacle(
+            a,
+            b,
+            caster_sheet=caster_sheet,
+            duration_rounds=duration_rounds,
+            blocks_flight=blocks_flight,
+        )
+    else:
+        connect_positions(a, b, is_passable=False, blocks_flight=blocks_flight)
+
+
+def _caster_sheet_from_instance(instance: ConditionInstance | None):
+    """Resolve the caster's CharacterSheet from a ConditionInstance (#2019).
+
+    Returns None when the instance has no source_character or the character
+    has no sheet.
+    """
+    if instance is None or instance.source_character_id is None:
+        return None
+    try:
+        return instance.source_character.sheet_data
+    except (AttributeError, instance.source_character.__class__.DoesNotExist):
+        return None
+
+
+def _duration_from_instance(instance: ConditionInstance | None) -> int | None:
+    """Get the duration (rounds) from a ConditionInstance (#2019)."""
+    if instance is None:
+        return None
+    return instance.rounds_remaining
 
 
 # ---------------------------------------------------------------------------
@@ -388,6 +427,8 @@ def create_obstacle_on_condition(
         payload=SimpleNamespace(
             position_a_id=pos_a_pk,
             position_b_id=pos_b_pk,
+            caster_sheet=_caster_sheet_from_instance(instance),
+            duration_rounds=_duration_from_instance(instance),
         )
     )
 
