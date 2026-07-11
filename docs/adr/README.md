@@ -141,6 +141,7 @@ treat those names as hints to confirm, not gospel.
 - [0095 — Battle live updates are a slim BATTLE_STATE ping plus REST refetch, not a full-state WS payload](0095-battle-live-updates-are-ping-plus-refetch.md)
 - [0096 — Casts roll the caster's personal check in every path](0096-casts-roll-the-casters-personal-check-in-every-path.md)
 - [0111 — GM battle staging is catalog-pick-and-instantiate, with parallel blueprint/live models](0111-battle-staging-is-catalog-and-instantiate.md) (extends ADR-0081/0085/0110)
+- [0112 — MOVE tracks in-progress position via personal transit coordinates, not a rounds-counter](0112-move-uses-transit-coordinates.md) (extends ADR-0085)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

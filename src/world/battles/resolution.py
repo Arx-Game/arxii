@@ -40,6 +40,7 @@ from world.battles.constants import (
     BATTLE_POSTURE_CHECK_MODIFIER,
     BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER,
     BATTLE_POSTURE_VP_MULTIPLIER,
+    MOVE_COST_DIFFICULTY_PER_POINT,
     ROUTED_MORALE_THRESHOLD,
     ROUTED_STRENGTH_THRESHOLD,
     STRIKE_ATTRITION_PER_LEVEL,
@@ -47,6 +48,7 @@ from world.battles.constants import (
     SUPPORT_VP,
     UNIT_QUALITY_STRIKE_MODIFIER,
     BattleActionKind,
+    BattleActionScope,
     BattleUnitStatus,
 )
 from world.battles.exceptions import BattleError
@@ -63,7 +65,13 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models import ConsequencePool
-    from world.battles.models import Battle, BattleActionDeclaration, BattlePlace, BattleSide
+    from world.battles.models import (
+        Battle,
+        BattleActionDeclaration,
+        BattlePlace,
+        BattleSide,
+        BattleUnit,
+    )
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionInstance
@@ -371,6 +379,12 @@ class BattleTechniqueResolver:
         quality = _quality_modifier(unit.quality) if unit is not None else 0
         commander = commander_bonus_for_side_at_place(participant.side, participant.place)
         posture = BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture, 0)
+        move_cost = (
+            -self.declaration.target_place.movement_cost * MOVE_COST_DIFFICULTY_PER_POINT
+            if self.declaration.action_kind == BattleActionKind.MOVE
+            and self.declaration.target_place is not None
+            else 0
+        )
 
         return (
             property_affinity
@@ -380,6 +394,7 @@ class BattleTechniqueResolver:
             + quality
             + commander
             + posture
+            + move_cost
         )
 
 
@@ -755,6 +770,128 @@ def _resolve_reposition_success(
     place.save(update_fields=["x", "y"])
 
 
+def _withdraw_move_mover(
+    participant: BattleParticipant, mover: BattleParticipant | BattleUnit
+) -> None:
+    """Withdraw ``mover`` from the battle (#2007) — target_place=None branch of
+    ``_resolve_move_success``, split out to keep that function under the
+    PLR0915 statement budget. UNIT scope only (validated at declare time by
+    ``declare_battle_action``): a commander PLACE-scope order can never withdraw
+    a unit, only move it between fronts.
+    """
+    from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+
+    old_place_id = mover.place_id
+    mover.place = None
+    mover.status = BattleParticipantStatus.WITHDRAWN
+    mover.transit_x = None
+    mover.transit_y = None
+    mover.transit_target_place = None
+    mover.save(update_fields=["place", "status", "transit_x", "transit_y", "transit_target_place"])
+    participant.battle.state_cache.move_participant_place(mover, old_place_id=old_place_id)
+
+
+def _advance_move_mover(
+    participant: BattleParticipant,
+    mover: BattleParticipant | BattleUnit,
+    target: BattlePlace,
+    *,
+    is_self_move: bool,
+) -> None:
+    """Advance ``mover`` toward ``target`` by up to its effective MOVEMENT capability
+    magnitude (#2007) — the target_place-set branch of ``_resolve_move_success``,
+    split out to keep that function under the PLR0915 statement budget.
+
+    Distance moved this round is bounded by min(distance to target, effective
+    MOVEMENT capability), mirroring REPOSITION's SPEED-bounded movement
+    (``_resolve_reposition_success``). Arrival (remaining distance <=
+    max_distance) flips ``.place`` to ``target`` and clears transit state;
+    otherwise the new intermediate position persists on transit_x/transit_y
+    and the mover must redeclare MOVE next round to keep progressing — same
+    redeclare-per-round precedent REPOSITION already established.
+    """
+    from world.conditions.constants import FoundationalCapability  # noqa: PLC0415
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
+    from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+
+    if mover.transit_x is not None and mover.transit_y is not None:
+        current_x, current_y = mover.transit_x, mover.transit_y
+    elif mover.place is not None:
+        current_x, current_y = mover.place.x, mover.place.y
+    else:
+        current_x, current_y = Decimal(0), Decimal(0)
+
+    dx = target.x - current_x
+    dy = target.y - current_y
+    distance = (dx * dx + dy * dy) ** Decimal("0.5")
+
+    capability_type = next(
+        (
+            c
+            for c in CapabilityType.objects.cached_all()
+            if c.name == FoundationalCapability.MOVEMENT
+        ),
+        None,
+    )
+    if capability_type is None:
+        max_distance = Decimal(0)
+    elif is_self_move:
+        max_distance = Decimal(
+            get_effective_capability_value(participant.character_sheet, capability_type)
+        )
+    else:
+        max_distance = Decimal(mover.effective_capability(capability_type))
+
+    if distance <= max_distance:
+        old_place_id = mover.place_id
+        mover.place = target
+        mover.transit_x = None
+        mover.transit_y = None
+        mover.transit_target_place = None
+        mover.save(update_fields=["place", "transit_x", "transit_y", "transit_target_place"])
+        if is_self_move:
+            participant.battle.state_cache.move_participant_place(mover, old_place_id=old_place_id)
+        else:
+            participant.battle.state_cache.move_unit_place(mover, old_place_id=old_place_id)
+        return
+
+    if distance > 0:
+        scale = max_distance / distance
+        current_x += dx * scale
+        current_y += dy * scale
+    mover.transit_x = current_x
+    mover.transit_y = current_y
+    mover.transit_target_place = target
+    mover.save(update_fields=["transit_x", "transit_y", "transit_target_place"])
+
+
+def _resolve_move_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,  # noqa: ARG001 — no VP awarded for movement
+    success_level: int,  # noqa: ARG001 — movement is capability-bounded, not margin-scaled
+) -> None:
+    """Apply MOVE success: advance the mover toward target_place by up to its
+    effective MOVEMENT capability magnitude, or withdraw it from the battle (#2007).
+
+    The mover is the declaring participant (scope=UNIT, self-move) or the
+    commander-ordered declaration.target_unit (scope=PLACE) — never both.
+    target_place=None means withdrawal (UNIT scope only, validated at declare
+    time by declare_battle_action) — see ``_withdraw_move_mover``. Otherwise
+    the mover advances toward target_place — see ``_advance_move_mover``.
+    """
+    participant = declaration.participant
+    is_self_move = declaration.scope == BattleActionScope.UNIT
+    mover = participant if is_self_move else declaration.target_unit
+    if mover is None:
+        return
+
+    if declaration.target_place is None:
+        _withdraw_move_mover(participant, mover)
+        return
+
+    _advance_move_mover(participant, mover, declaration.target_place, is_self_move=is_self_move)
+
+
 def _resolve_breach_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
@@ -1099,6 +1236,7 @@ def _dispatch_success_handler(
         BattleActionKind.REPOSITION: lambda: _resolve_reposition_success(
             declaration, result, success_level
         ),
+        BattleActionKind.MOVE: lambda: _resolve_move_success(declaration, result, success_level),
     }
     handler = handlers.get(
         declaration.action_kind, lambda: _resolve_support_success(declaration, result)
@@ -1229,7 +1367,11 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "participant__character_sheet__character",
             "participant__character_sheet",
             "participant__side",
+            "participant__place",
+            "participant__transit_target_place",
             "target_unit",
+            "target_unit__place",
+            "target_unit__transit_target_place",
             "target_place",
             "target_side",
             "target_fortification",

@@ -134,6 +134,26 @@ class PlaceScopeRequiredError(BattleError):
         super().__init__(user_message)
 
 
+class InvalidMoveScopeError(BattleError):
+    """Raised when MOVE is declared with a scope other than UNIT or PLACE (#2007)."""
+
+    def __init__(
+        self,
+        user_message: str = "MOVE can only be declared for yourself or as a "
+        "commander's order to one unit.",
+    ) -> None:
+        super().__init__(user_message)
+
+
+class MoveOrderRequiresTargetUnitError(BattleError):
+    """Raised when a PLACE-scope MOVE (a commander's order) has no target_unit (#2007)."""
+
+    def __init__(
+        self, user_message: str = "A commander's MOVE order needs a unit to move."
+    ) -> None:
+        super().__init__(user_message)
+
+
 class FortificationTargetRequiredError(BattleError):
     """Raised when BREACH/FORTIFY is declared without a target_fortification (#1713)."""
 

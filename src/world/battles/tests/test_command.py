@@ -426,6 +426,96 @@ class CmdBattleDeclareTests(TestCase):
         feedback = self.player_char.msg.call_args[0][0]
         self.assertIn("wall", feedback.lower())
 
+    def test_declare_move_self_creates_declaration(self) -> None:
+        place = BattlePlaceFactory(battle=self.battle, name="The Ford")
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare move The Ford with Lance Thrust")
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.MOVE)
+        self.assertEqual(decl.scope, BattleActionScope.UNIT)
+        self.assertEqual(decl.target_place_id, place.pk)
+
+    def test_declare_move_withdraw_creates_declaration(self) -> None:
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare move withdraw with Lance Thrust")
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.MOVE)
+        self.assertIsNone(decl.target_place)
+
+    def test_declare_move_commander_order_creates_declaration(self) -> None:
+        place = BattlePlaceFactory(battle=self.battle, name="The Ford")
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save(update_fields=["covenant"])
+        rank = CovenantRankFactory(covenant=covenant)
+        subordinate_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="cmd-test-move-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=subordinate_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+        own_unit = BattleUnitFactory(battle=self.battle, side=self.defender_side, name="Own Guard")
+
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare move Own Guard to The Ford with Lance Thrust")
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.MOVE)
+        self.assertEqual(decl.scope, BattleActionScope.PLACE)
+        self.assertEqual(decl.target_unit_id, own_unit.pk)
+        self.assertEqual(decl.target_place_id, place.pk)
+
+    def test_declare_reposition_creates_declaration(self) -> None:
+        from decimal import Decimal
+
+        from world.battles.constants import VehicleKind
+        from world.battles.services import create_battle_vehicle
+
+        vehicle = create_battle_vehicle(
+            battle=self.battle,
+            side=self.defender_side,
+            place_name="The Gull",
+            vehicle_kind=VehicleKind.SHIP,
+        )
+        vehicle.unit.commander = self.player_sheet
+        vehicle.unit.save(update_fields=["commander"])
+
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare reposition The Gull 10 5 with Lance Thrust")
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.REPOSITION)
+        self.assertEqual(decl.reposition_dx, Decimal(10))
+        self.assertEqual(decl.reposition_dy, Decimal(5))
+
+    def test_declare_move_unknown_place_sends_error(self) -> None:
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare move Nowhere with Lance Thrust")
+
+        self.assertFalse(
+            BattleActionDeclaration.objects.filter(battle_round=self.battle_round).exists()
+        )
+        self.player_char.msg.assert_called()
+        feedback = self.player_char.msg.call_args[0][0]
+        self.assertIn("Nowhere", feedback)
+
 
 class CmdBattleDuelTests(TestCase):
     """CmdBattle `duel` subverb dispatches ChallengeChampionDuelAction."""

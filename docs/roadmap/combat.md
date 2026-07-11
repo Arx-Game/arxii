@@ -74,8 +74,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   (`apply_ship_battle_outcome`) writing `needs_repair` back onto the persistent ship
   when its hull is breached — see [ships.md](../systems/ships.md). Airship/
   dragon/kraken remain data variants (`VehicleKind`) pending their own end-to-end
-  pass — no dedicated content, telnet reposition subcommand, reposition-movement
-  resolution, or persistent-ship equivalent yet.
+  pass — no dedicated content or persistent-ship equivalent yet. REPOSITION's
+  movement resolution and telnet subcommand both shipped with #2007 (the
+  resolution logic had actually been built since #1714 — only the
+  Action-layer/telnet wiring was missing).
   Live strategic battle map shipped (#2009): read-only REST aggregate
   (`GET /api/battles/`, `GET /api/battles/<pk>/`, scene-visibility-gated) + a
   slim `BATTLE_STATE` WS ping (`{battle_id, round_number}`, sent post-commit
@@ -95,6 +97,13 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   minimal `StagingPanel` on the `/scenes/:id/battle` map page. A starter catalog (2
   blueprints, 3 unit templates) ships via the "battles" seed cluster — see
   [battles.md](../systems/battles.md#staging-2010).
+  Battle movement shipped (#2007): `BattleActionKind.MOVE` — self-move,
+  commander-ordered unit move (reuses #1710's command-tier gate), and withdrawal —
+  moves a `BattleParticipant`/`BattleUnit` between existing fronts via multi-round,
+  MOVEMENT-capability-bounded transit; `BattlePlace.movement_cost` consumed for the
+  first time as check-difficulty. `WITHDRAWN` (`BattleParticipantStatus`) wired for
+  the first time. Web click-to-move on the #2009 strategic map deferred — not yet
+  scoped.
 - Mounts / charging / flying (P2, no-improv-flagged). Ranged / archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
 
 ## Reserved term: "clash"

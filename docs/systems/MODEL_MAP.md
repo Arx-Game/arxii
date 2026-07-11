@@ -694,7 +694,9 @@
 **Pointed to by:**
   - fortifications <- battles.Fortification
   - units <- battles.BattleUnit
+  - units_in_transit <- battles.BattleUnit
   - participants <- battles.BattleParticipant
+  - participants_in_transit <- battles.BattleParticipant
   - scoped_declarations <- battles.BattleActionDeclaration
   - vehicle <- battles.BattleVehicle
 
@@ -711,6 +713,7 @@
   - battle -> battles.Battle [FK]
   - side -> battles.BattleSide [FK]
   - place -> battles.BattlePlace [FK] (nullable)
+  - transit_target_place -> battles.BattlePlace [FK] (nullable)
   - commander -> character_sheets.CharacterSheet [FK] (nullable)
   - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -737,6 +740,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - side -> battles.BattleSide [FK]
   - place -> battles.BattlePlace [FK] (nullable)
+  - transit_target_place -> battles.BattlePlace [FK] (nullable)
 **Pointed to by:**
   - declarations <- battles.BattleActionDeclaration
   - support_declarations <- battles.BattleActionDeclaration

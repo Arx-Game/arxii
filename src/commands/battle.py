@@ -17,6 +17,10 @@ Player subverbs:
     battle declare fortify place <name> fortification <kind> with <technique>
     battle declare set_environment with <technique>
     battle declare set_environment place <name> with <technique>
+    battle declare move <place> with <technique>
+    battle declare move <unit> to <place> with <technique>
+    battle declare move withdraw with <technique>
+    battle declare reposition <place> <dx> <dy> with <technique>
     battle duel <front> vs <boss name>
 
 GM subverbs:
@@ -37,6 +41,7 @@ No business logic lives here: parse, resolve model instances, call Action.
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
@@ -98,6 +103,10 @@ class CmdBattle(ArxCommand):
         battle declare fortify place <name> fortification <kind> with <technique>
         battle declare set_environment with <technique>
         battle declare set_environment place <name> with <technique>
+        battle declare move <place> with <technique>
+        battle declare move <unit> to <place> with <technique>
+        battle declare move withdraw with <technique>
+        battle declare reposition <place> <dx> <dy> with <technique>
         battle duel <front> vs <boss name>
 
     Syntax (GM / staff):
@@ -138,6 +147,11 @@ class CmdBattle(ArxCommand):
     to a PLACE-scope local exception at that front only.
     ``duel <front> vs <boss name>`` opens a lethal Champion duel bound to that
     front — requires an engaged Champion role for your side's covenant.
+    ``move <place>`` repositions yourself to a different front; ``move <unit> to
+    <place>`` is a commander's order (requires an engaged SUBORDINATE or SUPREME
+    command_tier, same as ``repel``/``hold``); ``move withdraw`` leaves the battle
+    entirely. ``reposition <place> <dx> <dy>`` moves a vehicle you command by the
+    given delta, clamped to its SPEED capability (#1714).
 
     The staging subverbs (#2010) turn a JUNIOR-GM catalog pick into a live
     Battle: ``create`` makes a new Battle (optionally staging a named
@@ -370,6 +384,10 @@ class CmdBattle(ArxCommand):
                 " | battle declare breach place <name> fortification <kind> with <technique>"
                 " | battle declare fortify place <name> fortification <kind> with <technique>"
                 " | battle declare set_environment [place <name>] with <technique>"
+                " | battle declare move <place> with <technique>"
+                " | battle declare move <unit> to <place> with <technique>"
+                " | battle declare move withdraw with <technique>"
+                " | battle declare reposition <place> <dx> <dy> with <technique>"
             )
             raise CommandError(msg)
 
@@ -387,6 +405,10 @@ class CmdBattle(ArxCommand):
                 " | battle declare breach place <name> fortification <kind> with <technique>"
                 " | battle declare fortify place <name> fortification <kind> with <technique>"
                 " | battle declare set_environment [place <name>] with <technique>"
+                " | battle declare move <place> with <technique>"
+                " | battle declare move <unit> to <place> with <technique>"
+                " | battle declare move withdraw with <technique>"
+                " | battle declare reposition <place> <dx> <dy> with <technique>"
             )
             raise CommandError(msg)
         split_at = remainder.index("with")
@@ -419,13 +441,15 @@ class CmdBattle(ArxCommand):
                 BattleActionKind.FORTIFY, n, t, verb="fortify"
             ),
             "set_environment": self._declare_environment,
+            "move": self._declare_move,
+            "reposition": self._declare_reposition,
         }
         handler = handlers.get(kind)
         if handler is None:
             msg = (
                 "Unknown declare subverb. Use 'strike', 'support', 'rescue', "
                 "'rout', 'rally', 'repel', 'hold', 'breach', 'fortify', "
-                "or 'set_environment'."
+                "'set_environment', 'move', or 'reposition'."
             )
             raise CommandError(msg)
 
@@ -649,6 +673,109 @@ class CmdBattle(ArxCommand):
 
         msg = "Usage: battle declare set_environment [place <name>] with <technique>"
         raise CommandError(msg)
+
+    def _declare_move(self, name: str, technique_name: str) -> ActionResult:
+        """Resolve and dispatch a MOVE declaration (#2007).
+
+        ``name`` is one of: ``withdraw`` (self-move off the map), a bare place
+        name (self-move to that front), or ``<unit> to <place>`` (a commander's
+        order — requires the declarant's engaged command_tier).
+        """
+        from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
+        from world.battles.constants import BattleActionKind, BattleActionScope  # noqa: PLC0415
+        from world.battles.models import BattlePlace  # noqa: PLC0415
+
+        if not name:
+            msg = (
+                "Usage: battle declare move <place> with <technique>"
+                " | battle declare move <unit> to <place> with <technique>"
+                " | battle declare move withdraw with <technique>"
+            )
+            raise CommandError(msg)
+        participant = self._resolve_participant()
+        technique = self._resolve_technique(participant, technique_name)
+
+        if name.lower() == "withdraw":  # noqa: STRING_LITERAL
+            return DeclareBattleActionAction().run(
+                self.caller,
+                action_kind=BattleActionKind.MOVE,
+                technique_id=technique.pk,
+                scope=BattleActionScope.UNIT,
+                target_place=None,
+            )
+
+        if " to " in name.lower():  # noqa: STRING_LITERAL
+            split_at = name.lower().index(" to ")
+            unit_name = name[:split_at].strip()
+            place_name = name[split_at + len(" to ") :].strip()
+            unit = self._resolve_own_unit(participant, unit_name)
+            place = BattlePlace.objects.filter(
+                battle=participant.battle, name__iexact=place_name
+            ).first()
+            if place is None:
+                msg = f"No front named '{place_name}' in this battle."
+                raise CommandError(msg)
+            return DeclareBattleActionAction().run(
+                self.caller,
+                action_kind=BattleActionKind.MOVE,
+                technique_id=technique.pk,
+                scope=BattleActionScope.PLACE,
+                target_unit=unit,
+                target_place=place,
+            )
+
+        place = BattlePlace.objects.filter(battle=participant.battle, name__iexact=name).first()
+        if place is None:
+            msg = f"No front named '{name}' in this battle."
+            raise CommandError(msg)
+        return DeclareBattleActionAction().run(
+            self.caller,
+            action_kind=BattleActionKind.MOVE,
+            technique_id=technique.pk,
+            scope=BattleActionScope.UNIT,
+            target_place=place,
+        )
+
+    def _declare_reposition(self, name: str, technique_name: str) -> ActionResult:
+        """Resolve and dispatch a REPOSITION declaration (#1714, telnet gap closed #2007).
+
+        ``name`` is ``<place> <dx> <dy>`` — the vehicle's own place, then the
+        requested x/y delta (clamped to the vehicle's SPEED capability at
+        resolution, unchanged from #1714).
+        """
+        from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
+        from world.battles.constants import BattleActionKind, BattleActionScope  # noqa: PLC0415
+        from world.battles.models import BattlePlace  # noqa: PLC0415
+
+        tokens = name.split()
+        if len(tokens) < 3:  # noqa: PLR2004
+            msg = "Usage: battle declare reposition <place> <dx> <dy> with <technique>"
+            raise CommandError(msg)
+        place_name = " ".join(tokens[:-2])
+        try:
+            dx = Decimal(tokens[-2])
+            dy = Decimal(tokens[-1])
+        except InvalidOperation as exc:
+            msg = "dx and dy must be numbers."
+            raise CommandError(msg) from exc
+
+        participant = self._resolve_participant()
+        technique = self._resolve_technique(participant, technique_name)
+        place = BattlePlace.objects.filter(
+            battle=participant.battle, name__iexact=place_name
+        ).first()
+        if place is None:
+            msg = f"No front named '{place_name}' in this battle."
+            raise CommandError(msg)
+        return DeclareBattleActionAction().run(
+            self.caller,
+            action_kind=BattleActionKind.REPOSITION,
+            technique_id=technique.pk,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+            reposition_dx=dx,
+            reposition_dy=dy,
+        )
 
     def _declare_ally_scoped(
         self, action_kind: str, name: str, technique_name: str, *, verb: str

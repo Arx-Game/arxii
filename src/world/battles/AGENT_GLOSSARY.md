@@ -93,6 +93,32 @@ or sustains control of a `BattlePlace` (see **Front control** below).
 holds a front as an objective. `None` means uncontrolled/contested. Set by a
 successful HOLD declaration.
 
+**Move** (verb):
+The `BattleActionKind.MOVE` declaration (#2007) — reassigns a `BattleParticipant`'s
+or `BattleUnit`'s `.place` FK to a different, already-existing `BattlePlace`.
+Distinct from **Reposition** below, which moves a `BattlePlace`'s own coordinates.
+Self-move (`scope=UNIT`) needs no command authority; a commander orders one unit
+(`scope=PLACE`) through the same Command Tier gate ROUT/RALLY use.
+`target_place=None` on a self-move means withdrawal from the battle.
+_Avoid_: reposition (reserved for the vehicle-coordinate verb), retreat (use
+"withdraw"/"withdrawal" — the `WITHDRAWN` status name).
+
+**Reposition** (verb):
+The `BattleActionKind.REPOSITION` declaration (#1714) — moves a `BattlePlace`'s own
+`x`/`y` coordinates (the battle-map plane, ADR-0085), clamped to the target
+vehicle's SPEED capability. Vehicle-commander-gated only (bypasses Command Tier
+entirely — a non-covenant-backed vessel must still be movable). Distinct from
+**Move** above, which relocates a participant/unit between existing places rather
+than moving a place itself.
+_Avoid_: move (reserved for the participant/unit-relocation verb).
+
+**Transit**:
+`transit_x`/`transit_y`/`transit_target_place` (#2007) — a `BattleParticipant`'s or
+`BattleUnit`'s in-progress position while a multi-round **Move** hasn't yet
+completed. All three null means "at rest" (effective position is simply the
+mover's current `.place` coordinates). Cleared on arrival or withdrawal.
+_Avoid_: en route, mid-move (descriptive only, not model vocabulary).
+
 **Fortification**:
 A `Fortification` — a defensible structure (wall/gate/battlement) at a
 `BattlePlace` (#1713). A front may carry several at once, each independently

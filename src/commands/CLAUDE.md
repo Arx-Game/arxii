@@ -316,12 +316,12 @@ actions, backends, and service functions.
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`. `succor <ally>` always names a specific ally to shelter from
   environmental hazards this round (resolved at round-tick DoT application, not declaration).
-- **`battle.py`**: `CmdBattle` (`battle`, #1592/#1710/#1712/#1713/#1715/#2010) — the
+- **`battle.py`**: `CmdBattle` (`battle`, #1592/#1710/#1712/#1713/#1715/#2010/#2007) — the
   large-scale-battle namespace. One `ArxCommand` routes a leading subverb (`battle declare
-  strike/support/rescue/rout/rally/repel/hold/breach/fortify/set_environment ... with
-  <technique>` / `battle duel <front> vs <boss name>` / `round` / `resolve` / `conclude`) to
-  the four round-lifecycle REGISTRY actions in `actions/definitions/battles.py`, all via
-  `Action().run()` directly. GM staging subverbs (#2010 — turn a catalog pick into a live
+  strike/support/rescue/rout/rally/repel/hold/breach/fortify/set_environment/move/reposition
+  ... with <technique>` / `battle duel <front> vs <boss name>` / `round` / `resolve` /
+  `conclude`) to the four round-lifecycle REGISTRY actions in `actions/definitions/battles.py`,
+  all via `Action().run()` directly. GM staging subverbs (#2010 — turn a catalog pick into a live
   Battle): `battle create <name> [risk=<level>] [map=<blueprint>]` → `CreateBattleAction`;
   `battle stage <blueprint> [replace]` → `StageBattleMapAction`; `battle spawn <template>
   [count=N] [at <front>] side=<role>` → `SpawnBattleUnitsAction`; `battle enlist
@@ -330,7 +330,7 @@ actions, backends, and service functions.
   catalogs (blueprints + templates); there is no kind filter.
   See `docs/systems/battles.md#staging-2010` for the full contract. Bare
   `battle` prints a status hub (battle name, side VP, front, current round).
-  All 10 `declare` kinds share one dispatch (a `dict[str, Callable]` lookup, not an if/elif
+  All 12 `declare` kinds share one dispatch (a `dict[str, Callable]` lookup, not an if/elif
   chain): `strike`/`rout` resolve a named unit on either side (ACTIVE only) or accept
   `side`/`place <name>` for command-tier-gated SIDE/PLACE-scope fan-out (#1710); `rally`
   mirrors that against the declarant's own side only, also matching ROUTED units (the point
@@ -341,7 +341,11 @@ actions, backends, and service functions.
   name of its own); `set_environment` casts battlefield weather (#1715) — the technique
   carries `target_weather_type`, so no weather argument is parsed; omitting a target casts
   at BATTLE scope (SUPREME command_tier gated), or `place <name>` narrows it to a
-  PLACE-scope local exception. Subverbs are namespaced — not bare top-level keys — to avoid
+  PLACE-scope local exception; `move <place>` self-moves to a different front, `move <unit>
+  to <place>` is a command-tier-gated commander's order, and `move withdraw` leaves the
+  battle entirely (#2007); `reposition <place> <dx> <dy>` moves a vehicle the caller commands
+  by the given delta, clamped to its SPEED capability at resolution (#1714, telnet parity
+  closed by #2007). Subverbs are namespaced — not bare top-level keys — to avoid
   exit/channel/alias collisions (mirrors `CmdCombat`/`CmdDuel`). No business logic in the
   command.
 - **`duels.py`**: `CmdDuel` (`duel`, #1492) — the PC-vs-PC duel-lifecycle namespace. One command
