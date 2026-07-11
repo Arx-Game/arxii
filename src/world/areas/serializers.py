@@ -8,6 +8,7 @@ class WhereEntrySerializer(serializers.Serializer):
 
     persona_name = serializers.CharField(read_only=True)
     room_path = serializers.CharField(read_only=True)
+    room_id = serializers.IntegerField(read_only=True)
 
 
 class WhoEntrySerializer(serializers.Serializer):

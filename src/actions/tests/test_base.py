@@ -198,6 +198,8 @@ class ActionRegistryTests(TestCase):
             "present_outfit",
             "judge_presentation",
             "traverse_exit",
+            "travel_to",
+            "stop_travel",
             "home",
             "activate_permit",
             "use_item",

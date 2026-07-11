@@ -132,6 +132,7 @@ from commands.social.tidings import CmdTidings
 from commands.story import CmdStory
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
+from commands.travel import CmdTravel  # #2163
 from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
@@ -369,6 +370,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPlaces,
             # #2005 — tactical position graph: list/take/move telnet namespace.
             CmdPosition,
+            # #2163 — "go there" travel: auto-walk to a character's location.
+            CmdTravel,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
             CmdMarket,
