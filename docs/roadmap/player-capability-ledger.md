@@ -136,7 +136,12 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
   charm/switch-sides (#1590, allegiance-flip); NPC negotiation (#1591); condition removal/dispel
   (#1585, shipped — `TechniqueRemovedCondition` + `remove_technique_conditions`, ADR-0064).
   Teleport/obstacle/telekinesis have placeholder position IDs — runtime destination selection
-  deferred to a follow-up issue.
+  deferred to a follow-up issue. **Ward-your-allies — SHIPPED #2208** (ADR-0116): each of the
+  three reactive wards (Aegis Field/Mirror Ward/Phase Step) gained an ALLY-single and an
+  ALLY-`FILTERED_GROUP` (party, out-of-combat only, 2x anima_cost) Technique variant reusing
+  the same `ConditionTemplate`; both reactive-fire and round-upkeep anima costs now debit the
+  applier (`ConditionInstance.source_character`), falling back to the bearer for self-wards,
+  so ally wards strain the caster. No in-combat party AoE (deliberately deferred).
 - **Combat systems:** war/battle system; mounts & flying (P2, no-improv-flagged); ranged/archery enforcement.
 
 ### Prove-it (WIRED-UNPROVEN — write the journey E2E, fix what it exposes)

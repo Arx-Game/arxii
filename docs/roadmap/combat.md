@@ -24,6 +24,16 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).
+- **Ward your allies (#2208, ADR-0116).** Aegis Field / Mirror Ward / Phase Step each gained
+  an ALLY-single (Aegis Ward, Mirror Vigil, Phase Guard — castable in or out of combat) and an
+  ALLY-`FILTERED_GROUP` party-preparation variant (Aegis Communion, Mirror Communion, Phase
+  Communion — out-of-combat only, consent-free per ADR-0045; party `anima_cost` is 2x the
+  single variant's), reusing the existing three `ConditionTemplate` rows with no new
+  ConditionTemplates/triggers/flows. Both reactive-cost paths (fire and round upkeep) now
+  debit the caster (`ConditionInstance.source_character`), falling back to the bearer for
+  self-cast wards, so an ally ward strains its caster rather than a free ride for the ally;
+  an upkeep payer who can't afford the round cost lapses the ward. No in-combat party AoE —
+  deliberately not built.
 - **On-use items as a round action (#2023/#2120).** `combat use <item> [on <target>]`
   (telnet) and `POST /api/combat/{pk}/use_item/` (web) both declare a USE_ITEM
   `CombatRoundAction` through the shared `combat_use` REGISTRY action; round resolution
