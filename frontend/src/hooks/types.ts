@@ -31,6 +31,8 @@ export const WS_MESSAGE_TYPE = {
   EXECUTE_ACTION: 'execute_action',
   /** Inbound: someone applauded your content; anonymous. */
   KUDOS_RECEIVED: 'kudos_received',
+  /** Inbound: a new letter arrived for one of the recipient's tenures (#2160). */
+  MAIL_ARRIVED: 'mail_arrived',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
@@ -155,6 +157,15 @@ export interface KudosReceivedPayload {
   amount: number;
   source_category: string;
   description: string;
+ * Slim arrival ping for `mail_arrived` messages (#2160). Anonymity boundary:
+ * `sender_display` is the sender tenure's display name only, never an
+ * account id/username. Carries no mail body — clients refetch the mail list
+ * / unread count on receipt.
+ */
+export interface MailArrivedPayload {
+  mail_id: number;
+  sender_display: string;
+  subject: string;
 }
 
 export interface InteractionWsPayload {
