@@ -1335,7 +1335,8 @@ def _tenure_blocks_actor(
 class _CategoryConsentData(NamedTuple):
     """Batched per-category consent lookups for a participant sweep (owner-tenure id sets)."""
 
-    rule_modes: dict[int, str]
+    effective_mode_by_pref: dict[int, str]
+    root_default_mode: str | None
     whitelisted_owner_ids: set[int]
     blacklisted_owner_ids: set[int]
     friend_owner_ids: set[int]
@@ -1348,14 +1349,19 @@ def _load_category_consent_data(
     category: object | None,
     actor_tenure: object | None,
 ) -> _CategoryConsentData:
-    """Batch-load the per-category consent data for a participant sweep.
+    """Batch-load the per-category consent data for a participant sweep (#2170).
 
-    Returns a :class:`_CategoryConsentData` whose ``rule_modes`` maps a preference id to
-    its category rule mode, and whose three owner-id sets record which owner tenures have
-    (respectively) whitelisted, blacklisted, or friended *actor_tenure*. Everything is
-    empty when *category* is ``None`` (uncategorized → master switch only). At most four
-    queries (rules, whitelist, blacklist, friendships), each independent of participant
-    count. Friendship is not category-scoped — an OOC friend passes every category.
+    Returns a :class:`_CategoryConsentData` whose ``effective_mode_by_pref`` maps a
+    preference id to its *resolved* ConsentMode after tree inheritance (the nearest rule up
+    the category's ancestor chain, else the root's ``default_mode``), ``root_default_mode``
+    holds that root default for owner tenures with no preference row, and whose four
+    owner-id sets record which owner tenures have (respectively) whitelisted, blacklisted,
+    friended, or mutually-rivalled *actor_tenure*. Everything is empty when *category* is
+    ``None`` (uncategorized → master switch only). Rules and whitelist/blacklist are loaded
+    across the whole ancestor chain in one query each, independent of participant count;
+    friendship/rivalry are category-independent. This mirrors
+    :func:`world.consent.services.consent_blocks_targeting` so the picker sweep and the
+    per-tenure gate agree.
     """
     from world.consent.models import (  # noqa: PLC0415
         SocialConsentBlacklist,
@@ -1364,44 +1370,58 @@ def _load_category_consent_data(
     )
     from world.scenes.models import Friendship, Rivalry  # noqa: PLC0415
 
-    rule_modes: dict[int, str] = {}
+    effective_mode_by_pref: dict[int, str] = {}
     whitelisted_owner_ids: set[int] = set()
     blacklisted_owner_ids: set[int] = set()
     friend_owner_ids: set[int] = set()
     rival_owner_ids: set[int] = set()
     if category is None:
         return _CategoryConsentData(
-            rule_modes,
+            effective_mode_by_pref,
+            None,
             whitelisted_owner_ids,
             blacklisted_owner_ids,
             friend_owner_ids,
             rival_owner_ids,
         )
 
+    chain = category.ancestor_chain()  # [leaf, …, root]
+    chain_ids = [node.pk for node in chain]
+    root_default_mode = chain[-1].default_mode
+
     pref_ids = [pref.pk for pref in prefs_by_tenure.values()]
     if pref_ids:
-        # One query: this category's rules across all of those preferences.
-        rule_modes = {
-            rule.preference_id: rule.mode
+        # One query: rules across the whole ancestor chain for all of those preferences.
+        rules_by_pref_cat: dict[tuple[int, int], str] = {
+            (rule.preference_id, rule.category_id): rule.mode
             for rule in SocialConsentCategoryRule.objects.filter(
-                preference_id__in=pref_ids, category=category
+                preference_id__in=pref_ids, category_id__in=chain_ids
             )
         }
+        for pref_id in pref_ids:
+            mode = root_default_mode
+            for node in chain:  # leaf → root: first rule up the chain wins.
+                node_mode = rules_by_pref_cat.get((pref_id, node.pk))
+                if node_mode is not None:
+                    mode = node_mode
+                    break
+            effective_mode_by_pref[pref_id] = mode
     if actor_tenure is not None:
-        # One query each: whitelist / blacklist entries naming the actor for this category,
-        # plus friendships the owner tenures extended to the actor (category-independent).
+        # One query each: whitelist / blacklist entries naming the actor anywhere on the
+        # chain (a parent whitelist admits the actor for its children too), plus friendships
+        # / mutual rivalries the owner tenures hold toward the actor (category-independent).
         whitelisted_owner_ids = set(
             SocialConsentWhitelist.objects.filter(
                 owner_tenure_id__in=tenure_ids,
                 allowed_tenure=actor_tenure,
-                category=category,
+                category_id__in=chain_ids,
             ).values_list("owner_tenure_id", flat=True)
         )
         blacklisted_owner_ids = set(
             SocialConsentBlacklist.objects.filter(
                 owner_tenure_id__in=tenure_ids,
                 blocked_tenure=actor_tenure,
-                category=category,
+                category_id__in=chain_ids,
             ).values_list("owner_tenure_id", flat=True)
         )
         friend_owner_ids = set(
@@ -1424,7 +1444,8 @@ def _load_category_consent_data(
         )
         rival_owner_ids = owners_declaring_actor & owners_actor_declared
     return _CategoryConsentData(
-        rule_modes,
+        effective_mode_by_pref,
+        root_default_mode,
         whitelisted_owner_ids,
         blacklisted_owner_ids,
         friend_owner_ids,
@@ -1440,20 +1461,22 @@ def _consent_excluded_persona_ids(
 ) -> set[int]:
     """Persona ids of *tenures* whose consent blocks the actor, decided from batched data.
 
-    Mirrors the per-tenure decision in :func:`_tenure_blocks_actor` but loads the
-    preference / category-rule / whitelist / blacklist / friendship data once for the
-    whole set (one preference query plus the loads in :func:`_load_category_consent_data`).
+    Mirrors the per-tenure decision in :func:`world.consent.services.consent_blocks_targeting`
+    but loads the preference / category-rule / whitelist / blacklist / friendship data once
+    for the whole set (one preference query plus the loads in
+    :func:`_load_category_consent_data`).
 
-    CAUTION (#1909): this batched sweep does NOT honor ``category.default_mode`` — an
-    absent preference row or absent per-category rule always falls through to legacy
-    default-allow here, unlike :func:`world.consent.services.consent_blocks_targeting`.
-    A category with a default-deny ``default_mode`` (e.g. theft) must gate through
-    ``consent_blocks_targeting`` directly; never wire it through this sweep.
+    Hierarchical (#2170): the effective mode walks the category's ancestor chain (nearest
+    rule wins, else the root's ``default_mode``). An owner tenure with NO preference row is
+    NOT auto-allowed — it resolves to the root default too (only the ``allow_social_actions``
+    master switch is unique to the preference row). This makes the picker sweep honor
+    ``default_mode`` in agreement with ``consent_blocks_targeting`` (resolving the earlier
+    #1909 divergence where the sweep was allow-only).
     """
     from world.consent.models import SocialConsentPreference  # noqa: PLC0415
     from world.consent.services import decide_consent_block  # noqa: PLC0415
 
-    # One query: preferences for those tenures, keyed by tenure id (missing → default allow).
+    # One query: preferences for those tenures, keyed by tenure id (missing → root default).
     prefs_by_tenure: dict[int, object] = {
         pref.tenure_id: pref
         for pref in SocialConsentPreference.objects.filter(tenure_id__in=tenure_ids)
@@ -1464,15 +1487,16 @@ def _consent_excluded_persona_ids(
     excluded: set[int] = set()
     for tenure in tenures:
         pref = prefs_by_tenure.get(tenure.pk)
-        if pref is None:
-            continue  # no preference row → default allow
-        if not pref.allow_social_actions:
+        if pref is not None and not pref.allow_social_actions:
             excluded.update(_tenure_persona_ids(tenure))
             continue
         if category is None:
             continue  # uncategorized → master switch only
+        rule_mode = (
+            data.effective_mode_by_pref.get(pref.pk) if pref is not None else data.root_default_mode
+        )
         if decide_consent_block(
-            data.rule_modes.get(pref.pk),
+            rule_mode,
             actor_present=actor_present,
             whitelisted=tenure.pk in data.whitelisted_owner_ids,
             blacklisted=tenure.pk in data.blacklisted_owner_ids,

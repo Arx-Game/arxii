@@ -66,7 +66,8 @@ def _dispatch_consent_action(character: Any, registry_key: str, kwargs: dict[str
 class SocialConsentCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only viewset for social consent categories.
 
-    Categories are authored by staff and shared across all players.
+    Categories are authored by staff and shared across all players. Each row carries
+    ``parent`` + ``default_mode`` so the client can render the category tree (#2170).
     """
 
     queryset = SocialConsentCategory.objects.all()
@@ -75,6 +76,18 @@ class SocialConsentCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["key"]
     pagination_class = ConsentPagination
+
+    @action(detail=False, methods=["get"], url_path="modes")
+    def modes(self, request: Request) -> Response:
+        """The consent-mode picker rows — ``{value, label, guidance}`` (#2170).
+
+        The "explain the pros and cons of each mode" surface the settings page renders next
+        to the mode selector, so a player chooses their antagonism openness understanding the
+        trade-off. Guidance copy is PLACEHOLDER pending an authored pass.
+        """
+        from world.consent.constants import consent_mode_guidance  # noqa: PLC0415
+
+        return Response(consent_mode_guidance())
 
 
 class SocialConsentPreferenceViewSet(viewsets.ModelViewSet):

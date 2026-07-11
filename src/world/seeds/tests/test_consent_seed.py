@@ -1,13 +1,16 @@
-"""Consent seed — the blackmail antagonism category (#1680).
+"""Consent seed — the antagonism category tree + inherited opt-in default (#1680/#2170).
 
-Blackmail leads the antagonism categories to Apostate's ratified opt-in default
-(FRIENDS_WHITELIST), while the legacy categories keep their default-allow behavior.
+The seed builds an **All Antagonism** root (FRIENDS_WHITELIST) and parents the antagonism
+leaves (Hostile, Blackmail) under it, so they inherit the opt-in default while keeping their
+own ``default_mode`` field legible for the orphaned-row case. Romantic/Manipulative/General
+stay independent default-allow roots.
 """
 
 from django.test import TestCase
 
 from world.consent.constants import ConsentMode
 from world.consent.models import SocialConsentCategory
+from world.consent.services import effective_consent_mode
 from world.seeds.consent import _TEMPLATE_CATEGORY_MAP, seed_social_consent_categories
 
 
@@ -18,19 +21,33 @@ class BlackmailConsentCategoryTests(TestCase):
         self.assertEqual(cat.name, "Blackmail")
         self.assertEqual(cat.default_mode, ConsentMode.FRIENDS_WHITELIST)
 
-    def test_legacy_categories_keep_default_allow(self) -> None:
+    def test_legacy_leaf_default_mode_field_unchanged(self) -> None:
+        # A leaf's own ``default_mode`` field is left as-is (only the root's is consulted
+        # while parented) — Hostile stays EVERYONE on the field, but *inherits* the root.
         seed_social_consent_categories()
         for key in ("romantic", "hostile", "manipulative", "general"):
             self.assertEqual(
                 SocialConsentCategory.objects.get(key=key).default_mode,
                 ConsentMode.EVERYONE,
-                msg=f"{key} should stay default-allow (the #2170 default audit is separate)",
             )
+
+    def test_antagonism_root_and_tree_wired(self) -> None:
+        seed_social_consent_categories()
+        root = SocialConsentCategory.objects.get(key="antagonism")
+        self.assertEqual(root.default_mode, ConsentMode.FRIENDS_WHITELIST)
+        self.assertIsNone(root.parent_id)
+        for key in ("hostile", "blackmail"):
+            leaf = SocialConsentCategory.objects.get(key=key)
+            self.assertEqual(leaf.parent_id, root.pk, msg=f"{key} should hang under All Antagonism")
+            # No preference row → the leaf resolves to the root's opt-in default via inheritance.
+            self.assertEqual(effective_consent_mode(None, leaf), ConsentMode.FRIENDS_WHITELIST)
 
     def test_idempotent(self) -> None:
         seed_social_consent_categories()
         seed_social_consent_categories()
         self.assertEqual(SocialConsentCategory.objects.filter(key="blackmail").count(), 1)
+        # Re-running does not duplicate or unset the parent link.
+        self.assertEqual(SocialConsentCategory.objects.get(key="hostile").parent.key, "antagonism")
 
     def test_blackmail_template_mapped_to_blackmail_category(self) -> None:
         self.assertEqual(_TEMPLATE_CATEGORY_MAP["Blackmail"], "blackmail")

@@ -170,14 +170,29 @@ class SocialConsentCategory(NaturalKeyMixin, SharedMemoryModel):
     display_order = models.PositiveIntegerField(
         default=0, help_text="Sort order in the consent UI."
     )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="children",
+        help_text=(
+            "Parent category in the consent tree (#2170); None = a root group. A category "
+            "with no player rule of its own inherits its parent's effective mode, walking up "
+            "to the root's default_mode. Lets a player set one node (e.g. 'All Antagonism') "
+            "and have every category beneath it follow, overriding only where they want an "
+            "exception."
+        ),
+    )
     default_mode = models.CharField(
         max_length=20,
         choices=ConsentMode.choices,
         default=ConsentMode.EVERYONE,
         help_text=(
-            "Targeting mode when a player has set no rule for this category. "
-            "EVERYONE preserves legacy behavior; ALLOWLIST makes the category "
-            "opt-in (used by theft, #1909)."
+            "Targeting mode when NOTHING is set anywhere up this category's parent chain. "
+            "Only consulted on the ROOT of a tree (a category with no parent) — a non-root "
+            "category inherits its parent instead of consulting its own default_mode. "
+            "EVERYONE is default-allow; FRIENDS_WHITELIST/RIVALS/ALLOWLIST make it opt-in."
         ),
     )
 
@@ -188,6 +203,22 @@ class SocialConsentCategory(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def ancestor_chain(self) -> list["SocialConsentCategory"]:
+        """This category then each parent up to the root — ``[leaf, …, root]`` (#2170).
+
+        The order consulted by the consent walk-up: the first node (starting at this
+        category) that has a player rule wins; if none do, the root's ``default_mode``
+        governs. Cycle-guarded so a mis-seeded loop can't hang the resolver.
+        """
+        chain: list[SocialConsentCategory] = []
+        seen: set[int] = set()
+        node: SocialConsentCategory | None = self
+        while node is not None and node.pk not in seen:
+            chain.append(node)
+            seen.add(node.pk)
+            node = node.parent
+        return chain
 
 
 class SocialConsentPreference(SharedMemoryModel):
