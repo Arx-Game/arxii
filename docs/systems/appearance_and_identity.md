@@ -299,8 +299,9 @@ path copies a descriptor from a sibling persona.
 | Legacy `Characteristic` skin/eye/hair | **BUILT & WIRED (to retire)** | `character_sheets/factories.py:280-393`; read by telnet `item_data` — **duplicates** the FormTrait definitions |
 | Persona ↔ Form link | **ABSENT** | grep → 0; the two systems are disconnected |
 | `(Persona × FormTrait)` descriptor | **ABSENT** | genuinely new — the core net-new surface |
-| Trait **mutability** tag | **ABSENT** | small new flag on `FormTrait` |
-| Natural baseline + change log | **ABSENT** | new |
+| Trait **mutability** tag | **BUILT** | `FormTrait.is_cosmetic` (`world/forms/models.py:97`, #1120); retained as validation guard on `ItemTemplateAppearanceEffect.clean()` (#1126) |
+| Natural baseline + change log | **BUILT (#1120)** | `CharacterFormValue.natural_option` + `AppearanceChangeLog` (`world/forms/models.py:300+`, #1120); `change_appearance` writes both |
+| Item-declared cosmetic scope | **BUILT & WIRED (#1126)** | `ItemTemplateAppearanceEffect` sidecar (`world/items/models.py`); `use_item` calls `change_appearance` per declared effect (`world/items/services/usage.py`); admin inline + seed data |
 | Two-slot active state (`current_real_form` + `active_fake_overlay`) | **BUILT (#1110)** | `forms.CharacterFormState.active_form` (real) + `active_fake_overlay` + `overlay_kind` (`DisguiseKind`); `apply_disguise`/`remove_disguise`; `get_presented_appearance(pierced=)` swaps the overlay in unless pierced (the pierce *contest* stays the senior dev's) |
 | Single render composition (gated by viewer) | **PARTLY WIRED (#1325)** | scalar fields ARE viewer-gated: `_build_appearance` exposes exact `height_inches` only to owner/staff (others get the coarse `height_band` label via `get_height_band`) and shows the free-text `description` only when `reveal_identity`; form-trait *overlay* selection still reads the TRUE form (ignores `active_fake_overlay`) — that part remains not wired |
 

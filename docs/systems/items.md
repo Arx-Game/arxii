@@ -241,8 +241,68 @@ Telnet: `CmdUse` (`src/commands/evennia_overrides/items.py`), grammar:
 
 ### is_usable Serializer Field
 `ItemInstanceReadSerializer` exposes `is_usable` (a `SerializerMethodField`) equal to
-`template.on_use_pool_id is not None`. Clients gate the **Use** button on this field; they do not
-need to inspect the template directly.
+`template.is_usable` (true when the template has an `on_use_pool` **or** appearance effects).
+Clients gate the **Use** button on this field; they do not need to inspect the template directly.
+
+---
+
+## Cosmetic Appearance Effects (#1126)
+
+An `ItemTemplate` can declare **cosmetic appearance edits** via the
+`ItemTemplateAppearanceEffect` sidecar model — a per-template detail row linking a
+`FormTrait` to a target `FormTraitOption`. When a character uses the item via `use_item`,
+the service calls `change_appearance` for each declared effect, editing the character's
+real form in-place (hair dye changes hair color; the natural baseline is preserved; an
+`AppearanceChangeLog` row records the edit).
+
+**The item IS the gate.** The player never asks "is this trait editable?" — they ask
+"do I have a thing that can change it?" The item's declared scope is the limit.
+
+### ItemTemplateAppearanceEffect
+
+| Field | Purpose |
+|-------|---------|
+| `item_template` | FK to `ItemTemplate` (CASCADE; `related_name="appearance_effects"`) |
+| `trait` | FK to `forms.FormTrait` (PROTECT) — the appearance trait to change |
+| `target_option` | FK to `forms.FormTraitOption` (PROTECT) — the value to set it to |
+
+- One effect per `(template, trait)` — a "Hair Dye: Black" has one row; a "Makeup Kit" has
+  multiple rows, each for a different trait.
+- `clean()` validates the target option belongs to the trait **and** the trait has
+  `is_cosmetic=True` — preventing misconfigured items from editing fixed traits (height,
+  species markers) via the cosmetic path.
+- `FormTrait.is_cosmetic` is retained as a server-side validation guard, not the
+  player-facing gate.
+
+### use_item Integration
+
+After existing consequence/charge dispatch, `use_item` calls
+`_apply_appearance_effects(template, user)` which:
+1. Queries `template.appearance_effects` (with `trait` + `target_option` prefetched).
+2. Resolves the user's active persona via `active_persona_for_sheet`.
+3. Calls `change_appearance` for each effect, passing the template name as `note`.
+4. Returns a list of `(FormTrait, FormTraitOption)` pairs that were changed.
+
+**Key behaviors:**
+- Appearance effects apply **after** consequences and charge consumption. If the item is
+  consumed/destroyed, the appearance change still applies.
+- Appearance effects are **always applied** regardless of check outcome.
+- A cosmetic item with no `on_use_pool` skips consequence dispatch but still applies
+  appearance effects (`is_usable` returns `True` for templates with appearance effects).
+- `NonCosmeticTraitError` is caught silently (defense-in-depth; `clean()` should prevent it).
+- `UseItemResult.appearance_changes` carries the changed pairs; `UseItemAction` surfaces
+  the count in its result data.
+
+### Admin Authoring
+
+`ItemTemplateAppearanceEffectInline` (TabularInline) on `ItemTemplateAdmin`, alongside
+`TemplateInteractionInline`. Fields: `trait` (autocomplete), `target_option` (autocomplete).
+
+### Seed Data
+
+`seed_cosmetic_items()` in `world/seeds/game_content/items.py` seeds starter hair dye
+templates (consumable, 1 charge each) with appearance effects. Called from
+`seed_items_dev()`; idempotent. Requires `FormTrait` rows from the forms dev seed.
 
 ---
 
