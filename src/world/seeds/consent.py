@@ -1,16 +1,23 @@
-"""Consent seed — default SocialConsentCategory rows + ActionTemplate tagging (#1141).
+"""Consent seed — default SocialConsentCategory rows + ActionTemplate tagging (#1141/#2170).
 
-Seeds the canonical social consent categories (Romantic, Hostile, Blackmail,
-Manipulative, General) and tags each social ActionTemplate with its category. Idempotent
-— all writes use ``get_or_create`` / ``update_fields``, so re-runs are no-ops and staff
-edits to existing rows are preserved.
+Seeds the canonical social consent categories and the **All Antagonism** root group they
+hang under, then tags each social ActionTemplate with its category. Idempotent — writes use
+``get_or_create`` / ``update_fields``, so re-runs are no-ops and staff edits to existing rows
+are preserved. Parents are applied in a second pass so already-seeded rows are adopted too.
 
-Category → action mapping:
-  Romantic     → Flirt
-  Hostile      → Intimidate
-  Blackmail    → Blackmail (default_mode FRIENDS_WHITELIST — the opt-in antagonism default, #1680)
-  Manipulative → Deceive, Persuade
-  General      → Perform, Entrance, Restore to Sense
+Category tree (#2170 — a leaf with no rule inherits its parent, up to the root's default):
+  All Antagonism (root, default FRIENDS_WHITELIST — antagonism is opt-in)
+    ├─ Hostile        → Intimidate
+    ├─ Blackmail      → Blackmail
+    ├─ Manipulative   → Deceive, Persuade        (a social imperative can force action)
+    └─ Theft          → (physical steal gate, #1909)
+  Romantic     → Flirt                            (root, EVERYONE — own intimacy opt-in axis)
+  General      → Perform, Entrance, Restore to Sense  (root, EVERYONE)
+
+Every detriment-capable category hangs under All Antagonism (Apostate: anything usable to a
+character's detriment is gated antagonism). `theft` moves under it too — its effective default
+becomes the root's FRIENDS_WHITELIST (its own ALLOWLIST is kept only for the unseeded
+``services.theft_category`` fallback + the orphaned-row case).
 """
 
 from __future__ import annotations
@@ -25,6 +32,20 @@ if TYPE_CHECKING:
 # (key, name, description, display_order, default_mode)
 _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
     (
+        "antagonism",
+        "All Antagonism",
+        # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #2170):
+        "The umbrella for hostile, coercive play against you. Set this one control and every "
+        "antagonism category beneath it follows, unless you override a specific one. Defaults "
+        "to Friends + whitelist: only your OOC friends (and anyone you allow) may antagonise "
+        "you until you widen it.",
+        5,
+        # Apostate's ratified opt-in default (#2170): antagonism is opt-in — friends +
+        # whitelist only until the player widens it. This root value cascades to every
+        # antagonism category that has no rule of its own.
+        ConsentMode.FRIENDS_WHITELIST,
+    ),
+    (
         "romantic",
         "Romantic",
         "Flirtatious, romantic, or intimacy-adjacent social actions.",
@@ -36,6 +57,8 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         "Hostile",
         "Threatening, coercive, or aggressive social actions.",
         20,
+        # Own default is moot while parented under All Antagonism — it inherits the root
+        # (FRIENDS_WHITELIST). Left EVERYONE so an orphaned row (root deleted) is legible.
         ConsentMode.EVERYONE,
     ),
     (
@@ -43,16 +66,28 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         "Blackmail",
         "Coercion by threat of exposing a secret you hold about the target.",
         25,
-        # Apostate's ratified opt-in default (#1680): only friends + whitelist may
-        # blackmail you unless you widen it. The register stays default-allow for the
-        # legacy categories; blackmail leads the antagonism categories to the new default.
+        # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept as the #1680 default
+        # so an orphaned row stays opt-in rather than reverting to EVERYONE.
         ConsentMode.FRIENDS_WHITELIST,
+    ),
+    (
+        "theft",
+        "Theft & Antagonism",
+        "Stealing from you and your belongings.",
+        27,
+        # Physical-theft gate (#1909). Now parented under All Antagonism, so its effective
+        # default is the root's FRIENDS_WHITELIST (friends may steal-in-RP by default) —
+        # Apostate's "no floors, fully inherit" call (#2170). Own value kept at ALLOWLIST so
+        # the lazy `theft_category()` fallback (unseeded) and any orphaned row stay strict.
+        ConsentMode.ALLOWLIST,
     ),
     (
         "manipulative",
         "Manipulative",
-        "Deceptive, persuasive, or psychologically influencing social actions.",
+        "Deceptive, persuasive, or psychologically influencing social actions "
+        "(a social imperative can force a character to act — gated antagonism, #2170).",
         30,
+        # Inherits All Antagonism (FRIENDS_WHITELIST); own value moot while parented.
         ConsentMode.EVERYONE,
     ),
     (
@@ -63,6 +98,17 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         ConsentMode.EVERYONE,
     ),
 )
+
+# child key → parent key (#2170). Applied after all rows exist so already-seeded rows are
+# adopted too. Every detriment-capable category is parented under All Antagonism (Apostate:
+# anything usable to a character's detriment is gated antagonism); romantic (its own intimacy
+# opt-in axis) and general (public performance) stay independent EVERYONE roots.
+_CATEGORY_PARENTS: dict[str, str] = {
+    "hostile": "antagonism",
+    "blackmail": "antagonism",
+    "manipulative": "antagonism",
+    "theft": "antagonism",
+}
 
 # ActionTemplate.name → category key
 _TEMPLATE_CATEGORY_MAP: dict[str, str] = {
@@ -103,7 +149,25 @@ def seed_social_consent_categories() -> None:
         )
         categories[key] = cat
 
+    _apply_category_parents(categories)
     _tag_action_templates(categories)
+
+
+def _apply_category_parents(categories: dict[str, SocialConsentCategory]) -> None:
+    """Point each antagonism leaf at its parent group (#2170), idempotently.
+
+    Runs as a second pass so rows seeded before the tree existed are adopted on re-run.
+    Only writes when the parent actually changes (avoids spurious UPDATE statements),
+    mirroring ``_tag_action_templates``.
+    """
+    for child_key, parent_key in _CATEGORY_PARENTS.items():
+        child = categories.get(child_key)
+        parent = categories.get(parent_key)
+        if child is None or parent is None:
+            continue
+        if child.parent_id != parent.pk:
+            child.parent = parent
+            child.save(update_fields=["parent"])
 
 
 def _tag_action_templates(categories: dict[str, SocialConsentCategory]) -> None:

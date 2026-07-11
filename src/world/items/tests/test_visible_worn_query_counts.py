@@ -252,6 +252,11 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
         # Warm-up call (loads session, equipment handlers for observable chars).
         self.client.get(url)
 
-        with self.assertNumQueries(5):
+        # 6 (was 5): the steal gate's consent check now consults the theft category's
+        # whitelist even when the owner has no preference row (#2170 unified
+        # ``consent_blocks_targeting`` — a whitelisted actor is honored without a pref row,
+        # which the old ``_decide_default`` short-circuit silently ignored). Still one bounded
+        # query; the mode-scoped signal computation keeps ALLOWLIST to the single whitelist read.
+        with self.assertNumQueries(6):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchCategories,
+  fetchConsentModes,
   fetchPreference,
   updatePreference,
   createPreference,
@@ -14,6 +15,7 @@ import {
   addBlacklist,
   removeBlacklist,
 } from './api';
+import type { ConsentModeGuidance } from './consentModes';
 import type {
   SocialConsentPreferenceRequest,
   SocialConsentCategoryRuleRequest,
@@ -31,6 +33,7 @@ import type {
 
 export const consentKeys = {
   categories: () => ['consent', 'categories'] as const,
+  modes: () => ['consent', 'modes'] as const,
   preference: (tenureId: number) => ['consent', 'preference', tenureId] as const,
   categoryRules: (preferenceId: number) => ['consent', 'category-rules', preferenceId] as const,
   whitelist: (tenureId: number, categoryId: number) =>
@@ -47,6 +50,16 @@ export function useConsentCategories() {
   return useQuery<PaginatedSocialConsentCategoryList>({
     queryKey: consentKeys.categories(),
     queryFn: fetchCategories,
+    throwOnError: true,
+  });
+}
+
+export function useConsentModes() {
+  // Static reference data (mode pros/cons copy) — cache it for the session (#2170).
+  return useQuery<ConsentModeGuidance[]>({
+    queryKey: consentKeys.modes(),
+    queryFn: fetchConsentModes,
+    staleTime: Infinity,
     throwOnError: true,
   });
 }

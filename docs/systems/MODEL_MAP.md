@@ -398,6 +398,10 @@
   - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
   - traps <- room_features.Trap
 
+### ExitProfile
+**Foreign Keys:**
+  - objectdb -> objects.ObjectDB [OneToOne]
+
 
 ## flows
 
@@ -622,6 +626,7 @@
   - damage_type -> conditions.DamageType [FK]
 
 ### Service Functions
+- `area_subtree_pks(area: 'Area') -> 'list[int]' — Return pks of ``area`` and all its descendants.`
 - `colored_area_path(room: 'ObjectDB') -> 'str' — Render a room's full area-hierarchy path with per-area colours (#1463).`
 - `get_ancestor_at_level(area: 'Area', target_level: 'AreaLevel') -> 'Area | None' — Walk the ancestry to find the ancestor at the given AreaLevel.`
 - `get_ancestry(area: 'Area') -> 'list[Area]' — Return the full ancestor chain from root down to this area.`
@@ -1978,8 +1983,11 @@
   - tenure -> roster.RosterTenure [FK]
 
 ### SocialConsentCategory
+**Foreign Keys:**
+  - parent -> consent.SocialConsentCategory [FK] (nullable)
 **Pointed to by:**
   - action_templates <- actions.ActionTemplate
+  - children <- consent.SocialConsentCategory
   - rules <- consent.SocialConsentCategoryRule
   - whitelist_entries <- consent.SocialConsentWhitelist
   - blacklist_entries <- consent.SocialConsentBlacklist
@@ -2010,8 +2018,9 @@
 ### Service Functions
 - `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
-- `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909).`
+- `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909/#2170).`
 - `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool', is_rival: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
+- `effective_consent_mode(pref: 'SocialConsentPreference | None', category: 'SocialConsentCategory') -> 'str' — The ConsentMode governing *(pref, category)* after tree inheritance (#2170).`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
@@ -2958,6 +2967,7 @@
 - `comfort_summary(room: 'DefaultObject') -> 'ComfortSummary' — Resolve a room's comfort readout (#1514): level, points, the biting exposures, amenity.`
 - `current_temperature_shift(*, real_now: 'datetime | None' = None) -> 'int' — The current global seasonal temperature shift from the IC clock (#1522).`
 - `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return all currently-active tenancies that apply to a room.`
+- `effective_enclosure_for_room(room_obj: 'ObjectDB') -> 'RoomEnclosure' — Return the room's effective enclosure, treating open windows as a breach.`
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' — Bulk-resolve owners for many rooms in one pass.`
 - `effective_stats_for_rooms(rooms: 'Iterable[DefaultObject]', stat_keys: 'Iterable[StatKey]') -> 'dict[int, dict[StatKey, int]]' — Bulk-resolve stats for many rooms in one pass.`
@@ -4203,6 +4213,7 @@
 ### MissionNode
 **Foreign Keys:**
   - template -> missions.MissionTemplate [FK]
+  - target_area -> areas.Area [FK] (nullable)
   - allowed_riders -> checks.Consequence [M2M]
   - locations -> evennia_extensions.RoomProfile [M2M]
 **Pointed to by:**

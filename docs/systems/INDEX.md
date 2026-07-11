@@ -1050,21 +1050,29 @@ content sharing and social action targeting (#1141). Consent mutations are share
 so web and telnet converge on the same write path.
 
 - **Models:** `ConsentGroup`, `ConsentGroupMember`, `VisibilityMixin` (abstract),
-  `SocialConsentCategory` (NaturalKey on `key`; `default_mode` ConsentMode field, #1909 —
-  the targeting mode used when a tenure has set no per-category rule; default `EVERYONE`
-  preserves legacy behavior), `SocialConsentPreference` (OneToOne on tenure),
+  `SocialConsentCategory` (NaturalKey on `key`; forms a **tree** via `parent` self-FK, #2170 —
+  a category with no player rule inherits its parent up to the root's `default_mode`, so
+  `default_mode` is consulted only on a root; `ancestor_chain()` returns `[leaf, …, root]`),
+  `SocialConsentPreference` (OneToOne on tenure),
   `SocialConsentCategoryRule` (preference + category + ConsentMode), `SocialConsentWhitelist`
   (owner_tenure / allowed_tenure / category), `SocialConsentBlacklist` (#1698 —
   owner_tenure / blocked_tenure / category; consulted under `ALL_BUT_BLACKLIST`)
 - **ConsentMode (#1698):** `EVERYONE` / `ALL_BUT_BLACKLIST` / `FRIENDS_WHITELIST` (OOC friends via
   `scenes.Friendship`) / `RIVALS` (declared **mutual** rivals via `scenes.Rivalry`, double
   opt-in — #2170; `friend_services.is_rival` + `declare_rival`/`undeclare_rival`, telnet
-  `rival`/`unrival`/`rivals`) / `ALLOWLIST`
+  `rival`/`unrival`/`rivals`) / `ALLOWLIST`. Settable at any tree node; `CONSENT_MODE_GUIDANCE`
+  + `consent_mode_guidance()` (constants) give the per-mode pros/cons copy the settings page /
+  telnet `consent modes` / `GET /api/consent/categories/modes/` render (PLACEHOLDER, #2170)
+- **Consent tree (#2170):** seed builds an **All Antagonism** root (`FRIENDS_WHITELIST`) with
+  `hostile` + `blackmail` parented under it (`world/seeds/consent.py`); `theft` stays its own
+  `ALLOWLIST` root (preserves the #1909 steal gate). `effective_consent_mode(pref, category)`
+  is the shared walk-up (nearest rule wins, else root default) — ADR-0113
 - **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()` (thin delegator
-  to `consent_blocks_targeting`, #1909), `decide_consent_block()`, `_social_consent_exclusions()`
-  (`actions/player_interface.py`) — the batched picker sweep does NOT honor `default_mode`
-  (legacy allow-only); a default-deny category must gate through `consent_blocks_targeting`
-  directly. PvP opt-out is the duel-start gate only (#1698): `ChallengeAction` refuses opted-out
+  to `consent_blocks_targeting`, #1909), `decide_consent_block()` (takes `is_rival`),
+  `effective_consent_mode()`, `_social_consent_exclusions()` (`actions/player_interface.py`) —
+  the batched picker sweep now **honors** the tree/`default_mode` in agreement with
+  `consent_blocks_targeting` (#2170 resolved the #1909 allow-only divergence). PvP opt-out is
+  the duel-start gate only (#1698): `ChallengeAction` refuses opted-out
   (`_consent_blocked`) + blocked (`block_services.sheet_blocked_for_viewer`) challengers
 - **Key Functions:** `seed_social_consent_categories()` (`world/seeds/consent.py`),
   `make_default_categories()` (`world/consent/factories.py`)
@@ -1073,20 +1081,23 @@ so web and telnet converge on the same write path.
   `add_social_consent_whitelist()`, `remove_social_consent_whitelist()`,
   `add_social_consent_blacklist()`, `remove_social_consent_blacklist()` (#1698),
   `get_social_consent_summary()`, `consent_blocks_targeting(*, owner_tenure, category,
-  actor_tenure)` (#1909 — the public single-tenure gate decision; absent preference row
-  and absent per-category rule both fall through to `category.default_mode`),
-  `theft_category()` (#1909 — lazy seeded "theft" category, `default_mode=ALLOWLIST`,
-  default-deny) (`world/consent/services.py`)
+  actor_tenure)` (#1909/#2170 — the public single-tenure gate decision; resolves the effective
+  mode by walking the category's ancestor chain, nearest rule wins else the root default),
+  `effective_consent_mode(pref, category)` (#2170 — shared walk-up used by read surfaces),
+  `theft_category()` (#1909 — lazy seeded "theft" category, own `ALLOWLIST` root)
+  (`world/consent/services.py`)
 - **Action Keys:** `set_social_consent_preference`, `set_social_consent_category_rule`,
   `add_social_consent_whitelist`, `remove_social_consent_whitelist`,
   `add_social_consent_blacklist`, `remove_social_consent_blacklist` (#1698)
   (`actions/definitions/consent_preferences.py`)
 - **Telnet:** `consent` namespace (`commands/consent_preferences.py`) — `consent on|off`,
-  `consent category <key>=<mode>`, `consent whitelist add|remove|list`,
-  `consent blacklist add|remove|list` (#1698); plus `accept/<difficulty>` + `deny/blacklist`
-  on the consent-response commands (`commands/consent.py`)
-- **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist,
-  blacklist (#1698); writes dispatch through the consent Actions via `dispatch_player_action()`
+  `consent modes` (#2170 — per-mode pros/cons), `consent category <key>=<mode>`,
+  `consent whitelist add|remove|list`, `consent blacklist add|remove|list` (#1698); plus
+  `accept/<difficulty>` + `deny/blacklist` on the consent-response commands (`commands/consent.py`)
+- **API:** `/api/consent/` — categories (read-only, now carry `parent` + `default_mode` for the
+  tree; `GET /categories/modes/` returns the mode guidance rows, #2170), preferences,
+  category-rules, whitelist, blacklist (#1698); writes dispatch through the consent Actions via
+  `dispatch_player_action()`
 - **Pattern:** RosterTenure-based (player's tenure, not character); absent preference row and
   absent per-category rule fall through to the category's `default_mode` (#1909) — `EVERYONE`
   preserves the legacy allow-all default; a category like theft opts into default-deny

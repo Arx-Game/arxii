@@ -84,6 +84,35 @@ class SocialConsentCategoryViewSetTests(TestCase):
         assert "action_templates" in response.data
         assert isinstance(response.data["action_templates"], list)
 
+    def test_category_serializes_parent_and_default_mode(self):
+        """Category rows expose parent + default_mode so the client can render the tree (#2170)."""
+        from world.consent.constants import ConsentMode
+
+        root = SocialConsentCategoryFactory(
+            key="antagonism", name="All Antagonism", default_mode=ConsentMode.FRIENDS_WHITELIST
+        )
+        self.category_b.parent = root
+        self.category_b.save(update_fields=["parent"])
+        response = self.client.get(f"/api/consent/categories/{self.category_b.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["parent"] == root.id
+        assert "default_mode" in response.data
+        root_response = self.client.get(f"/api/consent/categories/{root.id}/")
+        assert root_response.data["parent"] is None
+        assert root_response.data["default_mode"] == ConsentMode.FRIENDS_WHITELIST
+
+    def test_modes_endpoint_returns_guidance(self):
+        """/categories/modes/ returns a guidance row per ConsentMode (#2170)."""
+        from world.consent.constants import ConsentMode
+
+        response = self.client.get("/api/consent/categories/modes/")
+        assert response.status_code == status.HTTP_200_OK
+        values = {row["value"] for row in response.data}
+        assert values == set(ConsentMode.values)
+        for row in response.data:
+            assert row["guidance"]  # non-empty explanation
+            assert row["label"]
+
     def test_categories_read_only_no_post(self):
         """POST to categories is not allowed (read-only)."""
         response = self.client.post(

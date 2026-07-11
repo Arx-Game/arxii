@@ -12,14 +12,28 @@ from world.consent.models import (
 
 
 class SocialConsentCategorySerializer(serializers.ModelSerializer):
-    """Read-only serializer for social consent categories."""
+    """Read-only serializer for social consent categories.
+
+    Exposes ``parent`` and ``default_mode`` (#2170) so the frontend can render the category
+    tree (nested by ``parent``) and show the root's inherited default; ``parent=None`` marks
+    a root group like "All Antagonism".
+    """
 
     action_templates = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialConsentCategory
-        fields = ("id", "key", "name", "description", "display_order", "action_templates")
-        read_only_fields = ("id", "key", "name", "description", "display_order", "action_templates")
+        fields = (
+            "id",
+            "key",
+            "name",
+            "description",
+            "display_order",
+            "parent",
+            "default_mode",
+            "action_templates",
+        )
+        read_only_fields = fields
 
     def get_action_templates(self, obj: SocialConsentCategory) -> list[str]:
         """Return the names of action templates tagged with this category."""

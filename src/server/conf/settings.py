@@ -330,6 +330,10 @@ SPECTACULAR_SETTINGS = {
         # this, spectacular emits a hash-suffixed collision name (CategoryF17Enum) that
         # churns whenever a new `category` field appears. Pin it (#1522).
         "NarrativeCategoryEnum": "world.narrative.constants.NarrativeCategory.choices",
+        # ConsentMode is shared by SocialConsentCategoryRule.mode AND, since #2170,
+        # SocialConsentCategory.default_mode. Without a pin, spectacular splits them into a
+        # field-named enum plus a hash-suffixed collision name (Mode447Enum) that churns.
+        "ConsentModeEnum": "world.consent.constants.ConsentMode.choices",
     },
 }
 

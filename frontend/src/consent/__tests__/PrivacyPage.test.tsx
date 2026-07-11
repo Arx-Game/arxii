@@ -37,6 +37,7 @@ vi.mock('@/components/ui/select', () => ({
 
 vi.mock('../queries', () => ({
   useConsentCategories: vi.fn(),
+  useConsentModes: vi.fn(),
   useConsentPreference: vi.fn(),
   useCreatePreference: vi.fn(),
   useUpdatePreference: vi.fn(),
@@ -108,6 +109,8 @@ const mockCategories = [
     name: 'Romantic',
     description: 'Romantic interactions.',
     display_order: 1,
+    parent: null,
+    default_mode: 'everyone',
     action_templates: [],
   },
   {
@@ -116,7 +119,21 @@ const mockCategories = [
     name: 'Hostile',
     description: 'Hostile interactions.',
     display_order: 2,
+    parent: null,
+    default_mode: 'everyone',
     action_templates: [],
+  },
+];
+
+const mockModes = [
+  { value: 'everyone', label: 'Everyone', guidance: 'Anyone may do this to you.' },
+  { value: 'friends_whitelist', label: 'Friends + whitelist', guidance: 'Only friends.' },
+  { value: 'rivals', label: 'My declared rivals', guidance: 'Only mutual rivals.' },
+  { value: 'allowlist', label: 'Allowlist only', guidance: 'Only people you allow.' },
+  {
+    value: 'all_but_blacklist',
+    label: 'Everyone except blacklist',
+    guidance: 'Anyone but your blacklist.',
   },
 ];
 
@@ -139,6 +156,11 @@ function setupDefaultMocks() {
     data: { count: 2, results: mockCategories },
     isLoading: false,
   } as unknown as ReturnType<typeof queries.useConsentCategories>);
+
+  vi.mocked(queries.useConsentModes).mockReturnValue({
+    data: mockModes,
+    isLoading: false,
+  } as unknown as ReturnType<typeof queries.useConsentModes>);
 
   vi.mocked(queries.useConsentPreference).mockReturnValue({
     data: mockPreferenceWithId,
@@ -300,6 +322,33 @@ describe('PrivacyPage', () => {
       category: mockCategories[0].id,
       mode: 'all_but_blacklist',
     });
+  });
+
+  it('deletes the rule (reverts to inherited) when choosing Inherit (#2170)', async () => {
+    const { deleteMutate } = setupDefaultMocks();
+    // Romantic has an explicit allowlist rule; choosing "inherit" should delete it.
+    vi.mocked(queries.useCategoryRules).mockReturnValue({
+      data: { count: 1, results: [{ id: 42, preference: 5, category: 10, mode: 'allowlist' }] },
+      isLoading: false,
+    } as unknown as ReturnType<typeof queries.useCategoryRules>);
+
+    renderWithProviders(<PrivacyPage />);
+    fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
+    await waitFor(() => screen.getByText('Romantic'));
+
+    const selects = screen.getAllByTestId('mock-select');
+    fireEvent.change(selects[0], { target: { value: 'inherit' } });
+
+    expect(deleteMutate).toHaveBeenCalledWith({ id: 42, preferenceId: mockPreferenceWithId.id });
+  });
+
+  it('offers the rivals mode option (#2170)', async () => {
+    setupDefaultMocks();
+    renderWithProviders(<PrivacyPage />);
+    fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
+    await waitFor(() => screen.getByText('Romantic'));
+    // The rivals mode is selectable in the per-category picker.
+    expect(screen.getAllByText('My declared rivals').length).toBeGreaterThan(0);
   });
 
   it('calls useAddBlacklist when barring a character under all_but_blacklist mode', async () => {

@@ -42,7 +42,7 @@ consent preferences gating which social actions a character may receive (#1141).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `SocialConsentCategory` | Staff-authored category for social action types (NaturalKey on `key`) | `key` (slug), `name`, `description`, `display_order`, `default_mode` (ConsentMode, default `EVERYONE`, #1909 — the targeting mode used when a tenure has set no per-category rule) |
+| `SocialConsentCategory` | Staff-authored category for social action types (NaturalKey on `key`); forms a **tree** via `parent` (#2170) | `key` (slug), `name`, `description`, `display_order`, `parent` (self-FK, `SET_NULL`; `None` = root group), `default_mode` (ConsentMode — consulted **only on a root**; a non-root inherits its parent). `ancestor_chain()` returns `[leaf, …, root]` (cycle-guarded) |
 | `SocialConsentPreference` | Per-tenure opt-out for social action targeting (OneToOne on tenure) | `tenure` (RosterTenure FK), `allow_social_actions` (bool, default True) |
 | `SocialConsentCategoryRule` | Per-category targeting mode on a preference | `preference` FK, `category` FK, `mode` (ConsentMode) |
 | `SocialConsentWhitelist` | Explicit allow entry: allowed_tenure may target owner with social actions | `owner_tenure` FK, `allowed_tenure` FK, `category` FK, `added_at` |
@@ -120,15 +120,22 @@ from world.consent.services import consent_blocks_targeting, theft_category
 
 # consent_blocks_targeting(*, owner_tenure, category, actor_tenure) -> bool
 #   True if owner_tenure's consent excludes actor_tenure for category.
-#   Absent preference row AND absent per-category rule both fall through to
-#   category.default_mode — EVERYONE (the default) preserves legacy
-#   default-allow; a default-deny category (theft_category(), ALLOWLIST)
-#   blocks by default. category=None (uncategorized) is gated only by the
-#   tenure's master allow_social_actions switch.
+#   Resolution is HIERARCHICAL (#2170): the effective mode walks the category's
+#   ancestor chain (nearest player rule wins, else the ROOT's default_mode) via
+#   effective_consent_mode(). An absent preference row is NOT auto-allow — it
+#   resolves to the root default too (only allow_social_actions is unique to the
+#   pref row). Whitelist/blacklist are consulted anywhere on the chain (a parent
+#   whitelist admits for children); friendship/rivalry are category-independent.
+#   category=None (uncategorized) is gated only by the master switch.
+
+# effective_consent_mode(pref | None, category) -> str
+#   Public helper for read surfaces (serializer / telnet) — the resolved
+#   ConsentMode for (player, category) after tree inheritance.
 
 # theft_category() -> SocialConsentCategory
-#   Lazy seeded "theft" row (default_mode=ALLOWLIST — opt-in, default-deny).
-#   Consulted by the physical-theft gate (world.items / flows.inventory.steal).
+#   Lazy seeded "theft" row (default_mode=ALLOWLIST — opt-in, default-deny),
+#   deliberately its OWN root (not under All Antagonism) so the steal gate keeps
+#   its strict default. Consulted by the physical-theft gate (flows.inventory.steal).
 ```
 
 ```python
@@ -146,12 +153,12 @@ a tenure, one whitelist/blacklist/friendship load each). It shares the per-tenur
 logic with `consent_blocks_targeting` via `decide_consent_block` (spans all four modes;
 #1698); keep new work on this path off any per-participant query loop (#1248).
 
-**Divergence (#1909):** the batched sweep does **not** honor `category.default_mode` — an
-absent preference row or absent per-category rule always falls through to legacy
-default-allow in the sweep, unlike `consent_blocks_targeting`. A category with a
-default-deny `default_mode` (e.g. `theft_category()`) must gate through
-`consent_blocks_targeting` directly, never through this sweep; the sweep stays correct only
-for `EVERYONE`-default categories (the social-action-picker categories it currently serves).
+**Divergence resolved (#2170):** the batched sweep now honors the tree/`default_mode` in
+agreement with `consent_blocks_targeting` — it walks the same ancestor chain (rules +
+whitelist/blacklist loaded across the whole chain in one query each) and resolves an
+owner tenure with no preference row to the root default rather than auto-allow. This closes
+the earlier #1909 divergence where the sweep was allow-only; a default-deny category no
+longer needs to bypass the sweep.
 A query-count regression test
 (`actions/tests/test_social_consent_enforcement.py::SocialConsentExclusionsQueryBudgetTest`)
 pins that the sweep stays constant in participant count.

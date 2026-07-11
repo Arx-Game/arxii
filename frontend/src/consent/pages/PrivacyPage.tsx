@@ -8,11 +8,14 @@ import MyTenureSelect from '@/components/MyTenureSelect';
 import { CategoryConsentRow } from '../components/CategoryConsentRow';
 import {
   useConsentCategories,
+  useConsentModes,
   useConsentPreference,
   useCreatePreference,
   useUpdatePreference,
   useCategoryRules,
 } from '../queries';
+import { flattenCategoryTree } from '../categoryTree';
+import type { SocialConsentCategory, SocialConsentCategoryRule } from '../types';
 
 // ---------------------------------------------------------------------------
 // Inner — renders once a tenureId is selected
@@ -26,6 +29,7 @@ function ConsentPanel({ tenureId }: ConsentPanelProps) {
   const { data: preference, isLoading: prefLoading } = useConsentPreference(tenureId);
   const { data: categories, isLoading: catLoading } = useConsentCategories();
   const { data: rulesData, isLoading: rulesLoading } = useCategoryRules(tenureId);
+  const { data: modes } = useConsentModes();
 
   const createPreference = useCreatePreference();
   const updatePreference = useUpdatePreference();
@@ -67,6 +71,17 @@ function ConsentPanel({ tenureId }: ConsentPanelProps) {
   const rules = rulesData?.results ?? [];
   const preferenceId = preference?.id;
 
+  // Lookups shared by every row: the category tree, this player's rules by category, and the
+  // per-mode guidance copy. Rows resolve their inherited mode by walking these (#2170).
+  const categoriesById = new Map<number, SocialConsentCategory>(
+    allCategories.map((c) => [c.id, c])
+  );
+  const ruleByCategoryId = new Map<number, SocialConsentCategoryRule>(
+    rules.map((r) => [r.category, r])
+  );
+  const guidanceByMode = new Map<string, string>((modes ?? []).map((m) => [m.value, m.guidance]));
+  const orderedTree = flattenCategoryTree(allCategories);
+
   return (
     <div className="mt-4 space-y-4">
       {/* Master switch */}
@@ -106,18 +121,19 @@ function ConsentPanel({ tenureId }: ConsentPanelProps) {
                 <Skeleton className="h-10 w-full" />
               </>
             ) : (
-              allCategories.map((category) => {
-                const rule = rules.find((r) => r.category === category.id);
-                return (
-                  <CategoryConsentRow
-                    key={category.id}
-                    tenureId={tenureId}
-                    preferenceId={preferenceId}
-                    category={category}
-                    rule={rule}
-                  />
-                );
-              })
+              orderedTree.map(({ category, depth }) => (
+                <CategoryConsentRow
+                  key={category.id}
+                  tenureId={tenureId}
+                  preferenceId={preferenceId}
+                  category={category}
+                  rule={ruleByCategoryId.get(category.id)}
+                  categoriesById={categoriesById}
+                  ruleByCategoryId={ruleByCategoryId}
+                  guidanceByMode={guidanceByMode}
+                  depth={depth}
+                />
+              ))
             )}
           </CardContent>
         </Card>

@@ -6331,7 +6331,8 @@ paths:
       description: |-
         Read-only viewset for social consent categories.
 
-        Categories are authored by staff and shared across all players.
+        Categories are authored by staff and shared across all players. Each row carries
+        ``parent`` + ``default_mode`` so the client can render the category tree (#2170).
       parameters:
       - in: query
         name: key
@@ -6360,7 +6361,8 @@ paths:
       description: |-
         Read-only viewset for social consent categories.
 
-        Categories are authored by staff and shared across all players.
+        Categories are authored by staff and shared across all players. Each row carries
+        ``parent`` + ``default_mode`` so the client can render the category tree (#2170).
       parameters:
       - in: path
         name: id
@@ -6368,6 +6370,26 @@ paths:
           type: integer
         description: A unique integer value identifying this Social Consent Category.
         required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentCategory'
+          description: ''
+  /api/consent/categories/modes/:
+    get:
+      operationId: consent_categories_modes_retrieve
+      description: |-
+        The consent-mode picker rows — ``{value, label, guidance}`` (#2170).
+
+        The "explain the pros and cons of each mode" surface the settings page renders next
+        to the mode selector, so a player chooses their antagonism openness understanding the
+        trade-off. Guidance copy is PLACEHOLDER pending an authored pass.
       tags:
       - consent
       security:
@@ -34154,6 +34176,20 @@ components:
       description: |-
         * `therefore` - Therefore
         * `but` - But
+    ConsentModeEnum:
+      enum:
+      - everyone
+      - all_but_blacklist
+      - friends_whitelist
+      - rivals
+      - allowlist
+      type: string
+      description: |-
+        * `everyone` - Everyone
+        * `all_but_blacklist` - Everyone except my blacklist
+        * `friends_whitelist` - Friends and my whitelist
+        * `rivals` - My declared rivals (and whitelist)
+        * `allowlist` - Allowlist only
     ConsentResponseRequest:
       type: object
       properties:
@@ -50101,7 +50137,7 @@ components:
           type: integer
         mode:
           allOf:
-          - $ref: '#/components/schemas/SocialConsentCategoryRuleModeEnum'
+          - $ref: '#/components/schemas/ConsentModeEnum'
           description: |-
             EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
@@ -56212,7 +56248,12 @@ components:
       - owner_tenure
     SocialConsentCategory:
       type: object
-      description: Read-only serializer for social consent categories.
+      description: |-
+        Read-only serializer for social consent categories.
+
+        Exposes ``parent`` and ``default_mode`` (#2170) so the frontend can render the category
+        tree (nested by ``parent``) and show the root's inherited default; ``parent=None`` marks
+        a root group like "All Antagonism".
       properties:
         id:
           type: integer
@@ -56234,6 +56275,27 @@ components:
           type: integer
           readOnly: true
           description: Sort order in the consent UI.
+        parent:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Parent category in the consent tree (#2170); None = a root
+            group. A category with no player rule of its own inherits its parent's
+            effective mode, walking up to the root's default_mode. Lets a player set
+            one node (e.g. 'All Antagonism') and have every category beneath it follow,
+            overriding only where they want an exception.
+        default_mode:
+          allOf:
+          - $ref: '#/components/schemas/ConsentModeEnum'
+          readOnly: true
+          description: |-
+            Targeting mode when NOTHING is set anywhere up this category's parent chain. Only consulted on the ROOT of a tree (a category with no parent) — a non-root category inherits its parent instead of consulting its own default_mode. EVERYONE is default-allow; FRIENDS_WHITELIST/RIVALS/ALLOWLIST make it opt-in.
+
+            * `everyone` - Everyone
+            * `all_but_blacklist` - Everyone except my blacklist
+            * `friends_whitelist` - Friends and my whitelist
+            * `rivals` - My declared rivals (and whitelist)
+            * `allowlist` - Allowlist only
         action_templates:
           type: array
           items:
@@ -56242,11 +56304,13 @@ components:
           readOnly: true
       required:
       - action_templates
+      - default_mode
       - description
       - display_order
       - id
       - key
       - name
+      - parent
     SocialConsentCategoryRule:
       type: object
       description: Serializer for per-category consent rules.
@@ -56260,7 +56324,7 @@ components:
           type: integer
         mode:
           allOf:
-          - $ref: '#/components/schemas/SocialConsentCategoryRuleModeEnum'
+          - $ref: '#/components/schemas/ConsentModeEnum'
           description: |-
             EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
@@ -56273,20 +56337,6 @@ components:
       - category
       - id
       - preference
-    SocialConsentCategoryRuleModeEnum:
-      enum:
-      - everyone
-      - all_but_blacklist
-      - friends_whitelist
-      - rivals
-      - allowlist
-      type: string
-      description: |-
-        * `everyone` - Everyone
-        * `all_but_blacklist` - Everyone except my blacklist
-        * `friends_whitelist` - Friends and my whitelist
-        * `rivals` - My declared rivals (and whitelist)
-        * `allowlist` - Allowlist only
     SocialConsentCategoryRuleRequest:
       type: object
       description: Serializer for per-category consent rules.
@@ -56297,7 +56347,7 @@ components:
           type: integer
         mode:
           allOf:
-          - $ref: '#/components/schemas/SocialConsentCategoryRuleModeEnum'
+          - $ref: '#/components/schemas/ConsentModeEnum'
           description: |-
             EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 

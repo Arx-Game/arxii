@@ -166,22 +166,42 @@ def decide_consent_block(  # noqa: PLR0913 — keyword-only signal flags, one pe
 _decide_consent_block = decide_consent_block
 
 
-def _decide_default(category: SocialConsentCategory | None, actor_tenure: object | None) -> bool:
-    """Fallback decision when no preference row exists for the owner tenure (#1909).
+def _effective_mode_from_chain(
+    pref: SocialConsentPreference | None,
+    chain: list[SocialConsentCategory],
+) -> str:
+    """Resolve the effective ConsentMode for a category's ancestor *chain* (#2170).
 
-    Treated as "no per-category rule" — falls through to the category's ``default_mode``.
-    ``category=None`` (uncategorized) keeps the legacy default-allow (master switch only).
+    *chain* is ``[leaf, …, root]`` (from :meth:`SocialConsentCategory.ancestor_chain`).
+    The first node carrying a player rule for *pref* wins; if *pref* is ``None`` or no node
+    on the chain has a rule, the root's ``default_mode`` governs. This is the single
+    inheritance rule both the per-tenure gate and the batched picker resolve through.
     """
-    if category is None:
-        return False
-    return _decide_consent_block(
-        category.default_mode,
-        actor_present=actor_tenure is not None,
-        whitelisted=False,
-        blacklisted=False,
-        is_friend=False,
-        is_rival=False,
-    )
+    if pref is not None:
+        rule_modes = {
+            rule.category_id: rule.mode
+            for rule in SocialConsentCategoryRule.objects.filter(
+                preference=pref, category__in=chain
+            )
+        }
+        for node in chain:
+            mode = rule_modes.get(node.pk)
+            if mode is not None:
+                return mode
+    return chain[-1].default_mode
+
+
+def effective_consent_mode(
+    pref: SocialConsentPreference | None,
+    category: SocialConsentCategory,
+) -> str:
+    """The ConsentMode governing *(pref, category)* after tree inheritance (#2170).
+
+    Public helper for read surfaces (serializer / telnet summary) that need to show a
+    player their *resolved* mode per category, not just their explicit rules. Delegates
+    to :func:`_effective_mode_from_chain` over the category's ancestor chain.
+    """
+    return _effective_mode_from_chain(pref, category.ancestor_chain())
 
 
 def consent_blocks_targeting(
@@ -190,52 +210,67 @@ def consent_blocks_targeting(
     category: SocialConsentCategory | None,
     actor_tenure: RosterTenure | None,
 ) -> bool:
-    """True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909).
+    """True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909/#2170).
 
     The single-tenure gate decision — moved here from
     ``actions.player_interface._tenure_blocks_actor`` so later gates (e.g. the steal
-    gate) call one public helper instead of reaching into the dispatch layer. Absent
-    preference row and absent per-category rule both fall through to the category's
-    ``default_mode`` (EVERYONE preserves legacy default-allow; a default-deny category
-    like theft blocks by default). The scene-wide picker sweep batches the same
-    decision in ``actions.player_interface._consent_excluded_persona_ids``.
+    gate) call one public helper instead of reaching into the dispatch layer.
+
+    Resolution is hierarchical (#2170): the effective mode walks the category's ancestor
+    chain (nearest rule wins, else the root's ``default_mode``), so a player who set only
+    "All Antagonism" has every category beneath it follow. Whitelist/blacklist entries are
+    consulted anywhere on the chain (a whitelist on a parent admits the actor for its
+    children too); friendship/rivalry are category-independent. An absent preference row is
+    NOT auto-allow — it still resolves to the root default (only the ``allow_social_actions``
+    master switch is unique to the preference row). The scene-wide picker sweep batches the
+    same decision in ``actions.player_interface._consent_excluded_persona_ids``.
     """
     from world.scenes.friend_services import (  # noqa: PLC0415
         is_friend as _is_friend,
         is_rival as _is_rival,
     )
 
+    # Reverse OneToOne accessor (cached on the tenure instance) rather than a fresh filter,
+    # so a warmed caller doesn't pay a query for the common has-a-preference-row path.
     try:
-        pref = owner_tenure.social_consent_preference
+        pref: SocialConsentPreference | None = owner_tenure.social_consent_preference
     except SocialConsentPreference.DoesNotExist:
-        return _decide_default(category, actor_tenure)
-
-    if not pref.allow_social_actions:
+        pref = None
+    if pref is not None and not pref.allow_social_actions:
         return True
 
     if category is None:
         return False  # uncategorized → master switch only
 
-    rule = SocialConsentCategoryRule.objects.filter(preference=pref, category=category).first()
-    rule_mode = rule.mode if rule is not None else category.default_mode
-    if actor_tenure is None:
+    chain = category.ancestor_chain()
+    rule_mode = _effective_mode_from_chain(pref, chain)
+    if actor_tenure is None or rule_mode is None or rule_mode == ConsentMode.EVERYONE:
+        # No actor, or default-allow: no relational signal is consulted.
         return _decide_consent_block(
             rule_mode,
-            actor_present=False,
+            actor_present=actor_tenure is not None,
             whitelisted=False,
             blacklisted=False,
             is_friend=False,
             is_rival=False,
         )
 
-    whitelisted = SocialConsentWhitelist.objects.filter(
-        owner_tenure=owner_tenure, allowed_tenure=actor_tenure, category=category
-    ).exists()
-    blacklisted = SocialConsentBlacklist.objects.filter(
-        owner_tenure=owner_tenure, blocked_tenure=actor_tenure, category=category
-    ).exists()
-    friended = _is_friend(owner_tenure=owner_tenure, friend_tenure=actor_tenure)
-    rivaled = _is_rival(owner_tenure=owner_tenure, rival_tenure=actor_tenure)
+    # Compute ONLY the signals the resolved mode consults. This gate is hot — the steal check
+    # runs it per item — so a default-deny mode costs one relational query (the whitelist), not
+    # four. Whitelist/blacklist are chain-scoped (a parent entry admits/bars for children).
+    whitelisted = blacklisted = friended = rivaled = False
+    if rule_mode == ConsentMode.ALL_BUT_BLACKLIST:
+        blacklisted = SocialConsentBlacklist.objects.filter(
+            owner_tenure=owner_tenure, blocked_tenure=actor_tenure, category__in=chain
+        ).exists()
+    else:  # FRIENDS_WHITELIST / RIVALS / ALLOWLIST all consult the whitelist first.
+        whitelisted = SocialConsentWhitelist.objects.filter(
+            owner_tenure=owner_tenure, allowed_tenure=actor_tenure, category__in=chain
+        ).exists()
+        if not whitelisted and rule_mode == ConsentMode.FRIENDS_WHITELIST:
+            friended = _is_friend(owner_tenure=owner_tenure, friend_tenure=actor_tenure)
+        elif not whitelisted and rule_mode == ConsentMode.RIVALS:
+            rivaled = _is_rival(owner_tenure=owner_tenure, rival_tenure=actor_tenure)
     return _decide_consent_block(
         rule_mode,
         actor_present=True,
