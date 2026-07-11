@@ -20,10 +20,16 @@ import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack'
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { markThreadSeen, setSceneBaseline } from '@/store/gameSlice';
+import {
+  markThreadSeen,
+  setSceneBaseline,
+  openThreadTab,
+  closeThreadTab,
+  setActiveThreadTab,
+} from '@/store/gameSlice';
 import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
 import { useThreading, getThreadKey } from '@/scenes/hooks/useThreading';
-import { threadToComposerMode } from '@/scenes/hooks/threadToComposerMode';
+import { threadToComposerMode, tabKeyToComposerMode } from '@/scenes/hooks/threadToComposerMode';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
@@ -33,6 +39,7 @@ import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { ComposerMode } from './components/CommandInput';
+import type { ConversationTabStripProps } from './components/ConversationTabStrip';
 
 const DEFAULT_ROOM_ENTRY: FocusEntry = {
   kind: 'room',
@@ -43,6 +50,8 @@ const DEFAULT_ROOM_ENTRY: FocusEntry = {
 // Stable empty-object reference so `useThreading`'s memo doesn't see a "changed"
 // lastSeenByThread on every render when there's no active session yet (#2156).
 const EMPTY_THREAD_LAST_SEEN: Record<string, number> = {};
+// Stable empty-array reference (#2165) — same reasoning as EMPTY_THREAD_LAST_SEEN.
+const EMPTY_OPEN_TABS: string[] = [];
 
 export function GamePage() {
   const account = useAccount();
@@ -95,17 +104,66 @@ export function GamePage() {
     viewerPersonaId: personaId,
     sceneBaselineId,
   });
+
+  const openThreadTabs = activeSession?.openThreadTabs ?? EMPTY_OPEN_TABS;
+  const activeThreadTabRaw = activeSession?.activeThreadTab ?? null;
+  // Guard against a stale active pointer (e.g. hydration races): only an
+  // OPEN tab may be active; anything else is the room anchor.
+  const activeThreadTab =
+    activeThreadTabRaw !== null && openThreadTabs.includes(activeThreadTabRaw)
+      ? activeThreadTabRaw
+      : null;
+
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
+
+  // #2165: the active conversation tab narrows the feed to its thread; the
+  // room anchor keeps the existing filtered feed. The composer's audience is
+  // DERIVED from the active tab every render (never stored) — that derivation
+  // is the mis-send guard.
+  const tabInteractions = useMemo(() => {
+    if (activeThreadTab === null) return threading.filteredInteractions;
+    return threading.interactionsByThread.get(activeThreadTab) ?? [];
+  }, [activeThreadTab, threading.filteredInteractions, threading.interactionsByThread]);
+
+  const effectiveComposerMode = useMemo(() => {
+    if (activeThreadTab === null) return composerMode;
+    return tabKeyToComposerMode(activeThreadTab, threading.threads, roomName);
+  }, [activeThreadTab, threading.threads, roomName, composerMode]);
+
+  const conversationTabs = useMemo<ConversationTabStripProps | undefined>(() => {
+    if (!sceneId || !active || openThreadTabs.length === 0) return undefined;
+    const roomThread = threading.threads.find((t) => t.key === 'room');
+    return {
+      roomLabel: roomName,
+      roomUnreadCount: roomThread?.unreadCount ?? 0,
+      tabs: openThreadTabs.map((key) => {
+        const thread = threading.threads.find((t) => t.key === key);
+        return {
+          key,
+          label: thread?.label ?? (key.startsWith('place:') ? 'Place' : 'Whisper'),
+          unreadCount: thread?.unreadCount ?? 0,
+        };
+      }),
+      activeKey: activeThreadTab,
+      onSelect: (key: string | null) =>
+        dispatch(setActiveThreadTab({ character: active, threadKey: key })),
+      onClose: (key: string) => dispatch(closeThreadTab({ character: active, threadKey: key })),
+    };
+  }, [sceneId, active, openThreadTabs, threading.threads, roomName, activeThreadTab, dispatch]);
 
   // Character-card drawer (#2156 Task 7): the clicked bubble's persona identity,
   // or null when the drawer is closed. GamePage owns this state (mirrored on
   // SceneDetailPage) since the drawer opens "in place" over whichever surface
   // the avatar was clicked on, not as a route navigation.
   const [cardPersona, setCardPersona] = useState<PoseUnitAvatarClickPersona | null>(null);
-  const handleWhisper = useCallback((name: string) => {
-    setComposerMode({ command: 'whisper', targets: [name], label: `Whisper → ${name}` });
-    setCardPersona(null);
-  }, []);
+  const handleWhisper = useCallback(
+    (name: string) => {
+      if (active) dispatch(setActiveThreadTab({ character: active, threadKey: null }));
+      setComposerMode({ command: 'whisper', targets: [name], label: `Whisper → ${name}` });
+      setCardPersona(null);
+    },
+    [active, dispatch]
+  );
 
   // Scene-load baseline (#2156 review fix): a single scalar snapshot, not a
   // per-thread-key one. The old per-key baseline one-shotted per KEY, so a
@@ -164,33 +222,38 @@ export function GamePage() {
     threadingResetForNewScene();
   }, [active, sceneId, threadingResetForNewScene]);
 
-  // Continuously mark the SELECTED thread seen as its interactions grow — this is
-  // the thread the player is actively viewing, so it never accumulates unread.
-  // Unselected threads are left alone and accumulate unread from the baseline above.
+  // Continuously mark the ACTIVE TAB's thread seen as its interactions grow —
+  // this is the thread the player is actively viewing (the room anchor when
+  // no tab is active), so it never accumulates unread. Unselected threads are
+  // left alone and accumulate unread from the baseline above (#2165: was
+  // keyed on threading.selectedThreadKey before conversation tabs existed).
   useEffect(() => {
     if (!sceneId || !active) return;
-    const selectedKey = threading.selectedThreadKey;
+    const seenKey = activeThreadTab ?? 'room';
     let maxId: number | undefined;
     for (const interaction of allInteractions) {
-      if (getThreadKey(interaction) !== selectedKey) continue;
+      if (getThreadKey(interaction) !== seenKey) continue;
       const id = Number(interaction.id);
       if (maxId === undefined || id > maxId) maxId = id;
     }
     if (maxId !== undefined) {
-      dispatch(markThreadSeen({ character: active, threadKey: selectedKey, interactionId: maxId }));
+      dispatch(markThreadSeen({ character: active, threadKey: seenKey, interactionId: maxId }));
     }
-  }, [sceneId, active, allInteractions, threading.selectedThreadKey, dispatch]);
+  }, [sceneId, active, allInteractions, activeThreadTab, dispatch]);
 
-  // Mirrors SceneInteractionPanel's handleThreadClick (#2156 review fix): a
-  // thread click toggles that thread's inclusion in the enabled-thread set
-  // (which is what useThreading.filteredInteractions actually narrows on),
-  // not just the "selected" highlight — otherwise the feed never changes.
+  // #2165: the sidebar is the open-a-tab surface. A conversation row opens or
+  // focuses its tab; the room row focuses the anchor. The old
+  // toggleThreadVisibility narrowing is retired for the room feed — the
+  // per-participant mute (ThreadFilterModal) still applies to the anchor.
   const handleThreadClick = (key: string) => {
-    threading.toggleThreadVisibility(key);
-    const thread = threading.threads.find((t) => t.key === key);
-    if (thread) {
-      setComposerMode(threadToComposerMode(thread, roomName));
+    if (!active) return;
+    if (key === 'room') {
+      dispatch(setActiveThreadTab({ character: active, threadKey: null }));
+      const roomThread = threading.threads.find((t) => t.key === 'room');
+      if (roomThread) setComposerMode(threadToComposerMode(roomThread, roomName));
+      return;
     }
+    dispatch(openThreadTab({ character: active, threadKey: key }));
   };
 
   // Scene toolset (#2156 Task 6) — GamePage is the composition root, so it
@@ -334,13 +397,13 @@ export function GamePage() {
                 sceneId
                   ? {
                       sceneId,
-                      interactions: threading.filteredInteractions,
+                      interactions: tabInteractions,
                       hasNextPage,
                       fetchNextPage,
                     }
                   : undefined
               }
-              composerMode={composerMode}
+              composerMode={effectiveComposerMode}
               onModeChange={setComposerMode}
               personaId={personaId}
               onAvatarClick={setCardPersona}
@@ -356,6 +419,7 @@ export function GamePage() {
               detachedActionIds={detachedActionIds}
               onPoseSubmitted={handlePoseSubmitted}
               isAtPlace={isAtPlace}
+              conversationTabs={conversationTabs}
               placeBar={placesRoomId ? <PlaceBar sceneId={placesRoomId} /> : undefined}
               pendingAttachments={
                 sceneId ? (

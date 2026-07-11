@@ -107,7 +107,13 @@ export function GameWindow({
       el.scrollTop = el.scrollHeight;
       pinnedRef.current = true;
     }
-  }, [activeConvKey]);
+    // Prune scroll offsets for tabs that are no longer open (#2165 review
+    // fold-in) — otherwise a closed tab's entry lingers in the map forever.
+    const liveKeys = new Set(['room', ...(conversationTabs?.tabs.map((t) => t.key) ?? [])]);
+    for (const key of scrollPositionsRef.current.keys()) {
+      if (!liveKeys.has(key)) scrollPositionsRef.current.delete(key);
+    }
+  }, [activeConvKey, conversationTabs?.tabs]);
 
   useEffect(() => {
     const el = feedScrollRef.current;

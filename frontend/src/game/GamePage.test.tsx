@@ -267,6 +267,16 @@ describe('GamePage', () => {
     });
 
     it('clicking a thread in the sidebar actually filters the center feed (review fix)', async () => {
+      // #2165 update: clicking a non-room thread row now OPENS A TAB
+      // (GamePage's handleThreadClick dispatches openThreadTab) rather than
+      // toggling useThreading's local enabledThreadKeys filter — that old
+      // narrowing mechanism is retired for the /game room feed (it still
+      // backs /scenes/:id's SceneInteractionPanel, untouched here). The feed
+      // narrows because the active TAB drives `tabInteractions` now, and the
+      // way back to the full feed is the room row, not "All" (clicking "All"
+      // only clears the retired enabledThreadKeys filter, which no longer
+      // drives what's on screen once a tab is active — see the "conversation
+      // tabs (#2165)" describe block below for that contract's own coverage).
       store.dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
@@ -285,15 +295,14 @@ describe('GamePage', () => {
       expect(whisperButton).not.toBeNull();
       await user.click(whisperButton as HTMLElement);
 
-      // Clicking the whisper thread must narrow the feed to just that thread —
-      // the room pose disappears and the whisper stays (GamePage's
-      // handleThreadClick must call toggleThreadVisibility, not just
-      // setSelectedThread, or filteredInteractions never changes).
+      // Clicking the whisper thread opens its tab and narrows the feed to
+      // just that thread — the room pose disappears and the whisper stays.
       expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
       expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
 
-      // "All" restores both threads.
-      await user.click(within(sidebar).getByText('All'));
+      // The room row restores the full feed (the room anchor).
+      const roomButton = within(sidebar).getByText('The Grand Ballroom').closest('button');
+      await user.click(roomButton as HTMLElement);
       expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
       expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
     });
@@ -746,6 +755,218 @@ describe('GamePage', () => {
       await user.click(trigger);
 
       expect(screen.queryByText('Tabletalk')).not.toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Conversation tabs (#2165): sidebar-click opens/focuses a tab; the tab
+  // strip narrows the feed + locks the composer; close falls back to the
+  // room anchor; a scene change clears every open tab.
+  // ---------------------------------------------------------------------------
+
+  describe('conversation tabs (#2165)', () => {
+    it('clicking a whisper thread in the sidebar opens a tab, narrows the feed, and locks the composer to its audience', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button') as HTMLElement;
+      await user.click(whisperRow);
+
+      // A tablist appears with the room anchor + the whisper tab, the
+      // whisper tab selected.
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      const tabs = within(tablist).getAllByRole('tab');
+      expect(tabs).toHaveLength(2);
+      const whisperTab = within(tablist)
+        .getByText(/whisper/i)
+        .closest('[role="tab"]') as HTMLElement;
+      expect(whisperTab).toHaveAttribute('aria-selected', 'true');
+      const roomTab = within(tablist)
+        .getByText('The Grand Ballroom')
+        .closest('[role="tab"]') as HTMLElement;
+      expect(roomTab).toHaveAttribute('aria-selected', 'false');
+
+      // The feed narrows to ONLY the whisper thread's interactions.
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+
+      // The composer is locked to the whisper audience.
+      const lockedMode = screen.getByTitle('Audience is locked to this conversation tab');
+      expect(lockedMode).toHaveTextContent(/whisper/i);
+      expect(screen.queryByRole('button', { name: 'Pose' })).not.toBeInTheDocument();
+    });
+
+    it('clicking the room anchor tab restores the full feed and re-enables the mode dropdown', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button') as HTMLElement;
+      await user.click(whisperRow);
+
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      const roomTab = within(tablist)
+        .getByText('The Grand Ballroom')
+        .closest('[role="tab"]') as HTMLElement;
+      await user.click(roomTab);
+
+      // Full feed is back.
+      expect(await screen.findByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+
+      // The mode dropdown is re-enabled (unlocked) — the trigger button
+      // renders instead of the locked static label.
+      expect(await screen.findByRole('button', { name: 'Pose' })).toBeInTheDocument();
+      expect(
+        screen.queryByTitle('Audience is locked to this conversation tab')
+      ).not.toBeInTheDocument();
+
+      // The tab strip still shows both tabs — closing wasn't involved — with
+      // the room anchor now selected.
+      expect(roomTab).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('badges the whisper tab with unread while the room anchor is active, and clears it on switch', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = () =>
+        within(sidebar)
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+      const roomRow = () =>
+        within(sidebar).getByText('The Grand Ballroom').closest('button') as HTMLElement;
+
+      // Open the whisper tab, then focus back on the room anchor — the tab
+      // stays open (only closing removes it from openThreadTabs).
+      await user.click(whisperRow());
+      await screen.findByRole('tablist', { name: 'Conversations' });
+      await user.click(roomRow());
+
+      // A new whisper arrives, in the same thread, from someone else, while
+      // the room anchor is active.
+      store.dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 3,
+            persona: { id: 9, name: 'Bystander', thumbnail_url: '' },
+            content: 'psst, did you hear?',
+            mode: 'whisper',
+            timestamp: '2026-01-01T00:02:00Z',
+            scene_id: 100,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [7],
+            target_persona_ids: [],
+          },
+        })
+      );
+
+      const tablist = screen.getByRole('tablist', { name: 'Conversations' });
+      const whisperTab = () =>
+        within(tablist)
+          .getByText(/whisper/i)
+          .closest('[role="tab"]') as HTMLElement;
+
+      await waitFor(() => {
+        expect(within(whisperTab()).getByText('1')).toBeInTheDocument();
+      });
+
+      // Switching to the whisper tab clears its badge.
+      await user.click(whisperTab());
+      await waitFor(() => {
+        expect(within(whisperTab()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
+      });
+    });
+
+    it('closing the active tab falls back to the room anchor and the tab strip disappears; the sidebar reopens it', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = () =>
+        within(sidebar)
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+
+      await user.click(whisperRow());
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      const closeButton = within(tablist).getByRole('button', { name: /close whisper/i });
+      await user.click(closeButton);
+
+      // The strip disappears entirely (no open tabs left).
+      expect(screen.queryByRole('tablist', { name: 'Conversations' })).not.toBeInTheDocument();
+
+      // The room anchor is active again — full feed is back.
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+
+      // Clicking the sidebar thread again reopens the tab.
+      await user.click(whisperRow());
+      expect(await screen.findByRole('tablist', { name: 'Conversations' })).toBeInTheDocument();
+    });
+
+    it('clears the tab strip when the active puppet moves into a new scene', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button') as HTMLElement;
+      await user.click(whisperRow);
+      await screen.findByRole('tablist', { name: 'Conversations' });
+
+      store.dispatch(
+        setSessionScene({
+          character: ACTIVE_NAME,
+          scene: {
+            id: 300,
+            name: 'The Garden',
+            description: '',
+            is_owner: false,
+            has_unseen_observer: false,
+          },
+        })
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByRole('tablist', { name: 'Conversations' })).not.toBeInTheDocument();
+      });
     });
   });
 });
