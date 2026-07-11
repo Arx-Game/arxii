@@ -1589,8 +1589,9 @@ def resolve_cast_position_params(
     positional-reach error path used elsewhere in this module):
 
     - ``UNKNOWN_ACTION_REF`` — a supplied position id does not resolve to a
-      ``Position`` in the encounter's own room, or the a/b pair is only
-      half-supplied.
+      ``Position`` in the encounter's own room, the a/b pair is only
+      half-supplied, or the a/b pair is identical (a barrier needs two
+      different endpoints).
     - ``TARGET_OUT_OF_REACH`` — the declared destination is beyond
       ``technique.reach`` from the caster's current position. Skipped when the
       caster is unplaced (no current_position) — lenient, same rationale as
@@ -1627,6 +1628,10 @@ def resolve_cast_position_params(
     if bool(a_id) != bool(b_id):
         raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
     if a_id and b_id:
+        if a_id == b_id:
+            # A barrier needs two different endpoints — reject a degenerate pair
+            # before it ever reaches the resolver.
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
         resolved["cast_position_a"] = _get(a_id)
         resolved["cast_position_b"] = _get(b_id)
 

@@ -437,23 +437,30 @@ function PositionPicker({
   }
 
   // shape === 'pair' — two labelled slots (A/B); no reach pre-filter (#2206 brief §Step 2).
+  // A barrier needs two different endpoints — disable whichever node is already picked
+  // in the OTHER slot so the pair can't collapse onto a single position.
   const renderSlot = (
     label: string,
     selectedId: number | undefined,
+    otherSelectedId: number | undefined,
     onPick: (id: number) => void
   ) => (
     <div className="space-y-1">
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <div className="flex flex-wrap gap-1.5">
-        {positions.map((node) => (
-          <PositionSlotButton
-            key={node.id}
-            node={node}
-            selected={selectedId === node.id}
-            disabled={disabled}
-            onSelect={() => onPick(node.id)}
-          />
-        ))}
+        {positions.map((node) => {
+          const isDisabledByPair = otherSelectedId !== undefined && node.id === otherSelectedId;
+          return (
+            <PositionSlotButton
+              key={node.id}
+              node={node}
+              selected={selectedId === node.id}
+              disabled={disabled || isDisabledByPair}
+              title={isDisabledByPair ? 'Already selected as the other endpoint' : undefined}
+              onSelect={() => onPick(node.id)}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -462,10 +469,10 @@ function PositionPicker({
 
   return (
     <div className="space-y-2" data-testid="position-picker-pair">
-      {renderSlot('Position A', castPosition.pairA, (id) =>
+      {renderSlot('Position A', castPosition.pairA, castPosition.pairB, (id) =>
         onCastPositionChange({ ...castPosition, pairA: id })
       )}
-      {renderSlot('Position B', castPosition.pairB, (id) =>
+      {renderSlot('Position B', castPosition.pairB, castPosition.pairA, (id) =>
         onCastPositionChange({ ...castPosition, pairB: id })
       )}
       <button

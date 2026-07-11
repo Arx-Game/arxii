@@ -50,6 +50,16 @@ class ResolveCastPositionParamsTests(TestCase):
                 {"destination_position_id": self.other_room_position.pk},
             )
 
+    def test_identical_pair_endpoints_rejected(self):
+        """A barrier needs two different endpoints — A==B must be rejected (#2206)."""
+        pos = PositionFactory(room=self.encounter.room)
+        with self.assertRaises(ActionDispatchError):
+            resolve_cast_position_params(
+                self.participant,
+                self.technique,
+                {"position_a_id": pos.pk, "position_b_id": pos.pk},
+            )
+
 
 class BarricadeCastPositionJourneyTests(TestCase):
     """Task 3 (#2206): a declared cast position pair reaches the applied condition.
