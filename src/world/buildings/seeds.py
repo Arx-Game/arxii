@@ -58,6 +58,49 @@ def ensure_house_kind() -> BuildingKind:
     return kind
 
 
+# Urban core BuildingKind catalog rows. Each is a staff-authored catalog
+# entry with non-exclusive descriptive flags (see BuildingKind model docstring).
+# Authored here (not as a fixture) per repo discipline #683.
+URBAN_BUILDING_KINDS: tuple[tuple[str, dict[str, bool]], ...] = (
+    ("Cottage", {"is_residential": True}),
+    ("Tavern", {"is_residential": True, "is_commercial": True}),
+    ("Shop", {"is_commercial": True}),
+    ("Workshop", {"is_commercial": True}),
+    ("Guild Hall", {"is_commercial": True}),
+    ("Warehouse", {"is_commercial": True}),
+)
+
+URBAN_BUILDING_KIND_DESCRIPTIONS: dict[str, str] = {
+    "Cottage": "A small residential dwelling; the rural baseline.",
+    "Tavern": "A commercial establishment offering food, drink, and lodging.",
+    "Shop": "A commercial storefront for trade and craft.",
+    "Workshop": "A production space for manufacturing and fabrication.",
+    "Guild Hall": "A headquarters for a guild or organization's operations.",
+    "Warehouse": "A commercial storage building for goods and materials.",
+}
+
+
+def ensure_urban_building_kinds() -> None:
+    """Get-or-create the urban core BuildingKind rows (#694).
+
+    Six kinds that expand the Builders Guild Clerk's permit menu beyond
+    House: Cottage, Tavern, Shop, Workshop, Guild Hall, Warehouse. Each
+    carries only the descriptive flags appropriate to its kind — all
+    other flags default to False on the model.
+
+    Idempotent — safe to call from test setUp, app startup, or staff
+    tooling.
+    """
+    for name, flags in URBAN_BUILDING_KINDS:
+        BuildingKind.objects.get_or_create(
+            name=name,
+            defaults={
+                "description": URBAN_BUILDING_KIND_DESCRIPTIONS[name],
+                **flags,
+            },
+        )
+
+
 # PLACEHOLDER magnitudes (#670) — ratified super-linear curve (one big build ≈ 2× two
 # half-size builds); absolute values await the economy/tuning pass. Admin-editable rows.
 BUILDING_SIZE_TIERS: tuple[tuple[int, str, int], ...] = (
@@ -119,6 +162,7 @@ def ensure_plan_3_seeds() -> None:
     """
     ensure_building_permit_template()
     ensure_house_kind()
+    ensure_urban_building_kinds()
     ensure_default_kind_on_permit_offers()
     ensure_building_size_tiers()
     # Room-size ladder (#670) lives in evennia_extensions but construction depends
