@@ -192,6 +192,30 @@ export async function fetchRitualSessionDetail(id: number): Promise<RitualSessio
   return res.json() as Promise<RitualSessionDetail>;
 }
 
+/**
+ * GET /api/magic/rituals/sessions/?scene=<sceneId>
+ *
+ * Sessions whose captured origin scene (`RitualSession.scene`, #2159 Task 5)
+ * is `sceneId` — server-scoped to the requesting user's own sessions
+ * (initiator or invited participant; see `RitualSessionViewSet.get_queryset`).
+ * `RitualSession` persists only during PENDING/READY (deleted outright on
+ * fire/cancel/expiry/threshold-killing decline — see the model docstring), so
+ * a non-empty result already IS the PENDING/READY signal; no separate status
+ * field exists to check. Backs `RitualProposedChip` (#2159 Task 7).
+ *
+ * The `?scene=` filter param exists on `RitualSessionFilterSet` but is absent
+ * from the generated OpenAPI schema — drf-spectacular cannot introspect this
+ * viewset's request-dependent filterset (a pre-existing gap; the
+ * as_invitee/as_initiator/ritual/participation_rule params are equally
+ * undocumented there). Built as a raw query string rather than a typed
+ * request param for that reason.
+ */
+export async function fetchRitualSessionsForScene(sceneId: number): Promise<RitualSessionList[]> {
+  const res = await apiFetch(`${SESSIONS_URL}/?scene=${sceneId}`);
+  if (!res.ok) throw new Error('Failed to load ritual sessions for scene');
+  return res.json() as Promise<RitualSessionList[]>;
+}
+
 // ---------------------------------------------------------------------------
 // RitualSession writes (Covenants Slice B)
 // ---------------------------------------------------------------------------

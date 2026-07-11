@@ -187,6 +187,16 @@ def _seed_building_condition() -> None:
     ensure_preparation_contribution_method()
 
 
+def _seed_agriculture() -> None:
+    from world.agriculture.seeds import (  # noqa: PLC0415
+        ensure_field_granary_kinds,
+        ensure_starter_crop_types,
+    )
+
+    ensure_field_granary_kinds()
+    ensure_starter_crop_types()
+
+
 def _seed_market() -> None:
     from world.seeds.market import seed_market_demo  # noqa: PLC0415
 
@@ -331,6 +341,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Building condition: the Grand Preparation AP-check contribution method
     # (#1930). After "governance" (rides its Household Command CheckType).
     "building_condition": _seed_building_condition,
+    "agriculture": _seed_agriculture,
     # Kudos: the KudosSourceCategory rows the pose_kudos / spread_assist / social_engagement
     # reaction-kind + weekly-grant paths need, plus the "relationship_writeup" category and the
     # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
@@ -371,6 +382,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
 
 def seeded_models() -> list[type[Model]]:
     """Representative content models per cluster for row-count progress tracking."""
+    from world.agriculture.models import CropType  # noqa: PLC0415
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
@@ -392,6 +404,7 @@ def seeded_models() -> list[type[Model]]:
         Beginnings,
         Species,
         CrimeKind,
+        CropType,
     ]
 
 
@@ -404,6 +417,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     order so the admin hub lists clusters in their seed sequence.
     """
     from actions.models import ActionTemplate  # noqa: PLC0415
+    from world.agriculture.models import CropType  # noqa: PLC0415
     from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
     from world.character_creation.models import (  # noqa: PLC0415
         Beginnings,
@@ -536,4 +550,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row
         # (#2038).
         "project_resonance": [ProjectKindResonanceAward],
+        # Agriculture: Field + Granary RoomFeatureKinds + starter CropTypes (#1864).
+        "agriculture": [CropType, RoomFeatureKind],
     }

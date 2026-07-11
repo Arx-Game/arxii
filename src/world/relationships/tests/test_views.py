@@ -16,6 +16,7 @@ from world.relationships.factories import (
     RelationshipTrackFactory,
     RelationshipTrackProgressFactory,
 )
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 
 
 class RelationshipTrackViewSetTests(TestCase):
@@ -100,6 +101,14 @@ class CharacterRelationshipViewSetTests(TestCase):
         cls.sheet2 = CharacterSheetFactory()
         cls.sheet3 = CharacterSheetFactory()
 
+        # cls.user owns sheet1 via a current RosterTenure — required for it to
+        # read sheet1's outbound relationships under the privacy scoping.
+        cls.player_data = PlayerDataFactory(account=cls.user)
+        cls.roster_entry1 = RosterEntryFactory(character_sheet=cls.sheet1)
+        cls.tenure1 = RosterTenureFactory(
+            player_data=cls.player_data, roster_entry=cls.roster_entry1
+        )
+
         cls.track = RelationshipTrackFactory(name="Respect", sign=TrackSign.POSITIVE)
         cls.tier = RelationshipTierFactory(
             track=cls.track, name="Acknowledged", tier_number=0, point_threshold=0
@@ -120,11 +129,16 @@ class CharacterRelationshipViewSetTests(TestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_list_relationships(self) -> None:
-        """Authenticated users can list relationships."""
+        """Authenticated users can list relationships whose source they own."""
         response = self.client.get("/api/relationships/relationships/")
         assert response.status_code == status.HTTP_200_OK
         data = self._get_results(response.data)
-        assert len(data) >= 3
+        # rel1 and rel2 both source from sheet1 (owned by cls.user); rel3
+        # sources from sheet2 (unowned, not a soul tether) and is excluded.
+        ids = [r["id"] for r in data]
+        assert self.rel1.pk in ids
+        assert self.rel2.pk in ids
+        assert self.rel3.pk not in ids
 
     def test_list_uses_list_serializer(self) -> None:
         """List response uses lightweight serializer (no track_progress)."""
@@ -217,6 +231,115 @@ class CharacterRelationshipViewSetTests(TestCase):
             format="json",
         )
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+    def _get_results(self, response_data: dict | list) -> list:
+        """Extract results from paginated or non-paginated response."""
+        if isinstance(response_data, dict) and "results" in response_data:
+            return response_data["results"]
+        return response_data
+
+
+class CharacterRelationshipViewSetPrivacyTests(TestCase):
+    """Privacy scoping tests for CharacterRelationshipViewSet.get_queryset (#2159).
+
+    Numeric relationship state is author-private: the caller may only read
+    rows whose ``source`` is one of their own (tenure-owned) characters, or
+    rows flagged ``is_soul_tether=True`` (a ratified carve-out — the tether
+    panel rendered on a foreign character's sheet depends on it).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Set up two accounts, each with an owned character, plus a bystander."""
+        User = get_user_model()
+        cls.owner_user = User.objects.create_user(username="owner", password="testpass")
+        cls.other_user = User.objects.create_user(username="other", password="testpass")
+
+        cls.owner_sheet = CharacterSheetFactory()
+        cls.other_sheet = CharacterSheetFactory()
+        cls.bystander_sheet = CharacterSheetFactory()
+        cls.tether_target_sheet = CharacterSheetFactory()
+
+        cls.owner_player_data = PlayerDataFactory(account=cls.owner_user)
+        cls.owner_roster_entry = RosterEntryFactory(character_sheet=cls.owner_sheet)
+        cls.owner_tenure = RosterTenureFactory(
+            player_data=cls.owner_player_data, roster_entry=cls.owner_roster_entry
+        )
+
+        # Own outbound relationship (source=owner_sheet).
+        cls.own_outbound = CharacterRelationshipFactory(
+            source=cls.owner_sheet, target=cls.bystander_sheet
+        )
+        # A pair entirely foreign to owner_user (neither side owned).
+        cls.foreign_pair = CharacterRelationshipFactory(
+            source=cls.other_sheet, target=cls.bystander_sheet
+        )
+        # A foreign soul-tether row — should remain readable via the carve-out.
+        cls.foreign_tether = CharacterRelationshipFactory(
+            source=cls.other_sheet, target=cls.tether_target_sheet, is_soul_tether=True
+        )
+
+    def setUp(self) -> None:
+        """Set up test client."""
+        self.client = APIClient()
+
+    def test_foreign_pair_excluded_from_list(self) -> None:
+        """A relationship neither owned nor soul-tethered is absent from the list."""
+        self.client.force_authenticate(user=self.owner_user)
+        response = self.client.get("/api/relationships/relationships/")
+        assert response.status_code == status.HTTP_200_OK
+        ids = [r["id"] for r in self._get_results(response.data)]
+        assert self.foreign_pair.pk not in ids
+
+    def test_foreign_pair_retrieve_404s(self) -> None:
+        """Directly retrieving a foreign, non-tethered relationship 404s."""
+        self.client.force_authenticate(user=self.owner_user)
+        response = self.client.get(f"/api/relationships/relationships/{self.foreign_pair.pk}/")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_own_outbound_relationship_readable(self) -> None:
+        """The caller can list and retrieve their own outbound relationship."""
+        self.client.force_authenticate(user=self.owner_user)
+        list_response = self.client.get("/api/relationships/relationships/")
+        ids = [r["id"] for r in self._get_results(list_response.data)]
+        assert self.own_outbound.pk in ids
+
+        detail_response = self.client.get(
+            f"/api/relationships/relationships/{self.own_outbound.pk}/"
+        )
+        assert detail_response.status_code == status.HTTP_200_OK
+
+    def test_foreign_soul_tether_readable(self) -> None:
+        """A soul-tether row is readable even though neither side is owned."""
+        self.client.force_authenticate(user=self.owner_user)
+        list_response = self.client.get("/api/relationships/relationships/")
+        ids = [r["id"] for r in self._get_results(list_response.data)]
+        assert self.foreign_tether.pk in ids
+
+        detail_response = self.client.get(
+            f"/api/relationships/relationships/{self.foreign_tether.pk}/"
+        )
+        assert detail_response.status_code == status.HTTP_200_OK
+
+    def test_multi_character_account_sees_non_puppeted_characters_rows(self) -> None:
+        """A tenure-owned character's rows are visible even while not currently puppeted.
+
+        Ownership is resolved via the current ``RosterTenure`` join (mirroring
+        ``RelationshipUpdateViewSet``), never Evennia's live-puppet ``db_account``
+        field, so an account with several owned characters sees every owned
+        character's outbound rows regardless of which one it is puppeting.
+        """
+        second_sheet = CharacterSheetFactory()
+        second_roster_entry = RosterEntryFactory(character_sheet=second_sheet)
+        RosterTenureFactory(player_data=self.owner_player_data, roster_entry=second_roster_entry)
+        second_outbound = CharacterRelationshipFactory(
+            source=second_sheet, target=self.bystander_sheet
+        )
+
+        self.client.force_authenticate(user=self.owner_user)
+        response = self.client.get("/api/relationships/relationships/")
+        ids = [r["id"] for r in self._get_results(response.data)]
+        assert second_outbound.pk in ids
 
     def _get_results(self, response_data: dict | list) -> list:
         """Extract results from paginated or non-paginated response."""

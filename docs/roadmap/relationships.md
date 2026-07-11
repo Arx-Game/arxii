@@ -110,17 +110,29 @@ Relationships are the heart of the game. A track-based system lets characters de
 - **Roster transition reset** — When a new player takes over a character, both players can mutually agree to reset. No implementation
 
 ### Frontend UI
-- **Relationship management page** — Currently RelationshipsSection.tsx is a stub showing string arrays with "TBD" placeholder. Needs full relationship list/detail views
-- **First impression creation UI** — Writing the initial impression, picking track, coloring, visibility
-- **Relationship update creation UI** — Writing updates with title, writeup, track assignment, scene linking, visibility
-- **Development update UI** — Social roll interface, writeup, track selection (with 7/week counter display)
-- **Capstone event UI** — Creating monumental moments with narrative writeup
-- **Point redistribution UI** — Moving developed points between tracks with narrative explanation
-- **Relationship timeline view** — Chronological display of all updates, developments, capstones, and changes for a relationship
-- **Track progress visualization** — Visual display of points per track, tier progression, capacity vs developed vs temporary
+- **Relationship management page — DONE (#2159).** `RelationshipsSection`'s "Ties" subsection
+  now renders `RelationshipPanel`, branching on own vs. foreign sheet (own:
+  `OwnRelationshipsList`; foreign: `ForeignRelationshipTimeline`) instead of the old
+  free-text `string[]` "TBD" stub.
+- **First impression / development / capstone / redistribute creation UI — DONE (#2159).**
+  One `RelationshipWriteupDialog` covers all four positive write actions (mode is a fixed
+  prop per call site), with track picker(s), points, title, writeup, visibility, and
+  `coloring` (impression-only). Reachable from `OwnRelationshipsList` action buttons and
+  from a card-drawer quick action (impression-vs-development chosen automatically by
+  whether a relationship already exists).
+- **Relationship timeline view — DONE (#2159).** `GET .../relationship-updates/timeline/`
+  merges Update/Development/Capstone history into one type-tagged, `-created_at`-ordered
+  feed; consumed by `OwnRelationshipsList`'s per-relationship expandable history and by
+  `ForeignRelationshipTimeline` in full.
+- **Track progress visualization — partially DONE (#2159).** `OwnRelationshipsList` shows
+  points/tiers per track via the relationship detail read (`track_progress`); no dedicated
+  capacity vs. developed vs. temporary chart yet.
+- **Visibility controls — partially DONE (#2159).** Private/Shared/Gossip/Public is a field
+  on `RelationshipWriteupDialog`'s create form and is enforced read-side (privacy-scoped
+  timeline/list queries, ADR-0117); a standalone "appropriate filtering" browse UI beyond
+  the panel's own scoped queries is not built.
 - **Deceit indicator** — Red question mark OOC warning when a character's displayed feelings may differ from real
 - **Asymmetric view rendering** — Each player sees their own real designations + the other's displayed designation
-- **Visibility controls** — Private/Shared/Gossip/Public per update, with appropriate filtering
 - **Consent prompt UI** — OOC agree/disagree modal for track designations
 - **Hybrid type display** — Showing when a relationship qualifies as a hybrid type (Frenemy, Beloved Enemy, etc.)
 

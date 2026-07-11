@@ -310,7 +310,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `summon_ally`, `move_position`, `create_obstacle`; adapters: `summon_ally_on_condition`,
     `move_position_on_condition`, `create_obstacle_on_condition`, `init_absorb_buffer`.
     See magic.md §"Effect Palette" for the full handler/adapter table.
-  - Ally + party ward variants (#2208, ADR-0117): Aegis Ward/Communion, Mirror Vigil/Communion,
+  - Ally + party ward variants (#2208, ADR-0118): Aegis Ward/Communion, Mirror Vigil/Communion,
     Phase Guard/Communion — ALLY SINGLE/FILTERED_GROUP Technique variants of the three reactive
     wards above (no new ConditionTemplates); reactive fire (`_try_spend_reactive`) and upkeep
     (`drain_reactive_upkeep`) both debit `ConditionInstance.source_character`, falling back to
@@ -2661,6 +2661,48 @@ drain the well by physically visiting and performing an absorb action.
 - **Source:** `src/world/magic/models/sanctum.py`,
   `src/world/magic/services/sanctum*.py`.
 
+### Agriculture (Field + Granary crop/food system — #1864)
+A coupled pair of Room Feature kinds implementing an accrue-then-collect food
+system. The Field produces food into an `uncollected_pool` on a daily cron tick;
+a character actively collects it via a lossy check-based dispatch (mirrors
+`collect_org_income`); the Granary's level gates storage capacity; a domain's
+population consumes food weekly with shortage raising unrest and lowering
+prosperity.
+
+- **Models** (`world.agriculture.models`):
+  - `CropType` — staff-authored catalog (name, base_production, description).
+  - `FieldDetails` — OneToOne to `RoomFeatureInstance`; carries `crop_type` FK
+    and `uncollected_pool` (accrued food awaiting active collection).
+  - `GranaryDetails` — OneToOne to `RoomFeatureInstance`; no stored amount
+    (the domain-level `FoodStockpile` holds the balance; level→capacity is
+    derived at read time via `max_food_capacity(domain)`).
+  - `FoodStockpile` — OneToOne to `Domain`; `stored` balance + `last_collected_at`.
+    Lazily created via `get_or_create` in `collect_field_food`.
+  - `FoodConfig` — singleton (pk=1) tuning knobs: production rate, consumption
+    per capita, shortage penalties, granary capacity per level.
+- **Services** (`world.agriculture.services`):
+  - `field_production_tick()` — daily cron; accrues `base_production × level ×
+    multiplier` into each active Field's `uncollected_pool`.
+  - `collect_field_food(character, field_instance)` — active collection dispatch;
+    zeroes pool, rolls a Food Collection check, applies `COLLECTION_BAND_PCTS`
+    (reused from currency), lands food into domain's `FoodStockpile` (capped at
+    Granary capacity; excess is overflow/lost).
+  - `domain_consumption_tick()` — weekly cron (part of weekly rollover); each
+    domain's population consumes food; shortage raises unrest + lowers
+    prosperity; no stockpile row = perpetual shortage.
+  - `resolve_domain_for_feature(instance)` — walks `RoomProfile.area` →
+    `AreaClosure` ancestor chain to find the `Domain`.
+  - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
+    across all active Granaries in the domain's area subtree.
+- **Action:** `CollectFoodAction` (key `"collect_food"`, category
+  `"agriculture"`) — the single commit seam for telnet + web.
+- **Events:** `FOOD_COLLECTED`, `FOOD_SHORTAGE` (in `flows/constants.py`).
+- **Cron tasks:** `agriculture.field_production` (daily 24h),
+  `agriculture.domain_consumption` (weekly, via weekly rollover).
+- **Seeds:** `ensure_field_granary_kinds()` + `ensure_starter_crop_types()`
+  (Wheat/Barley/Root Vegetables with PLACEHOLDER production values).
+- **Source:** `src/world/agriculture/`
+
 ### Lab (crafting-station economy — #1234)
 Second Room Feature kind (`RoomFeatureServiceStrategy.LAB`), registered by
 `world.items`. A per-Lab durability meter gates and wears down under crafting
@@ -3873,7 +3915,35 @@ writeup kudos/complaint feedback.
   one owned sheet. Frontend: the commend button on the "Writeups" subsection of
   `RelationshipsSection` (`frontend/src/components/character/RelationshipsSection.tsx`, own-
   sheet gated), fed by `frontend/src/relationships/` (`api.ts`/`queries.ts`), POSTs
-  `{writeup_type: "update", writeup_id}` to `.../kudos/`.
+  `{writeup_type: "update", writeup_id}` to `.../kudos/`. A "Report" button beside Commend
+  opens `WriteupComplaintDialog` (#2159, `frontend/src/relationships/components/`), which
+  POSTs `{writeup_type, writeup_id, reason}` to `.../complaint/` — zero follow-up read
+  surface, matching `WriteupComplaint`'s staff-only visibility.
+- **Writeup timeline action (#2159):** `GET .../relationship-updates/timeline/` merges
+  Update/Development/Capstone history into one type-tagged (`kind`), `-created_at`-ordered,
+  paginated feed. Exactly one of two mutually exclusive params (both/neither → 400):
+  `?about_character=<CharacterSheet pk>` — non-PRIVATE writeups about that character from
+  any author, plus PRIVATE ones where the caller is the author or the subject (the
+  queryset-level generalization of `services._can_view_writeup`, entirely DB-side, no
+  Python row filtering); `?relationship=<CharacterRelationship pk>` — one relationship's
+  full history incl. PRIVATE, source-owner-only (tenure join; 404 missing, 403 non-source).
+  Implementation: each writeup model's queryset is projected to a shared column shape and
+  combined via `.union()` (per-branch `.order_by()` clears `Meta.ordering` — SQLite
+  rejects `ORDER BY` inside a union branch).
+- **RelationshipPanel (#2159):** the "Ties" subsection of `RelationshipsSection`, replacing
+  the old free-text `CharacterData.relationships` Notes list. Branches on `isMyCharacter`
+  (`frontend/src/relationships/components/RelationshipPanel.tsx`), mirroring
+  `CharacterRelationshipViewSet`'s author-private scoping (ADR-0117): own sheet renders
+  `OwnRelationshipsList` — `GET .../relationships/?source=<sheet pk>` (list serializer, no
+  `track_progress`) for target/affection rows, each expandable (Radix `Accordion`, lazy —
+  no N+1 up front) into `GET .../relationships/<id>/` (detail serializer, for
+  `track_progress` points/tiers) plus the `?relationship=` timeline arm for full history,
+  and buttons opening `RelationshipWriteupDialog` in development/capstone/redistribute
+  modes (`target_persona_id` resolved via `GET /api/personas/?character_sheet=`, since the
+  list/detail relationship serializers only carry the target's CharacterSheet pk, not a
+  Persona pk). Foreign sheet renders `ForeignRelationshipTimeline` — the `?about_character=`
+  arm only, type-tagged, deliberately no numeric fields (`RelationshipTimelineEntry` itself
+  carries none).
 - **Automatic affection shifts (#1697):** `AffectionShift` model +
   `apply_affection_shift(*, source, target, scene, effect, amount)` — the generic
   valence-signed success consequence (`EffectType.SHIFT_AFFECTION`, handler in

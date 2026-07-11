@@ -4063,6 +4063,7 @@
 **Foreign Keys:**
   - ritual -> magic.Ritual [FK]
   - initiator -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
 **Pointed to by:**
   - participants <- magic.RitualSessionParticipant
   - references <- magic.RitualSessionReference
@@ -5664,6 +5665,7 @@
   - entry_endorsements <- magic.SceneEntryEndorsement
   - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
+  - ritual_sessions <- magic.RitualSession
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating

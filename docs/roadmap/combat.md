@@ -25,7 +25,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).
-- **Ward your allies (#2208, ADR-0117).** Aegis Field / Mirror Ward / Phase Step each gained
+- **Ward your allies (#2208, ADR-0118).** Aegis Field / Mirror Ward / Phase Step each gained
   an ALLY-single (Aegis Ward, Mirror Vigil, Phase Guard — castable in or out of combat) and an
   ALLY-`FILTERED_GROUP` party-preparation variant (Aegis Communion, Mirror Communion, Phase
   Communion — out-of-combat only, consent-free per ADR-0045; party `anima_cost` is 2x the

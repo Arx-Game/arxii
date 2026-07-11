@@ -14423,6 +14423,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/relationships/relationship-updates/timeline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Merged Update/Development/Capstone writeup history (#2159).
+     *
+     *     Exactly one of `about_character` or `relationship` must be provided (400
+     *     otherwise); see ``_timeline_about_character_queryset`` /
+     *     ``_timeline_relationship_queryset`` for each mode's visibility rule. Results
+     *     are type-tagged (``kind``), ordered ``-created_at``, and paginated per this
+     *     viewset's ``pagination_class``.
+     */
+    get: operations['relationships_relationship_updates_timeline_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/relationships/relationships/': {
     parameters: {
       query?: never;
@@ -23231,6 +23256,13 @@ export interface components {
       readonly last_unseen_count: number;
     };
     /**
+     * @description * `update` - update
+     *     * `development` - development
+     *     * `capstone` - capstone
+     * @enum {string}
+     */
+    Kind4adEnum: 'update' | 'development' | 'capstone';
+    /**
      * @description * `wall` - Wall
      *     * `gate` - Gate
      *     * `battlement` - Battlement
@@ -26635,6 +26667,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['RelationshipCapstone'][];
     };
+    PaginatedRelationshipTimelineEntryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RelationshipTimelineEntry'][];
+    };
     PaginatedRelationshipUpdateList: {
       /** @example 123 */
       count: number;
@@ -28685,6 +28732,7 @@ export interface components {
        */
       target_kind?: components['schemas']['ThreadTargetKindEnum'];
       target_id?: number;
+      target_persona_id?: number | null;
       character_sheet_id?: number;
       /** @default  */
       name: string;
@@ -30074,6 +30122,29 @@ export interface components {
       readonly point_threshold: number;
       /** @description Narrative description of what this tier represents */
       readonly description: string;
+    };
+    /**
+     * @description One row of the merged Update/Development/Capstone writeup timeline (#2159).
+     *
+     *     Serializes a plain dict row (not a model instance) — projected by
+     *     ``RelationshipUpdateViewSet.timeline``'s ``_timeline_rows``/``.union()`` query,
+     *     which gives ``RelationshipUpdate``/``RelationshipDevelopment``/
+     *     ``RelationshipCapstone`` rows the same shared column shape regardless of which
+     *     of the three writeup models a given row came from.
+     */
+    RelationshipTimelineEntry: {
+      kind: components['schemas']['Kind4adEnum'];
+      id: number;
+      relationship: number;
+      author: number;
+      author_name: string;
+      track: number;
+      track_name: string;
+      title: string;
+      writeup: string;
+      visibility: components['schemas']['VisibilityFdaEnum'];
+      /** Format: date-time */
+      created_at: string;
     };
     /** @description Serializer for RelationshipTrack with nested tiers. */
     RelationshipTrack: {
@@ -33043,6 +33114,7 @@ export interface components {
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
       target_id: number;
+      target_persona_id?: number | null;
       character_sheet_id: number;
       /** @default  */
       name: string;
@@ -54035,6 +54107,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RedistributeWrite'];
+        };
+      };
+    };
+  };
+  relationships_relationship_updates_timeline_list: {
+    parameters: {
+      query?: {
+        /** @description CharacterSheet pk. Every non-PRIVATE writeup about this character from any author, plus PRIVATE writeups where the caller is the author or the subject. Mutually exclusive with `relationship`. */
+        about_character?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description CharacterRelationship pk. Full history (incl. PRIVATE) of one relationship; caller must be its tenure-owned source. Mutually exclusive with `about_character`. */
+        relationship?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRelationshipTimelineEntryList'];
         };
       };
     };

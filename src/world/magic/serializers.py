@@ -766,6 +766,13 @@ class ThreadSerializer(serializers.ModelSerializer):
 
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
     target_id = serializers.IntegerField(write_only=True, required=True)
+    # RELATIONSHIP_TRACK only (#2159): names the partner persona. target_id for that
+    # kind is the RelationshipTrack CATALOG id (not a RelationshipTrackProgress pk —
+    # no API exposes that pk; RelationshipTrackProgressSerializer has no id field).
+    # Same identifier convention as the relationship write serializers
+    # (RelationshipUpdateViewSet._resolve_target_sheet): a Persona pk resolved
+    # server-side to its CharacterSheet.
+    target_persona_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     character_sheet_id = serializers.IntegerField(write_only=True, required=True)
     name = serializers.CharField(required=False, allow_blank=True, default="")
     description = serializers.CharField(required=False, allow_blank=True, default="")
@@ -782,6 +789,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "resonance_name",
             "target_kind",
             "target_id",
+            "target_persona_id",
             "character_sheet_id",
             "name",
             "description",
@@ -851,12 +859,44 @@ class ThreadSerializer(serializers.ModelSerializer):
         # object-level validate()). Required to scope the RELATIONSHIP_TRACK/
         # RELATIONSHIP_CAPSTONE lookup below to the requester's own rows (#2033).
         character_sheet = attrs.get("character_sheet_id")
-        attrs["_target"] = self._resolve_target(target_kind, target_id, character_sheet)
+        partner_sheet = None
+        if target_kind == TargetKind.RELATIONSHIP_TRACK:
+            partner_sheet = self._resolve_partner_sheet(attrs.get("target_persona_id"))
+        attrs["_target"] = self._resolve_target(
+            target_kind, target_id, character_sheet, partner_sheet
+        )
         return attrs
 
     @staticmethod
+    def _resolve_partner_sheet(target_persona_id: int | None) -> CharacterSheet:
+        """Resolve ``target_persona_id`` → the partner's CharacterSheet.
+
+        Same identifier convention as the relationship write serializers
+        (``RelationshipUpdateViewSet._resolve_target_sheet``): the request names a
+        Persona pk, resolved server-side. Required for RELATIONSHIP_TRACK — a thread
+        anchors to one specific partner's developed track, and no anchor pk survives
+        the round trip to the client (``RelationshipTrackProgressSerializer`` has no
+        id field), so the partner must be named directly (#2159).
+        """
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        if target_persona_id is None:
+            msg = "target_persona_id is required to weave a RELATIONSHIP_TRACK thread."
+            raise serializers.ValidationError(msg)
+        persona = (
+            Persona.objects.filter(pk=target_persona_id).select_related("character_sheet").first()
+        )
+        if persona is None:
+            msg = "Target persona not found."
+            raise serializers.ValidationError(msg)
+        return persona.character_sheet
+
+    @staticmethod
     def _resolve_target(
-        target_kind: str, target_id: int, character_sheet: CharacterSheet | None
+        target_kind: str,
+        target_id: int,
+        character_sheet: CharacterSheet | None,
+        partner_sheet: CharacterSheet | None = None,
     ) -> object:
         """Look up the target model instance for a given (target_kind, target_id).
 
@@ -879,14 +919,17 @@ class ThreadSerializer(serializers.ModelSerializer):
         )
         from world.relationships.models import (  # noqa: PLC0415
             RelationshipCapstone,
-            RelationshipTrackProgress,
         )
         from world.traits.models import Trait  # noqa: PLC0415
+
+        if target_kind == TargetKind.RELATIONSHIP_TRACK:
+            return ThreadSerializer._resolve_relationship_track_target(
+                target_id, character_sheet, partner_sheet
+            )
 
         model_map: dict[str, type] = {
             TargetKind.TRAIT: Trait,
             TargetKind.TECHNIQUE: TechniqueModel,
-            TargetKind.RELATIONSHIP_TRACK: RelationshipTrackProgress,
             TargetKind.RELATIONSHIP_CAPSTONE: RelationshipCapstone,
             TargetKind.FACET: Facet,
             TargetKind.COVENANT_ROLE: CovenantRole,
@@ -898,13 +941,53 @@ class ThreadSerializer(serializers.ModelSerializer):
             msg = f"Unsupported target_kind: {target_kind!r}."
             raise serializers.ValidationError(msg)
         lookup: dict[str, object] = {"pk": target_id}
-        if target_kind in (TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE):
+        if target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
             lookup["relationship__source"] = character_sheet
         try:
             return model.objects.get(**lookup)
         except model.DoesNotExist as exc:
             msg = f"{target_kind} target with id={target_id} does not exist."
             raise serializers.ValidationError(msg) from exc
+
+    @staticmethod
+    def _resolve_relationship_track_target(
+        target_id: int,
+        character_sheet: CharacterSheet | None,
+        partner_sheet: CharacterSheet | None,
+    ) -> object:
+        """Resolve the caller's OWN ``RelationshipTrackProgress`` toward ``partner_sheet``.
+
+        ``target_id`` is the ``RelationshipTrack`` **catalog** id (not a
+        ``RelationshipTrackProgress`` pk — no API exposes that pk). Mirrors telnet's
+        ``CmdWeaveThread._resolve_track_anchor`` (#2159): filter-resolve by
+        (source, target, track), never create a progress row, and surface a friendly
+        message when the pair has no developed history on that track yet.
+        """
+        from world.relationships.models import (  # noqa: PLC0415
+            RelationshipTrack,
+            RelationshipTrackProgress,
+        )
+
+        if partner_sheet is None:
+            msg = "target_persona_id is required to weave a RELATIONSHIP_TRACK thread."
+            raise serializers.ValidationError(msg)
+
+        track = RelationshipTrack.objects.filter(pk=target_id).first()
+        if track is None:
+            msg = f"RelationshipTrack target with id={target_id} does not exist."
+            raise serializers.ValidationError(msg)
+
+        progress = RelationshipTrackProgress.objects.filter(
+            relationship__source=character_sheet,
+            relationship__target=partner_sheet,
+            track_id=target_id,
+        ).first()
+        if progress is None:
+            partner_persona = getattr(partner_sheet, "primary_persona", None)  # noqa: GETATTR_LITERAL
+            partner_name = getattr(partner_persona, "name", None) or "them"  # noqa: GETATTR_LITERAL
+            msg = f"You have no developed '{track.name}' track with {partner_name} yet."
+            raise serializers.ValidationError(msg)
+        return progress
 
     def create(self, validated_data: dict) -> Thread:
         """Delegate thread creation to ``WeaveThreadAction`` (telnet + web converge).
@@ -920,6 +1003,7 @@ class ThreadSerializer(serializers.ModelSerializer):
         character_sheet = validated_data.pop("character_sheet_id")
         target = validated_data.pop("_target")
         validated_data.pop("target_id", None)
+        validated_data.pop("target_persona_id", None)
 
         result = WeaveThreadAction().run(
             actor=character_sheet.character,

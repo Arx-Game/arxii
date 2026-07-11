@@ -99,6 +99,12 @@ export interface WeaveThreadRequest {
   character_sheet_id: number;
   name?: string;
   description?: string;
+  /**
+   * RELATIONSHIP_TRACK only (#2159): the partner's `Persona` pk. Required by
+   * the backend for that kind (`ThreadSerializer._resolve_partner_sheet`);
+   * omitted for every other kind.
+   */
+  target_persona_id?: number;
 }
 
 export interface PatchThreadRequest {

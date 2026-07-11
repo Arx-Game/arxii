@@ -942,6 +942,16 @@ hook creates the companion `RitualLiturgy` via `RitualLiturgyFactory`.
 `CmdRitual` adapter for the Ritual of the Durance (mirroring the covenant adapters) — is
 tracked in **#1700** (under the telnet-E2E umbrella #1328).
 
+**Origin scene (#2159).** `RitualSession.scene` (nullable FK → `scenes.Scene`, `SET_NULL`)
+captures the initiator's active scene at draft time via the canonical `get_active_scene`
+resolver — never client-supplied. `RitualSessionFilterSet` exposes a `?scene=` `NumberFilter`
+(field `scene_id`) on the sessions list endpoint so a scene can surface its own
+PENDING/READY sessions (the web `RitualProposedChip` on `/game` and `/scenes/:id`, see
+`frontend/src/rituals/CLAUDE.md`). Like the other `RitualSessionFilterSet` filters
+(`as_invitee`/`as_initiator`/`ritual`/`participation_rule`), `?scene=` doesn't appear in the
+generated OpenAPI schema — drf-spectacular can't introspect this viewset's request-dependent
+filterset (pre-existing gap).
+
 ---
 
 ### Audere & Audere Majora (models/audere.py, audere_majora.py)
@@ -1065,7 +1075,7 @@ grammar is what #2206 made actually reach validation/persistence in combat.
   A `CANCEL_EVENT` child fires unconditionally — even on the fizzle path — so an
   unaffordable defense would still cancel the attack. That bug was caught and fixed
   by the reactive E2E tests (#1584 Task 16).
-- **Payer rule (#2208, ADR-0117):** both cost paths debit
+- **Payer rule (#2208, ADR-0118):** both cost paths debit
   `ConditionInstance.source_character`, falling back to the bearer (`target`) when
   unset. `_try_spend_reactive` (fire cost) and `drain_reactive_upkeep` (round upkeep,
   per-participant) both resolve the payer this way — an ally ward strains its caster,
@@ -1554,7 +1564,7 @@ the legacy ThreadType lookup no longer exists.
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/threads/` | GET | List threads owned by requesting account (staff see all); excludes retired |
-| `/threads/` | POST | Weave a new thread. Body must include `character_sheet_id`; serializer delegates to `weave_thread` |
+| `/threads/` | POST | Weave a new thread. Body must include `character_sheet_id`; serializer delegates to `weave_thread`. For `target_kind=RELATIONSHIP_TRACK`, `target_id` is the `RelationshipTrack` **catalog** id (not a `RelationshipTrackProgress` pk) and `target_persona_id` (required, that kind only) names the partner — see the RELATIONSHIP_TRACK contract note below (#2159) |
 | `/threads/{id}/` | GET | Thread detail with anchor + resonance |
 | `/threads/{id}/` | DELETE | Soft-retire (stamps `retired_at`; row remains for historical references) |
 | `/thread-pull-preview/` | POST | Read-only preview; body `{character_sheet_id, resonance_id, tier, thread_ids[], action_context?}`; returns resonance/anima cost + `affordable` + `resolved_effects[]` |
@@ -1569,6 +1579,17 @@ the legacy ThreadType lookup no longer exists.
   `WeavingUnlockMissing`, `RelationshipBondNotOwned`, `XPInsufficient`,
   `RitualComponentError`). Views surface those messages as HTTP 400 detail
   (never raw `str(exc)`).
+- **RELATIONSHIP_TRACK catalog-id contract (#2159).** `target_id` for a RELATIONSHIP_TRACK
+  weave is the `RelationshipTrack` catalog id, never a `RelationshipTrackProgress` pk — no
+  API exposes that pk (`RelationshipTrackProgressSerializer` has no id field). The request
+  must also carry `target_persona_id` (write-only, RELATIONSHIP_TRACK only, same Persona-pk
+  convention `RelationshipUpdateViewSet._resolve_target_sheet` uses) naming the partner.
+  `ThreadSerializer._resolve_relationship_track_target` resolves the caller's own
+  `RelationshipTrackProgress` by `(relationship__source=character_sheet,
+  relationship__target=partner_sheet, track_id=target_id)` and never creates a progress row
+  — mirroring telnet's `CmdWeaveThread._resolve_track_anchor` — surfacing a friendly message
+  when the pair has no developed history on that track yet, instead of a raw not-found error.
+  RELATIONSHIP_CAPSTONE keeps resolving by its own pk (`target_persona_id` not used).
 - `weave_thread` asserts relationship-bond ownership for RELATIONSHIP_TRACK /
   RELATIONSHIP_CAPSTONE anchors (`target.relationship.source == character_sheet`,
   raising `RelationshipBondNotOwned`, #2033) **after** the `ThreadWeavingUnlock`

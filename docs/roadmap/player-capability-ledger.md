@@ -143,7 +143,7 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
   fixed the previously-broken non-combat live path). Wired declaration → resolver → condition
   handlers, journey-tested at the round seam. Web non-combat casting still has no position picker
   (telnet-only there via #2019's `position=` grammar). **Ward-your-allies — SHIPPED #2208**
-  (ADR-0117): each of the three reactive wards (Aegis Field/Mirror Ward/Phase Step) gained an
+  (ADR-0118): each of the three reactive wards (Aegis Field/Mirror Ward/Phase Step) gained an
   ALLY-single and an ALLY-`FILTERED_GROUP` (party, out-of-combat only, 2x anima_cost) Technique
   variant reusing the same `ConditionTemplate`; both reactive-fire and round-upkeep anima costs now
   debit the applier (`ConditionInstance.source_character`), falling back to the bearer for

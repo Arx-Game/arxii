@@ -335,6 +335,144 @@ describe('WeaveThreadWizard', () => {
     });
   });
 
+  describe('Step 2 — RELATIONSHIP_TRACK "with whom" partner→track gating (#2159)', () => {
+    const RELATIONSHIPS_RESPONSE = [
+      {
+        id: 20,
+        source: 5,
+        source_name: 'Me',
+        target: 9,
+        target_name: 'Aria',
+        is_active: true,
+        is_pending: false,
+        is_soul_tether: false,
+        soul_tether_role: '',
+        absolute_value: 10,
+        developed_absolute_value: 10,
+        affection: 5,
+        updated_at: '2025-01-01T00:00:00Z',
+      },
+    ];
+
+    const RELATIONSHIP_DETAIL_RESPONSE = {
+      id: 20,
+      source: 5,
+      source_name: 'Me',
+      target: 9,
+      target_name: 'Aria',
+      is_active: true,
+      is_pending: false,
+      is_deceitful: false,
+      track_progress: [
+        {
+          track: 7,
+          track_name: 'Devotion',
+          track_sign: '+',
+          capacity: 100,
+          developed_points: 10,
+          temporary_points: 0,
+          total_points: 10,
+          current_tier_name: 'Bond',
+        },
+      ],
+      absolute_value: 10,
+      developed_absolute_value: 10,
+      mechanical_bonus: 0,
+      affection: 5,
+      created_at: '2025-01-01T00:00:00Z',
+      updated_at: '2025-01-01T00:00:00Z',
+    };
+
+    const PERSONA_RESPONSE = {
+      results: [{ id: 55, persona_type: 'primary' }],
+    };
+
+    function mockRelationshipTrackApis() {
+      vi.mocked(apiModule.apiFetch).mockImplementation((url: string) => {
+        const urlStr = String(url);
+        if (urlStr.includes('/api/relationships/relationships/?source=')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(RELATIONSHIPS_RESPONSE),
+          } as Response);
+        }
+        if (urlStr.includes('/api/relationships/relationships/20/')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(RELATIONSHIP_DETAIL_RESPONSE),
+          } as Response);
+        }
+        if (urlStr.includes('/api/personas/?character_sheet=9')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(PERSONA_RESPONSE),
+          } as Response);
+        }
+        return Promise.resolve({ ok: false, json: () => Promise.resolve({}) } as Response);
+      });
+    }
+
+    it('gates track choices behind a partner pick and submits target_persona_id in the payload', async () => {
+      const mockMutate = vi.fn();
+      vi.mocked(magicQueries.useWeaveThread).mockReturnValue(
+        makeMutation({ mutate: mockMutate }) as unknown as ReturnType<
+          typeof magicQueries.useWeaveThread
+        >
+      );
+      mockRelationshipTrackApis();
+
+      const summary = makeSummary({
+        weaving_eligibility: { RELATIONSHIP_TRACK: true },
+        weavable_relationship_track_ids: [7],
+      });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+
+      // Step 1 -> RELATIONSHIP_TRACK
+      fireEvent.click(screen.getByTestId('kind-button-RELATIONSHIP_TRACK'));
+
+      // Partner sub-view first — the track isn't offered yet.
+      await waitFor(() => {
+        expect(screen.getByTestId('wizard-step-2-partner')).toBeInTheDocument();
+        expect(screen.getByTestId('partner-option-9')).toHaveTextContent('Aria');
+      });
+      expect(screen.queryByTestId('anchor-option-7')).not.toBeInTheDocument();
+
+      // Pick the partner -> track sub-view reveals only that partner's qualifying track.
+      fireEvent.click(screen.getByTestId('partner-option-9'));
+      await waitFor(() => {
+        expect(screen.getByTestId('wizard-step-2-track')).toBeInTheDocument();
+        expect(screen.getByTestId('anchor-option-7')).toHaveTextContent('Devotion');
+      });
+
+      // Pick the track -> step 3 (resonance).
+      fireEvent.click(screen.getByTestId('anchor-option-7'));
+      await waitFor(() => screen.getByTestId('wizard-step-3'));
+
+      // Step 3 -> Step 4 -> Step 5 -> Weave.
+      fireEvent.click(screen.getByTestId('resonance-option-1'));
+      await waitFor(() => screen.getByTestId('wizard-step-4'));
+      fireEvent.click(screen.getByTestId('wizard-next-to-confirm'));
+      await waitFor(() => screen.getByTestId('wizard-step-5'));
+      fireEvent.click(screen.getByTestId('wizard-weave-button'));
+
+      expect(mockMutate).toHaveBeenCalledOnce();
+      expect(mockMutate).toHaveBeenCalledWith(
+        {
+          target_kind: 'RELATIONSHIP_TRACK',
+          target_id: 7,
+          resonance: 1,
+          character_sheet_id: 5,
+          name: undefined,
+          description: undefined,
+          target_persona_id: 55,
+        },
+        expect.any(Object)
+      );
+    });
+  });
+
   describe('Step 3 — Resonance picker', () => {
     async function reachStep3() {
       const summary = makeSummary({ weaving_eligibility: { FACET: true } });

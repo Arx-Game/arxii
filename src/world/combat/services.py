@@ -7166,7 +7166,7 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     self-ward path on the single-query-per-participant code path below.
 
     Participants without a ``CharacterAnima`` row are skipped entirely — including
-    any caster-paid wards they bear (ADR-0117 edge: an anima-less bearer's ally
+    any caster-paid wards they bear (ADR-0118 edge: an anima-less bearer's ally
     ward gets free upkeep; acceptable because player characters always have an
     anima row).
 

@@ -148,7 +148,6 @@ export function CharacterSheetPage() {
 
         <TabsContent value="relationships" className="space-y-4">
           <RelationshipsSection
-            relationships={entry.character.relationships}
             characterSheetId={entry.character.id}
             isMyCharacter={isMyCharacter}
           />

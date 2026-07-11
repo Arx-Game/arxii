@@ -61,3 +61,6 @@ class EventName(models.TextChoices):
     # Engagement lock lifecycle (#2020)
     ENGAGEMENT_LOCK_FORMED = "engagement_lock_formed", "Engagement Lock Formed"
     ENGAGEMENT_LOCK_BROKEN = "engagement_lock_broken", "Engagement Lock Broken"
+    # Agriculture (crop/food system, #1864)
+    FOOD_COLLECTED = "food_collected", "Food Collected"
+    FOOD_SHORTAGE = "food_shortage", "Food Shortage"

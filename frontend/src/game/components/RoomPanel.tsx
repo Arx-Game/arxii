@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { dispatchRoomBuilder } from '@/buildings/api';
 import { buildingKeys, useBuildingForRoomQuery } from '@/buildings/queries';
 import { BuildingBuilderDialog } from '@/buildings/components/BuildingBuilderDialog';
+import { RitualProposedChip } from '@/rituals/components/RitualProposedChip';
 import { RoomHeader } from './room-panel/RoomHeader';
 import { RoomDescription } from './room-panel/RoomDescription';
 import { CharactersList } from './room-panel/CharactersList';
@@ -129,6 +130,8 @@ export function RoomPanel({
         hasActiveEncounter={hasActiveEncounter}
         hasActiveBattle={hasActiveBattle}
       />
+
+      {scene && <RitualProposedChip sceneId={scene.id} />}
 
       {room.is_owner && characterId != null && (
         <Dialog open={editOpen} onOpenChange={setEditOpen}>

@@ -51,5 +51,7 @@ class EventNameTests(TestCase):
             "combat_round_starting",
             "engagement_lock_formed",
             "engagement_lock_broken",
+            "food_collected",
+            "food_shortage",
         }
         self.assertEqual(set(EventName.values), expected)

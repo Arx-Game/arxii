@@ -32,6 +32,8 @@ export const ritualSessionKeys = {
   inbox: () => [...ritualSessionKeys.all, 'inbox'] as const,
   outbox: () => [...ritualSessionKeys.all, 'outbox'] as const,
   detail: (id: number) => [...ritualSessionKeys.all, 'detail', id] as const,
+  /** Sessions whose captured origin scene is `sceneId` (#2159) — `RitualProposedChip`. */
+  forScene: (sceneId: number) => [...ritualSessionKeys.all, 'for-scene', sceneId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -130,6 +132,21 @@ export function useRitualSessionDetail(id: number) {
     queryFn: () => api.fetchRitualSessionDetail(id),
     enabled: id > 0,
     throwOnError: true,
+  });
+}
+
+/**
+ * Backs `RitualProposedChip` (#2159 Task 7) — a passive, widely-mounted info
+ * chip (`/game` scene surface + `SceneDetailPage`), so `throwOnError` is
+ * deliberately NOT set (mirrors `usePendingAlterations` in
+ * `magic/queries.ts`): a fetch failure here must degrade to rendering
+ * nothing, not crash the surrounding page through the error boundary.
+ */
+export function useRitualSessionsForScene(sceneId: number | null) {
+  return useQuery({
+    queryKey: ritualSessionKeys.forScene(sceneId ?? 0),
+    queryFn: () => api.fetchRitualSessionsForScene(sceneId as number),
+    enabled: sceneId != null && sceneId > 0,
   });
 }
 

@@ -146,7 +146,8 @@ treat those names as hints to confirm, not gospel.
 - [0114 — Player-authored accusations are weight-bearing secrets, gated by consent not the model](0114-accusations-are-weight-bearing-player-secrets.md) (extends ADR-0062/0113)
 - [0115 — Applause is three axes, not one economy: votes=popularity, kudos=graciousness, reactions=expression](0115-applause-three-axes.md)
 - [0116 — PlayerMail is the letters surface at MVP; tenure-routed anonymity is the mechanism](0116-playermail-is-the-letters-surface-at-mvp.md)
-- [0117 — Reactive ward costs debit the applier, falling back to the bearer](0117-reactive-costs-debit-the-applier.md) (extends ADR-0060)
+- [0117 — Relationship reads are scoped to the caller's own outbound rows, plus a soul-tether carve-out](0117-relationship-reads-scoped-to-own-outbound-rows.md)
+- [0118 — Reactive ward costs debit the applier, falling back to the bearer](0118-reactive-costs-debit-the-applier.md) (extends ADR-0060)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
