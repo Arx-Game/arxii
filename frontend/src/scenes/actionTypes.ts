@@ -124,6 +124,14 @@ export interface PlayerAction {
    */
   reach?: string | null;
   /**
+   * Cast-time position-targeting shape for this technique (#2206). Hand-typed
+   * mirror of the backend `position_target_shape` field (generated api.d.ts
+   * was not regenerated for this feature — see Task 5 brief). "none" → no
+   * position target; "single" → one destination position; "pair" → two
+   * positions (e.g. an origin/destination pair).
+   */
+  position_target_shape?: 'none' | 'single' | 'pair';
+  /**
    * Soulfray warning for combat-cast techniques that risk death (#1543).
    * null / absent → no death-risk warning applies.
    */

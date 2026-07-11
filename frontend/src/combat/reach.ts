@@ -65,6 +65,25 @@ export function isTargetReachable(
 }
 
 /**
+ * Returns true when a candidate *position* (rather than an occupant) is
+ * reachable by the actor given the technique's reach constraint (#2206) —
+ * used by the cast-time position picker's "single" shape.
+ *
+ * A position is its own "target position," so this is a thin, self-documenting
+ * wrapper around `isTargetReachable`: no occupant/persona lookup is needed,
+ * the candidate position's own id is passed directly as the target position id.
+ */
+export function isPositionReachable(
+  reach: string | null | undefined,
+  actorPositionId: number | null | undefined,
+  candidatePositionId: number | null | undefined,
+  adjacency: PositionAdjacencyItem[],
+  reachHops?: number | null
+): boolean {
+  return isTargetReachable(reach, actorPositionId, candidatePositionId, adjacency, reachHops);
+}
+
+/**
  * Bounded BFS over the adjacency graph. Returns true if `targetPositionId`
  * is reachable from `startPositionId` within `maxHops` edges.
  */

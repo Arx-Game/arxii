@@ -15,7 +15,14 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
-import type { ActionContext, ActionSlot, EffortLevel, TargetOption } from '@/actions/types';
+import type {
+  ActionContext,
+  ActionSlot,
+  CastPosition,
+  EffortLevel,
+  PositionTargetShape,
+  TargetOption,
+} from '@/actions/types';
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { MovementActions } from '../components/MovementActions';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
@@ -40,6 +47,7 @@ import type {
   DispatchActionRequest,
   EncounterDetail,
   Participant,
+  PositionNode,
   RoundActionTyped,
 } from '../types';
 
@@ -141,6 +149,10 @@ type DispatchJob = () => Promise<unknown>;
  *
  * When a pull is selected, pull_resonance_id / pull_tier / pull_thread_ids are
  * merged into kwargs so the backend commits a CombatPull alongside the action.
+ *
+ * When a cast-time position is selected (#2206), `position_params` is merged
+ * into kwargs: `{ destination_position_id }` for a "single"-shape technique,
+ * or `{ position_a_id, position_b_id }` for a "pair"-shape technique.
  */
 function buildFocusedJob(
   focusedContext: ActionContext,
@@ -150,7 +162,8 @@ function buildFocusedJob(
   soulfrayAccepted: boolean,
   soulfrayWarning: SoulfrayWarningData | null,
   furyTierId: number | null,
-  furyAnchorId: number | null
+  furyAnchorId: number | null,
+  castPosition: CastPosition
 ): DispatchJob | null {
   if (focusedContext.techniqueId === undefined) return null;
 
@@ -189,6 +202,17 @@ function buildFocusedJob(
         ...pullKwargs,
         ...soulfrayKwarg,
         ...furyKwargs,
+        ...(castPosition?.destinationId
+          ? { position_params: { destination_position_id: castPosition.destinationId } }
+          : {}),
+        ...(castPosition?.pairA && castPosition?.pairB
+          ? {
+              position_params: {
+                position_a_id: castPosition.pairA,
+                position_b_id: castPosition.pairB,
+              },
+            }
+          : {}),
       },
     });
 }
@@ -426,6 +450,11 @@ export function YourTurn({
   const [coverAllyId, setCoverAllyId] = useState<string>('');
   const [maneuverError, setManeuverError] = useState<string | null>(null);
 
+  // Cast-time position selection for the focused technique (#2206) — lifted
+  // here so both the position-requirement gate (submit button) and the
+  // dispatch kwargs merge (buildFocusedJob) can read it.
+  const [castPosition, setCastPosition] = useState<CastPosition>({});
+
   // Reset submitted, pull selection, and pull dialog when round advances.
   useEffect(() => {
     setSubmitted(false);
@@ -436,6 +465,7 @@ export function YourTurn({
     setFuryAnchorId(null);
     setCoverAllyId('');
     setManeuverError(null);
+    setCastPosition({});
   }, [roundNumber]);
 
   // ---------------------------------------------------------------------------
@@ -548,6 +578,27 @@ export function YourTurn({
     return selected?.reach ?? null;
   })();
 
+  // Cast-time position-targeting shape for the currently selected focused
+  // technique (#2206). Positions/edges data is the same source
+  // CombatTacticalMap uses — EncounterDetail.position_nodes.
+  const focusedTechniquePositionShape: PositionTargetShape = (() => {
+    if (focusedContext.techniqueId === undefined) return 'none';
+    const selected = availableActions.find(
+      (a) => a.ref.technique_id === focusedContext.techniqueId
+    );
+    return selected?.position_target_shape ?? 'none';
+  })();
+  const focusedPositions: PositionNode[] = encounter?.position_nodes ?? [];
+
+  // Blocks Ready/submit while a required position slot is empty (#2206,
+  // mirrors the fury/soulfray required-declaration gating below).
+  const positionRequirementMet =
+    focusedTechniquePositionShape === 'none' ||
+    (focusedTechniquePositionShape === 'single' && castPosition.destinationId !== undefined) ||
+    (focusedTechniquePositionShape === 'pair' &&
+      castPosition.pairA !== undefined &&
+      castPosition.pairB !== undefined);
+
   // Soulfray + fury descriptor for the currently selected focused cast (#1543).
   const focusedCastDescriptor = (() => {
     if (focusedContext.techniqueId === undefined) return null;
@@ -596,6 +647,10 @@ export function YourTurn({
       setSubmitError('Chosen fury tier exceeds your bond with the anchor.');
       return;
     }
+    if (!positionRequirementMet) {
+      setSubmitError('Select a position target for this technique.');
+      return;
+    }
 
     // The round effort comes from the focused slot and applies to every
     // declaration (focused + passives). The COMBAT dispatch requires
@@ -614,7 +669,8 @@ export function YourTurn({
       soulfrayAccepted,
       soulfrayWarning,
       furyTierId,
-      furyAnchorId
+      furyAnchorId,
+      castPosition
     );
     const passiveJobs = buildPassiveJobs(
       visiblePassiveSlots,
@@ -713,6 +769,10 @@ export function YourTurn({
           reach={focusedTechniqueReach}
           actorPositionId={actorPositionId}
           positionAdjacency={encounter?.position_adjacency ?? []}
+          positionTargetShape={focusedTechniquePositionShape}
+          positions={focusedPositions}
+          castPosition={castPosition}
+          onCastPositionChange={setCastPosition}
         />
         {soulfrayWarning !== null && (
           <SoulfrayAcceptGate
@@ -981,7 +1041,8 @@ export function YourTurn({
           isLocked ||
           dispatchPending ||
           (soulfrayWarning !== null && !soulfrayAccepted) ||
-          furyOverCap
+          furyOverCap ||
+          !positionRequirementMet
         }
         onClick={() => {
           handleSubmit().catch(() => {});
