@@ -153,6 +153,9 @@ type DispatchJob = () => Promise<unknown>;
  * When a cast-time position is selected (#2206), `position_params` is merged
  * into kwargs: `{ destination_position_id }` for a "single"-shape technique,
  * or `{ position_a_id, position_b_id }` for a "pair"-shape technique.
+ * Shape-aware per the selected action's `position_target_shape` — a
+ * "none"/undefined-shape technique never gets `position_params`, even if
+ * stale castPosition state is present (#2206 review finding).
  */
 function buildFocusedJob(
   focusedContext: ActionContext,
@@ -163,7 +166,8 @@ function buildFocusedJob(
   soulfrayWarning: SoulfrayWarningData | null,
   furyTierId: number | null,
   furyAnchorId: number | null,
-  castPosition: CastPosition
+  castPosition: CastPosition,
+  positionTargetShape: PositionTargetShape
 ): DispatchJob | null {
   if (focusedContext.techniqueId === undefined) return null;
 
@@ -189,6 +193,27 @@ function buildFocusedJob(
   const soulfrayKwarg =
     soulfrayWarning !== null && soulfrayAccepted ? { confirm_soulfray_risk: true } : {};
 
+  // Strictly per-shape — never derive position_params from mere presence of
+  // castPosition fields, since stale state from a previously-selected
+  // technique can otherwise leak into a differently-shaped technique's
+  // dispatch (#2206 review finding).
+  type PositionParams =
+    | { destination_position_id: number }
+    | { position_a_id: number; position_b_id: number };
+  const positionKwargs: Record<string, PositionParams> = {};
+  if (positionTargetShape === 'single' && castPosition?.destinationId !== undefined) {
+    positionKwargs.position_params = { destination_position_id: castPosition.destinationId };
+  } else if (
+    positionTargetShape === 'pair' &&
+    castPosition?.pairA !== undefined &&
+    castPosition?.pairB !== undefined
+  ) {
+    positionKwargs.position_params = {
+      position_a_id: castPosition.pairA,
+      position_b_id: castPosition.pairB,
+    };
+  }
+
   return () =>
     dispatchAction({
       ref: {
@@ -202,17 +227,7 @@ function buildFocusedJob(
         ...pullKwargs,
         ...soulfrayKwarg,
         ...furyKwargs,
-        ...(castPosition?.destinationId
-          ? { position_params: { destination_position_id: castPosition.destinationId } }
-          : {}),
-        ...(castPosition?.pairA && castPosition?.pairB
-          ? {
-              position_params: {
-                position_a_id: castPosition.pairA,
-                position_b_id: castPosition.pairB,
-              },
-            }
-          : {}),
+        ...positionKwargs,
       },
     });
 }
@@ -468,6 +483,14 @@ export function YourTurn({
     setCastPosition({});
   }, [roundNumber]);
 
+  // Reset cast-time position selection when the focused technique changes —
+  // a position picked for a prior technique (e.g. a pair-shape technique's A/B)
+  // must not silently leak into a differently-shaped technique's
+  // `position_params` (#2206 review finding).
+  useEffect(() => {
+    setCastPosition({});
+  }, [focusedContext.techniqueId]);
+
   // ---------------------------------------------------------------------------
   // Slot composition
   // ---------------------------------------------------------------------------
@@ -670,7 +693,8 @@ export function YourTurn({
       soulfrayWarning,
       furyTierId,
       furyAnchorId,
-      castPosition
+      castPosition,
+      focusedTechniquePositionShape
     );
     const passiveJobs = buildPassiveJobs(
       visiblePassiveSlots,
