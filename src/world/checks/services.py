@@ -188,6 +188,31 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     )
 
 
+def compute_check_rating(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    extra_modifiers: int = 0,
+) -> int:
+    """Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.
+
+    Reuses :func:`_compute_check_breakdown`, the single source of the check's point math
+    shared by :func:`perform_check` and the forced-outcome test path, so any caller that
+    needs to *compare* a character's standing in two ``CheckType``s (e.g. picking the
+    better of two reaction approaches) does so deterministically. ADR-0019 keeps the one
+    dice roll inside ``perform_check``/``resolve_challenge`` — this helper never rolls.
+    """
+    breakdown = _compute_check_breakdown(
+        character,
+        check_type,
+        target_difficulty=0,
+        extra_modifiers=extra_modifiers,
+        effort_level=None,
+        fatigue_penalty=0,
+        specialization=None,
+    )
+    return breakdown.total_points
+
+
 def _check_result(
     check_type: "CheckType", outcome: "CheckOutcome | None", breakdown: _CheckBreakdown
 ) -> CheckResult:

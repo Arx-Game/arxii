@@ -1,4 +1,4 @@
-"""Interpose challenge content seed (#1273).
+"""Interpose challenge content seed (#1273, best-of twin #2207).
 
 Idempotently seeds the content the interpose feature needs:
 
@@ -8,14 +8,18 @@ Idempotently seeds the content the interpose feature needs:
   shared row also seeded by the catch content — ``get_or_create`` ensures a single
   row), one :class:`~world.mechanics.models.Application` +
   :class:`~world.mechanics.models.ChallengeApproach` per capability (Reflexes
-  :class:`~world.checks.models.CheckType`, same as the catch challenge), and a
-  SUCCESS-tier DESTROY consequence (clean block).
+  :class:`~world.checks.models.CheckType`, same as the catch challenge), a
+  Melee-Defense twin :class:`~world.mechanics.models.ChallengeApproach` per
+  capability (#2207 — a duelist-statted guardian's Melee Combat training counts,
+  not just raw Reflexes), and a SUCCESS-tier DESTROY consequence (clean block).
 
 ``ensure_interpose_content`` mirrors
 ``world.areas.positioning.plummet_content.ensure_catch_content`` and is safe to call
 repeatedly: every write goes through ``get_or_create``. It
 doubles as integration-test setup and staff seed data.
 """
+
+import logging
 
 from world.areas.positioning.constants import CATCH_CHECK_TYPE_NAME
 from world.checks.models import CheckCategory, CheckType, Consequence
@@ -33,12 +37,29 @@ from world.mechanics.models import (
 )
 from world.traits.models import CheckOutcome
 
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Identity keys
 # ---------------------------------------------------------------------------
 
 INTERPOSE_CHALLENGE_NAME: str = "Interpose"
 INTERPOSABLE_PROPERTY_NAME: str = "interposable"
+
+# The "Melee Defense" CheckType is seeded by world.seeds.combat_checks
+# (ensure_melee_defense_check_type, #1994) — this module only looks it up
+# (mirrors the cross-module CheckType reference idiom in
+# world.seeds.social_actions._MELEE_DEFENSE_CHECK_NAME) and never creates it,
+# so a re-seed never risks a duplicate row under a different CheckCategory.
+MELEE_DEFENSE_CHECK_TYPE_NAME: str = "Melee Defense"
+
+# Shared CapabilityType for every Melee-Defense twin approach (#2207). One row,
+# not four — mirrors the existing "telekinesis" shared-row precedent above: the
+# fiction differs per capability but the mechanical roll (trained melee defense)
+# is the same, and this is also what makes the twin selectable via
+# dispatch_capability_reaction's approach= param (capability_source.capability_name),
+# regardless of which of the four base interpose capabilities the guardian holds.
+MELEE_GUARD_CAPABILITY_NAME: str = "melee_guard"
 
 # Authored difficulty of the interpose challenge. Lives on
 # ChallengeTemplate.severity — never as a literal target_difficulty in engine code.
@@ -122,6 +143,33 @@ def _ensure_interpose_check_type() -> CheckType:
     return obj
 
 
+def _ensure_melee_guard_capability() -> CapabilityType:
+    """Idempotently seed the shared 'melee_guard' CapabilityType (#2207).
+
+    Backs every Melee-Defense twin ``Application`` — one row shared across all
+    four interpose capabilities, same pattern as the shared ``telekinesis`` row.
+    """
+    obj, _ = CapabilityType.objects.get_or_create(name=MELEE_GUARD_CAPABILITY_NAME)
+    return obj
+
+
+def _get_melee_defense_check_type() -> CheckType | None:
+    """Look up the "Melee Defense" CheckType seeded by world.seeds.combat_checks.
+
+    Returns None (never creates) when it hasn't been seeded yet — the twin
+    approaches are skipped for that run rather than risking a duplicate
+    CheckType row under the wrong CheckCategory (CheckType.name is only unique
+    together with category, not globally).
+    """
+    check_type = CheckType.objects.filter(name=MELEE_DEFENSE_CHECK_TYPE_NAME).first()
+    if check_type is None:
+        logger.warning(
+            "Melee Defense CheckType not seeded; interpose best-of twins skipped "
+            "(run world.seeds.combat_checks.seed_combat_check_content() first)."
+        )
+    return check_type
+
+
 def _ensure_clean_interpose_consequence(template: ChallengeTemplate) -> None:
     """Idempotently link a SUCCESS-tier DESTROY consequence to the template.
 
@@ -159,15 +207,17 @@ def _ensure_clean_interpose_consequence(template: ChallengeTemplate) -> None:
 
 
 def ensure_interpose_content() -> None:
-    """Idempotently seed the "Interpose" challenge (#1273).
+    """Idempotently seed the "Interpose" challenge (#1273, best-of twin #2207).
 
     Seeds the four seed interpose ``CapabilityType`` rows (``telekinesis`` reuses
     the shared row from the catch content — ``get_or_create`` by name), the shared
     ``interposable`` ``Property``, the reused Reflexes ``CheckType``, the
     capability-gated ``ChallengeTemplate`` (with authored severity), one
-    ``Application`` + ``ChallengeApproach`` per capability, and a SUCCESS-tier
-    DESTROY consequence so a clean block resolves the challenge. Safe to call
-    repeatedly — every write goes through ``get_or_create``.
+    ``Application`` + ``ChallengeApproach`` per capability, a Melee-Defense twin
+    ``Application`` + ``ChallengeApproach`` per capability (skipped with a warning
+    if "Melee Defense" hasn't been seeded yet), and a SUCCESS-tier DESTROY
+    consequence so a clean block resolves the challenge. Safe to call repeatedly —
+    every write goes through ``get_or_create``.
 
     Adding a new interpose capability later is pure data: a new
     ``CapabilityType`` + ``Application(target_property=interpose property)`` +
@@ -224,3 +274,31 @@ def ensure_interpose_content() -> None:
                 "custom_description": fiction,
             },
         )
+
+    melee_defense_check_type = _get_melee_defense_check_type()
+    if melee_defense_check_type is not None:
+        melee_guard_capability = _ensure_melee_guard_capability()
+        for capability_name, application_name, display_name, fiction in _INTERPOSE_CAPABILITIES:
+            melee_application, _ = Application.objects.get_or_create(
+                name=f"{application_name} (Melee Defense)",
+                defaults={
+                    "capability": melee_guard_capability,
+                    "target_property": interpose_property,
+                    "description": (
+                        f"Interpose on behalf of an ally, meeting the blow with trained "
+                        f"melee defense ({capability_name} flavor)."
+                    ),
+                },
+            )
+            ChallengeApproach.objects.get_or_create(
+                challenge_template=template,
+                application=melee_application,
+                defaults={
+                    "check_type": melee_defense_check_type,
+                    "display_name": f"{display_name} (Melee Defense)",
+                    "custom_description": (
+                        f"{fiction} Years of melee training carry the parry as surely as "
+                        "raw reflex."
+                    ),
+                },
+            )

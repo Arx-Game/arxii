@@ -59,7 +59,7 @@ from flows.events.payloads import (
     EncounterCompletedPayload,
 )
 from world.checks.constants import ModifierSourceKind
-from world.checks.services import collect_check_modifiers, perform_check
+from world.checks.services import collect_check_modifiers, compute_check_rating, perform_check
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
     COMBO_MIN_SLOTS,
@@ -6599,6 +6599,40 @@ def _resolve_clashes(
     return outcomes
 
 
+def _better_interpose_approach(interposer: ObjectDB) -> str | None:  # noqa: OBJECTDB_PARAM
+    """Compare the interposer's Reflexes vs Melee Defense rating; pick the better twin (#2207).
+
+    Deterministic — no dice roll (ADR-0019 keeps the one roll inside
+    ``resolve_challenge``/``perform_check``): reuses
+    :func:`world.checks.services.compute_check_rating`, the same pre-roll
+    trait/skill assembly ``perform_check`` uses, for both ``CheckType``s. Returns
+    the shared Melee-Defense-twin capability name
+    (:data:`world.combat.interpose_content.MELEE_GUARD_CAPABILITY_NAME`) — the
+    string ``dispatch_capability_reaction``'s ``approach`` param matches against
+    ``capability_source.capability_name`` — when Melee Defense strictly beats
+    Reflexes. Returns ``None`` to keep today's default (Reflexes-flavored)
+    approach otherwise, including when either ``CheckType`` hasn't been seeded.
+    """
+    from world.areas.positioning.constants import CATCH_CHECK_TYPE_NAME  # noqa: PLC0415
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.combat.interpose_content import (  # noqa: PLC0415
+        MELEE_DEFENSE_CHECK_TYPE_NAME,
+        MELEE_GUARD_CAPABILITY_NAME,
+    )
+
+    reflexes = CheckType.objects.filter(name=CATCH_CHECK_TYPE_NAME).first()
+    melee_defense = CheckType.objects.filter(name=MELEE_DEFENSE_CHECK_TYPE_NAME).first()
+    if reflexes is None or melee_defense is None:
+        return None
+
+    reflexes_rating = compute_check_rating(interposer, reflexes)
+    melee_rating = compute_check_rating(interposer, melee_defense)
+
+    if melee_rating > reflexes_rating:
+        return MELEE_GUARD_CAPABILITY_NAME
+    return None
+
+
 def _try_interpose(
     participant: CombatParticipant,
     pre_payload: DamagePreApplyPayload,
@@ -6648,7 +6682,7 @@ def _try_interpose(
         interposer,
         protected,
         pre_payload,
-        approach=None,
+        approach=_better_interpose_approach(interposer),
         extra_modifiers=bond_bonus(interposer, protected),
     )
     if result is not None:
