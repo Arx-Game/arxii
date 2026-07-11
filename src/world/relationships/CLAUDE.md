@@ -179,7 +179,12 @@ The positive relationship-building loop is reachable from both web and telnet:
   per-model querysets are projected to a shared column shape and combined with
   `.union()` (each branch's default `Meta.ordering` cleared via a bare `.order_by()` —
   SQLite rejects `ORDER BY` inside a union branch), then paginated via the viewset's own
-  `pagination_class`.
+  `pagination_class`. Both timeline arms are consumed by `RelationshipPanel` (#2159,
+  `frontend/src/relationships/components/`) — the `?relationship=` arm backs each row's
+  expandable history on the caller's own-sheet `OwnRelationshipsList` (alongside a detail
+  fetch for `track_progress`, since the list serializer omits it); the `?about_character=`
+  arm is the entirety of `ForeignRelationshipTimeline` on a foreign sheet — deliberately no
+  numeric relationship state there, matching the author-private scoping below.
 - **Telnet** — `CmdRelationship` (`relationship <subverb>`) runs the same Actions; it adds
   telnet-only `relationship list` and `relationship show <name|#>` read surfaces (the web provides
   these implicitly).
@@ -191,12 +196,16 @@ not compel or provoke the target's behavior (ADR-0024).
 ### Writeup feedback (#1537) [BUILT & WIRED]
 - **Web** — `RelationshipUpdateViewSet` POST `kudos` endpoint dispatches
   `GiveWriteupKudosAction`; POST `complaint` endpoint dispatches `FileWriteupComplaintAction`.
-  Both run through `action.run()` (ADR-0001).
+  Both run through `action.run()` (ADR-0001). A "Report" button beside Commend on the
+  Writeups subsection (#2159, `WriteupComplaintDialog`) POSTs `{writeup_type, writeup_id,
+  reason}` to `.../complaint/` — the filing surface, not a resolution one: the complainant
+  gets a toast confirming it was filed and nothing else (`WriteupComplaint` still never
+  appears in any player-facing serializer, so there's no outcome to show).
 - **Telnet** — `CmdRelationship` adds `relationship kudos <ref>` and
   `relationship complain <ref>=<reason>`, where `<ref>` is `u<pk>` / `d<pk>` / `c<pk>` as shown
   by `relationship show`.
 - **Admin** — `WriteupComplaint` is registered in Django admin (django-unfold style) for staff
-  triage. No player-facing complaint surface.
+  triage.
 - **FK direction** — feedback models live in `relationships`; the kudos primitive (`KudosPointsData`
   etc.) is not polluted with FK back-pointers (ADR-0010). No denormalized kudos count column —
   derived at read time (ADR-0014).

@@ -26,6 +26,10 @@ export type RelationshipWriteup = components['schemas']['RelationshipUpdate'];
 export type GiveWriteupKudosRequest = components['schemas']['WriteupKudosWriteRequest'];
 export type RelationshipTrack = components['schemas']['RelationshipTrack'];
 export type CharacterRelationshipList = components['schemas']['CharacterRelationshipList'];
+export type CharacterRelationship = components['schemas']['CharacterRelationship'];
+export type RelationshipTimelineEntry = components['schemas']['RelationshipTimelineEntry'];
+export type WriteupTypeEnum = components['schemas']['WriteupTypeEnum'];
+export type WriteupComplaintWriteRequest = components['schemas']['WriteupComplaintWriteRequest'];
 export type FirstImpressionWriteRequest = components['schemas']['FirstImpressionWriteRequest'];
 export type DevelopmentWriteRequest = components['schemas']['DevelopmentWriteRequest'];
 export type CapstoneWriteRequest = components['schemas']['CapstoneWriteRequest'];
@@ -155,6 +159,98 @@ export async function getMyRelationshipToTarget(
     | { results?: CharacterRelationshipList[] }
     | CharacterRelationshipList[];
   return Array.isArray(data) ? data : (data.results ?? []);
+}
+
+/**
+ * GET /api/relationships/relationships/?source=<CharacterSheet pk>
+ *
+ * The caller's full outbound relationship list from one of their own
+ * characters — server-scoped the same way as `getMyRelationshipToTarget`
+ * (`CharacterRelationshipViewSet.get_queryset`'s tenure join), just narrowed
+ * by `source` instead of `target`. Feeds `RelationshipPanel`'s own-sheet arm
+ * (target name, affection, absolute/developed values per relationship row).
+ */
+export async function getMyOutboundRelationships(
+  sourceCharacterSheetId: number
+): Promise<CharacterRelationshipList[]> {
+  const params = new URLSearchParams({
+    source: String(sourceCharacterSheetId),
+    page_size: '100',
+  });
+  const res = await apiFetch(`${RELATIONSHIPS_URL}/?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to load relationships');
+  const data = (await res.json()) as
+    | { results?: CharacterRelationshipList[] }
+    | CharacterRelationshipList[];
+  return Array.isArray(data) ? data : (data.results ?? []);
+}
+
+/**
+ * GET /api/relationships/relationships/<id>/
+ *
+ * Full relationship detail — the only variant carrying `track_progress`
+ * (per-track developed/temporary points and current tier); the list
+ * serializer used by `getMyOutboundRelationships` omits it
+ * (`CharacterRelationshipListSerializer`). Used to expand one relationship
+ * row in `RelationshipPanel`'s own-sheet arm.
+ */
+export async function getRelationshipDetail(
+  relationshipId: number
+): Promise<CharacterRelationship> {
+  const res = await apiFetch(`${RELATIONSHIPS_URL}/${relationshipId}/`);
+  if (!res.ok) throw new Error('Failed to load relationship detail');
+  return (await res.json()) as CharacterRelationship;
+}
+
+export interface RelationshipTimelineParams {
+  /** CharacterRelationship pk — own-full-history arm. Mutually exclusive with `aboutCharacter`. */
+  relationship?: number;
+  /** CharacterSheet pk — visibility-scoped arm. Mutually exclusive with `relationship`. */
+  aboutCharacter?: number;
+}
+
+/**
+ * GET /api/relationships/relationship-updates/timeline/
+ *
+ * Merged Update/Development/Capstone writeup history (#2159), type-tagged
+ * via `kind`. Exactly one of `relationship`/`aboutCharacter` must be set —
+ * mirrors `RelationshipUpdateViewSet.timeline`'s mutually-exclusive 400.
+ */
+export async function getRelationshipTimeline(
+  params: RelationshipTimelineParams
+): Promise<RelationshipTimelineEntry[]> {
+  const query = new URLSearchParams({ page_size: '100' });
+  if (params.relationship != null) {
+    query.set('relationship', String(params.relationship));
+  }
+  if (params.aboutCharacter != null) {
+    query.set('about_character', String(params.aboutCharacter));
+  }
+  const res = await apiFetch(`${RELATIONSHIP_UPDATES_URL}/timeline/?${query.toString()}`);
+  if (!res.ok) throw new Error('Failed to load relationship timeline');
+  const data = (await res.json()) as
+    | { results?: RelationshipTimelineEntry[] }
+    | RelationshipTimelineEntry[];
+  return Array.isArray(data) ? data : (data.results ?? []);
+}
+
+/**
+ * POST /api/relationships/relationship-updates/complaint/
+ *
+ * File a bad-faith-RP complaint against a SHARED/PUBLIC writeup, for staff
+ * triage only — `WriteupComplaint` never appears in any player-facing
+ * serializer, so there is no follow-up read surface for this write. Rejected
+ * with the exact `WriteupNotVisibleError.user_message` on 400.
+ */
+export async function fileWriteupComplaint(body: WriteupComplaintWriteRequest): Promise<void> {
+  const res = await apiFetch(`${RELATIONSHIP_UPDATES_URL}/complaint/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await readActionErrorMessage(res, 'Failed to file this complaint');
+  }
 }
 
 async function postWriteAction(

@@ -16,7 +16,9 @@ import type {
   FirstImpressionWriteRequest,
   GiveWriteupKudosRequest,
   RedistributeWriteRequest,
+  RelationshipTimelineParams,
   RelationshipWriteResult,
+  WriteupComplaintWriteRequest,
 } from './api';
 
 export const relationshipsKeys = {
@@ -36,6 +38,21 @@ export const relationshipsKeys = {
     targetCharacterSheetId == null
       ? ([...relationshipsKeys.all, 'my-relationship'] as const)
       : ([...relationshipsKeys.all, 'my-relationship', targetCharacterSheetId] as const),
+  /** The caller's full outbound relationship list from one owned character (`?source=`). */
+  outbound: (sourceCharacterSheetId?: number) =>
+    sourceCharacterSheetId == null
+      ? ([...relationshipsKeys.all, 'outbound'] as const)
+      : ([...relationshipsKeys.all, 'outbound', sourceCharacterSheetId] as const),
+  /** One relationship's full detail (incl. `track_progress`) — `RelationshipPanel` row expand. */
+  detail: (relationshipId: number) => [...relationshipsKeys.all, 'detail', relationshipId] as const,
+  /** Merged Update/Development/Capstone timeline — either arm, keyed by whichever param is set. */
+  timeline: (params: RelationshipTimelineParams) =>
+    [
+      ...relationshipsKeys.all,
+      'timeline',
+      params.relationship ?? null,
+      params.aboutCharacter ?? null,
+    ] as const,
 };
 
 /**
@@ -93,6 +110,58 @@ export function useMyRelationshipToTarget(targetCharacterSheetId?: number, enabl
     queryKey: relationshipsKeys.myRelationship(targetCharacterSheetId),
     queryFn: () => api.getMyRelationshipToTarget(targetCharacterSheetId as number),
     enabled: enabled && targetCharacterSheetId != null,
+  });
+}
+
+/**
+ * GET the caller's full outbound relationship list from one owned character
+ * (CharacterSheet pk). Feeds `RelationshipPanel`'s own-sheet arm — the
+ * lightweight list serializer (no `track_progress`; see `useRelationshipDetail`
+ * for that on row expand).
+ */
+export function useMyOutboundRelationships(sourceCharacterSheetId?: number, enabled = true) {
+  return useQuery({
+    queryKey: relationshipsKeys.outbound(sourceCharacterSheetId),
+    queryFn: () => api.getMyOutboundRelationships(sourceCharacterSheetId as number),
+    enabled: enabled && sourceCharacterSheetId != null,
+  });
+}
+
+/**
+ * GET one relationship's full detail, including per-track `track_progress`
+ * (points/tier). Used to expand one row in `RelationshipPanel`'s own-sheet
+ * arm — pass `enabled=false` until the row is actually expanded so this
+ * doesn't fire for every row up front.
+ */
+export function useRelationshipDetail(relationshipId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: relationshipsKeys.detail(relationshipId ?? 0),
+    queryFn: () => api.getRelationshipDetail(relationshipId as number),
+    enabled: enabled && relationshipId != null,
+  });
+}
+
+/**
+ * GET the merged Update/Development/Capstone writeup timeline. Exactly one
+ * of `relationship`/`aboutCharacter` should be set (mirrors the backend's
+ * mutually-exclusive 400) — this hook only fires once one of them is.
+ */
+export function useRelationshipTimeline(params: RelationshipTimelineParams, enabled = true) {
+  return useQuery({
+    queryKey: relationshipsKeys.timeline(params),
+    queryFn: () => api.getRelationshipTimeline(params),
+    enabled: enabled && (params.relationship != null || params.aboutCharacter != null),
+  });
+}
+
+/**
+ * File a bad-faith-RP complaint against a writeup. No cache invalidation —
+ * `WriteupComplaint` never appears in any player-facing serializer, so there
+ * is nothing this mutation's success would change the shape of.
+ */
+export function useFileWriteupComplaint() {
+  return useMutation({
+    mutationFn: (body: WriteupComplaintWriteRequest) => api.fileWriteupComplaint(body),
   });
 }
 

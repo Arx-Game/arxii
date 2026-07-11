@@ -3,14 +3,16 @@
  *
  * Covers:
  * 1. Renders the "Relationships" heading and both sub-sections.
- * 2. Free-text relationships render as list items in the Notes sub-section.
- * 3. When no free-text relationships exist, the empty-state placeholder renders.
- * 4. SoulTetherStatusPanel is rendered with bond data from useMyTetherBonds.
- * 5. characterSheetId is forwarded to SoulTetherStatusPanel (via callerSheetId).
- * 6. Bond relationship IDs and bonded names are passed to SoulTetherStatusPanel.
- * 7. Writeups sub-section (#2031): renders with kudos_count, Commend button
+ * 2. SoulTetherStatusPanel is rendered with bond data from useMyTetherBonds.
+ * 3. characterSheetId is forwarded to SoulTetherStatusPanel (via callerSheetId).
+ * 4. Bond relationship IDs and bonded names are passed to SoulTetherStatusPanel.
+ * 5. Writeups sub-section (#2031): renders with kudos_count, Commend button
  *    hidden when viewer_has_kudosed, exact POST body, 400 message rendered,
  *    empty writeups list renders nothing.
+ * 6. Report button (#2159): always shown per writeup, opens WriteupComplaintDialog
+ *    with the writeup's id/title.
+ * 7. Ties sub-section (#2159): renders RelationshipPanel with characterSheetId/
+ *    isMyCharacter forwarded — the free-text Notes subsection it replaced is gone.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -70,6 +72,54 @@ vi.mock('@/relationships/queries', () => ({
 import { useMyWriteups } from '@/relationships/queries';
 
 // ---------------------------------------------------------------------------
+// Mock RelationshipPanel (#2159) — the real relationship panel has its own
+// tests; here we only verify RelationshipsSection composes it correctly.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/relationships/components/RelationshipPanel', () => ({
+  RelationshipPanel: ({
+    characterSheetId,
+    isMyCharacter,
+  }: {
+    characterSheetId?: number;
+    isMyCharacter?: boolean;
+  }) => (
+    <div
+      data-testid="relationship-panel"
+      data-character-sheet-id={characterSheetId ?? ''}
+      data-is-my-character={String(isMyCharacter ?? false)}
+    />
+  ),
+}));
+
+// ---------------------------------------------------------------------------
+// Mock WriteupComplaintDialog (#2159) — has its own tests; here we only
+// verify RelationshipsSection opens it with the right writeup.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/relationships/components/WriteupComplaintDialog', () => ({
+  WriteupComplaintDialog: ({
+    open,
+    writeupType,
+    writeupId,
+    writeupTitle,
+  }: {
+    open: boolean;
+    writeupType: string;
+    writeupId: number;
+    writeupTitle: string;
+  }) =>
+    open ? (
+      <div
+        data-testid="writeup-complaint-dialog"
+        data-writeup-type={writeupType}
+        data-writeup-id={writeupId}
+        data-writeup-title={writeupTitle}
+      />
+    ) : null,
+}));
+
+// ---------------------------------------------------------------------------
 // Wrapper
 // ---------------------------------------------------------------------------
 
@@ -93,10 +143,20 @@ describe('RelationshipsSection', () => {
     expect(screen.getByRole('heading', { name: /relationships/i })).toBeInTheDocument();
   });
 
-  it('renders the Notes sub-section heading', () => {
+  it('renders the Ties sub-section heading', () => {
     render(<RelationshipsSection />, { wrapper: createWrapper() });
 
-    expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /ties/i })).toBeInTheDocument();
+  });
+
+  it('renders RelationshipPanel with characterSheetId and isMyCharacter forwarded', () => {
+    render(<RelationshipsSection characterSheetId={42} isMyCharacter />, {
+      wrapper: createWrapper(),
+    });
+
+    const panel = screen.getByTestId('relationship-panel');
+    expect(panel).toHaveAttribute('data-character-sheet-id', '42');
+    expect(panel).toHaveAttribute('data-is-my-character', 'true');
   });
 
   it('renders SoulTetherStatusPanel', () => {
@@ -141,37 +201,6 @@ describe('RelationshipsSection', () => {
     const panel = screen.getByTestId('soul-tether-status-panel');
     expect(panel).toHaveAttribute('data-relationship-count', '0');
     expect(screen.getByText('No active soul tethers.')).toBeInTheDocument();
-  });
-
-  it('renders free-text relationships as list items', () => {
-    const relationships = ['Childhood friend of Marek', 'Rival of House Ashveil'];
-    render(<RelationshipsSection relationships={relationships} />, { wrapper: createWrapper() });
-
-    expect(screen.getByText('Childhood friend of Marek')).toBeInTheDocument();
-    expect(screen.getByText('Rival of House Ashveil')).toBeInTheDocument();
-  });
-
-  it('renders empty-state placeholder when no free-text relationships are provided', () => {
-    render(<RelationshipsSection relationships={[]} />, { wrapper: createWrapper() });
-
-    expect(screen.getByText('No relationship notes yet.')).toBeInTheDocument();
-  });
-
-  it('renders empty-state placeholder when relationships prop is omitted', () => {
-    render(<RelationshipsSection />, { wrapper: createWrapper() });
-
-    expect(screen.getByText('No relationship notes yet.')).toBeInTheDocument();
-  });
-
-  it('renders both free-text notes and the soul tether panel together', () => {
-    const relationships = ['Old ally from the siege'];
-    render(<RelationshipsSection relationships={relationships} characterSheetId={10} />, {
-      wrapper: createWrapper(),
-    });
-
-    // Both sub-sections present
-    expect(screen.getByTestId('soul-tether-status-panel')).toBeInTheDocument();
-    expect(screen.getByText('Old ally from the siege')).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -343,6 +372,59 @@ describe('RelationshipsSection', () => {
       });
 
       expect(useMyWriteups).toHaveBeenCalledWith(99, true);
+    });
+
+    // -----------------------------------------------------------------------
+    // Report button + WriteupComplaintDialog (#2159)
+    // -----------------------------------------------------------------------
+
+    it('shows a Report button beside Commend', () => {
+      vi.mocked(useMyWriteups).mockReturnValue({
+        data: [
+          {
+            id: 77,
+            author_name: 'Marek',
+            title: 'A Debt Repaid',
+            writeup: 'writeup text',
+            kudos_count: 0,
+            viewer_has_kudosed: false,
+          },
+        ],
+      } as unknown as ReturnType<typeof useMyWriteups>);
+
+      render(<RelationshipsSection isMyCharacter characterSheetId={42} />, {
+        wrapper: createWrapper(),
+      });
+
+      expect(screen.getByRole('button', { name: /report/i })).toBeInTheDocument();
+    });
+
+    it('opens WriteupComplaintDialog with the writeup id/title when Report is clicked', () => {
+      vi.mocked(useMyWriteups).mockReturnValue({
+        data: [
+          {
+            id: 77,
+            author_name: 'Marek',
+            title: 'A Debt Repaid',
+            writeup: 'writeup text',
+            kudos_count: 0,
+            viewer_has_kudosed: true,
+          },
+        ],
+      } as unknown as ReturnType<typeof useMyWriteups>);
+
+      render(<RelationshipsSection isMyCharacter characterSheetId={42} />, {
+        wrapper: createWrapper(),
+      });
+
+      expect(screen.queryByTestId('writeup-complaint-dialog')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /report/i }));
+
+      const dialog = screen.getByTestId('writeup-complaint-dialog');
+      expect(dialog).toHaveAttribute('data-writeup-type', 'update');
+      expect(dialog).toHaveAttribute('data-writeup-id', '77');
+      expect(dialog).toHaveAttribute('data-writeup-title', 'A Debt Repaid');
     });
   });
 });
