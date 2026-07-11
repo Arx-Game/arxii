@@ -93,6 +93,9 @@ export function RegisterPage() {
             })}
           />
           {errors.password1 && <p className="text-sm text-red-600">{errors.password1.message}</p>}
+          <p className="text-xs text-muted-foreground">
+            At least 8 characters, not entirely numeric, and not a commonly used password.
+          </p>
         </div>
         <div className="space-y-1">
           <Label htmlFor="password2">Confirm Password</Label>
@@ -113,7 +116,11 @@ export function RegisterPage() {
         </SubmitButton>
       </form>
       {mutation.isError && (
-        <p className="mt-4 text-red-600">Registration failed. Please try again.</p>
+        <p className="mt-4 text-red-600">
+          {mutation.error instanceof Error && mutation.error.message
+            ? mutation.error.message
+            : 'Registration failed. Please try again.'}
+        </p>
       )}
       {providers.length > 0 && (
         <div className="mt-6 space-y-2">
