@@ -65,13 +65,14 @@ def sheet_is_player_held(sheet: CharacterSheet) -> bool:
     return entry is not None and entry.current_tenure is not None
 
 
-def stake_resolution_payload_problems(
+def stake_resolution_payload_problems(  # noqa: PLR0913
     *,
     stake: Stake,
     forfeits_subject_item: bool,
     subject_standing_delta: int,
     sets_subject_lifecycle: str,
     machine_match_lifecycle_state: str = "",
+    npc_regard_delta: int = 0,
 ) -> list[StakePayloadProblem]:
     """Validate a StakeResolution's writer payloads against its stake (pillar 12).
 
@@ -124,6 +125,14 @@ def stake_resolution_payload_problems(
                     ),
                 )
             )
+
+    if npc_regard_delta != 0 and stake.subject_kind != StakeSubjectKind.NPC_FATE:
+        problems.append(
+            StakePayloadProblem(
+                field="npc_regard_delta",
+                message="npc_regard_delta requires subject_kind=NPC_FATE.",
+            )
+        )
 
     return problems
 
