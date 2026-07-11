@@ -422,11 +422,12 @@ class ItemTemplate(SharedMemoryModel):
 
     @property
     def is_usable(self) -> bool:
-        """Whether this template can be used (has an on-use effect pool).
+        """Whether this template can be used (has an on-use pool or appearance effects).
 
         Canonical 'usable' predicate; consumables are the charge-spending subset.
+        A template with appearance effects but no pool is usable (cosmetic-only items).
         """
-        return self.on_use_pool_id is not None
+        return self.on_use_pool_id is not None or self.appearance_effects.exists()
 
     @cached_property
     def cached_slots(self) -> list[TemplateSlot]:

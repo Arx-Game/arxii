@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import contextlib
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
+
+if TYPE_CHECKING:
+    from world.forms.models import FormTrait, FormTraitOption
+    from world.items.models import ItemTemplate
 
 from world.checks.consequence_resolution import (
     apply_pool_deterministically,
@@ -133,24 +138,27 @@ def use_item(
     usable items are reusable and keep their charges. user/target are ObjectDBs."""
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     template = locked.template
-    if template.on_use_pool_id is None:
+    has_appearance_effects = template.appearance_effects.exists()
+    if template.on_use_pool_id is None and not has_appearance_effects:
         raise ItemNotUsable
     if template.is_consumable and locked.charges <= 0:
         raise NoChargesRemaining
 
     context = ResolutionContext(character=user, target=target)
     check_result = None
-    if template.on_use_check_type_id is None:
-        applied = apply_pool_deterministically(pool=template.on_use_pool, context=context)
-    else:
-        pending = select_consequence(
-            user,
-            template.on_use_check_type,
-            template.on_use_difficulty,
-            resolve_pool_consequences(template.on_use_pool),
-        )
-        applied = apply_resolution(pending, context)
-        check_result = pending.check_result
+    applied: list = []
+    if template.on_use_pool_id is not None:
+        if template.on_use_check_type_id is None:
+            applied = apply_pool_deterministically(pool=template.on_use_pool, context=context)
+        else:
+            pending = select_consequence(
+                user,
+                template.on_use_check_type,
+                template.on_use_difficulty,
+                resolve_pool_consequences(template.on_use_pool),
+            )
+            applied = apply_resolution(pending, context)
+            check_result = pending.check_result
 
     if template.is_consumable:
         consumed = consume_item_charges(item_instance=locked, amount=1)
@@ -169,10 +177,50 @@ def use_item(
         destroyed = False
         soft_deleted = False
 
+    appearance_changes = _apply_appearance_effects(template, user)
+
     return UseItemResult(
         applied_effects=applied,
         charges_remaining=charges_remaining,
         destroyed=destroyed,
         soft_deleted=soft_deleted,
         check_result=check_result,
+        appearance_changes=appearance_changes,
     )
+
+
+def _apply_appearance_effects(
+    template: ItemTemplate, user: ObjectDB
+) -> list[tuple[FormTrait, FormTraitOption]]:
+    """Apply cosmetic appearance effects declared on the item template.
+
+    Returns a list of (FormTrait, FormTraitOption) pairs that were changed.
+    Empty list if the template has no appearance effects or the character
+    has no sheet (e.g., character creation never ran).
+    """
+    effects = list(template.appearance_effects.select_related("trait", "target_option"))
+    if not effects:
+        return []
+    from world.forms.services import NonCosmeticTraitError, change_appearance  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = getattr(user, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        return []
+
+    persona = active_persona_for_sheet(sheet)
+    changes = []
+    for effect in effects:
+        try:
+            change_appearance(
+                user,
+                effect.trait,
+                effect.target_option,
+                persona=persona,
+                actor_persona=persona,
+                note=template.name,
+            )
+            changes.append((effect.trait, effect.target_option))
+        except NonCosmeticTraitError:
+            pass  # defense-in-depth; clean() should prevent this
+    return changes

@@ -1,4 +1,4 @@
-"""Tests for ItemTemplateAppearanceEffect sidecar model (#1126)."""
+"""Tests for ItemTemplateAppearanceEffect sidecar model + use_item integration (#1126)."""
 
 from __future__ import annotations
 
@@ -6,9 +6,17 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
-from world.items.factories import ItemTemplateFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.forms.factories import (
+    CharacterFormFactory,
+    CharacterFormValueFactory,
+    FormTraitFactory,
+    FormTraitOptionFactory,
+)
+from world.forms.models import AppearanceChangeLog
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemTemplateAppearanceEffect
+from world.items.services.usage import use_item
 
 
 class ItemTemplateAppearanceEffectModelTests(TestCase):
@@ -57,3 +65,100 @@ class ItemTemplateAppearanceEffectModelTests(TestCase):
             ItemTemplateAppearanceEffect.objects.create(
                 item_template=template, trait=trait, target_option=option
             )
+
+
+class UseItemAppearanceEffectTests(TestCase):
+    """Integration tests: use_item applies cosmetic appearance effects (#1126)."""
+
+    def setUp(self) -> None:
+        self.trait = FormTraitFactory(name="hair_color_use", is_cosmetic=True)
+        self.black = FormTraitOptionFactory(trait=self.trait, name="black")
+        self.blonde = FormTraitOptionFactory(trait=self.trait, name="blonde")
+        self.template = ItemTemplateFactory(
+            name="Hair Dye Blonde",
+            is_consumable=True,
+            max_charges=1,
+        )
+        ItemTemplateAppearanceEffect.objects.create(
+            item_template=self.template,
+            trait=self.trait,
+            target_option=self.blonde,
+        )
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.persona = self.sheet.primary_persona
+        self.form = CharacterFormFactory(character=self.character)
+        CharacterFormValueFactory(
+            form=self.form,
+            trait=self.trait,
+            option=self.black,
+        )
+        self.item = ItemInstanceFactory(
+            template=self.template,
+            holder_character_sheet=self.sheet,
+            charges=1,
+        )
+
+    def test_use_item_applies_cosmetic_change(self) -> None:
+        """use_item on a cosmetic dye edits the real form's trait value."""
+        result = use_item(item_instance=self.item, user=self.character)
+        self.form.refresh_from_db()
+        value = self.form.values.get(trait=self.trait)
+        self.assertEqual(value.option, self.blonde)
+        self.assertEqual(value.natural_option, self.black)
+        self.assertEqual(len(result.appearance_changes), 1)
+        self.assertEqual(result.charges_remaining, 0)
+        self.assertTrue(result.destroyed)
+
+    def test_use_item_writes_appearance_change_log(self) -> None:
+        """use_item writes an AppearanceChangeLog row with from/to + note."""
+        use_item(item_instance=self.item, user=self.character)
+        log = AppearanceChangeLog.objects.get(form=self.form)
+        self.assertEqual(log.from_option, self.black)
+        self.assertEqual(log.to_option, self.blonde)
+        self.assertEqual(log.note, "Hair Dye Blonde")
+
+    def test_use_item_no_pool_still_applies_appearance(self) -> None:
+        """A cosmetic item with no on_use_pool still applies appearance effects."""
+        # Template already has no on_use_pool (factory defaults to None)
+        result = use_item(item_instance=self.item, user=self.character)
+        self.assertEqual(len(result.appearance_changes), 1)
+
+    def test_use_item_no_appearance_effects_returns_empty(self) -> None:
+        """A non-cosmetic usable item returns empty appearance_changes."""
+        from actions.factories import ConsequencePoolFactory
+
+        pool = ConsequencePoolFactory()
+        plain_template = ItemTemplateFactory(
+            name="Plain Potion",
+            is_consumable=True,
+            max_charges=1,
+        )
+        plain_template.on_use_pool = pool
+        plain_template.save()
+        plain_item = ItemInstanceFactory(
+            template=plain_template,
+            holder_character_sheet=self.sheet,
+            charges=1,
+        )
+        result = use_item(item_instance=plain_item, user=self.character)
+        self.assertEqual(result.appearance_changes, [])
+
+    def test_use_item_reusable_not_consumed(self) -> None:
+        """A reusable (non-consumable) cosmetic item applies effects without destruction."""
+        reusable_template = ItemTemplateFactory(
+            name="Makeup Kit",
+            is_consumable=False,
+        )
+        ItemTemplateAppearanceEffect.objects.create(
+            item_template=reusable_template,
+            trait=self.trait,
+            target_option=self.blonde,
+        )
+        reusable_item = ItemInstanceFactory(
+            template=reusable_template,
+            holder_character_sheet=self.sheet,
+        )
+        result = use_item(item_instance=reusable_item, user=self.character)
+        self.assertEqual(len(result.appearance_changes), 1)
+        self.assertFalse(result.destroyed)
