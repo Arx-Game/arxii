@@ -84,3 +84,19 @@ class BuildingKindViewSetTests(APITestCase):
         results = response.json()["results"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Tavern")
+
+    def test_urban_seed_kinds_appear_in_catalog(self) -> None:
+        """Seed-authored urban kinds appear in the catalog endpoint."""
+        from world.buildings.seeds import ensure_urban_building_kinds
+
+        ensure_urban_building_kinds()
+        response = self._get()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = {row["name"] for row in response.json()["results"]}
+        # The 3 manually-created kinds + 6 seeded urban kinds
+        for expected in ("Cottage", "Tavern", "Shop", "Workshop", "Guild Hall", "Warehouse"):
+            self.assertIn(expected, names)
+
+        cottage = next(row for row in response.json()["results"] if row["name"] == "Cottage")
+        self.assertTrue(cottage["is_residential"])
+        self.assertFalse(cottage["is_commercial"])
