@@ -3541,6 +3541,8 @@ def _resolve_opponent_pre_apply(
     raw_damage: int,
     damage_type: DamageType | None,
     source_sheet: CharacterSheet | None,
+    *,
+    skip_guardian_shield: bool = False,
 ) -> tuple[int, bool]:
     """Run DAMAGE_PRE_APPLY, then guardian-shields-a-summon (#2207), for an opponent.
 
@@ -3551,10 +3553,18 @@ def _resolve_opponent_pre_apply(
     cancelled/zeroed hit never charges the guardian's interpose fatigue for
     blocking a hit that no longer exists (mirrors
     :func:`apply_damage_to_participant`'s ordering).
+
+    ``skip_guardian_shield=True`` skips ONLY :func:`_try_guardian_shield_opponent`
+    — :func:`_emit_opponent_pre_apply` (the opponent's own DAMAGE_PRE_APPLY
+    trigger band) still runs. Used by :func:`_try_companion_defend`'s redirect
+    to avoid double-charging a guardian that already had a chance to interpose
+    earlier in the same blow.
     """
     raw_damage, dropped = _emit_opponent_pre_apply(opponent, raw_damage, damage_type, source_sheet)
     if dropped:
         return raw_damage, True
+    if skip_guardian_shield:
+        return raw_damage, False
     return _try_guardian_shield_opponent(opponent, raw_damage, damage_type, source_sheet)
 
 
@@ -3643,6 +3653,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     bypass_pre_apply: bool = False,
     damage_type: DamageType | None = None,
     source_sheet: CharacterSheet | None = None,
+    skip_guardian_shield: bool = False,
 ) -> OpponentDamageResult:
     """Apply damage to an NPC opponent, accounting for soak, probing,
     and damage-type resistance.
@@ -3653,6 +3664,10 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     When ``source_sheet`` is provided, increments the source's achievement
     counters: ``damage_dealt`` (by post-soak damage), and on defeat
     ``opponents_defeated``.
+
+    ``skip_guardian_shield=True`` skips ONLY the guardian-shields-a-summon
+    (#2207) hook — the opponent's own DAMAGE_PRE_APPLY trigger band still
+    runs. See :func:`_resolve_opponent_pre_apply`.
     """
     # Swarm: no HP, no soak, no probing -- a landing attack clears bodies.
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
@@ -3666,7 +3681,11 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         # DAMAGE_PRE_APPLY, then guardian-shields-a-summon (#2207) for
         # ALLY-allegiance opponents — see _resolve_opponent_pre_apply.
         raw_damage, dropped = _resolve_opponent_pre_apply(
-            opponent, raw_damage, damage_type, source_sheet
+            opponent,
+            raw_damage,
+            damage_type,
+            source_sheet,
+            skip_guardian_shield=skip_guardian_shield,
         )
         if dropped:
             return _zero_opponent_damage_result(opponent)
@@ -6913,7 +6932,13 @@ def _try_technique_interpose(
         if anima is None or anima.current < cost:
             return  # Fizzle: unaffordable — no roll, no cost, damage proceeds.
 
-    severity = ChallengeTemplate.objects.get(name=INTERPOSE_CHALLENGE_NAME).severity
+    severity_template = ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).first()
+    if severity_template is None:
+        # Unseeded content (mirrors _ensure_interpose_challenges' warn-and-skip
+        # for the mundane path): fail safe like the resolved-is-None branch
+        # above — no roll, no cost, damage proceeds unchanged.
+        return
+    severity = severity_template.severity
     check_type = resolve_cast_check_type(interposer, technique.action_template)
     if check_type is None:
         # Unprovisioned caster + template-less technique (clash.py guards the
@@ -6987,11 +7012,18 @@ def _try_companion_defend(
     if companion_opponent is None:
         return
 
-    # Redirect damage to the companion
+    # Redirect damage to the companion. skip_guardian_shield=True: the
+    # guardian already had a chance to interpose for `participant` above via
+    # _try_interpose (same blow) — without this, the redirect re-enters
+    # _resolve_opponent_pre_apply -> _try_guardian_shield_opponent and would
+    # charge that guardian's interpose fatigue/anima a second time for one
+    # hit (#2207 review finding I1). The companion's own DAMAGE_PRE_APPLY
+    # trigger band still runs.
     apply_damage_to_opponent(
         companion_opponent,
         pre_payload.amount,
         damage_type=pre_payload.damage_type,
+        skip_guardian_shield=True,
     )
 
     # If companion survived, zero out the damage to the ally

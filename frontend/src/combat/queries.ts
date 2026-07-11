@@ -207,7 +207,7 @@ export function useUpgradeCombo(encounterId: number) {
  * Fetch COMBAT-backend PlayerActions for the character.
  *
  * Wraps GET /api/actions/characters/{characterId}/available/ and filters
- * results where ref.backend === 'COMBAT'. Clash contribution actions appear
+ * results where ref.backend === 'combat'. Clash contribution actions appear
  * here too with ref.clash_id !== null.
  *
  * Disabled when characterId <= 0.
@@ -225,7 +225,7 @@ export function useAvailableActions(characterId: number): {
   });
 
   const combatActions = (result.data?.results ?? []).filter(
-    (a: PlayerAction) => a.ref.backend === 'COMBAT'
+    (a: PlayerAction) => a.ref.backend === 'combat'
   );
 
   return {

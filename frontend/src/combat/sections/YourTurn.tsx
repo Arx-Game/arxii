@@ -473,7 +473,7 @@ export function YourTurn({
   // ---------------------------------------------------------------------------
 
   const clashActions = availableActions.filter(
-    (a) => a.ref.backend === 'COMBAT' && a.ref.clash_id != null
+    (a) => a.ref.backend === 'combat' && a.ref.clash_id != null
   );
 
   // ---------------------------------------------------------------------------
@@ -615,7 +615,7 @@ export function YourTurn({
   // rejects it at declaration today, so offering it would only surface errors.
   const protectiveTechniques = availableActions.filter(
     (a) =>
-      a.ref.backend === 'COMBAT' &&
+      a.ref.backend === 'combat' &&
       a.protective_flavor != null &&
       a.protective_flavor !== 'redirect' &&
       a.ref.technique_id != null
