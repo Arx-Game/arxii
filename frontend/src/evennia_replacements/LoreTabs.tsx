@@ -25,7 +25,7 @@ export function LoreTabs() {
                 <p className="mb-2">
                   Discover the basics of Arx II's setting and its central themes.
                 </p>
-                <Link className="text-primary underline" to="/lore/setting">
+                <Link className="text-primary underline" to="/codex">
                   Read more
                 </Link>
                 .
@@ -39,7 +39,7 @@ export function LoreTabs() {
               <AccordionTrigger>Key Players</AccordionTrigger>
               <AccordionContent>
                 <p className="mb-2">Meet the houses and factions competing for influence.</p>
-                <Link className="text-primary underline" to="/lore/houses">
+                <Link className="text-primary underline" to="/codex">
                   Read more
                 </Link>
                 .
@@ -53,7 +53,7 @@ export function LoreTabs() {
               <AccordionTrigger>Historical Events</AccordionTrigger>
               <AccordionContent>
                 <p className="mb-2">Explore the major events that shaped the realm.</p>
-                <Link className="text-primary underline" to="/lore/timeline">
+                <Link className="text-primary underline" to="/codex">
                   Read more
                 </Link>
                 .

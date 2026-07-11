@@ -13,6 +13,7 @@ import { EmailVerificationPendingPage } from './evennia_replacements/EmailVerifi
 import { EmailVerifyPage } from './evennia_replacements/EmailVerifyPage';
 import { AuthCallbackPage } from './evennia_replacements/AuthCallbackPage';
 import { UnverifiedAccountPage } from './pages/UnverifiedAccountPage';
+import { HowToStartPage } from './pages/HowToStartPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { BlocksSettingsPage } from './social/pages/BlocksSettingsPage';
 import { MutesSettingsPage } from './social/pages/MutesSettingsPage';
@@ -296,6 +297,7 @@ function App() {
         <Route path="/verify-email/:key" element={<EmailVerifyPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/account/unverified" element={<UnverifiedAccountPage />} />
+        <Route path="/how-to-start" element={<HowToStartPage />} />
         <Route path="/profile/*" element={<ProfilePage />}>
           <Route path="mail" element={<MailPage />} />
           <Route path="media" element={<PlayerMediaPage />} />

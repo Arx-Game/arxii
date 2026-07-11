@@ -22,8 +22,10 @@ export function HomePage() {
         className="container mx-auto flex flex-col items-center gap-8 py-12 text-center"
       >
         <div className="flex flex-col items-center gap-2">
-          <h1 className="text-4xl font-bold tracking-tight">Welcome to {SITE_NAME}!</h1>
-          <p className="text-lg text-muted-foreground">The Python MUD/MU* creation system.</p>
+          <h1 className="text-4xl font-bold tracking-tight">Welcome to {SITE_NAME}</h1>
+          <p className="text-lg text-muted-foreground">
+            A living world of intrigue and magic, played with others in your browser.
+          </p>
         </div>
         <Button asChild size="lg">
           <Link to="/game">Play in the browser</Link>

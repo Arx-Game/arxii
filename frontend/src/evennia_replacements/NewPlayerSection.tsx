@@ -23,12 +23,13 @@ export function NewPlayerSection() {
               <AccordionTrigger>Welcome</AccordionTrigger>
               <AccordionContent>
                 <p className="mb-2">
-                  Placeholder overview copy for new players. Learn the basics of the game and
-                  explore what awaits.
+                  Arx II is a collaborative roleplaying game: you play a character in a shared
+                  story, scene by scene, alongside other players. No downloads — everything happens
+                  right here in the browser.
                 </p>
                 <p>
                   <Link className="text-primary underline" to="/how-to-start">
-                    Learn how to play
+                    Learn how to start
                   </Link>{' '}
                   or browse the{' '}
                   <Link className="text-primary underline" to="/roster">
@@ -45,9 +46,13 @@ export function NewPlayerSection() {
             <AccordionItem value="how-item">
               <AccordionTrigger>Getting Started</AccordionTrigger>
               <AccordionContent>
-                <p className="mb-2">Placeholder instructions on how to dive into the world.</p>
+                <p className="mb-2">
+                  Register an account, get a character — apply for an existing roster character or
+                  create your own — then join a scene and play. The game teaches you the rest as you
+                  go.
+                </p>
                 <Link className="text-primary underline" to="/how-to-start">
-                  Read the getting started guide
+                  Read the step-by-step guide
                 </Link>
                 .
               </AccordionContent>
@@ -59,7 +64,11 @@ export function NewPlayerSection() {
             <AccordionItem value="roster-item">
               <AccordionTrigger>Find Characters</AccordionTrigger>
               <AccordionContent>
-                <p className="mb-2">Placeholder details about the roster and how to join.</p>
+                <p className="mb-2">
+                  The roster is a cast of established characters with histories, families, and
+                  rivalries already woven into the world. Applying to play one is the fastest way
+                  into the story.
+                </p>
                 <Link className="text-primary underline" to="/roster">
                   Browse the roster
                 </Link>
