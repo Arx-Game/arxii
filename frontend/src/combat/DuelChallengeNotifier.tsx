@@ -8,10 +8,16 @@
  * buttons — the first time a new challenge id appears in the poll. A `Set` of
  * already-toasted ids prevents the 15s poll from re-firing the same toast.
  *
+ * Accept/Decline await the dispatch (mirroring DuelChallengeControls' mutateAsync
+ * + try/catch pattern) — the toast only dismisses on success; on failure it stays
+ * open with an inline error and the buttons remain clickable to retry, so a failed
+ * dispatch is never silently lost (the id was already added to toastedIds when the
+ * toast first fired, so a dismissed-on-error toast would otherwise never resurface).
+ *
  * Renders nothing itself — `null` always, purely a side-effect component.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
@@ -19,14 +25,27 @@ import { useDuelChallengeInbox, useDispatchPlayerAction } from './queries';
 import { registryRef } from './duels/DuelChallengeControls';
 
 interface ToastBodyProps {
-  toastId: string | number;
   challengerName: string;
-  challengeId: number;
-  onAccept: () => void;
-  onDecline: () => void;
+  onAccept: () => Promise<void>;
+  onDecline: () => Promise<void>;
 }
 
 function DuelChallengeToastBody({ challengerName, onAccept, onDecline }: ToastBodyProps) {
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handle(action: () => Promise<void>) {
+    setIsPending(true);
+    setError(null);
+    try {
+      await action();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to respond to the challenge');
+    } finally {
+      setIsPending(false);
+    }
+  }
+
   return (
     <div
       className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 shadow-sm"
@@ -38,21 +57,32 @@ function DuelChallengeToastBody({ challengerName, onAccept, onDecline }: ToastBo
       <div className="mt-2 flex gap-2">
         <button
           type="button"
-          onClick={onAccept}
+          disabled={isPending}
+          onClick={() => {
+            handle(onAccept).catch(() => {});
+          }}
           data-testid="duel-toast-accept-btn"
-          className="rounded border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300"
+          className="rounded border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Accept
+          {isPending ? 'Dispatching…' : 'Accept'}
         </button>
         <button
           type="button"
-          onClick={onDecline}
+          disabled={isPending}
+          onClick={() => {
+            handle(onDecline).catch(() => {});
+          }}
           data-testid="duel-toast-decline-btn"
-          className="rounded border border-destructive/60 bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive"
+          className="rounded border border-destructive/60 bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Decline
+          {isPending ? 'Dispatching…' : 'Decline'}
         </button>
       </div>
+      {error !== null && (
+        <p role="alert" className="mt-2 text-xs text-destructive" data-testid="duel-toast-error">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -70,7 +100,7 @@ export function DuelChallengeNotifier() {
     enabled: characterId > 0,
     role: 'incoming',
   });
-  const { mutate } = useDispatchPlayerAction(characterId);
+  const { mutateAsync } = useDispatchPlayerAction(characterId);
 
   const toastedIds = useRef<Set<number>>(new Set());
 
@@ -81,21 +111,19 @@ export function DuelChallengeNotifier() {
 
       toast.custom((toastId) => (
         <DuelChallengeToastBody
-          toastId={toastId}
           challengerName={challenge.challenger.name}
-          challengeId={challenge.id}
-          onAccept={() => {
-            mutate(registryRef('accept', { challenge_id: challenge.id }));
+          onAccept={async () => {
+            await mutateAsync(registryRef('accept', { challenge_id: challenge.id }));
             toast.dismiss(toastId);
           }}
-          onDecline={() => {
-            mutate(registryRef('decline', { challenge_id: challenge.id }));
+          onDecline={async () => {
+            await mutateAsync(registryRef('decline', { challenge_id: challenge.id }));
             toast.dismiss(toastId);
           }}
         />
       ));
     }
-  }, [incomingChallenges, mutate]);
+  }, [incomingChallenges, mutateAsync]);
 
   return null;
 }

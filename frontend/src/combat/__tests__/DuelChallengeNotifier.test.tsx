@@ -1,13 +1,13 @@
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DuelChallengeNotifier } from '../DuelChallengeNotifier';
 
 const mockUseDuelChallengeInbox = vi.fn();
-const mockMutate = vi.fn();
+const mockMutateAsync = vi.fn();
 vi.mock('@/combat/queries', () => ({
   useDuelChallengeInbox: (...args: unknown[]) => mockUseDuelChallengeInbox(...args),
-  useDispatchPlayerAction: () => ({ mutate: mockMutate, isPending: false }),
+  useDispatchPlayerAction: () => ({ mutateAsync: mockMutateAsync, isPending: false }),
 }));
 
 vi.mock('@/roster/queries', () => ({
@@ -62,7 +62,6 @@ describe('DuelChallengeNotifier', () => {
     const { rerender } = render(<DuelChallengeNotifier />);
     expect(toastCustomMock).toHaveBeenCalledTimes(1);
 
-    // Same data on a re-render (e.g. the 15s poll ticking with no change).
     rerender(<DuelChallengeNotifier />);
     expect(toastCustomMock).toHaveBeenCalledTimes(1);
   });
@@ -80,33 +79,59 @@ describe('DuelChallengeNotifier', () => {
     expect(toastCustomMock).toHaveBeenCalledTimes(2);
   });
 
-  it('Accept button dispatches the accept registry action with the challenge id', () => {
+  it('Accept button dispatches the accept registry action and dismisses on success', async () => {
     mockUseDuelChallengeInbox.mockReturnValue({ data: [challenge(5)], isLoading: false });
+    mockMutateAsync.mockResolvedValue({});
     render(<DuelChallengeNotifier />);
 
     const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
     const { getByTestId } = render(renderFn('toast-1'));
     fireEvent.click(getByTestId('duel-toast-accept-btn'));
 
-    expect(mockMutate).toHaveBeenCalledWith({
-      ref: { backend: 'registry', registry_key: 'accept' },
-      kwargs: { challenge_id: 5 },
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        ref: { backend: 'registry', registry_key: 'accept' },
+        kwargs: { challenge_id: 5 },
+      });
     });
-    expect(toastDismissMock).toHaveBeenCalledWith('toast-1');
+    await waitFor(() => {
+      expect(toastDismissMock).toHaveBeenCalledWith('toast-1');
+    });
   });
 
-  it('Decline button dispatches the decline registry action with the challenge id', () => {
+  it('Decline button dispatches the decline registry action and dismisses on success', async () => {
     mockUseDuelChallengeInbox.mockReturnValue({ data: [challenge(5)], isLoading: false });
+    mockMutateAsync.mockResolvedValue({});
     render(<DuelChallengeNotifier />);
 
     const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
     const { getByTestId } = render(renderFn('toast-1'));
     fireEvent.click(getByTestId('duel-toast-decline-btn'));
 
-    expect(mockMutate).toHaveBeenCalledWith({
-      ref: { backend: 'registry', registry_key: 'decline' },
-      kwargs: { challenge_id: 5 },
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        ref: { backend: 'registry', registry_key: 'decline' },
+        kwargs: { challenge_id: 5 },
+      });
     });
-    expect(toastDismissMock).toHaveBeenCalledWith('toast-1');
+    await waitFor(() => {
+      expect(toastDismissMock).toHaveBeenCalledWith('toast-1');
+    });
+  });
+
+  it('shows an inline error and does not dismiss the toast when the dispatch fails', async () => {
+    mockUseDuelChallengeInbox.mockReturnValue({ data: [challenge(5)], isLoading: false });
+    mockMutateAsync.mockRejectedValue(new Error('Network error'));
+    render(<DuelChallengeNotifier />);
+
+    const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
+    const { getByTestId } = render(renderFn('toast-1'));
+    fireEvent.click(getByTestId('duel-toast-accept-btn'));
+
+    await waitFor(() => {
+      expect(getByTestId('duel-toast-error')).toHaveTextContent('Network error');
+    });
+    expect(toastDismissMock).not.toHaveBeenCalled();
+    expect(getByTestId('duel-toast-accept-btn')).not.toBeDisabled();
   });
 });
