@@ -85,7 +85,7 @@ class TestSeededCharacterCreation(TestCase):
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
         from world.character_sheets.models import CharacterSheet
-        from world.magic.models import Cantrip
+        from world.magic.models import Cantrip, Resonance
         from world.seeds.character_creation import DEFAULT_STAT_NAMES
         from world.tarot.models import TarotCard
 
@@ -117,6 +117,8 @@ class TestSeededCharacterCreation(TestCase):
         # The seeded magic cluster provides a selectable cantrip.
         cantrip = Cantrip.objects.first()
         self.assertIsNotNone(cantrip, "magic cluster must seed a selectable cantrip")
+        resonance = Resonance.objects.first()
+        self.assertIsNotNone(resonance, "magic cluster must seed a resonance")
 
         account = AccountDB.objects.create(username="seeded_cg_player")
         draft_data = {
@@ -128,6 +130,7 @@ class TestSeededCharacterCreation(TestCase):
             "tarot_reversed": False,
             "traits_complete": True,
             "selected_cantrip_id": cantrip.id,
+            "selected_gift_resonance_id": resonance.id,
         }
         # selected_tradition may be nullable; leave it unset unless finalize needs it.
 
