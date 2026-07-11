@@ -24150,6 +24150,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlayerMail'
           description: ''
+  /api/roster/mail/{id}/mark-read/:
+    post:
+      operationId: roster_mail_mark_read_create
+      description: Mark this mail as read (idempotent). Recipient-only via the scoped
+        queryset.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this player mail.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerMail'
+          description: ''
+  /api/roster/mail/unread-count/:
+    get:
+      operationId: roster_mail_unread_count_retrieve
+      description: Count of unread, unarchived mail across the requester's tenures.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadMailCount'
+          description: ''
   /api/roster/media/:
     get:
       operationId: roster_media_list
@@ -60545,6 +60583,16 @@ components:
         * `class_level` - Class Level
         * `thread_xp_lock` - Thread XP Lock
         * `skill_breakthrough` - Skill Breakthrough
+    UnreadMailCount:
+      type: object
+      description: Response shape for ``PlayerMailViewSet.unread_count`` -- schema
+        only, never a model.
+      properties:
+        count:
+          type: integer
+          readOnly: true
+      required:
+      - count
     UpdateBulletinPostInput:
       type: object
       description: |-

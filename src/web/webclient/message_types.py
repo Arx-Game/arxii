@@ -20,6 +20,7 @@ class WebsocketMessageType(str, Enum):
     ROULETTE_RESULT = "roulette_result"
     BATTLE_STATE = "battle_state"
     KUDOS_RECEIVED = "kudos_received"
+    MAIL_ARRIVED = "mail_arrived"
 
 
 @dataclass
@@ -146,3 +147,18 @@ class KudosReceivedPayload:
     amount: int
     source_category: str
     description: str
+
+
+@dataclass
+class MailArrivedPayload:
+    """Payload for ``mail_arrived`` messages.
+
+    Anonymity boundary (#2160): tenure-display-only. ``sender_display`` is the sender tenure's
+    display name (e.g. "1st player of Ariel"), never an account id or username -- carrying either
+    would let the recipient unmask the sender's real player. Clients refetch the mail list /
+    unread count on receipt; this is a slim arrival ping, not the mail body.
+    """
+
+    mail_id: int
+    sender_display: str
+    subject: str
