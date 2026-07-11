@@ -162,7 +162,7 @@ class ItemCreationCraftTests(TestCase):
             )
 
     def test_action_dispatches_to_service(self) -> None:
-        from world.actions.definitions.crafting import CreateItemAction
+        from actions.definitions.crafting import CreateItemAction
         from world.checks.test_helpers import force_check_outcome
         from world.traits.factories import CheckOutcomeFactory
 
