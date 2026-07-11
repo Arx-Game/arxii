@@ -227,6 +227,7 @@ published IP-range data so CDN edge nodes are covered:
 | GitHub CDN / PyPI files | `objects.githubusercontent.com`, `files.pythonhosted.org` | Fastly published ranges (`api.fastly.com/public-ip-list`) |
 | npm registry | `registry.npmjs.org` | Cloudflare published ranges (`cloudflare.com/ips-v4`) |
 | GitHub Actions log downloads | `productionresultssaN.blob.core.windows.net` (N unbounded, no fixed IPs — each shard is a different Azure region behind Traffic Manager) | Azure's global `Storage` service tag (Microsoft's `ServiceTags_Public_*.json`) |
+| SonarCloud | `sonarcloud.io`, `api.sonarcloud.io` (both CloudFront-fronted, rotating edge IPs) | AWS's published `CLOUDFRONT` service tag (`ip-ranges.amazonaws.com/ip-ranges.json`) |
 
 If any required fetch fails during initialization the script exits 1 **before**
 applying the default-deny policy, so the container retains open egress rather than
