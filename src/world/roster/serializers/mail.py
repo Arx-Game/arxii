@@ -50,3 +50,9 @@ class PlayerMailSerializer(serializers.ModelSerializer):
             "sender_display",
             "recipient_display",
         ]
+
+
+class UnreadMailCountSerializer(serializers.Serializer):
+    """Response shape for ``PlayerMailViewSet.unread_count`` -- schema only, never a model."""
+
+    count = serializers.IntegerField(read_only=True)

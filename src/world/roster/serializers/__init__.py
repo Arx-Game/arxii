@@ -29,7 +29,7 @@ from world.roster.serializers.families import (
     KinSlotPoolSerializer,
     KinSlotSerializer,
 )
-from world.roster.serializers.mail import PlayerMailSerializer
+from world.roster.serializers.mail import PlayerMailSerializer, UnreadMailCountSerializer
 from world.roster.serializers.media import (
     ArtistSerializer,
     PlayerMediaSerializer,
@@ -77,4 +77,5 @@ __all__ = [
     "RosterTenureSerializer",
     "TenureGallerySerializer",
     "TenureMediaSerializer",
+    "UnreadMailCountSerializer",
 ]

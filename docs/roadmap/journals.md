@@ -33,6 +33,10 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **Thread linking** — `JournalEntry.related_threads` M2M to the new `magic.Thread` model
   (Spec A). Replaces the deleted `ThreadJournal` join table; entries can now tag any
   anchored thread (trait, technique, item, room, relationship track, relationship capstone)
+- **Frontend React components (#2160)** — `/journals` page (composer, public feed, own-entries
+  tab) plus a `JournalTab` quick-compose panel in the in-scene sidebar. The `/journal` route
+  (previously a decoy pointing at the unrelated missions ledger) now belongs to this app; the
+  missions ledger moved to `/missions/journal`.
 
 ## Deferred (depends on systems that don't exist yet)
 - **Relationship gating for retorts** — retorts should validate antagonistic relationship (needs relationships system)
@@ -43,7 +47,6 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **Account-level block integration** — respect account blocks in journal visibility
 - **Great Archive IC location gating** — IC access point for the journal archive (needs world building)
 - **GoalJournal removal** — remove old goal-specific journals once migrated (ThreadJournal already removed; see Thread linking above)
-- **Frontend React components** — journal reading, writing, and browsing UI
 
 ## Notes
 - Retorts award more XP to receiver (3) than giver (1) to incentivize dramatic conflict
