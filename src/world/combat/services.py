@@ -6799,6 +6799,11 @@ def _try_technique_interpose(
 
     severity = ChallengeTemplate.objects.get(name=INTERPOSE_CHALLENGE_NAME).severity
     check_type = resolve_cast_check_type(interposer, technique.action_template)
+    if check_type is None:
+        # Unprovisioned caster + template-less technique (clash.py guards the
+        # same pairing) — fail safe like the resolved-is-None branch above:
+        # no roll, no cost, damage proceeds to the next protection layer.
+        return
     check_result = perform_check(
         interposer,
         check_type,
