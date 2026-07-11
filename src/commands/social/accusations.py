@@ -14,6 +14,9 @@ from actions.definitions.accusations import MintAccusationAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
+# The switch that routes a bare accusation into the criminal (heat-bearing) path.
+CRIME_SWITCH = "crime"
+
 
 class CmdAccuse(ArxCommand):
     """Manufacture a false scandal against another character.
@@ -40,7 +43,7 @@ class CmdAccuse(ArxCommand):
         raw = (self.args or "").strip()
         name, sep, rest = raw.partition("=")
         name, rest = name.strip(), rest.strip()
-        is_crime = "crime" in self.switches
+        is_crime = CRIME_SWITCH in self.switches
 
         crime_slug = ""
         if is_crime:
