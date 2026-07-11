@@ -11,10 +11,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { fetchPendingRequests, fetchPendingTargets, respondToRequest } from '../actionQueries';
-import type { ActionRequest, PendingActionTarget, StakesSummary } from '../actionTypes';
+import type {
+  ActionRequest,
+  ActionRequestResponse,
+  PendingActionTarget,
+  StakesSummary,
+} from '../actionTypes';
 
 interface Props {
   sceneId: string;
+}
+
+// Shared by respond and respondTarget's onSuccess — an NPC disposition shift
+// (#2158) may follow either the primary or an additional-target accept.
+function toastDispositionMessage(data: ActionRequestResponse) {
+  if (data.result?.disposition_message) {
+    toast.success(data.result.disposition_message);
+  }
 }
 
 /**
@@ -196,9 +209,7 @@ export function ConsentPrompt({ sceneId }: Props) {
     }) =>
       respondToRequest(sceneId, requestId, { accept, difficulty, resist_effort, blacklist_actor }),
     onSuccess: (data) => {
-      if (data.result?.disposition_message) {
-        toast.success(data.result.disposition_message);
-      }
+      toastDispositionMessage(data);
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
     },
@@ -234,9 +245,7 @@ export function ConsentPrompt({ sceneId }: Props) {
         target_persona_id: targetPersonaId,
       }),
     onSuccess: (data) => {
-      if (data.result?.disposition_message) {
-        toast.success(data.result.disposition_message);
-      }
+      toastDispositionMessage(data);
       queryClient.invalidateQueries({ queryKey: ['pending-targets', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
     },
