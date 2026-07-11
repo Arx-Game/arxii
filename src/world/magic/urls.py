@@ -21,6 +21,7 @@ from world.magic.views import (
     CharacterResonanceViewSet,
     ConsequencePoolCatalogViewSet,
     CrossingRespondView,
+    DramaticMomentSuggestionViewSet,
     DramaticMomentTagViewSet,
     DramaticMomentTypeViewSet,
     EffectTypeViewSet,
@@ -128,6 +129,11 @@ router.register(
     "dramatic-moment-tags",
     DramaticMomentTagViewSet,
     basename="dramatic-moment-tag",
+)
+router.register(
+    "dramatic-moment-suggestions",
+    DramaticMomentSuggestionViewSet,
+    basename="dramatic-moment-suggestion",
 )
 
 # Plan 4 §F — Sanctum (Subsystem F) surface

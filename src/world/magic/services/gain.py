@@ -863,15 +863,32 @@ def create_dramatic_moment_tag(
             risk=moment_type.risk,
             reach=moment_type.reach or None,
             archetypes=list(moment_type.archetypes.all()),
-            origin_area=(
-                scene.location.area
-                if scene and hasattr(scene, "location") and scene.location
-                else None
-            ),
+            origin_area=_origin_area_for_scene(scene),
             title=moment_type.label,
         )
 
     return tag
+
+
+def _origin_area_for_scene(scene: Scene | None):
+    """Resolve the Area for a scene's location, or None.
+
+    A ``Scene.location`` FK points at the room's bare ``ObjectDB`` — the room
+    typeclass carries no ``.area`` attribute of its own; the Area lives on the
+    room's ``RoomProfile`` (reverse OneToOne, accessor ``room_profile``, absent
+    for a room with no profile row yet). Mirrors the ``getattr``-chained
+    resolution ``societies_for_scene`` (``world/areas/services.py``) uses for
+    the same location → RoomProfile → Area walk (#2183 — surfaced by wiring
+    ``resolve_dramatic_moment_suggestion`` to a real scene/location for the
+    first time; this fixed a pre-existing ``scene.location.area`` AttributeError
+    shared with ``audere_majora._mint_crossing_deed``'s identical, also-untested
+    expression).
+    """
+    location = getattr(scene, "location", None) if scene is not None else None  # noqa: GETATTR_LITERAL
+    if location is None:
+        return None
+    profile = getattr(location, "room_profile", None)  # noqa: GETATTR_LITERAL
+    return profile.area if profile is not None else None
 
 
 def maybe_suggest_dramatic_moments(
