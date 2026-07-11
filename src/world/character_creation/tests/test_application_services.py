@@ -707,11 +707,12 @@ class ApproveApplicationIntegrationTests(TestCase):
         self.account = AccountFactory()
 
     def _create_complete_magic(self, draft):
-        """Helper to create complete magic data for a draft (cantrip in draft_data)."""
+        """Helper to create complete magic data for a draft (cantrip + resonance in draft_data)."""
         from world.magic.factories import CantripFactory
 
         cantrip = CantripFactory(requires_facet=False)
         draft.draft_data["selected_cantrip_id"] = cantrip.id
+        draft.draft_data["selected_gift_resonance_id"] = self.resonance.id
         draft.save(update_fields=["draft_data"])
 
     def _create_approved_application(self):

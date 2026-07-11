@@ -122,11 +122,12 @@ class FinalizationTestMixin:
         target.tradition = TraditionFactory()
 
     def _create_complete_magic(self, draft: CharacterDraft) -> None:
-        """Create complete magic data for a draft (cantrip in draft_data)."""
+        """Create complete magic data for a draft (cantrip + resonance in draft_data)."""
         from world.magic.factories import CantripFactory
 
         cantrip = CantripFactory(requires_facet=False)
         draft.draft_data["selected_cantrip_id"] = cantrip.id
+        draft.draft_data["selected_gift_resonance_id"] = self.resonance.id
         draft.save(update_fields=["draft_data"])
 
     def _create_base_draft(
@@ -1088,9 +1089,10 @@ class FinalizeMagicDataCantripTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.magic.factories import CantripFactory, TraditionFactory
+        from world.magic.factories import CantripFactory, ResonanceFactory, TraditionFactory
 
         cls.cantrip = CantripFactory(name="Danger Sense", requires_facet=False)
+        cls.resonance = ResonanceFactory()
         cls.tradition = TraditionFactory()
 
     def test_gift_created_from_cantrip(self) -> None:
@@ -1335,6 +1337,7 @@ class FinalizeMagicDataCantripTests(TestCase):
         draft_data: dict = {}
         if cantrip is not None:
             draft_data["selected_cantrip_id"] = cantrip.id
+            draft_data["selected_gift_resonance_id"] = self.resonance.id
         if custom_gift_name:
             draft_data["custom_gift_name"] = custom_gift_name
         if custom_gift_description:

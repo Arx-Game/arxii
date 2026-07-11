@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { useConsequencePoolCatalog, useUpdateDraft } from '../../queries';
+import { useConsequencePoolCatalog, useResonances, useUpdateDraft } from '../../queries';
 import type { Cantrip, CharacterDraft } from '../../types';
 
 const ARCHETYPE_LABELS: Record<Cantrip['archetype'], string> = {
@@ -42,6 +42,9 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
 
   const { data: consequencePools = [] } = useConsequencePoolCatalog();
   const selectedPoolId = draft.draft_data.selected_consequence_pool_id ?? null;
+
+  const { data: resonances = [] } = useResonances();
+  const selectedResonanceId = draft.draft_data.selected_gift_resonance_id ?? null;
 
   // Group cantrips by archetype
   const grouped = ARCHETYPE_ORDER.map((archetype) => ({
@@ -84,6 +87,18 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
         draft_data: {
           ...draft.draft_data,
           selected_consequence_pool_id: poolId === 'standard' ? null : parseInt(poolId, 10),
+        },
+      },
+    });
+  };
+
+  const handleSelectResonance = (resonanceId: string) => {
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: {
+        draft_data: {
+          ...draft.draft_data,
+          selected_gift_resonance_id: parseInt(resonanceId, 10),
         },
       },
     });
@@ -155,6 +170,28 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
               {consequencePools.map((p) => (
                 <SelectItem key={p.id} value={String(p.id)}>
                   {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Gift resonance selector — anchors the latent GIFT thread (#1620) */}
+      {selectedCantrip && (
+        <div className="max-w-xs space-y-2">
+          <Label>Gift Resonance</Label>
+          <Select
+            value={selectedResonanceId?.toString() ?? ''}
+            onValueChange={handleSelectResonance}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select a resonance" />
+            </SelectTrigger>
+            <SelectContent>
+              {resonances.map((r) => (
+                <SelectItem key={r.id} value={r.id.toString()}>
+                  {r.name}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -132,6 +132,7 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
         TechniqueStyleFactory()
         EffectTypeFactory()
         ResonanceFactory()
+        cls.resonance = ResonanceFactory()
         tradition = TraditionFactory()
 
         # Skill needed so provision_player_anima_ritual doesn't log + skip.
@@ -180,6 +181,7 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
                 "tarot_reversed": False,
                 "traits_complete": True,
                 "selected_cantrip_id": self.cantrip.id,
+                "selected_gift_resonance_id": self.resonance.id,
                 "skills": {str(self.skill.pk): 20},
             },
         )
@@ -260,6 +262,7 @@ class GetCharacterCastCheckTests(TestCase):
         TechniqueStyleFactory()
         EffectTypeFactory()
         ResonanceFactory()
+        cls.resonance = ResonanceFactory()
         tradition = TraditionFactory()
         cls.skill = SkillFactory(trait__name="CCProvisionMelee")
         cantrip = CantripFactory(requires_facet=False)
@@ -312,6 +315,7 @@ class GetCharacterCastCheckTests(TestCase):
                 "tarot_reversed": False,
                 "traits_complete": True,
                 "selected_cantrip_id": self.cantrip.id,
+                "selected_gift_resonance_id": self.resonance.id,
                 "skills": {str(self.skill.pk): 20},
             },
         )

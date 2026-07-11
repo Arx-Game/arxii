@@ -130,6 +130,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
         TechniqueStyleFactory()
         EffectTypeFactory()
         ResonanceFactory()
+        cls.resonance = ResonanceFactory()
         cls.tradition = TraditionFactory()
         # Skill so provision_player_anima_ritual finds a default and doesn't skip.
         cls.skill = SkillFactory(trait__name="CastPCRitualism")
@@ -169,6 +170,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
                 "tarot_reversed": False,
                 "traits_complete": True,
                 "selected_cantrip_id": self.cantrip.id,
+                "selected_gift_resonance_id": self.resonance.id,
                 "skills": {str(self.skill.pk): 20},
             },
         )

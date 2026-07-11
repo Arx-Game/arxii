@@ -763,8 +763,9 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
   (`world/magic/specialization/services.py`) creates the level-0 GIFT thread at
   character-creation finalization, idempotent on `(owner, gift)` and write-once on resonance.
   Wires from `finalize_magic_data` after `CharacterGift` creation, reading the chosen
-  `selected_gift_resonance_id` from `draft.draft_data` (frontend picker is a deferred
-  needs-design follow-up; falls back to `gift.resonances.first()`).
+  `selected_gift_resonance_id` from `draft.draft_data` (frontend picker is built #1620;
+  the `CantripSelector` component writes the key; `compute_magic_errors` requires it.
+  Legacy/absent draft data falls back to `gift.resonances.first()`).
 - **Weaving commits resonance** — `weave_thread(target_kind=GIFT)` commits/chooses a
   resonance onto the existing latent thread rather than creating a new one (validates the
   resonance is in the gift's supported set, else raises `UnsupportedGiftResonanceError`,
@@ -779,8 +780,7 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
 **GIFT anchor cap (#1580):** `compute_anchor_cap` now handles `TargetKind.GIFT`:
 `_current_path_stage(thread.owner) × ANCHOR_CAP_GIFT_PER_STAGE` (=10,
 `world/magic/services/threads.py`). GIFT threads are always in-action (intrinsic species
-gift — added to `_ALWAYS_IN_ACTION_KINDS`). The frontend CG resonance picker remains a
-needs-design follow-up.
+gift — added to `_ALWAYS_IN_ACTION_KINDS`). The frontend CG resonance picker is built (#1620).
 
 Proven end-to-end by `world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578):
 CG provisioning → base resolve at level 0 → `gift_resonances_for` reads the thread's

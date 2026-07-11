@@ -10,7 +10,7 @@ from world.character_creation.validators import compute_magic_errors
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
 from world.fatigue.models import FatiguePool
-from world.magic.factories import CantripFactory, FacetFactory
+from world.magic.factories import CantripFactory, FacetFactory, ResonanceFactory
 from world.magic.models import CharacterAnima, Technique
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
@@ -51,6 +51,7 @@ class MagicStageValidationTest(TestCase):
         cls.manifested_cantrip.allowed_facets.add(fire, ice)
         cls.fire = fire
         cls.unrelated_facet = FacetFactory(name="Wolf")
+        cls.resonance = ResonanceFactory()
 
     def test_no_cantrip_selected_returns_error(self):
         draft = CharacterDraftFactory()
@@ -59,7 +60,10 @@ class MagicStageValidationTest(TestCase):
 
     def test_innate_cantrip_selected_passes(self):
         draft = CharacterDraftFactory(
-            draft_data={"selected_cantrip_id": self.innate_cantrip.id},
+            draft_data={
+                "selected_cantrip_id": self.innate_cantrip.id,
+                "selected_gift_resonance_id": self.resonance.id,
+            },
         )
         errors = compute_magic_errors(draft)
         assert errors == []
@@ -78,6 +82,7 @@ class MagicStageValidationTest(TestCase):
             draft_data={
                 "selected_cantrip_id": self.manifested_cantrip.id,
                 "selected_facet_id": self.fire.id,
+                "selected_gift_resonance_id": self.resonance.id,
             },
         )
         errors = compute_magic_errors(draft)
@@ -100,6 +105,25 @@ class MagicStageValidationTest(TestCase):
         )
         errors = compute_magic_errors(draft)
         assert len(errors) > 0
+
+    def test_cantrip_without_resonance_fails(self):
+        """Resonance is required — anchors the latent GIFT thread (#1620)."""
+        draft = CharacterDraftFactory(
+            draft_data={"selected_cantrip_id": self.innate_cantrip.id},
+        )
+        errors = compute_magic_errors(draft)
+        assert "Select a gift resonance" in errors
+
+    def test_cantrip_with_resonance_passes(self):
+        """Valid cantrip + facet + resonance produces no errors."""
+        draft = CharacterDraftFactory(
+            draft_data={
+                "selected_cantrip_id": self.innate_cantrip.id,
+                "selected_gift_resonance_id": self.resonance.id,
+            },
+        )
+        errors = compute_magic_errors(draft)
+        assert errors == []
 
 
 class MagicFinalizationCGSeedingTest(TestCase):
