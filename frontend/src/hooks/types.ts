@@ -157,6 +157,9 @@ export interface KudosReceivedPayload {
   amount: number;
   source_category: string;
   description: string;
+}
+
+/**
  * Slim arrival ping for `mail_arrived` messages (#2160). Anonymity boundary:
  * `sender_display` is the sender tenure's display name only, never an
  * account id/username. Carries no mail body — clients refetch the mail list
