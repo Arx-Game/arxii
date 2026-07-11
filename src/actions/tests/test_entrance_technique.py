@@ -23,8 +23,12 @@ from unittest.mock import MagicMock, patch
 
 from actions.definitions.social import EntranceAction
 from actions.factories import ActionTemplateFactory
-from world.combat.constants import ParticipantStatus, RiskLevel
-from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.constants import OpponentStatus, ParticipantStatus, RiskLevel
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+)
 from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
 from world.magic.entry_flourish import PendingEntryFlourishOffer
 from world.magic.factories import CharacterResonanceFactory, ensure_dramatic_entrance_content
@@ -263,6 +267,35 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
             encounter=encounter,
             character_sheet=self.caster.character_sheet,
             status=ParticipantStatus.ACTIVE,
+        )
+
+        technique = make_benign_castable_technique()
+        grant_technique(self.caster, technique)
+
+        result = EntranceAction().execute(
+            self._actor(), None, technique_id=technique.pk, confirm_soulfray_risk=True
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("already in the fight", (result.message or "").lower())
+
+    def test_already_in_fight_guard_catches_opponent_seated_pc(self) -> None:
+        """A PC seated as an ACTIVE CombatOpponent (the defender of a hostile cast)
+        must be caught by the same guard as a CombatParticipant (#2183 review) —
+        mirrors ``encounter_requiring_risk_acknowledgement``'s dual check
+        (``world/combat/cast_seed.py``).
+        """
+        encounter = CombatEncounterFactory(
+            scene=self.scene,
+            room=self.scene.location,
+            status=RoundStatus.DECLARING,
+            risk_level=RiskLevel.MODERATE,
+            round_number=1,
+        )
+        CombatOpponentFactory(
+            encounter=encounter,
+            persona=self.caster,
+            status=OpponentStatus.ACTIVE,
         )
 
         technique = make_benign_castable_technique()

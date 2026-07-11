@@ -86,6 +86,16 @@ class MomentTelnetE2ETest(TestCase):
         self.assertIn(str(self.suggestion.pk), msg)
         self.assertIn(self.moment_type.label, msg)
 
+    def test_non_gm_suggestions_refused(self) -> None:
+        """A non-GM must never see pending suggestions (oracle leak, #2183 review)."""
+        _run(self.outsider_character, "suggestions")
+
+        self.outsider_character.msg.assert_called()
+        msg = self.outsider_character.msg.call_args[0][0]
+        self.assertIn("gm", msg.lower())
+        self.assertNotIn(str(self.suggestion.pk), msg)
+        self.assertNotIn(self.moment_type.label, msg)
+
     def test_suggestions_no_active_scene_reports_error(self) -> None:
         lone_room = create_object("typeclasses.rooms.Room", key="LoneRoom", nohome=True)
         self.gm_character.location = lone_room

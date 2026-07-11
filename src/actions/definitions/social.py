@@ -349,8 +349,8 @@ class EntranceAction(_SocialTemplateAction):
         from actions.prerequisites import resolve_actor_sheet  # noqa: PLC0415
         from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
         from world.combat.cast_seed import _feedable_encounter  # noqa: PLC0415
-        from world.combat.constants import ParticipantStatus  # noqa: PLC0415
-        from world.combat.models import CombatParticipant  # noqa: PLC0415
+        from world.combat.constants import OpponentStatus, ParticipantStatus  # noqa: PLC0415
+        from world.combat.models import CombatOpponent, CombatParticipant  # noqa: PLC0415
         from world.magic.models import Technique  # noqa: PLC0415
         from world.scenes.models import Persona, Scene  # noqa: PLC0415
         from world.scenes.services import persona_for_character  # noqa: PLC0415
@@ -362,15 +362,19 @@ class EntranceAction(_SocialTemplateAction):
         actor_sheet = resolve_actor_sheet(actor)
         if actor_sheet is not None:
             feedable = _feedable_encounter(scene)
-            if (
-                feedable is not None
-                and CombatParticipant.objects.filter(
+            if feedable is not None:
+                already_participant = CombatParticipant.objects.filter(
                     encounter=feedable,
                     character_sheet=actor_sheet,
                     status=ParticipantStatus.ACTIVE,
                 ).exists()
-            ):
-                return _ActionResult(success=False, message="You're already in the fight.")
+                already_opponent = CombatOpponent.objects.filter(
+                    encounter=feedable,
+                    objectdb=actor,
+                    status=OpponentStatus.ACTIVE,
+                ).exists()
+                if already_participant or already_opponent:
+                    return _ActionResult(success=False, message="You're already in the fight.")
 
         initiator = persona_for_character(actor)
 
