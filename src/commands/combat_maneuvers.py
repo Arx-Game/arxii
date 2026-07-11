@@ -139,12 +139,16 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         knowing it — the service-layer check in ``declare_interpose`` is
         defense-in-depth for non-telnet callers.
         """
+        # Pad with spaces so a bare "with <technique>" (no ally clause) still
+        # matches the " with " separator at position 0; both slices come off the
+        # SAME padded string so the indexes stay consistent.
+        padded = f" {text} "
         ally_text = text
         technique_text = ""
-        with_index = text.lower().find(_WITH_SEPARATOR)
+        with_index = padded.lower().find(_WITH_SEPARATOR)
         if with_index != -1:
-            ally_text = text[:with_index].strip()
-            technique_text = text[with_index + len(_WITH_SEPARATOR) :].strip()
+            ally_text = padded[:with_index].strip()
+            technique_text = padded[with_index + len(_WITH_SEPARATOR) :].strip()
             if not technique_text:
                 msg = "Usage: combat interpose [ally] with <technique>."
                 raise CommandError(msg)
