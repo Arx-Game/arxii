@@ -15,6 +15,7 @@ from world.progression.models import (
     KudosSourceCategory,
     KudosTransaction,
 )
+from world.progression.services.notifications import notify_kudos_received
 from world.progression.types import AwardResult, ClaimResult, KudosXPResult, ProgressionReason
 
 
@@ -68,6 +69,15 @@ def award_kudos(  # noqa: PLR0913
         description=description,
         awarded_by=awarded_by,
         character=character,
+    )
+
+    transaction.on_commit(
+        lambda: notify_kudos_received(
+            account,
+            amount=amount,
+            source_category=source_category.display_name,
+            description=description,
+        )
     )
 
     return AwardResult(points_data=points_data, transaction=kudos_transaction)
