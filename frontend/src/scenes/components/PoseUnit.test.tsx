@@ -679,4 +679,27 @@ describe('PoseUnit reaction regard-bump toast', () => {
       expect(toast.success).toHaveBeenCalledWith('Your regard for Elena warms.');
     });
   });
+
+  it('does not toast when the reaction resolves with no bump message (#2158)', async () => {
+    vi.mocked(postInteractionReaction).mockResolvedValue({
+      bump_applied: false,
+      bump_message: null,
+    });
+    const interaction = makeInteraction({ mode: 'pose' });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    const emojiButton = await screen.findByText('\u{1F44D}');
+    fireEvent.click(emojiButton);
+
+    await waitFor(() => {
+      expect(postInteractionReaction).toHaveBeenCalled();
+    });
+
+    expect(toast.success).not.toHaveBeenCalled();
+  });
 });

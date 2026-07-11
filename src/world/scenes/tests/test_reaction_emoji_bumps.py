@@ -87,6 +87,7 @@ class ValencedReactionBumpTests(TestCase):
         response = self._post_reaction("\U0001f44d")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertFalse(response.data["bump_applied"])
+        self.assertIsNone(response.data["bump_message"])
         self.assertEqual(RelationshipBump.objects.count(), 0)
         self.assertTrue(InteractionReaction.objects.exists())
 
@@ -94,6 +95,7 @@ class ValencedReactionBumpTests(TestCase):
         response = self._post_reaction("\U0001f9c4")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertFalse(response.data["bump_applied"])
+        self.assertIsNone(response.data["bump_message"])
         self.assertEqual(RelationshipBump.objects.count(), 0)
 
     def test_self_reaction_never_bumps(self) -> None:
@@ -101,6 +103,7 @@ class ValencedReactionBumpTests(TestCase):
         response = self._post_reaction("❤️", interaction=own_pose)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertFalse(response.data["bump_applied"])
+        self.assertIsNone(response.data["bump_message"])
         self.assertEqual(RelationshipBump.objects.count(), 0)
 
     def test_bump_message_reaches_response(self) -> None:
