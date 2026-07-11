@@ -186,6 +186,11 @@ class Secret(SharedMemoryModel):
         - **Anchored ⇒ evidenced:** a secret tied to a recorded act (legend/mission/scene) is
           true-because-it-happened, so it can never be player-flavor (unverified) — minting it
           from play uses ``ACTION_ANCHORED`` provenance.
+
+        Both rules are ``PLAYER_FLAVOR``-specific by design. ``ACCUSATION`` (#1825) is
+        deliberately **exempt** — a player-authored false scandal is *meant* to carry weight and
+        anchor to an alleged deed; its guard is the consent gate at the mint action, not the
+        model. Do not widen these checks to catch ``ACCUSATION``.
         """
         super().clean()
         if (

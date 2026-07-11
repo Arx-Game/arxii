@@ -42,11 +42,27 @@ class SecretProvenance(models.TextChoices):
     happened) → player-flavor (unverified, no mechanical stakes). Free player authoring is
     capped at ``PLAYER_FLAVOR`` + Level 1; anything heavier must be ``GM_AUTHORED`` or
     ``ACTION_ANCHORED`` so it cannot masquerade as canon.
+
+    ``ACCUSATION`` (#1825) is the deliberate exception: a **player-authored false scandal about
+    someone else** that is meant to carry real weight — it mints heat/reputation exactly like a
+    true scandal until disproven, which is the gameplay. It is therefore **exempt** from the
+    ``PLAYER_FLAVOR`` caps (may be any level, may anchor to an *alleged* deed). Its abuse guard is
+    not the model but the **consent gate at the mint action** (a target must have opted into the
+    ``hostile`` antagonism category), and its falsity stays **emergent** (divergence between the
+    alleged deed and truth — never a stored flag).
     """
 
     GM_AUTHORED = "gm", "GM/Staff authored (canon)"
     ACTION_ANCHORED = "action", "Action-anchored (minted by play)"
     PLAYER_FLAVOR = "flavor", "Player flavor (unverified)"
+    ACCUSATION = "accusation", "Accusation (player-authored, consent-gated, weight-bearing)"
+
+
+# PLACEHOLDER magnitude (#1825 — Apostate tunes later): the heaviest level a player-minted
+# ACCUSATION may reach. The model permits any level for ACCUSATION (the clean() exemption); this
+# is the *gameplay* cap the mint service enforces, so a player can't one-shot a Dangerous frame.
+# The consent gate is the real abuse guard; this just keeps unverified frames off the top tier.
+ACCUSATION_MAX_LEVEL = SecretLevel.CAREFULLY_KEPT
 
 
 # --- Gossip (#1572): regional Level-1-secret spread "heat". ---

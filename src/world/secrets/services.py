@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ValidationError
 
 from world.secrets.constants import (
+    ACCUSATION_MAX_LEVEL,
     DEFAULT_VICTIM_SEVERITY_BY_LEVEL,
     SecretLevel,
     SecretProvenance,
@@ -134,6 +135,49 @@ def author_player_flavor_secret(
         content=content,
         category=category,
         author_persona=author_persona,
+    )
+
+
+def mint_accusation(  # noqa: PLR0913 — keyword-only; each arg is a distinct secret field
+    *,
+    accuser_persona: Persona,
+    subject_sheet: CharacterSheet,
+    content: str,
+    level: int = SecretLevel.UNCOMMON_KNOWLEDGE,
+    category: SecretCategory | None = None,
+    legend_deed: LegendEntry | None = None,
+    mission_deed: MissionDeedRecord | None = None,
+    scene: Scene | None = None,
+) -> Secret:
+    """Mint a player-authored ACCUSATION — a false scandal about *someone else* (#1825).
+
+    The player-facing frame-job author path. Thin over :func:`author_secret` with
+    ``provenance=ACCUSATION`` (so it may carry weight + anchor to an *alleged* deed, unlike
+    player-flavor). Falsity stays emergent — divergence between the alleged deed and truth, never
+    a stored flag; a leaked accusation mints heat/reputation like a true scandal until disproven.
+
+    This is the FIRST mint path where the subject is **not** the actor: an accusation is about a
+    target, so ``subject_sheet`` must differ from the accuser's own sheet (no self-framing).
+    ``level`` is clamped to ``ACCUSATION_MAX_LEVEL`` (PLACEHOLDER cap). **The consent gate is NOT
+    enforced here** — the caller (``MintAccusationAction``) checks ``consent_blocks_targeting``
+    against the target's ``hostile`` antagonism category before minting.
+    """
+    if accuser_persona.character_sheet_id == subject_sheet.pk:
+        msg = "An accusation must be about someone else, not yourself."
+        raise SecretError(msg, user_message=msg)
+    if level > ACCUSATION_MAX_LEVEL:
+        msg = "That accusation is too grave to mint without evidence."
+        raise SecretError(msg, user_message=msg)
+    return author_secret(
+        subject_sheet=subject_sheet,
+        provenance=SecretProvenance.ACCUSATION,
+        level=level,
+        content=content,
+        category=category,
+        author_persona=accuser_persona,
+        legend_deed=legend_deed,
+        mission_deed=mission_deed,
+        scene=scene,
     )
 
 
