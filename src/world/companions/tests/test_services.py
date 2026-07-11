@@ -123,3 +123,253 @@ class BindAndReleaseCompanionTests(TestCase):
         from evennia.objects.models import ObjectDB
 
         self.assertFalse(ObjectDB.objects.filter(pk=object_id).exists())
+
+
+class StablesCapacityBonusTests(TestCase):
+    """Tests for stables_capacity_bonus_for_sheet (#1863)."""
+
+    def test_no_stables_returns_zero(self) -> None:
+        """A character with no Stables gets 0 bonus."""
+        sheet = CharacterSheetFactory()
+        from world.companions.services import stables_capacity_bonus_for_sheet
+
+        self.assertEqual(stables_capacity_bonus_for_sheet(sheet), 0)
+
+    def test_stables_bonus_scales_with_level(self) -> None:
+        """A character with standing in a Stables room gets bonus * level."""
+        from evennia import create_object
+
+        from world.companions.models import StablesDetails
+        from world.companions.services import stables_capacity_bonus_for_sheet
+        from world.locations.constants import HolderType, LocationParentType
+        from world.locations.models import LocationTenancy
+        from world.room_features.constants import (
+            RoomFeatureInstallMechanism,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.factories import (
+            RoomFeatureInstanceFactory,
+        )
+        from world.room_features.models import RoomFeatureKind
+
+        sheet = CharacterSheetFactory()
+        persona = sheet.primary_persona
+
+        room = create_object("typeclasses.rooms.Room", key="Stables Room")
+        from evennia_extensions.factories import RoomProfileFactory
+
+        room_profile = RoomProfileFactory(objectdb=room)
+
+        kind = RoomFeatureKind.objects.create(
+            name="Stables",
+            max_level=5,
+            service_strategy=RoomFeatureServiceStrategy.STABLES,
+            install_mechanism=RoomFeatureInstallMechanism.PROJECT,
+        )
+        instance = RoomFeatureInstanceFactory(
+            room_profile=room_profile,
+            feature_kind=kind,
+            level=3,
+        )
+        StablesDetails.objects.create(
+            feature_instance=instance,
+            capacity_bonus_per_level=2,
+        )
+        # Grant the sheet's persona tenancy in the room.
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=room_profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=persona,
+        )
+
+        bonus = stables_capacity_bonus_for_sheet(sheet)
+        # Expected: 2 (per_level) * 3 (level) = 6
+        self.assertEqual(bonus, 6)
+
+    def test_no_standing_returns_zero(self) -> None:
+        """A Stables the character has no standing in gives no bonus."""
+        from evennia import create_object
+
+        from world.companions.models import StablesDetails
+        from world.companions.services import stables_capacity_bonus_for_sheet
+        from world.room_features.constants import (
+            RoomFeatureInstallMechanism,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.factories import RoomFeatureInstanceFactory
+        from world.room_features.models import RoomFeatureKind
+
+        sheet = CharacterSheetFactory()
+        room = create_object("typeclasses.rooms.Room", key="Other Room")
+        from evennia_extensions.factories import RoomProfileFactory
+
+        room_profile = RoomProfileFactory(objectdb=room)
+        kind = RoomFeatureKind.objects.create(
+            name="Stables2",
+            max_level=5,
+            service_strategy=RoomFeatureServiceStrategy.STABLES,
+            install_mechanism=RoomFeatureInstallMechanism.PROJECT,
+        )
+        instance = RoomFeatureInstanceFactory(
+            room_profile=room_profile,
+            feature_kind=kind,
+            level=3,
+        )
+        StablesDetails.objects.create(
+            feature_instance=instance,
+            capacity_bonus_per_level=2,
+        )
+        # No tenancy or ownership granted.
+        self.assertEqual(stables_capacity_bonus_for_sheet(sheet), 0)
+
+
+class CompanionCapacityWithStablesTests(TestCase):
+    """Tests that companion_capacity includes the Stables bonus (#1863)."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.gift = GiftFactory(name="Beastlord Stables Test", kind=GiftKind.MINOR)
+        self.resonance = ResonanceFactory()
+        self.gift.resonances.add(self.resonance)
+        self.thread = provision_latent_gift_thread(
+            self.sheet,
+            self.gift,
+            resonance=self.resonance,
+        )
+
+    def test_stables_bonus_added_to_capacity(self) -> None:
+        """companion_capacity includes the Stables bonus."""
+        from evennia import create_object
+
+        from world.companions.models import StablesDetails
+        from world.locations.constants import HolderType, LocationParentType
+        from world.locations.models import LocationTenancy
+        from world.room_features.constants import (
+            RoomFeatureInstallMechanism,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.factories import RoomFeatureInstanceFactory
+        from world.room_features.models import RoomFeatureKind
+
+        # Base capacity: 10 from ThreadPullEffect.
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=self.resonance,
+            tier=0,
+            min_thread_level=0,
+            target_gift=self.gift,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=10,
+        )
+        self.assertEqual(companion_capacity(self.sheet, self.gift), 10)
+
+        # Install a Stables at level 2 with bonus_per_level=3 → +6.
+        persona = self.sheet.primary_persona
+        room = create_object("typeclasses.rooms.Room", key="Cap Room")
+        from evennia_extensions.factories import RoomProfileFactory
+
+        room_profile = RoomProfileFactory(objectdb=room)
+        kind = RoomFeatureKind.objects.create(
+            name="StablesCap",
+            max_level=5,
+            service_strategy=RoomFeatureServiceStrategy.STABLES,
+            install_mechanism=RoomFeatureInstallMechanism.PROJECT,
+        )
+        instance = RoomFeatureInstanceFactory(
+            room_profile=room_profile,
+            feature_kind=kind,
+            level=2,
+        )
+        StablesDetails.objects.create(
+            feature_instance=instance,
+            capacity_bonus_per_level=3,
+        )
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=room_profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=persona,
+        )
+
+        self.assertEqual(companion_capacity(self.sheet, self.gift), 16)
+
+    def test_no_stables_no_change(self) -> None:
+        """companion_capacity unchanged when no Stables exists (no regression)."""
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=self.resonance,
+            tier=0,
+            min_thread_level=0,
+            target_gift=self.gift,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=10,
+        )
+        self.assertEqual(companion_capacity(self.sheet, self.gift), 10)
+
+
+class StablesProgressionTests(TestCase):
+    """Tests for handle_stables_progression (#1863)."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.room_features.constants import (
+            RoomFeatureInstallMechanism,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.models import RoomFeatureKind
+
+        self.room_profile = RoomProfileFactory()
+        self.kind = RoomFeatureKind.objects.create(
+            name="StablesProg",
+            max_level=5,
+            service_strategy=RoomFeatureServiceStrategy.STABLES,
+            install_mechanism=RoomFeatureInstallMechanism.PROJECT,
+        )
+
+    def _progression(self, target_level: int = 1):
+        from world.projects.factories import ProjectFactory
+        from world.room_features.models import RoomFeatureProgressionDetails
+
+        project = ProjectFactory()
+        RoomFeatureProgressionDetails.objects.create(
+            project=project,
+            target_room_profile=self.room_profile,
+            target_feature_kind=self.kind,
+            target_level=target_level,
+        )
+        return project
+
+    def test_install_creates_instance_and_details(self) -> None:
+        """handle_stables_progression creates a RoomFeatureInstance + StablesDetails."""
+        from world.companions.services import handle_stables_progression
+        from world.room_features.models import RoomFeatureInstance
+
+        project = self._progression(target_level=1)
+        handle_stables_progression(project, 1, None)
+
+        instance = RoomFeatureInstance.objects.get(room_profile=self.room_profile)
+        self.assertEqual(instance.feature_kind, self.kind)
+        self.assertEqual(instance.level, 1)
+        # StablesDetails sidecar created.
+        self.assertTrue(hasattr(instance, "stables_details"))
+        self.assertEqual(instance.stables_details.capacity_bonus_per_level, 1)
+
+    def test_upgrade_bumps_level_preserves_details(self) -> None:
+        """Upgrading a Stables bumps the level and preserves StablesDetails (get_or_create)."""
+        from world.companions.services import handle_stables_progression
+        from world.room_features.models import RoomFeatureInstance
+
+        # Install at L1.
+        project1 = self._progression(target_level=1)
+        handle_stables_progression(project1, 1, None)
+        instance = RoomFeatureInstance.objects.get(room_profile=self.room_profile)
+        details_pk = instance.stables_details.pk
+
+        # Upgrade to L3.
+        project3 = self._progression(target_level=3)
+        handle_stables_progression(project3, 3, None)
+        instance.refresh_from_db()
+        self.assertEqual(instance.level, 3)
+        # Same StablesDetails row (get_or_create).
+        self.assertEqual(instance.stables_details.pk, details_pk)

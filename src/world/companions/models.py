@@ -61,6 +61,13 @@ class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
         default=5,
         help_text="Unit strength when bridged into a BattleVehicle.",
     )
+    is_mount = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether this archetype is a ridable mount. Descriptive tag "
+            "for now — mount-riding mechanics are deferred (#1863)."
+        ),
+    )
 
     class Meta:
         ordering = ["domain", "name"]
@@ -342,3 +349,33 @@ class CompanionOrder(SharedMemoryModel):
         if self.encounter is not None and self.battle is not None:
             msg = "CompanionOrder cannot have both an encounter and a battle."
             raise ValidationError(msg)
+
+
+class StablesDetails(SharedMemoryModel):
+    """Per-instance config for a Stables RoomFeatureInstance (#1863).
+
+    Follows the SanctumDetails pattern: OneToOne → RoomFeatureInstance,
+    carrying per-instance tuning knobs. The Stables' mechanical effect
+    (capacity bonus) is derive-on-read via
+    :func:`world.companions.services.stables_capacity_bonus_for_sheet`.
+    """
+
+    feature_instance = models.OneToOneField(
+        "room_features.RoomFeatureInstance",
+        on_delete=models.CASCADE,
+        related_name="stables_details",
+        primary_key=True,
+    )
+    capacity_bonus_per_level = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Flat Companion Capacity bonus per Stables level. "
+            "Total bonus = capacity_bonus_per_level * instance.level."
+        ),
+    )
+
+    class Meta:
+        ordering = ["feature_instance"]
+
+    def __str__(self) -> str:
+        return f"Stables details ({self.capacity_bonus_per_level}/level)"

@@ -22,3 +22,16 @@ _Avoid_: capacity (unqualified), companion count, pet slots.
 **Bind** (verb):
 The acquisition action for a Companion. _Avoid_: summon (reserved for the
 in-combat `CombatOpponent` ally row, ADR-0059).
+
+**Stables**:
+A `RoomFeatureKind` (strategy `STABLES`) that provides an owner-scoped Companion
+Capacity bonus scaled by its `level` (#1863). A character with owner or tenant
+standing in a room with a Stables gets a flat bonus to their total Companion
+Capacity, computed derive-on-read via `stables_capacity_bonus_for_sheet`. Mounts
+are beast-domain Companions with `CompanionArchetype.is_mount=True`.
+
+**Mount**:
+A beast-domain Companion whose archetype has `is_mount=True` (#1863). No separate
+model — a mount uses the existing Companion substrate (bind, capacity, combat).
+Mount-riding/travel/cavalry mechanics are deferred; `is_mount` is a descriptive
+tag for now.

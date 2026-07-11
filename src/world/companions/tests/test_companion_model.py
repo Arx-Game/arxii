@@ -27,3 +27,47 @@ class CompanionModelTests(TestCase):
         companion = CompanionFactory(name="Fang", archetype__name="Wolf")
 
         self.assertEqual(str(companion), "Fang (Wolf)")
+
+
+class CompanionArchetypeIsMountTests(TestCase):
+    """Tests for the is_mount field on CompanionArchetype (#1863)."""
+
+    def test_is_mount_defaults_to_false(self) -> None:
+        """New archetypes default to non-mount."""
+        from world.companions.factories import CompanionArchetypeFactory
+
+        archetype = CompanionArchetypeFactory()
+        self.assertFalse(archetype.is_mount)
+
+    def test_is_mount_can_be_set_true(self) -> None:
+        """An archetype can be flagged as a mount."""
+        from world.companions.factories import CompanionArchetypeFactory
+
+        archetype = CompanionArchetypeFactory(is_mount=True)
+        self.assertTrue(archetype.is_mount)
+
+
+class StablesDetailsModelTests(TestCase):
+    """Tests for the StablesDetails model (#1863)."""
+
+    def test_stables_details_creation(self) -> None:
+        """StablesDetails can be created linked to a RoomFeatureInstance."""
+        from world.companions.models import StablesDetails
+        from world.room_features.factories import RoomFeatureInstanceFactory
+
+        instance = RoomFeatureInstanceFactory()
+        details = StablesDetails.objects.create(feature_instance=instance)
+        self.assertEqual(details.capacity_bonus_per_level, 1)
+        self.assertEqual(details.feature_instance, instance)
+
+    def test_stables_details_str(self) -> None:
+        from world.companions.models import StablesDetails
+        from world.room_features.factories import RoomFeatureInstanceFactory
+
+        instance = RoomFeatureInstanceFactory()
+        details = StablesDetails.objects.create(
+            feature_instance=instance,
+            capacity_bonus_per_level=3,
+        )
+        self.assertIn("Stables", str(details))
+        self.assertIn("3", str(details))

@@ -49,6 +49,41 @@ class EnsureCompanionContentTests(TestCase):
         self.assertEqual(CompanionArchetype.objects.count(), gift_count_before)
 
 
+class EnsureStablesKindTests(TestCase):
+    """Tests for the Stables RoomFeatureKind seed (#1863)."""
+
+    def test_ensure_stables_kind_creates_kind(self) -> None:
+        from world.companions.seeds import ensure_stables_kind
+        from world.room_features.constants import (
+            RoomFeatureInstallMechanism,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.models import RoomFeatureKind
+
+        ensure_stables_kind()
+
+        kind = RoomFeatureKind.objects.get(
+            service_strategy=RoomFeatureServiceStrategy.STABLES,
+        )
+        self.assertEqual(kind.name, "Stables")
+        self.assertEqual(kind.max_level, 5)
+        self.assertEqual(kind.install_mechanism, RoomFeatureInstallMechanism.PROJECT)
+
+    def test_ensure_stables_kind_is_idempotent(self) -> None:
+        from world.companions.seeds import ensure_stables_kind
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.models import RoomFeatureKind
+
+        ensure_stables_kind()
+        ensure_stables_kind()
+        self.assertEqual(
+            RoomFeatureKind.objects.filter(
+                service_strategy=RoomFeatureServiceStrategy.STABLES,
+            ).count(),
+            1,
+        )
+
+
 class EnsureCompanionAbilitiesTests(TestCase):
     def test_seeds_abilities_for_archetypes(self) -> None:
         ensure_companion_content()

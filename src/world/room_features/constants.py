@@ -30,6 +30,7 @@ class RoomFeatureServiceStrategy(models.TextChoices):
     # ``RoomProfile.is_social_hub`` (#1572). Installing it marks the room a hub;
     # its ``level`` scales crowd draw + the fame/prestige earned for actions here.
     SOCIAL_HUB = "SOCIAL_HUB", "Social Hub"
+    STABLES = "STABLES", "Stables"
 
 
 class RoomFeatureInstallMechanism(models.TextChoices):
