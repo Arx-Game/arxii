@@ -24,6 +24,7 @@ vi.mock('@/combat/queries', () => ({
   useDispatchPlayerAction: vi.fn(),
   useFleeMutation: vi.fn(),
   useCoverMutation: vi.fn(),
+  useGuardMutation: vi.fn(),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
@@ -166,10 +167,12 @@ const mockedUseDispatchPlayerAction = combatQueries.useDispatchPlayerAction as R
 >;
 const mockedUseFleeMutation = combatQueries.useFleeMutation as ReturnType<typeof vi.fn>;
 const mockedUseCoverMutation = combatQueries.useCoverMutation as ReturnType<typeof vi.fn>;
+const mockedUseGuardMutation = combatQueries.useGuardMutation as ReturnType<typeof vi.fn>;
 
 const mockMutate = vi.fn();
 const mockFleeMutate = vi.fn();
 const mockCoverMutate = vi.fn();
+const mockGuardMutate = vi.fn();
 const mockMutateAsync = vi.fn();
 
 function setupMocks(
@@ -197,6 +200,10 @@ function setupMocks(
   });
   mockedUseCoverMutation.mockReturnValue({
     mutate: mockCoverMutate,
+    isPending: false,
+  });
+  mockedUseGuardMutation.mockReturnValue({
+    mutate: mockGuardMutate,
     isPending: false,
   });
 }
@@ -269,7 +276,9 @@ function defaultProps(overrides?: Partial<YourTurnProps>): YourTurnProps {
 
 function makePlayerAction(clashId: number | null, displayName: string): PlayerAction {
   return {
-    backend: 'COMBAT',
+    // Lowercase: the API serializes ActionBackend values ("combat"), and the
+    // availableActions filters compare against that serialized form (#2207).
+    backend: 'combat',
     display_name: displayName,
     description: '',
     difficulty: null,
@@ -278,7 +287,7 @@ function makePlayerAction(clashId: number | null, displayName: string): PlayerAc
     check_type: { id: 1, name: 'Attack' },
     action_template: null,
     ref: {
-      backend: 'COMBAT',
+      backend: 'combat',
       challenge_instance_id: null,
       approach_id: null,
       technique_id: null,
@@ -1613,7 +1622,7 @@ describe('YourTurn — first-timer wayfinding tooltips (#2157)', () => {
 
     expect(screen.getByText('Maneuvers')).toHaveAttribute(
       'title',
-      'Flee the encounter, or Cover an ally, instead of declaring an offensive or defensive action.'
+      'Flee the encounter, Cover an ally, or Guard an ally with your body or a protective technique, instead of declaring an offensive or defensive action.'
     );
   });
 });
