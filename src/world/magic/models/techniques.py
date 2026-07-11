@@ -436,6 +436,15 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         "cast conjures when successfully declared as a battle environmental effect. "
         "Null on every non-environmental technique.",
     )
+    travel_anchor_kind = models.ForeignKey(
+        "magic.PortalAnchorKind",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="travel_techniques",
+        help_text="Set = this technique is a portal-travel technique through this "
+        "anchor medium (#2222).",
+    )
 
     class Meta:
         verbose_name = "Technique"

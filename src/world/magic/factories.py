@@ -61,6 +61,8 @@ from world.magic.models import (
     MotifResonanceAssociation,
     MotifResonanceStyle,
     PendingAlteration,
+    PortalAnchor,
+    PortalAnchorKind,
     Resonance,
     Restriction,
     Ritual,
@@ -3513,3 +3515,27 @@ class RitualLiturgyFactory(factory.django.DjangoModelFactory):
 
     ritual = factory.SubFactory(RitualOfTheDuranceFactory)
     opening_call = "One stands before us in Durance. Speak thy name and testament."
+
+
+class PortalAnchorKindFactory(factory.django.DjangoModelFactory):
+    """Factory for PortalAnchorKind — a staff-authored travel-anchor medium (#2222)."""
+
+    class Meta:
+        model = PortalAnchorKind
+
+    name = factory.Sequence(lambda n: f"Anchor Kind {n}")
+    description = factory.LazyAttribute(lambda o: f"The {o.name} anchor kind.")
+    arrival_verb = "steps out of"
+    departure_verb = "steps into"
+
+
+class PortalAnchorFactory(factory.django.DjangoModelFactory):
+    """Factory for PortalAnchor — a concrete installed travel anchor (#2222)."""
+
+    class Meta:
+        model = PortalAnchor
+
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    kind = factory.SubFactory(PortalAnchorKindFactory)
+    name = factory.Sequence(lambda n: f"a portal anchor {n}")
+    is_network_open = True

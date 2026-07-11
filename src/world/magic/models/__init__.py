@@ -26,6 +26,7 @@ Submodules (see Scope 6 §4.4):
 - weaving: ThreadWeavingUnlock, CharacterThreadWeavingUnlock,
   ThreadWeavingTeachingOffer
 - rituals: Ritual, RitualComponentRequirement, ImbuingProseTemplate
+- portals: PortalAnchorKind, PortalAnchor (#2222)
 - ritual_check_config: RitualCheckConfig
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
@@ -132,6 +133,7 @@ from world.magic.models.motifs import (
     MotifResonanceAssociation,
     MotifResonanceStyle,
 )
+from world.magic.models.portals import PortalAnchor, PortalAnchorKind
 from world.magic.models.power_config import AuraPowerConfig, LevelPowerConfig, StandingCapBand
 from world.magic.models.progression_milestone import MagicProgressionMilestone
 from world.magic.models.reincarnation import Reincarnation
@@ -320,6 +322,9 @@ __all__ = [
     "PendingRitualEffect",
     # soul tether (Spec B §14.1, §15.1 — Task 1.7)
     "PendingStageAdvanceOffer",
+    # portal travel (#2222)
+    "PortalAnchor",
+    "PortalAnchorKind",
     # endorsement (Spec C §2.2)
     "PoseEndorsement",
     # endorsement (Outfits Phase C §2.2 — #514)
