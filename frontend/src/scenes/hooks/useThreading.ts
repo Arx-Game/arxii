@@ -28,6 +28,8 @@ export interface UseThreadingOpts {
 
 export interface ThreadingState {
   threads: Thread[];
+  /** Interactions grouped by thread key (#2165 per-tab feeds) — same grouping the threads list is built from. */
+  interactionsByThread: Map<string, Interaction[]>;
   filteredInteractions: Interaction[];
   selectedThreadKey: string;
   enabledThreadKeys: Set<string>;
@@ -140,7 +142,7 @@ export function useThreading(
   const viewerPersonaId = opts?.viewerPersonaId;
   const sceneBaselineId = opts?.sceneBaselineId;
 
-  const { threads, threadKeyMap } = useMemo(() => {
+  const { threads, threadKeyMap, interactionsByThread } = useMemo(() => {
     const groups = new Map<string, Interaction[]>();
     const keyMap = new Map<number, string>();
     for (const interaction of interactions) {
@@ -179,7 +181,7 @@ export function useThreading(
         if (b.type === 'room') return 1;
         return b.latestTimestamp.localeCompare(a.latestTimestamp);
       });
-    return { threads: threadList, threadKeyMap: keyMap };
+    return { threads: threadList, threadKeyMap: keyMap, interactionsByThread: groups };
   }, [interactions, roomName, lastSeenByThread, viewerPersonaId, sceneBaselineId]);
 
   const filteredInteractions = useMemo(() => {
@@ -256,6 +258,7 @@ export function useThreading(
 
   return {
     threads,
+    interactionsByThread,
     filteredInteractions,
     selectedThreadKey,
     enabledThreadKeys,

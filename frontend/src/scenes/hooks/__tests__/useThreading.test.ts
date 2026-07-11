@@ -238,6 +238,33 @@ describe('useThreading', () => {
     expect(hidden.size).toBe(0);
   });
 
+  it('interactionsByThread groups interactions per thread key (#2165)', () => {
+    const interactions = [
+      makeInteraction({
+        id: 1,
+        mode: 'whisper',
+        persona: { id: 1, name: 'Alice' },
+        receiver_persona_ids: [2],
+      }),
+      makeInteraction({
+        id: 2,
+        mode: 'whisper',
+        persona: { id: 2, name: 'Bob' },
+        receiver_persona_ids: [1],
+      }),
+      makeInteraction({ id: 3 }),
+      makeInteraction({ id: 4 }),
+    ];
+
+    const { result } = renderHook(() => useThreading(interactions, 'Room'));
+
+    const whisperInteractions = result.current.interactionsByThread.get('whisper:1,2');
+    expect(whisperInteractions?.map((i) => i.id)).toEqual([1, 2]);
+
+    const roomInteractions = result.current.interactionsByThread.get('room');
+    expect(roomInteractions?.map((i) => i.id)).toEqual([3, 4]);
+  });
+
   describe('unread counts', () => {
     it('defaults unreadCount to 0 when no opts are passed at all', () => {
       const interactions = [makeInteraction({ id: 1 }), makeInteraction({ id: 2 })];

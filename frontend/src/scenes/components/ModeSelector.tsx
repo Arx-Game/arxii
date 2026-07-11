@@ -4,12 +4,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Lock } from 'lucide-react';
 
 interface ModeSelectorProps {
   currentMode: string;
   onModeChange: (mode: string) => void;
   isAtPlace: boolean;
+  /** #2165: audience is fixed by the active conversation tab — renders a static label, no dropdown. */
+  locked?: boolean;
 }
 
 const COMMUNICATION_MODES = [
@@ -21,12 +23,24 @@ const COMMUNICATION_MODES = [
   { key: 'tt', label: 'Tabletalk' },
 ] as const;
 
-export function ModeSelector({ currentMode, onModeChange, isAtPlace }: ModeSelectorProps) {
+export function ModeSelector({ currentMode, onModeChange, isAtPlace, locked }: ModeSelectorProps) {
   const currentLabel = COMMUNICATION_MODES.find((m) => m.key === currentMode)?.label ?? currentMode;
 
   const visibleModes = isAtPlace
     ? COMMUNICATION_MODES
     : COMMUNICATION_MODES.filter((m) => m.key !== 'tt');
+
+  if (locked) {
+    return (
+      <span
+        title="Audience is locked to this conversation tab"
+        className="flex items-center gap-0.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium text-muted-foreground"
+      >
+        <Lock className="h-3 w-3" />
+        {currentLabel}
+      </span>
+    );
+  }
 
   return (
     <DropdownMenu>
