@@ -121,7 +121,7 @@ export function RelationshipsSection({
             {relationships?.length ? (
               relationships.map((rel) => <li key={rel}>{rel}</li>)
             ) : (
-              <li>TBD</li>
+              <li className="text-muted-foreground">No relationship notes yet.</li>
             )}
           </ul>
         </div>

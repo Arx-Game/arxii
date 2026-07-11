@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { WelcomePanel } from '@/components/WelcomePanel';
 import { SITE_NAME } from '@/config';
 import { StatusBlock } from './StatusBlock';
 import { NewPlayerSection } from './NewPlayerSection';
@@ -32,6 +33,7 @@ export function HomePage() {
         </Button>
         <StatusBlock />
       </section>
+      <WelcomePanel />
       <div className="container mx-auto grid gap-4 py-8 md:grid-cols-3">
         <StatsCard
           stats={
