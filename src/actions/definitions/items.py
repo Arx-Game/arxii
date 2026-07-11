@@ -516,6 +516,7 @@ class UseItemAction(Action):
                 "charges_remaining": result.charges_remaining,
                 "destroyed": result.destroyed,
                 "applied_effect_count": len(result.applied_effects),
+                "appearance_changes": len(result.appearance_changes),
             },
         )
 
