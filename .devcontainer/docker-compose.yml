@@ -68,6 +68,14 @@ services:
       # Verify after a rebuild: a sampled worktree venv file shows links>1
       # (`stat -c %h .claude/worktrees/<wt>/.venv/bin/activate_this.py`). #1037
       UV_CACHE_DIR: /workspaces/arxii/.claude/worktrees/.uv-cache
+      # Base image leaves TERM=xterm (tput colors reports 8), which fails
+      # polytoken's stage-1 256-color capability check. A manual `export` or
+      # ~/.bashrc edit doesn't persist across rebuilds (/home/vscode isn't a
+      # named volume outside arxii-claude-home/arxii-polytoken-*), so set it
+      # here instead. Applies container-wide (VS Code terminal, docker exec,
+      # just recipes), not just interactive login shells.
+      TERM: xterm-256color
+      COLORTERM: truecolor
     # Forward the brainstorm-server port so http://localhost:49200/ in the
     # Windows browser reaches the in-container server. The skill's
     # start-server.sh defaults to binding 127.0.0.1; pass --host 0.0.0.0

@@ -10,6 +10,8 @@ from commands.exceptions import CommandError
 from world.magic.entry_flourish import PendingEntryFlourishOffer
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Resonance
 
@@ -43,10 +45,61 @@ def _resolve_resonance(arg: str, sheet: CharacterSheet) -> Resonance:
     raise CommandError(msg)
 
 
+def _resolve_known_technique_id(technique_name: str, sheet: CharacterSheet) -> int:
+    """Return the pk of the technique named *technique_name* among *sheet*'s known techniques.
+
+    Case-insensitive match against ``CharacterTechnique`` (mirrors
+    ``commands.combat._CombatCommandMixin._find_technique_id``).
+
+    Raises:
+        CommandError: If no matching known technique is found.
+    """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+    ct = (
+        CharacterTechnique.objects.filter(
+            character=sheet,
+            technique__name__iexact=technique_name,
+        )
+        .select_related("technique")
+        .first()
+    )
+    if ct is None:
+        msg = f"You don't know a technique called '{technique_name}'."
+        raise CommandError(msg)
+    return ct.technique_id
+
+
+def _resolve_target_persona_id_in_room(caller: ObjectDB, target_name: str) -> int:
+    """Return the pk of the Persona named *target_name* in the caller's current room.
+
+    Mirrors ``commands.combat.CmdDeclareTechnique._resolve_target_persona_id``'s
+    non-combat lookup (the active scene's cached participant personas).
+
+    Raises:
+        CommandError: If there is no active scene, or no matching persona is found.
+    """
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    scene = get_active_scene(caller.location)
+    if scene is None:
+        msg = "There is no active scene here."
+        raise CommandError(msg)
+    name_lower = target_name.lower()
+    for persona in scene.persona_handler.active_participant_personas():
+        if persona.name.lower() == name_lower:
+            return persona.pk
+    msg = f"No persona named '{target_name}' is participating in this scene."
+    raise CommandError(msg)
+
+
 class CmdEnter(ArxCommand):
     """Make a dramatic entrance into the scene.
 
-    Usage: enter
+    Usage:
+        enter
+        enter <technique>
+        enter <technique>=<target>
     """
 
     key = "enter"
@@ -54,7 +107,25 @@ class CmdEnter(ArxCommand):
     action = EntranceAction()
 
     def resolve_action_args(self) -> dict:
-        return {}
+        args = (self.args or "").strip()
+        if not args:
+            return {}
+
+        technique_part, _, target_part = args.partition("=")
+        technique_name = technique_part.strip()
+        target_name = target_part.strip()
+
+        sheet = self.caller.sheet_data
+        if sheet is None:
+            msg = "You don't have a character sheet."
+            raise CommandError(msg)
+
+        kwargs: dict = {"technique_id": _resolve_known_technique_id(technique_name, sheet)}
+        if target_name:
+            kwargs["target_persona_id"] = _resolve_target_persona_id_in_room(
+                self.caller, target_name
+            )
+        return kwargs
 
 
 class CmdFlourish(ArxCommand):

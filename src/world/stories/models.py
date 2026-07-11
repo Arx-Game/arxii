@@ -2418,6 +2418,13 @@ class StakeResolution(SharedMemoryModel):
             "never read); this is the fix."
         ),
     )
+    npc_regard_delta = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind "
+            "is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row."
+        ),
+    )
     sets_subject_lifecycle = models.CharField(
         max_length=10,
         choices=LifecycleState.choices,
@@ -2470,6 +2477,7 @@ class StakeResolution(SharedMemoryModel):
             subject_standing_delta=self.subject_standing_delta,
             sets_subject_lifecycle=self.sets_subject_lifecycle,
             machine_match_lifecycle_state=self.machine_match_lifecycle_state,
+            npc_regard_delta=self.npc_regard_delta,
         ):
             raise ValidationError({problem.field: problem.message})
 

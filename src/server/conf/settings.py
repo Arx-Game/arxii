@@ -73,6 +73,7 @@ INSTALLED_APPS += [
     "world.goals.apps.GoalsConfig",
     "world.societies.apps.SocietiesConfig",
     "world.currency.apps.CurrencyConfig",
+    "world.agriculture.apps.AgricultureConfig",
     "world.action_points.apps.ActionPointsConfig",
     "world.consent.apps.ConsentConfig",
     "world.boundaries.apps.BoundariesConfig",
@@ -209,6 +210,11 @@ FALL_IMPACT_PER_LEVEL = env.int("FALL_IMPACT_PER_LEVEL", default=5)
 # create per character via the designed creation flow (#1127). Staff bypass it.
 # TEMPORARY masks are not capped here (throwaway). PLACEHOLDER magnitude.
 MAX_ESTABLISHED_PERSONAS_PER_SHEET = env.int("MAX_ESTABLISHED_PERSONAS_PER_SHEET", default=5)
+
+# Max number of exits a single travel_to dispatch will traverse in one go (#2163).
+# Backstop against a pathological/disconnected-but-still-searched graph; same-Area
+# scoping already bounds most realistic routes well under this.
+TRAVEL_MAX_HOPS = env.int("TRAVEL_MAX_HOPS", default=50)
 
 # Web frontend base URL — the React app's origin. Referenced by allauth's
 # headless redirect config below, CSRF_TRUSTED_ORIGINS, and telnet-side

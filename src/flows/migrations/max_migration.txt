@@ -1,1 +1,1 @@
-0007_alter_triggerdefinition_event_name
+0008_alter_triggerdefinition_event_name

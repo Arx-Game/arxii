@@ -8,13 +8,35 @@ cast routing downstream.
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.db.models import Prefetch
 
 from actions.constants import ActionTargetType
+from flows.consts import FlowActionChoices
+from flows.models.flows import FlowStepDefinition
+from flows.models.triggers import TriggerDefinition
+from world.conditions.models import ConditionTemplate
 from world.conditions.services import is_untargetable
 from world.magic.models.techniques import ConditionTargetKind, Technique
 from world.magic.services.hostility import is_technique_hostile
 from world.mechanics.services import prerequisites_met
 from world.scenes.models import Persona, Scene
+
+# protective_flavor() return values (#2207) — named constants rather than bare
+# strings so callers (e.g. declare_interpose) compare against an identifier,
+# not a string literal.
+PROTECTIVE_FLAVOR_BARRIER = "barrier"
+PROTECTIVE_FLAVOR_BLINK = "blink"
+PROTECTIVE_FLAVOR_REDIRECT = "redirect"
+
+# Reactive-trigger handler function name -> guardian-declaration flavor.
+# Keyed on the trailing segment of the CALL_SERVICE_FUNCTION step's dotted
+# `variable_name` (e.g. "world.magic.services.effect_handlers.absorb_pool"),
+# mirroring the handler paths authored in `world/magic/effect_palette_content.py`.
+_PROTECTIVE_FLAVOR_BY_HANDLER: dict[str, str] = {
+    "absorb_pool": PROTECTIVE_FLAVOR_BARRIER,
+    "blink_dodge": PROTECTIVE_FLAVOR_BLINK,
+    "reflect_damage": PROTECTIVE_FLAVOR_REDIRECT,
+}
 
 
 class InvalidCastTarget(ValidationError):
@@ -152,6 +174,124 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
     if technique.removed_conditions.filter(target_kind=ConditionTargetKind.ALLY).exists():
         return ConditionTargetKind.ALLY
     return ConditionTargetKind.SELF
+
+
+def protective_condition_and_flavor(technique: Technique) -> tuple[ConditionTemplate, str] | None:
+    """Classify *technique*'s protective handler AND resolve the matched ConditionTemplate (#2207).
+
+    Guardian declarations (Interpose) need to know whether a technique carries a
+    protective reactive-trigger handler and, if so, which family: an absorb-pool
+    barrier, a blink-dodge escape, or a reflect-damage redirect. This is derived from
+    the technique's existing authored data — `condition_applications ->
+    condition.reactive_triggers -> flow_definition.steps` — the same machinery that
+    installs Aegis Field / Mirror Ward / Phase Step (see
+    `world/magic/effect_palette_content.py`); no new authored field is introduced.
+
+    Traverses one batched query (select_related + nested Prefetch, no N+1 — the
+    prefetch-string lint hook requires the Prefetch()+to_attr form, see
+    `tools/lint_prefetch_string.py`): for each of the technique's applied conditions,
+    walks that condition's reactive triggers, then each trigger's flow's
+    CALL_SERVICE_FUNCTION steps, matching the step's `variable_name` (a dotted
+    service-function path) against the known handler families.
+
+    Returns the ``(ConditionTemplate, flavor)`` of the FIRST matching step
+    encountered — authored techniques carry at most one protective handler in
+    practice — or None when no applied condition's reactive triggers resolve to a
+    known protective handler.
+
+    Guardian resolution (``world.combat.services._try_technique_interpose``, #2207)
+    needs the template itself — its ``reactive_anima_cost`` pays the guardian's
+    reaction — not just the flavor string. :func:`protective_flavor` (declaration-time
+    validation only needs the flavor) is a thin wrapper over this function so both
+    call sites share one traversal.
+    """
+    applied_conditions = technique.condition_applications.select_related(
+        "condition"
+    ).prefetch_related(
+        Prefetch(
+            "condition__reactive_triggers",
+            queryset=TriggerDefinition.objects.select_related("flow_definition").prefetch_related(
+                Prefetch(
+                    "flow_definition__steps",
+                    queryset=FlowStepDefinition.objects.filter(
+                        action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+                    ),
+                    to_attr="cached_call_service_steps",
+                )
+            ),
+            to_attr="cached_reactive_triggers",
+        )
+    )
+
+    for applied in applied_conditions:
+        for trigger in applied.condition.cached_reactive_triggers:
+            for step in trigger.flow_definition.cached_call_service_steps:
+                function_name = step.variable_name.rsplit(".", 1)[-1]
+                flavor = _PROTECTIVE_FLAVOR_BY_HANDLER.get(function_name)
+                if flavor is not None:
+                    return applied.condition, flavor
+    return None
+
+
+def protective_flavor(technique: Technique) -> str | None:
+    """Classify *technique*'s reactive-trigger handler family for guardian declarations (#2207).
+
+    Thin wrapper over :func:`protective_condition_and_flavor` — declaration-time
+    validation (``declare_interpose``) only needs the flavor, not the resolved
+    ``ConditionTemplate``.
+    """
+    resolved = protective_condition_and_flavor(technique)
+    return resolved[1] if resolved is not None else None
+
+
+#: Reactive-trigger handler families that consume a caster-declared position PAIR
+#: (origin + destination), e.g. an obstacle placed between two points.
+_PAIR_HANDLERS = ("create_obstacle_on_condition",)
+
+#: Reactive-trigger handler families that consume a single caster-declared position
+#: (a destination), e.g. teleport / force-move / zone-hazard placement.
+_SINGLE_HANDLERS = (
+    "move_position_on_condition",
+    "force_move_target_on_condition",
+    "create_zone_hazard_on_condition",
+)
+
+#: ``position_target_shape`` return values — module-level constants (not bare
+#: string literals) so the shape vocabulary has one spelling.
+POSITION_SHAPE_PAIR = "pair"
+POSITION_SHAPE_SINGLE = "single"
+POSITION_SHAPE_NONE = "none"
+
+
+def position_target_shape(technique: Technique) -> str:
+    """Classify which cast-position input (if any) the technique's effects consume.
+
+    Walks the technique's applied conditions to their reactive triggers' flow steps,
+    looking for a ``CALL_SERVICE_FUNCTION`` step whose dotted handler path names a
+    known position-consuming effect handler:
+
+    - ``POSITION_SHAPE_PAIR`` — an obstacle-family handler is present (origin + destination).
+    - ``POSITION_SHAPE_SINGLE`` — a teleport/force-move/zone-hazard-family handler is present.
+    - ``POSITION_SHAPE_NONE`` — no position-consuming handler found.
+    """
+    step_paths: list[str] = []
+    applications = technique.condition_applications.select_related("condition").prefetch_related(
+        Prefetch(
+            "condition__reactive_triggers__flow_definition__steps",
+            to_attr="prefetched_shape_steps",
+        )
+    )
+    for applied in applications:
+        for trigger in applied.condition.reactive_triggers.all():
+            step_paths.extend(
+                step.variable_name or "" for step in trigger.flow_definition.prefetched_shape_steps
+            )
+    joined = " ".join(step_paths)
+    if any(handler in joined for handler in _PAIR_HANDLERS):
+        return POSITION_SHAPE_PAIR
+    if any(handler in joined for handler in _SINGLE_HANDLERS):
+        return POSITION_SHAPE_SINGLE
+    return POSITION_SHAPE_NONE
 
 
 def _signature_alters_behavior(caster, technique: Technique) -> bool:

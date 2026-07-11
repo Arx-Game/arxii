@@ -11,6 +11,7 @@ export interface WhoEntry {
 export interface WhereEntry {
   persona_name: string;
   room_path: string;
+  room_id: number;
 }
 
 export interface PresencePayload {

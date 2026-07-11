@@ -66,6 +66,10 @@ if TYPE_CHECKING:
 _STRAIN_PREFIX = "strain="
 # Keyword prefix used to parse position=<name> from cast command args (#2019).
 _POSITION_PREFIX = "position="
+# Keyword prefix used to parse position_a=<name>,position_b=<name> pair tokens from
+# cast command args (#2206) — arrives as a single whitespace token, kept whole (not
+# stripped) so _resolve_position_params's `val.startswith("position_a=")` branch fires.
+_POSITION_PAIR_PREFIX = "position_a="
 # Usage hint for the clash command (shared across three error sites in _parse_args).
 _CLASH_USAGE = (
     "Usage: clash <opponent> with <technique> [strain=<n>]"
@@ -330,15 +334,25 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     def _extract_position_keywords(self, raw: str) -> tuple[str, str | None]:
         """Strip ``position=<name>`` or ``position_a=<name>,position_b=<name>`` tokens (#2019).
 
-        Returns ``(remainder, position_str)`` where *position_str* is the raw
-        value after ``position=`` (e.g. ``"center"`` or
-        ``"alpha,bravo"``). ``None`` when no ``position=`` keyword was present.
+        The pair form arrives as a single whitespace token (no space around the
+        comma), so it is captured whole — kept with its ``position_a=`` prefix
+        intact — because ``_resolve_position_params``'s
+        ``val.startswith("position_a=")`` branch (#2206) expects that prefix to
+        still be present. The single form is stripped of its ``position=``
+        prefix, matching the pre-#2206 behavior.
+
+        Returns ``(remainder, position_str)`` where *position_str* is either the
+        raw value after ``position=`` (e.g. ``"center"``) or the full
+        ``position_a=<name>,position_b=<name>`` token. ``None`` when neither
+        keyword was present.
         """
         kept: list[str] = []
         position_val: str | None = None
         for token in raw.split():
             lower = token.lower()
-            if lower.startswith(_POSITION_PREFIX):
+            if lower.startswith(_POSITION_PAIR_PREFIX):
+                position_val = token
+            elif lower.startswith(_POSITION_PREFIX):
                 position_val = token[len(_POSITION_PREFIX) :] or None
             else:
                 kept.append(token)

@@ -1,7 +1,8 @@
 # Combat — Status
 
-**Status:** core party and duel combat ship end-to-end; the frontier is the authored effect palette,
-embodied combat (companions, mounts, war), and *proving* the WIRED-UNPROVEN paths — not the round engine.
+**Status:** core party and duel combat ship end-to-end; the authored effect palette shipped (#1584,
+combat-wired for battlefield shaping by #2206); the frontier is embodied combat (companions, mounts,
+war) and *proving* the WIRED-UNPROVEN paths — not the round engine.
 
 This is the combat **status map**. Per-capability tiers, the MVP bar, and sequencing live in the
 [`player-capability-ledger.md`](player-capability-ledger.md) (the spine — read it first). The
@@ -20,10 +21,35 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - DEFEND halves / INTERPOSE zeroes incoming damage.
 - SUCCOR shelters a named ally from a round-ticked environmental hazard, in both combat and
   non-combat scene rounds (#1744, ADR-0069) — the environmental-DoT sibling of INTERPOSE.
+- **Guardian reactions — best-of check selection and technique-guardian BARRIER (#2207),
+  two journey tests.** Interpose's Melee-Defense twin (seeded per interpose capability,
+  `interpose_content.py`) is reachable on the REAL dispatch path:
+  `dispatch_capability_reaction(select_best_check_rating=True)` rates each guardian's real
+  available reaction actions via `compute_check_rating` and picks the higher-rated one, never
+  inventing an action — proven by a duelist-statted guardian rolling Melee Defense and a
+  reflexes-statted guardian rolling Reflexes (`InterposeBestOfCheckRealPathTest`,
+  `world/combat/tests/test_guardian_reactions.py`). **That test is `@tag("postgres")`** —
+  `apply_condition`'s capability grant uses DISTINCT ON, so its first real gate is CI parity,
+  not the local SQLite fast tier. Separately, a guardian can declare Interpose "with" a known
+  protective technique (`declare_interpose(technique=...)`); the BARRIER flavor's real
+  resolution (guardian's own cast check via `resolve_cast_check_type`, anima debited instead
+  of fatigue, ally damage zeroed) is journey-proven (`TechniqueGuardianBarrierResolutionTest`,
+  SQLite tier). See ADR-0118 for why the technique-guardian roll happens outside
+  `use_technique`.
 - Escalation → Audere offer → accept → real power change.
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).
+- **Ward your allies (#2208, ADR-0118).** Aegis Field / Mirror Ward / Phase Step each gained
+  an ALLY-single (Aegis Ward, Mirror Vigil, Phase Guard — castable in or out of combat) and an
+  ALLY-`FILTERED_GROUP` party-preparation variant (Aegis Communion, Mirror Communion, Phase
+  Communion — out-of-combat only, consent-free per ADR-0045; party `anima_cost` is 2x the
+  single variant's), reusing the existing three `ConditionTemplate` rows with no new
+  ConditionTemplates/triggers/flows. Both reactive-cost paths (fire and round upkeep) now
+  debit the caster (`ConditionInstance.source_character`), falling back to the bearer for
+  self-cast wards, so an ally ward strains its caster rather than a free ride for the ally;
+  an upkeep payer who can't afford the round cost lapses the ward. No in-combat party AoE —
+  deliberately not built.
 - **On-use items as a round action (#2023/#2120).** `combat use <item> [on <target>]`
   (telnet) and `POST /api/combat/{pk}/use_item/` (web) both declare a USE_ITEM
   `CombatRoundAction` through the shared `combat_use` REGISTRY action; round resolution
@@ -43,6 +69,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   than defaulting everyone to the same spot (journey test in `world/combat/tests/
   test_declare_reach_gate.py`). Full telnet parity: `position` / `position <name>`
   (`CmdPosition`) lists/takes/moves the same way the web position panel does.
+- **Technique-driven combat entrance (#2183, ADR-0113).** A hostile technique cast made
+  as an entrance (`enter <technique>=<target>`) seeds/feeds the encounter exactly like a
+  normal declared hostile cast, additionally stamping `CombatRoundAction.from_entrance`
+  so round resolution can fire the GM-facing Dramatic Moment Suggestion check once the
+  real success level is known (`_maybe_suggest_entrance_dramatic_moment`,
+  `world/combat/services.py`; journey test:
+  `world/scenes/tests/test_entrance_cast_threading.py`
+  ::`test_accepted_hostile_entrance_declaration_marked_from_entrance`). A *benign*
+  entrance cast that lands on an already-embattled ally seats the caster into the fight
+  (`seed_or_feed_encounter_from_benign_intervention`) with no opponent row and no stakes
+  lock — the cast already resolved standalone; this only adds the intervener to the
+  scene's live encounter. See [magic.md](../systems/magic.md#technique-entrance-2183).
 - **Tactical encounter map — spatial rendering (#2006).** The position graph (#2005) is
   now rendered, not just listed: `TacticalMap` (`frontend/src/areas/components/`), a
   read-only `@xyflow/react` canvas with occupant avatars per node, edges styled by
@@ -54,14 +92,49 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `position_edges`, via the new `position_graph(room)` service) — unlike the
   ADJACENT-reach-only `position_adjacency`, this keeps impassable/gated edges so
   obstacles are visible. See [areas.md](../systems/areas.md#frontend-built--wired).
+- **Cast-position targeting for the position-consuming effect palette (#2206).**
+  Barricade/Phase Jump/Force Grip previously embedded a placeholder
+  `destination_position_id=0` at seed time (no runtime destination selection); a player
+  now declares a real `areas.Position` (single point for Phase Jump/Force Grip, an
+  endpoint pair for Barricade) at cast-declaration time. `resolve_cast_position_params`
+  validates room-scope + technique reach; the three FKs (`cast_destination`/
+  `cast_position_a`/`cast_position_b`) persist on the `CombatRoundAction` and are
+  forwarded through `CombatTechniqueResolver._apply_conditions` into the shared
+  `apply_technique_conditions` seam. Root-cause fix in the conditions layer: position ids
+  are now stamped onto the `ConditionInstance` (`_stamp_cast_positions`) **before**
+  `CONDITION_APPLIED` fires, replacing a post-hoc helper that raced same-event reactive
+  handlers — this also fixed the previously-broken non-combat live path. Frontend: a
+  reach-greyed, shape-aware Positions picker in `ActionDeclarationCard` plus map-click
+  picking on the tactical map. Telnet needed no changes — #2019's `position=` grammar now
+  actually reaches validation/persistence in combat. Journey-tested at the round seam
+  (`world/combat/tests/test_cast_position_declaration.py`: foreign-room rejection +
+  full declare → resolve → condition → sealed-edge for Barricade). Non-combat web casting
+  still has no position picker (telnet-only there). See
+  [magic.md](../systems/magic.md) (Effect Palette) and [INDEX.md](../systems/INDEX.md)
+  (Combat § "Cast-position targeting") for the full wiring.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
 - Enemy-NPC condition application · thread-pull final outcome. (Combo full journey proven in #2017.)
+- **Guardian-reaction surfaces beyond the two #2207 journey tests above.** Wired but
+  not journey-proven: the technique-guardian BLINK flavor's clean-success ward
+  relocation (`force_move_to_position` to the guardian's own position —
+  `_try_technique_interpose`); the ALLY-opponent guard path
+  (`_try_interpose_for_opponent` in `apply_damage_to_opponent`, shielding a
+  summon — ANY-ALLY declarations only, no named-ally FK to a `CombatOpponent`
+  yet); telnet `combat interpose [ally] with <technique>` (parses correctly per
+  unit coverage, but no end-to-end telnet journey test); and the web Guard panel
+  (`YourTurn`'s ward + technique selects) — typechecked/linted, no e2e run
+  (Playwright is blocked in this devcontainer for every spec, not specific to
+  this feature).
 
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 
-- **Effect palette** — summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field.
+- **Effect palette** — SHIPPED (#1584: summon, reflect, incorporeal, sink, telekinesis, teleport,
+  obstacle, force-field; combat position-targeting #2206; ally/party ward variants #2208). The
+  three position-consuming effects (telekinesis/teleport/obstacle → Force Grip/Phase Jump/Barricade)
+  have real runtime destination selection for combat (#2206) — the non-combat web cast path still
+  lacks a position picker. Remaining per-effect follow-ups live in the capability ledger, not here.
 - **Charm / switch-sides** an enemy NPC; **negotiate / parley** an NPC down (built in this PR,
   #1590/#1591, ADR-0058); **dispel** a condition.
 - **Companions / pets / summons** with breath weapons & ordered abilities.

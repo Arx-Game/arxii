@@ -210,7 +210,15 @@ class DispatchInterposeDelegatesTest(TestCase):
         captured_outcome_fn = None
 
         def _capture_dispatch(  # noqa: PLR0913
-            actor, target, *, challenge_name, approach, error_msg, outcome_fn, extra_modifiers=0
+            actor,
+            target,
+            *,
+            challenge_name,
+            approach,
+            error_msg,
+            outcome_fn,
+            extra_modifiers=0,
+            **kwargs,
         ):
             nonlocal captured_outcome_fn
             captured_outcome_fn = outcome_fn

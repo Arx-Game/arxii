@@ -46,6 +46,10 @@ _SUBVERBS: dict[str, str] = {
 _ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
 _OPPONENT_SUBVERBS = {"demoralize", "taunt", "parley"}
 
+# Trailing-clause separator for ``interpose [ally] with <technique>`` (#2207) —
+# mirrors ``CmdClashCommit``'s ``" with "`` split in ``commands/combat.py``.
+_WITH_SEPARATOR = " with "
+
 
 class CmdCombat(_CombatCommandMixin, DispatchCommand):
     """Take a combat action other than casting or clashing.
@@ -54,7 +58,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat                      — show your combat status + available actions
         combat flee                 — declare a desperate flee this round
         combat cover <ally>         — cover an ally's escape
-        combat interpose [ally]     — guard an ally (or any ally) from harm
+        combat interpose [ally] [with <technique>] — guard an ally (or any ally) from
+                                     harm, optionally carrying a known protective technique
         combat succor <ally>        — shelter an ally from environmental hazards
         combat use <item> [on <target>] — use a held on-use item this round
         combat rally <ally>         — inspire an ally, bolstering their next action
@@ -101,8 +106,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         if self._subverb == "cover":  # noqa: STRING_LITERAL
             return {"ally_participant_id": self._resolve_ally_pk(self._require_rest("an ally"))}
         if self._subverb == "interpose":  # noqa: STRING_LITERAL
-            ally = self._resolve_ally_pk(self._rest) if self._rest else None
-            return {"ally_participant_id": ally}
+            return self._resolve_interpose_args(self._rest)
         if self._subverb == "succor":  # noqa: STRING_LITERAL
             return {"ally_participant_id": self._resolve_ally_pk(self._require_rest("an ally"))}
         if self._subverb == "rally":  # noqa: STRING_LITERAL
@@ -122,6 +126,40 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             msg = f"Usage: combat {self._subverb} <{what}>."
             raise CommandError(msg)
         return self._rest
+
+    def _resolve_interpose_args(self, text: str) -> dict[str, Any]:
+        """Parse ``[ally] [with <technique>]`` for the interpose subverb (#2207).
+
+        Both clauses are optional: bare ``combat interpose`` guards any ally with a
+        plain declaration; ``combat interpose <ally>`` names a specific ally;
+        ``with <technique>`` (order-independent trailer split on ``" with "``,
+        case-insensitive — mirrors ``CmdClashCommit``'s split, `commands/combat.py`)
+        carries a known protective technique into the declaration. The technique
+        name is resolved via `_find_technique_id`, which already gates on the caller
+        knowing it — the service-layer check in ``declare_interpose`` is
+        defense-in-depth for non-telnet callers.
+        """
+        # Pad with spaces so a bare "with <technique>" (no ally clause) still
+        # matches the " with " separator at position 0; both slices come off the
+        # SAME padded string so the indexes stay consistent.
+        padded = f" {text} "
+        ally_text = text
+        technique_text = ""
+        with_index = padded.lower().find(_WITH_SEPARATOR)
+        if with_index != -1:
+            ally_text = padded[:with_index].strip()
+            technique_text = padded[with_index + len(_WITH_SEPARATOR) :].strip()
+            if not technique_text:
+                msg = "Usage: combat interpose [ally] with <technique>."
+                raise CommandError(msg)
+
+        ally_text = ally_text.strip()
+        kwargs: dict[str, Any] = {
+            "ally_participant_id": self._resolve_ally_pk(ally_text) if ally_text else None,
+        }
+        if technique_text:
+            kwargs["technique_id"] = self._find_technique_id(technique_text)
+        return kwargs
 
     def _resolve_ally_pk(self, name: str) -> int:
         """Return the pk of the active ally named *name* in the caller's encounter."""
@@ -320,7 +358,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         """Print resource/risk state + the declared action + available subverbs."""
         lines = [
             "|wCombat actions|n: "
-            "flee, cover <ally>, interpose [ally], succor <ally>, use <item> [on <target>], "
+            "flee, cover <ally>, interpose [ally] [with <technique>], succor <ally>, "
+            "use <item> [on <target>], "
             "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, join, leave, ready, "
             "combo <name>, revert, yield"
         ]

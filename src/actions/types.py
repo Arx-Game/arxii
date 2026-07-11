@@ -255,6 +255,19 @@ class PlayerAction:
     # can pre-filter selectable targets by position before declaring.
     reach: str | None = None
 
+    # Guardian-declaration flavor for combat cast techniques (#2207):
+    # PROTECTIVE_FLAVOR_BARRIER / _BLINK / _REDIRECT (world.magic.services.targeting),
+    # or None when the technique carries no protective reactive-trigger handler (or
+    # for non-combat actions). Lets the frontend Guard panel offer only techniques
+    # that actually protect a ward.
+    protective_flavor: str | None = None
+
+    # Which cast-position input (if any) the technique's effects consume:
+    # "pair" (origin+destination), "single" (destination only), or "none" (default).
+    # Carried so the frontend knows whether to prompt for battlefield position(s)
+    # before declaring a combat cast (#2206).
+    position_target_shape: str = "none"
+
     # Soulfray + fury declaration context for combat cast techniques (#1543).
     # None/empty for non-cast actions; populated by _combat_actions for casts.
     soulfray_warning: SoulfrayWarning | None = None

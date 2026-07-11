@@ -90,7 +90,11 @@ def _duration_from_instance(instance: ConditionInstance | None) -> int | None:
 
 
 def _try_spend_reactive(instance: ConditionInstance) -> bool:
-    """Spend the template's reactive_anima_cost from the bearer; False if unaffordable.
+    """Spend the reactive anima cost, debiting the APPLIER (caster) when known.
+
+    Payer rule (#2208): ``source_character`` pays when set — an ally ward
+    strains its caster, never its bearer. Self-cast wards are unchanged
+    (source == bearer). Unaffordable → False (silent fizzle), as before.
 
     Returns True immediately when cost is 0 (free-to-fire condition).
     Does NOT use select_for_update — single-threaded game tick is the expected
@@ -99,7 +103,8 @@ def _try_spend_reactive(instance: ConditionInstance) -> bool:
     cost = instance.condition.reactive_anima_cost
     if cost <= 0:
         return True
-    anima = CharacterAnima.objects.filter(character=instance.target).first()
+    payer = instance.source_character or instance.target
+    anima = CharacterAnima.objects.filter(character=payer).first()
     if anima is None or anima.current < cost:
         return False
     anima.current -= cost

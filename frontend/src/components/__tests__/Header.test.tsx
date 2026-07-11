@@ -24,6 +24,10 @@ vi.mock('@/narrative/components/UnreadNarrativeBadge', () => ({
   UnreadNarrativeBadge: () => <div data-testid="unread-badge" />,
 }));
 
+vi.mock('@/mail/queries', () => ({
+  useUnreadMailCount: () => 0,
+}));
+
 vi.mock('@/rituals/queries', () => ({
   useRitualSessionInbox: () => ({
     data: [],

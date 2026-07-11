@@ -272,7 +272,35 @@ They do not use the command system, dispatchers, or handlers.
   commands in `src/commands/currency.py`: `CmdDeposit` (`deposit <item>`),
   `CmdSteal` (`steal <item>` / `steal <item> from <container>`, mirrors
   `CmdGet`'s two grammars but always dispatches `StealAction`), `CmdSecure`
-  (`secure <container>=<open|friends|owner_only>`).)
+  (`secure <container>=<open|friends|owner_only>`).
+  `movement.py` (#2163) — alongside the existing `GetAction`/`DropAction`/`GiveAction`/
+  `TraverseExitAction`/`HomeAction`, the "go there" auto-walk pair: `TravelAction`
+  (key `"travel_to"`, `target_type=SINGLE`) computes a route via
+  `world.areas.positioning.travel.find_route()` (same-Area, public-rooms-only
+  frontier-batched BFS) and paces one hop per `hop_delay_seconds` via
+  `evennia.utils.delay()`, reusing `check_exit_traversal`/`traverse_exit` per hop
+  so room-state broadcasts match a manual walk; a per-caller
+  `.ndb.active_travel_token` makes re-dispatch/cancellation safe — a stale
+  scheduled callback no-ops instead of moving the player unexpectedly.
+  `StopTravelAction` (`"stop_travel"`, `target_type=SELF`) cancels the pending
+  `.ndb.active_travel_task` and clears the token. Shared by telnet `CmdTravel`
+  (`travel <name>` / `travel stop`, `src/commands/travel.py`) and the web "Go
+  there" buttons on the scene browser + presence panel.
+  `social.py` (#2183, ADR-0113) — `EntranceAction` (key `"entrance"`) gains a
+  technique-driven path: `execute()` branches on a `technique_id` kwarg to
+  `_execute_technique_entrance`, which mirrors `CastTechniqueAction.execute` (scene/
+  persona/technique/target resolution, soulfray gating) but routes the outcome through
+  a deferral matrix instead of a flat success/failure — a technique cast IS the
+  entrance's check (one roll, not two), so flourish/disposition/the Dramatic Moment
+  Suggestion (see `world/magic/CLAUDE.md` "Dramatic Moment Suggestion") fire whenever
+  the real success level becomes known: immediately (inline resolution), at combat
+  round resolution (hostile, `CombatRoundAction.from_entrance`), or at consent-accept
+  (`SceneActionRequest.originated_as_entrance`). Reached via telnet `enter
+  <technique>[=<target>]` and the web `EntranceTechniqueAttachment` popover, both via
+  `action.run()`; `dramatic_moments.py`'s `ConfirmDramaticMomentSuggestionAction` /
+  `DismissDramaticMomentSuggestionAction` (account-authorized, mirroring
+  `events.py`'s host-lifecycle actions) close the recognition loop a qualifying
+  entrance opens.
 
   **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
   (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager
@@ -402,6 +430,28 @@ on sync-with-main. Resolution is mechanical: keep **both** sides' appends
 (concatenate the two Action lists / two key sets), never drop either — dropping
 one breaks the exact-match test. Verify post-merge with `just test-fast
 actions`; a failure there means a key was dropped or duplicated.
+
+**`objectdb_target_kwargs` does NOT auto-resolve on the REST dispatch path** (#2163,
+a real bug that shipped past all per-task tests because they mocked the dispatch
+hook). `objectdb_target_kwargs: ClassVar[frozenset[str]]` (declared on e.g.
+`TraverseExitAction`, `items.py`'s several actions) is consumed **only** by the
+websocket `execute_action` inputfunc's `_resolve_registry_kwargs`
+(`server/conf/inputfuncs.py`) — and even there, only for kwargs whose wire key ends
+in `_id` (`key.endswith("_id") and key[:-3] in objectdb_targets`), so the kwarg must
+be named `<field>_id` (e.g. `target_id`), not the bare field name. The REST dispatch
+path (`dispatch_player_action` → `_dispatch_registry`,
+`actions/player_interface.py`) does **no** ObjectDB resolution at all — it passes
+raw kwargs straight to `action_obj.run()`. If your action takes an ObjectDB-typed
+kwarg and is dispatched from the web via `useDispatchPlayerAction`/`postDispatchAction`
+(REST, not the websocket), **resolve the id yourself inside `execute()`** — see
+`_resolve_room()` in `definitions/locations.py:92-100` for the established pattern
+(`ObjectDB.objects.filter(pk=kwargs.get("foo")).first()` when the value is an int,
+falling through unchanged when it's already an ObjectDB, so the same `execute()`
+works for both a telnet `.run()` call passing a resolved object and a REST dispatch
+passing a raw id). Declaring `objectdb_target_kwargs` is harmless but does nothing
+for a REST-only action — don't rely on it as your only correctness guarantee, and
+write at least one test that calls `.run()` with a plain int in that kwarg (not a
+mock, not a pre-resolved object) to prove the REST shape actually works.
 
 ## Enhancement System
 

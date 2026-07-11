@@ -41,13 +41,24 @@ class AdvancementResistFailureKind(models.TextChoices):
 
 @dataclass(frozen=True)
 class BulkConditionApplication:
-    """One target/template/per-entry-knobs binding for bulk_apply_conditions."""
+    """One target/template/per-entry-knobs binding for bulk_apply_conditions.
+
+    ``cast_destination_id``/``cast_position_a_id``/``cast_position_b_id`` (#2206)
+    are optional cast-time position FKs, stamped onto the created
+    ``ConditionInstance`` BEFORE ``CONDITION_APPLIED`` is emitted — same-event
+    reactive handlers (``create_obstacle_on_condition`` and siblings, #2019)
+    read them off ``payload.instance`` synchronously, so they must already be
+    set at creation time rather than patched on after the event has fired.
+    """
 
     target: "ObjectDB"
     template: "ConditionTemplate"
     severity: int = 1
     duration_rounds: int | None = None
     stack_count: int = 1
+    cast_destination_id: int | None = None
+    cast_position_a_id: int | None = None
+    cast_position_b_id: int | None = None
 
 
 @dataclass(frozen=True)

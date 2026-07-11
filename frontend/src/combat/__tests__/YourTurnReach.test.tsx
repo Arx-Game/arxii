@@ -31,6 +31,7 @@ vi.mock('@/combat/queries', () => ({
   useDispatchPlayerAction: vi.fn(),
   useFleeMutation: vi.fn(),
   useCoverMutation: vi.fn(),
+  useGuardMutation: vi.fn(),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
@@ -140,6 +141,7 @@ function setupMocks() {
   >;
   const mockedUseFleeMutation = combatQueries.useFleeMutation as ReturnType<typeof vi.fn>;
   const mockedUseCoverMutation = combatQueries.useCoverMutation as ReturnType<typeof vi.fn>;
+  const mockedUseGuardMutation = combatQueries.useGuardMutation as ReturnType<typeof vi.fn>;
 
   mockedUseAvailableCombos.mockReturnValue({ data: [], isLoading: false, isError: false });
   mockedUseUpgradeCombo.mockReturnValue({ mutate: vi.fn(), isPending: false });
@@ -149,6 +151,7 @@ function setupMocks() {
   });
   mockedUseFleeMutation.mockReturnValue({ mutate: vi.fn(), isPending: false });
   mockedUseCoverMutation.mockReturnValue({ mutate: vi.fn(), isPending: false });
+  mockedUseGuardMutation.mockReturnValue({ mutate: vi.fn(), isPending: false });
 }
 
 /** Build a PlayerAction with the given technique_id, reach, and optional action_category. */

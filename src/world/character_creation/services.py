@@ -721,6 +721,7 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
     )
     from world.mechanics.constants import RESONANCE_CATEGORY_NAME  # noqa: PLC0415
     from world.mechanics.models import CharacterModifier, ModifierSource  # noqa: PLC0415
+    from world.npc_services.regard import reconcile_distinction_regard_seeds  # noqa: PLC0415
 
     # Build ModifierSource instances for all effects across all distinctions
     sources = []
@@ -755,6 +756,7 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
     for char_dist in char_distinctions:
         reconcile_distinction_resonance_grants(char_dist)
         reconcile_distinction_asset_grants(char_dist)
+        reconcile_distinction_regard_seeds(char_dist)
 
 
 def _create_true_form(character: ObjectDB, draft_data: dict) -> None:

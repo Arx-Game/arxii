@@ -1129,6 +1129,47 @@ Raises `EndorsementValidationError` (unclaimed resonance) or `DramaticMomentCapE
 - `DramaticMomentTagDialog.tsx` — modal dialog for type selection + confirmation.
 - Badge displayed on tagged interactions in the scene log.
 
+#### Dramatic Moment Suggestion — the technique-entrance recognition bridge (#2183)
+
+A qualifying **Technique Entrance** (see "Technique Entrance" below) does not auto-tag a
+Dramatic Moment — it surfaces a `DramaticMomentSuggestion` a GM later confirms or dismisses.
+Recognition stays a human-adjudicated nudge, never a mechanical auto-grant (ADR-0113).
+
+- `DramaticMomentType.suggest_on_technique_entrance` (bool) / `.suggestion_min_success_level`
+  (`PositiveSmallIntegerField`) — opts a moment type into the bridge and sets the cast
+  success-level floor (`>=`) that must be cleared.
+- `DramaticMomentSuggestion` (`models/dramatic_moment.py`) — FKs `moment_type` (PROTECT),
+  `character_sheet` (CASCADE), `scene` (nullable/SET_NULL), `interaction` (nullable/SET_NULL,
+  `db_constraint=False` — the entrance pose), `interaction_timestamp` (denormalized).
+  Fields: `success_level`, `status` (`SuggestionStatus`: PENDING/CONFIRMED/DISMISSED),
+  `resolved_by` (AccountDB, PROTECT), `confirmed_tag` (OneToOne → `DramaticMomentTag`, the
+  tag minted on confirmation). Unique per `(moment_type, character_sheet, scene)` while
+  PENDING.
+- **Services (`services/gain.py`):** `maybe_suggest_dramatic_moments(*, character_sheet,
+  scene, success_level, interaction=None) -> list[DramaticMomentSuggestion]` — scans
+  flagged `DramaticMomentType` rows meeting the success-level floor, skips unclaimed
+  resonance / an already-spent `per_scene_cap`, `get_or_create`s idempotently.
+  `resolve_dramatic_moment_suggestion(suggestion, *, resolver, confirm)` — confirm mints a
+  real `DramaticMomentTag` via `create_dramatic_moment_tag`; dismiss closes it out with no
+  reward. Raises `DramaticMomentSuggestionAlreadyResolved` on a non-PENDING suggestion.
+- **Actions (`actions/definitions/dramatic_moments.py`):**
+  `ConfirmDramaticMomentSuggestionAction` (key `"confirm_dramatic_moment_suggestion"`) /
+  `DismissDramaticMomentSuggestionAction` (key `"dismiss_dramatic_moment_suggestion"`) —
+  **account-authorized** (mirrors `actions/definitions/events.py`'s host-lifecycle
+  actions: `actor=None`, `account=<resolver>`), gated on `_account_can_gm_scene` (staff,
+  or `scene.is_gm(account)`, or `scene.is_owner(account)`).
+- **Web:** `DramaticMomentSuggestionViewSet` (`views.py`) — `GET
+  /api/magic/dramatic-moment-suggestions/?scene=<id>` (PENDING list, same GM/owner/staff
+  gate); `POST .../{id}/confirm/` / `POST .../{id}/dismiss/` dispatch the actions above.
+- **Telnet:** `CmdMoment` (`commands/dramatic_moments.py`, key `"moment"`) — `moment
+  suggestions|confirm <id>|dismiss <id>`, account-authorized like the web surface.
+- **Frontend:** `DramaticMomentSuggestionChip` (`frontend/src/scenes/components/`),
+  mounted in `PoseUnit` for the caller's own entrance poses.
+- **Seed content:** `ensure_dramatic_entrance_content()` (`factories.py`) seeds the "Grand
+  Entrance" `DramaticMomentType` (self-contained — get-or-creates its own "Fervor"
+  Resonance + "Celestial" Affinity) with `suggest_on_technique_entrance=True` /
+  `suggestion_min_success_level=3`.
+
 ### Entry-Flourish Declaration (#1140)
 
 On a **successful Entrance social action**, a poll-able offer is created so the entrant
@@ -1169,6 +1210,11 @@ the complementary half of the entrance moment).
 - `ResolveFlourishOfferAction` (key `"resolve_entry_flourish"`) — telnet + web converge
   here; calls `resolve_entry_flourish_offer(offer, resonance=resonance)` and stores the
   result under `ActionResult.data["entry_flourish_result"]`.
+- **Technique-driven entrance (#2183):** `EntranceAction.execute` branches on a
+  `technique_id` kwarg to `_execute_technique_entrance` instead of the plain
+  ActionTemplate check path — see "Technique Entrance" below. The bare-entrance
+  ActionTemplate path (this section) is unchanged and byte-identical when no
+  technique is attached.
 
 **Telnet commands (`commands/social/entrance_flourish.py`):**
 - `CmdEnter` — thin telnet wrapper that dispatches `EntranceAction`.
@@ -1196,6 +1242,37 @@ the complementary half of the entrance moment).
   `useRespondToEntryFlourish`.
 
 **GainSource:** `ENTRY_FLOURISH` in `world/magic/constants.py` (`GainSource` TextChoices).
+
+### Technique Entrance (#2183, ADR-0113)
+
+A "make an entrance" whose check IS a technique cast — one roll, not two (ADR-0113): the
+technique's own success level substitutes for the entrance's social check entirely and
+drives every downstream consequence (flourish, disposition, the Dramatic Moment Suggestion
+above). See `docs/systems/magic.md`'s "Technique Entrance" section for the full deferral
+matrix table; the summary:
+
+- **Dispatch:** telnet `enter <technique>[=<target>]` (`CmdEnter`,
+  `commands/social/entrance_flourish.py`) and the web `EntranceTechniqueAttachment`
+  popover both reach `EntranceAction._execute_technique_entrance`
+  (`actions/definitions/social.py`) via `action.run()`. The web REST caller
+  (`SceneActionRequestViewSet._create_technique_entrance`,
+  `world/scenes/action_views.py`, #2183 Task 8 fold-in) dispatches the identical seam —
+  **not** the generic technique-as-`ActionEnhancement` consent path
+  `SceneActionRequestViewSet.create()` otherwise uses (that path has no
+  `ActionEnhancement` row for `"entrance"` and always 400ed before this fix).
+- **Deferral matrix** (why a success level isn't always known immediately): resolved
+  inline → full hooks now; hostile → seeds/feeds combat, flourish only, suggestion
+  deferred to combat round resolution (`from_entrance` marker, see
+  `docs/systems/INDEX.md`'s Combat section); PENDING consent/risk-gated →
+  `SceneActionRequest.originated_as_entrance` defers all hooks to
+  `resolve_accepted_cast`; soulfray gate unconfirmed → a `PendingCast` carrying an
+  `"entrance"` marker re-dispatches through the `"entrance"` REGISTRY action (not
+  `"cast_technique"`) on `accept soulfray` (`world/magic/offer_handlers.py`
+  `SoulfrayPendingHandler`).
+- **Shared hook helper:** `run_entrance_success_hooks(actor, scene, *, success_level,
+  target_persona_id, technique, interaction=None)` (`actions/definitions/social.py`) —
+  one signature, three call sites (declaration-time inline/hostile branches,
+  accept-time deferred hooks, combat round-resolution hook), no drift.
 
 ### Offer handler registry (`commands/offer_registry.py`)
 

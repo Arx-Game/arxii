@@ -11,6 +11,7 @@ import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trig
 import { useAppSelector } from '@/store/hooks';
 import { useOpenSubmissionCount } from '@/staff/queries';
 import { UnreadNarrativeBadge } from '@/narrative/components/UnreadNarrativeBadge';
+import { UnreadMailBadge } from '@/mail/components/UnreadMailBadge';
 import { useRitualSessionInbox } from '@/rituals/queries';
 
 const links = [
@@ -100,6 +101,9 @@ export function Header() {
               <UnreadNarrativeBadge />
             </NavigationMenuItem>
             <NavigationMenuItem>
+              <UnreadMailBadge />
+            </NavigationMenuItem>
+            <NavigationMenuItem>
               <UserNav />
             </NavigationMenuItem>
           </NavigationMenuList>
@@ -142,6 +146,7 @@ export function Header() {
                 )}
                 <ModeToggle />
                 <UnreadNarrativeBadge />
+                <UnreadMailBadge />
                 <UserNav />
               </nav>
             </SheetContent>

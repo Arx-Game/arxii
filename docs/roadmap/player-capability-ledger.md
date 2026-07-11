@@ -76,7 +76,7 @@ in-fiction trigger is plausible.
 | **Remove / dispel** a condition (cleanse) | ✅ PROVEN | `TechniqueRemovedCondition` payload + `remove_technique_conditions` (`world/magic/services/condition_application.py`) wired into the cast seam; honors `can_be_dispelled` + opposed `cure_check_type`/`cure_difficulty`; E2E `world/magic/tests/integration/test_dispel_cast_e2e.py` (#1585, ADR-0064) | done |
 | **Charm / switch-sides** an enemy NPC | ✅ PROVEN | `derive_allegiance` → `select_npc_actions` (#1590, ADR-0058) | MVP |
 | **Negotiate / parley** an NPC down | ✅ PROVEN | `apply_social_disposition_delta` → `adjust_npc_affection`; durable + ephemeral tiers (#1591, ADR-0058) | MVP |
-| **Effect palette**: summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field | ✅ PROVEN | `effect_palette_content.py`; 9 seeded effects; summon E2E `integration_tests/pipeline/test_effect_summon_telnet_e2e.py`; reactive interceptor E2Es `integration_tests/pipeline/test_effect_reactive_families.py` (#1584) | done |
+| **Effect palette**: summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field | ✅ PROVEN (mixed) | `effect_palette_content.py`; 9 seeded effects; summon + the three reactives PROVEN E2E (`integration_tests/pipeline/test_effect_summon_telnet_e2e.py`, `integration_tests/pipeline/test_effect_reactive_families.py`, #1584). Barricade/Phase Jump/Force Grip (obstacle/teleport/telekinesis) are position-targeted techniques — **#2206** wired runtime destination selection into combat (declaration → `resolve_cast_position_params` → resolver → condition handlers), journey-tested at the round seam (`test_cast_position_declaration.py`); non-combat web casting still telnet-only for positions (`position=` grammar, #2019). | done |
 | **Companions / pets / summons** w/ breath weapons & ordered abilities | ✅ PROVEN (basic) | ALLY `CombatOpponent` via `allegiance`/`summoned_by`; opponent-vs-opponent damage; advanced ordered abilities are a follow-up | done (ADR-0059; #672 folds in) |
 | **Roles grant techniques** (resonance-spec at lvl 3) | ✅ PROVEN | **ADR-0055** (the specialization engine); `CovenantRole` inherits `AbstractSpecializedVariant` + `fire_variant_discoveries` generalizes the discovery beat across `target_kind`; proven by `covenants/tests/integration/test_resonance_subrole_flow.py` (covenant) + `magic/tests/integration/test_gift_specialization_e2e.py` (gift) | done |
 | **War / battle system** | ✅ PROVEN (spine) | **#1592** — spine landed: `Battle` (1:1 Scene extension), `BattleSide` / `BattlePlace` / `BattleUnit` / `BattleRound` / `BattleParticipant` / `BattleActionDeclaration`; `BattleRoundContext` wired into `get_active_round_context`; services + REGISTRY actions + `CmdBattle` (`battle declare\|round\|resolve\|conclude`); E2E `test_battle_telnet_e2e.py` proves stage → declare → resolve → conclude. Deferred: peril/rescue (#1710), AFK knobs (#1711), battle page (#1712), Audere weighting (#1713), rich type-matchups (#1714), naval/siege (#1715), campaign-stakes propagation + win-gated Legend (#1716). | soon |
@@ -135,8 +135,19 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
   proven E2E; reactive interceptor trio proven E2E; ADR-0059 + ADR-0060). Remaining effects work:
   charm/switch-sides (#1590, allegiance-flip); NPC negotiation (#1591); condition removal/dispel
   (#1585, shipped — `TechniqueRemovedCondition` + `remove_technique_conditions`, ADR-0064).
-  Teleport/obstacle/telekinesis have placeholder position IDs — runtime destination selection
-  deferred to a follow-up issue.
+  Teleport/obstacle/telekinesis runtime destination selection — **SHIPPED for combat by #2206**:
+  three nullable FKs on `CombatRoundAction` (`cast_destination`/`cast_position_a`/
+  `cast_position_b`), `resolve_cast_position_params` validates room-scope + technique reach at
+  declaration, and position ids are stamped onto the `ConditionInstance` before
+  `CONDITION_APPLIED` fires (`_stamp_cast_positions`, `world/conditions/services.py` — this also
+  fixed the previously-broken non-combat live path). Wired declaration → resolver → condition
+  handlers, journey-tested at the round seam. Web non-combat casting still has no position picker
+  (telnet-only there via #2019's `position=` grammar). **Ward-your-allies — SHIPPED #2208**
+  (ADR-0118): each of the three reactive wards (Aegis Field/Mirror Ward/Phase Step) gained an
+  ALLY-single and an ALLY-`FILTERED_GROUP` (party, out-of-combat only, 2x anima_cost) Technique
+  variant reusing the same `ConditionTemplate`; both reactive-fire and round-upkeep anima costs now
+  debit the applier (`ConditionInstance.source_character`), falling back to the bearer for
+  self-wards, so ally wards strain the caster. No in-combat party AoE (deliberately deferred).
 - **Combat systems:** war/battle system; mounts & flying (P2, no-improv-flagged); ranged/archery enforcement.
 
 ### Prove-it (WIRED-UNPROVEN — write the journey E2E, fix what it exposes)

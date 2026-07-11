@@ -143,7 +143,12 @@ The positive relationship-building loop is reachable from both web and telnet:
 
 - **Web** — `RelationshipUpdateViewSet` exposes four POST endpoints (`first_impression` /
   `develop` / `capstone` / `redistribute`) that dispatch the Actions via `action.run()`.
-  Relationship state list/detail reads live on `CharacterRelationshipViewSet` (read-only).
+  Relationship state list/detail reads live on `CharacterRelationshipViewSet` (read-only),
+  **privacy-scoped** (#2159, ADR-0117): numeric state is author-private, so `get_queryset`
+  filters to rows whose `source` is one of the caller's own tenure-owned characters (same
+  tenure join as `RelationshipUpdateViewSet`, never Evennia's live-puppet `db_account`), OR
+  `is_soul_tether=True` (a ratified carve-out — the tether panel on a foreign character's
+  sheet depends on reading that row).
   The same `RelationshipUpdateViewSet` also mixes in `ListModelMixin` for a narrow `GET`
   list route (#2031) — **not** a general writeup browser: scoped to `RelationshipUpdate`
   rows where the requesting user's account has a **current RosterTenure** (mirroring
@@ -161,6 +166,25 @@ The positive relationship-building loop is reachable from both web and telnet:
   a sibling character's writeups as the viewed character's. Read serializers expose
   `kudos_count` and `viewer_has_kudosed` on every writeup row (annotated via
   `Count`/`Exists` to avoid N+1). Complaints never appear in any player-facing serializer.
+  The same viewset also exposes a `GET timeline` action (#2159) — a merged, type-tagged
+  (`kind`: update/development/capstone) feed across all three writeup models, ordered
+  `-created_at`. Two mutually exclusive query modes (both or neither → 400):
+  `?about_character=<CharacterSheet pk>` returns every non-PRIVATE writeup about that
+  character from any author, plus PRIVATE writeups where the caller's account is the
+  author's or the subject's — the queryset-level generalization of
+  `services._can_view_writeup` (all scoping happens in the DB query, never Python-side
+  row filtering); `?relationship=<CharacterRelationship pk>` returns one relationship's
+  full history including PRIVATE, restricted to callers who are its tenure-owned source
+  (404 if the relationship doesn't exist, 403 if the caller isn't its source). The three
+  per-model querysets are projected to a shared column shape and combined with
+  `.union()` (each branch's default `Meta.ordering` cleared via a bare `.order_by()` —
+  SQLite rejects `ORDER BY` inside a union branch), then paginated via the viewset's own
+  `pagination_class`. Both timeline arms are consumed by `RelationshipPanel` (#2159,
+  `frontend/src/relationships/components/`) — the `?relationship=` arm backs each row's
+  expandable history on the caller's own-sheet `OwnRelationshipsList` (alongside a detail
+  fetch for `track_progress`, since the list serializer omits it); the `?about_character=`
+  arm is the entirety of `ForeignRelationshipTimeline` on a foreign sheet — deliberately no
+  numeric relationship state there, matching the author-private scoping below.
 - **Telnet** — `CmdRelationship` (`relationship <subverb>`) runs the same Actions; it adds
   telnet-only `relationship list` and `relationship show <name|#>` read surfaces (the web provides
   these implicitly).
@@ -172,12 +196,16 @@ not compel or provoke the target's behavior (ADR-0024).
 ### Writeup feedback (#1537) [BUILT & WIRED]
 - **Web** — `RelationshipUpdateViewSet` POST `kudos` endpoint dispatches
   `GiveWriteupKudosAction`; POST `complaint` endpoint dispatches `FileWriteupComplaintAction`.
-  Both run through `action.run()` (ADR-0001).
+  Both run through `action.run()` (ADR-0001). A "Report" button beside Commend on the
+  Writeups subsection (#2159, `WriteupComplaintDialog`) POSTs `{writeup_type, writeup_id,
+  reason}` to `.../complaint/` — the filing surface, not a resolution one: the complainant
+  gets a toast confirming it was filed and nothing else (`WriteupComplaint` still never
+  appears in any player-facing serializer, so there's no outcome to show).
 - **Telnet** — `CmdRelationship` adds `relationship kudos <ref>` and
   `relationship complain <ref>=<reason>`, where `<ref>` is `u<pk>` / `d<pk>` / `c<pk>` as shown
   by `relationship show`.
 - **Admin** — `WriteupComplaint` is registered in Django admin (django-unfold style) for staff
-  triage. No player-facing complaint surface.
+  triage.
 - **FK direction** — feedback models live in `relationships`; the kudos primitive (`KudosPointsData`
   etc.) is not polluted with FK back-pointers (ADR-0010). No denormalized kudos count column —
   derived at read time (ADR-0014).
@@ -213,3 +241,12 @@ not compel or provoke the target's behavior (ADR-0024).
   (`world/seeds/social_relationships.py`). Flirt/Seduce success-effect content wiring is a follow-up.
 - **Secret reputation consequences (#1429):** a secret's persona-victim, on learning who wronged
   them, registers a grievance via `register_grievance` (the relationship effect they *decide*).
+- **NpcRegard mirror-bridge (#2039):** `mirror_npc_regard_event_to_track(event)` reuses
+  `apply_affection_shift`'s track-selection (`TrackSystemKey.REGARD`/`FRICTION` by sign) and
+  capstone write-shape, but dedups on the `NpcRegardEvent` row itself rather than a
+  `Scene`+`ConsequenceEffect` — called automatically by `world.npc_services.regard
+  .record_npc_regard_event` for every nemesis/toxic-bond buildup event. Always writes
+  `source=<PC's own CharacterSheet>, target=<NPC's CharacterSheet>` regardless of which side
+  of the underlying `NpcRegardEvent` caused it, matching #2013's hated-foe surge read direction
+  (`world.combat.escalation`) — lets that already-shipped surge pick up nemesis buildup with
+  zero changes to its own code.

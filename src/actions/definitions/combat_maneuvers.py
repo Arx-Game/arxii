@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
+    from world.magic.models import Technique
 
 # Repeated ActionResult failure messages, extracted to satisfy S1192.
 NOT_IN_ACTIVE_ROUND_MESSAGE = "You are not in an active combat round."
@@ -77,6 +78,15 @@ def _resolve_ally(
         pk=ally_participant_id,
         encounter=participant.encounter,
     ).first()
+
+
+def _resolve_technique(technique_id: int | None) -> Technique | None:
+    """Resolve a technique pk to a Technique instance, or None when not supplied."""
+    if technique_id is None:
+        return None
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    return Technique.objects.filter(pk=technique_id).first()
 
 
 def _resolve_opponent(
@@ -186,6 +196,7 @@ class InterposeAction(Action):
         actor: ObjectDB,
         context: ActionContext | None = None,
         ally_participant_id: int | None = None,
+        technique_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         from world.combat.services import declare_interpose  # noqa: PLC0415
@@ -197,8 +208,11 @@ class InterposeAction(Action):
         ally = _resolve_ally(participant, ally_participant_id)
         if ally_participant_id is not None and ally is None:
             return ActionResult(success=False, message="No such ally in this encounter.")
+        technique = _resolve_technique(technique_id)
+        if technique_id is not None and technique is None:
+            return ActionResult(success=False, message="No such technique.")
         try:
-            declare_interpose(participant, ally)
+            declare_interpose(participant, ally, technique=technique)
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
         return ActionResult(success=True, message="You stand ready to interpose.")

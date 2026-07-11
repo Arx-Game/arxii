@@ -30,6 +30,27 @@ export interface ActionContext {
 }
 
 /**
+ * Cast-time position-targeting shape for a technique (#2206). Mirrors the
+ * backend `position_target_shape` value: "none" (no position target),
+ * "single" (one destination position), or "pair" (two positions, e.g. an
+ * origin/destination pair).
+ */
+export type PositionTargetShape = 'none' | 'single' | 'pair';
+
+/**
+ * Cast-time position selection for a technique whose `PositionTargetShape`
+ * is "single" or "pair" (#2206). Lifted in `YourTurn`, threaded into the
+ * focused `ActionDeclarationCard` via props (`castPosition` /
+ * `onCastPositionChange`); merged into the focused dispatch's kwargs as
+ * `position_params` on submit.
+ */
+export interface CastPosition {
+  destinationId?: number;
+  pairA?: number;
+  pairB?: number;
+}
+
+/**
  * One selectable combatant in the focused-target picker (#1001a). The shared
  * ActionDeclarationCard receives these from the combat panel; scene usage omits
  * them and falls back to the kind-only selector.

@@ -168,7 +168,7 @@ def mint_accusation(  # noqa: PLR0913 — keyword-only; each arg is a distinct s
     if level > ACCUSATION_MAX_LEVEL:
         msg = "That accusation is too grave to mint without evidence."
         raise SecretError(msg, user_message=msg)
-    return author_secret(
+    secret = author_secret(
         subject_sheet=subject_sheet,
         provenance=SecretProvenance.ACCUSATION,
         level=level,
@@ -179,6 +179,17 @@ def mint_accusation(  # noqa: PLR0913 — keyword-only; each arg is a distinct s
         mission_deed=mission_deed,
         scene=scene,
     )
+    # The author knows their own accusation — so a Level-1 smear is immediately gossipable by
+    # its framer (`gossip plant`, #1572), the light-tier spread of the counter-play (#1825).
+    # Best-effort: an author with no roster entry (an edge case) simply gets no knowledge row.
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    author_entry = RosterEntry.objects.filter(
+        character_sheet=accuser_persona.character_sheet
+    ).first()
+    if author_entry is not None:
+        grant_secret_knowledge(roster_entry=author_entry, secret=secret)
+    return secret
 
 
 def accusation_permitted(*, framer_sheet: CharacterSheet, target_sheet: CharacterSheet) -> bool:

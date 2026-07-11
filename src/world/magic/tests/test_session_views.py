@@ -130,6 +130,22 @@ class RitualSessionListTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
 
+    def test_scene_filter(self) -> None:
+        """?scene=<id> narrows the list to sessions captured against that Scene (#2159)."""
+        from world.magic.factories import RitualSessionFactory
+        from world.scenes.factories import SceneFactory
+
+        _, account, sheet = _make_tenure_with_account()
+        ritual = _make_formation_ritual()
+        scene = SceneFactory()
+        RitualSessionFactory(ritual=ritual, initiator=sheet, scene=scene)
+        RitualSessionFactory(ritual=ritual, initiator=sheet, scene=None)
+
+        self.client.force_authenticate(user=account)
+        response = self.client.get(f"/api/magic/rituals/sessions/?scene={scene.pk}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+
 
 class RitualSessionDetailTests(TestCase):
     """GET /api/magic/rituals/sessions/{id}/"""

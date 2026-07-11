@@ -21,6 +21,7 @@ from actions.definitions.battles import (
 )
 from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.coercion import coerce, reveal_secret
+from actions.definitions.collect_food import CollectFoodAction
 from actions.definitions.combat_maneuvers import (
     CoverAction,
     DemoralizeAction,
@@ -75,6 +76,7 @@ from actions.definitions.covenants import (
 from actions.definitions.crafting import (
     AttachFacetAction,
     AttachStyleAction,
+    CreateItemAction,
     DetachFacetAction,
 )
 from actions.definitions.crossing import resolve_crossing_offer
@@ -82,6 +84,10 @@ from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, Wi
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.distinctions import GMAwardDistinctionAction
 from actions.definitions.doors import LockAction, UnlockAction
+from actions.definitions.dramatic_moments import (
+    ConfirmDramaticMomentSuggestionAction,
+    DismissDramaticMomentSuggestionAction,
+)
 from actions.definitions.duels import (
     AcceptChallengeAction,
     AcknowledgeRiskAction,
@@ -200,6 +206,8 @@ from actions.definitions.movement import (
     GetAction,
     GiveAction,
     HomeAction,
+    StopTravelAction,
+    TravelAction,
     TraverseExitAction,
 )
 from actions.definitions.npc_services import (
@@ -387,10 +395,14 @@ _ALL_ACTIONS: list[Action] = [
     UseItemAction(),
     GrantItemAction(),
     GMAwardDistinctionAction(),
+    # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
+    ConfirmDramaticMomentSuggestionAction(),
+    DismissDramaticMomentSuggestionAction(),
     # #1866 — crafting telnet coverage.
     AttachFacetAction(),
     DetachFacetAction(),
     AttachStyleAction(),
+    CreateItemAction(),
     ApplyOutfitAction(),
     UndressAction(),
     # #1866 — outfit CRUD telnet coverage.
@@ -405,6 +417,8 @@ _ALL_ACTIONS: list[Action] = [
     SceneEntryEndorseAction(),
     StylePresentationEndorseAction(),
     TraverseExitAction(),
+    TravelAction(),
+    StopTravelAction(),
     HomeAction(),
     MoveToPositionAction(),
     TakePositionAction(),
@@ -593,6 +607,7 @@ _ALL_ACTIONS: list[Action] = [
     SpawnBattleUnitsAction(),
     EnlistBattleParticipantAction(),
     BrowseBattleCatalogAction(),
+    CollectFoodAction(),
 ]
 
 # Lookup by key

@@ -32,7 +32,12 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.constants import PendingAlterationStatus, RitualExecutionKind, TargetKind
+from world.magic.constants import (
+    PendingAlterationStatus,
+    RitualExecutionKind,
+    SuggestionStatus,
+    TargetKind,
+)
 from world.magic.exceptions import (
     InvalidImbueAmount,
     TechniqueAuthoringNotPermitted,
@@ -71,7 +76,11 @@ from world.magic.models import (
     Thread,
     ThreadWeavingTeachingOffer,
 )
-from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
+from world.magic.models.dramatic_moment import (
+    DramaticMomentSuggestion,
+    DramaticMomentTag,
+    DramaticMomentType,
+)
 from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
     AcceptSoulTetherSerializer,
@@ -96,6 +105,7 @@ from world.magic.serializers import (
     CrossXPLockResponseSerializer,
     CrossXPLockSerializer,
     DissolveSerializer,
+    DramaticMomentSuggestionSerializer,
     DramaticMomentTagSerializer,
     DramaticMomentTypeSerializer,
     EffectTypeSerializer,
@@ -2354,3 +2364,88 @@ class DramaticMomentTagViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, G
         ):
             raise PermissionDenied(_ERR_DRAMATIC_MOMENT_PERMISSION)
         serializer.save(tagged_by=self.request.user)
+
+
+# =============================================================================
+# Dramatic Moment Suggestions — GM confirm/dismiss inbox (#2183)
+# =============================================================================
+
+_ERR_SUGGESTION_PERMISSION = (
+    "Only the scene's GM, owner, or staff may resolve dramatic-moment suggestions."
+)
+_ERR_SUGGESTION_SCENE_REQUIRED = "A scene id is required (?scene=<id>)."
+
+
+class DramaticMomentSuggestionViewSet(mixins.ListModelMixin, GenericViewSet):
+    """GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+
+    GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+    POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+    POST .../{id}/dismiss/ — dismiss.
+
+    List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+    .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+    same gate against the suggestion's own scene before dispatching the REGISTRY action
+    (which independently re-checks it again — defense in depth for a direct-call caller).
+    """
+
+    queryset = DramaticMomentSuggestion.objects.select_related(
+        "moment_type", "character_sheet", "scene", "interaction"
+    ).order_by("-created_at")
+    serializer_class = DramaticMomentSuggestionSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["scene", "character_sheet", "status"]
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        from world.scenes.models import Scene  # noqa: PLC0415
+        from world.scenes.permissions import IsSceneGMOrOwnerOrStaff  # noqa: PLC0415
+
+        scene_id = request.query_params.get("scene")  # noqa: USE_FILTERSET
+        if not scene_id:
+            return Response(
+                {"detail": _ERR_SUGGESTION_SCENE_REQUIRED}, status=status.HTTP_400_BAD_REQUEST
+            )
+        scene = get_object_or_404(Scene, pk=scene_id)
+        if not IsSceneGMOrOwnerOrStaff().has_object_permission(request, self, scene):
+            raise PermissionDenied(_ERR_SUGGESTION_PERMISSION)
+
+        qs = self.filter_queryset(
+            self.get_queryset().filter(scene=scene, status=SuggestionStatus.PENDING)
+        )
+        page = self.paginate_queryset(qs)
+        serializer = self.get_serializer(page if page is not None else qs, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+    def _resolve(self, request: Request, pk: str | None, *, confirm: bool) -> Response:
+        from actions.definitions.dramatic_moments import (  # noqa: PLC0415
+            ConfirmDramaticMomentSuggestionAction,
+            DismissDramaticMomentSuggestionAction,
+        )
+        from world.scenes.permissions import IsSceneGMOrOwnerOrStaff  # noqa: PLC0415
+
+        suggestion = get_object_or_404(DramaticMomentSuggestion, pk=pk)
+        if not IsSceneGMOrOwnerOrStaff().has_object_permission(request, self, suggestion.scene):
+            raise PermissionDenied(_ERR_SUGGESTION_PERMISSION)
+
+        action_cls = (
+            ConfirmDramaticMomentSuggestionAction
+            if confirm
+            else DismissDramaticMomentSuggestionAction
+        )
+        result = action_cls().run(actor=None, account=request.user, suggestion_id=suggestion.pk)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        suggestion.refresh_from_db()
+        return Response(DramaticMomentSuggestionSerializer(suggestion).data)
+
+    @action(detail=True, methods=["post"])
+    def confirm(self, request: Request, pk: str | None = None) -> Response:
+        return self._resolve(request, pk, confirm=True)
+
+    @action(detail=True, methods=["post"])
+    def dismiss(self, request: Request, pk: str | None = None) -> Response:
+        return self._resolve(request, pk, confirm=False)

@@ -335,15 +335,18 @@ class SceneViewSet(viewsets.ModelViewSet):
 
         Featured = the highest-reacted GM-tagged pose; a tagged pose headlines even with
         zero reactions, because storyteller curation has primacy. When the scene has no
-        tags, this falls back to the single most-reacted pose. The index is the remaining
-        poses with at least one reaction, ranked by reaction count (ties -> most recent)
-        and capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the
-        reel can never surface a pose the viewer cannot already see — not even as a sealed
-        slot. The payload carries only interaction ids (the featured card is fully sealed);
-        the frontend reveals a pose by fetching it through the existing interaction-detail
-        endpoint, which re-checks visibility.
+        tags, this falls back to the single most-voted (reactions tie-break) pose. The
+        index is the remaining poses with at least one vote or reaction, ranked by
+        all-time vote count first, reaction count as tie-break, and recency last —
+        capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the reel
+        can never surface a pose the viewer cannot already see — not even as a sealed
+        slot. The payload carries interaction ids plus vote/reaction counts (the featured
+        card stays otherwise sealed); the frontend reveals a pose by fetching it through
+        the existing interaction-detail endpoint, which re-checks visibility.
         """
         from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
+        from world.progression.constants import VoteTargetType  # noqa: PLC0415
+        from world.progression.models.voting import WeeklyVote  # noqa: PLC0415
 
         scene = self.get_object()
         user = request.user
@@ -373,32 +376,67 @@ class SceneViewSet(viewsets.ModelViewSet):
                 "interaction_id", flat=True
             )
         )
+        # All-time votes are the persistent signal: WeeklyVote rows survive (as
+        # processed=True) after weekly settlement, unlike Interaction.vote_count, which
+        # is a weekly counter reset to 0 at settlement. Ranking on the persistent rows is
+        # the whole point of #2161 — a pose's standing outlives the week it was posed in.
+        vote_counts = dict(
+            WeeklyVote.objects.filter(
+                target_type=VoteTargetType.INTERACTION, target_id__in=pose_ids
+            )
+            .values("target_id")
+            .annotate(count=Count("id"))
+            .values_list("target_id", "count")
+        )
+
+        def votes_for(pose_id: int) -> int:
+            return vote_counts.get(pose_id, 0)
 
         def reactions_for(pose_id: int) -> int:
             return reaction_counts.get(pose_id, 0)
 
-        # Reaction count desc, then most-recent first.
+        # Vote count desc, reaction count tie-break, then most-recent first.
         ranked = sorted(
             pose_ids,
-            key=lambda pose_id: (reactions_for(pose_id), pose_timestamps[pose_id]),
+            key=lambda pose_id: (
+                votes_for(pose_id),
+                reactions_for(pose_id),
+                pose_timestamps[pose_id],
+            ),
             reverse=True,
         )
 
         featured_pk = None
         if tagged_ids:
-            # Highest-reacted tagged pose (ranked is already sorted); headlines even at 0.
+            # Highest-ranked tagged pose (ranked is already sorted); headlines even at 0.
             featured_pk = next((pose_id for pose_id in ranked if pose_id in tagged_ids), None)
-        elif ranked and reactions_for(ranked[0]) >= 1:
+        elif ranked and (votes_for(ranked[0]) + reactions_for(ranked[0])) >= 1:
             featured_pk = ranked[0]
 
         index = [
-            pose_id for pose_id in ranked if reactions_for(pose_id) >= 1 and pose_id != featured_pk
+            pose_id
+            for pose_id in ranked
+            if (votes_for(pose_id) + reactions_for(pose_id)) >= 1 and pose_id != featured_pk
         ][:10]
 
         payload = {
-            "featured": {"interaction_id": featured_pk} if featured_pk else None,
+            "featured": (
+                {
+                    "interaction_id": featured_pk,
+                    "vote_count": votes_for(featured_pk),
+                    "reaction_count": reactions_for(featured_pk),
+                }
+                if featured_pk
+                else None
+            ),
             "index": [
-                {"interaction_id": pose_id, "rank": i + 1} for i, pose_id in enumerate(index)
+                {
+                    "interaction_id": pose_id,
+                    "rank": i + 1,
+                    "vote_count": votes_for(pose_id),
+                    "reaction_count": reactions_for(pose_id),
+                }
+                for i, pose_id in enumerate(index)
             ],
         }
         return Response(HighlightReelSerializer(payload).data)

@@ -9,17 +9,22 @@
  * Phase 9, Task 9.2.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
 import { Badge } from '@/components/ui/badge';
+import { VoteButton } from '@/components/VoteButton';
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { ActionResult } from './ActionResult';
 import { ReactionStrip } from './ReactionStrip';
 import { DramaticMomentTagDialog } from './DramaticMomentTagDialog';
+import { DramaticMomentSuggestionChip } from './DramaticMomentSuggestionChip';
 import { EndorsementControl } from './EndorsementControl';
 import { fetchReactionEmojiCatalog, postInteractionReaction } from '../queries';
 import type { Interaction, ActionLink } from '../types';
@@ -114,7 +119,12 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
   const queryClient = useQueryClient();
   const reactionMutation = useMutation({
     mutationFn: (emoji: string) => postInteractionReaction(interaction.id, emoji),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      if (data?.bump_message) {
+        toast.success(data.bump_message);
+      }
+    },
   });
   // Staff-editable catalog (#1699); valenced entries also nudge the author's regard.
   const { data: catalog } = useQuery({
@@ -198,6 +208,20 @@ export function PoseUnit({
 
   const actionInteractionIds = actionLinks.map((l) => l.action_interaction.id);
   const dramaticTags = interaction.dramatic_moment_tags ?? [];
+  const dramaticSuggestions = interaction.dramatic_moment_suggestions ?? [];
+
+  // Resolve the viewer's active persona to detect self-pose — mirrors
+  // EndorsementControl's self-endorsement guard (same signal, same source).
+  // VoteButton has no self-guard of its own (the backend rejects self-votes;
+  // this gate is UX only), so PoseUnit computes it and decides whether to mount.
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const viewerPersonaId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.primary_persona_id ?? null,
+    [myRosterEntries, activeCharacterName]
+  );
+  const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
+  const canVote = Boolean(sceneId) && !isSelfPose;
 
   // -------------------------------------------------------------------------
   // State 3: standalone ACTION (not linked to any pose)
@@ -244,7 +268,10 @@ export function PoseUnit({
           details
         </button>
         {expanded && <PoseUnitDetailPanel actionInteractionIds={[interaction.id]} />}
-        <ReactionsFooter interaction={interaction} sceneId={sceneId} />
+        <div className="flex items-center gap-1">
+          <ReactionsFooter interaction={interaction} sceneId={sceneId} />
+          {canVote && <VoteButton targetType="interaction" targetId={interaction.id} />}
+        </div>
         {/* Standalone ACTION rows are authored content (claimed resonances) and
             are endorsable per spec — this is intentional, not a slip. */}
         <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
@@ -360,7 +387,15 @@ export function PoseUnit({
         </div>
       )}
 
-      <ReactionsFooter interaction={interaction} sceneId={sceneId} />
+      {/* GM confirm/dismiss inbox: technique-driven dramatic-moment suggestions (#2183) */}
+      {canGm && (
+        <DramaticMomentSuggestionChip suggestions={dramaticSuggestions} sceneId={sceneId} />
+      )}
+
+      <div className="flex items-center gap-1">
+        <ReactionsFooter interaction={interaction} sceneId={sceneId} />
+        {canVote && <VoteButton targetType="interaction" targetId={interaction.id} />}
+      </div>
       <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
       {interaction.pose_kind === 'entry' && (
         <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />

@@ -90,18 +90,35 @@ Resolving this split is **#2156**, the structural core of the slate.
 
 - **Giving kudos is exemplary** — one-tap `ReactionStrip` on every pose, ADR-0033-respecting
   anonymized attribution. But *seeing why you got kudos* requires navigating to `/xp-kudos`.
+  **[FIXED #2161]** Kudos now surfaces in-context: `award_kudos` pushes a real-time
+  `kudos_received` WS toast to the recipient (`notify_kudos_received`) instead of requiring
+  a trip to `/xp-kudos`.
 - **Three parallel applause systems disagree**: kudos chip, emoji reactions (what
   `HighlightReel` "top poses" actually ranks by), and the fully-built-server-side
   `WeeklyVote` heart economy whose `VoteButton`/`VotesPanel` components are **imported
   nowhere**; no top-voted endpoint exists.
-- **`world.journals` (diary/praise-retort, weekly XP) has zero web frontend**; telnet
-  (`journal write`) is complete. The `/journal` route is a decoy — it's the *missions*
-  ledger, an unrelated system sharing the name.
-- **No messenger concept exists**; `PlayerMail` compose/inbox is at `/profile/mail` with no
-  in-scene compose, no unread badge, no arrival push.
+  **[FIXED #2161]** The disagreement is now a deliberate, documented three-axes design
+  (ADR-0115) rather than an accident: `WeeklyVote` is wired end-to-end — `VoteButton` on
+  every `PoseUnit` and `VotesPanel` on `/xp-kudos` — and the highlight reel re-ranks on
+  all-time vote count first (reaction count as tie-break), not reaction count alone.
+- [FIXED #2160] `world.journals` (diary/praise-retort, weekly XP) **had zero web frontend**;
+  telnet (`journal write`) was complete but the `/journal` route was a decoy — it's the
+  *missions* ledger, an unrelated system sharing the name. The missions ledger moved to
+  `/missions/journal`, freeing `/journal`/`/journals` for a real composer/feed page plus an
+  in-scene sidebar `JournalTab` quick-compose — see `src/world/journals/AGENT_GLOSSARY.md` for
+  the now-disambiguated "journal" homonym across journals/missions/clues.
+- [FIXED #2160] **No messenger concept exists** remains true by design (see ADR-0116 — an
+  in-fiction delivery layer is a deliberately deferred, distinct system), but the *web*
+  `PlayerMail` gaps are closed: an in-scene quick-compose (`SendLetterDialog` pre-filling
+  `ComposeMailForm`) from the character card, an `UnreadMailBadge` + arrival toast in the
+  header driven by a new `MAIL_ARRIVED` websocket push, and mark-read-on-open. Compose/inbox
+  stays at `/profile/mail`.
 - Latent gotcha: `KudosTransaction.awarded_by` serializes raw `username`; all callers pass
   `None` by convention only — no structural guard (ADR-0033 risk if a future caller passes
   an account).
+  **[FIXED #2161]** The guard is now structural, not conventional: `awarded_by`/
+  `awarded_by_name` was removed from `KudosTransactionSerializer` entirely — a future
+  caller passing a real `awarded_by` account can no longer leak it to the recipient.
 
 ### 5. Rituals, threads, relationships (#2159)
 
@@ -109,19 +126,45 @@ Resolving this split is **#2156**, the structural core of the slate.
   sessions (draft→invite→accept/decline→fire) are well-built dialogs but **exiled from the
   scene**: reachable only via header inbox; no marker in the scene where the ritual was
   proposed; `/rituals` absent from top nav (only entry: own sheet → Magic tab footer).
+  **[FIXED #2159]** `RitualSession` now captures its origin scene server-side at draft time
+  (`RitualSession.scene`, `get_active_scene`-derived, never client-supplied); a
+  `RitualProposedChip` mounted on `/game`'s `RoomPanel` and on `SceneDetailPage` renders
+  while a PENDING/READY session has that scene as its origin, linking to the session. The
+  `/rituals` top-nav gap is unchanged (out of #2159's scope).
 - **Bug:** `WeaveThreadWizard`'s RELATIONSHIP_TRACK anchor posts a generic
   `RelationshipTrack` catalog id where the backend resolves
   `RelationshipTrackProgress.objects.get(pk=…)` (`magic/serializers.py:885-901`) — disjoint
   pk spaces, and the wizard never asks *with whom*. Presents as fully built; fails on
-  submit. Telnet's `track=<partner>/<track>` grammar is correct. RELATIONSHIP_CAPSTONE
-  weaving is honestly labeled deferred, but capstone *creation* has no web path either.
+  submit. Telnet's `track=<partner>/<track>` grammar is correct.
+  **[FIXED #2159]** `ThreadSerializer._resolve_target` now resolves RELATIONSHIP_TRACK by
+  `(RelationshipTrack catalog id, target_persona_id)` — mirroring telnet's
+  `_resolve_track_anchor` — and `WeaveThreadWizard` gained a with-whom step (a partner
+  picker) before the anchor step, so the wizard can no longer produce this disjoint-pk
+  submit failure.
+  RELATIONSHIP_CAPSTONE weaving is honestly labeled deferred.
+  **[CORRECTION]** "capstone *creation* has no web path either" was wrong at the time of
+  writing: `RelationshipUpdateViewSet.capstone` (POST, dispatching `CreateCapstoneAction`)
+  is pre-existing on `main`, predating this audit — the claim conflated it with
+  `RelationshipCapstoneViewSet`, which is read-only. Only RELATIONSHIP_CAPSTONE *weaving*
+  (a thread anchored to a capstone) remains deferred.
 - **Relationship state is invisible on the web**: `RelationshipsSection.tsx` renders a
   legacy `string[]` with "TBD"; the full REST family (`CharacterRelationshipViewSet`,
   `RelationshipUpdateViewSet`, capstones, tracks) has zero frontend consumers. The
   relationship-authoring loop (impression/development/capstone/redistribute) shipped
   web+telnet at the action layer (PR #1536 — this **corrects the 2026-06-25 audit's
-  NO-SURFACE row**), but the web side is viewset-only with no UI; writeup kudos/complain
-  endpoints are uncalled.
+  NO-SURFACE row**), but the web side is viewset-only with no UI.
+  **[FIXED #2159]** `RelationshipsSection`'s "Ties" subsection now renders a real
+  `RelationshipPanel` (`frontend/src/relationships/components/`): own sheet gets
+  `OwnRelationshipsList` (tracks/tiers, expandable per-relationship history via the new
+  `timeline` action) privacy-scoped per ADR-0117 (numeric state is author-private); foreign
+  sheet gets `ForeignRelationshipTimeline` (visible writeups only, deliberately no numeric
+  state).
+  **[CORRECTION]** "writeup kudos/complain endpoints are uncalled" was only half right:
+  writeup kudos was already called — the commend button on `RelationshipsSection` has
+  POSTed to `.../kudos/` since #2136 (pre-existing on `main`, predating this audit).
+  **[FIXED #2159]** The complaint endpoint is now called too: a Report button beside
+  Commend opens `WriteupComplaintDialog`, POSTing `{writeup_type, writeup_id, reason}` to
+  `.../complaint/`.
 - **The bright spot:** rel/plus / rel/neg as one-click valenced emoji on poses
   (`ReactionsFooter` → `RelationshipBumpAction`, #2132) is the model in-scene affordance —
   though its success is silent (response discarded; see #2158).

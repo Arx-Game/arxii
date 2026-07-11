@@ -80,11 +80,22 @@ describe('actionQueries', () => {
       });
     });
 
-    it('throws on error response', async () => {
+    it('throws the fallback message when the error response has no detail', async () => {
       vi.mocked(apiFetch).mockResolvedValue(mockErrorResponse());
 
       await expect(createActionRequest('42', { action_key: 'x' })).rejects.toThrow(
         'Failed to perform action'
+      );
+    });
+
+    it('surfaces the backend detail on a 400 (#2183: e.g. "already in the fight")', async () => {
+      vi.mocked(apiFetch).mockResolvedValue({
+        ok: false,
+        json: () => Promise.resolve({ detail: "You're already in the fight." }),
+      } as Response);
+
+      await expect(createActionRequest('42', { action_key: 'enter_combat' })).rejects.toThrow(
+        "You're already in the fight."
       );
     });
 

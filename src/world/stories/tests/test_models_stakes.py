@@ -17,6 +17,7 @@ from world.stories.factories import (
     seed_default_risk_calibrations,
 )
 from world.stories.models import RiskCalibration, StakeContractActivation
+from world.stories.services.stake_resolution import stake_resolution_payload_problems
 
 
 class StakeModelTests(TestCase):
@@ -100,3 +101,33 @@ class StakeResolutionOutcomeKeyTests(EvenniaTestCase):
     def test_outcome_key_defaults_to_blank(self) -> None:
         resolution = StakeResolutionFactory()
         self.assertEqual(resolution.outcome_key, "")
+
+
+class NpcRegardDeltaValidationTests(TestCase):
+    """StakeResolution.npc_regard_delta is NPC_FATE-only (#2039)."""
+
+    def _problems_for(self, stake, npc_regard_delta):
+        resolution = StakeResolutionFactory.build(stake=stake, npc_regard_delta=npc_regard_delta)
+        return stake_resolution_payload_problems(
+            stake=resolution.stake,
+            forfeits_subject_item=resolution.forfeits_subject_item,
+            subject_standing_delta=resolution.subject_standing_delta,
+            sets_subject_lifecycle=resolution.sets_subject_lifecycle,
+            machine_match_lifecycle_state=resolution.machine_match_lifecycle_state,
+            npc_regard_delta=resolution.npc_regard_delta,
+        )
+
+    def test_npc_regard_delta_requires_npc_fate_subject(self):
+        stake = StakeFactory(subject_kind=StakeSubjectKind.FACTION)
+        problems = self._problems_for(stake, npc_regard_delta=10)
+        self.assertTrue(any(p.field == "npc_regard_delta" for p in problems))
+
+    def test_npc_regard_delta_allowed_on_npc_fate_subject(self):
+        stake = StakeFactory(subject_kind=StakeSubjectKind.NPC_FATE)
+        problems = self._problems_for(stake, npc_regard_delta=10)
+        self.assertFalse(any(p.field == "npc_regard_delta" for p in problems))
+
+    def test_npc_regard_delta_zero_is_always_allowed(self):
+        stake = StakeFactory(subject_kind=StakeSubjectKind.FACTION)
+        problems = self._problems_for(stake, npc_regard_delta=0)
+        self.assertFalse(any(p.field == "npc_regard_delta" for p in problems))

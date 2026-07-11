@@ -217,6 +217,7 @@ class ResolvePendingInterposeHarmTests(TestCase):
             error_msg,
             outcome_fn,
             extra_modifiers=0,
+            **kwargs,
         ):
             result = ChallengeResolutionResult(
                 challenge_instance_id=1,
@@ -287,6 +288,7 @@ class ResolvePendingInterposeHarmTests(TestCase):
             error_msg,
             outcome_fn,
             extra_modifiers=0,
+            **kwargs,
         ):
             result = ChallengeResolutionResult(
                 challenge_instance_id=1,

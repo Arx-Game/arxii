@@ -24,6 +24,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `related_name="technique_draft"`; no JSON; all proper columns),
     `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` /
     `TechniqueDraftAppliedCondition` (draft payload children — inherit abstract bases)
+  - **Cast-position targeting (#2206):** `position_target_shape(technique)`
+    (`services/targeting.py`) classifies a technique's declared-position input shape
+    (pair/single/none); combat's declaration→resolver→condition-handler wiring for the
+    three placeholder-destination effect-palette techniques (Barricade/Phase Jump/Force
+    Grip) lives in `docs/systems/INDEX.md`'s Combat section ("Cast-position targeting");
+    see `docs/systems/magic.md`'s Effect Palette section for the updated per-effect status.
   - **Motif style binding (#2030):** `MotifResonanceStyle` (`motif_resonance` FK,
     `style` FK to `items.Style`; cap 3/resonance) is now player-authorable, not
     admin-only. Service (`services/motif_style.py`): `bind_motif_style` /
@@ -107,6 +113,22 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     partial UniqueConstraint `(character_sheet, scene) WHERE scene IS NOT NULL`).
     `ResonanceGainConfig.entry_flourish_grant` (default 10). The #904
     reaction-window framework is peer-only and was rejected for this use.
+  - **Technique Entrance + Dramatic Moment Suggestion (#2183, ADR-0113):** a "make an
+    entrance" whose check IS a technique cast (`enter <technique>[=<target>]` /
+    `EntranceAction._execute_technique_entrance`) — one roll drives flourish +
+    disposition + a GM-facing recognition nudge instead of a separate social check.
+    `DramaticMomentType.suggest_on_technique_entrance` / `.suggestion_min_success_level`
+    opt a moment type into the bridge; `DramaticMomentSuggestion` (PENDING/CONFIRMED/
+    DISMISSED, unique per `(moment_type, character_sheet, scene)` while PENDING) is the
+    suggestion row. Services: `maybe_suggest_dramatic_moments` /
+    `resolve_dramatic_moment_suggestion` (`services/gain.py`). Actions:
+    `ConfirmDramaticMomentSuggestionAction` / `DismissDramaticMomentSuggestionAction`
+    (account-authorized, `actions/definitions/dramatic_moments.py`). Web:
+    `DramaticMomentSuggestionViewSet` (`/api/magic/dramatic-moment-suggestions/`).
+    Telnet: `CmdMoment` (`moment suggestions|confirm <id>|dismiss <id>`). See
+    magic.md "Technique Entrance" + "Dramatic Moment Suggestion" for the full deferral
+    matrix (inline / hostile-seeded / PENDING-consent / soulfray-gated) and the
+    combat-side `from_entrance` marker + benign-intervention join (see Combat section).
   - **Ritual Liturgy (#1352):** `RitualLiturgy` (OneToOne → `Ritual`; `opening_call`
     TextField — the officiant's authored ceremonial words; public, non-spoiler).
     Seeded alongside the Ritual of the Durance via `RitualLiturgyFactory`.
@@ -304,6 +326,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `summon_ally`, `move_position`, `create_obstacle`; adapters: `summon_ally_on_condition`,
     `move_position_on_condition`, `create_obstacle_on_condition`, `init_absorb_buffer`.
     See magic.md §"Effect Palette" for the full handler/adapter table.
+  - Ally + party ward variants (#2208, ADR-0118): Aegis Ward/Communion, Mirror Vigil/Communion,
+    Phase Guard/Communion — ALLY SINGLE/FILTERED_GROUP Technique variants of the three reactive
+    wards above (no new ConditionTemplates); reactive fire (`_try_spend_reactive`) and upkeep
+    (`drain_reactive_upkeep`) both debit `ConditionInstance.source_character`, falling back to
+    the bearer, so an ally ward strains its caster. See magic.md §"Ally + party ward variants".
   - Technique authoring draft workbench (#1496):
     `get_or_start_draft(character) -> TechniqueDraft`,
     `discard_draft(character)`,
@@ -641,6 +668,14 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Models:** `Area`, `AreaClosure` (unmanaged, materialized view)
 - **Enums:** `AreaLevel` (Region, District, Neighborhood)
 - **Key Functions:** `get_ancestry()`, `get_descendant_areas()`, `get_rooms_in_area()`, `reparent_area()`
+- **Presence & Travel (#1463 + #2163):** `where_listing()` — public presence directory,
+  returns `WhereEntry(persona_name, room_path, room_id)` per online character in a
+  publicly-listed room; `find_route(origin_room, destination_room) -> list[ObjectDB] | None`
+  (`world.areas.positioning.travel`) — frontier-batched BFS pathfinder, same-Area +
+  public-rooms-only, capped at `settings.TRAVEL_MAX_HOPS`. `TravelAction`/`StopTravelAction`
+  (`registry_key`s `travel_to`/`stop_travel`) auto-walk a computed route one hop at a time;
+  shared by telnet `CmdTravel` and "Go there" buttons on the scene browser + presence panel.
+  See [areas.md](areas.md) "Presence & Travel" section.
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
 - **Source:** `src/world/areas/`
@@ -877,8 +912,14 @@ Character journal entries (public/private), praises, retorts, freeform tags, wee
 - **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses), `JournalTag`, `WeeklyJournalXP`
 - **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`; `JournalError` user-safe exception in `types.py`
 - **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit`) converge on `action.run()`
+- **Web surface (#2160):** previously zero web frontend (telnet-only); now `/journals`
+  (composer, public feed, own-entries tab) plus a `JournalTab` quick-compose panel in the
+  in-scene sidebar. `/journal` (singular) was freed from the missions ledger, which moved to
+  `/missions/journal` in the same PR — see Missions below and `journals/AGENT_GLOSSARY.md`'s
+  disambiguation entry for the "journal" homonym across apps.
 - **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M)
-- **Source:** `src/world/journals/`
+- **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
+  `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points
 Time/effort resource economy with regeneration via cron. The most complete gate pattern in the codebase.
 
@@ -1161,6 +1202,13 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`);
   `kudos`, `vote`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348);
   `durance [status|intent|convene]` (in `commands/durance.py`, #1700)
+- **`award_kudos` real-time push + privacy guard (#2161):** every `award_kudos` call
+  schedules `notify_kudos_received` via `transaction.on_commit`, pushing a `kudos_received`
+  WS frame (amount/source_category/description) to the recipient's connected sessions —
+  central to the service, not per-caller, so vote settlement, GM awards, writeup kudos, and
+  the social-engagement roll below all get the toast for free. `KudosTransactionSerializer`
+  no longer exposes `awarded_by`/`awarded_by_name` to the recipient (ADR-0033 structural
+  guard — the awarder's identity never leaks to the person they kudos'd).
 - **Good-sport kudos accrual:**
   - `accrue(account, initiator_account, points) -> WeeklySocialEngagement` (`services/engagement.py`) — adds points to the weekly pending ledger; tracks `WeeklyEngagementInitiator` rows for distinct-initiator anti-farm; resets stale ledgers lazily on the game-week boundary.
   - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; for each ungranted ledger with `engagement_events > 0`, rolls the diminishing-chance curve once per event (`_roll_good_sport_points`, guaranteed first point, capped at `GOOD_SPORT_WEEKLY_CAP`) and awards kudos via `award_kudos` when the roll yields > 0; every ledger is marked `granted=True` regardless of the rolled amount. There is no distinct-initiator floor — `distinct_initiators` (from `WeeklyEngagementInitiator` rows) is tracked on the ledger but not read by this function. Requires the `"social_engagement"` `KudosSourceCategory` to exist (seeded by the "kudos" cluster, #2026) or it logs a warning and no-ops.
@@ -1242,6 +1290,15 @@ Character lifecycle management with web-first applications and player anonymity.
   hosts the shared `_send_email`/`_get_staff_emails` primitives; `RosterEmailService`
   extends it unchanged. `world.character_creation.email_service.CGEmailService`
   extends the same base — see Character Creation above.
+- **Letters web surface (#2160, ADR-0116):** `PlayerMailViewSet` gained two actions —
+  `POST /api/roster/mail/{id}/mark-read/` (idempotent, recipient-scoped via the queryset) and
+  `GET /api/roster/mail/unread-count/` (unread + unarchived, across the requester's tenures).
+  Sending mail fires `notify_mail_arrived` via `transaction.on_commit` (the
+  `notify_battle_state_changed` pattern), pushing a new `WebsocketMessageType.MAIL_ARRIVED`
+  (`src/web/webclient/message_types.py`) payload — `mail_id`/`sender_display`/`subject` only, no
+  account identifiers. Frontend: in-scene quick-compose (`SendLetterDialog` pre-filling
+  `ComposeMailForm`) from the character card, an `UnreadMailBadge` in the header, and a
+  mark-read-on-open flow in `ReceivedMailList`. No telnet mail command exists or is planned.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
@@ -1529,10 +1586,15 @@ action consent flow, and a three-mode non-combat round framework.
     and `SceneViewSet.highlight_reel`.
   - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, the combat
     encounter read gate, and the interaction/reel read gates all consume these forms.
-- **Highlight reel (#1241):** `GET /api/scenes/{id}/highlight-reel/` — a fully-sealed featured
-  moment + ranked index (ids only), ranked by `InteractionReaction` counts (a queryset-level
-  `Count` annotation, no denormalized column), GM-tagged poses headline. Filtered through
-  `Interaction.objects.visible_to`. Frontend: `HighlightReel` (`frontend/src/scenes/components/`).
+- **Highlight reel (#1241; re-ranked #2161):** `GET /api/scenes/{id}/highlight-reel/` — a
+  fully-sealed featured moment + ranked index, carrying `vote_count`/`reaction_count` per pose.
+  Ranked by all-time `WeeklyVote` count first (survives weekly settlement, unlike the weekly
+  `Interaction.vote_count` counter), `InteractionReaction` count as tie-break, recency last;
+  GM-tagged poses headline. Filtered through `Interaction.objects.visible_to`. Frontend:
+  `HighlightReel` (`frontend/src/scenes/components/`) — direct-mounted (no extra Accordion
+  wrapper, it's already self-collapsing) in the `/game` right sidebar's Room tab via
+  `SceneHighlightsPanel` (`frontend/src/game/components/room-panel/`), in addition to its
+  original mount on `SceneDetailPage`.
 - **API Endpoints:** `GET/POST /api/action-requests/`, `POST /api/action-requests/{id}/respond/`,
   `GET /api/action-targets/` (read-only; filterable by `scene` + `status`; surfaces pending
   additional-target consent rows for the authenticated player's personas).
@@ -1909,6 +1971,45 @@ register as additional kinds.
   target)`. Deliberately separate from `NPCStanding` (see ADR-0085). Consumed by
   Covenant of the Court's `has_regarded_target_present` engagement gate
   (`world/covenants/court_missions.py`).
+- **Regard buildup / toxic-bond family (#2039):** `NpcRegardEvent` — a per-event
+  ledger on top of `NpcRegard`, mirroring justice's `HeatSource`/`PersonaHeat`
+  shape. `record_npc_regard_event(*, holder_persona, target, amount, reason,
+  source_pc_combat_action=None, source_npc_combat_action=None, source_scene=None,
+  source_stake_resolution=None)` (`world/npc_services/regard.py`) is the single
+  write seam — wrapped in `transaction.atomic()`, clamps `amount` to
+  `RegardEventConfig.max_event_delta` and the resulting `NpcRegard.value` to
+  `REGARD_MIN`/`REGARD_MAX`. `NpcRegardEventReason` (6 values) each carry a
+  distinct, DB-enforced citation requirement (`NpcRegardEvent.clean()`) — a
+  PC-attributed reason (`NPC_HARMED_PC_INTEREST`, `PC_FOILED_NPC_PLAN`) must cite
+  a real resolved `CombatOpponentAction`/`CombatRoundAction`, never a freetext
+  claim; `SOCIAL_ACTION_RESOLVED` cites the resolved `Scene`;
+  `STAKE_RESOLUTION` cites the `StakeResolution` row that pre-authored it;
+  `GM_MANUAL_ADJUSTMENT` may optionally cite any of those; `DISTINCTION_SEED`
+  cites none. `is_bond_story_vital(regard)` derives "vital to your story" status
+  from `|value| >= RegardEventConfig.story_vital_threshold` — no stored flag,
+  matching `NpcRegard`'s "no separate enemy flag" design; symmetric for hostile
+  and infatuated (toxic-bond-family) valence alike.
+  - **Four authoring paths:** (1) combat auto-hooks in
+    `world/combat/services.py`'s `_resolve_pc_action`/`_resolve_npc_action_on_target`
+    fire on a genuine defeat/critical-hit against a persona-backed opponent; (2) the
+    structured-consequence `EffectType.SHIFT_NPC_REGARD` +
+    `ConsequenceEffect.npc_regard_amount` + `_shift_npc_regard` handler
+    (`world/mechanics/effect_handlers.py`) mirrors `SHIFT_AFFECTION` for social
+    actions — content-authored amounts only, never GM-freehanded; (3)
+    `StakeResolution.npc_regard_delta` (`world/stories/`) lets a GM pre-bind "if
+    this stake resolves this way, regard shifts by N" before the scene plays out,
+    dispatched through the existing `NPC_FATE` `subject_kind` branch; (4)
+    `DistinctionRegardSeed` (lookup sidecar, mirrors `DistinctionResonanceGrant`'s
+    shape) lets a CG distinction pre-seed a bond with a named NPC, reconciled via
+    `reconcile_distinction_regard_seeds()` in the chargen `CharacterDistinction`
+    bulk-create loop.
+  - **Bridge to #2013:** `mirror_npc_regard_event_to_track(event)`
+    (`world/relationships/services.py`) reuses `apply_affection_shift`'s
+    track-selection/capstone-write-shape but dedups on the event row itself
+    (no `Scene`+`ConsequenceEffect` needed) — every `record_npc_regard_event` call
+    also mirrors onto the PC's own `CharacterRelationship`/`RelationshipTrackProgress`
+    Regard/Friction system tracks, so #2013's hated-foe surge (unmodified) picks
+    up nemesis buildup for free.
 - **Interaction state machine:** ephemeral `InteractionSession` (lives in caller's
   session for one interaction). `start_interaction(role, persona, character, npc_persona=None)`
   → `available_offers(session)` (single-predicate filtered) → `resolve_offer(session, offer)`
@@ -2583,6 +2684,48 @@ drain the well by physically visiting and performing an absorb action.
 - **Source:** `src/world/magic/models/sanctum.py`,
   `src/world/magic/services/sanctum*.py`.
 
+### Agriculture (Field + Granary crop/food system — #1864)
+A coupled pair of Room Feature kinds implementing an accrue-then-collect food
+system. The Field produces food into an `uncollected_pool` on a daily cron tick;
+a character actively collects it via a lossy check-based dispatch (mirrors
+`collect_org_income`); the Granary's level gates storage capacity; a domain's
+population consumes food weekly with shortage raising unrest and lowering
+prosperity.
+
+- **Models** (`world.agriculture.models`):
+  - `CropType` — staff-authored catalog (name, base_production, description).
+  - `FieldDetails` — OneToOne to `RoomFeatureInstance`; carries `crop_type` FK
+    and `uncollected_pool` (accrued food awaiting active collection).
+  - `GranaryDetails` — OneToOne to `RoomFeatureInstance`; no stored amount
+    (the domain-level `FoodStockpile` holds the balance; level→capacity is
+    derived at read time via `max_food_capacity(domain)`).
+  - `FoodStockpile` — OneToOne to `Domain`; `stored` balance + `last_collected_at`.
+    Lazily created via `get_or_create` in `collect_field_food`.
+  - `FoodConfig` — singleton (pk=1) tuning knobs: production rate, consumption
+    per capita, shortage penalties, granary capacity per level.
+- **Services** (`world.agriculture.services`):
+  - `field_production_tick()` — daily cron; accrues `base_production × level ×
+    multiplier` into each active Field's `uncollected_pool`.
+  - `collect_field_food(character, field_instance)` — active collection dispatch;
+    zeroes pool, rolls a Food Collection check, applies `COLLECTION_BAND_PCTS`
+    (reused from currency), lands food into domain's `FoodStockpile` (capped at
+    Granary capacity; excess is overflow/lost).
+  - `domain_consumption_tick()` — weekly cron (part of weekly rollover); each
+    domain's population consumes food; shortage raises unrest + lowers
+    prosperity; no stockpile row = perpetual shortage.
+  - `resolve_domain_for_feature(instance)` — walks `RoomProfile.area` →
+    `AreaClosure` ancestor chain to find the `Domain`.
+  - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
+    across all active Granaries in the domain's area subtree.
+- **Action:** `CollectFoodAction` (key `"collect_food"`, category
+  `"agriculture"`) — the single commit seam for telnet + web.
+- **Events:** `FOOD_COLLECTED`, `FOOD_SHORTAGE` (in `flows/constants.py`).
+- **Cron tasks:** `agriculture.field_production` (daily 24h),
+  `agriculture.domain_consumption` (weekly, via weekly rollover).
+- **Seeds:** `ensure_field_granary_kinds()` + `ensure_starter_crop_types()`
+  (Wheat/Barley/Root Vegetables with PLACEHOLDER production values).
+- **Source:** `src/world/agriculture/`
+
 ### Lab (crafting-station economy — #1234)
 Second Room Feature kind (`RoomFeatureServiceStrategy.LAB`), registered by
 `world.items`. A per-Lab durability meter gates and wears down under crafting
@@ -3178,12 +3321,27 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   unset = legacy find-all-on-scene behavior, unchanged), `CombatParticipant`, `CombatOpponent`,
   `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR; plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
-  `fury_commitment` / `fury_anchor`, #1454),
+  `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
+  `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
+  target/pair for position-consuming techniques, #2206, see "Cast-position targeting" below),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `ComboSlot`, `ComboLearning` (use_count tracks repeat
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
   `ComboSignature` (covenant+combo narrative flourish, #2017), `Clash`,
   `ClashRound`, `ClashContribution`
+- **Technique-entrance combat integration (#2183):** `CombatRoundAction.from_entrance`
+  (bool, default False) — stamped when a hostile Technique Entrance (see magic.md
+  "Technique Entrance") seeds/feeds an encounter (`world.combat.cast_seed
+  .seed_or_feed_encounter_from_cast(..., from_entrance=True)`); read at round resolution
+  by `_maybe_suggest_entrance_dramatic_moment` (`world/combat/services.py`) to fire the
+  Dramatic Moment Suggestion check once the declared cast's real success level is known
+  (the entrance's own recognition hooks fired flourish-only at declaration time — the
+  suggestion was deferred). `world.combat.cast_seed
+  .seed_or_feed_encounter_from_benign_intervention(*, caster_sheet, target_sheet, scene)`
+  is the benign sibling: seats a non-combatant whose protective (non-hostile) entrance
+  cast landed on an already-embattled ally into the fight — no opponent row, no stakes
+  lock, no FOCUSED declaration (the cast already resolved standalone); no-ops when there
+  is no feedable encounter or the target isn't embattled in it.
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
     side-field; ALLY opponents fight *for* the party (summons, and future charm/
@@ -3229,6 +3387,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     Both paths now also call `process_damage_interactions` after soak/resistance/armor
     (#2018) — condition-damage interactions amplify, dampen, consume, or transform
     conditions. Narration fires only on transitions (removal/transform), not every hit.
+    `apply_damage_to_opponent` also calls `_try_interpose_for_opponent` (#2207) so a
+    declared guardian can shield an ALLY-allegiance opponent (a summon) the same way
+    `apply_damage_to_participant` shields a PC — see the Key Services list below.
   - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
     from each active participant holding a reactive condition; called by `begin_round_of_combat`
     immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060.
@@ -3236,6 +3397,53 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     True when the target has an active `ConditionInstance` whose
     `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
     filter sites to honour the intangibility gate.
+- **Cast-position targeting (#2206):** runtime destination selection for the
+  position-consuming effect-palette techniques (Barricade/obstacle, Phase Jump/teleport,
+  Force Grip/telekinesis — previously placeholder `destination_position_id=0` at seed
+  time, see `docs/systems/magic.md`), wired end-to-end for combat declaration:
+  - `resolve_cast_position_params(participant, technique, position_params)`
+    (`world/combat/services.py`) — validates a declared `destination_position_id` (single)
+    or `position_a_id`/`position_b_id` (pair) against the encounter's own room and the
+    technique's `reach`/`reach_hops`; raises `ActionDispatchError` (`UNKNOWN_ACTION_REF`) on
+    a foreign-room position or a half-supplied pair, `TARGET_OUT_OF_REACH` when the caster
+    is placed and the destination exceeds reach.
+  - `CastTechniqueAction.round_declaration` (`actions/definitions/cast.py`) forwards a
+    `position_params` kwarg into the round-declaration kwargs; `CombatRoundContext
+    ._resolve_cast_positions` (`world/combat/round_context.py`) calls
+    `resolve_cast_position_params` and persists the resolved FKs onto the
+    `CombatRoundAction` at declaration time (`declare_action`, `world/combat/services.py`).
+  - `CombatTechniqueResolver._apply_conditions` (`world/combat/services.py`) reads the three
+    FKs back off the declared action and forwards them as `position_params` to
+    `apply_technique_conditions` (`world/magic/services/condition_application.py`), the same
+    shared seam the non-combat cast path already used.
+  - **Root-cause fix in the shared conditions layer:** position ids now thread through
+    `BulkConditionApplication.cast_destination_id` / `cast_position_a_id` /
+    `cast_position_b_id` (`world/conditions/types.py`) and are stamped onto the resulting
+    `ConditionInstance` by `_stamp_cast_positions` (`world/conditions/services.py`) **before**
+    `CONDITION_APPLIED` fires — same-event reactive handlers
+    (`create_obstacle_on_condition` and siblings, #2019) read the position fields off
+    `payload.instance` synchronously. This replaces the old post-hoc
+    `_apply_position_params_to_instances` helper (removed) and also fixes the previously-broken
+    non-combat live path, which suffered the same race.
+  - `position_target_shape(technique) -> "pair" | "single" | "none"`
+    (`world/magic/services/targeting.py`, batched `Prefetch` over condition→trigger→flow
+    steps) classifies which position input shape a technique's effects consume; exposed on
+    available actions via `PlayerAction.position_target_shape`
+    (`actions/player_interface.py`) → `RoundActionSerializer.position_target_shape`
+    (`actions/serializers.py`) so the frontend can render the right picker (single point vs.
+    endpoint pair) without hardcoding technique names.
+  - `RoundActionSerializer` (`world/combat/serializers.py`) exposes the three FKs; note
+    drf-spectacular does not introspect them (pre-existing generator gap) — generated
+    frontend types were not regenerated for this field, a known/documented degradation.
+  - **Frontend:** a Positions picker in `ActionDeclarationCard` (single/pair, reach-greyed),
+    shape-aware `position_params` dispatch kwargs, state lifted to `CombatScenePage`, and
+    map-click picking via `TacticalMap.onPickPosition` (`frontend/src/areas/components/`).
+  - **Telnet needed zero changes** — #2019's `position=`/`position_a=,position_b=` command
+    grammar (`commands/combat.py`) already produced a `position_params` kwarg; #2206 is what
+    makes that kwarg actually reach validation and persistence in the combat round.
+  - Proven at the round seam by `world/combat/tests/test_cast_position_declaration.py`
+    (foreign-room rejection + a full declare→resolve→condition→sealed-edge journey for
+    Barricade); non-combat web casting still has no position picker (telnet-only there).
 - **Event:** `EventName.COMBAT_ROUND_STARTING` (`flows/constants.py`) — emitted at the
   start of each round by `begin_round_of_combat`; `drain_reactive_upkeep` subscribes to it.
 - **Condition fields added for effect palette (#1584):**
@@ -3251,11 +3459,50 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Key Services (`world/combat/services.py`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
-  - `declare_interpose(participant, ally)` — arm an INTERPOSE `CombatRoundAction` for the round
+  - `declare_interpose(participant, ally=None, technique=None)` — arm an INTERPOSE
+    `CombatRoundAction` for the round. **Guardian reaction declaration (#2207):** an
+    optional *technique* reuses `CombatRoundAction.focused_action` (no new column) to
+    carry a declared protective technique into the round; gated on the participant
+    knowing it (`CharacterTechnique`), it classifying to a non-`redirect` protective
+    flavor via `world.magic.services.targeting.protective_flavor` (`redirect` deferred
+    to #2210), and `ally` still resolving to an active co-encounter participant when
+    given. `technique=None` keeps the pre-#2207 mundane shape (passives only,
+    `focused_action` zeroed). See the combat `AGENT_GLOSSARY.md`'s Guardian reaction
+    entry and ADR-0118.
   - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
-    an armed interpose challenge and dispatches it
-  - `dispatch_interpose(interposer, protected, pre_payload, approach)` — thin wrapper over
-    `dispatch_capability_reaction`; calls `apply_interpose_outcome` to mutate the payload
+    an armed interpose challenge naming *participant* (or "any ally") and dispatches it
+    via `_dispatch_interpose_action`
+  - `_try_interpose_for_opponent(opponent, pre_payload)` (#2207) — the summon-guarding
+    sibling of `_try_interpose`: extends interpose to ALLY-allegiance `CombatOpponent`
+    wards (player summons/companion NPCs). **ANY-ALLY only** — `CombatRoundAction.
+    focused_ally_target` FKs `CombatParticipant`, so it can never name a `CombatOpponent`
+    directly; only an armed `focused_ally_target IS NULL` declaration can pick up a
+    summon. Named-ally guarding of a summon is a follow-up once `focused_ally_target`
+    (or a sibling field) can point at an opponent. Called from `apply_damage_to_opponent`.
+  - `_dispatch_interpose_action(action, protected, pre_payload)` (#2207) — shared tail for
+    both ward types; computes the bond-bonus modifier (`bond_bonus`, #2021) then forks on
+    `action.focused_action_id`: set → `_try_technique_interpose` (anima cost, no fatigue);
+    unset → `dispatch_interpose(..., select_best_check_rating=True)` + fatigue charge on fire.
+  - `dispatch_interpose(interposer, protected, pre_payload, approach, *, select_best_check_rating=False)`
+    — thin wrapper over `dispatch_capability_reaction`; calls `apply_interpose_outcome` to
+    mutate the payload. **Best-of check selection (#2207):** the mundane guardian path calls
+    this with `select_best_check_rating=True`, so `dispatch_capability_reaction` picks the
+    higher-rated of the guardian's *real* available reaction approaches (the Reflexes vs.
+    Melee-Defense twins seeded per interpose capability in `interpose_content.py`) via
+    `world.checks.services.compute_check_rating` — deterministic, zero extra rolls, never
+    inventing an action outside `get_available_actions`'s output (ADR-0032).
+  - `_try_technique_interpose(action, interposer, protected, pre_payload, *, extra_modifiers=0)`
+    (#2207) — resolves a technique-guardian's declared protective reaction. Affordability
+    first (`ConditionTemplate.reactive_anima_cost` via `protective_condition_and_flavor`;
+    unaffordable → fizzle, no roll/no cost); rolls the guardian's own cast check
+    (`resolve_cast_check_type`, None-guarded — an unprovisioned caster fizzles the same way)
+    against the mundane Interpose challenge's severity; debits anima (not fatigue) on any
+    non-fizzle fire; grades via the SAME `_grade_interpose_damage` the mundane path uses
+    (SHIELD divisor included). A clean `blink`-flavored block relocates the ward to the
+    guardian's own current position (`force_move_to_position`) — a stand-in for #2206's
+    `CombatRoundAction.cast_destination`, preferred once that field lands. `redirect` is
+    rejected at declaration time, not here. See ADR-0118 for why this rolls outside
+    `use_technique`.
   - `apply_interpose_outcome(pre_payload, result)` — SUCCESS zeroes payload, PARTIAL halves,
     FAILURE is a no-op
   - `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints
@@ -3306,13 +3553,23 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     idempotent seed for the 4 social-combat CheckTypes (Rally/Demoralize/Taunt/Parley
     with stat+skill+spec), the Inspired condition, and a Charming Word technique.
 - **Key Services (`world/mechanics/reactions.py`):**
-  - `dispatch_capability_reaction(character, protected, challenge_name, approach, outcome_fn)`
-    — shared reactive spine; used by INTERPOSE and the catch-faller seam
+  - `dispatch_capability_reaction(character, protected, challenge_name, approach, outcome_fn, *, select_best_check_rating=False)`
+    — shared reactive spine; used by INTERPOSE and the catch-faller seam. `approach`
+    still wins when given; `select_best_check_rating=True` (opt-in, #2207) only changes
+    the ``approach is None`` fallback: instead of the naive first-match pick, it groups
+    the actor's real available reaction actions by resolved `check_type`, rates each
+    DISTINCT check type once via `world.checks.services.compute_check_rating`, and
+    returns the action backed by the higher-rated one (`_select_best_rated_action`) —
+    deterministic (ADR-0019), no invented actions (ADR-0032). Existing callers (Succor,
+    the scene-cover path) leave it `False` and keep the prior first-match behavior.
 - **Reactive content seeds:**
   - `ensure_interpose_content()` (`src/world/combat/interpose_content.py`) — idempotent
     seed for the INTERPOSE `ChallengeTemplate` + four capability-gated `Application` rows
     (telekinesis, shield, barrier, pull_aside) + Reflexes `CheckType` + SUCCESS-tier DESTROY
-    consequence
+    consequence. Each interpose capability also seeds a Melee-Defense twin `Application`
+    (#2207) keyed on the SAME `CapabilityType` as its base row (not a separate
+    `melee_guard` type) — the twin is what `select_best_check_rating` actually has to
+    choose between on the real dispatch path.
   - `ensure_succor_content()` (`src/world/combat/succor_content.py`) — idempotent seed for
     the SUCCOR `ChallengeTemplate`, reusing the same four capability-gated `Application` rows
     Interpose seeds + a dedicated exploration `CheckType` + SUCCESS-tier DESTROY consequence
@@ -3326,7 +3583,26 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
   participant, add opponent, pause), player actions (declare, ready, interpose, cover,
   yield, flee, use_item, my_action, available_combos, rally, demoralize, taunt, parley),
-  duel challenge endpoints
+  duel challenge endpoints. **Guard declaration (#2207):** `InterposeSerializer`
+  (`world/combat/serializers.py`) only carries `ally_participant_id` — the optional
+  `technique_id` (protective technique) has no bespoke REST verb yet, so the web Guard
+  panel dispatches through the generic REGISTRY path instead
+  (`POST /api/actions/characters/{characterId}/dispatch/` with
+  `registry_key: "combat_interpose"`, `actions/definitions/combat_maneuvers.py`), the
+  same seam bespoke-verb-less maneuvers already use.
+- **Web (#2207):** a "Guard" panel in `YourTurn` (`frontend/src/combat/sections/
+  YourTurn.tsx`) — a ward select (any-ally default or a named participant) plus an
+  optional protective-technique select sourced from `PlayerAction.protective_flavor`
+  (new field, `barrier`/`blink`/`redirect`/`null` — `redirect` excluded from the picker
+  until #2210 lifts the declaration-time gate) — dispatches via `useGuardMutation`
+  (`frontend/src/combat/queries.ts`) and shows a "Guarding" badge once armed.
+- **Telnet parity (#2207):** `combat interpose [ally] [with <technique>]`
+  (`CmdCombat._resolve_interpose_args`, `src/commands/combat_maneuvers.py`) — both
+  clauses optional; `with <technique>` splits on `" with "` (mirrors
+  `CmdClashCommit`'s split) and resolves the technique name via `_find_technique_id`,
+  which already gates on the caller knowing it (defense-in-depth alongside the
+  service-layer gate in `declare_interpose`). Works ally-less: `combat interpose with
+  <technique>`.
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
   conditions (`bulk_apply_conditions` — now installs reactive side-effects;
@@ -3746,7 +4022,35 @@ writeup kudos/complaint feedback.
   one owned sheet. Frontend: the commend button on the "Writeups" subsection of
   `RelationshipsSection` (`frontend/src/components/character/RelationshipsSection.tsx`, own-
   sheet gated), fed by `frontend/src/relationships/` (`api.ts`/`queries.ts`), POSTs
-  `{writeup_type: "update", writeup_id}` to `.../kudos/`.
+  `{writeup_type: "update", writeup_id}` to `.../kudos/`. A "Report" button beside Commend
+  opens `WriteupComplaintDialog` (#2159, `frontend/src/relationships/components/`), which
+  POSTs `{writeup_type, writeup_id, reason}` to `.../complaint/` — zero follow-up read
+  surface, matching `WriteupComplaint`'s staff-only visibility.
+- **Writeup timeline action (#2159):** `GET .../relationship-updates/timeline/` merges
+  Update/Development/Capstone history into one type-tagged (`kind`), `-created_at`-ordered,
+  paginated feed. Exactly one of two mutually exclusive params (both/neither → 400):
+  `?about_character=<CharacterSheet pk>` — non-PRIVATE writeups about that character from
+  any author, plus PRIVATE ones where the caller is the author or the subject (the
+  queryset-level generalization of `services._can_view_writeup`, entirely DB-side, no
+  Python row filtering); `?relationship=<CharacterRelationship pk>` — one relationship's
+  full history incl. PRIVATE, source-owner-only (tenure join; 404 missing, 403 non-source).
+  Implementation: each writeup model's queryset is projected to a shared column shape and
+  combined via `.union()` (per-branch `.order_by()` clears `Meta.ordering` — SQLite
+  rejects `ORDER BY` inside a union branch).
+- **RelationshipPanel (#2159):** the "Ties" subsection of `RelationshipsSection`, replacing
+  the old free-text `CharacterData.relationships` Notes list. Branches on `isMyCharacter`
+  (`frontend/src/relationships/components/RelationshipPanel.tsx`), mirroring
+  `CharacterRelationshipViewSet`'s author-private scoping (ADR-0117): own sheet renders
+  `OwnRelationshipsList` — `GET .../relationships/?source=<sheet pk>` (list serializer, no
+  `track_progress`) for target/affection rows, each expandable (Radix `Accordion`, lazy —
+  no N+1 up front) into `GET .../relationships/<id>/` (detail serializer, for
+  `track_progress` points/tiers) plus the `?relationship=` timeline arm for full history,
+  and buttons opening `RelationshipWriteupDialog` in development/capstone/redistribute
+  modes (`target_persona_id` resolved via `GET /api/personas/?character_sheet=`, since the
+  list/detail relationship serializers only carry the target's CharacterSheet pk, not a
+  Persona pk). Foreign sheet renders `ForeignRelationshipTimeline` — the `?about_character=`
+  arm only, type-tagged, deliberately no numeric fields (`RelationshipTimelineEntry` itself
+  carries none).
 - **Automatic affection shifts (#1697):** `AffectionShift` model +
   `apply_affection_shift(*, source, target, scene, effect, amount)` — the generic
   valence-signed success consequence (`EffectType.SHIFT_AFFECTION`, handler in

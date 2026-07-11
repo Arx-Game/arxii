@@ -3,19 +3,23 @@
  *
  * Composed panel for character relationships. Three sub-sections:
  * 1. Soul Tethers — SoulTetherStatusPanel displaying active tether bonds.
- * 2. Writeups — commendable relationship writeups about the OWN character (#2031).
- * 3. Notes — free-text relationship entries from CharacterData.relationships.
+ * 2. Writeups — commendable relationship writeups about the OWN character (#2031),
+ *    plus a "Report" button (#2159) filing a staff-triage bad-faith-RP complaint.
+ * 3. Ties — RelationshipPanel (#2159): own sheet gets the full outbound relationship
+ *    list (tracks/tiers/history); a foreign sheet gets the visibility-scoped timeline.
+ *    Replaces the old free-text `CharacterData.relationships` Notes subsection, which
+ *    no longer renders.
  */
 
 import { useState } from 'react';
 
-import type { CharacterData } from '@/roster/types';
 import { SoulTetherStatusPanel } from '@/magic/components/SoulTetherStatusPanel';
 import { useMyTetherBonds } from '@/magic/queries';
 import { useGiveWriteupKudos, useMyWriteups } from '@/relationships/queries';
+import { RelationshipPanel } from '@/relationships/components/RelationshipPanel';
+import { WriteupComplaintDialog } from '@/relationships/components/WriteupComplaintDialog';
 
 interface RelationshipsSectionProps {
-  relationships?: CharacterData['relationships'];
   /** The CharacterSheet PK for the viewed character. Passed to SoulTetherStatusPanel. */
   characterSheetId?: number;
   /**
@@ -39,7 +43,6 @@ interface RelationshipsSectionProps {
 }
 
 export function RelationshipsSection({
-  relationships,
   characterSheetId,
   isMyCharacter = false,
 }: RelationshipsSectionProps) {
@@ -47,6 +50,10 @@ export function RelationshipsSection({
   const { data: writeups = [] } = useMyWriteups(characterSheetId, isMyCharacter);
   const giveKudos = useGiveWriteupKudos();
   const [kudosError, setKudosError] = useState<string | null>(null);
+  const [complaintTarget, setComplaintTarget] = useState<{
+    writeupId: number;
+    title: string;
+  } | null>(null);
 
   const relationshipIds = bonds.map((b) => b.relationship_id);
 
@@ -107,6 +114,14 @@ export function RelationshipsSection({
                         Commend
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setComplaintTarget({ writeupId: writeup.id, title: writeup.title })
+                      }
+                    >
+                      Report
+                    </button>
                   </div>
                 </li>
               ))}
@@ -114,18 +129,24 @@ export function RelationshipsSection({
           </div>
         )}
 
-        {/* Sub-section: Notes (free-text) */}
+        {/* Sub-section: Ties (#2159) — real relationship state, replacing free-text Notes */}
         <div>
-          <h4 className="text-lg font-medium">Notes</h4>
-          <ul className="list-disc pl-5">
-            {relationships?.length ? (
-              relationships.map((rel) => <li key={rel}>{rel}</li>)
-            ) : (
-              <li className="text-muted-foreground">No relationship notes yet.</li>
-            )}
-          </ul>
+          <h4 className="text-lg font-medium">Ties</h4>
+          <RelationshipPanel characterSheetId={characterSheetId} isMyCharacter={isMyCharacter} />
         </div>
       </div>
+
+      {complaintTarget && (
+        <WriteupComplaintDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setComplaintTarget(null);
+          }}
+          writeupType="update"
+          writeupId={complaintTarget.writeupId}
+          writeupTitle={complaintTarget.title}
+        />
+      )}
     </section>
   );
 }

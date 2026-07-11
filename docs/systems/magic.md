@@ -248,6 +248,8 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 | `cast_requires_consent(technique) -> bool` | True iff `technique_alters_behavior` — **behavior only**, not blanket benign |
 | `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
 | `resolve_targets(*, technique, initiator_persona, scene, supplied_personas) -> list[Persona]` | Expands target_type to concrete personas: SELF→caster; SINGLE→one; AREA→all eligible in scene; FILTERED_GROUP→supplied ∩ eligible |
+| `protective_condition_and_flavor(technique) -> tuple[ConditionTemplate, str] \| None` (#2207) | Classifies a technique's reactive-trigger handler into `barrier`/`blink`/`redirect` by walking `condition_applications → condition.reactive_triggers → flow_definition.steps` (one batched Prefetch query); returns the matched `ConditionTemplate` too, since combat's guardian resolution needs its `reactive_anima_cost`. No new authored field — derives from the existing effect-palette data. |
+| `protective_flavor(technique) -> str \| None` (#2207) | Thin wrapper over `protective_condition_and_flavor` returning only the flavor string; used by `declare_interpose`'s declaration-time gate (combat, `world/combat/services.py`) |
 
 **Consent routing** (in `world/scenes/cast_services.py:request_technique_cast`):
 - Hostile → `seed_or_feed_encounter_from_cast` (combat).
@@ -942,6 +944,16 @@ hook creates the companion `RitualLiturgy` via `RitualLiturgyFactory`.
 `CmdRitual` adapter for the Ritual of the Durance (mirroring the covenant adapters) — is
 tracked in **#1700** (under the telnet-E2E umbrella #1328).
 
+**Origin scene (#2159).** `RitualSession.scene` (nullable FK → `scenes.Scene`, `SET_NULL`)
+captures the initiator's active scene at draft time via the canonical `get_active_scene`
+resolver — never client-supplied. `RitualSessionFilterSet` exposes a `?scene=` `NumberFilter`
+(field `scene_id`) on the sessions list endpoint so a scene can surface its own
+PENDING/READY sessions (the web `RitualProposedChip` on `/game` and `/scenes/:id`, see
+`frontend/src/rituals/CLAUDE.md`). Like the other `RitualSessionFilterSet` filters
+(`as_invitee`/`as_initiator`/`ritual`/`participation_rule`), `?scene=` doesn't appear in the
+generated OpenAPI schema — drf-spectacular can't introspect this viewset's request-dependent
+filterset (pre-existing gap).
+
 ---
 
 ### Audere & Audere Majora (models/audere.py, audere_majora.py)
@@ -989,6 +1001,103 @@ makes the very next eligibility poll pass — no separate re-sync step.
 
 **Context fields on scenes serializers:** `SceneDetailSerializer.viewer_can_gm` (bool — True when the requesting user is the scene's GM, owner, or staff; controls GM control visibility); `InteractionSerializer.dramatic_moment_tags` (list — tags anchored to the pose; drives the interaction badge); `SceneParticipationSerializer.dramatic_moment_count` (int — per-participant tally in the scene).
 
+#### Dramatic Moment Suggestion — the technique-entrance recognition bridge (#2183)
+
+A **Technique Entrance** (see below) that clears an authored success-level threshold does not
+auto-tag — it creates a `DramaticMomentSuggestion` a GM later confirms (minting a real
+`DramaticMomentTag`, with the usual resonance grant + renown award) or dismisses. See
+ADR-0113 for why recognition stays a human-adjudicated nudge rather than a mechanical
+auto-grant.
+
+**Knobs on `DramaticMomentType`:**
+- `suggest_on_technique_entrance` (bool, default False) — opts this moment type into the
+  technique-entrance bridge at all.
+- `suggestion_min_success_level` (`PositiveSmallIntegerField`) — the cast success level that
+  must be cleared (`>=`) for a suggestion to fire.
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `DramaticMomentSuggestion` | GM-facing PENDING suggestion surfaced by a high-success technique entrance | `moment_type` FK (PROTECT), `character_sheet` FK (CASCADE), `scene` FK (nullable/SET_NULL), `interaction` FK (nullable/SET_NULL, `db_constraint=False` — the entrance pose that triggered it), `interaction_timestamp` (denormalized), `success_level`, `status` (`SuggestionStatus`: PENDING/CONFIRMED/DISMISSED), `resolved_by` FK AccountDB (PROTECT), `confirmed_tag` OneToOneField → `DramaticMomentTag` (the tag minted on confirmation, if any). Unique constraint: one PENDING suggestion per `(moment_type, character_sheet, scene)`. |
+
+**Services (`services/gain.py`):**
+- `maybe_suggest_dramatic_moments(*, character_sheet, scene, success_level, interaction=None) -> list[DramaticMomentSuggestion]`
+  — scans `DramaticMomentType` rows flagged `suggest_on_technique_entrance` whose
+  `suggestion_min_success_level <= success_level`; for each, skips if the character hasn't
+  claimed the type's resonance, or if `per_scene_cap` real tags are already spent for this
+  `(moment_type, scene)`; otherwise `get_or_create`s a PENDING suggestion (idempotent — a
+  second qualifying cast in the same scene does not duplicate it). No-ops (`[]`) when
+  `scene` is `None` — a suggestion is scene-scoped, same as the tag cap it mirrors.
+- `resolve_dramatic_moment_suggestion(suggestion, *, resolver, confirm) -> DramaticMomentSuggestion`
+  — confirm mints a real `DramaticMomentTag` via `create_dramatic_moment_tag` (full
+  resonance-grant + renown-award side effects); dismiss just closes the suggestion out.
+  Raises `DramaticMomentSuggestionAlreadyResolved` on a non-PENDING suggestion; `confirm`'s
+  `EndorsementValidationError`/`DramaticMomentCapExceeded` propagate uncaught.
+
+**Actions (`actions/definitions/dramatic_moments.py`):** `ConfirmDramaticMomentSuggestionAction`
+(key `"confirm_dramatic_moment_suggestion"`) / `DismissDramaticMomentSuggestionAction`
+(key `"dismiss_dramatic_moment_suggestion"`) — both **account-authorized** (mirrors
+`actions/definitions/events.py`'s host-lifecycle actions: `actor=None`, `account=<resolver>`,
+since a web GM confirming/dismissing may have no puppeted character). The GM gate
+(`_account_can_gm_scene`) mirrors `IsSceneGMOrOwnerOrStaff` / `SceneDetailSerializer
+.get_viewer_can_gm`: staff, or `scene.is_gm(account)`, or `scene.is_owner(account)`.
+
+**Web:** `DramaticMomentSuggestionViewSet` (`world/magic/views.py`) —
+`GET /api/magic/dramatic-moment-suggestions/?scene=<id>` (PENDING suggestions for a scene,
+same GM/owner/staff gate as list); `POST .../{id}/confirm/` / `POST .../{id}/dismiss/`
+dispatch the REGISTRY actions above.
+
+**Telnet:** `CmdMoment` (`commands/dramatic_moments.py`, key `"moment"`) — `moment
+suggestions` (PENDING suggestions for the active scene here), `moment confirm <id>`,
+`moment dismiss <id>`. Account-authorized like the web surface (`account=self.caller.account`).
+
+**Frontend:** `DramaticMomentSuggestionChip` (`frontend/src/scenes/components/`), mounted
+in `PoseUnit` for the caller's own entrance poses.
+
+**Seed content:** `ensure_dramatic_entrance_content()` (`world/magic/factories.py`) seeds the
+"Grand Entrance" `DramaticMomentType` (self-contained — get-or-creates its own "Fervor"
+Resonance + "Celestial" Affinity by name, mirroring `seeds_touchstone_content
+.ensure_touchstone_content`) with `suggest_on_technique_entrance=True` and
+`suggestion_min_success_level=3` — framework-proving content so the bridge has something real
+to surface, not only under test factories.
+
+### Technique Entrance (#2183)
+
+A **Technique Entrance** is a "make an entrance" whose check IS a technique cast — the
+technique's own success level substitutes for the entrance's social check entirely (one
+roll, not two; see ADR-0113). Reached via telnet `enter <technique>[=<target>]`
+(`commands/social/entrance_flourish.py`'s `CmdEnter`, dispatching `EntranceAction().run()`
+directly) or the web `EntranceTechniqueAttachment` popover
+(`frontend/src/scenes/components/`) attached to the entry pose in `CommandInput`, which
+POSTs to `/api/action-requests/` — `SceneActionRequestViewSet._create_technique_entrance`
+(`world/scenes/action_views.py`) dispatches the same `EntranceAction().run()` seam rather
+than the generic technique-as-`ActionEnhancement` consent path the rest of that endpoint
+uses (#2183 Task 8 fold-in — that generic path has no `ActionEnhancement` row for
+`"entrance"` and would always 400).
+
+**Dispatch: `EntranceAction._execute_technique_entrance`** (`actions/definitions/social.py`)
+mirrors `CastTechniqueAction.execute` (scene/persona/technique/target resolution, soulfray
+`PendingCast` gating) but routes the outcome through a **deferral matrix** instead of a flat
+success/failure, since the entrance's real success level isn't always known at declaration
+time:
+
+| Branch | What happens |
+|--------|--------------|
+| Resolved inline (self/room/no-target, or a benign no-consent cast at another PC) | Full hooks fire immediately once the success level clears 0: entry-flourish offer, disposition delta (non-hostile only), the `Dramatic Moment Suggestion` check, and — when the target is another sheet's ACTIVE combatant — a **benign-intervention combat join** (`seed_or_feed_encounter_from_benign_intervention`, see combat.md). |
+| Hostile cast at another PC | Seeds/feeds a combat encounter (`seed_or_feed_encounter_from_cast(..., from_entrance=True)`) — flourish only; the success level isn't known until the declared cast resolves at round resolution (see combat.md's `_maybe_suggest_entrance_dramatic_moment`). |
+| PENDING (benign consent-gated, or hostile #777 risk-gated) | No hooks at declaration; `SceneActionRequest.originated_as_entrance` marks the request so `resolve_accepted_cast` fires the deferred hooks at accept-time resolution instead. |
+| Soulfray gate not confirmed | Registers a `PendingCast` (mirrors `cast.py`) carrying an `"entrance": True` marker in its kwargs; `SoulfrayPendingHandler`'s `accept soulfray` re-dispatch reads the marker and re-enters through the `"entrance"` REGISTRY action (not `"cast_technique"`) so the flourish/suggestion/intervention hooks stay reachable — see `world/magic/offer_handlers.py`. |
+| Already an ACTIVE participant in a feedable encounter | Clean failure — "You're already in the fight." |
+| No active scene at the actor's location | The cast seam's own failure message. |
+
+**Shared hook helper:** `run_entrance_success_hooks(actor, scene, *, success_level,
+target_persona_id, technique, interaction=None) -> str | None` (`actions/definitions/social.py`)
+— fires the entry-flourish offer (gated on the "Entrance" `ActionTemplate.grants_entry_flourish`,
+independent of the technique's own template) and, when `success_level is not None`, the
+Dramatic Moment Suggestion check (`maybe_suggest_dramatic_moments`). Shared by
+`EntranceAction`'s inline/hostile branches, the accept-time deferred-hook path
+(`world/scenes/cast_services.py`), and combat's round-resolution hook — one signature, three
+call sites, no drift.
+
 ### Other
 
 | Model | Purpose |
@@ -1009,15 +1118,36 @@ point calls all nine sub-builders:
 | Aegis Field | Aegis Field | `absorb_pool` (priority 10) | DAMAGE_PRE_APPLY; mutation-only; overflow lands |
 | Mirror Ward | Mirror Ward | `reflect_damage` (priority 20) | DAMAGE_PRE_APPLY; mutation-only; bounces via `bypass_pre_apply` |
 | Phase Step | Phase Step | `blink_dodge` (priority 30) | DAMAGE_PRE_APPLY; mutation-only; moves bearer on success |
-| Phase Jump | Phase Jump | `move_position_on_condition` adapter | CONDITION_APPLIED; placeholder destination (follow-up: #1584 note) |
-| Barricade | Barricade | `create_obstacle_on_condition` adapter | CONDITION_APPLIED; placeholder destination (follow-up: #1584 note) |
+| Phase Jump | Phase Jump | `move_position_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
+| Barricade | Barricade | `create_obstacle_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 | Ghostform | Ghostform | intangibility category only (`grants_intangibility=True`) | `ConditionCategory`; intangibility gate via `is_untargetable` |
 | Earthmeld | Earthmeld | intangibility category only (1-round duration) | `ConditionCategory`; as Ghostform |
-| Force Grip | Force Grip | `move_position_on_condition` adapter (ENEMY target) | CONDITION_APPLIED; placeholder destination (follow-up: #1584 note) |
+| Force Grip | Force Grip | `move_position_on_condition` adapter (ENEMY target) | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 
-**Placeholder-destination follow-up:** Phase Jump, Barricade, and Force Grip embed
-`destination_position_id=0` at seed time; runtime destination selection (player
-picks a position) is deferred to a follow-up issue.
+**Runtime destination selection (#2206 — supersedes the old placeholder-destination
+follow-up note):** Phase Jump, Barricade, and Force Grip still embed
+`destination_position_id=0` at seed time (`ensure_effect_palette_content()`), but that
+value is now only ever a fallback — for **combat**, the player picks a real position at
+declaration time. `CombatRoundAction` carries three nullable FKs to `areas.Position`:
+`cast_destination` (Phase Jump / Force Grip — single point) and `cast_position_a`/
+`cast_position_b` (Barricade — an endpoint pair). `resolve_cast_position_params`
+(`world/combat/services.py`) validates the declared position(s) against the encounter's
+own battlefield room and the technique's `reach`/`reach_hops` at declaration; a foreign-room
+position or a half-supplied pair is rejected outright. `position_target_shape(technique)`
+(`services/targeting.py`) classifies which shape (`pair`/`single`/`none`) a technique's
+effects consume, by walking its applied conditions' reactive-trigger flow steps for a
+`create_obstacle_on_condition`-family (pair) or `move_position_on_condition`-family
+(single) handler; this is exposed on available combat actions
+(`actions/player_interface.py` → `RoundActionSerializer.position_target_shape`) so the
+frontend picker knows whether to collect one point or two. See `docs/systems/INDEX.md`'s
+Combat section ("Cast-position targeting") for the full declaration → resolver →
+condition-handler wiring, including the shared-conditions root-cause fix
+(`_stamp_cast_positions` stamps the FKs onto the `ConditionInstance` before
+`CONDITION_APPLIED` fires, replacing the old post-hoc `_apply_position_params_to_instances`
+helper and also fixing the non-combat live path). **Non-combat web casting still has no
+position picker** — telnet's `position=`/`position_a=,position_b=` grammar (#2019,
+`commands/combat.py`) is the only non-combat-web-adjacent entry point today, and that
+grammar is what #2206 made actually reach validation/persistence in combat.
 
 **Handlers and adapters** (`src/world/magic/services/effect_handlers.py`):
 
@@ -1044,6 +1174,35 @@ picks a position) is deferred to a follow-up issue.
   A `CANCEL_EVENT` child fires unconditionally — even on the fizzle path — so an
   unaffordable defense would still cancel the attack. That bug was caught and fixed
   by the reactive E2E tests (#1584 Task 16).
+- **Payer rule (#2208, ADR-0118):** both cost paths debit
+  `ConditionInstance.source_character`, falling back to the bearer (`target`) when
+  unset. `_try_spend_reactive` (fire cost) and `drain_reactive_upkeep` (round upkeep,
+  per-participant) both resolve the payer this way — an ally ward strains its caster,
+  never the ally wearing it; an upkeep payer who can't afford the round cost causes
+  the ward to lapse (row deleted, `Trigger` rows cascade). Self-cast wards are
+  unchanged: `source_character` already equals the bearer.
+
+**Ally + party ward variants (#2208):** each of the three reactive-defense
+`ensure_*_content()` builders above (Aegis Field / Mirror Ward / Phase Step) also
+seeds an ALLY-single and an ALLY-`FILTERED_GROUP` (party) Technique variant, reusing
+the exact same `ConditionTemplate`/triggers/flow as the self variant — no new
+ConditionTemplates, triggers, or flows.
+
+| Technique | Variant of | `target_kind` / `target_type` | Castable | `anima_cost` |
+|-----------|------------|-------------------------------|----------|---------------|
+| Aegis Ward | Aegis Field | ALLY / SINGLE | in or out of combat (existing ally-target seam) | 2 |
+| Aegis Communion | Aegis Field | ALLY / FILTERED_GROUP | out-of-combat party preparation | 4 |
+| Mirror Vigil | Mirror Ward | ALLY / SINGLE | in or out of combat | 2 |
+| Mirror Communion | Mirror Ward | ALLY / FILTERED_GROUP | out-of-combat party preparation | 4 |
+| Phase Guard | Phase Step | ALLY / SINGLE | in or out of combat | 2 |
+| Phase Communion | Phase Step | ALLY / FILTERED_GROUP | out-of-combat party preparation | 4 |
+
+Party (`Communion`) variants pay 2x the single variant's `anima_cost`. The
+`FILTERED_GROUP` party route is deliberately **out-of-combat only** — casting a
+party ward mid-encounter (in-combat party AoE) was not built; the reserved slot on
+the technique-target join table remains unused for that case. `FILTERED_GROUP`
+targeting is the benign, consent-free route per ADR-0045 (non-hostile group casts
+don't need per-target consent the way hostile multi-target casts do).
 
 ### Resonance Gain Surfaces (Resonance Pivot Spec C)
 
@@ -1504,7 +1663,7 @@ the legacy ThreadType lookup no longer exists.
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/threads/` | GET | List threads owned by requesting account (staff see all); excludes retired |
-| `/threads/` | POST | Weave a new thread. Body must include `character_sheet_id`; serializer delegates to `weave_thread` |
+| `/threads/` | POST | Weave a new thread. Body must include `character_sheet_id`; serializer delegates to `weave_thread`. For `target_kind=RELATIONSHIP_TRACK`, `target_id` is the `RelationshipTrack` **catalog** id (not a `RelationshipTrackProgress` pk) and `target_persona_id` (required, that kind only) names the partner — see the RELATIONSHIP_TRACK contract note below (#2159) |
 | `/threads/{id}/` | GET | Thread detail with anchor + resonance |
 | `/threads/{id}/` | DELETE | Soft-retire (stamps `retired_at`; row remains for historical references) |
 | `/thread-pull-preview/` | POST | Read-only preview; body `{character_sheet_id, resonance_id, tier, thread_ids[], action_context?}`; returns resonance/anima cost + `affordable` + `resolved_effects[]` |
@@ -1519,6 +1678,17 @@ the legacy ThreadType lookup no longer exists.
   `WeavingUnlockMissing`, `RelationshipBondNotOwned`, `XPInsufficient`,
   `RitualComponentError`). Views surface those messages as HTTP 400 detail
   (never raw `str(exc)`).
+- **RELATIONSHIP_TRACK catalog-id contract (#2159).** `target_id` for a RELATIONSHIP_TRACK
+  weave is the `RelationshipTrack` catalog id, never a `RelationshipTrackProgress` pk — no
+  API exposes that pk (`RelationshipTrackProgressSerializer` has no id field). The request
+  must also carry `target_persona_id` (write-only, RELATIONSHIP_TRACK only, same Persona-pk
+  convention `RelationshipUpdateViewSet._resolve_target_sheet` uses) naming the partner.
+  `ThreadSerializer._resolve_relationship_track_target` resolves the caller's own
+  `RelationshipTrackProgress` by `(relationship__source=character_sheet,
+  relationship__target=partner_sheet, track_id=target_id)` and never creates a progress row
+  — mirroring telnet's `CmdWeaveThread._resolve_track_anchor` — surfacing a friendly message
+  when the pair has no developed history on that track yet, instead of a raw not-found error.
+  RELATIONSHIP_CAPSTONE keeps resolving by its own pk (`target_persona_id` not used).
 - `weave_thread` asserts relationship-bond ownership for RELATIONSHIP_TRACK /
   RELATIONSHIP_CAPSTONE anchors (`target.relationship.source == character_sheet`,
   raising `RelationshipBondNotOwned`, #2033) **after** the `ThreadWeavingUnlock`
@@ -1551,6 +1721,16 @@ and `JournalEntry.related_threads` M2M for all thread kinds.
 | `/dramatic-moment-tags/` | GET | List tags; filterable by `character_sheet` and `scene`; paginated |
 
 No `DELETE` — tags are immutable provenance records.
+
+### Dramatic Moment Suggestion (#2183)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/dramatic-moment-suggestions/?scene=<id>` | GET | PENDING suggestions for a scene; `IsSceneGMOrOwnerOrStaff`-gated (400 without `?scene=`, 403 if ungated) |
+| `/dramatic-moment-suggestions/{id}/confirm/` | POST | Confirm — mints a `DramaticMomentTag` via `ConfirmDramaticMomentSuggestionAction` |
+| `/dramatic-moment-suggestions/{id}/dismiss/` | POST | Dismiss — closes the suggestion with no reward via `DismissDramaticMomentSuggestionAction` |
+
+Telnet parity: `moment suggestions` / `moment confirm <id>` / `moment dismiss <id>` (`CmdMoment`).
 
 ---
 

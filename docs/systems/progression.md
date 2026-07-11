@@ -287,6 +287,14 @@ result = award_kudos(
     character=character,  # optional: associate with specific character
 )
 # Returns AwardResult(points_data, transaction)
+#
+# Post-commit side effect (#2161): every award — regardless of caller (vote
+# settlement, GM award, writeup kudos, social-engagement roll, …) — schedules
+# `notify_kudos_received(account, amount=..., source_category=..., description=...)`
+# via `transaction.on_commit`, pushing a `kudos_received` WS frame to the recipient's
+# connected sessions so the toast surfaces in real time. `KudosTransactionSerializer`
+# never exposes `awarded_by` to the recipient (ADR-0033 structural guard) — the push
+# payload mirrors that: no awarder identity, only amount/source_category/description.
 
 # Claim kudos for conversion (atomic: updates balance + creates transaction)
 result = claim_kudos(

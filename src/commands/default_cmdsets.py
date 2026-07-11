@@ -47,6 +47,7 @@ from commands.crafting_station import CmdLabStation
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
+from commands.dramatic_moments import CmdMoment
 from commands.duels import CmdDuel
 from commands.durance import CmdDurance
 from commands.encounter import CmdEncounter
@@ -132,6 +133,7 @@ from commands.social.tidings import CmdTidings
 from commands.story import CmdStory
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
+from commands.travel import CmdTravel  # #2163
 from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
@@ -217,6 +219,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdSignature,
             # #2030 — motif style-binding namespace (bindstyle/unbindstyle/list).
             CmdMotif,
+            # #2183 — dramatic-moment suggestion inbox (suggestions/confirm/dismiss).
+            CmdMoment,
             CmdWeaveThread,
             CmdImbue,
             # #1490 — telnet face of ResolveAlterationAction; list/resolve Mage Scars.
@@ -369,6 +373,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPlaces,
             # #2005 — tactical position graph: list/take/move telnet namespace.
             CmdPosition,
+            # #2163 — "go there" travel: auto-walk to a character's location.
+            CmdTravel,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
             CmdMarket,

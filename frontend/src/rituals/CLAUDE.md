@@ -117,6 +117,32 @@ The `participant_fields` schema lives in `input_schema.participant_fields` on th
   `candidate_only` field hiding for the initiator (induction only), and bare
   session-kwargs `depends_on` resolution (formation).
 
+### `RitualProposedChip` (#2159 Task 7)
+
+`components/RitualProposedChip.tsx` — a transient badge shown in the `/game` scene
+surface (mounted in `frontend/src/game/components/RoomPanel.tsx`, right below
+`RoomHeader`) and on `SceneDetailPage` (`frontend/src/scenes/pages/SceneDetailPage.tsx`,
+below the battle-map/writeup links) while a PENDING/READY `RitualSession` has that scene
+as its captured origin (`RitualSession.scene`, #2159 Task 5). Takes `sceneId: number |
+null`, renders nothing while loading/erroring/empty, and links to
+`/rituals/sessions/{id}` when a session is found.
+
+Backed by `api.fetchRitualSessionsForScene(sceneId)` (`GET
+/api/magic/rituals/sessions/?scene=<sceneId>`) and `useRitualSessionsForScene(sceneId)`
+(`ritualSessionKeys.forScene(sceneId)`, `throwOnError` deliberately unset — mirrors
+`usePendingAlterations` in `magic/queries.ts`, since this chip is mounted widely and a
+fetch failure must degrade to rendering nothing). "Transient by design": `RitualSession`
+rows persist only during PENDING/READY (deleted outright on fire/cancel/expiry/
+threshold-killing decline, per the model docstring) — so a non-empty result already IS
+the PENDING/READY signal, no separate status field to check and no persistence work for
+this chip.
+
+The `?scene=` filter param lives on `RitualSessionFilterSet` but is absent from the
+generated OpenAPI schema — drf-spectacular cannot introspect `RitualSessionViewSet`'s
+request-dependent filterset (pre-existing gap; `as_invitee`/`as_initiator`/`ritual`/
+`participation_rule` are equally undocumented there). `fetchRitualSessionsForScene` builds
+the query string by hand rather than through a typed request param for that reason.
+
 ## Common Gotchas
 
 **`Ritual.input_schema` is `unknown` in the generated types.** Cast the ritual to

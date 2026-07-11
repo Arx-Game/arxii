@@ -1067,15 +1067,13 @@ class InteractionReaction(SharedMemoryModel):
 
     Originally intended as a temporary bridge model, but now fully integrated
     with the API layer (viewset, serializer, filters), frontend components,
-    admin, factories, and tests. When the proper kudos/voting system is
-    designed, migration will require:
-    - Data migration from InteractionReaction to the new model
-    - API endpoint update or versioning
-    - Frontend component update
-    - Partition SQL update for composite FK
-
-    For now, this model serves its purpose well. The migration path should be
-    designed when the kudos system is specced, not preemptively.
+    admin, factories, and tests. #2161 resolved the "will this get merged into
+    kudos/voting?" question raised in this docstring's earlier revisions:
+    reactions stay their own axis (see ADR-0115) — expression + an ambient
+    relationship bump (``ReactionEmoji.valence``) — distinct from kudos
+    (graciousness, ``award_kudos``) and votes (popularity/ranking,
+    ``WeeklyVote``). No migration is planned; this model is the permanent
+    home for emoji reactions, not a bridge.
     """
 
     interaction = models.ForeignKey(

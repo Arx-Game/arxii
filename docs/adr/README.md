@@ -124,6 +124,7 @@ treat those names as hints to confirm, not gospel.
 - [0058 — NPC disposition is two-tier: ephemeral for mooks, durable for named NPCs, with persona-promotion as the seam](0058-npc-disposition-is-two-tier-ephemeral-and-durable.md)
 - [0059 — Allegiance is the unified substrate for summons and future charm/switch-sides](0059-allegiance-is-the-summon-charm-substrate.md)
 - [0060 — Reactive defenses are mutation-only DAMAGE_PRE_APPLY flow handlers with a shared anima-cost pattern](0060-reactive-defenses-are-mutation-only-flow-handlers.md)
+- [0118 — Declared guardian reactions roll the caster's cast check outside `use_technique`](0118-guardian-reaction-seam.md) (extends ADR-0060/0096)
 - [0061 — Access-change fires one shared surface; discoverability is a shared abstract base](0061-access-change-fires-one-surface-discoverable-is-shared-base.md)
 - [0069 — Succor is a RoundContext capability; location shelter is a hard gate, not arithmetic resistance](0069-succor-roundcontext-capability.md)
 - [0070 — NPC ontology: Functionary, Standing, and Story NPCs as class-1..4](0070-npc-ontology-functionary-standing-story.md)
@@ -144,7 +145,11 @@ treat those names as hints to confirm, not gospel.
 - [0112 — MOVE tracks in-progress position via personal transit coordinates, not a rounds-counter](0112-move-uses-transit-coordinates.md) (extends ADR-0085)
 - [0113 — Consent defaults are a category tree, not per-category flags](0113-consent-defaults-are-a-category-tree.md) (extends ADR-0024)
 - [0114 — Player-authored accusations are weight-bearing secrets, gated by consent not the model](0114-accusations-are-weight-bearing-player-secrets.md) (extends ADR-0062/0113)
-- [0115 — The accusation→heat bridge lives justice-side, and its tier is emergent from the real deed underneath](0115-accusation-heat-bridge-tier-is-emergent-from-the-deed.md) (extends ADR-0114/0010)
+- [0115 — Applause is three axes, not one economy: votes=popularity, kudos=graciousness, reactions=expression](0115-applause-three-axes.md)
+- [0116 — PlayerMail is the letters surface at MVP; tenure-routed anonymity is the mechanism](0116-playermail-is-the-letters-surface-at-mvp.md)
+- [0117 — Relationship reads are scoped to the caller's own outbound rows, plus a soul-tether carve-out](0117-relationship-reads-scoped-to-own-outbound-rows.md)
+- [0118 — Reactive ward costs debit the applier, falling back to the bearer](0118-reactive-costs-debit-the-applier.md) (extends ADR-0060)
+- [0119 — The accusation→heat bridge lives justice-side, and its tier is emergent from the real deed underneath](0119-accusation-heat-bridge-tier-is-emergent-from-the-deed.md) (extends ADR-0114/0010)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
@@ -165,6 +170,7 @@ treat those names as hints to confirm, not gospel.
 - [0063 — The level-3 (Prospect→Potential) semi-crossing lives in the Ritual of the Durance, not Audere Majora](0063-level-3-semi-crossing-lives-in-the-durance.md)
 - [0064 — Dispel is a technique payload row, not an EffectKind (thread-pull) entry](0064-dispel-is-a-technique-payload-not-an-effectkind.md)
 - [0065 — A trainer-of-record bound to a room (DuranceTrainingSite) enables automated self-conduct of the Ritual of the Durance from telnet](0065-durance-trainer-of-record-enables-automated-self-conduct.md)
+- [0113 — A technique-driven entrance carries the cast: one check, not two](0113-entrance-carries-the-cast.md)
 
 ### Story & stakes
 - [0067 — Beat.risk is the stakes-wager declaration](0067-beat-risk-is-the-stakes-wager-declaration.md)

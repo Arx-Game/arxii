@@ -29,7 +29,6 @@ export interface KudosTransaction {
   source_category_name: string | null;
   claim_category_name: string | null;
   description: string;
-  awarded_by_name: string | null;
   transaction_date: string;
 }
 

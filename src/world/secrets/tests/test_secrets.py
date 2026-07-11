@@ -163,6 +163,18 @@ class MintAccusationServiceTests(TestCase):
                 level=SecretLevel.DANGEROUS,
             )
 
+    def test_author_holds_knowledge_of_their_own_accusation(self) -> None:
+        # #1825 counter-play (light smear): the framer knows what they minted, so a Level-1
+        # accusation is immediately gossipable by them (`gossip plant`).
+        author_entry = RosterEntryFactory()
+        secret = mint_accusation(
+            accuser_persona=author_entry.character_sheet.primary_persona,
+            subject_sheet=self.target,
+            content="They cheat at cards.",
+            level=SecretLevel.UNCOMMON_KNOWLEDGE,
+        )
+        assert secret_known_to(secret, author_entry) is True
+
 
 class AccusationPermittedTests(TestCase):
     """The frame-job consent gate (#1825) — the target's ``hostile`` category decides."""

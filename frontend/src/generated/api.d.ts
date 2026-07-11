@@ -7806,6 +7806,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/crafting/create/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Roll the crafting check and (on success) mint a new ItemInstance. */
+    post: operations['items_crafting_create_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/equipped-items/': {
     parameters: {
       query?: never;
@@ -9240,6 +9257,90 @@ export interface paths {
      *     POST /api/magic/crossing/respond/  {offer_id, option_id}
      */
     post: operations['magic_crossing_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/dramatic-moment-suggestions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+     *
+     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+     *     POST .../{id}/dismiss/ — dismiss.
+     *
+     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
+     *     (which independently re-checks it again — defense in depth for a direct-call caller).
+     */
+    get: operations['magic_dramatic_moment_suggestions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/dramatic-moment-suggestions/{id}/confirm/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+     *
+     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+     *     POST .../{id}/dismiss/ — dismiss.
+     *
+     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
+     *     (which independently re-checks it again — defense in depth for a direct-call caller).
+     */
+    post: operations['magic_dramatic_moment_suggestions_confirm_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/dramatic-moment-suggestions/{id}/dismiss/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+     *
+     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+     *     POST .../{id}/dismiss/ — dismiss.
+     *
+     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
+     *     (which independently re-checks it again — defense in depth for a direct-call caller).
+     */
+    post: operations['magic_dramatic_moment_suggestions_dismiss_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -14406,6 +14507,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/relationships/relationship-updates/timeline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Merged Update/Development/Capstone writeup history (#2159).
+     *
+     *     Exactly one of `about_character` or `relationship` must be provided (400
+     *     otherwise); see ``_timeline_about_character_queryset`` /
+     *     ``_timeline_relationship_queryset`` for each mode's visibility rule. Results
+     *     are type-tagged (``kind``), ordered ``-created_at``, and paginated per this
+     *     viewset's ``pagination_class``.
+     */
+    get: operations['relationships_relationship_updates_timeline_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/relationships/relationships/': {
     parameters: {
       query?: never;
@@ -14721,6 +14847,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/mail/{id}/mark-read/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Mark this mail as read (idempotent). Recipient-only via the scoped queryset. */
+    post: operations['roster_mail_mark_read_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/mail/unread-count/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Count of unread, unarchived mail across the requester's tenures. */
+    get: operations['roster_mail_unread_count_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/media/': {
     parameters: {
       query?: never;
@@ -14963,13 +15123,14 @@ export interface paths {
      *
      *     Featured = the highest-reacted GM-tagged pose; a tagged pose headlines even with
      *     zero reactions, because storyteller curation has primacy. When the scene has no
-     *     tags, this falls back to the single most-reacted pose. The index is the remaining
-     *     poses with at least one reaction, ranked by reaction count (ties -> most recent)
-     *     and capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the
-     *     reel can never surface a pose the viewer cannot already see — not even as a sealed
-     *     slot. The payload carries only interaction ids (the featured card is fully sealed);
-     *     the frontend reveals a pose by fetching it through the existing interaction-detail
-     *     endpoint, which re-checks visibility.
+     *     tags, this falls back to the single most-voted (reactions tie-break) pose. The
+     *     index is the remaining poses with at least one vote or reaction, ranked by
+     *     all-time vote count first, reaction count as tie-break, and recency last —
+     *     capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the reel
+     *     can never surface a pose the viewer cannot already see — not even as a sealed
+     *     slot. The payload carries interaction ids plus vote/reaction counts (the featured
+     *     card stays otherwise sealed); the frontend reveals a pose by fetching it through
+     *     the existing interaction-detail endpoint, which re-checks visibility.
      */
     get: operations['scenes_highlight_reel_retrieve'];
     put?: never;
@@ -20779,6 +20940,41 @@ export interface components {
       distinctions: components['schemas']['DraftDistinctionEntry'][];
     };
     /**
+     * @description Read-only GM confirm/dismiss inbox row (#2183).
+     *
+     *     List/confirm/dismiss all render this shape; there is no client-writable field —
+     *     resolution (confirm/dismiss) happens exclusively through the viewset's dispatch
+     *     of the REGISTRY actions, never through a serializer ``create``/``update``.
+     */
+    DramaticMomentSuggestion: {
+      readonly id: number;
+      readonly moment_type: number;
+      readonly moment_type_label: string;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number;
+      /** @description Scene context; nullable for resilience to scene cleanup. */
+      readonly scene: number | null;
+      /** @description The entrance pose that triggered this suggestion; nullable. */
+      readonly interaction: number | null;
+      /** @description Cast success level that triggered this suggestion. */
+      readonly success_level: number;
+      /** @default pending */
+      readonly status: components['schemas']['DramaticMomentSuggestionStatusEnum'];
+      /** @description GM account that confirmed or dismissed this suggestion. */
+      readonly resolved_by: number | null;
+      /** @description The DramaticMomentTag minted on confirmation, if any. */
+      readonly confirmed_tag: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `confirmed` - Confirmed
+     *     * `dismissed` - Dismissed
+     * @enum {string}
+     */
+    DramaticMomentSuggestionStatusEnum: 'pending' | 'confirmed' | 'dismissed';
+    /**
      * @description Create + read dramatic-moment tags (#1139).
      *
      *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
@@ -22398,30 +22594,35 @@ export interface components {
       readonly found_at: string;
     };
     /**
-     * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241).
+     * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241, #2161).
      *
-     *     ``featured`` is null when the scene has no GM-tagged moments AND no reacted poses
-     *     (an empty reel — the frontend hides the collapsible section).
+     *     ``featured`` is null when the scene has no GM-tagged moments AND no voted-or-reacted
+     *     poses (an empty reel — the frontend hides the collapsible section).
      */
     HighlightReel: {
       featured: components['schemas']['HighlightReelFeatured'] | null;
       index: components['schemas']['HighlightReelEntry'][];
     };
-    /** @description One sealed entry in the ranked index below the featured moment (#1241). */
+    /** @description One sealed entry in the ranked index below the featured moment (#1241, #2161). */
     HighlightReelEntry: {
       interaction_id: number;
       rank: number;
+      vote_count: number;
+      reaction_count: number;
     };
     /**
-     * @description The single featured moment of a scene's highlight reel (#1241).
+     * @description The single featured moment of a scene's highlight reel (#1241, #2161).
      *
-     *     Intentionally IDs-only: the collapsed featured card is *fully sealed* — it shows no
-     *     pose content, type, participants, or reaction count until the viewer expands it, at
-     *     which point the frontend fetches the pose through the existing interaction-detail
-     *     endpoint (which re-checks visibility). Sending content here would defeat the seal.
+     *     The collapsed featured card is *fully sealed* — it shows no pose content, type, or
+     *     participants until the viewer expands it, at which point the frontend fetches the
+     *     pose through the existing interaction-detail endpoint (which re-checks visibility).
+     *     Sending pose content here would defeat the seal, but ``vote_count``/``reaction_count``
+     *     (#2161) are exposed so the frontend can badge the sealed card.
      */
     HighlightReelFeatured: {
       interaction_id: number;
+      vote_count: number;
+      reaction_count: number;
     };
     /** @description A required catalog choice on a template, with its active options (#2079). */
     HouseAspectDefinition: {
@@ -22720,6 +22921,16 @@ export interface components {
         [key: string]: unknown;
       }[];
       /**
+       * @description PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+       *
+       *     GM-gated: a plain participant sees an empty list. Reads
+       *     ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
+       *     queryset, already filtered to PENDING) — never a fresh query.
+       */
+      readonly dramatic_moment_suggestions: {
+        [key: string]: unknown;
+      }[];
+      /**
        * @description List of resonances claimed by the endorsee (pose author).
        *
        *     Reads from the prefetched ``persona__character_sheet__resonances``
@@ -22853,6 +23064,16 @@ export interface components {
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
       readonly dramatic_moment_tags: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * @description PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+       *
+       *     GM-gated: a plain participant sees an empty list. Reads
+       *     ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
+       *     queryset, already filtered to PENDING) — never a fresh query.
+       */
+      readonly dramatic_moment_suggestions: {
         [key: string]: unknown;
       }[];
       /**
@@ -23173,6 +23394,13 @@ export interface components {
       can_tell_tale: boolean;
       readonly last_unseen_count: number;
     };
+    /**
+     * @description * `update` - update
+     *     * `development` - development
+     *     * `capstone` - capstone
+     * @enum {string}
+     */
+    Kind4adEnum: 'update' | 'development' | 'capstone';
     /**
      * @description * `wall` - Wall
      *     * `gate` - Gate
@@ -25452,6 +25680,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['DraftApplication'][];
     };
+    PaginatedDramaticMomentSuggestionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DramaticMomentSuggestion'][];
+    };
     PaginatedDramaticMomentTagList: {
       /** @example 123 */
       count: number;
@@ -26577,6 +26820,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['RelationshipCapstone'][];
+    };
+    PaginatedRelationshipTimelineEntryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RelationshipTimelineEntry'][];
     };
     PaginatedRelationshipUpdateList: {
       /** @example 123 */
@@ -28628,6 +28886,7 @@ export interface components {
        */
       target_kind?: components['schemas']['ThreadTargetKindEnum'];
       target_id?: number;
+      target_persona_id?: number | null;
       character_sheet_id?: number;
       /** @default  */
       name: string;
@@ -29219,6 +29478,8 @@ export interface components {
         | (components['schemas']['ActionCategoryEnum'] | components['schemas']['NullEnum'])
         | null;
       readonly reach: string | null;
+      readonly protective_flavor: string | null;
+      readonly position_target_shape: string;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
@@ -30017,6 +30278,29 @@ export interface components {
       /** @description Narrative description of what this tier represents */
       readonly description: string;
     };
+    /**
+     * @description One row of the merged Update/Development/Capstone writeup timeline (#2159).
+     *
+     *     Serializes a plain dict row (not a model instance) — projected by
+     *     ``RelationshipUpdateViewSet.timeline``'s ``_timeline_rows``/``.union()`` query,
+     *     which gives ``RelationshipUpdate``/``RelationshipDevelopment``/
+     *     ``RelationshipCapstone`` rows the same shared column shape regardless of which
+     *     of the three writeup models a given row came from.
+     */
+    RelationshipTimelineEntry: {
+      kind: components['schemas']['Kind4adEnum'];
+      id: number;
+      relationship: number;
+      author: number;
+      author_name: string;
+      track: number;
+      track_name: string;
+      title: string;
+      writeup: string;
+      visibility: components['schemas']['VisibilityFdaEnum'];
+      /** Format: date-time */
+      created_at: string;
+    };
     /** @description Serializer for RelationshipTrack with nested tiers. */
     RelationshipTrack: {
       readonly id: number;
@@ -30730,13 +31014,14 @@ export interface components {
     };
     SceneActionRequestCreateRequest: {
       scene: number;
-      initiator_persona: number;
+      initiator_persona?: number | null;
       target_persona?: number;
       target_persona_ids?: number[];
       action_key: string;
       /** @default medium */
       effort_level: components['schemas']['EffortLevelEnum'];
       technique_id?: number | null;
+      entry_interaction_id?: number | null;
       /** @default 0 */
       strain_commitment: number;
       fury_commitment_id?: number | null;
@@ -32985,6 +33270,7 @@ export interface components {
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
       target_id: number;
+      target_persona_id?: number | null;
       character_sheet_id: number;
       /** @default  */
       name: string;
@@ -33621,6 +33907,10 @@ export interface components {
      * @enum {string}
      */
     UnlockTypeEnum: 'class_level' | 'thread_xp_lock' | 'skill_breakthrough';
+    /** @description Response shape for ``PlayerMailViewSet.unread_count`` -- schema only, never a model. */
+    UnreadMailCount: {
+      readonly count: number;
+    };
     /**
      * @description Input for PATCH /api/table-bulletin-posts/{id}/.
      *
@@ -44241,6 +44531,24 @@ export interface operations {
       };
     };
   };
+  items_crafting_create_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   items_equipped_items_list: {
     parameters: {
       query: {
@@ -46204,6 +46512,82 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrossingResult'];
+        };
+      };
+    };
+  };
+  magic_dramatic_moment_suggestions_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        scene?: number;
+        /**
+         * @description * `pending` - Pending
+         *     * `confirmed` - Confirmed
+         *     * `dismissed` - Dismissed
+         */
+        status?: 'confirmed' | 'dismissed' | 'pending';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDramaticMomentSuggestionList'];
+        };
+      };
+    };
+  };
+  magic_dramatic_moment_suggestions_confirm_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this dramatic moment suggestion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DramaticMomentSuggestion'];
+        };
+      };
+    };
+  };
+  magic_dramatic_moment_suggestions_dismiss_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this dramatic moment suggestion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DramaticMomentSuggestion'];
         };
       };
     };
@@ -53959,6 +54343,32 @@ export interface operations {
       };
     };
   };
+  relationships_relationship_updates_timeline_list: {
+    parameters: {
+      query?: {
+        /** @description CharacterSheet pk. Every non-PRIVATE writeup about this character from any author, plus PRIVATE writeups where the caller is the author or the subject. Mutually exclusive with `relationship`. */
+        about_character?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description CharacterRelationship pk. Full history (incl. PRIVATE) of one relationship; caller must be its tenure-owned source. Mutually exclusive with `about_character`. */
+        relationship?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRelationshipTimelineEntryList'];
+        };
+      };
+    };
+  };
   relationships_relationships_list: {
     parameters: {
       query?: {
@@ -54569,6 +54979,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PlayerMail'];
+        };
+      };
+    };
+  };
+  roster_mail_mark_read_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this player mail. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerMail'];
+        };
+      };
+    };
+  };
+  roster_mail_unread_count_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UnreadMailCount'];
         };
       };
     };

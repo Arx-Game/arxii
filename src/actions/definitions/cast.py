@@ -230,6 +230,9 @@ class CastTechniqueAction(Action):
         fury_anchor_id = kwargs.get("fury_anchor_id")
         if fury_anchor_id is not None:
             decl_kwargs["fury_anchor_id"] = fury_anchor_id
+        position_params = kwargs.get("position_params")
+        if position_params:
+            decl_kwargs["position_params"] = position_params
         # cast_pull is deliberately excluded from decl_kwargs: the CombatPull read-path
         # supplies the bonus during resolution; forwarding it here would double-charge.
         return pa, decl_kwargs

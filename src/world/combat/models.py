@@ -1070,6 +1070,12 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         default=False,
         help_text="Player accepted the soulfray risk for this declared cast.",
     )
+    from_entrance = models.BooleanField(
+        default=False,
+        help_text="True when this declared action originated as a dramatic technique "
+        "entrance cast (#2183), stamped by seed_or_feed_encounter_from_cast so a later "
+        "task can fire recognition when the declared cast resolves.",
+    )
     participant = models.ForeignKey(
         CombatParticipant,
         on_delete=models.CASCADE,
@@ -1168,6 +1174,34 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         blank=True,
         related_name="round_actions",
         help_text="If this action was upgraded to a combo, which combo.",
+    )
+    cast_destination = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Declared cast destination for single-position techniques "
+            "(Phase Jump / Force Grip / zone hazards). Null when the cast "
+            "targets no position. (#2206)"
+        ),
+    )
+    cast_position_a = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="First endpoint of a declared position pair (Barricade). (#2206)",
+    )
+    cast_position_b = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Second endpoint of a declared position pair (Barricade). (#2206)",
     )
     interaction = models.ForeignKey(
         "scenes.Interaction",

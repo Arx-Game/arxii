@@ -15,13 +15,33 @@ import { fetchAvailableActions } from '@/scenes/actionQueries';
 import { TacticalMap } from '@/areas/components/TacticalMap';
 import type { OccupantSummary } from '@/areas/components/PositionMapNode';
 import type { PlayerAction } from '@/scenes/actionTypes';
+import type { PositionTargetShape } from '@/actions/types';
 
 export interface CombatTacticalMapProps {
   encounterId: number;
   characterId: number;
+  /**
+   * Cast-time position-targeting shape for the currently selected focused
+   * technique (#2206), lifted to CombatScenePage so this map tab can
+   * highlight pickable nodes and consume clicks while a position-shaped
+   * technique is selected in the sibling "Your Turn" tab. Defaults to 'none'
+   * (today's move-only behavior) when the caller omits it.
+   */
+  positionShape?: PositionTargetShape;
+  /**
+   * Called when the player clicks a map node while `positionShape !== 'none'`.
+   * Only forwarded to TacticalMap when picking is active — see the
+   * presence-gated `onPickPosition` handoff below.
+   */
+  onPickPosition?: (positionId: number) => boolean;
 }
 
-export function CombatTacticalMap({ encounterId, characterId }: CombatTacticalMapProps) {
+export function CombatTacticalMap({
+  encounterId,
+  characterId,
+  positionShape = 'none',
+  onPickPosition,
+}: CombatTacticalMapProps) {
   const { data: encounter } = useCombatEncounter(encounterId);
 
   const { data: actionsData } = useQuery({
@@ -78,6 +98,13 @@ export function CombatTacticalMap({ encounterId, characterId }: CombatTacticalMa
     dispatchAction({ ref: action.ref, kwargs: {} }).catch(() => {});
   };
 
+  // Only hand TacticalMap a defined onPickPosition while a position-shaped
+  // technique is actually selected (#2206) — TacticalMap treats the prop's
+  // mere presence as "picking is active" for its highlight styling, so
+  // passing undefined here keeps today's move-only behavior byte-for-byte
+  // whenever no position-shaped technique is selected.
+  const isPositionPickActive = positionShape !== 'none' && onPickPosition !== undefined;
+
   return (
     <div
       className="h-[480px] rounded-lg border border-border bg-card"
@@ -89,6 +116,7 @@ export function CombatTacticalMap({ encounterId, characterId }: CombatTacticalMa
         occupantsByPosition={occupantsByPosition}
         moveActions={moveActions}
         onDispatchMove={handleDispatchMove}
+        onPickPosition={isPositionPickActive ? onPickPosition : undefined}
       />
     </div>
   );

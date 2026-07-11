@@ -720,6 +720,27 @@ class WriterTests(EvenniaTestCase):
         )
         self.assertEqual(standing.affection, -3)
 
+    def test_npc_regard_delta_moves_npc_regard(self):
+        from world.npc_services.models import NpcRegard
+
+        sheet, beat, progress = _character_story_beat()
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
+        )
+        resolution = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, npc_regard_delta=-5
+        )
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.fail_tier)
+
+        npc_regard = NpcRegard.objects.get(
+            holder_persona=npc_sheet.primary_persona, target_persona=sheet.primary_persona
+        )
+        self.assertEqual(npc_regard.value, -5)
+        event = npc_regard.events.get()
+        self.assertEqual(event.source_stake_resolution_id, resolution.pk)
+
     def test_faction_subject_society_resolution_bumps_society_reputation(self) -> None:
         from world.societies.factories import SocietyFactory
         from world.societies.models import SocietyReputation

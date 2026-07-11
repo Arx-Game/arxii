@@ -165,8 +165,15 @@ Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" se
   `JournalPage`/`BeatCard`. The web registration→application funnel polish — ✅ **shipped
   (#2162)**, see "Built — Web Registration → Application Funnel" above.
 - Anti-harassment tools — blocking, muting, reporting
-- Scene discovery — finding active public scenes to join; the discovery→presence bridge
-  is #2163
+- Scene discovery — finding active public scenes to join. ~~The discovery→presence
+  bridge~~ — SHIPPED (#2163): `where` rows and the scene browser (`ScenesListPage`)
+  both grew "Go there" buttons dispatching the `travel_to` REGISTRY action
+  (`TravelAction`/`StopTravelAction`, `actions/definitions/movement.py`), which
+  auto-walks a same-Area, public-rooms-only route computed by `find_route()`
+  (`world/areas/positioning/travel.py`, frontier-batched BFS); telnet parity via
+  `CmdTravel` (`travel <name>` / `travel stop`). See `docs/systems/areas.md`'s
+  "Presence & Travel" section. Still open: no dedicated search/filter UI for
+  browsing scenes beyond the plain list, and cross-Area routing.
 - Social feed — what's happening in the game right now (new achievements, notable events, active scenes)
 
 See `docs/audits/2026-07-10-webclient-rp-ux-audit.md` (epic #2155) for the full

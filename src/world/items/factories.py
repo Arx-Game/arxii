@@ -365,6 +365,28 @@ def wire_enchanting_crafting(*, base_difficulty: int = 0):
             consequence_factory=ConsequenceFactory,
         )
 
+    # Seed an ITEM_CREATE recipe producing a simple craftable dagger.
+    craftable_template = ItemTemplateFactory(name="Craftable Dagger", is_craftable=True)
+    create_recipe, _ = CraftingRecipe.objects.update_or_create(
+        kind=CraftingRecipeKind.ITEM_CREATE,
+        output_item_template=craftable_template,
+        defaults={
+            "name": "Create Item (Enchanting)",
+            "check_type": check_type,
+            "skill_trait": enchanting,
+            "base_difficulty": base_difficulty,
+            "success_level_step": 10,
+            "min_success_level": 1,
+        },
+    )
+    _wire_recipe_caps_and_consequences(
+        recipe=create_recipe,
+        tiers=(common, fine, master),
+        success_tier=success_tier,
+        botch_tier=botch_tier,
+        consequence_factory=ConsequenceFactory,
+    )
+
     return facet_recipe
 
 
@@ -430,20 +452,21 @@ def install_full_lab_station(room_profile, *, level: int = 1):
 class CraftingRecipeFactory(factory.django.DjangoModelFactory):
     """Factory for CraftingRecipe.
 
-    Creates a minimal recipe with sensible defaults. ``kind`` carries a ``unique``
-    constraint (one recipe per kind), so the factory keys ``django_get_or_create`` on
-    ``kind`` — two bare ``CraftingRecipeFactory()`` calls return the *same* FACET_ATTACH
-    recipe instead of raising ``IntegrityError`` on the second. Override ``kind`` to
-    create a recipe of a different kind. (Per the ``django_get_or_create`` gotcha,
-    non-lookup kwargs are ignored when the row for a ``kind`` already exists.)
+    Creates a minimal recipe with sensible defaults. The composite unique
+    constraint is ``(kind, output_item_template)``, so the factory keys
+    ``django_get_or_create`` on both — two bare ``CraftingRecipeFactory()``
+    calls return the *same* FACET_ATTACH recipe (null output) instead of
+    raising ``IntegrityError`` on the second. Override ``kind`` (and
+    ``output_item_template`` for ITEM_CREATE) to create a different recipe.
     """
 
     class Meta:
         model = "items.CraftingRecipe"
-        django_get_or_create = ("kind",)
+        django_get_or_create = ("kind", "output_item_template")
 
     name = factory.Sequence(lambda n: f"Crafting Recipe {n}")
     kind = CraftingRecipeKind.FACET_ATTACH
+    output_item_template = None
     base_difficulty = 0
     success_level_step = 10
     min_success_level = 1

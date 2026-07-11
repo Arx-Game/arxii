@@ -489,6 +489,10 @@ def _combat_actions(
     )
     from world.magic.services.fury import provocation_cap  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
+    from world.magic.services.targeting import (  # noqa: PLC0415
+        position_target_shape,
+        protective_flavor,
+    )
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     grants = list(grants)
@@ -542,6 +546,15 @@ def _combat_actions(
                 action_template=template,
                 action_category=technique.action_category,
                 reach=technique.reach,
+                # Guardian-declaration flavor (#2207): one batched query per technique
+                # (protective_condition_and_flavor's select_related + nested Prefetch) —
+                # this loop is per-technique already (technique_performable above), so
+                # this adds one more per-technique query on the same cadence, not a new
+                # N+1 shape. Flagging for the reviewer per the task brief rather than
+                # silently shipping: if this loop is ever hoisted to a batched form,
+                # protective_flavor's traversal would need batching too.
+                protective_flavor=protective_flavor(technique),
+                position_target_shape=position_target_shape(technique),
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
                 eligible_fury_anchors=eligible_fury_anchors,

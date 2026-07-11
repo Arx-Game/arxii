@@ -95,6 +95,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         source="cached_action_links",
     )
     dramatic_moment_tags = serializers.SerializerMethodField()
+    dramatic_moment_suggestions = serializers.SerializerMethodField()
     endorsee_sheet_id = serializers.IntegerField(
         source="persona.character_sheet_id", read_only=True
     )
@@ -128,6 +129,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "target_persona_ids",
             "action_links",
             "dramatic_moment_tags",
+            "dramatic_moment_suggestions",
             "endorsable_resonances",
             "pose_endorsers",
             "my_pose_endorsement",
@@ -304,6 +306,57 @@ class InteractionListSerializer(serializers.ModelSerializer):
         return [
             {"moment_type_label": t.moment_type.label, "character_sheet_id": t.character_sheet_id}
             for t in tags
+        ]
+
+    def _viewer_can_gm_scene(self, scene: Scene | None) -> bool:
+        """Mirror ``SceneListSerializer.get_viewer_can_gm`` for this interaction's scene (#2183).
+
+        Cached on the serializer context per scene id (a page of interactions can, in
+        principle, span more than one scene). For the common ``?scene=<id>`` list request,
+        ``InteractionViewSet.get_serializer_context`` pre-seeds this cache with the one
+        relevant scene's answer computed via a single targeted ``SceneParticipation``
+        query — so this field never falls through to ``scene.is_gm()``/``scene.is_owner()``
+        (which would cost a fresh ``participations_cached`` query per distinct in-memory
+        Scene instance, since ``select_related`` builds a new one per row). The fallback
+        below only fires for requests without a scene filter.
+        """
+        if scene is None:
+            return False
+        cache: dict[int, bool] = self.context.setdefault("_viewer_can_gm_cache", {})
+        if scene.pk in cache:
+            return cache[scene.pk]
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        result = bool(
+            user is not None
+            and getattr(user, "is_authenticated", False)  # noqa: GETATTR_LITERAL
+            and (user.is_staff or scene.is_gm(user) or scene.is_owner(user))
+        )
+        cache[scene.pk] = result
+        return result
+
+    def get_dramatic_moment_suggestions(self, obj: Interaction) -> list[dict]:
+        """PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+
+        GM-gated: a plain participant sees an empty list. Reads
+        ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
+        queryset, already filtered to PENDING) — never a fresh query.
+        """
+        if not self._viewer_can_gm_scene(obj.scene):
+            return []
+        suggestions = getattr(obj, "cached_dramatic_moment_suggestions", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
+        if suggestions is None:
+            return []
+        return [
+            {
+                "id": s.pk,
+                "moment_type_id": s.moment_type_id,
+                "moment_type_label": s.moment_type.label,
+                "character_sheet_id": s.character_sheet_id,
+                "success_level": s.success_level,
+                "status": s.status,
+            }
+            for s in suggestions
         ]
 
     def get_endorsable_resonances(self, obj: Interaction) -> list[dict]:
