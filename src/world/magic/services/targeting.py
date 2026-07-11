@@ -8,6 +8,7 @@ cast routing downstream.
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.db.models import Prefetch
 
 from actions.constants import ActionTargetType
 from world.conditions.services import is_untargetable
@@ -185,10 +186,16 @@ def position_target_shape(technique: Technique) -> str:
     - ``POSITION_SHAPE_NONE`` — no position-consuming handler found.
     """
     step_paths: list[str] = []
-    for applied in technique.condition_applications.select_related("condition").all():
+    applications = technique.condition_applications.select_related("condition").prefetch_related(
+        Prefetch(
+            "condition__reactive_triggers__flow_definition__steps",
+            to_attr="prefetched_shape_steps",
+        )
+    )
+    for applied in applications:
         for trigger in applied.condition.reactive_triggers.all():
             step_paths.extend(
-                step.variable_name or "" for step in trigger.flow_definition.steps.all()
+                step.variable_name or "" for step in trigger.flow_definition.prefetched_shape_steps
             )
     joined = " ".join(step_paths)
     if any(handler in joined for handler in _PAIR_HANDLERS):
