@@ -663,6 +663,22 @@ class OpenPlaceEncounterActionTests(BattleActionTestBase):
 
         self.assertFalse(result.success)
 
+    def test_junior_gm_not_this_battles_gm_is_refused(self) -> None:
+        # A JUNIOR-trust GM who is *not* this battle's own GM (and not staff)
+        # clears MinimumGMLevelPrerequisite but must still be rejected by the
+        # execute()-time _actor_may_gm_battle re-check (#2008 Finding 1).
+        other_gm_account = AccountFactory(username="other_gm_battle_tester")
+        GMProfileFactory(account=other_gm_account, level=GMLevel.JUNIOR)
+        other_gm_actor, _ = _make_actor_with_account(
+            "other_gm_battle_actor", self.room, other_gm_account
+        )
+
+        result = OpenPlaceEncounterAction().run(other_gm_actor, battle_place_id=self.place.pk)
+
+        self.assertFalse(result.success)
+        self.place.refresh_from_db()
+        self.assertIsNone(self.place.combat_encounter_id)
+
 
 class JoinPlaceEncounterActionTests(BattleActionTestBase):
     """JoinPlaceEncounterAction lets a stationed participant join an open front (#2008)."""
@@ -692,6 +708,35 @@ class JoinPlaceEncounterActionTests(BattleActionTestBase):
     def test_non_stationed_participant_is_refused(self) -> None:
         # self.participant.place is None (set explicitly above) — not stationed
         # at self.place.
+        result = JoinPlaceEncounterAction().run(self.player_char, battle_place_id=self.place.pk)
+
+        self.assertFalse(result.success)
+        self.assertEqual(self.encounter.participants.count(), 0)
+
+    def test_duel_type_encounter_is_refused(self) -> None:
+        # A strict 1v1 Champion Duel bound to this front must not accept a
+        # third party joining through the general-join action (#2008 Finding 2a).
+        from world.combat.constants import EncounterType
+
+        self.encounter.encounter_type = EncounterType.DUEL
+        self.encounter.save(update_fields=["encounter_type"])
+        self.participant.place = self.place
+        self.participant.save(update_fields=["place"])
+
+        result = JoinPlaceEncounterAction().run(self.player_char, battle_place_id=self.place.pk)
+
+        self.assertFalse(result.success)
+        self.assertEqual(self.encounter.participants.count(), 0)
+
+    def test_non_active_participant_is_refused(self) -> None:
+        # A WITHDRAWN/INCAPACITATED participant still stationed at the place
+        # must not be able to rejoin combat (#2008 Finding 2b).
+        from world.battles.constants import BattleParticipantStatus
+
+        self.participant.place = self.place
+        self.participant.status = BattleParticipantStatus.WITHDRAWN
+        self.participant.save(update_fields=["place", "status"])
+
         result = JoinPlaceEncounterAction().run(self.player_char, battle_place_id=self.place.pk)
 
         self.assertFalse(result.success)

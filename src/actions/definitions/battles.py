@@ -446,8 +446,10 @@ class JoinPlaceEncounterAction(Action):
     ) -> ActionResult:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
+        from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
         from world.battles.models import BattleParticipant, BattlePlace  # noqa: PLC0415
         from world.combat.beat_wiring import activate_stakes_for_scene  # noqa: PLC0415
+        from world.combat.constants import EncounterType  # noqa: PLC0415
         from world.combat.services import join_encounter  # noqa: PLC0415
 
         try:
@@ -457,15 +459,23 @@ class JoinPlaceEncounterAction(Action):
 
         battle_place_id = kwargs.get("battle_place_id")
         try:
-            battle_place = BattlePlace.objects.select_related("battle").get(pk=battle_place_id)
+            battle_place = BattlePlace.objects.select_related("battle", "combat_encounter").get(
+                pk=battle_place_id
+            )
         except (BattlePlace.DoesNotExist, TypeError, ValueError):
             return ActionResult(success=False, message=_NO_SUCH_PLACE)
 
         if battle_place.combat_encounter_id is None:
             return ActionResult(success=False, message="No encounter is open at that front.")
+        if battle_place.combat_encounter.encounter_type != EncounterType.PARTY_COMBAT:
+            return ActionResult(
+                success=False, message="This front's encounter isn't open for general joining."
+            )
 
         participant = BattleParticipant.objects.filter(
-            battle=battle_place.battle, character_sheet=sheet
+            battle=battle_place.battle,
+            character_sheet=sheet,
+            status=BattleParticipantStatus.ACTIVE,
         ).first()
         if participant is None:
             return ActionResult(success=False, message=_NOT_IN_BATTLE)
