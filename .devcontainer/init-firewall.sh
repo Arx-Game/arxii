@@ -10,7 +10,7 @@
 #   https://raw.githubusercontent.com/anthropics/claude-code/main/.devcontainer/init-firewall.sh
 # Structure preserved; allowlist replaced; IP-range gathering uses the same
 # "fetch published ranges before lockdown" philosophy as the upstream reference,
-# extended to cover all five logical destination groups.
+# extended to cover all six logical destination groups.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -107,7 +107,17 @@ iptables -A OUTPUT -d 172.16.0.0/12 -j ACCEPT
 #      published Storage-service IP ranges instead — scoped to the Storage tag,
 #      not all of Azure.
 #
-# Sources b–e use -exist so duplicate CIDRs across ranges don't error.
+#   f) AWS CloudFront published ranges — covers sonarcloud.io and
+#      api.sonarcloud.io, both served from CloudFront (confirmed via
+#      api.sonarcloud.io's CNAME to a *.cloudfront.net distribution).
+#      SonarCloud used to be in group (a) as a single dig-resolved IP, which
+#      is exactly the wrong approach for a CDN-fronted host (same failure
+#      mode as (e)'s Azure blob storage) — a one-shot dig only catches
+#      whichever edge node answered that query, so it silently goes stale
+#      and CI-failure diagnosis via the SonarCloud API stops working. Fixed
+#      by allowing AWS's published CLOUDFRONT service-tag ranges instead.
+#
+# Sources b–f use -exist so duplicate CIDRs across ranges don't error.
 # ---------------------------------------------------------------------------
 ipset create allowed-domains hash:net
 
@@ -145,8 +155,6 @@ resolve_and_add "sentry.io"
 # endpoint that Claude Code reaches.
 resolve_and_add "statsig.com"
 resolve_and_add "pypi.org"
-# SonarCloud — public-project API for fetching code-quality findings on PRs.
-resolve_and_add "sonarcloud.io"
 # Umans Code — Anthropic-compatible model endpoint (https://api.code.umans.ai).
 # Backs two harnesses: Claude Code via its ANTHROPIC_BASE_URL override, and
 # polytoken's custom Anthropic-compatible provider. Two stable AWS EIPs
@@ -248,6 +256,26 @@ if [ "$AZURE_COUNT" -lt 50 ]; then
 fi
 echo "  Added ${AZURE_COUNT} Azure Storage CIDRs."
 
+# ---- f) AWS CloudFront published ranges (sonarcloud.io, api.sonarcloud.io) ----
+echo "Fetching AWS CloudFront IP ranges..."
+AWS_RANGES=$(curl -sf --connect-timeout 15 --max-time 30 https://ip-ranges.amazonaws.com/ip-ranges.json)
+if [ -z "$AWS_RANGES" ]; then
+    echo "ERROR: Failed to fetch https://ip-ranges.amazonaws.com/ip-ranges.json" >&2
+    exit 1
+fi
+CLOUDFRONT_COUNT=0
+while read -r cidr; do
+    if is_valid_ipv4_cidr "$cidr"; then
+        ipset add allowed-domains "$cidr" -exist
+        CLOUDFRONT_COUNT=$((CLOUDFRONT_COUNT + 1))
+    fi
+done < <(echo "$AWS_RANGES" | jq -r '.prefixes[] | select(.service == "CLOUDFRONT") | .ip_prefix')
+if [ "$CLOUDFRONT_COUNT" -lt 50 ]; then
+    echo "ERROR: AWS CloudFront ranges returned only ${CLOUDFRONT_COUNT} IPv4 CIDRs (minimum 50); aborting" >&2
+    exit 1
+fi
+echo "  Added ${CLOUDFRONT_COUNT} AWS CloudFront CIDRs."
+
 # ---------------------------------------------------------------------------
 # 4. Default-deny policies and final ACCEPT/REJECT rules.
 #
@@ -293,7 +321,8 @@ echo "Verifying firewall rules..."
 # (a) Blocked host must be unreachable. Use www.google.com — Google's own
 # IPs (142.250.0.0/15, 142.251.0.0/16) are not in any of our allowlist
 # sources (Anthropic, Sentry, Statsig, PyPI, GitHub meta, Fastly,
-# Cloudflare, Azure Storage), so reachability here means a firewall miss. Avoid
+# Cloudflare, Azure Storage, AWS CloudFront), so reachability here means a
+# firewall miss. Avoid
 # example.com / example.org as test targets: both now resolve to
 # Cloudflare IPs (104.20.x.x, 172.66.x.x) that are legitimately in our
 # allowlist because Cloudflare fronts the npm registry.

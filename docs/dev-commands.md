@@ -115,6 +115,24 @@ Automatic-Analysis-specific behaviors that differ from a configured scanner:
   extracting a shared helper. Sonar's mechanical duplication check doesn't
   grade semantic justification, so even duplication a human reviewer calls
   "reasonable" still fails the gate.
+- **The duplication gate is an aggregate percentage, not a per-file
+  annotation** — the Checks API only tells you the failing metric name and
+  its value, not which lines are duplicated against which. To find the exact
+  duplicate blocks, call SonarCloud's own API directly (`SONAR_TOKEN` is
+  already in the devcontainer env; anonymous calls return empty bodies, so
+  basic-auth with the token and no password):
+  ```bash
+  # Find offending files on this PR/branch:
+  curl -su "$SONAR_TOKEN:" "https://sonarcloud.io/api/measures/component_tree?component=Arx-Game_arxii&metricKeys=new_duplicated_lines_density&pullRequest=<PR#>&ps=500"
+  # Exact duplicate block locations for one file (component key from above):
+  curl -su "$SONAR_TOKEN:" "https://sonarcloud.io/api/duplications/show?key=<file-component-key>"
+  # Full issue list with rule + message (also works for non-duplication findings):
+  curl -su "$SONAR_TOKEN:" "https://sonarcloud.io/api/issues/search?componentKeys=Arx-Game_arxii&pullRequest=<PR#>&resolved=false"
+  ```
+  This needs `sonarcloud.io`/`api.sonarcloud.io` reachable from the
+  devcontainer — see the SonarCloud row in `docs/devcontainer-setup.md`'s
+  egress table if these calls fail with a connection error rather than an
+  HTTP error.
 - **A backend-only model retype (e.g. int→enum) can trip both the duplication
   gate indirectly and, separately, the frontend `api-types-drift`/build gates**
   (see "Generated API Schema" in `django_notes.md`) — regenerating the
