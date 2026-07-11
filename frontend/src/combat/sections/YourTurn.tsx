@@ -33,6 +33,7 @@ import {
   useCoverMutation,
   useDispatchPlayerAction,
   useFleeMutation,
+  useGuardMutation,
   useUpgradeCombo,
 } from '../queries';
 import type {
@@ -88,6 +89,21 @@ const EFFORT_TO_BACKEND: Record<EffortLevel, string> = {
   HIGH: 'high',
   VERY_HIGH: 'extreme',
 };
+
+/**
+ * Display labels for `PlayerAction.protective_flavor` (#2207) — mirrors
+ * PROTECTIVE_FLAVOR_BARRIER/_BLINK/_REDIRECT in
+ * world/magic/services/targeting.py. Purely cosmetic (Guard technique picker).
+ */
+const PROTECTIVE_FLAVOR_LABELS: Record<string, string> = {
+  barrier: 'Barrier',
+  blink: 'Blink',
+  redirect: 'Redirect',
+};
+
+/** Sentinel Select values — Radix Select disallows an empty-string item value. */
+const GUARD_ANYONE_VALUE = '__anyone__';
+const GUARD_NO_TECHNIQUE_VALUE = '__none__';
 
 /**
  * Derive the focused slot's category from the selected technique's
@@ -426,6 +442,11 @@ export function YourTurn({
   const [coverAllyId, setCoverAllyId] = useState<string>('');
   const [maneuverError, setManeuverError] = useState<string | null>(null);
 
+  // Guard (Interpose) picker state (#2207) — ward defaults to "anyone hit this
+  // round"; protective technique defaults to "none" (mundane interpose).
+  const [guardAllyId, setGuardAllyId] = useState<string>(GUARD_ANYONE_VALUE);
+  const [guardTechniqueId, setGuardTechniqueId] = useState<string>(GUARD_NO_TECHNIQUE_VALUE);
+
   // Reset submitted, pull selection, and pull dialog when round advances.
   useEffect(() => {
     setSubmitted(false);
@@ -435,6 +456,8 @@ export function YourTurn({
     setFuryTierId(null);
     setFuryAnchorId(null);
     setCoverAllyId('');
+    setGuardAllyId(GUARD_ANYONE_VALUE);
+    setGuardTechniqueId(GUARD_NO_TECHNIQUE_VALUE);
     setManeuverError(null);
   }, [roundNumber]);
 
@@ -474,6 +497,10 @@ export function YourTurn({
 
   const { mutate: declareFlee, isPending: fleePending } = useFleeMutation(encounterId);
   const { mutate: declareCover, isPending: coverPending } = useCoverMutation(encounterId);
+  const { mutate: declareGuard, isPending: guardPending } = useGuardMutation(
+    encounterId,
+    characterId
+  );
 
   // ---------------------------------------------------------------------------
   // Flee / Cover — derived state
@@ -571,6 +598,23 @@ export function YourTurn({
     const ally = participants.find((p) => p.id === ownRoundAction.focused_ally_target);
     return ally?.character_name ?? `participant #${ownRoundAction.focused_ally_target}`;
   })();
+
+  // Resolve guarded ally's name from participants list (#2207). null
+  // focused_ally_target on an interpose maneuver means "guard whoever is hit."
+  const guardedAllyName = (() => {
+    if (declaredManeuver !== 'interpose' || ownRoundAction?.focused_ally_target == null) {
+      return null;
+    }
+    const ally = participants.find((p) => p.id === ownRoundAction.focused_ally_target);
+    return ally?.character_name ?? `participant #${ownRoundAction.focused_ally_target}`;
+  })();
+
+  // Techniques offered as a Guard's optional protective technique (#2207): any
+  // available combat-cast technique whose protective_flavor classifier resolved
+  // (a barrier/blink/redirect reactive-trigger handler).
+  const protectiveTechniques = availableActions.filter(
+    (a) => a.ref.backend === 'COMBAT' && a.protective_flavor != null && a.ref.technique_id != null
+  );
 
   // ---------------------------------------------------------------------------
   // Dispatch
@@ -672,6 +716,30 @@ export function YourTurn({
         setManeuverError(err instanceof Error ? err.message : 'Failed to declare cover');
       },
     });
+  }
+
+  function handleGuard() {
+    setManeuverError(null);
+    const allyParticipantId =
+      guardAllyId === GUARD_ANYONE_VALUE ? null : parseInt(guardAllyId, 10) || null;
+    const techniqueId =
+      guardTechniqueId === GUARD_NO_TECHNIQUE_VALUE ? null : parseInt(guardTechniqueId, 10) || null;
+    declareGuard(
+      { allyParticipantId, techniqueId },
+      {
+        onSuccess: (result) => {
+          // The generic dispatch endpoint always resolves 200 — a business-rule
+          // rejection (e.g. "not in active round") surfaces as success:false,
+          // not a thrown error, so it must be checked explicitly here.
+          if (result?.success === false) {
+            setManeuverError(result.message ?? 'Failed to declare guard');
+          }
+        },
+        onError: (err) => {
+          setManeuverError(err instanceof Error ? err.message : 'Failed to declare guard');
+        },
+      }
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -881,7 +949,7 @@ export function YourTurn({
         <div className="space-y-2" data-testid="maneuver-declaration-section">
           <p
             className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            title="Flee the encounter, or Cover an ally, instead of declaring an offensive or defensive action."
+            title="Flee the encounter, Cover an ally, or Guard an ally with your body or a protective technique, instead of declaring an offensive or defensive action."
           >
             Maneuvers
           </p>
@@ -901,6 +969,14 @@ export function YourTurn({
               data-testid="cover-declared-badge"
             >
               Covering {coveredAllyName ?? 'ally'}
+            </div>
+          )}
+          {declaredManeuver === 'interpose' && (
+            <div
+              className="rounded border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-300"
+              data-testid="guard-declared-badge"
+            >
+              Guarding {guardedAllyName ?? 'any ally hit this round'}
             </div>
           )}
 
@@ -961,6 +1037,73 @@ export function YourTurn({
                 )}
               >
                 {coverPending ? 'Declaring cover…' : 'Confirm Cover'}
+              </button>
+            </div>
+          )}
+
+          {/* Guard control — ward picker + optional protective-technique select + confirm (#2207) */}
+          {declaredManeuver !== 'interpose' && (
+            <div className="space-y-1.5" data-testid="guard-control">
+              <Select
+                value={guardAllyId}
+                onValueChange={setGuardAllyId}
+                disabled={isLocked || !isDeclaringPhase || guardPending}
+              >
+                <SelectTrigger data-testid="guard-ally-select" className="h-8 text-xs">
+                  <SelectValue placeholder="Guard anyone…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={GUARD_ANYONE_VALUE}>Anyone (guard whoever is hit)</SelectItem>
+                  {coverableAllies.map((ally) => (
+                    <SelectItem key={ally.id} value={String(ally.id)}>
+                      {ally.character_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {protectiveTechniques.length > 0 && (
+                <Select
+                  value={guardTechniqueId}
+                  onValueChange={setGuardTechniqueId}
+                  disabled={isLocked || !isDeclaringPhase || guardPending}
+                >
+                  <SelectTrigger data-testid="guard-technique-select" className="h-8 text-xs">
+                    <SelectValue placeholder="No protective technique" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={GUARD_NO_TECHNIQUE_VALUE}>
+                      No protective technique (mundane)
+                    </SelectItem>
+                    {protectiveTechniques.map((action) => (
+                      <SelectItem
+                        key={action.ref.technique_id ?? action.display_name}
+                        value={String(action.ref.technique_id)}
+                      >
+                        {action.display_name}
+                        {action.protective_flavor != null
+                          ? ` (${PROTECTIVE_FLAVOR_LABELS[action.protective_flavor] ?? action.protective_flavor})`
+                          : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              <button
+                type="button"
+                disabled={isLocked || !isDeclaringPhase || guardPending}
+                onClick={handleGuard}
+                data-testid="guard-confirm-btn"
+                className={cn(
+                  'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  isLocked || !isDeclaringPhase
+                    ? 'border-border bg-muted text-muted-foreground'
+                    : 'border-violet-500/60 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
+                )}
+              >
+                {guardPending ? 'Declaring guard…' : 'Guard'}
               </button>
             </div>
           )}

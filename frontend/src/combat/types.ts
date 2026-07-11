@@ -52,14 +52,16 @@ export interface SurgeBeatTyped extends SurgeBeat {
 /**
  * Typed overlay for RoundAction entries from RoundActionSerializer.
  * Extends the opaque blob with the fields we actually consume in the UI.
- * maneuver: null = no special maneuver; "flee" / "cover" = declared maneuver.
- * focused_ally_target: CombatParticipant PK of the covered ally (cover only).
+ * maneuver: null = no special maneuver; "flee" / "cover" / "interpose" (#2207,
+ * "Guard" in the UI) = declared maneuver.
+ * focused_ally_target: CombatParticipant PK of the covered/guarded ally
+ * (cover/interpose only — null on interpose means "guard whoever is hit").
  */
 export interface RoundActionTyped extends RoundAction {
   participant: number;
   participant_name: string;
   is_ready: boolean;
-  maneuver: 'flee' | 'cover' | null;
+  maneuver: 'flee' | 'cover' | 'interpose' | null;
   focused_ally_target: number | null;
 }
 

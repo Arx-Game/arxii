@@ -51817,6 +51817,10 @@ components:
           type: string
           readOnly: true
           nullable: true
+        protective_flavor:
+          type: string
+          readOnly: true
+          nullable: true
         soulfray_warning:
           allOf:
           - $ref: '#/components/schemas/SoulfrayWarning'
@@ -51845,6 +51849,7 @@ components:
       - enhancements
       - prerequisite_met
       - prerequisite_reasons
+      - protective_flavor
       - reach
       - ref
       - soulfray_warning

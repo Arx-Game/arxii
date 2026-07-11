@@ -29225,6 +29225,7 @@ export interface components {
         | (components['schemas']['ActionCategoryEnum'] | components['schemas']['NullEnum'])
         | null;
       readonly reach: string | null;
+      readonly protective_flavor: string | null;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];

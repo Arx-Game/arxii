@@ -7,7 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as api from './api';
-import type { DispatchActionRequest, EncounterListItem } from './types';
+import type { DispatchActionRequest, DispatchResult, EncounterListItem } from './types';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
 
@@ -355,6 +355,41 @@ export function useEndEncounter(encounterId: number) {
 export function useCoverMutation(encounterId: number) {
   return useEncounterMutation(encounterId, (allyParticipantId: number) =>
     api.postCover(encounterId, allyParticipantId)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Guard (Interpose) mutation hook
+// ---------------------------------------------------------------------------
+
+/** Args for useGuardMutation — ward + optional protective technique (#2207). */
+export interface GuardMutationArgs {
+  allyParticipantId: number | null;
+  techniqueId: number | null;
+}
+
+/**
+ * Declare a guarding (Interpose) maneuver, optionally naming a ward ally
+ * and/or a protective technique (#2207 — "Guard" in the UI, `interpose` on the
+ * wire/maneuver enum). Unlike flee/cover, Interpose has no dedicated REST verb
+ * that accepts `technique_id` — `InterposeSerializer`
+ * (world/combat/serializers.py) only carries `ally_participant_id` — so this
+ * rides the generic REGISTRY dispatch path (`combat_interpose`) via
+ * `api.postDispatchAction` instead of a bespoke `api.post*` wrapper, the same
+ * seam `MovementActions`/the focused-slot dispatch already use. Reuses
+ * `useEncounterMutation` so the cache-invalidation contract matches flee/cover.
+ */
+export function useGuardMutation(encounterId: number, characterId: number) {
+  return useEncounterMutation<DispatchResult, GuardMutationArgs>(
+    encounterId,
+    ({ allyParticipantId, techniqueId }) =>
+      api.postDispatchAction(characterId, {
+        ref: { backend: 'registry', registry_key: 'combat_interpose' },
+        kwargs: {
+          ally_participant_id: allyParticipantId,
+          technique_id: techniqueId,
+        },
+      })
   );
 }
 

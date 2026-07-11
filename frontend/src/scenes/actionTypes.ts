@@ -124,6 +124,13 @@ export interface PlayerAction {
    */
   reach?: string | null;
   /**
+   * Guardian-declaration flavor for combat-cast techniques (#2207). Values:
+   * "barrier" | "blink" | "redirect" | null. null → the technique carries no
+   * protective reactive-trigger handler, so it can't be offered as a Guard
+   * declaration's protective technique.
+   */
+  protective_flavor?: string | null;
+  /**
    * Soulfray warning for combat-cast techniques that risk death (#1543).
    * null / absent → no death-risk warning applies.
    */
