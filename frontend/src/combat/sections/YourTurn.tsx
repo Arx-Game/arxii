@@ -610,10 +610,15 @@ export function YourTurn({
   })();
 
   // Techniques offered as a Guard's optional protective technique (#2207): any
-  // available combat-cast technique whose protective_flavor classifier resolved
-  // (a barrier/blink/redirect reactive-trigger handler).
+  // available combat-cast technique whose protective_flavor classifier resolved.
+  // 'redirect' is excluded until #2210 builds its resolution — the server
+  // rejects it at declaration today, so offering it would only surface errors.
   const protectiveTechniques = availableActions.filter(
-    (a) => a.ref.backend === 'COMBAT' && a.protective_flavor != null && a.ref.technique_id != null
+    (a) =>
+      a.ref.backend === 'COMBAT' &&
+      a.protective_flavor != null &&
+      a.protective_flavor !== 'redirect' &&
+      a.ref.technique_id != null
   );
 
   // ---------------------------------------------------------------------------
