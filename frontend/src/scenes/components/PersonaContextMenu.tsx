@@ -1,5 +1,5 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,8 +26,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateBlock, useCreateMute } from '@/social/queries';
-import { createActionRequest } from '../actionQueries';
-import type { ActionAttachmentInfo, PlayerActionsResponse, PlayerAction } from '../actionTypes';
+import { createActionRequest, fetchAvailableActions } from '../actionQueries';
+import type { ActionAttachmentInfo, PlayerAction } from '../actionTypes';
 import type { SceneDetail } from '../types';
 import { WhisperReceiverPicker } from './WhisperReceiverPicker';
 import { TreatActionPanel } from '@/conditions/components/TreatActionPanel';
@@ -65,9 +65,14 @@ export function PersonaContextMenu({
     [myRosterEntries, activeCharacterName]
   );
 
-  // Read from React Query cache instead of triggering a fetch.
-  // The ActionAttachment component populates this cache when opened.
-  const data = queryClient.getQueryData<PlayerActionsResponse>(['available-actions', characterId]);
+  // Fetch directly (mirrors ActionPanel.tsx) rather than reading the cache
+  // opportunistically — the menu must populate even if ActionPanel/ActionAttachment
+  // hasn't been opened yet this session (#2158).
+  const { data } = useQuery({
+    queryKey: ['available-actions', characterId],
+    queryFn: () => fetchAvailableActions(characterId!),
+    enabled: characterId !== null,
+  });
 
   // #907: present scene personas (excluding the target) are the extra-listener
   // pool. Read from the already-loaded scene cache; empty if not yet present.
@@ -147,8 +152,9 @@ export function PersonaContextMenu({
     },
   });
 
-  // Show all prerequisite-met actions as potential targeted actions.
-  const targetedActions: PlayerAction[] = (data?.results ?? []).filter((a) => a.prerequisite_met);
+  // Show every targeted action, including unmet-prerequisite ones — rendered
+  // disabled with their reason below, not silently omitted (mirrors ActionPanel, #2158).
+  const targetedActions: PlayerAction[] = data?.results ?? [];
 
   // Treat affordance (#1486): available for any non-self target once the viewer's
   // character is resolved.  The discovery endpoint gates candidates server-side,
@@ -198,6 +204,24 @@ export function PersonaContextMenu({
             picks the audience (#903); the plain "Default" entry sends NO delivery
             so the backend's template default stays the single fallback authority. */}
           {targetedActions.map((action) => {
+            const stableKey = `${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`;
+            if (!action.prerequisite_met) {
+              // Unmet prerequisite: shown disabled with its reason instead of
+              // omitted (mirrors ActionPanel.tsx's disabled-button pattern, #2158).
+              // No delivery submenu — the action can't be fired regardless.
+              return (
+                <button
+                  key={stableKey}
+                  type="button"
+                  disabled
+                  title={action.prerequisite_reasons.join('; ')}
+                  className="flex w-full cursor-not-allowed select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm opacity-50 outline-none"
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  {action.display_name}
+                </button>
+              );
+            }
             const techniqueId = action.ref.technique_id ?? undefined;
             const actionKey =
               action.ref.registry_key ??
@@ -212,9 +236,7 @@ export function PersonaContextMenu({
               });
             const defaultDelivery = action.action_template?.default_delivery ?? 'pose';
             return (
-              <DropdownMenuSub
-                key={`${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
-              >
+              <DropdownMenuSub key={stableKey}>
                 <DropdownMenuSubTrigger disabled={performAction.isPending}>
                   <Zap className="mr-2 h-4 w-4" />
                   {action.display_name}
@@ -257,6 +279,23 @@ export function PersonaContextMenu({
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs">Attach to Pose</DropdownMenuLabel>
               {targetedActions.map((action) => {
+                const stableKey = `attach-${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`;
+                if (!action.prerequisite_met) {
+                  // Unmet prerequisite: shown disabled with its reason instead of
+                  // omitted (mirrors ActionPanel.tsx's disabled-button pattern, #2158).
+                  return (
+                    <button
+                      key={stableKey}
+                      type="button"
+                      disabled
+                      title={action.prerequisite_reasons.join('; ')}
+                      className="flex w-full cursor-not-allowed select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm opacity-50 outline-none"
+                    >
+                      <Zap className="mr-2 h-4 w-4" />
+                      {action.display_name}
+                    </button>
+                  );
+                }
                 const techniqueId = action.ref.technique_id ?? undefined;
                 const actionKey =
                   action.ref.registry_key ??
@@ -264,7 +303,7 @@ export function PersonaContextMenu({
                   action.display_name.toLowerCase();
                 return (
                   <DropdownMenuItem
-                    key={`attach-${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
+                    key={stableKey}
                     onClick={() =>
                       onAttachAction({
                         actionKey,
