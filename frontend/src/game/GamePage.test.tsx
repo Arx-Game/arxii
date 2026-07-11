@@ -807,6 +807,18 @@ describe('GamePage', () => {
       const lockedMode = screen.getByTitle('Audience is locked to this conversation tab');
       expect(lockedMode).toHaveTextContent(/whisper/i);
       expect(screen.queryByRole('button', { name: 'Pose' })).not.toBeInTheDocument();
+
+      // #2165 fold-in fix: the sidebar's OWN row selection must track the
+      // active tab too, not stay pinned to the room. Without the fix,
+      // `threading.selectedThreadKey` never changes once tab wiring takes
+      // over, so the room row stays permanently marked selected
+      // (`font-semibold`, per ThreadSidebar.tsx) and the whisper row never
+      // is, even while its tab is the one showing.
+      expect(whisperRow).toHaveClass('font-semibold');
+      const roomRow = within(sidebar)
+        .getByText('The Grand Ballroom')
+        .closest('button') as HTMLElement;
+      expect(roomRow).not.toHaveClass('font-semibold');
     });
 
     it('clicking room anchor tab restores full feed, re-enables mode dropdown', async () => {

@@ -16,12 +16,22 @@ interface ConversationSidebarProps {
    * alone doesn't touch tab state.
    */
   onShowAll?: () => void;
+  /**
+   * Which row renders selected. Defaults to `threading.selectedThreadKey`;
+   * GamePage overrides it (#2165 fold-in fix) to the active conversation TAB
+   * instead — `threading.selectedThreadKey` is pinned to `'room'` forever on
+   * /game since the tab wiring stopped calling `setSelectedThread`, which was
+   * leaving the room row permanently highlighted and no thread row ever
+   * marking the active conversation.
+   */
+  selectedThreadKey?: string;
 }
 
 export function ConversationSidebar({
   threading,
   onThreadClick,
   onShowAll,
+  selectedThreadKey,
 }: ConversationSidebarProps) {
   const [filterThreadKey, setFilterThreadKey] = useState<string | null>(null);
 
@@ -52,7 +62,7 @@ export function ConversationSidebar({
       </div>
       <ThreadSidebar
         threads={threading.threads}
-        selectedThreadKey={threading.selectedThreadKey}
+        selectedThreadKey={selectedThreadKey ?? threading.selectedThreadKey}
         enabledThreadKeys={threading.enabledThreadKeys}
         isUnfiltered={threading.enabledThreadKeys.size === 0}
         onThreadClick={onThreadClick}

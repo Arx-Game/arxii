@@ -440,6 +440,7 @@ export function GamePage() {
             threading={sceneId ? threading : undefined}
             onThreadClick={handleThreadClick}
             onShowAll={handleShowAll}
+            selectedThreadKey={activeThreadTab ?? 'room'}
           />
         }
         center={
