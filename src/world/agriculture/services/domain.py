@@ -16,13 +16,13 @@ def _ancestor_area_ids(area) -> set[int]:
     (where the view doesn't exist), falls back to walking
     ``Area.parent`` manually.
     """
-    from world.areas.models import AreaClosure
+    from world.areas.models import AreaClosure  # noqa: PLC0415
 
     try:
         ancestor_ids = set(
             AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         # SQLite test fallback: walk the parent chain manually.
         ancestor_ids = set()
         current = area
@@ -43,7 +43,7 @@ def resolve_domain_for_feature(
     ancestor of the feature's room's area, or ``None`` if no domain is
     found.
     """
-    from world.societies.houses.models import Domain
+    from world.societies.houses.models import Domain  # noqa: PLC0415
 
     room_area = room_feature_instance.room_profile.area
     if room_area is None:
@@ -61,24 +61,23 @@ def max_food_capacity(domain: Domain) -> int:
     ``instance.level × config.granary_capacity_per_level``. Returns 0 if
     no Granaries exist.
     """
-    from world.agriculture.services.production import get_food_config
-    from world.room_features.constants import RoomFeatureServiceStrategy
-    from world.room_features.models import RoomFeatureInstance
+    from world.agriculture.services.production import get_food_config  # noqa: PLC0415
+    from world.areas.models import AreaClosure  # noqa: PLC0415
+    from world.room_features.constants import RoomFeatureServiceStrategy  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
 
     config = get_food_config()
 
     domain_area = domain.area
 
     # Find all descendant areas of the domain's area (including itself).
-    from world.areas.models import AreaClosure
-
     try:
         descendant_ids = set(
             AreaClosure.objects.filter(ancestor_id=domain_area.pk).values_list(
                 "descendant_id", flat=True
             )
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         # SQLite test fallback: no descendants table — just use the area itself.
         descendant_ids = {domain_area.pk}
     descendant_ids.add(domain_area.pk)
