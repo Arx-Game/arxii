@@ -1,10 +1,31 @@
+import { useState } from 'react';
+
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { BackgroundSection, StatsSection, CharacterLink } from '@/components/character';
 import { FriendButton } from '@/friends/components/FriendButton';
 import { useRosterEntryByNameQuery, useRosterEntryQuery } from '@/roster/queries';
+import { useMyRelationshipToTarget } from '@/relationships/queries';
+import { RelationshipWriteupDialog } from '@/relationships/components/RelationshipWriteupDialog';
+import type { RelationshipWriteupMode } from '@/relationships/components/RelationshipWriteupDialog';
+import type { CharacterRelationshipList } from '@/relationships/api';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
+
+/**
+ * Decide whether the "Record an impression" quick action opens the
+ * writeup dialog in development mode (a relationship the caller authored
+ * already exists toward this target) or impression mode (none yet, or the
+ * lookup couldn't run — e.g. a disguise with no public roster match, per
+ * this file's own privacy docstring). `undefined` (query not yet resolved
+ * or disabled) is treated the same as "none" — impression is always the
+ * safe default first move. Exported for testing.
+ */
+export function resolveWriteupMode(
+  relationships: CharacterRelationshipList[] | undefined
+): RelationshipWriteupMode {
+  return relationships && relationships.length > 0 ? 'development' : 'impression';
+}
 
 export interface CharacterCardDrawerProps {
   /** The clicked bubble's persona identity; `null` means the drawer is closed. */
@@ -52,6 +73,16 @@ export function CharacterCardDrawer({
   const matchId = match?.id;
   const { data: entry } = useRosterEntryQuery(matchId ?? 0);
 
+  // Undefined for a disguise/temporary persona with no public roster match —
+  // `useMyRelationshipToTarget` stays disabled and `resolveWriteupMode` falls
+  // back to impression mode (the only mode that makes sense with nothing to
+  // develop). See this file's own privacy docstring.
+  const targetCharacterSheetId = entry?.character.id;
+  const { data: myRelationship } = useMyRelationshipToTarget(targetCharacterSheetId);
+  const writeupMode = resolveWriteupMode(myRelationship);
+
+  const [writeupOpen, setWriteupOpen] = useState(false);
+
   const handleWhisper = () => {
     if (!persona) return;
     onWhisper(persona.name);
@@ -89,6 +120,14 @@ export function CharacterCardDrawer({
               <Button type="button" variant="outline" size="sm" onClick={handleWhisper}>
                 Whisper
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setWriteupOpen(true)}
+              >
+                Record an impression
+              </Button>
             </div>
 
             {searching ? (
@@ -116,6 +155,14 @@ export function CharacterCardDrawer({
                 This face isn't on the public roster.
               </p>
             )}
+
+            <RelationshipWriteupDialog
+              open={writeupOpen}
+              onOpenChange={setWriteupOpen}
+              mode={writeupMode}
+              targetPersonaId={persona.id}
+              targetName={persona.name}
+            />
           </>
         )}
       </SheetContent>
