@@ -722,6 +722,17 @@ def _apply_branch_writers(
                 resolution.subject_standing_delta,
                 stake.pk,
             )
+    if resolution.npc_regard_delta != 0:
+        if _custody_allows_fire_time_write(stake, CustodyScope.HARM):
+            _write_npc_regard(resolution, stake, participants)
+        else:
+            logger.warning(
+                "StakeResolution %s: npc_regard_delta=%s blocked by cross-story "
+                "custody on stake %s's subject; skipping.",
+                resolution.pk,
+                resolution.npc_regard_delta,
+                stake.pk,
+            )
 
 
 def _write_subject_lifecycle(resolution: StakeResolution, stake: Stake) -> None:
@@ -952,6 +963,53 @@ def _write_npc_standing(
         return
     for participant in participants:
         adjust_npc_affection(participant, npc_persona, delta=resolution.subject_standing_delta)
+
+
+def _write_npc_regard(
+    resolution: StakeResolution,
+    stake: Stake,
+    participants: list[Persona] | None,
+) -> None:
+    """Fire the subject's primary persona's pre-authored NpcRegard delta against each
+    participant (#2039)."""
+    from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
+    from world.npc_services.regard import record_npc_regard_event  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    sheet = stake.subject_sheet
+    if sheet is None:
+        logger.warning(
+            "StakeResolution %s: npc_regard_delta=%s but stake %s has no subject_sheet; skipping.",
+            resolution.pk,
+            resolution.npc_regard_delta,
+            stake.pk,
+        )
+        return
+    try:
+        npc_persona = sheet.primary_persona
+    except Persona.DoesNotExist:
+        logger.warning(
+            "StakeResolution %s: subject sheet %s has no primary persona; skipping regard delta.",
+            resolution.pk,
+            sheet.pk,
+        )
+        return
+    if not participants:
+        logger.warning(
+            "StakeResolution %s: npc_regard_delta=%s but no participants "
+            "resolved for the completion; skipping.",
+            resolution.pk,
+            resolution.npc_regard_delta,
+        )
+        return
+    for participant in participants:
+        record_npc_regard_event(
+            holder_persona=npc_persona,
+            target=participant,
+            amount=resolution.npc_regard_delta,
+            reason=NpcRegardEventReason.STAKE_RESOLUTION,
+            source_stake_resolution=resolution,
+        )
 
 
 def _write_faction_standing(
