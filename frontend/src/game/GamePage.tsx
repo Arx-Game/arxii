@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
@@ -117,29 +117,37 @@ export function GamePage() {
       : null;
 
   // #2165 tab-layout persistence (spec decision 5a). Hydrate once per
-  // character+scene, BEFORE the save effect below may write — the ref
-  // handshake prevents a fresh mount's empty state from clobbering a stored
-  // layout it hasn't restored yet.
-  const tabsHydratedForRef = useRef<string | null>(null);
+  // character+scene, BEFORE the save effect below may write. This used to be
+  // a ref handshake, but a ref is set synchronously the instant hydration is
+  // *attempted* — the save effect runs in the same commit right after, while
+  // its closure still holds the pre-hydration `openThreadTabs: []`, so it
+  // wrote (and pruned) an empty layout over the entry just loaded. That
+  // self-healed on the next render UNLESS the user switched character/scene
+  // first (A->B->A), leaving the empty write durable (review fold-in). Using
+  // React state instead means `setTabsReadyFor` and the `hydrateThreadTabs`
+  // dispatch land in the same batched re-render, so the save effect's first
+  // run for a key is the POST-hydration commit, with hydrated values in the
+  // closure — the save is gated on hydration having LANDED, not attempted.
+  const [tabsReadyFor, setTabsReadyFor] = useState<string | null>(null);
   useEffect(() => {
     if (!active || !sceneId) return;
     const hydrationKey = `${active}:${sceneId}`;
-    if (tabsHydratedForRef.current === hydrationKey) return;
-    tabsHydratedForRef.current = hydrationKey;
+    if (tabsReadyFor === hydrationKey) return;
     const stored = loadThreadTabs(active, sceneId);
     if (stored && stored.openThreadTabs.length > 0) {
       dispatch(hydrateThreadTabs({ character: active, ...stored }));
     }
-  }, [active, sceneId, dispatch]);
+    setTabsReadyFor(hydrationKey);
+  }, [active, sceneId, dispatch, tabsReadyFor]);
 
   useEffect(() => {
     if (!active || !sceneId) return;
-    if (tabsHydratedForRef.current !== `${active}:${sceneId}`) return;
+    if (tabsReadyFor !== `${active}:${sceneId}`) return;
     saveThreadTabs(active, sceneId, {
       openThreadTabs,
       activeThreadTab: activeThreadTabRaw,
     });
-  }, [active, sceneId, openThreadTabs, activeThreadTabRaw]);
+  }, [active, sceneId, openThreadTabs, activeThreadTabRaw, tabsReadyFor]);
 
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
 

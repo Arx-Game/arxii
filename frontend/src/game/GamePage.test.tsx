@@ -2,7 +2,7 @@ import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
 import { GamePage } from './GamePage';
-import { saveThreadTabs } from './threadTabsStorage';
+import { saveThreadTabs, loadThreadTabs } from './threadTabsStorage';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
@@ -1067,6 +1067,79 @@ describe('GamePage', () => {
         .getByText('Whisper')
         .closest('[role="tab"]') as HTMLElement;
       expect(whisperTab).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('does not clobber a restored tab layout in storage on mount (review race fix)', async () => {
+      // Regression for a task-review finding on 408e8f8c1: the hydrate effect
+      // used to set a ref synchronously and dispatch `hydrateThreadTabs`, but
+      // the save effect ran in the SAME commit right after — its closure
+      // still held the pre-hydration `openThreadTabs: []`, so it wrote (and
+      // pruned) an empty layout over the entry this test just seeded. Assert
+      // on STORAGE, not just the DOM: the DOM self-heals on the corrective
+      // re-render, but a durable empty write underneath would go unnoticed.
+      store.dispatch(setAccount(mockAccount));
+      saveThreadTabs(ACTIVE_NAME, '100', {
+        openThreadTabs: ['whisper:9'],
+        activeThreadTab: 'whisper:9',
+      });
+
+      seedActiveSceneWithPose();
+      renderWithProviders(<GamePage />);
+
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      await within(tablist).findByText('Whisper');
+
+      expect(localStorage.getItem(`arx:threadTabs:${ACTIVE_NAME}:100`)).not.toBeNull();
+      expect(loadThreadTabs(ACTIVE_NAME, '100')).toEqual({
+        openThreadTabs: ['whisper:9'],
+        activeThreadTab: 'whisper:9',
+      });
+    });
+
+    it("keeps puppet A's persisted tab layout intact after a round trip through puppet B (A->B->A, review race fix)", async () => {
+      // Same review finding as above, in the shape the reviewer specifically
+      // flagged: a ref-based hydration guard doesn't re-run once set, so a
+      // character/scene round trip (A->B->A) re-triggers the hydrate effect
+      // for A a second time with no self-heal render to fall back on if
+      // anything raced. Assert A's storage survives the round trip untouched.
+      store.dispatch(setAccount(mockAccount));
+      saveThreadTabs(ACTIVE_NAME, '100', {
+        openThreadTabs: ['whisper:9'],
+        activeThreadTab: 'whisper:9',
+      });
+
+      seedActiveSceneWithPose();
+      store.dispatch(startSession(SECOND_NAME));
+      store.dispatch(
+        setSessionScene({
+          character: SECOND_NAME,
+          scene: {
+            id: 200,
+            name: 'The Kitchen',
+            description: '',
+            is_owner: false,
+            has_unseen_observer: false,
+          },
+        })
+      );
+      // startSession(SECOND_NAME) above made Bianca active — switch back to
+      // Aria before rendering (this test starts with Aria in view).
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+
+      renderWithProviders(<GamePage />);
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      await within(tablist).findByText('Whisper');
+
+      // Round-trip through puppet B, then back to A.
+      store.dispatch(setActiveSession(SECOND_NAME));
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+
+      await waitFor(() => {
+        expect(loadThreadTabs(ACTIVE_NAME, '100')).toEqual({
+          openThreadTabs: ['whisper:9'],
+          activeThreadTab: 'whisper:9',
+        });
+      });
     });
   });
 });
