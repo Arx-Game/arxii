@@ -12,6 +12,13 @@ too; see #1584 Task 16):
 * ``ensure_reflect_content()`` — Mirror Ward (reflect_damage, priority 20).
 * ``ensure_blink_content()`` — Phase Step (blink_dodge, priority 30).
 
+#2208 — each of the three ``ensure_*_content()`` builders above also seeds an ally-single
+and an ally-party Technique variant (e.g. Aegis Field -> Aegis Ward / Aegis Communion),
+all reusing the SAME ConditionTemplate instance the self variant creates — no new
+ConditionTemplates, triggers, or flows. Party variants pay 2x the single variant's
+``anima_cost``; the payer-pays-for-upkeep rule lives in ``_try_spend_reactive`` /
+``drain_reactive_upkeep`` (Tasks 1-2), not in this content module.
+
 Task 14c — Five simple effect techniques + the unified entry point:
 * ``ensure_teleport_content()``   — Phase Jump (SELF): CONDITION_APPLIED → move_position.
 * ``ensure_obstacle_content()``   — Barricade (SELF): CONDITION_APPLIED → create_obstacle.
@@ -34,6 +41,7 @@ Task 15/16 PG E2Es (``apply_condition`` uses PG-only DISTINCT ON); this module's
 own tests stay SQLite-safe.
 """
 
+from actions.constants import ActionTargetType
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.models.flows import FlowDefinition, FlowStepDefinition
@@ -107,6 +115,26 @@ REFLECT_TECHNIQUE_NAME: str = "Mirror Ward"
 
 #: Castable technique name for the Phase Step (blink) reactive bundle.
 BLINK_TECHNIQUE_NAME: str = "Phase Step"
+
+# --- #2208: Ally + party ward technique variants (reuse the templates above) ---
+
+#: Ally-single variant of Aegis Field (target_kind=ALLY, target_type=SINGLE).
+FORCE_FIELD_ALLY_TECHNIQUE_NAME: str = "Aegis Ward"
+
+#: Ally-party variant of Aegis Field (target_kind=ALLY, target_type=FILTERED_GROUP).
+FORCE_FIELD_PARTY_TECHNIQUE_NAME: str = "Aegis Communion"
+
+#: Ally-single variant of Mirror Ward (target_kind=ALLY, target_type=SINGLE).
+REFLECT_ALLY_TECHNIQUE_NAME: str = "Mirror Vigil"
+
+#: Ally-party variant of Mirror Ward (target_kind=ALLY, target_type=FILTERED_GROUP).
+REFLECT_PARTY_TECHNIQUE_NAME: str = "Mirror Communion"
+
+#: Ally-single variant of Phase Step (target_kind=ALLY, target_type=SINGLE).
+BLINK_ALLY_TECHNIQUE_NAME: str = "Phase Guard"
+
+#: Ally-party variant of Phase Step (target_kind=ALLY, target_type=FILTERED_GROUP).
+BLINK_PARTY_TECHNIQUE_NAME: str = "Phase Communion"
 
 # --- Dotted handler paths ---
 _ABSORB_POOL_PATH: str = "world.magic.services.effect_handlers.absorb_pool"
@@ -410,12 +438,18 @@ def _seed_technique(  # noqa: PLR0913
     technique_description: str,
     condition_template: ConditionTemplate,
     target_kind: str = ConditionTargetKind.SELF,
+    target_type: str = ActionTargetType.SINGLE,
+    anima_cost: int = 2,
 ) -> None:
     """Get-or-create a ``Technique`` + ``TechniqueAppliedCondition`` row.
 
     Shared boilerplate for all effect bundles.  Defaults to ``target_kind=SELF``
     (reactive / self-buff / teleport / incorporeal); pass ``target_kind=ENEMY``
-    for techniques applied to opponents (e.g. telekinesis Force Grip).
+    for techniques applied to opponents (e.g. telekinesis Force Grip), or
+    ``target_kind=ALLY`` for the #2208 ward variants. ``target_type`` is the
+    per-technique cardinality (``SINGLE`` default preserved; pass
+    ``FILTERED_GROUP`` for the #2208 party variants). ``anima_cost`` defaults to
+    the original hardcoded 2; party variants pass 2x the single variant's cost.
     """
     gift, _ = Gift.objects.get_or_create(
         name=gift_name,
@@ -445,7 +479,8 @@ def _seed_technique(  # noqa: PLR0913
             "intensity": 4,
             "level": 1,
             "control": 4,
-            "anima_cost": 2,
+            "anima_cost": anima_cost,
+            "target_type": target_type,
             "combo_opening_probing": None,
             "action_template": get_standalone_cast_template(),
         },
@@ -537,7 +572,7 @@ def ensure_force_field_content() -> None:
     )
     condition.reactive_triggers.add(dpa_trigger, ca_trigger)
 
-    # 5. Technique.
+    # 5. Technique (self).
     _seed_technique(
         FORCE_FIELD_TECHNIQUE_NAME,
         gift_name="Warding",
@@ -549,6 +584,41 @@ def ensure_force_field_content() -> None:
             "The field persists until combat ends or its buffer is exhausted."
         ),
         condition_template=condition,
+    )
+
+    # 6. Ally + party variants (#2208) — reuse the SAME "Aegis Field" ConditionTemplate;
+    # no new ConditionTemplates/triggers/flows. Same Gift/Style/EffectType as the self
+    # variant, so acquisition wiring is identical (zero new gate code).
+    _seed_technique(
+        FORCE_FIELD_ALLY_TECHNIQUE_NAME,
+        gift_name="Warding",
+        style_name="Warding Stance",
+        effect_type_name="Force Field",
+        description="Techniques that erect protective barriers.",
+        technique_description=(
+            "Erect a shimmering force field around an ally that absorbs incoming damage.  "
+            "The field persists until combat ends or its buffer is exhausted."
+        ),
+        condition_template=condition,
+        target_kind=ConditionTargetKind.ALLY,
+        target_type=ActionTargetType.SINGLE,
+        anima_cost=2,
+    )
+    _seed_technique(
+        FORCE_FIELD_PARTY_TECHNIQUE_NAME,
+        gift_name="Warding",
+        style_name="Warding Stance",
+        effect_type_name="Force Field",
+        description="Techniques that erect protective barriers.",
+        technique_description=(
+            "Erect a shimmering force field around a whole party of allies that absorbs "
+            "incoming damage.  Each field persists independently until combat ends or its "
+            "own buffer is exhausted."
+        ),
+        condition_template=condition,
+        target_kind=ConditionTargetKind.ALLY,
+        target_type=ActionTargetType.FILTERED_GROUP,
+        anima_cost=4,
     )
 
 
@@ -603,7 +673,7 @@ def ensure_reflect_content() -> None:
     )
     condition.reactive_triggers.add(reflect_trigger)
 
-    # 4. Technique.
+    # 4. Technique (self).
     _seed_technique(
         REFLECT_TECHNIQUE_NAME,
         gift_name="Warding",
@@ -615,6 +685,41 @@ def ensure_reflect_content() -> None:
             "cancelling any active force-field absorption."
         ),
         condition_template=condition,
+    )
+
+    # 5. Ally + party variants (#2208) — reuse the SAME "Mirror Ward" ConditionTemplate;
+    # no new ConditionTemplates/triggers/flows. Same Gift/Style/EffectType as the self
+    # variant, so acquisition wiring is identical (zero new gate code).
+    _seed_technique(
+        REFLECT_ALLY_TECHNIQUE_NAME,
+        gift_name="Warding",
+        style_name="Warding Stance",
+        effect_type_name="Damage Reflection",
+        description="Techniques that erect protective barriers.",
+        technique_description=(
+            "Weave a mirror ward onto an ally that reflects incoming damage back at "
+            "their attacker, cancelling any active force-field absorption on that ally."
+        ),
+        condition_template=condition,
+        target_kind=ConditionTargetKind.ALLY,
+        target_type=ActionTargetType.SINGLE,
+        anima_cost=2,
+    )
+    _seed_technique(
+        REFLECT_PARTY_TECHNIQUE_NAME,
+        gift_name="Warding",
+        style_name="Warding Stance",
+        effect_type_name="Damage Reflection",
+        description="Techniques that erect protective barriers.",
+        technique_description=(
+            "Weave a mirror ward onto a whole party of allies that reflects incoming "
+            "damage back at each attacker, cancelling any active force-field absorption "
+            "on the warded allies."
+        ),
+        condition_template=condition,
+        target_kind=ConditionTargetKind.ALLY,
+        target_type=ActionTargetType.FILTERED_GROUP,
+        anima_cost=4,
     )
 
 
@@ -668,7 +773,7 @@ def ensure_blink_content() -> None:
     )
     condition.reactive_triggers.add(blink_trigger)
 
-    # 4. Technique.
+    # 4. Technique (self).
     _seed_technique(
         BLINK_TECHNIQUE_NAME,
         gift_name="Evasion",
@@ -680,6 +785,41 @@ def ensure_blink_content() -> None:
             "position and negating the hit entirely."
         ),
         condition_template=condition,
+    )
+
+    # 5. Ally + party variants (#2208) — reuse the SAME "Phase Step" ConditionTemplate;
+    # no new ConditionTemplates/triggers/flows. Same Gift/Style/EffectType as the self
+    # variant, so acquisition wiring is identical (zero new gate code).
+    _seed_technique(
+        BLINK_ALLY_TECHNIQUE_NAME,
+        gift_name="Evasion",
+        style_name="Evasion Stance",
+        effect_type_name="Blink Dodge",
+        description="Techniques that attune the body to phase-step through incoming attacks.",
+        technique_description=(
+            "Attune an ally's body to phase-step out of the way of incoming damage, "
+            "teleporting them to an adjacent position and negating the hit entirely."
+        ),
+        condition_template=condition,
+        target_kind=ConditionTargetKind.ALLY,
+        target_type=ActionTargetType.SINGLE,
+        anima_cost=2,
+    )
+    _seed_technique(
+        BLINK_PARTY_TECHNIQUE_NAME,
+        gift_name="Evasion",
+        style_name="Evasion Stance",
+        effect_type_name="Blink Dodge",
+        description="Techniques that attune the body to phase-step through incoming attacks.",
+        technique_description=(
+            "Attune a whole party of allies to phase-step out of the way of incoming "
+            "damage, teleporting each to an adjacent position and negating the hit "
+            "entirely."
+        ),
+        condition_template=condition,
+        target_kind=ConditionTargetKind.ALLY,
+        target_type=ActionTargetType.FILTERED_GROUP,
+        anima_cost=4,
     )
 
 
