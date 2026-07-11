@@ -158,7 +158,16 @@ export function SceneDetailPage() {
     <div className="flex h-full flex-col">
       <div className="shrink-0 px-4 pt-4">
         <SceneHeader scene={scene} onRefresh={() => refetch()} />
-        {battle && (
+        {battle && battle.outcome === 'unresolved' && (
+          <Link
+            to={`/scenes/${id}/battle`}
+            className="mt-1 inline-block text-sm text-blue-600 hover:underline"
+            data-testid="scene-battle-map-link"
+          >
+            Battle Map
+          </Link>
+        )}
+        {battle && battle.outcome !== 'unresolved' && (
           <Link
             to={`/battles/${battle.id}`}
             className="mt-1 inline-block text-sm text-blue-600 hover:underline"

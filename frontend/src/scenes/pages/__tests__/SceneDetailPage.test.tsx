@@ -102,7 +102,7 @@ vi.mock('@/roster/queries', () => ({
 
 const mockUseBattleForSceneQuery = vi.fn(
   (): {
-    data: { id: number } | null;
+    data: { id: number; outcome: string } | null;
     isLoading: boolean;
     isError: boolean;
   } => ({
@@ -314,9 +314,9 @@ describe('SceneDetailPage', () => {
     expect(fetchPlaces).toHaveBeenCalledWith('777');
   });
 
-  it('shows a Battle Writeup link when a battle exists for the scene (#1735)', () => {
+  it('shows a Battle Writeup link when a concluded battle exists for the scene (#1735)', () => {
     mockUseBattleForSceneQuery.mockReturnValue({
-      data: { id: 42 },
+      data: { id: 42, outcome: 'attacker_decisive' },
       isLoading: false,
       isError: false,
     });
@@ -330,6 +330,7 @@ describe('SceneDetailPage', () => {
 
     const link = getByTestId('scene-battle-writeup-link');
     expect(link).toHaveAttribute('href', '/battles/42');
+    expect(link).toHaveTextContent('Battle Writeup');
   });
 
   it('does not show a Battle Writeup link when no battle exists (#1735)', () => {
@@ -340,6 +341,26 @@ describe('SceneDetailPage', () => {
       { initialEntries: ['/scenes/1'] }
     );
 
+    expect(queryByTestId('scene-battle-writeup-link')).not.toBeInTheDocument();
+  });
+
+  it('links to the live battle map, not the writeup, while the battle is unresolved (#2157)', () => {
+    mockUseBattleForSceneQuery.mockReturnValue({
+      data: { id: 42, outcome: 'unresolved' },
+      isLoading: false,
+      isError: false,
+    });
+
+    const { getByTestId, queryByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    const link = getByTestId('scene-battle-map-link');
+    expect(link).toHaveAttribute('href', '/scenes/1/battle');
+    expect(link).toHaveTextContent('Battle Map');
     expect(queryByTestId('scene-battle-writeup-link')).not.toBeInTheDocument();
   });
 });
