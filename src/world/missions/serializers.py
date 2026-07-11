@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.missions.constants import DeedRewardSink, MissionStatus
+from world.missions.constants import DeedRewardSink, MissionStatus, NodeLocationMode
 from world.missions.models import (
     MissionCategory,
     MissionGiver,
@@ -21,6 +21,9 @@ from world.missions.models import (
     MissionOptionRouteReward,
     MissionTemplate,
 )
+
+_ERR_TARGET_AREA_ONLY_AREA = "target_area is only valid when location_mode is AREA."
+_ERR_AREA_REQUIRES_TARGET_AREA = "AREA location mode requires a target area."
 
 
 def _validate_name_unique_on_update(
@@ -266,7 +269,8 @@ class MissionNodeSerializer(serializers.ModelSerializer):
     ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
     authoring UI passes them through unchanged). Editor layout fields
     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-    sibling are both editable.
+    sibling are both editable. ``location_mode``/``locations``/``target_area``
+    round-trip the node's location gate (#885, #888).
     """
 
     class Meta:
@@ -285,8 +289,35 @@ class MissionNodeSerializer(serializers.ModelSerializer):
             "editor_y",
             "flavor_text",
             "flavor_text_needs_rewrite",
+            "location_mode",
+            "locations",
+            "target_area",
         ]
         read_only_fields = ["id"]
+
+    def validate_target_area(self, value: object) -> object:
+        """target_area is only valid when location_mode is AREA."""
+        location_mode = self._effective_location_mode()
+        if value is not None and location_mode != NodeLocationMode.AREA:
+            raise serializers.ValidationError(_ERR_TARGET_AREA_ONLY_AREA)
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        """AREA mode requires a target_area."""
+        attrs = super().validate(attrs)
+        location_mode = attrs.get("location_mode")
+        if location_mode is None and self.instance is not None:
+            location_mode = self.instance.location_mode
+        if location_mode == NodeLocationMode.AREA and not attrs.get("target_area"):
+            raise serializers.ValidationError({"target_area": _ERR_AREA_REQUIRES_TARGET_AREA})
+        return attrs
+
+    def _effective_location_mode(self) -> str | None:
+        """The location_mode in play, falling back to the instance on partial updates."""
+        mode = self.initial_data.get("location_mode")
+        if mode is None and self.instance is not None:
+            return self.instance.location_mode
+        return mode
 
 
 class MissionOptionSerializer(serializers.ModelSerializer):

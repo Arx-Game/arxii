@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("missions", "0031_support_moves"),
+        ("missions", "0032_add_area_location_mode"),
     ]
 
     operations = [

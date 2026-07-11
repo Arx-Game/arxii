@@ -310,6 +310,7 @@ from actions.definitions.social import (
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
+from actions.definitions.windows import CloseWindowAction, OpenWindowAction
 from actions.types import TargetType
 
 # All base action instances. Each is a singleton — actions are stateless.
@@ -562,6 +563,8 @@ _ALL_ACTIONS: list[Action] = [
     # #1866 — door lock/unlock telnet coverage.
     LockAction(),
     UnlockAction(),
+    OpenWindowAction(),
+    CloseWindowAction(),
     # #2116 — gift/technique/thread-weaving acquisition surface.
     PurchaseGiftUnlockAction(),
     AcceptTechniqueOfferAction(),

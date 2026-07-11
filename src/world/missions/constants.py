@@ -229,6 +229,7 @@ class NodeLocationMode(models.TextChoices):
     ANCHOR = "anchor", "Anchor Room"
     ROOMS = "rooms", "Authored Rooms"
     INSTANCE = "instance", "Spawned Instance"
+    AREA = "area", "Target Area"
 
 
 class GiverKind(models.TextChoices):

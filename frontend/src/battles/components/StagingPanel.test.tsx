@@ -156,6 +156,11 @@ const MOCK_BATTLE_DETAIL: BattleDetail = {
   places: [],
   units: [],
   participants: [],
+  concluded_at: '2026-07-10T12:00:00Z',
+  created_at: '2026-07-09T08:00:00Z',
+  campaign_story_id: null,
+  scene_id: 1,
+  deeds: [],
 };
 
 function makeStagingAction(registryKey: string, displayName: string): PlayerAction {

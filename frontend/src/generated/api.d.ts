@@ -17995,6 +17995,19 @@ export interface components {
       readonly places: components['schemas']['BattlePlace'][];
       readonly units: components['schemas']['BattleUnit'][];
       readonly participants: components['schemas']['BattleParticipant'][];
+      /** Format: date-time */
+      readonly concluded_at: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly campaign_story_id: number | null;
+      readonly scene_id: number;
+      /**
+       * @description Legendary deeds scoped to this battle's backing scene (#1735).
+       *
+       *     Reads from the ``cached_deeds`` to_attr the view's Prefetch populates
+       *     on the battle's Scene (world/battles/views.py) — never a fresh query.
+       */
+      readonly deeds: unknown[];
     };
     /** @description Slim row for the battle list endpoint. */
     BattleList: {
@@ -23191,6 +23204,15 @@ export interface components {
       is_visible_at_rest?: boolean;
     };
     /**
+     * @description * `anywhere` - Anywhere
+     *     * `anchor` - Anchor Room
+     *     * `rooms` - Authored Rooms
+     *     * `instance` - Spawned Instance
+     *     * `area` - Target Area
+     * @enum {string}
+     */
+    LocationModeEnum: 'anywhere' | 'anchor' | 'rooms' | 'instance' | 'area';
+    /**
      * @description * `ALIVE` - Alive
      *     * `CAPTURED` - Captured / Unknown
      *     * `COMA` - Coma
@@ -23454,7 +23476,8 @@ export interface components {
      *     ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
      *     authoring UI passes them through unchanged). Editor layout fields
      *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-     *     sibling are both editable.
+     *     sibling are both editable. ``location_mode``/``locations``/``target_area``
+     *     round-trip the node's location gate (#885, #888).
      */
     MissionNode: {
       readonly id: number;
@@ -23497,6 +23520,20 @@ export interface components {
       flavor_text?: string;
       /** @description Phase-D copy service sets True (inherited copy reads as 'rewrite me'); the Phase-D edit service clears it on save. Surfaces in the Studio's 'N flavor fields are still flagged as un-rewritten copy' counter (design §10). NOT cleared automatically at the model layer — service responsibility. */
       flavor_text_needs_rewrite?: boolean;
+      /**
+       * @description Default location gate for this node's options (#885): ANYWHERE = live wherever the character is; ANCHOR = live only in the instance's grant-time anchor room; ROOMS = live in this node's authored ``locations`` set. An option with its own ``locations`` rows overrides this default.
+       *
+       *     * `anywhere` - Anywhere
+       *     * `anchor` - Anchor Room
+       *     * `rooms` - Authored Rooms
+       *     * `instance` - Spawned Instance
+       *     * `area` - Target Area
+       */
+      location_mode?: components['schemas']['LocationModeEnum'];
+      /** @description Authored rooms where this node's options are live (consulted only when ``location_mode=ROOMS``). Options may override per-option via ``MissionOption.locations``. */
+      locations?: number[];
+      /** @description Target area for AREA location_mode. A room matches when its RoomProfile.area is this area or any descendant via AreaClosure. */
+      target_area?: number | null;
     };
     /**
      * @description Editor CRUD for MissionNode rows.
@@ -23504,7 +23541,8 @@ export interface components {
      *     ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
      *     authoring UI passes them through unchanged). Editor layout fields
      *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-     *     sibling are both editable.
+     *     sibling are both editable. ``location_mode``/``locations``/``target_area``
+     *     round-trip the node's location gate (#885, #888).
      */
     MissionNodeRequest: {
       template: number;
@@ -23546,6 +23584,20 @@ export interface components {
       flavor_text?: string;
       /** @description Phase-D copy service sets True (inherited copy reads as 'rewrite me'); the Phase-D edit service clears it on save. Surfaces in the Studio's 'N flavor fields are still flagged as un-rewritten copy' counter (design §10). NOT cleared automatically at the model layer — service responsibility. */
       flavor_text_needs_rewrite?: boolean;
+      /**
+       * @description Default location gate for this node's options (#885): ANYWHERE = live wherever the character is; ANCHOR = live only in the instance's grant-time anchor room; ROOMS = live in this node's authored ``locations`` set. An option with its own ``locations`` rows overrides this default.
+       *
+       *     * `anywhere` - Anywhere
+       *     * `anchor` - Anchor Room
+       *     * `rooms` - Authored Rooms
+       *     * `instance` - Spawned Instance
+       *     * `area` - Target Area
+       */
+      location_mode?: components['schemas']['LocationModeEnum'];
+      /** @description Authored rooms where this node's options are live (consulted only when ``location_mode=ROOMS``). Options may override per-option via ``MissionOption.locations``. */
+      locations?: number[];
+      /** @description Target area for AREA location_mode. A room matches when its RoomProfile.area is this area or any descendant via AreaClosure. */
+      target_area?: number | null;
     };
     /**
      * @description Staff CRUD for mission-kind offer details (#728).
@@ -27696,7 +27748,8 @@ export interface components {
      *     ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
      *     authoring UI passes them through unchanged). Editor layout fields
      *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-     *     sibling are both editable.
+     *     sibling are both editable. ``location_mode``/``locations``/``target_area``
+     *     round-trip the node's location gate (#885, #888).
      */
     PatchedMissionNodeRequest: {
       template?: number;
@@ -27738,6 +27791,20 @@ export interface components {
       flavor_text?: string;
       /** @description Phase-D copy service sets True (inherited copy reads as 'rewrite me'); the Phase-D edit service clears it on save. Surfaces in the Studio's 'N flavor fields are still flagged as un-rewritten copy' counter (design §10). NOT cleared automatically at the model layer — service responsibility. */
       flavor_text_needs_rewrite?: boolean;
+      /**
+       * @description Default location gate for this node's options (#885): ANYWHERE = live wherever the character is; ANCHOR = live only in the instance's grant-time anchor room; ROOMS = live in this node's authored ``locations`` set. An option with its own ``locations`` rows overrides this default.
+       *
+       *     * `anywhere` - Anywhere
+       *     * `anchor` - Anchor Room
+       *     * `rooms` - Authored Rooms
+       *     * `instance` - Spawned Instance
+       *     * `area` - Target Area
+       */
+      location_mode?: components['schemas']['LocationModeEnum'];
+      /** @description Authored rooms where this node's options are live (consulted only when ``location_mode=ROOMS``). Options may override per-option via ``MissionOption.locations``. */
+      locations?: number[];
+      /** @description Target area for AREA location_mode. A room matches when its RoomProfile.area is this area or any descendant via AreaClosure. */
+      target_area?: number | null;
     };
     /**
      * @description Staff CRUD for mission-kind offer details (#728).
@@ -49254,6 +49321,7 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        target_area?: number;
         template?: number;
       };
       header?: never;

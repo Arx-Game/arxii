@@ -62,6 +62,7 @@ from typing import TYPE_CHECKING
 from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
+from world.areas.services import area_subtree_pks
 from world.checks.consequence_resolution import apply_resolution
 from world.checks.models import Consequence
 from world.checks.outcome_utils import select_weighted
@@ -88,6 +89,7 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
+    from evennia_extensions.models import RoomProfile
     from world.checks.models import CheckType
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
@@ -151,18 +153,18 @@ def build_option_list(
         )
         .order_by("order", "pk")
     )
-    here = _current_room_profile_id(viewer.character)
+    here = _current_room_profile(viewer.character)
     local = [opt for opt in options if option_is_locally_live(opt, node, instance, here)]
     return present_options_for_character(viewer.character, local)
 
 
-def _current_room_profile_id(character: ObjectDB) -> int | None:
-    """The pk of the RoomProfile where ``character`` stands, or None."""
+def _current_room_profile(character: ObjectDB) -> RoomProfile | None:
+    """The RoomProfile where ``character`` stands, or None."""
     location = character.location
     if location is None:
         return None
     try:
-        return location.room_profile.pk
+        return location.room_profile
     except RoomProfile.DoesNotExist:
         return None
 
@@ -171,34 +173,39 @@ def option_is_locally_live(
     option: MissionOption,
     node: MissionNode,
     instance: MissionInstance,
-    current_room_profile_id: int | None,
+    current_room_profile: RoomProfile | None,
 ) -> bool:
-    """The location conjunct of option eligibility (#885).
+    """The location conjunct of option eligibility (#885, #888).
 
     Resolution order: the option's own ``locations`` set (non-empty =
     override — live only in those rooms), else the node's
     ``location_mode``: ANYWHERE → always live; ANCHOR → live only in the
     instance's grant-time ``anchor_room`` (a placeless grant never fires
-    ANCHOR options); ROOMS → live in the node's authored ``locations``.
+    ANCHOR options); ROOMS → live in the node's authored ``locations``;
+    AREA → live in any room whose area is the node's ``target_area`` or a
+    descendant of it; INSTANCE → live only inside the room this run
+    spawned; nowhere before.
     """
     override_ids = [room.pk for room in option.locations.all()]
     if override_ids:
-        return current_room_profile_id in override_ids
+        return current_room_profile is not None and current_room_profile.pk in override_ids
+
+    profile_pk = current_room_profile.pk if current_room_profile is not None else None
     if node.location_mode == NodeLocationMode.ANYWHERE:
         return True
     if node.location_mode == NodeLocationMode.ANCHOR:
-        return (
-            instance.anchor_room_id is not None
-            and current_room_profile_id == instance.anchor_room_id
-        )
+        return profile_pk is not None and profile_pk == instance.anchor_room_id
     if node.location_mode == NodeLocationMode.INSTANCE:
         # #886: live only inside the room this run spawned; nowhere before.
+        return profile_pk is not None and profile_pk == instance.spawned_room_id
+    if node.location_mode == NodeLocationMode.AREA:
         return (
-            instance.spawned_room_id is not None
-            and current_room_profile_id == instance.spawned_room_id
+            node.target_area_id is not None
+            and current_room_profile is not None
+            and current_room_profile.area_id in area_subtree_pks(node.target_area)
         )
     # NodeLocationMode.ROOMS
-    return any(room.pk == current_room_profile_id for room in node.locations.all())
+    return profile_pk is not None and any(room.pk == profile_pk for room in node.locations.all())
 
 
 def present_options_for_character(

@@ -5,6 +5,18 @@ from __future__ import annotations
 from django.db import models
 
 
+class ExitKind(models.TextChoices):
+    """What kind of traversal object an exit is.
+
+    Mirrors ``RoomProfile``'s typed-state pattern for exits. ``DOOR`` is the
+    default for all existing exits; ``WINDOW`` is the first stateful kind that
+    can be opened/closed and affects traversal + room enclosure.
+    """
+
+    DOOR = "door", "Door"
+    WINDOW = "window", "Window"
+
+
 class RoomEnclosure(models.TextChoices):
     """How enclosed a room is — gates which outdoor weather reaches its inhabitants (#1514).
 
