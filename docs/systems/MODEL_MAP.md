@@ -6062,6 +6062,7 @@
   - known_by <- secrets.SecretKnowledge
   - gossip_heat <- secrets.SecretGossip
   - leverage <- secrets.Leverage
+  - accusation_crime_claim <- justice.AccusationCrimeClaim
 
 ### SecretVictim
 **Foreign Keys:**
@@ -6381,6 +6382,7 @@
   - explaining_secrets <- secrets.Secret
   - crime_tags <- justice.DeedCrimeTag
   - heat_sources <- justice.HeatSource
+  - frame_claims <- justice.AccusationCrimeClaim
   - mission_deeds <- missions.MissionDeedRecord
 
 ### LegendSpread

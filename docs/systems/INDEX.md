@@ -1022,7 +1022,10 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
   carries weight + mints heat/reputation like a true scandal (falsity emergent). `mint_accusation`
   (thin over `author_secret`) + `accusation_permitted` (consent gate: the target's `hostile`
   category, #2170; NPC always frameable). `MintAccusationAction` (key `mint_accusation`), telnet
-  `accuse <char> = <claim>` (`commands/social/accusations.py`)
+  `accuse <char> = <claim>` (`commands/social/accusations.py`). A *criminal* accusation bridges
+  into pursuit heat justice-side via `AccusationCrimeClaim` + `file_criminal_accusation`
+  (see Justice, #1825) — wild L2 (named crime, no real deed → easily refuted) vs L3 frame
+  (a real deed pinned on someone who didn't do it → robust)
 - **Discovery:** secrets are a `Clue` `target_kind` (`SECRET` + `target_secret` FK) — found
   through the same Search / `acquire_clue` loop; `grant_clue_target` teaches the fact
 - **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
@@ -1042,10 +1045,14 @@ heat; identity-association copies it (`associate_heat` — the #1334 outing seam
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`
   (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society), `HeatSource`
-  (allegation provenance — false accusations are emergent, never flagged)
+  (allegation provenance — false accusations are emergent, never flagged),
+  `AccusationCrimeClaim` (→ `secrets.Secret` — the frame-job→heat bridge; `real_deed`
+  null = wild L2, set = L3 frame for a real crime, #1825)
 - **Key functions (`world/justice/services.py`):** `law_for`, `enforcing_society_for`,
   `accrue_heat`, `accrue_for_deed_knowledge`, `heat_for`, `associate_heat`,
-  `tag_deed_crimes`, `heat_decay_tick` (daily cron)
+  `tag_deed_crimes`, `heat_decay_tick` (daily cron); accusation bridge (#1825):
+  `record_accusation_crime`, `accrue_accusation_heat`, `file_criminal_accusation`
+  (composes `secrets.mint_accusation` + claim + heat — justice→secrets, ADR-0010)
 - **Writers:** deed-knowledge seam (`grant_deed_knowledge(room=…)`); mission report
   CRIME_WATCH sink (`missions.integrations.crime_watch.flag_crime` + the
   MOSTLY_ACCURATE dodge + masked-report association chance)

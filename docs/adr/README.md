@@ -149,6 +149,7 @@ treat those names as hints to confirm, not gospel.
 - [0116 — PlayerMail is the letters surface at MVP; tenure-routed anonymity is the mechanism](0116-playermail-is-the-letters-surface-at-mvp.md)
 - [0117 — Relationship reads are scoped to the caller's own outbound rows, plus a soul-tether carve-out](0117-relationship-reads-scoped-to-own-outbound-rows.md)
 - [0118 — Reactive ward costs debit the applier, falling back to the bearer](0118-reactive-costs-debit-the-applier.md) (extends ADR-0060)
+- [0119 — The accusation→heat bridge lives justice-side, and its tier is emergent from the real deed underneath](0119-accusation-heat-bridge-tier-is-emergent-from-the-deed.md) (extends ADR-0114/0010)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

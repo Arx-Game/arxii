@@ -34,7 +34,7 @@ class MintAccusationAction(Action):
     action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.SINGLE
 
-    def execute(
+    def execute(  # noqa: PLR0911 — each return is a distinct guard/route (consent, crime, mint)
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -76,10 +76,51 @@ class MintAccusationAction(Action):
                 ),
             )
 
+        accuser_persona = active_persona_for_sheet(framer_sheet)
+
+        # A criminal accusation (a crime kind named) routes through the justice heat
+        # bridge; a bare accusation stays reputation-only. This command path files a
+        # *wild* accusation (no real deed underneath) — the fragile, easily-refuted tier
+        # (#1825); anchoring a real deed (an L3 frame) is the evidence-assembly path.
+        crime_slug = (kwargs.get("crime_kind_slug") or "").strip()
+        if crime_slug:
+            from world.justice.models import CrimeKind  # noqa: PLC0415
+            from world.justice.services import (  # noqa: PLC0415
+                area_for_room,
+                file_criminal_accusation,
+            )
+
+            crime_kind = CrimeKind.objects.filter(slug=crime_slug).first()
+            if crime_kind is None:
+                no_crime = f"There's no such crime to accuse them of: {crime_slug!r}."
+                return _ActionResult(success=False, message=no_crime)
+            location = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+            area = area_for_room(location) if location is not None else None
+            level = kwargs.get("level") or SecretLevel.WHISPERS
+            try:
+                secret = file_criminal_accusation(
+                    accuser_persona=accuser_persona,
+                    subject_sheet=target_sheet,
+                    content=content,
+                    crime_kind=crime_kind,
+                    level=int(level),
+                    area=area,
+                )
+            except SecretError as exc:
+                return _ActionResult(success=False, message=exc.user_message)
+            return _ActionResult(
+                success=True,
+                message=(
+                    f"You accuse {target_persona} of {crime_kind}. Where that's a crime, "
+                    "the law will start to look their way — until someone disproves it."
+                ),
+                data={"secret_id": secret.pk},
+            )
+
         level = kwargs.get("level") or SecretLevel.UNCOMMON_KNOWLEDGE
         try:
             secret = mint_accusation(
-                accuser_persona=active_persona_for_sheet(framer_sheet),
+                accuser_persona=accuser_persona,
                 subject_sheet=target_sheet,
                 content=content,
                 level=int(level),
