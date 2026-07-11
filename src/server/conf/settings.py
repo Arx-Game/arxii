@@ -212,8 +212,9 @@ FALL_IMPACT_PER_LEVEL = env.int("FALL_IMPACT_PER_LEVEL", default=5)
 MAX_ESTABLISHED_PERSONAS_PER_SHEET = env.int("MAX_ESTABLISHED_PERSONAS_PER_SHEET", default=5)
 
 # Max number of exits a single travel_to dispatch will traverse in one go (#2163).
-# Backstop against a pathological/disconnected-but-still-searched graph; same-Area
-# scoping already bounds most realistic routes well under this.
+# Cross-Area BFS routing (#2223) has no separate Area-to-Area adjacency scoping —
+# the exit graph alone is the connectivity, so this hop cap is the sole cost/reach
+# bound against a pathological/disconnected-but-still-searched graph.
 TRAVEL_MAX_HOPS = env.int("TRAVEL_MAX_HOPS", default=50)
 
 # Web frontend base URL — the React app's origin. Referenced by allauth's
