@@ -22,7 +22,84 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class RosterEmailService:
+class EmailServiceBase:
+    """Shared low-level email-sending primitives for domain email services.
+
+    Split out from RosterEmailService (#2162) so sibling domain services (e.g.
+    CGEmailService) can reuse `_send_email`/`_get_staff_emails` without
+    subclassing RosterEmailService itself — its `send_application_approved`/
+    `send_application_denied` take a domain-specific signature (roster's
+    include a `tenure` arg) that an override with a narrower signature would
+    violate (ty: invalid-method-override / Liskov Substitution Principle).
+    """
+
+    @classmethod
+    def _send_email(
+        cls,
+        subject: str,
+        message: str,
+        recipient_list: list,
+        html_message: str | None = None,
+        from_email: str | None = None,
+    ) -> bool:
+        """
+        Internal method to send emails via Django's email system.
+
+        Args:
+            subject: Email subject
+            message: Plain text message
+            recipient_list: List of recipient email addresses
+            html_message: Optional HTML version of the message
+            from_email: Optional from email (uses DEFAULT_FROM_EMAIL if not provided)
+
+        Returns:
+            bool: True if email was sent successfully
+        """
+        try:
+            if not from_email:
+                from_email = settings.DEFAULT_FROM_EMAIL
+
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=from_email,
+                recipient_list=recipient_list,
+                html_message=html_message,
+                fail_silently=False,
+            )
+
+            return True
+
+        except Exception as e:
+            logger.exception(f"Failed to send email: {e}")
+            return False
+
+    @classmethod
+    def _get_staff_emails(cls) -> list:
+        """
+        Get list of staff email addresses for notifications.
+
+        Returns:
+            list: List of staff email addresses
+        """
+        # TODO: This could be made configurable or pulled from a staff group
+        try:
+            staff_emails = settings.STAFF_NOTIFICATION_EMAILS
+        except AttributeError:
+            staff_emails = []
+
+        if not staff_emails:
+            # Fallback to admin emails
+            try:
+                admins = settings.ADMINS
+            except AttributeError:
+                admins = []
+            return [admin[1] for admin in admins]
+
+        return staff_emails
+
+
+class RosterEmailService(EmailServiceBase):
     """Service for sending roster-related emails."""
 
     @classmethod
@@ -260,71 +337,6 @@ class RosterEmailService:
         except Exception as e:
             logger.exception(f"Failed to send password reset email to {user.email}: {e}")
             return False
-
-    @classmethod
-    def _send_email(
-        cls,
-        subject: str,
-        message: str,
-        recipient_list: list,
-        html_message: str | None = None,
-        from_email: str | None = None,
-    ) -> bool:
-        """
-        Internal method to send emails via Django's email system.
-
-        Args:
-            subject: Email subject
-            message: Plain text message
-            recipient_list: List of recipient email addresses
-            html_message: Optional HTML version of the message
-            from_email: Optional from email (uses DEFAULT_FROM_EMAIL if not provided)
-
-        Returns:
-            bool: True if email was sent successfully
-        """
-        try:
-            if not from_email:
-                from_email = settings.DEFAULT_FROM_EMAIL
-
-            send_mail(
-                subject=subject,
-                message=message,
-                from_email=from_email,
-                recipient_list=recipient_list,
-                html_message=html_message,
-                fail_silently=False,
-            )
-
-            return True
-
-        except Exception as e:
-            logger.exception(f"Failed to send email: {e}")
-            return False
-
-    @classmethod
-    def _get_staff_emails(cls) -> list:
-        """
-        Get list of staff email addresses for notifications.
-
-        Returns:
-            list: List of staff email addresses
-        """
-        # TODO: This could be made configurable or pulled from a staff group
-        try:
-            staff_emails = settings.STAFF_NOTIFICATION_EMAILS
-        except AttributeError:
-            staff_emails = []
-
-        if not staff_emails:
-            # Fallback to admin emails
-            try:
-                admins = settings.ADMINS
-            except AttributeError:
-                admins = []
-            return [admin[1] for admin in admins]
-
-        return staff_emails
 
     @classmethod
     def handle_new_application(cls, application: RosterApplication) -> bool:
