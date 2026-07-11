@@ -61,6 +61,7 @@ if TYPE_CHECKING:
     from world.checks.models import ConsequenceEffect
     from world.checks.types import ModifierContribution
     from world.combat.models import CombatEncounter
+    from world.npc_services.models import NpcRegardEvent
     from world.relationships.constants import FirstImpressionColoring
     from world.relationships.models import BondCombatConfig, GrievanceOption, RelationshipTrack
     from world.scenes.models import Interaction, ReactionEmoji, Scene
@@ -424,6 +425,67 @@ def apply_affection_shift(
     except IntegrityError:
         return None
     return shift
+
+
+def mirror_npc_regard_event_to_track(event: NpcRegardEvent) -> RelationshipTrackProgress | None:
+    """Mirror one NpcRegardEvent onto the PC's Regard/Friction system track (#2039).
+
+    Reuses ``apply_affection_shift``'s track-selection + capstone write-shape, but
+    dedups on the ``NpcRegardEvent`` row itself (one mirror write per event, folded
+    into the same call) rather than requiring a Scene+ConsequenceEffect —
+    ``apply_affection_shift`` can't be called directly here since combat/GM/chargen-
+    authored events don't carry those. #2013's hated-foe surge
+    (``world/combat/escalation.py``'s ``_maybe_surge_hated_foe``) reads
+    ``source=<PC's own CharacterSheet>, target=<NPC's CharacterSheet>`` — so this
+    helper always writes in that fixed direction regardless of which side of the
+    NpcRegardEvent caused it. Returns ``None`` if the event's regard row isn't
+    persona-targeted, or the amount is zero.
+    """
+    regard = event.regard
+    target_persona = regard.target_persona
+    if target_persona is None:
+        # Only PERSONA-targeted regard rows have a PC to mirror onto; org/society
+        # targets have no CharacterSheet and can't feed the #2013 bridge.
+        return None
+    npc_persona = regard.holder_persona
+
+    pc_sheet = target_persona.character_sheet
+    npc_sheet = npc_persona.character_sheet
+    if pc_sheet.pk == npc_sheet.pk:
+        return None
+
+    points = abs(event.amount)
+    if points == 0:
+        return None
+
+    key = TrackSystemKey.REGARD if event.amount > 0 else TrackSystemKey.FRICTION
+    try:
+        track = RelationshipTrack.objects.get(system_key=key)
+    except RelationshipTrack.DoesNotExist:
+        # Unlike apply_affection_shift/apply_relationship_bump, this bridge is
+        # wired unconditionally into record_npc_regard_event's write seam — the
+        # core NPC regard buildup path must not blow up just because the
+        # relationships system tracks haven't been seeded yet.
+        return None
+
+    try:
+        with transaction.atomic():
+            relationship, _ = CharacterRelationship.objects.get_or_create(
+                source=pc_sheet,
+                target=npc_sheet,
+                defaults={"is_pending": True},
+            )
+            progress, _ = RelationshipTrackProgress.objects.select_for_update().get_or_create(
+                relationship=relationship,
+                track=track,
+                defaults={"capacity": 0, "developed_points": 0},
+            )
+            progress.capacity += points
+            progress.developed_points += points
+            progress.save(update_fields=["capacity", "developed_points"])
+    except IntegrityError:
+        return None
+    return progress
 
 
 def _writeup_field_name(writeup) -> str:

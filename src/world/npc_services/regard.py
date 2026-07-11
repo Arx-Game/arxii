@@ -123,4 +123,8 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
             regard.flush_from_cache(force=True)
             regard.refresh_from_db()
 
+        from world.relationships.services import mirror_npc_regard_event_to_track  # noqa: PLC0415
+
+        mirror_npc_regard_event_to_track(event)
+
     return event
