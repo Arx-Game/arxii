@@ -22,6 +22,8 @@ Player subverbs:
     battle declare move withdraw with <technique>
     battle declare reposition <place> <dx> <dy> with <technique>
     battle duel <front> vs <boss name>
+    battle join <front>
+    battle encounters    — list open front fights (read-only, any participant)
 
 GM subverbs:
     battle round        — begin the next round (DECLARING)
@@ -35,6 +37,7 @@ GM staging subverbs (#2010 — turn a catalog pick into a live Battle):
     battle enlist <character> = <side>[, <front>]
     battle maps [<term>]
     battle units [<term>]
+    battle encounter open <front>  — open a general party encounter (#2008)
 
 No business logic lives here: parse, resolve model instances, call Action.
 """
@@ -69,6 +72,7 @@ if TYPE_CHECKING:
 
 _PLACE_PREFIX = "place "
 _AT_MARKER = "at"  # noqa: STRING_LITERAL
+_OPEN_MARKER = "open"  # noqa: STRING_LITERAL
 
 
 def _split_leading_positional(tokens: list[str]) -> tuple[list[str], list[str]]:
@@ -108,6 +112,8 @@ class CmdBattle(ArxCommand):
         battle declare move withdraw with <technique>
         battle declare reposition <place> <dx> <dy> with <technique>
         battle duel <front> vs <boss name>
+        battle join <front>
+        battle encounters
 
     Syntax (GM / staff):
         battle round
@@ -121,6 +127,7 @@ class CmdBattle(ArxCommand):
         battle enlist <character> = <side>[, <front>]
         battle maps [<term>]
         battle units [<term>]
+        battle encounter open <front>
 
     Bare ``battle`` shows your current battle status. Supply a unit name for
     ``strike`` (matched within the active battle) or a character name for
@@ -147,11 +154,17 @@ class CmdBattle(ArxCommand):
     to a PLACE-scope local exception at that front only.
     ``duel <front> vs <boss name>`` opens a lethal Champion duel bound to that
     front — requires an engaged Champion role for your side's covenant.
-    ``move <place>`` repositions yourself to a different front; ``move <unit> to
-    <place>`` is a commander's order (requires an engaged SUBORDINATE or SUPREME
-    command_tier, same as ``repel``/``hold``); ``move withdraw`` leaves the battle
-    entirely. ``reposition <place> <dx> <dy>`` moves a vehicle you command by the
-    given delta, clamped to its SPEED capability (#1714).
+    ``declare move <place>`` repositions yourself to a different front;
+    ``declare move <unit> to <place>`` is a commander's order (requires an
+    engaged SUBORDINATE or SUPREME command_tier, same as ``repel``/``hold``);
+    ``declare move withdraw`` leaves the battle entirely. ``declare
+    reposition <place> <dx> <dy>`` moves a vehicle you command by the given
+    delta, clamped to its SPEED capability (#1714).
+    ``encounter open <front>`` (#2008, GM-gated) opens a general party
+    encounter at that front for anyone stationed there to join; ``join
+    <front>`` joins an open front encounter you're stationed at; ``encounters``
+    lists every front with an open encounter, its status, and participant
+    count.
 
     The staging subverbs (#2010) turn a JUNIOR-GM catalog pick into a live
     Battle: ``create`` makes a new Battle (optionally staging a named
@@ -204,11 +217,14 @@ class CmdBattle(ArxCommand):
             "enlist": self._enlist_participant,
             "maps": self._browse_catalog,
             "units": self._browse_catalog,
+            "encounter": self._encounter,
+            "join": self._join_place_encounter,
         }
         no_arg_handlers: dict[str, Callable[[], None]] = {
             "round": self._begin_round,
             "resolve": self._resolve_round,
             "conclude": self._conclude,
+            "encounters": self._list_encounters,
         }
 
         if first in arg_handlers:
@@ -220,7 +236,9 @@ class CmdBattle(ArxCommand):
 
         msg = (
             "Usage: battle [declare strike <unit>|declare support <char>"
-            "|declare rescue <ally>|duel <front> vs <boss name>|round|resolve|conclude"
+            "|declare rescue <ally>|duel <front> vs <boss name>"
+            "|encounter open <front>|join <front>|encounters"
+            "|round|resolve|conclude"
             "|create <name>|stage <blueprint>|spawn <template>|enlist <char> = <side>"
             "|maps [<term>]|units [<term>]]"
         )
@@ -841,6 +859,60 @@ class CmdBattle(ArxCommand):
             opponent_kwargs={"name": boss_name, "max_health": 300, "threat_pool": None},
         )
         self._send(result)
+
+    def _encounter(self, rest: list[str]) -> None:
+        """``battle encounter open <front>`` (#2008)."""
+        from actions.definitions.battles import OpenPlaceEncounterAction  # noqa: PLC0415
+
+        usage = "Usage: battle encounter open <front>"
+        if len(rest) < 2 or rest[0].lower() != _OPEN_MARKER:  # noqa: PLR2004
+            raise CommandError(usage)
+        place_name = " ".join(rest[1:]).strip()
+        if not place_name:
+            raise CommandError(usage)
+
+        battle = self._resolve_staging_battle()
+        place = self._resolve_battle_place(battle, place_name)
+
+        result = OpenPlaceEncounterAction().run(self.caller, battle_place_id=place.pk)
+        self._send(result)
+
+    def _join_place_encounter(self, rest: list[str]) -> None:
+        """``battle join <front>`` (#2008)."""
+        from actions.definitions.battles import JoinPlaceEncounterAction  # noqa: PLC0415
+
+        usage = "Usage: battle join <front>"
+        place_name = " ".join(rest).strip()
+        if not place_name:
+            raise CommandError(usage)
+
+        participant = self._resolve_participant()
+        place = self._resolve_battle_place(participant.battle, place_name)
+
+        result = JoinPlaceEncounterAction().run(self.caller, battle_place_id=place.pk)
+        self._send(result)
+
+    def _list_encounters(self) -> None:
+        """``battle encounters`` (#2008) — list open front fights and their status."""
+        from world.battles.models import BattlePlace  # noqa: PLC0415
+
+        participant = self._resolve_participant()
+        places = (
+            BattlePlace.objects.filter(battle=participant.battle, combat_encounter__isnull=False)
+            .select_related("combat_encounter")
+            .order_by("name")
+        )
+        if not places:
+            self.msg("No encounters are open at any front in this battle.")
+            return
+        lines = ["Open encounters:"]
+        for place in places:
+            enc = place.combat_encounter
+            lines.append(
+                f"  {place.name}: {enc.get_status_display()}"
+                f" ({enc.participants.count()} participants)"
+            )
+        self.msg("\n".join(lines))
 
     # ------------------------------------------------------------------
     # GM staging subverbs (#2010)
