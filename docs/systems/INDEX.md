@@ -1154,6 +1154,13 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`);
   `kudos`, `vote`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348);
   `durance [status|intent|convene]` (in `commands/durance.py`, #1700)
+- **`award_kudos` real-time push + privacy guard (#2161):** every `award_kudos` call
+  schedules `notify_kudos_received` via `transaction.on_commit`, pushing a `kudos_received`
+  WS frame (amount/source_category/description) to the recipient's connected sessions —
+  central to the service, not per-caller, so vote settlement, GM awards, writeup kudos, and
+  the social-engagement roll below all get the toast for free. `KudosTransactionSerializer`
+  no longer exposes `awarded_by`/`awarded_by_name` to the recipient (ADR-0033 structural
+  guard — the awarder's identity never leaks to the person they kudos'd).
 - **Good-sport kudos accrual:**
   - `accrue(account, initiator_account, points) -> WeeklySocialEngagement` (`services/engagement.py`) — adds points to the weekly pending ledger; tracks `WeeklyEngagementInitiator` rows for distinct-initiator anti-farm; resets stale ledgers lazily on the game-week boundary.
   - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; for each ungranted ledger with `engagement_events > 0`, rolls the diminishing-chance curve once per event (`_roll_good_sport_points`, guaranteed first point, capped at `GOOD_SPORT_WEEKLY_CAP`) and awards kudos via `award_kudos` when the roll yields > 0; every ledger is marked `granted=True` regardless of the rolled amount. There is no distinct-initiator floor — `distinct_initiators` (from `WeeklyEngagementInitiator` rows) is tracked on the ledger but not read by this function. Requires the `"social_engagement"` `KudosSourceCategory` to exist (seeded by the "kudos" cluster, #2026) or it logs a warning and no-ops.
@@ -1522,10 +1529,15 @@ action consent flow, and a three-mode non-combat round framework.
     and `SceneViewSet.highlight_reel`.
   - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, the combat
     encounter read gate, and the interaction/reel read gates all consume these forms.
-- **Highlight reel (#1241):** `GET /api/scenes/{id}/highlight-reel/` — a fully-sealed featured
-  moment + ranked index (ids only), ranked by `InteractionReaction` counts (a queryset-level
-  `Count` annotation, no denormalized column), GM-tagged poses headline. Filtered through
-  `Interaction.objects.visible_to`. Frontend: `HighlightReel` (`frontend/src/scenes/components/`).
+- **Highlight reel (#1241; re-ranked #2161):** `GET /api/scenes/{id}/highlight-reel/` — a
+  fully-sealed featured moment + ranked index, carrying `vote_count`/`reaction_count` per pose.
+  Ranked by all-time `WeeklyVote` count first (survives weekly settlement, unlike the weekly
+  `Interaction.vote_count` counter), `InteractionReaction` count as tie-break, recency last;
+  GM-tagged poses headline. Filtered through `Interaction.objects.visible_to`. Frontend:
+  `HighlightReel` (`frontend/src/scenes/components/`) — direct-mounted (no extra Accordion
+  wrapper, it's already self-collapsing) in the `/game` right sidebar's Room tab via
+  `SceneHighlightsPanel` (`frontend/src/game/components/room-panel/`), in addition to its
+  original mount on `SceneDetailPage`.
 - **API Endpoints:** `GET/POST /api/action-requests/`, `POST /api/action-requests/{id}/respond/`,
   `GET /api/action-targets/` (read-only; filterable by `scene` + `status`; surfaces pending
   additional-target consent rows for the authenticated player's personas).
