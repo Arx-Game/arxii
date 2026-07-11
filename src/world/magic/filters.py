@@ -123,6 +123,7 @@ class RitualSessionFilterSet(django_filters.FilterSet):
     as_initiator=me — sessions where the requesting user is the initiator.
     ritual — filter by Ritual PK.
     participation_rule — filter by ParticipationRule enum value.
+    scene — filter by the session's captured origin Scene PK (#2159).
 
     The as_invitee / as_initiator filters accept the literal value "me" (case-insensitive).
     Any other value is ignored (no-op filter).
@@ -135,10 +136,11 @@ class RitualSessionFilterSet(django_filters.FilterSet):
         field_name="ritual__participation_rule",
         choices=ParticipationRule.choices,
     )
+    scene = django_filters.NumberFilter(field_name="scene_id")
 
     class Meta:
         model = RitualSession
-        fields = ["as_invitee", "as_initiator", "ritual", "participation_rule"]
+        fields = ["as_invitee", "as_initiator", "ritual", "participation_rule", "scene"]
 
     def _my_sheet_ids(self) -> "list[int]":
         """Resolve the requesting user's active character sheet PKs."""
