@@ -382,6 +382,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
 
 def seeded_models() -> list[type[Model]]:
     """Representative content models per cluster for row-count progress tracking."""
+    from world.agriculture.models import CropType  # noqa: PLC0415
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
@@ -403,6 +404,7 @@ def seeded_models() -> list[type[Model]]:
         Beginnings,
         Species,
         CrimeKind,
+        CropType,
     ]
 
 
@@ -415,6 +417,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     order so the admin hub lists clusters in their seed sequence.
     """
     from actions.models import ActionTemplate  # noqa: PLC0415
+    from world.agriculture.models import CropType  # noqa: PLC0415
     from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
     from world.character_creation.models import (  # noqa: PLC0415
         Beginnings,
@@ -547,4 +550,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row
         # (#2038).
         "project_resonance": [ProjectKindResonanceAward],
+        # Agriculture: Field + Granary RoomFeatureKinds + starter CropTypes (#1864).
+        "agriculture": [CropType, RoomFeatureKind],
     }
