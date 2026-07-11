@@ -258,6 +258,15 @@ const MagicProgressionPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded journals page (#2160) — diary route, plural /journals. Distinct
+// from /missions/journal (the mission ledger, moved there in Task 1).
+// ---------------------------------------------------------------------------
+
+const JournalsPage = lazy(() =>
+  import('@/journals/pages/JournalsPage').then((m) => ({ default: m.JournalsPage }))
+);
+
+// ---------------------------------------------------------------------------
 // Suspense fallback — shown while lazy stories chunks load
 // ---------------------------------------------------------------------------
 
@@ -326,6 +335,16 @@ function App() {
         <Route path="/characters/create" element={<CharacterCreationPage />} />
         <Route path="/characters/:id" element={<CharacterSheetPage />} />
         <Route path="/missions/journal" element={<JournalPage />} />
+        <Route
+          path="/journals"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <JournalsPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
         <Route path="/tidings" element={<TidingsPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
