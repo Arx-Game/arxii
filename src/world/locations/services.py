@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from evennia_extensions.constants import RoomEnclosure
 from evennia_extensions.models import RoomProfile
+from evennia_extensions.services.exits import effective_enclosure_for_room
 from world.areas.models import AreaClosure
 from world.conditions.models import DamageType
 from world.locations.constants import (
@@ -381,7 +382,8 @@ def _exposure_context(room: DefaultObject) -> _ExposureContext:
     """Resolve a room's profile, effective climate + seasonal shift, and sheltered axes once."""
     profile, ancestor_ids = _room_profile_and_ancestors(room)
     climate, temperature_shift = _resolve_room_climate(profile)
-    sheltered_axes = ENCLOSURE_SHELTERED_AXES.get(room_enclosure(room), frozenset())
+    effective_enclosure = effective_enclosure_for_room(room)
+    sheltered_axes = ENCLOSURE_SHELTERED_AXES.get(effective_enclosure, frozenset())
     return _ExposureContext(profile, ancestor_ids, climate, temperature_shift, sheltered_axes)
 
 

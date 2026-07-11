@@ -31,6 +31,7 @@ from world.gm.permissions import HasGMTrust
 from world.mechanics.models import Property
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona, Scene
+from world.societies.models import LegendEntry
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -58,9 +59,10 @@ class BattleViewSet(ReadOnlyModelViewSet):
         """Explicit ``to_attr``-cached prefetches for the retrieve-only nested aggregate.
 
         Every relation the detail serializer nests (sides/places/units/
-        participants, plus places' fortifications) is loaded via a ``Prefetch``
-        with ``to_attr`` — never a bare string — so the serializer's cache reads
-        cost zero extra queries (repo-wide PREFETCH_STRING rule).
+        participants, plus places' fortifications and the battle's scene-scoped
+        deeds) is loaded via a ``Prefetch`` with ``to_attr`` — never a bare
+        string — so the serializer's cache reads cost zero extra queries
+        (repo-wide PREFETCH_STRING rule).
         ``BattleSideSerializer``/``BattlePlaceSerializer``/etc. read the
         matching ``cached_*`` attrs via their ``source=`` kwarg.
         """
@@ -108,10 +110,21 @@ class BattleViewSet(ReadOnlyModelViewSet):
                 ),
                 to_attr="cached_participants",
             ),
+            # Deeds scoped to the battle's backing scene (#1735). LegendEntry.scene
+            # has related_name="legend_entries" on Scene, so the prefetch path is
+            # scene__legend_entries. The to_attr lands on the Scene instance, which
+            # BattleDetailSerializer.get_deeds reads as obj.scene.cached_deeds.
+            Prefetch(
+                "scene__legend_entries",
+                queryset=LegendEntry.objects.filter(is_active=True)
+                .select_related("persona")
+                .order_by("-created_at"),
+                to_attr="cached_deeds",
+            ),
         ]
 
     def _base_queryset(self) -> QuerySet[Battle]:
-        qs = Battle.objects.order_by("-created_at")
+        qs = Battle.objects.select_related("scene").order_by("-created_at")
         if self.action == "retrieve":
             qs = qs.prefetch_related(*self._detail_prefetches())
         return qs

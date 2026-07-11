@@ -18254,6 +18254,10 @@ paths:
         schema:
           type: integer
       - in: query
+        name: target_area
+        schema:
+          type: number
+      - in: query
         name: template
         schema:
           type: number
@@ -30133,12 +30137,41 @@ components:
           items:
             $ref: '#/components/schemas/BattleParticipant'
           readOnly: true
+        concluded_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        campaign_story_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        scene_id:
+          type: integer
+          readOnly: true
+        deeds:
+          type: array
+          items: {}
+          description: |-
+            Legendary deeds scoped to this battle's backing scene (#1735).
+
+            Reads from the ``cached_deeds`` to_attr the view's Prefetch populates
+            on the battle's Scene (world/battles/views.py) — never a fresh query.
+          readOnly: true
       required:
+      - campaign_story_id
+      - concluded_at
+      - created_at
+      - deeds
       - id
       - name
       - participants
       - places
       - round
+      - scene_id
       - sides
       - units
     BattleList:
@@ -41342,6 +41375,20 @@ components:
       - origin_affinity_name
       - player_description
       - tier
+    LocationModeEnum:
+      enum:
+      - anywhere
+      - anchor
+      - rooms
+      - instance
+      - area
+      type: string
+      description: |-
+        * `anywhere` - Anywhere
+        * `anchor` - Anchor Room
+        * `rooms` - Authored Rooms
+        * `instance` - Spawned Instance
+        * `area` - Target Area
     MachineMatchLifecycleStateEnum:
       enum:
       - ALIVE
@@ -41888,7 +41935,8 @@ components:
         ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-        sibling are both editable.
+        sibling are both editable. ``location_mode``/``locations``/``target_area``
+        round-trip the node's location gate (#885, #888).
       properties:
         id:
           type: integer
@@ -41965,6 +42013,29 @@ components:
             me'); the Phase-D edit service clears it on save. Surfaces in the Studio's
             'N flavor fields are still flagged as un-rewritten copy' counter (design
             §10). NOT cleared automatically at the model layer — service responsibility.
+        location_mode:
+          allOf:
+          - $ref: '#/components/schemas/LocationModeEnum'
+          description: |-
+            Default location gate for this node's options (#885): ANYWHERE = live wherever the character is; ANCHOR = live only in the instance's grant-time anchor room; ROOMS = live in this node's authored ``locations`` set. An option with its own ``locations`` rows overrides this default.
+
+            * `anywhere` - Anywhere
+            * `anchor` - Anchor Room
+            * `rooms` - Authored Rooms
+            * `instance` - Spawned Instance
+            * `area` - Target Area
+        locations:
+          type: array
+          items:
+            type: integer
+          description: Authored rooms where this node's options are live (consulted
+            only when ``location_mode=ROOMS``). Options may override per-option via
+            ``MissionOption.locations``.
+        target_area:
+          type: integer
+          nullable: true
+          description: Target area for AREA location_mode. A room matches when its
+            RoomProfile.area is this area or any descendant via AreaClosure.
       required:
       - conflict_mode
       - id
@@ -41978,7 +42049,8 @@ components:
         ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-        sibling are both editable.
+        sibling are both editable. ``location_mode``/``locations``/``target_area``
+        round-trip the node's location gate (#885, #888).
       properties:
         template:
           type: integer
@@ -42053,6 +42125,29 @@ components:
             me'); the Phase-D edit service clears it on save. Surfaces in the Studio's
             'N flavor fields are still flagged as un-rewritten copy' counter (design
             §10). NOT cleared automatically at the model layer — service responsibility.
+        location_mode:
+          allOf:
+          - $ref: '#/components/schemas/LocationModeEnum'
+          description: |-
+            Default location gate for this node's options (#885): ANYWHERE = live wherever the character is; ANCHOR = live only in the instance's grant-time anchor room; ROOMS = live in this node's authored ``locations`` set. An option with its own ``locations`` rows overrides this default.
+
+            * `anywhere` - Anywhere
+            * `anchor` - Anchor Room
+            * `rooms` - Authored Rooms
+            * `instance` - Spawned Instance
+            * `area` - Target Area
+        locations:
+          type: array
+          items:
+            type: integer
+          description: Authored rooms where this node's options are live (consulted
+            only when ``location_mode=ROOMS``). Options may override per-option via
+            ``MissionOption.locations``.
+        target_area:
+          type: integer
+          nullable: true
+          description: Target area for AREA location_mode. A room matches when its
+            RoomProfile.area is this area or any descendant via AreaClosure.
       required:
       - conflict_mode
       - key
@@ -49116,7 +49211,8 @@ components:
         ``allowed_riders`` exposes the consequence M2M as a list of PKs (the
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
-        sibling are both editable.
+        sibling are both editable. ``location_mode``/``locations``/``target_area``
+        round-trip the node's location gate (#885, #888).
       properties:
         template:
           type: integer
@@ -49191,6 +49287,29 @@ components:
             me'); the Phase-D edit service clears it on save. Surfaces in the Studio's
             'N flavor fields are still flagged as un-rewritten copy' counter (design
             §10). NOT cleared automatically at the model layer — service responsibility.
+        location_mode:
+          allOf:
+          - $ref: '#/components/schemas/LocationModeEnum'
+          description: |-
+            Default location gate for this node's options (#885): ANYWHERE = live wherever the character is; ANCHOR = live only in the instance's grant-time anchor room; ROOMS = live in this node's authored ``locations`` set. An option with its own ``locations`` rows overrides this default.
+
+            * `anywhere` - Anywhere
+            * `anchor` - Anchor Room
+            * `rooms` - Authored Rooms
+            * `instance` - Spawned Instance
+            * `area` - Target Area
+        locations:
+          type: array
+          items:
+            type: integer
+          description: Authored rooms where this node's options are live (consulted
+            only when ``location_mode=ROOMS``). Options may override per-option via
+            ``MissionOption.locations``.
+        target_area:
+          type: integer
+          nullable: true
+          description: Target area for AREA location_mode. A room matches when its
+            RoomProfile.area is this area or any descendant via AreaClosure.
     PatchedMissionOfferDetailsRequest:
       type: object
       description: |-
@@ -49975,6 +50094,7 @@ components:
             * `everyone` - Everyone
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
+            * `rivals` - My declared rivals (and whitelist)
             * `allowlist` - Allowlist only
     PatchedSocialConsentPreferenceRequest:
       type: object
@@ -56061,6 +56181,7 @@ components:
             * `everyone` - Everyone
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
+            * `rivals` - My declared rivals (and whitelist)
             * `allowlist` - Allowlist only
       required:
       - category
@@ -56071,12 +56192,14 @@ components:
       - everyone
       - all_but_blacklist
       - friends_whitelist
+      - rivals
       - allowlist
       type: string
       description: |-
         * `everyone` - Everyone
         * `all_but_blacklist` - Everyone except my blacklist
         * `friends_whitelist` - Friends and my whitelist
+        * `rivals` - My declared rivals (and whitelist)
         * `allowlist` - Allowlist only
     SocialConsentCategoryRuleRequest:
       type: object
@@ -56095,6 +56218,7 @@ components:
             * `everyone` - Everyone
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
+            * `rivals` - My declared rivals (and whitelist)
             * `allowlist` - Allowlist only
       required:
       - category

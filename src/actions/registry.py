@@ -17,6 +17,7 @@ from actions.definitions.battles import (
     StageBattleMapAction,
 )
 from actions.definitions.cast import CastTechniqueAction
+from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.combat_maneuvers import (
     CoverAction,
     DemoralizeAction,
@@ -297,6 +298,7 @@ from actions.definitions.signature import (
 )
 from actions.definitions.situations import SetSituationAction
 from actions.definitions.social import (
+    blackmail,
     deceive,
     entrance,
     flirt,
@@ -310,6 +312,7 @@ from actions.definitions.social import (
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
+from actions.definitions.windows import CloseWindowAction, OpenWindowAction
 from actions.types import TargetType
 
 # All base action instances. Each is a singleton — actions are stateless.
@@ -517,6 +520,9 @@ _ALL_ACTIONS: list[Action] = [
     deceive,
     flirt,
     seduce,
+    blackmail,
+    coerce,
+    reveal_secret,
     perform,
     entrance,
     restore_sense,
@@ -562,6 +568,8 @@ _ALL_ACTIONS: list[Action] = [
     # #1866 — door lock/unlock telnet coverage.
     LockAction(),
     UnlockAction(),
+    OpenWindowAction(),
+    CloseWindowAction(),
     # #2116 — gift/technique/thread-weaving acquisition surface.
     PurchaseGiftUnlockAction(),
     AcceptTechniqueOfferAction(),
@@ -597,7 +605,17 @@ for _action in _ALL_ACTIONS:
 # the ActionTemplate for a consent request.
 SOCIAL_ACTIONS_BY_TEMPLATE_NAME: dict[str, Action] = {
     a.template_name: a
-    for a in (intimidate, persuade, deceive, flirt, seduce, perform, entrance, restore_sense)
+    for a in (
+        intimidate,
+        persuade,
+        deceive,
+        flirt,
+        seduce,
+        blackmail,
+        perform,
+        entrance,
+        restore_sense,
+    )
 }
 
 

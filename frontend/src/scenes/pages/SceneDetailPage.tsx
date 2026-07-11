@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchScene, SceneDetail } from '../queries';
 import { createActionRequest, fetchPlaces } from '../actionQueries';
@@ -23,6 +23,7 @@ import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { PendingActionAttachments } from '../components/PendingActionAttachments';
 import { usePendingUnlinkedActions } from '../hooks/usePendingUnlinkedActions';
+import { useBattleForSceneQuery } from '@/battles/queries';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -35,6 +36,7 @@ export function SceneDetailPage() {
   const isActive = scene?.is_active ?? false;
   const roomName = scene?.name ?? 'Room';
   const activeCharacter = useAppSelector((state) => state.game.active);
+  const { data: battle } = useBattleForSceneQuery(id ? Number(id) : null);
 
   // Resolve the active character's primary persona id for submit_pose REST calls.
   // Also derives characterSheetId: CharacterSheet uses OneToOneField(primary_key=True)
@@ -156,6 +158,15 @@ export function SceneDetailPage() {
     <div className="flex h-full flex-col">
       <div className="shrink-0 px-4 pt-4">
         <SceneHeader scene={scene} onRefresh={() => refetch()} />
+        {battle && (
+          <Link
+            to={`/battles/${battle.id}`}
+            className="mt-1 inline-block text-sm text-blue-600 hover:underline"
+            data-testid="scene-battle-writeup-link"
+          >
+            Battle Writeup
+          </Link>
+        )}
         {isActive && <ConsentPrompt sceneId={id} />}
         {isActive && <SineatingInbox />}
         {isActive && <SoulTetherRescuePrompt />}

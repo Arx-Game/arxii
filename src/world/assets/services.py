@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 if TYPE_CHECKING:
+    from world.assets.models import NPCAsset
     from world.distinctions.models import CharacterDistinction
+    from world.scenes.models import Persona
 
 
 @transaction.atomic
@@ -83,3 +85,53 @@ def reconcile_distinction_asset_grants(character_distinction: CharacterDistincti
             npc_persona=asset_persona,
             defaults={"affection": grant.starting_affection},
         )
+
+
+class CoercionError(Exception):
+    """A leverage-coercion could not proceed (carries a user-facing message)."""
+
+    def __init__(self, message: str, *, user_message: str | None = None) -> None:
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+@transaction.atomic
+def coerce_into_asset(
+    *,
+    coercer_persona: Persona,
+    target_persona: Persona,
+    role_context: str,
+) -> NPCAsset:
+    """Extract a blackmailed NPC as a COERCION ``NPCAsset`` (#1680).
+
+    The blackmailer holds standing leverage over the target (a ``Secret`` about their
+    sheet, minted by a successful Blackmail); calling it in makes the target the
+    coercer's coerced asset of the chosen ``role_context`` (informant / contact /
+    personal-favor — the "list of options"). No functionary, no rapport, no capability
+    check — leverage is the guarantee. (An actively-piloted NPC's player-style resist is
+    handled by the caller before it reaches here; this service is the auto-success mint.)
+    Reuses the whole ``NPCAsset`` machinery with ``acquisition_source=COERCION`` and both
+    source FKs null (like a CG grant, this is not a functionary promotion).
+
+    Raises ``CoercionError`` if the coercer holds no leverage over the target, or the
+    target already answers to someone (``asset_persona`` is OneToOne — one owner per NPC).
+    """
+    from world.assets.constants import AssetAcquisitionSource  # noqa: PLC0415
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+    from world.secrets.services import has_leverage  # noqa: PLC0415
+
+    if not has_leverage(
+        holder_sheet=coercer_persona.character_sheet,
+        subject_sheet=target_persona.character_sheet,
+    ):
+        msg = "You hold no leverage over them."
+        raise CoercionError(msg, user_message=msg)
+    if NPCAsset.objects.filter(asset_persona=target_persona).exists():
+        msg = "They already answer to someone."
+        raise CoercionError(msg, user_message=msg)
+    return NPCAsset.objects.create(
+        promoter_persona=coercer_persona,
+        asset_persona=target_persona,
+        role_context=role_context,
+        acquisition_source=AssetAcquisitionSource.COERCION,
+    )

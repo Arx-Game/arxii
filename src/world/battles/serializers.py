@@ -30,6 +30,7 @@ from world.battles.models import (
 )
 from world.mechanics.models import Property
 from world.scenes.constants import PersonaType
+from world.societies.models import LegendEntry
 
 
 class FortificationSerializer(serializers.ModelSerializer):
@@ -180,6 +181,28 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         }
 
 
+class BattleDeedSerializer(serializers.ModelSerializer):
+    """A legendary deed performed during the battle, scoped via the battle's scene (#1735).
+
+    Reads from ``LegendEntry`` rows whose ``scene`` FK matches the battle's
+    backing scene. Exposes the persona's public identity (id + name only) —
+    never account/username (ADR-0033).
+    """
+
+    persona = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LegendEntry
+        fields = ["id", "title", "description", "base_value", "created_at", "persona"]
+
+    def get_persona(self, obj: LegendEntry) -> dict | None:
+        """Public persona identity only — id/name, never account/username."""
+        persona = obj.persona
+        if persona is None:
+            return None
+        return {"id": persona.id, "name": persona.name}
+
+
 class BattleSideSerializer(serializers.ModelSerializer):
     """One side in the battle, with its victory tally and fielding covenant."""
 
@@ -225,6 +248,13 @@ class BattleDetailSerializer(serializers.ModelSerializer):
     participants = BattleParticipantSerializer(
         many=True, read_only=True, source="cached_participants"
     )
+    # Writeup fields (#1735) — additive to the existing aggregate; the live
+    # battle-map page ignores these, the writeup page consumes them.
+    concluded_at = serializers.DateTimeField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    campaign_story_id = serializers.IntegerField(read_only=True, allow_null=True)
+    scene_id = serializers.IntegerField(read_only=True)
+    deeds = serializers.SerializerMethodField()
 
     class Meta:
         model = Battle
@@ -239,6 +269,11 @@ class BattleDetailSerializer(serializers.ModelSerializer):
             "places",
             "units",
             "participants",
+            "concluded_at",
+            "created_at",
+            "campaign_story_id",
+            "scene_id",
+            "deeds",
         ]
 
     def get_round(self, obj: Battle) -> dict | None:
@@ -247,6 +282,14 @@ class BattleDetailSerializer(serializers.ModelSerializer):
         if current is None:
             return None
         return {"number": current.round_number, "status": current.status}
+
+    def get_deeds(self, obj: Battle) -> list:
+        """Legendary deeds scoped to this battle's backing scene (#1735).
+
+        Reads from the ``cached_deeds`` to_attr the view's Prefetch populates
+        on the battle's Scene (world/battles/views.py) — never a fresh query.
+        """
+        return BattleDeedSerializer(obj.scene.cached_deeds, many=True).data
 
 
 class BlueprintFortificationSerializer(serializers.ModelSerializer):

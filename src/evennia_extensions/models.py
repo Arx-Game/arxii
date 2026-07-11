@@ -13,7 +13,7 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from evennia_extensions.constants import RoomEnclosure
+from evennia_extensions.constants import ExitKind, RoomEnclosure
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from server.conf.serversession import ServerSession
 from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication
@@ -471,3 +471,41 @@ class RoomProfile(SharedMemoryModel):
     def __str__(self):
         area_name = self.area.name if self.area else "unplaced"
         return f"RoomProfile for {self.objectdb.db_key} ({area_name})"
+
+
+class ExitProfile(SharedMemoryModel):
+    """Typed state for an Evennia Exit object.
+
+    Mirrors ``RoomProfile``: a OneToOne Django model that adds queryable fields
+    to an Evennia object without replacing the core typeclass. The first kind is
+    ``WINDOW``, which can be opened/closed to affect traversal and room comfort.
+    """
+
+    objectdb = models.OneToOneField(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="exit_profile",
+    )
+    exit_kind = models.CharField(
+        max_length=20,
+        choices=ExitKind.choices,
+        default=ExitKind.DOOR,
+        help_text="What kind of exit this is.",
+    )
+    is_open = models.BooleanField(
+        default=False,
+        help_text="For WINDOW kinds: whether the window is open.",
+    )
+
+    class Meta:
+        verbose_name = "Exit Profile"
+        verbose_name_plural = "Exit Profiles"
+
+    def __str__(self):
+        return f"ExitProfile for {self.objectdb.db_key} ({self.exit_kind})"
+
+    @classmethod
+    def get_or_create_for_exit(cls, exit_obj):
+        """Return the ExitProfile for an exit, creating a default DOOR row if absent."""
+        return cls.objects.get_or_create(objectdb=exit_obj)[0]

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.scenes.models import Friendship
+from world.scenes.models import Friendship, Rivalry
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -58,6 +58,45 @@ def is_friend(*, owner_tenure: RosterTenure, friend_tenure: RosterTenure) -> boo
     return Friendship.objects.filter(
         friender_tenure=owner_tenure, friend_tenure=friend_tenure
     ).exists()
+
+
+def is_rival(*, owner_tenure: RosterTenure, rival_tenure: RosterTenure) -> bool:
+    """Is there a **mutual** rivalry between the two tenures? — the #2170 RIVALS predicate.
+
+    Double opt-in: both directions must be declared, so RIVALS-mode antagonism only flows
+    between characters who have *each* named the other a rival — no one is dragged in one-sidedly.
+    """
+    return (
+        Rivalry.objects.filter(rivaler_tenure=owner_tenure, rival_tenure=rival_tenure).exists()
+        and Rivalry.objects.filter(rivaler_tenure=rival_tenure, rival_tenure=owner_tenure).exists()
+    )
+
+
+def declare_rival(*, rivaler_tenure: RosterTenure, rival_tenure: RosterTenure) -> Rivalry:
+    """Declare ``rival_tenure`` a rival of ``rivaler_tenure`` (one-way, idempotent).
+
+    Only a *mutual* declaration (both sides) satisfies the RIVALS consent gate — this records
+    one side's intent.
+    """
+    rivalry, _ = Rivalry.objects.get_or_create(
+        rivaler_tenure=rivaler_tenure, rival_tenure=rival_tenure
+    )
+    return rivalry
+
+
+def undeclare_rival(*, rivaler_tenure: RosterTenure, rival_tenure: RosterTenure) -> bool:
+    """Withdraw a rival declaration (rivaler → rival). Returns True if a row was removed."""
+    deleted, _ = Rivalry.objects.filter(
+        rivaler_tenure=rivaler_tenure, rival_tenure=rival_tenure
+    ).delete()
+    return deleted > 0
+
+
+def rivaled_tenures_for(rivaler_tenure: RosterTenure) -> QuerySet[RosterTenure]:
+    """The tenures this character has declared rivals (their own side — may not be mutual yet)."""
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    return RosterTenure.objects.filter(rivalries_received__rivaler_tenure=rivaler_tenure)
 
 
 def friended_tenures_for(friender_tenure: RosterTenure) -> QuerySet[RosterTenure]:

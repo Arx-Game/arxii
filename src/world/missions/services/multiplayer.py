@@ -42,7 +42,7 @@ from django.db.models import Sum
 from world.missions.constants import ConflictMode, JointCombine
 from world.missions.models import MissionOptionRoute
 from world.missions.services.resolution import (
-    _current_room_profile_id,
+    _current_room_profile,
     _finish_terminal,
     _route_next_node,
     option_is_locally_live,
@@ -136,7 +136,7 @@ def build_group_option_list(
     participants = instance.participants.all().order_by("pk")
     presented: list[PresentedOption] = []
     for participant in participants:
-        here = _current_room_profile_id(participant.character)
+        here = _current_room_profile(participant.character)
         local = [opt for opt in options if option_is_locally_live(opt, node, instance, here)]
         presented.extend(present_options_for_character(participant.character, local))
     return presented

@@ -652,6 +652,7 @@
   - granted_assets <- assets.NPCAsset
 
 ### Service Functions
+- `coerce_into_asset(*, coercer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a blackmailed NPC as a COERCION ``NPCAsset`` (#1680).`
 - `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
 
 
@@ -1276,6 +1277,8 @@
   - companions <- companions.Companion
   - secrets <- secrets.Secret
   - secret_grievances <- secrets.SecretGrievance
+  - leverage_held <- secrets.Leverage
+  - leverage_against <- secrets.Leverage
   - detected_concealments <- conditions.ConditionInstance
   - modifiers <- mechanics.CharacterModifier
   - consequence_outcomes <- checks.ConsequenceOutcome
@@ -2008,7 +2011,7 @@
 - `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
 - `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909).`
-- `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
+- `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool', is_rival: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
@@ -5206,6 +5209,8 @@
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer
   - friendships_made <- scenes.Friendship
   - friendships_received <- scenes.Friendship
+  - rivalries_made <- scenes.Rivalry
+  - rivalries_received <- scenes.Rivalry
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
   - social_consent_preference <- consent.SocialConsentPreference
@@ -5390,6 +5395,11 @@
 **Foreign Keys:**
   - friender_tenure -> roster.RosterTenure [FK]
   - friend_tenure -> roster.RosterTenure [FK]
+
+### Rivalry
+**Foreign Keys:**
+  - rivaler_tenure -> roster.RosterTenure [FK]
+  - rival_tenure -> roster.RosterTenure [FK]
 
 ### Mute
 **Foreign Keys:**
@@ -5614,6 +5624,7 @@
   - grievances <- secrets.SecretGrievance
   - known_by <- secrets.SecretKnowledge
   - gossip_heat <- secrets.SecretGossip
+  - leverage <- secrets.Leverage
 
 ### SecretVictim
 **Foreign Keys:**
@@ -5637,13 +5648,23 @@
   - secret -> secrets.Secret [FK]
   - region -> areas.Area [FK]
 
+### Leverage
+**Foreign Keys:**
+  - holder_sheet -> character_sheets.CharacterSheet [FK]
+  - subject_sheet -> character_sheets.CharacterSheet [FK]
+  - founded_on -> secrets.Secret [FK]
+
 ### Service Functions
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' — Author a Level-1 player-flavor secret (the only tier a player may free-write).`
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
+- `character_knows_secret(*, knower_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' — True if the character (by current tenure) holds knowledge of ``secret`` (#1680).`
 - `expose_secret(secret: 'Secret', *, societies: 'Iterable[Society]') -> 'SecretExposureResult' — Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).`
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' — Record that a character knows a secret, unlocking the given layers (idempotent).`
+- `has_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet') -> 'bool' — True if ``holder_sheet`` holds any standing leverage over ``subject_sheet`` (#1680).`
 - `known_secrets_for(roster_entry: 'RosterEntry', *, subject_sheet: 'CharacterSheet | None' = None, sort: 'str' = 'recent') -> 'QuerySet[SecretKnowledge]' — The secrets a character has **learned about others** — held records (#1334).`
+- `mint_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet', founded_on: 'Secret') -> 'Leverage' — Record standing leverage ``holder_sheet`` holds over ``subject_sheet`` (#1680).`
 - `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '') -> 'RelationshipCapstone' — A secret's victim registers a grievance against its subject (#1429).`
+- `reveal_leveraged_secret(*, revealer_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' — Play the blackmail card: expose ``secret`` and spend the leverage founded on it (#1680).`
 - `secret_known_to(secret: 'Secret', roster_entry: 'RosterEntry') -> 'bool' — Whether this character already holds the fact of this secret (#1334).`
 - `secrets_explaining(*, roster_entry: 'RosterEntry', legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'QuerySet[SecretKnowledge]' — The secrets a viewer KNOWS that are the hidden truth behind a given act (#1573).`
 - `secrets_owned_by(sheet: 'CharacterSheet', *, sort: 'str' = 'level') -> 'QuerySet[Secret]' — The secrets a character **owns** — its own shelf (#1334).`

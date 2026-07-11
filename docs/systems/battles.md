@@ -895,7 +895,7 @@ declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold 
 
 | What | Issue |
 |---|---|
-| Battle writeup / React page | partially built — the live strategic battle map (`/scenes/:id/battle`, [Web surface (#2009)](#web-surface-2009) below) shipped; a post-conclusion narrative writeup page is still deferred (#1735), and should reuse `BattleDetailSerializer`'s aggregate shape rather than authoring a second one |
+| Battle writeup / React page | **built** — the live strategic battle map (`/scenes/:id/battle`, [Web surface (#2009)](#web-surface-2009) below) shipped; post-conclusion narrative writeup page at `/battles/:id` reuses `BattleDetailSerializer`'s aggregate shape (#1735). `BattleDetailSerializer` was extended with `concluded_at`, `created_at`, `campaign_story_id`, `scene_id`, and `deeds` (a `SerializerMethodField` querying `LegendEntry` by the battle's scene). The deeds section is empty until battle→LegendEntry creation wiring is built (deferred — see follow-up). |
 | Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating + movement resolution, hull-breach/living-mount-defeat ejection + drowning/falling hazard, see below; REPOSITION's telnet `CmdBattle` subcommand shipped with #2007); a player-facing embark action still deferred (#1714) |
 | Siege variants | **built, see [Sieges (#1713)](#sieges-1713) below** |
 
