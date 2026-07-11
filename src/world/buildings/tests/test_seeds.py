@@ -9,8 +9,18 @@ from world.buildings.seeds import (
     ensure_building_permit_template,
     ensure_house_kind,
     ensure_plan_3_seeds,
+    ensure_urban_building_kinds,
 )
 from world.items.models import ItemTemplate
+
+URBAN_KIND_FLAGS = {
+    "Cottage": {"is_residential": True, "is_commercial": False},
+    "Tavern": {"is_residential": True, "is_commercial": True},
+    "Shop": {"is_residential": False, "is_commercial": True},
+    "Workshop": {"is_residential": False, "is_commercial": True},
+    "Guild Hall": {"is_residential": False, "is_commercial": True},
+    "Warehouse": {"is_residential": False, "is_commercial": True},
+}
 
 
 class BuildingPermitTemplateSeedTests(TestCase):
@@ -57,3 +67,27 @@ class Plan3SeedsTests(TestCase):
         for offer in NPCServiceOffer.objects.filter(kind=OfferKind.PERMIT):
             self.assertIsNotNone(offer.permit_offer_details.building_kind_id)
             self.assertEqual(offer.permit_offer_details.building_kind.name, HOUSE_KIND_NAME)
+
+
+class UrbanBuildingKindsSeedTests(TestCase):
+    def test_creates_all_six_urban_kinds(self) -> None:
+        ensure_urban_building_kinds()
+        for name, flags in URBAN_KIND_FLAGS.items():
+            kind = BuildingKind.objects.get(name=name)
+            for flag_name, expected in flags.items():
+                self.assertEqual(
+                    getattr(kind, flag_name),
+                    expected,
+                    f"{name}.{flag_name} should be {expected}",
+                )
+
+    def test_idempotent(self) -> None:
+        ensure_urban_building_kinds()
+        ensure_urban_building_kinds()
+        for name in URBAN_KIND_FLAGS:
+            self.assertEqual(BuildingKind.objects.filter(name=name).count(), 1)
+
+    def test_seeded_via_plan_3_seeds(self) -> None:
+        ensure_plan_3_seeds()
+        for name in URBAN_KIND_FLAGS:
+            self.assertTrue(BuildingKind.objects.filter(name=name).exists())
