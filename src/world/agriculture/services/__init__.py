@@ -4,6 +4,7 @@ Re-exports the public API so callers import from ``world.agriculture.services``
 rather than individual submodules.
 """
 
+from world.agriculture.services.collection import collect_field_food
 from world.agriculture.services.domain import (
     max_food_capacity,
     resolve_domain_for_feature,
@@ -14,6 +15,7 @@ from world.agriculture.services.production import (
 )
 
 __all__ = [
+    "collect_field_food",
     "field_production_tick",
     "get_food_config",
     "max_food_capacity",
