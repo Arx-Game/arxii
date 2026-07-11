@@ -325,7 +325,7 @@ function App() {
         <Route path="/roster" element={<RosterListPage />} />
         <Route path="/characters/create" element={<CharacterCreationPage />} />
         <Route path="/characters/:id" element={<CharacterSheetPage />} />
-        <Route path="/journal" element={<JournalPage />} />
+        <Route path="/missions/journal" element={<JournalPage />} />
         <Route path="/tidings" element={<TidingsPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
