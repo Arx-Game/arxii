@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ValidationError
 
 from world.secrets.constants import (
+    ACCUSATION_MAX_LEVEL,
     DEFAULT_VICTIM_SEVERITY_BY_LEVEL,
     SecretLevel,
     SecretProvenance,
@@ -134,6 +135,78 @@ def author_player_flavor_secret(
         content=content,
         category=category,
         author_persona=author_persona,
+    )
+
+
+def mint_accusation(  # noqa: PLR0913 — keyword-only; each arg is a distinct secret field
+    *,
+    accuser_persona: Persona,
+    subject_sheet: CharacterSheet,
+    content: str,
+    level: int = SecretLevel.UNCOMMON_KNOWLEDGE,
+    category: SecretCategory | None = None,
+    legend_deed: LegendEntry | None = None,
+    mission_deed: MissionDeedRecord | None = None,
+    scene: Scene | None = None,
+) -> Secret:
+    """Mint a player-authored ACCUSATION — a false scandal about *someone else* (#1825).
+
+    The player-facing frame-job author path. Thin over :func:`author_secret` with
+    ``provenance=ACCUSATION`` (so it may carry weight + anchor to an *alleged* deed, unlike
+    player-flavor). Falsity stays emergent — divergence between the alleged deed and truth, never
+    a stored flag; a leaked accusation mints heat/reputation like a true scandal until disproven.
+
+    This is the FIRST mint path where the subject is **not** the actor: an accusation is about a
+    target, so ``subject_sheet`` must differ from the accuser's own sheet (no self-framing).
+    ``level`` is clamped to ``ACCUSATION_MAX_LEVEL`` (PLACEHOLDER cap). **The consent gate is NOT
+    enforced here** — the caller (``MintAccusationAction``) checks ``consent_blocks_targeting``
+    against the target's ``hostile`` antagonism category before minting.
+    """
+    if accuser_persona.character_sheet_id == subject_sheet.pk:
+        msg = "An accusation must be about someone else, not yourself."
+        raise SecretError(msg, user_message=msg)
+    if level > ACCUSATION_MAX_LEVEL:
+        msg = "That accusation is too grave to mint without evidence."
+        raise SecretError(msg, user_message=msg)
+    return author_secret(
+        subject_sheet=subject_sheet,
+        provenance=SecretProvenance.ACCUSATION,
+        level=level,
+        content=content,
+        category=category,
+        author_persona=accuser_persona,
+        legend_deed=legend_deed,
+        mission_deed=mission_deed,
+        scene=scene,
+    )
+
+
+def accusation_permitted(*, framer_sheet: CharacterSheet, target_sheet: CharacterSheet) -> bool:
+    """Target-side consent gate for a frame-job (#1825) — may *framer* accuse *target*?
+
+    Mirrors the theft gate (``steal_permitted``): a tenure-less subject (NPC/org) is always
+    frameable; a played target must have opted into being antagonised via their ``hostile``
+    consent category — resolved through the antagonism-consent tree (#2170), which defaults
+    Friends+whitelist. Returns True when minting is allowed. The mint action re-checks this.
+    """
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    def _active_tenure(sheet: CharacterSheet) -> RosterTenure | None:
+        return RosterTenure.objects.filter(
+            roster_entry__character_sheet=sheet, end_date__isnull=True
+        ).first()
+
+    target_tenure = _active_tenure(target_sheet)
+    if target_tenure is None:
+        return True  # NPC/tenure-less subject — antagonism-allowed by default (mirrors theft)
+    try:
+        hostile = SocialConsentCategory.objects.get_by_natural_key("hostile")
+    except SocialConsentCategory.DoesNotExist:
+        return True  # category not seeded (bare test DB) — no gate to apply
+    return not consent_blocks_targeting(
+        owner_tenure=target_tenure, category=hostile, actor_tenure=_active_tenure(framer_sheet)
     )
 
 

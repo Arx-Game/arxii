@@ -143,6 +143,7 @@ treat those names as hints to confirm, not gospel.
 - [0111 — GM battle staging is catalog-pick-and-instantiate, with parallel blueprint/live models](0111-battle-staging-is-catalog-and-instantiate.md) (extends ADR-0081/0085/0110)
 - [0112 — MOVE tracks in-progress position via personal transit coordinates, not a rounds-counter](0112-move-uses-transit-coordinates.md) (extends ADR-0085)
 - [0113 — Consent defaults are a category tree, not per-category flags](0113-consent-defaults-are-a-category-tree.md) (extends ADR-0024)
+- [0114 — Player-authored accusations are weight-bearing secrets, gated by consent not the model](0114-accusations-are-weight-bearing-player-secrets.md) (extends ADR-0062/0113)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

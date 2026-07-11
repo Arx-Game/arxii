@@ -9,17 +9,25 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.consent.constants import ConsentMode
+from world.consent.factories import (
+    SocialConsentCategoryFactory,
+    SocialConsentCategoryRuleFactory,
+    SocialConsentPreferenceFactory,
+)
 from world.missions.factories import MissionDeedRecordFactory
-from world.roster.factories import RosterEntryFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory
-from world.secrets.constants import SecretLevel, SecretProvenance
+from world.secrets.constants import ACCUSATION_MAX_LEVEL, SecretLevel, SecretProvenance
 from world.secrets.factories import SecretCategoryFactory, SecretFactory
 from world.secrets.models import Secret, SecretKnowledge
 from world.secrets.services import (
     SecretError,
+    accusation_permitted,
     author_player_flavor_secret,
     author_secret,
     grant_secret_knowledge,
+    mint_accusation,
     secret_known_to,
     secrets_explaining,
     set_secret_act_anchor,
@@ -113,6 +121,80 @@ class AuthorSecretServiceTests(TestCase):
         assert secret.level == SecretLevel.UNCOMMON_KNOWLEDGE
         assert secret.provenance == SecretProvenance.PLAYER_FLAVOR
         assert secret.author_persona_id == persona.pk
+
+
+class MintAccusationServiceTests(TestCase):
+    """The player-facing frame-job author path (#1825)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.accuser = CharacterSheetFactory()
+        cls.accuser_persona = cls.accuser.primary_persona
+        cls.target = CharacterSheetFactory()
+
+    def test_mints_an_accusation_about_the_target(self) -> None:
+        secret = mint_accusation(
+            accuser_persona=self.accuser_persona,
+            subject_sheet=self.target,
+            content="They took bribes from the enemy.",
+            level=SecretLevel.WHISPERS,
+        )
+        assert secret.provenance == SecretProvenance.ACCUSATION
+        assert secret.subject_sheet_id == self.target.pk
+        assert secret.author_persona_id == self.accuser_persona.pk
+        assert secret.level == SecretLevel.WHISPERS
+
+    def test_rejects_self_framing(self) -> None:
+        # An accusation is about someone else — the first mint path where subject != actor.
+        with self.assertRaises(SecretError):
+            mint_accusation(
+                accuser_persona=self.accuser_persona,
+                subject_sheet=self.accuser,
+                content="framing myself?",
+            )
+
+    def test_rejects_level_over_the_placeholder_cap(self) -> None:
+        assert SecretLevel.DANGEROUS > ACCUSATION_MAX_LEVEL
+        with self.assertRaises(SecretError):
+            mint_accusation(
+                accuser_persona=self.accuser_persona,
+                subject_sheet=self.target,
+                content="the gravest of crimes, no evidence",
+                level=SecretLevel.DANGEROUS,
+            )
+
+
+class AccusationPermittedTests(TestCase):
+    """The frame-job consent gate (#1825) — the target's ``hostile`` category decides."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.framer_tenure = RosterTenureFactory()
+        cls.framer_sheet = cls.framer_tenure.roster_entry.character_sheet
+        cls.target_tenure = RosterTenureFactory()
+        cls.target_sheet = cls.target_tenure.roster_entry.character_sheet
+        cls.hostile = SocialConsentCategoryFactory(key="hostile", default_mode=ConsentMode.EVERYONE)
+
+    def test_npc_target_is_always_frameable(self) -> None:
+        npc_sheet = CharacterSheetFactory()  # no active RosterTenure
+        assert accusation_permitted(framer_sheet=self.framer_sheet, target_sheet=npc_sheet) is True
+
+    def test_open_hostile_category_permits(self) -> None:
+        # hostile defaults EVERYONE here → a stranger may frame the target.
+        assert (
+            accusation_permitted(framer_sheet=self.framer_sheet, target_sheet=self.target_sheet)
+            is True
+        )
+
+    def test_locked_down_target_blocks_the_frame(self) -> None:
+        pref = SocialConsentPreferenceFactory(tenure=self.target_tenure)
+        SocialConsentCategoryRuleFactory(
+            preference=pref, category=self.hostile, mode=ConsentMode.ALLOWLIST
+        )
+        assert (
+            accusation_permitted(framer_sheet=self.framer_sheet, target_sheet=self.target_sheet)
+            is False
+        )
 
 
 class SecretKnowledgeServiceTests(TestCase):
@@ -218,6 +300,33 @@ class SecretActAnchorTests(TestCase):
                 content="it totally happened",
                 scene=scene,
             )
+
+    def test_accusation_is_exempt_from_player_flavor_caps(self) -> None:
+        # #1825: a player-authored ACCUSATION is a false scandal *meant* to carry weight — it may
+        # be any level AND anchor to an alleged deed, unlike PLAYER_FLAVOR. Its guard is the
+        # consent gate at the mint action, not the model.
+        scene = SceneFactory()
+        secret = author_secret(
+            subject_sheet=self.subject,
+            provenance=SecretProvenance.ACCUSATION,
+            level=SecretLevel.DANGEROUS,
+            content="They poisoned the Duke — everyone should know.",
+            scene=scene,
+        )
+        assert secret.provenance == SecretProvenance.ACCUSATION
+        assert secret.level == SecretLevel.DANGEROUS
+        assert secret.is_act_anchored is True
+
+    def test_accusation_needs_no_anchor(self) -> None:
+        # An accusation may also stand unanchored (a bare claim) at any level.
+        secret = author_secret(
+            subject_sheet=self.subject,
+            provenance=SecretProvenance.ACCUSATION,
+            level=SecretLevel.CAREFULLY_KEPT,
+            content="I heard they took bribes.",
+        )
+        assert secret.is_act_anchored is False
+        assert secret.level == SecretLevel.CAREFULLY_KEPT
 
     def test_set_secret_act_anchor_sets_then_clears(self) -> None:
         secret = SecretFactory(subject_sheet=self.subject, provenance=SecretProvenance.GM_AUTHORED)
