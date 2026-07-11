@@ -661,12 +661,20 @@ class CombatTechniqueResolver:
             if target is not None:
                 targets_by_kind[ConditionTargetKind.ENEMY] = [target]
 
+        position_params: dict[str, int] = {}
+        if self.action.cast_destination_id:
+            position_params["destination_position_id"] = self.action.cast_destination_id
+        if self.action.cast_position_a_id and self.action.cast_position_b_id:
+            position_params["position_a_id"] = self.action.cast_position_a_id
+            position_params["position_b_id"] = self.action.cast_position_b_id
+
         applied = apply_technique_conditions(
             technique=technique,
             success_level=check_result.success_level,
             eff_intensity=eff_intensity,
             targets_by_kind=targets_by_kind,
             source_character=caster_od,
+            position_params=position_params or None,
         )
         # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
         # through the SAME shared seam, over the same resolved targets. No-op when the
