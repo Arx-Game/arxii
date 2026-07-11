@@ -126,3 +126,49 @@ class FindRouteTests(TestCase):
             f"expected a small, depth-bounded query count, got "
             f"{len(ctx.captured_queries)}: {[q['sql'] for q in ctx.captured_queries]}"
         )
+
+    def test_query_count_stays_low_with_genuinely_multi_room_frontier(self):
+        """Companion to test_query_count_scales_with_depth_not_room_count —
+        that test's frontier is only ever 1 room wide at each level actually
+        processed (all 20 leaves are direct children of the single origin),
+        so it can't distinguish batched-per-level querying from a naive
+        per-room-loop implementation for this exact graph shape. This test
+        builds a genuinely multi-room frontier (5 rooms wide) at level 2, so
+        the bulk `db_location_id__in=frontier` query is exercised against a
+        real multi-room `frontier` set — a naive per-room-loop implementation
+        would issue ~5 queries at level 2 where the batched one issues 1.
+        """
+        room_a = make_room(self.area, "A")
+        # Level 1: 5 rooms, all direct children of A (frontier size 5 at level 2).
+        level1 = [make_room(self.area, f"L1-{i}") for i in range(5)]
+        for room in level1:
+            make_exit(room_a, room, "path")
+        # Level 2: each level-1 room has 4 children — frontier at level 2
+        # processing is genuinely {L1-0, L1-1, L1-2, L1-3, L1-4}, 5 rooms.
+        level2_target = None
+        for room in level1:
+            for i in range(4):
+                leaf = make_room(self.area, f"L2-{room.db_key}-{i}")
+                make_exit(room, leaf, "path")
+                if level2_target is None:
+                    level2_target = leaf
+        # Force the target to be reached only after level 2 is processed —
+        # pick the LAST leaf created under the LAST level-1 room, so BFS must
+        # fully expand the 5-room level-1 frontier before finding it.
+        last_room = level1[-1]
+        final_leaf = make_room(self.area, "FinalTarget")
+        make_exit(last_room, final_leaf, "path")
+
+        with CaptureQueriesContext(connection) as ctx:
+            route = find_route(room_a, final_leaf)
+
+        assert route is not None
+        assert len(route) == 2
+        # Two BFS levels processed (level 1: frontier={A}, level 2:
+        # frontier={5 level-1 rooms}) should still issue a small, level-bounded
+        # query count — not one query per room in the 5-room frontier.
+        assert len(ctx.captured_queries) <= 6, (
+            f"expected query count bounded by BFS depth (2 levels), not frontier "
+            f"width (5 rooms at level 2), got {len(ctx.captured_queries)}: "
+            f"{[q['sql'] for q in ctx.captured_queries]}"
+        )
