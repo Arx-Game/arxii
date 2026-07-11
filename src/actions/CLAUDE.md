@@ -416,6 +416,28 @@ on sync-with-main. Resolution is mechanical: keep **both** sides' appends
 one breaks the exact-match test. Verify post-merge with `just test-fast
 actions`; a failure there means a key was dropped or duplicated.
 
+**`objectdb_target_kwargs` does NOT auto-resolve on the REST dispatch path** (#2163,
+a real bug that shipped past all per-task tests because they mocked the dispatch
+hook). `objectdb_target_kwargs: ClassVar[frozenset[str]]` (declared on e.g.
+`TraverseExitAction`, `items.py`'s several actions) is consumed **only** by the
+websocket `execute_action` inputfunc's `_resolve_registry_kwargs`
+(`server/conf/inputfuncs.py`) — and even there, only for kwargs whose wire key ends
+in `_id` (`key.endswith("_id") and key[:-3] in objectdb_targets`), so the kwarg must
+be named `<field>_id` (e.g. `target_id`), not the bare field name. The REST dispatch
+path (`dispatch_player_action` → `_dispatch_registry`,
+`actions/player_interface.py`) does **no** ObjectDB resolution at all — it passes
+raw kwargs straight to `action_obj.run()`. If your action takes an ObjectDB-typed
+kwarg and is dispatched from the web via `useDispatchPlayerAction`/`postDispatchAction`
+(REST, not the websocket), **resolve the id yourself inside `execute()`** — see
+`_resolve_room()` in `definitions/locations.py:92-100` for the established pattern
+(`ObjectDB.objects.filter(pk=kwargs.get("foo")).first()` when the value is an int,
+falling through unchanged when it's already an ObjectDB, so the same `execute()`
+works for both a telnet `.run()` call passing a resolved object and a REST dispatch
+passing a raw id). Declaring `objectdb_target_kwargs` is harmless but does nothing
+for a REST-only action — don't rely on it as your only correctness guarantee, and
+write at least one test that calls `.run()` with a plain int in that kwarg (not a
+mock, not a pre-resolved object) to prove the REST shape actually works.
+
 ## Enhancement System
 
 ### ActionEnhancement Model
