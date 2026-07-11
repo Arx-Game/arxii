@@ -66,41 +66,41 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "already knows, what they take for granted, and which conflicts will find "
         "them first."
     ),
-    "heritage_heading": "Heritage",
+    "heritage_heading": "Your Heritage",
     "heritage_intro": (
         "Beginnings, species, and gender decide what your character is — and what "
         "the world assumes about them before they say a word."
     ),
-    "heritage_beginnings_heading": "Beginnings",
+    "heritage_beginnings_heading": "Your Beginnings",
     "heritage_beginnings_desc": (
         "Your beginnings set the household and circumstances your character was "
         "raised in, and which species and families are open to you."
     ),
-    "heritage_species_heading": "Species",
+    "heritage_species_heading": "Choose Your Species",
     "heritage_species_desc": (
         "Species carries its own stat leanings and how other characters read your "
         "character on sight — pick the one whose instincts suit your concept."
     ),
-    "heritage_gender_heading": "Gender",
-    "lineage_heading": "Lineage",
+    "heritage_gender_heading": "Gender & Pronouns",
+    "lineage_heading": "Family & Lineage",
     "lineage_intro": (
         "Claim a family within your starting area, go an orphan, or step forward as "
         "someone whose origins are still unknown — family ties bring kin, "
         "obligations, and a name people already have opinions about."
     ),
-    "distinctions_heading": "Distinctions",
+    "distinctions_heading": "Your Distinctions",
     "distinctions_intro": (
         "Distinctions are the advantages and disadvantages that make your character "
         "specific — a sharp mind, a bad leg, a secret debt. Spend your points "
         "deliberately; disadvantages give points back but shape play."
     ),
-    "attributes_heading": "Attributes",
+    "attributes_heading": "Attribute Scores",
     "attributes_intro": (
         "Allocate your twelve core statistics across the physical, social, mental, "
         "and meta categories. These numbers back every roll your character makes, "
         "so weight them toward how you want to play."
     ),
-    "path_heading": "Path",
+    "path_heading": "Choose Your Path",
     "path_intro": (
         "Your path is the road your character walks toward greatness — a "
         "narrative class shaping the skills, techniques, and story beats "
@@ -111,18 +111,18 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "Spend your skill points across the specializations your path opens up; "
         "these are the trained competencies your character can already call on."
     ),
-    "magic_heading": "Magic",
-    "identity_heading": "Identity",
+    "magic_heading": "Magic & Cantrips",
+    "identity_heading": "Name & Identity",
     "identity_intro": (
         "Give your character a name, a guiding concept, and the words and history "
         "that make them feel real before anyone else meets them."
     ),
-    "appearance_heading": "Appearance",
+    "appearance_heading": "Appearance & Build",
     "appearance_intro": (
         "Set your character's age, build, and physical traits, then write the "
         "description other players will see when they look at your character."
     ),
-    "finaltouches_heading": "Goals",
+    "finaltouches_heading": "Goals & Motivations",
     "finaltouches_intro": (
         "Choose the goals and motivations that drive your character forward — "
         "checks that align with a goal earn a bonus, so pick what your character "
