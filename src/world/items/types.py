@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.checks.types import CheckResult
+    from world.forms.models import FormTrait, FormTraitOption
     from world.items.models import ItemFacet, ItemStyle, QualityTier
     from world.mechanics.types import AppliedEffect
     from world.traits.models import CheckOutcome
@@ -45,3 +46,4 @@ class UseItemResult:
     destroyed: bool = False
     soft_deleted: bool = False
     check_result: CheckResult | None = None
+    appearance_changes: list[tuple[FormTrait, FormTraitOption]] = field(default_factory=list)

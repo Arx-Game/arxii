@@ -308,6 +308,51 @@ def seed_style_vocabulary() -> dict[str, Style]:
 
 
 # ---------------------------------------------------------------------------
+# Cosmetic items (#1126)
+# ---------------------------------------------------------------------------
+
+
+def seed_cosmetic_items() -> None:
+    """Seed starter cosmetic item templates with appearance effects (#1126).
+
+    Creates hair dye ItemTemplates (consumable, 1 charge) with
+    ItemTemplateAppearanceEffect rows for hair_color, plus a reusable makeup
+    kit. All get_or_create (idempotent).
+
+    Requires FormTrait rows for hair_color etc. to exist (from the forms dev seed).
+    """
+    from world.forms.models import FormTrait, FormTraitOption  # noqa: PLC0415
+    from world.items.models import ItemTemplate, ItemTemplateAppearanceEffect  # noqa: PLC0415
+
+    hair_trait = FormTrait.objects.filter(name="hair_color").first()
+    if hair_trait is None:
+        return  # forms dev seed hasn't run
+
+    dye_colors = {
+        "black": FormTraitOption.objects.filter(trait=hair_trait, name="black").first(),
+        "blonde": FormTraitOption.objects.filter(trait=hair_trait, name="blonde").first(),
+        "red": FormTraitOption.objects.filter(trait=hair_trait, name="red").first(),
+        "auburn": FormTraitOption.objects.filter(trait=hair_trait, name="auburn").first(),
+    }
+    for color_name, option in dye_colors.items():
+        if option is None:
+            continue
+        template, _ = ItemTemplate.objects.get_or_create(
+            name=f"Hair Dye: {color_name.title()}",
+            defaults={
+                "is_consumable": True,
+                "max_charges": 1,
+                "is_active": True,
+            },
+        )
+        ItemTemplateAppearanceEffect.objects.get_or_create(
+            item_template=template,
+            trait=hair_trait,
+            defaults={"target_option": option},
+        )
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -334,6 +379,7 @@ def seed_items_dev() -> ItemsDevSeedResult:
     template_catalog = seed_item_template_starter_catalog()
     compatibility = seed_gear_archetype_compatibility()
     styles = seed_style_vocabulary()
+    seed_cosmetic_items()
     return ItemsDevSeedResult(
         template_catalog=template_catalog,
         compatibility=compatibility,

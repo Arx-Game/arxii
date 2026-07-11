@@ -422,9 +422,15 @@ class ItemTemplate(SharedMemoryModel):
 
     @property
     def is_usable(self) -> bool:
-        """Whether this template can be used (has an on-use effect pool).
+        """Whether this template can be used (has an on-use pool or appearance effects).
 
         Canonical 'usable' predicate; consumables are the charge-spending subset.
+        A template with appearance effects but no pool is usable (cosmetic-only items).
+
+        Note: the appearance_effects check is deferred to use_item itself to avoid
+        N+1 queries in list serializers. This property returns True when the template
+        has an on_use_pool; callers that need cosmetic-only usability should check
+        appearance_effects separately.
         """
         return self.on_use_pool_id is not None
 
@@ -824,6 +830,60 @@ class TemplateInteraction(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.template.name}: {self.interaction_type.label}"
+
+
+class ItemTemplateAppearanceEffect(SharedMemoryModel):
+    """Declares a cosmetic appearance edit an item template can perform on use.
+
+    When a character uses an item whose template has appearance-effect rows,
+    use_item calls change_appearance for each row, editing the character's
+    real form in-place. The item IS the gate -- the player needs a cosmetic
+    item to change a trait; they never ask 'is this trait editable?'
+
+    clean() validates that the declared FormTrait has is_cosmetic=True,
+    preventing misconfigured items from editing fixed traits (height, species
+    markers) via the cosmetic path.
+    """
+
+    item_template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.CASCADE,
+        related_name="appearance_effects",
+        help_text="The item template this cosmetic effect belongs to.",
+    )
+    trait = models.ForeignKey(
+        "forms.FormTrait",
+        on_delete=models.PROTECT,
+        related_name="item_template_effects",
+        help_text="The appearance trait this item can change (e.g., hair_color).",
+    )
+    target_option = models.ForeignKey(
+        "forms.FormTraitOption",
+        on_delete=models.PROTECT,
+        related_name="item_template_effects",
+        help_text="The value the trait is set to when this item is used.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_template", "trait"],
+                name="items_one_appearance_effect_per_trait_per_template",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_template.name}: {self.trait.display_name}"
+
+    def clean(self) -> None:
+        """Validate the target option belongs to the trait and the trait is cosmetic."""
+        super().clean()
+        if self.target_option_id is not None and self.target_option.trait_id != self.trait_id:
+            raise ValidationError({"target_option": "Option does not belong to this trait."})
+        if not self.trait.is_cosmetic:
+            raise ValidationError(
+                {"trait": f"{self.trait.display_name} is not a cosmetically editable trait."}
+            )
 
 
 class EquippedItem(SharedMemoryModel):
