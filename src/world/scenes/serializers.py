@@ -403,29 +403,34 @@ class ScenesSpotlightSerializer(serializers.Serializer):
 
 
 class HighlightReelFeaturedSerializer(serializers.Serializer):
-    """The single featured moment of a scene's highlight reel (#1241).
+    """The single featured moment of a scene's highlight reel (#1241, #2161).
 
-    Intentionally IDs-only: the collapsed featured card is *fully sealed* — it shows no
-    pose content, type, participants, or reaction count until the viewer expands it, at
-    which point the frontend fetches the pose through the existing interaction-detail
-    endpoint (which re-checks visibility). Sending content here would defeat the seal.
+    The collapsed featured card is *fully sealed* — it shows no pose content, type, or
+    participants until the viewer expands it, at which point the frontend fetches the
+    pose through the existing interaction-detail endpoint (which re-checks visibility).
+    Sending pose content here would defeat the seal, but ``vote_count``/``reaction_count``
+    (#2161) are exposed so the frontend can badge the sealed card.
     """
 
     interaction_id = serializers.IntegerField()
+    vote_count = serializers.IntegerField()
+    reaction_count = serializers.IntegerField()
 
 
 class HighlightReelEntrySerializer(serializers.Serializer):
-    """One sealed entry in the ranked index below the featured moment (#1241)."""
+    """One sealed entry in the ranked index below the featured moment (#1241, #2161)."""
 
     interaction_id = serializers.IntegerField()
     rank = serializers.IntegerField()
+    vote_count = serializers.IntegerField()
+    reaction_count = serializers.IntegerField()
 
 
 class HighlightReelSerializer(serializers.Serializer):
-    """A scene's highlight reel: a sealed featured moment + a ranked index (#1241).
+    """A scene's highlight reel: a sealed featured moment + a ranked index (#1241, #2161).
 
-    ``featured`` is null when the scene has no GM-tagged moments AND no reacted poses
-    (an empty reel — the frontend hides the collapsible section).
+    ``featured`` is null when the scene has no GM-tagged moments AND no voted-or-reacted
+    poses (an empty reel — the frontend hides the collapsible section).
     """
 
     featured = HighlightReelFeaturedSerializer(allow_null=True)

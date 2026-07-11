@@ -19,6 +19,7 @@ import { ObjectsList } from './room-panel/ObjectsList';
 import { RoomEditorPanel } from './room-panel/RoomEditorPanel';
 import { HubTidingsPanel } from './room-panel/HubTidingsPanel';
 import { RoomAuraPicker } from './room-panel/RoomAuraPicker';
+import { SceneHighlightsPanel } from './room-panel/SceneHighlightsPanel';
 
 export interface RoomData {
   id: number;
@@ -195,6 +196,8 @@ export function RoomPanel({
       {room.description && <RoomDescription description={room.description} />}
 
       {room.hub && <HubTidingsPanel hub={room.hub} />}
+
+      {scene && <SceneHighlightsPanel sceneId={scene.id} />}
 
       <CharactersList characters={room.characters} onCharacterClick={onCharacterClick} />
       <ExitsList exits={room.exits} onExit={handleExit} />

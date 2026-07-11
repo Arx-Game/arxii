@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAccountProgressionQuery, useClaimKudosMutation } from './queries';
+import { VotesPanel } from './components/VotesPanel';
 import { usePendingAlterations } from '@/magic/queries';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -64,9 +65,6 @@ function KudosTransactionRow({ transaction }: { transaction: KudosTransaction })
       <div className="flex-1">
         <div className="font-medium">{categoryName}</div>
         <div className="text-sm text-muted-foreground">{transaction.description}</div>
-        {transaction.awarded_by_name && (
-          <div className="text-xs text-muted-foreground">From: {transaction.awarded_by_name}</div>
-        )}
         <div className="text-xs text-muted-foreground">
           {formatDate(transaction.transaction_date)}
         </div>
@@ -341,7 +339,7 @@ export function XpKudosPage() {
 
       <AlterationGateAlert />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-2">
+      <div className="mb-6 grid gap-4 md:grid-cols-3">
         <BalanceCard
           title="Experience Points"
           available={xp?.current_available || 0}
@@ -363,6 +361,7 @@ export function XpKudosPage() {
             )
           }
         />
+        <VotesPanel />
       </div>
 
       <Card>

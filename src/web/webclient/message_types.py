@@ -19,6 +19,7 @@ class WebsocketMessageType(str, Enum):
     INTERACTION = "interaction"
     ROULETTE_RESULT = "roulette_result"
     BATTLE_STATE = "battle_state"
+    KUDOS_RECEIVED = "kudos_received"
 
 
 @dataclass
@@ -132,3 +133,16 @@ class BattleStatePayload:
 
     battle_id: int
     round_number: int | None
+
+
+@dataclass
+class KudosReceivedPayload:
+    """Payload for ``kudos_received`` messages — anonymous by design (ADR-0033).
+
+    Carries no giver identity: the description string is the audited,
+    already-anonymized text from the KudosTransaction.
+    """
+
+    amount: int
+    source_category: str
+    description: str

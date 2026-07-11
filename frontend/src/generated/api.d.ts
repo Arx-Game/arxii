@@ -14963,13 +14963,14 @@ export interface paths {
      *
      *     Featured = the highest-reacted GM-tagged pose; a tagged pose headlines even with
      *     zero reactions, because storyteller curation has primacy. When the scene has no
-     *     tags, this falls back to the single most-reacted pose. The index is the remaining
-     *     poses with at least one reaction, ranked by reaction count (ties -> most recent)
-     *     and capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the
-     *     reel can never surface a pose the viewer cannot already see — not even as a sealed
-     *     slot. The payload carries only interaction ids (the featured card is fully sealed);
-     *     the frontend reveals a pose by fetching it through the existing interaction-detail
-     *     endpoint, which re-checks visibility.
+     *     tags, this falls back to the single most-voted (reactions tie-break) pose. The
+     *     index is the remaining poses with at least one vote or reaction, ranked by
+     *     all-time vote count first, reaction count as tie-break, and recency last —
+     *     capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the reel
+     *     can never surface a pose the viewer cannot already see — not even as a sealed
+     *     slot. The payload carries interaction ids plus vote/reaction counts (the featured
+     *     card stays otherwise sealed); the frontend reveals a pose by fetching it through
+     *     the existing interaction-detail endpoint, which re-checks visibility.
      */
     get: operations['scenes_highlight_reel_retrieve'];
     put?: never;
@@ -22398,30 +22399,35 @@ export interface components {
       readonly found_at: string;
     };
     /**
-     * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241).
+     * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241, #2161).
      *
-     *     ``featured`` is null when the scene has no GM-tagged moments AND no reacted poses
-     *     (an empty reel — the frontend hides the collapsible section).
+     *     ``featured`` is null when the scene has no GM-tagged moments AND no voted-or-reacted
+     *     poses (an empty reel — the frontend hides the collapsible section).
      */
     HighlightReel: {
       featured: components['schemas']['HighlightReelFeatured'] | null;
       index: components['schemas']['HighlightReelEntry'][];
     };
-    /** @description One sealed entry in the ranked index below the featured moment (#1241). */
+    /** @description One sealed entry in the ranked index below the featured moment (#1241, #2161). */
     HighlightReelEntry: {
       interaction_id: number;
       rank: number;
+      vote_count: number;
+      reaction_count: number;
     };
     /**
-     * @description The single featured moment of a scene's highlight reel (#1241).
+     * @description The single featured moment of a scene's highlight reel (#1241, #2161).
      *
-     *     Intentionally IDs-only: the collapsed featured card is *fully sealed* — it shows no
-     *     pose content, type, participants, or reaction count until the viewer expands it, at
-     *     which point the frontend fetches the pose through the existing interaction-detail
-     *     endpoint (which re-checks visibility). Sending content here would defeat the seal.
+     *     The collapsed featured card is *fully sealed* — it shows no pose content, type, or
+     *     participants until the viewer expands it, at which point the frontend fetches the
+     *     pose through the existing interaction-detail endpoint (which re-checks visibility).
+     *     Sending pose content here would defeat the seal, but ``vote_count``/``reaction_count``
+     *     (#2161) are exposed so the frontend can badge the sealed card.
      */
     HighlightReelFeatured: {
       interaction_id: number;
+      vote_count: number;
+      reaction_count: number;
     };
     /** @description A required catalog choice on a template, with its active options (#2079). */
     HouseAspectDefinition: {

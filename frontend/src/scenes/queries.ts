@@ -127,15 +127,6 @@ export async function fetchReactionEmojiCatalog(): Promise<ReactionEmojiEntry[]>
   return data.results;
 }
 
-export async function toggleInteractionFavorite(interactionId: number) {
-  const res = await apiFetch('/api/interaction-favorites/', {
-    method: 'POST',
-    body: JSON.stringify({ interaction: interactionId }),
-  });
-  if (!res.ok && res.status !== 204) throw new Error('Failed to toggle favorite');
-  return res.status;
-}
-
 export interface PendingUnlinkedActionRow {
   id: number;
   content: string;

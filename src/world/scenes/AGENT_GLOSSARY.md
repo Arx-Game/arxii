@@ -34,7 +34,7 @@ The defender's authored plausibility band (`DifficultyChoice`: trivial / easy / 
 _Avoid_: difficulty rating, target number (for the player-facing choice)
 
 **Highlight reel**:
-A read-only curated digest of a scene: one fully-sealed featured moment (highest-reacted GM-tagged pose, else most-reacted pose) plus a ranked index of remaining reacted poses, capped at ten. Filtered through interaction read-visibility so it can never surface a pose the viewer cannot see.
+A read-only curated digest of a scene: one fully-sealed featured moment (highest-ranked GM-tagged pose, else most-ranked pose) plus a ranked index of remaining voted-or-reacted poses, capped at ten. Ranked by all-time `progression.WeeklyVote` count first (the popularity axis, persists past weekly XP settlement), `InteractionReaction` count as tie-break, recency last (#2161 — previously reaction-count-only). Filtered through interaction read-visibility so it can never surface a pose the viewer cannot see. Each pose carries a `VoteButton` (see `progression/AGENT_GLOSSARY.md`'s Weekly Vote entry) so applause and reel ranking are driven by the same click.
 _Avoid_: feed, recap, summary, spotlight
 
 **Co-owner**:

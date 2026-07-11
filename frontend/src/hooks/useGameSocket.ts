@@ -11,6 +11,7 @@ import type {
   GameMessage,
   IncomingMessage,
   InteractionWsPayload,
+  KudosReceivedPayload,
   OutgoingMessage,
   RoomStatePayload,
   ScenePayload,
@@ -24,6 +25,7 @@ import { handleRoulettePayload } from './handleRoulettePayload';
 import type { RoulettePayload } from '@/components/roulette/types';
 import { handleBattleStatePayload } from './handleBattleStatePayload';
 import type { BattleStatePayload } from '@/battles/types';
+import { handleKudosReceivedPayload } from './handleKudosReceivedPayload';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -122,6 +124,11 @@ export function useGameSocket() {
           if (msgType === WS_MESSAGE_TYPE.COMMAND_ERROR) {
             const { error, command } = (kwargs as unknown as CommandErrorPayload) ?? {};
             toast.error(error, { description: command });
+            return;
+          }
+
+          if (msgType === WS_MESSAGE_TYPE.KUDOS_RECEIVED) {
+            handleKudosReceivedPayload(kwargs as unknown as KudosReceivedPayload | undefined);
             return;
           }
 

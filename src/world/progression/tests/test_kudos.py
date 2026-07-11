@@ -3,6 +3,7 @@ Tests for kudos models and services.
 """
 
 from decimal import Decimal
+from unittest import mock
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -578,3 +579,92 @@ class KudosDifficultyWeightTest(TestCase):
         KudosDifficultyWeightFactory(difficulty_choice="hard", multiplier=Decimal("0.50"))
         with pytest.raises(IntegrityError):
             KudosDifficultyWeightFactory(difficulty_choice="hard", multiplier=Decimal("0.75"))
+
+
+class AwardKudosNotificationTest(TestCase):
+    """Test the kudos_received WS push registered by award_kudos (#2161)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountDB.objects.create(
+            username="recipient",
+            email="recipient@test.com",
+        )
+        cls.awarder = AccountDB.objects.create(
+            username="awarder",
+            email="awarder@test.com",
+        )
+        cls.source_category = KudosSourceCategoryFactory(
+            name="player_vote", display_name="Player Vote"
+        )
+
+    def setUp(self):
+        # Flush SharedMemoryModel caches and clean up per-test state
+        KudosPointsData.flush_instance_cache()
+        KudosTransaction.flush_instance_cache()
+        KudosPointsData.objects.filter(account=self.account).delete()
+        KudosTransaction.objects.filter(account=self.account).delete()
+
+    def test_award_kudos_pushes_kudos_received_post_commit(self):
+        """award_kudos defers a kudos_received push to the recipient via on_commit."""
+        # create=True: raw AccountDB rows lack msg (it lives on the Account
+        # typeclass); production accounts are always typeclassed and carry it.
+        with mock.patch.object(self.account, "msg", create=True) as mock_msg:
+            with self.captureOnCommitCallbacks() as callbacks:
+                award_kudos(
+                    account=self.account,
+                    amount=5,
+                    source_category=self.source_category,
+                    description="Thanks for helping!",
+                    awarded_by=self.awarder,
+                )
+            # Not fired yet -- still inside the transaction.
+            mock_msg.assert_not_called()
+            self.assertEqual(len(callbacks), 1)
+
+            for callback in callbacks:
+                callback()
+
+        mock_msg.assert_called_once_with(
+            kudos_received=(
+                (),
+                {
+                    "amount": 5,
+                    "source_category": "Player Vote",
+                    "description": "Thanks for helping!",
+                },
+            )
+        )
+
+    def test_award_kudos_survives_msg_raising(self):
+        """A recipient whose msg() raises (e.g. offline) does not break the award."""
+        with mock.patch.object(
+            self.account, "msg", create=True, side_effect=RuntimeError("offline")
+        ):
+            with self.captureOnCommitCallbacks(execute=True):
+                result = award_kudos(
+                    account=self.account,
+                    amount=5,
+                    source_category=self.source_category,
+                    description="Thanks for helping!",
+                )
+
+        assert result.points_data.total_earned == 5
+        assert result.transaction.amount == 5
+
+    def test_kudos_received_payload_omits_giver_identity(self):
+        """The payload carries no key referencing the giver (ADR-0033)."""
+        with mock.patch.object(self.account, "msg", create=True) as mock_msg:
+            with self.captureOnCommitCallbacks(execute=True):
+                award_kudos(
+                    account=self.account,
+                    amount=5,
+                    source_category=self.source_category,
+                    description="Thanks for helping!",
+                    awarded_by=self.awarder,
+                )
+
+        _, kwargs = mock_msg.call_args
+        _, payload = kwargs["kudos_received"]
+        assert set(payload.keys()) == {"amount", "source_category", "description"}
+        assert self.awarder.username not in str(payload.values())

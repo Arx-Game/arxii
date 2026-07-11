@@ -90,10 +90,17 @@ Resolving this split is **#2156**, the structural core of the slate.
 
 - **Giving kudos is exemplary** — one-tap `ReactionStrip` on every pose, ADR-0033-respecting
   anonymized attribution. But *seeing why you got kudos* requires navigating to `/xp-kudos`.
+  **[FIXED #2161]** Kudos now surfaces in-context: `award_kudos` pushes a real-time
+  `kudos_received` WS toast to the recipient (`notify_kudos_received`) instead of requiring
+  a trip to `/xp-kudos`.
 - **Three parallel applause systems disagree**: kudos chip, emoji reactions (what
   `HighlightReel` "top poses" actually ranks by), and the fully-built-server-side
   `WeeklyVote` heart economy whose `VoteButton`/`VotesPanel` components are **imported
   nowhere**; no top-voted endpoint exists.
+  **[FIXED #2161]** The disagreement is now a deliberate, documented three-axes design
+  (ADR-0115) rather than an accident: `WeeklyVote` is wired end-to-end — `VoteButton` on
+  every `PoseUnit` and `VotesPanel` on `/xp-kudos` — and the highlight reel re-ranks on
+  all-time vote count first (reaction count as tie-break), not reaction count alone.
 - **`world.journals` (diary/praise-retort, weekly XP) has zero web frontend**; telnet
   (`journal write`) is complete. The `/journal` route is a decoy — it's the *missions*
   ledger, an unrelated system sharing the name.
@@ -102,6 +109,9 @@ Resolving this split is **#2156**, the structural core of the slate.
 - Latent gotcha: `KudosTransaction.awarded_by` serializes raw `username`; all callers pass
   `None` by convention only — no structural guard (ADR-0033 risk if a future caller passes
   an account).
+  **[FIXED #2161]** The guard is now structural, not conventional: `awarded_by`/
+  `awarded_by_name` was removed from `KudosTransactionSerializer` entirely — a future
+  caller passing a real `awarded_by` account can no longer leak it to the recipient.
 
 ### 5. Rituals, threads, relationships (#2159)
 

@@ -58,11 +58,6 @@ class KudosTransactionSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True,
     )
-    awarded_by_name = serializers.CharField(
-        source="awarded_by.username",
-        read_only=True,
-        allow_null=True,
-    )
 
     class Meta:
         model = KudosTransaction
@@ -72,7 +67,6 @@ class KudosTransactionSerializer(serializers.ModelSerializer):
             "source_category_name",
             "claim_category_name",
             "description",
-            "awarded_by_name",
             "transaction_date",
         ]
 

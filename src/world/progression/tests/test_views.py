@@ -10,6 +10,10 @@ from world.progression.factories import KudosClaimCategoryFactory, KudosSourceCa
 from world.progression.services import award_kudos
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 
+# awarded_by must never reach the wire — recipients cannot see who awarded kudos
+# (ADR-0033 structural guard, #2161).
+AWARDED_BY_KEYS = {"awarded_by", "awarded_by_name"}
+
 
 class ProgressionViewTestCase(TestCase):
     """Base test case with authenticated API client."""
@@ -66,6 +70,30 @@ class AccountProgressionViewTests(ProgressionViewTestCase):
         self.client.force_authenticate(user=None)
         response = self.client.get("/api/progression/account/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_kudos_transactions_omit_awarded_by(self):
+        """A staff-awarded transaction's payload carries no awarded_by identity."""
+        from evennia.accounts.models import AccountDB
+
+        awarder = AccountDB.objects.create_user(
+            username="awarder", email="awarder@test.com", password="testpass123"
+        )
+        source_category = KudosSourceCategoryFactory(name="staff_award")
+        award_kudos(
+            account=self.user,
+            amount=5,
+            source_category=source_category,
+            description="Staff award",
+            awarded_by=awarder,
+        )
+
+        response = self.client.get("/api/progression/account/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        kudos_transactions = response.data["kudos_transactions"]
+        self.assertTrue(kudos_transactions)
+        for transaction in kudos_transactions:
+            self.assertFalse(AWARDED_BY_KEYS & set(transaction.keys()))
 
 
 class ClaimKudosViewTests(ProgressionViewTestCase):

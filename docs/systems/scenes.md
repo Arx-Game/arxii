@@ -366,12 +366,14 @@ with `distinct_initiators >= MIN_ENGAGEMENT_BAR` (currently 2) are granted Kudos
 - `DELETE /api/scenes/{id}/` - Delete scene (owner/staff only)
 - `POST /api/scenes/{id}/finish/` - Finish an active scene (owner/GM/staff)
 - `GET /api/scenes/spotlight/` - Active scenes + recently finished (last 7 days)
-- `GET /api/scenes/{id}/highlight-reel/` - Highlight reel (#1241): one **fully sealed**
-  featured moment + a ranked index, ids only. Featured = highest-reacted GM-tagged pose
-  (headlines even at 0 reactions — curation primacy), else the single most-reacted pose;
-  index = remaining poses with ≥1 reaction, ranked by reaction count, capped at 10. Source
-  set is filtered through `Interaction.objects.visible_to`, so hidden poses never appear.
-  Reveal a pose via `GET /api/interactions/{id}/`.
+- `GET /api/scenes/{id}/highlight-reel/` - Highlight reel (#1241, re-ranked #2161): one
+  **fully sealed** featured moment + a ranked index, ids plus `vote_count`/`reaction_count`.
+  Featured = highest-ranked GM-tagged pose (headlines even at 0 votes/reactions — curation
+  primacy), else the single most-ranked pose; index = remaining poses with ≥1 vote or
+  reaction, ranked by all-time `WeeklyVote` count first (persists past weekly settlement —
+  a pose's standing outlives the week it was posed in), reaction count as tie-break, and
+  recency last, capped at 10. Source set is filtered through `Interaction.objects.visible_to`,
+  so hidden poses never appear. Reveal a pose via `GET /api/interactions/{id}/`.
 
 **Filters:** `is_active`, `is_public`, `location`, `participant`, `status` (active/completed/upcoming), `gm`, `player`
 
