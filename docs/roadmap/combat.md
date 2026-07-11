@@ -20,6 +20,21 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - DEFEND halves / INTERPOSE zeroes incoming damage.
 - SUCCOR shelters a named ally from a round-ticked environmental hazard, in both combat and
   non-combat scene rounds (#1744, ADR-0069) — the environmental-DoT sibling of INTERPOSE.
+- **Guardian reactions — best-of check selection and technique-guardian BARRIER (#2207),
+  two journey tests.** Interpose's Melee-Defense twin (seeded per interpose capability,
+  `interpose_content.py`) is reachable on the REAL dispatch path:
+  `dispatch_capability_reaction(select_best_check_rating=True)` rates each guardian's real
+  available reaction actions via `compute_check_rating` and picks the higher-rated one, never
+  inventing an action — proven by a duelist-statted guardian rolling Melee Defense and a
+  reflexes-statted guardian rolling Reflexes (`InterposeBestOfCheckRealPathTest`,
+  `world/combat/tests/test_guardian_reactions.py`). **That test is `@tag("postgres")`** —
+  `apply_condition`'s capability grant uses DISTINCT ON, so its first real gate is CI parity,
+  not the local SQLite fast tier. Separately, a guardian can declare Interpose "with" a known
+  protective technique (`declare_interpose(technique=...)`); the BARRIER flavor's real
+  resolution (guardian's own cast check via `resolve_cast_check_type`, anima debited instead
+  of fatigue, ally damage zeroed) is journey-proven (`TechniqueGuardianBarrierResolutionTest`,
+  SQLite tier). See ADR-0118 for why the technique-guardian roll happens outside
+  `use_technique`.
 - Escalation → Audere offer → accept → real power change.
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
@@ -58,6 +73,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
 - Enemy-NPC condition application · thread-pull final outcome. (Combo full journey proven in #2017.)
+- **Guardian-reaction surfaces beyond the two #2207 journey tests above.** Wired but
+  not journey-proven: the technique-guardian BLINK flavor's clean-success ward
+  relocation (`force_move_to_position` to the guardian's own position —
+  `_try_technique_interpose`); the ALLY-opponent guard path
+  (`_try_interpose_for_opponent` in `apply_damage_to_opponent`, shielding a
+  summon — ANY-ALLY declarations only, no named-ally FK to a `CombatOpponent`
+  yet); telnet `combat interpose [ally] with <technique>` (parses correctly per
+  unit coverage, but no end-to-end telnet journey test); and the web Guard panel
+  (`YourTurn`'s ward + technique selects) — typechecked/linted, no e2e run
+  (Playwright is blocked in this devcontainer for every spec, not specific to
+  this feature).
 
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 

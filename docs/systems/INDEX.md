@@ -3273,6 +3273,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     Both paths now also call `process_damage_interactions` after soak/resistance/armor
     (#2018) — condition-damage interactions amplify, dampen, consume, or transform
     conditions. Narration fires only on transitions (removal/transform), not every hit.
+    `apply_damage_to_opponent` also calls `_try_interpose_for_opponent` (#2207) so a
+    declared guardian can shield an ALLY-allegiance opponent (a summon) the same way
+    `apply_damage_to_participant` shields a PC — see the Key Services list below.
   - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
     from each active participant holding a reactive condition; called by `begin_round_of_combat`
     immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060.
@@ -3295,11 +3298,50 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Key Services (`world/combat/services.py`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
-  - `declare_interpose(participant, ally)` — arm an INTERPOSE `CombatRoundAction` for the round
+  - `declare_interpose(participant, ally=None, technique=None)` — arm an INTERPOSE
+    `CombatRoundAction` for the round. **Guardian reaction declaration (#2207):** an
+    optional *technique* reuses `CombatRoundAction.focused_action` (no new column) to
+    carry a declared protective technique into the round; gated on the participant
+    knowing it (`CharacterTechnique`), it classifying to a non-`redirect` protective
+    flavor via `world.magic.services.targeting.protective_flavor` (`redirect` deferred
+    to #2210), and `ally` still resolving to an active co-encounter participant when
+    given. `technique=None` keeps the pre-#2207 mundane shape (passives only,
+    `focused_action` zeroed). See the combat `AGENT_GLOSSARY.md`'s Guardian reaction
+    entry and ADR-0118.
   - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
-    an armed interpose challenge and dispatches it
-  - `dispatch_interpose(interposer, protected, pre_payload, approach)` — thin wrapper over
-    `dispatch_capability_reaction`; calls `apply_interpose_outcome` to mutate the payload
+    an armed interpose challenge naming *participant* (or "any ally") and dispatches it
+    via `_dispatch_interpose_action`
+  - `_try_interpose_for_opponent(opponent, pre_payload)` (#2207) — the summon-guarding
+    sibling of `_try_interpose`: extends interpose to ALLY-allegiance `CombatOpponent`
+    wards (player summons/companion NPCs). **ANY-ALLY only** — `CombatRoundAction.
+    focused_ally_target` FKs `CombatParticipant`, so it can never name a `CombatOpponent`
+    directly; only an armed `focused_ally_target IS NULL` declaration can pick up a
+    summon. Named-ally guarding of a summon is a follow-up once `focused_ally_target`
+    (or a sibling field) can point at an opponent. Called from `apply_damage_to_opponent`.
+  - `_dispatch_interpose_action(action, protected, pre_payload)` (#2207) — shared tail for
+    both ward types; computes the bond-bonus modifier (`bond_bonus`, #2021) then forks on
+    `action.focused_action_id`: set → `_try_technique_interpose` (anima cost, no fatigue);
+    unset → `dispatch_interpose(..., select_best_check_rating=True)` + fatigue charge on fire.
+  - `dispatch_interpose(interposer, protected, pre_payload, approach, *, select_best_check_rating=False)`
+    — thin wrapper over `dispatch_capability_reaction`; calls `apply_interpose_outcome` to
+    mutate the payload. **Best-of check selection (#2207):** the mundane guardian path calls
+    this with `select_best_check_rating=True`, so `dispatch_capability_reaction` picks the
+    higher-rated of the guardian's *real* available reaction approaches (the Reflexes vs.
+    Melee-Defense twins seeded per interpose capability in `interpose_content.py`) via
+    `world.checks.services.compute_check_rating` — deterministic, zero extra rolls, never
+    inventing an action outside `get_available_actions`'s output (ADR-0032).
+  - `_try_technique_interpose(action, interposer, protected, pre_payload, *, extra_modifiers=0)`
+    (#2207) — resolves a technique-guardian's declared protective reaction. Affordability
+    first (`ConditionTemplate.reactive_anima_cost` via `protective_condition_and_flavor`;
+    unaffordable → fizzle, no roll/no cost); rolls the guardian's own cast check
+    (`resolve_cast_check_type`, None-guarded — an unprovisioned caster fizzles the same way)
+    against the mundane Interpose challenge's severity; debits anima (not fatigue) on any
+    non-fizzle fire; grades via the SAME `_grade_interpose_damage` the mundane path uses
+    (SHIELD divisor included). A clean `blink`-flavored block relocates the ward to the
+    guardian's own current position (`force_move_to_position`) — a stand-in for #2206's
+    `CombatRoundAction.cast_destination`, preferred once that field lands. `redirect` is
+    rejected at declaration time, not here. See ADR-0118 for why this rolls outside
+    `use_technique`.
   - `apply_interpose_outcome(pre_payload, result)` — SUCCESS zeroes payload, PARTIAL halves,
     FAILURE is a no-op
   - `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints
@@ -3350,13 +3392,23 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     idempotent seed for the 4 social-combat CheckTypes (Rally/Demoralize/Taunt/Parley
     with stat+skill+spec), the Inspired condition, and a Charming Word technique.
 - **Key Services (`world/mechanics/reactions.py`):**
-  - `dispatch_capability_reaction(character, protected, challenge_name, approach, outcome_fn)`
-    — shared reactive spine; used by INTERPOSE and the catch-faller seam
+  - `dispatch_capability_reaction(character, protected, challenge_name, approach, outcome_fn, *, select_best_check_rating=False)`
+    — shared reactive spine; used by INTERPOSE and the catch-faller seam. `approach`
+    still wins when given; `select_best_check_rating=True` (opt-in, #2207) only changes
+    the ``approach is None`` fallback: instead of the naive first-match pick, it groups
+    the actor's real available reaction actions by resolved `check_type`, rates each
+    DISTINCT check type once via `world.checks.services.compute_check_rating`, and
+    returns the action backed by the higher-rated one (`_select_best_rated_action`) —
+    deterministic (ADR-0019), no invented actions (ADR-0032). Existing callers (Succor,
+    the scene-cover path) leave it `False` and keep the prior first-match behavior.
 - **Reactive content seeds:**
   - `ensure_interpose_content()` (`src/world/combat/interpose_content.py`) — idempotent
     seed for the INTERPOSE `ChallengeTemplate` + four capability-gated `Application` rows
     (telekinesis, shield, barrier, pull_aside) + Reflexes `CheckType` + SUCCESS-tier DESTROY
-    consequence
+    consequence. Each interpose capability also seeds a Melee-Defense twin `Application`
+    (#2207) keyed on the SAME `CapabilityType` as its base row (not a separate
+    `melee_guard` type) — the twin is what `select_best_check_rating` actually has to
+    choose between on the real dispatch path.
   - `ensure_succor_content()` (`src/world/combat/succor_content.py`) — idempotent seed for
     the SUCCOR `ChallengeTemplate`, reusing the same four capability-gated `Application` rows
     Interpose seeds + a dedicated exploration `CheckType` + SUCCESS-tier DESTROY consequence
@@ -3370,7 +3422,26 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
   participant, add opponent, pause), player actions (declare, ready, interpose, cover,
   yield, flee, use_item, my_action, available_combos, rally, demoralize, taunt, parley),
-  duel challenge endpoints
+  duel challenge endpoints. **Guard declaration (#2207):** `InterposeSerializer`
+  (`world/combat/serializers.py`) only carries `ally_participant_id` — the optional
+  `technique_id` (protective technique) has no bespoke REST verb yet, so the web Guard
+  panel dispatches through the generic REGISTRY path instead
+  (`POST /api/actions/characters/{characterId}/dispatch/` with
+  `registry_key: "combat_interpose"`, `actions/definitions/combat_maneuvers.py`), the
+  same seam bespoke-verb-less maneuvers already use.
+- **Web (#2207):** a "Guard" panel in `YourTurn` (`frontend/src/combat/sections/
+  YourTurn.tsx`) — a ward select (any-ally default or a named participant) plus an
+  optional protective-technique select sourced from `PlayerAction.protective_flavor`
+  (new field, `barrier`/`blink`/`redirect`/`null` — `redirect` excluded from the picker
+  until #2210 lifts the declaration-time gate) — dispatches via `useGuardMutation`
+  (`frontend/src/combat/queries.ts`) and shows a "Guarding" badge once armed.
+- **Telnet parity (#2207):** `combat interpose [ally] [with <technique>]`
+  (`CmdCombat._resolve_interpose_args`, `src/commands/combat_maneuvers.py`) — both
+  clauses optional; `with <technique>` splits on `" with "` (mirrors
+  `CmdClashCommit`'s split) and resolves the technique name via `_find_technique_id`,
+  which already gates on the caller knowing it (defense-in-depth alongside the
+  service-layer gate in `declare_interpose`). Works ally-less: `combat interpose with
+  <technique>`.
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
   conditions (`bulk_apply_conditions` — now installs reactive side-effects;
