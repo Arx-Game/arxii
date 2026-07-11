@@ -1377,4 +1377,59 @@ describe('ActionPanel', () => {
       );
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Anima/resonance freshness on cast/pull (#2158)
+  // -------------------------------------------------------------------------
+
+  describe('ActionPanel anima/resonance freshness (#2158)', () => {
+    it('invalidates anima and resonance queries after a successful cast', async () => {
+      vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+      vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+      mockEmberTouchCastables();
+      await mockRosterWithPersona();
+
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
+      const user = userEvent.setup();
+
+      render(<ActionPanel sceneId="42" />, {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      });
+
+      // Open panel → Cast → select technique → commit (mirrors openCastDialogWithEmberTouch)
+      await user.click(screen.getByRole('button'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Cast')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Cast'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Ember Touch'));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+      await waitFor(() => {
+        expect(invalidateSpy).toHaveBeenCalledWith({
+          queryKey: ['magic', 'character-anima', 42],
+        });
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ['magic', 'character-resonances', 'list'],
+      });
+    });
+  });
 });

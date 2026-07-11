@@ -75,6 +75,7 @@ from actions.definitions.covenants import (
 from actions.definitions.crafting import (
     AttachFacetAction,
     AttachStyleAction,
+    CreateItemAction,
     DetachFacetAction,
 )
 from actions.definitions.crossing import resolve_crossing_offer
@@ -200,6 +201,8 @@ from actions.definitions.movement import (
     GetAction,
     GiveAction,
     HomeAction,
+    StopTravelAction,
+    TravelAction,
     TraverseExitAction,
 )
 from actions.definitions.npc_services import (
@@ -391,6 +394,7 @@ _ALL_ACTIONS: list[Action] = [
     AttachFacetAction(),
     DetachFacetAction(),
     AttachStyleAction(),
+    CreateItemAction(),
     ApplyOutfitAction(),
     UndressAction(),
     # #1866 — outfit CRUD telnet coverage.
@@ -405,6 +409,8 @@ _ALL_ACTIONS: list[Action] = [
     SceneEntryEndorseAction(),
     StylePresentationEndorseAction(),
     TraverseExitAction(),
+    TravelAction(),
+    StopTravelAction(),
     HomeAction(),
     MoveToPositionAction(),
     TakePositionAction(),

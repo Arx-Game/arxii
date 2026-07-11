@@ -40,9 +40,17 @@ vi.mock('../actionQueries', () => ({
   respondToRequest: vi.fn(),
 }));
 
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 import { fetchPendingRequests, fetchPendingTargets, respondToRequest } from '../actionQueries';
 import type { PendingActionTarget } from '../actionTypes';
 import { ConsentPrompt } from './ConsentPrompt';
+import { toast } from 'sonner';
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -590,5 +598,79 @@ describe('ConsentPrompt', () => {
         target_persona_id: 99,
       })
     );
+  });
+
+  // ---------------------------------------------------------------------------
+  // NPC disposition toast (#2158)
+  // ---------------------------------------------------------------------------
+
+  it('toasts the disposition message when the response includes one (#2158)', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+    vi.mocked(respondToRequest).mockResolvedValue({
+      status: 'resolved',
+      result: {
+        interaction_id: 1,
+        action_key: 'persuade',
+        action_resolution: {
+          current_phase: 'resolved',
+          main_result: { step_label: 'Roll', check_outcome: 'Success', consequence_id: null },
+          gate_results: [],
+        },
+        technique_result: null,
+        technique_name: null,
+        check_result: null,
+        selected_consequence: null,
+        applied_effects: [],
+        disposition_message: "Mara's regard for you warms noticeably.",
+      },
+    });
+    const user = userEvent.setup();
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Accept').length).toBeGreaterThan(0);
+    });
+
+    await user.click(screen.getAllByText('Accept')[0]);
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith("Mara's regard for you warms noticeably.");
+    });
+  });
+
+  it('does not toast when disposition_message is absent', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+    vi.mocked(respondToRequest).mockResolvedValue({
+      status: 'resolved',
+      result: {
+        interaction_id: 1,
+        action_key: 'intimidate',
+        action_resolution: {
+          current_phase: 'resolved',
+          main_result: { step_label: 'Roll', check_outcome: 'Success', consequence_id: null },
+          gate_results: [],
+        },
+        technique_result: null,
+        technique_name: null,
+        check_result: null,
+        selected_consequence: null,
+        applied_effects: [],
+      },
+    });
+    const user = userEvent.setup();
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Accept').length).toBeGreaterThan(0);
+    });
+
+    await user.click(screen.getAllByText('Accept')[0]);
+
+    await waitFor(() => {
+      expect(respondToRequest).toHaveBeenCalled();
+    });
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

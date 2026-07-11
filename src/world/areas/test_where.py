@@ -95,3 +95,9 @@ class WhereListingConcealmentTests(TestCase):
             entries = where_listing()
         names = [entry.persona_name for entry in entries]
         assert self.visible_sheet.primary_persona.name in names
+
+    def test_where_entry_includes_room_id(self) -> None:
+        with patch("evennia.SESSION_HANDLER") as handler:
+            handler.get_sessions.return_value = [self._session(self.visible)]
+            entries = where_listing()
+        assert any(entry.room_id == self.room.id for entry in entries)

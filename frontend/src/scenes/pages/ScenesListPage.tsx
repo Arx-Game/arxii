@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { CharacterLink } from '@/components/character';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useDispatchPlayerAction } from '@/combat/queries';
 import { fetchScenes, SceneListItem } from '../queries';
 
 export function ScenesListPage() {
@@ -10,6 +13,21 @@ export function ScenesListPage() {
     queryKey: ['scenes', status],
     queryFn: () => fetchScenes(`status=${status}`),
   });
+
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const characterId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
+    [myRosterEntries, activeCharacterName]
+  );
+  const { mutate: dispatchTravel, isPending } = useDispatchPlayerAction(characterId ?? 0);
+
+  const goThere = (roomId: number) => {
+    dispatchTravel({
+      ref: { backend: 'registry', registry_key: 'travel_to' },
+      kwargs: { target: roomId },
+    });
+  };
 
   return (
     <div className="container mx-auto p-4">
@@ -47,7 +65,20 @@ export function ScenesListPage() {
               </td>
               <td className="border p-2">{scene.description}</td>
               <td className="border p-2">{new Date(scene.date_started).toLocaleDateString()}</td>
-              <td className="border p-2">{scene.location?.name || ''}</td>
+              <td className="border p-2">
+                {scene.location?.name || ''}
+                {scene.location && (
+                  <button
+                    type="button"
+                    className="ml-2 text-xs text-blue-600 hover:underline"
+                    onClick={() => goThere(scene.location!.id)}
+                    disabled={isPending}
+                    data-testid={`go-there-${scene.id}`}
+                  >
+                    Go there
+                  </button>
+                )}
+              </td>
               <td className="border p-2">
                 {scene.participants.map((p, idx) => (
                   <span key={p.id}>

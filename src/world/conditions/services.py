@@ -940,6 +940,7 @@ def bulk_apply_conditions(
             _install_reactive_side_effects(app.target, app.template, result.instance)
             _make_just_installed_triggers_live(app.target)
             _register_unseen_observer_if_concealing(app.target, app.template)
+            _stamp_cast_positions(result.instance, app)
 
         if result.instance is not None and target_location is not None:
             emit_event(
@@ -955,6 +956,28 @@ def bulk_apply_conditions(
         results.append(result)
 
     return results
+
+
+def _stamp_cast_positions(instance: "ConditionInstance", app: BulkConditionApplication) -> None:
+    """Set ``app``'s optional cast-time position FKs on ``instance`` (#2206).
+
+    Must run BEFORE ``CONDITION_APPLIED`` is emitted (caller-enforced ordering,
+    see ``BulkConditionApplication`` docstring) — same-event reactive handlers
+    (``create_obstacle_on_condition`` and siblings, #2019) read these fields off
+    ``payload.instance`` synchronously.
+    """
+    update_fields: list[str] = []
+    if app.cast_destination_id:
+        instance.cast_destination_id = app.cast_destination_id
+        update_fields.append("cast_destination_id")
+    if app.cast_position_a_id:
+        instance.cast_position_a_id = app.cast_position_a_id
+        update_fields.append("cast_position_a_id")
+    if app.cast_position_b_id:
+        instance.cast_position_b_id = app.cast_position_b_id
+        update_fields.append("cast_position_b_id")
+    if update_fields:
+        instance.save(update_fields=update_fields)
 
 
 def _make_just_installed_triggers_live(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM

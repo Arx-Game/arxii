@@ -12,6 +12,7 @@ import type {
   IncomingMessage,
   InteractionWsPayload,
   KudosReceivedPayload,
+  MailArrivedPayload,
   OutgoingMessage,
   RoomStatePayload,
   ScenePayload,
@@ -26,6 +27,7 @@ import type { RoulettePayload } from '@/components/roulette/types';
 import { handleBattleStatePayload } from './handleBattleStatePayload';
 import type { BattleStatePayload } from '@/battles/types';
 import { handleKudosReceivedPayload } from './handleKudosReceivedPayload';
+import { handleMailArrivedPayload } from './handleMailArrivedPayload';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -153,6 +155,11 @@ export function useGameSocket() {
 
           if (msgType === WS_MESSAGE_TYPE.BATTLE_STATE) {
             handleBattleStatePayload(kwargs as unknown as BattleStatePayload);
+            return;
+          }
+
+          if (msgType === WS_MESSAGE_TYPE.MAIL_ARRIVED) {
+            handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload);
             return;
           }
 

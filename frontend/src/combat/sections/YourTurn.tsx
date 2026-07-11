@@ -12,10 +12,17 @@
  * Phase 7 of the unified-combat-ui plan.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
-import type { ActionContext, ActionSlot, EffortLevel, TargetOption } from '@/actions/types';
+import type {
+  ActionContext,
+  ActionSlot,
+  CastPosition,
+  EffortLevel,
+  PositionTargetShape,
+  TargetOption,
+} from '@/actions/types';
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { MovementActions } from '../components/MovementActions';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
@@ -41,6 +48,7 @@ import type {
   DispatchActionRequest,
   EncounterDetail,
   Participant,
+  PositionNode,
   RoundActionTyped,
 } from '../types';
 
@@ -66,6 +74,23 @@ export interface YourTurnProps {
    * don't have encounter data yet can still render the slot composition.
    */
   encounter?: EncounterDetail | null;
+  /**
+   * Cast-time position selection, controlled by the caller (#2206). CombatTurnPanel/
+   * CombatScenePage lift this above the rail tabs so the tactical-map tab can share
+   * it with this panel. Optional and falls back to local `useState` when the caller
+   * doesn't provide it (e.g. tests rendering YourTurn standalone) — unlike
+   * ActionDeclarationCard's castPosition prop, which has no such local-state
+   * fallback and simply no-ops without a caller-supplied setter.
+   */
+  castPosition?: CastPosition;
+  onCastPositionChange?: (next: CastPosition) => void;
+  /**
+   * Reports the currently-selected focused technique's position-targeting shape
+   * to the caller (#2206) — lets a sibling tab (the tactical map) know whether
+   * map-click position-picking should be active, even after this panel unmounts
+   * (rail tabs unmount their inactive TabsContent).
+   */
+  onPositionShapeChange?: (shape: PositionTargetShape) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +182,13 @@ type DispatchJob = () => Promise<unknown>;
  *
  * When a pull is selected, pull_resonance_id / pull_tier / pull_thread_ids are
  * merged into kwargs so the backend commits a CombatPull alongside the action.
+ *
+ * When a cast-time position is selected (#2206), `position_params` is merged
+ * into kwargs: `{ destination_position_id }` for a "single"-shape technique,
+ * or `{ position_a_id, position_b_id }` for a "pair"-shape technique.
+ * Shape-aware per the selected action's `position_target_shape` — a
+ * "none"/undefined-shape technique never gets `position_params`, even if
+ * stale castPosition state is present (#2206 review finding).
  */
 function buildFocusedJob(
   focusedContext: ActionContext,
@@ -166,7 +198,9 @@ function buildFocusedJob(
   soulfrayAccepted: boolean,
   soulfrayWarning: SoulfrayWarningData | null,
   furyTierId: number | null,
-  furyAnchorId: number | null
+  furyAnchorId: number | null,
+  castPosition: CastPosition,
+  positionTargetShape: PositionTargetShape
 ): DispatchJob | null {
   if (focusedContext.techniqueId === undefined) return null;
 
@@ -192,6 +226,27 @@ function buildFocusedJob(
   const soulfrayKwarg =
     soulfrayWarning !== null && soulfrayAccepted ? { confirm_soulfray_risk: true } : {};
 
+  // Strictly per-shape — never derive position_params from mere presence of
+  // castPosition fields, since stale state from a previously-selected
+  // technique can otherwise leak into a differently-shaped technique's
+  // dispatch (#2206 review finding).
+  type PositionParams =
+    | { destination_position_id: number }
+    | { position_a_id: number; position_b_id: number };
+  const positionKwargs: Record<string, PositionParams> = {};
+  if (positionTargetShape === 'single' && castPosition?.destinationId !== undefined) {
+    positionKwargs.position_params = { destination_position_id: castPosition.destinationId };
+  } else if (
+    positionTargetShape === 'pair' &&
+    castPosition?.pairA !== undefined &&
+    castPosition?.pairB !== undefined
+  ) {
+    positionKwargs.position_params = {
+      position_a_id: castPosition.pairA,
+      position_b_id: castPosition.pairB,
+    };
+  }
+
   return () =>
     dispatchAction({
       ref: {
@@ -205,6 +260,7 @@ function buildFocusedJob(
         ...pullKwargs,
         ...soulfrayKwarg,
         ...furyKwargs,
+        ...positionKwargs,
       },
     });
 }
@@ -396,6 +452,9 @@ export function YourTurn({
   readOnly = false,
   availableStrain,
   encounter = null,
+  castPosition: castPositionProp,
+  onCastPositionChange: onCastPositionChangeProp,
+  onPositionShapeChange,
 }: YourTurnProps) {
   const strainMax = availableStrain ?? 10;
   // ---------------------------------------------------------------------------
@@ -447,8 +506,31 @@ export function YourTurn({
   const [guardAllyId, setGuardAllyId] = useState<string>(GUARD_ANYONE_VALUE);
   const [guardTechniqueId, setGuardTechniqueId] = useState<string>(GUARD_NO_TECHNIQUE_VALUE);
 
+  // Cast-time position selection for the focused technique (#2206). Controlled
+  // by the caller when castPositionProp/onCastPositionChangeProp are supplied
+  // (CombatScenePage lifts this above the rail tabs so the tactical-map tab
+  // shares it); falls back to local state otherwise (e.g. standalone tests).
+  const [localCastPosition, setLocalCastPosition] = useState<CastPosition>({});
+  const castPosition = castPositionProp ?? localCastPosition;
+  const setCastPosition = onCastPositionChangeProp ?? setLocalCastPosition;
+
+  // Did-mount guards for the two reset effects below (#2206 review finding).
+  // Both effects' dependencies take on their "changed" value on first mount
+  // too (standard React) — without a guard, mounting/remounting this panel
+  // (e.g. switching from the Map tab back to Your Turn, which unmounts and
+  // remounts inactive TabsContent) would fire `setCastPosition({})` and wipe
+  // out a position the caller already lifted into `castPosition`/
+  // `onCastPositionChange`. Skip the reset on the mount that establishes each
+  // ref; only fire on genuine post-mount transitions.
+  const roundResetMounted = useRef(false);
+  const techniqueResetMounted = useRef(false);
+
   // Reset submitted, pull selection, and pull dialog when round advances.
   useEffect(() => {
+    if (!roundResetMounted.current) {
+      roundResetMounted.current = true;
+      return;
+    }
     setSubmitted(false);
     setPullDialogOpen(false);
     setSelectedPull(null);
@@ -459,7 +541,20 @@ export function YourTurn({
     setGuardAllyId(GUARD_ANYONE_VALUE);
     setGuardTechniqueId(GUARD_NO_TECHNIQUE_VALUE);
     setManeuverError(null);
-  }, [roundNumber]);
+    setCastPosition({});
+  }, [roundNumber, setCastPosition]);
+
+  // Reset cast-time position selection when the focused technique changes —
+  // a position picked for a prior technique (e.g. a pair-shape technique's A/B)
+  // must not silently leak into a differently-shaped technique's
+  // `position_params` (#2206 review finding).
+  useEffect(() => {
+    if (!techniqueResetMounted.current) {
+      techniqueResetMounted.current = true;
+      return;
+    }
+    setCastPosition({});
+  }, [focusedContext.techniqueId, setCastPosition]);
 
   // ---------------------------------------------------------------------------
   // Slot composition
@@ -575,6 +670,35 @@ export function YourTurn({
     return selected?.reach ?? null;
   })();
 
+  // Cast-time position-targeting shape for the currently selected focused
+  // technique (#2206). Positions/edges data is the same source
+  // CombatTacticalMap uses — EncounterDetail.position_nodes.
+  const focusedTechniquePositionShape: PositionTargetShape = (() => {
+    if (focusedContext.techniqueId === undefined) return 'none';
+    const selected = availableActions.find(
+      (a) => a.ref.technique_id === focusedContext.techniqueId
+    );
+    return selected?.position_target_shape ?? 'none';
+  })();
+  const focusedPositions: PositionNode[] = encounter?.position_nodes ?? [];
+
+  // Report the current shape to the caller (#2206) — lets the tactical-map tab
+  // know whether map-click position-picking should be active, and keeps
+  // knowing even after this panel unmounts on tab switch (CombatScenePage's
+  // state persists across its children's mount/unmount).
+  useEffect(() => {
+    onPositionShapeChange?.(focusedTechniquePositionShape);
+  }, [focusedTechniquePositionShape, onPositionShapeChange]);
+
+  // Blocks Ready/submit while a required position slot is empty (#2206,
+  // mirrors the fury/soulfray required-declaration gating below).
+  const positionRequirementMet =
+    focusedTechniquePositionShape === 'none' ||
+    (focusedTechniquePositionShape === 'single' && castPosition.destinationId !== undefined) ||
+    (focusedTechniquePositionShape === 'pair' &&
+      castPosition.pairA !== undefined &&
+      castPosition.pairB !== undefined);
+
   // Soulfray + fury descriptor for the currently selected focused cast (#1543).
   const focusedCastDescriptor = (() => {
     if (focusedContext.techniqueId === undefined) return null;
@@ -645,6 +769,10 @@ export function YourTurn({
       setSubmitError('Chosen fury tier exceeds your bond with the anchor.');
       return;
     }
+    if (!positionRequirementMet) {
+      setSubmitError('Select a position target for this technique.');
+      return;
+    }
 
     // The round effort comes from the focused slot and applies to every
     // declaration (focused + passives). The COMBAT dispatch requires
@@ -663,7 +791,9 @@ export function YourTurn({
       soulfrayAccepted,
       soulfrayWarning,
       furyTierId,
-      furyAnchorId
+      furyAnchorId,
+      castPosition,
+      focusedTechniquePositionShape
     );
     const passiveJobs = buildPassiveJobs(
       visiblePassiveSlots,
@@ -786,6 +916,10 @@ export function YourTurn({
           reach={focusedTechniqueReach}
           actorPositionId={actorPositionId}
           positionAdjacency={encounter?.position_adjacency ?? []}
+          positionTargetShape={focusedTechniquePositionShape}
+          positions={focusedPositions}
+          castPosition={castPosition}
+          onCastPositionChange={setCastPosition}
         />
         {soulfrayWarning !== null && (
           <SoulfrayAcceptGate
@@ -1129,7 +1263,8 @@ export function YourTurn({
           isLocked ||
           dispatchPending ||
           (soulfrayWarning !== null && !soulfrayAccepted) ||
-          furyOverCap
+          furyOverCap ||
+          !positionRequirementMet
         }
         onClick={() => {
           handleSubmit().catch(() => {});

@@ -785,6 +785,9 @@ def _resolve_action_against_persona(
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
     from world.fatigue.constants import EFFORT_CHECK_MODIFIER  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+    from world.npc_services.social_disposition import (  # noqa: PLC0415
+        apply_social_disposition_delta,
+    )
     from world.relationships.services import relationship_gated_contributions  # noqa: PLC0415
 
     if difficulty_override is not None:
@@ -878,6 +881,10 @@ def _resolve_action_against_persona(
     # Berserk condition). The check chain above resolves the action; this is where
     # data-driven condition effects reach the live player path (#1172).
     _dispatch_action_effects(action_request, character, target_character)
+
+    result.disposition_message = apply_social_disposition_delta(
+        character, target_persona.pk, result.action_resolution
+    )
 
     result_interaction = _create_result_interaction(
         action_request=action_request,

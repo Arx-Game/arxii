@@ -551,6 +551,15 @@ actions, backends, and service functions.
   each with their coloured area-hierarchy path (`colored_area_path` walks `AreaClosure`,
   colouring each segment by `Area.color` with cascade-down inheritance). Private rooms /
   private RP never appear (the #1287 invariant). Colours are author-set flavour (PLACEHOLDER).
+- **`travel.py`**: `CmdTravel` (`travel`, #2163) — telnet face of the "go there" auto-walk.
+  `travel <character name>` resolves the target's current room and dispatches
+  `TravelAction` (key `travel_to`, `actions/definitions/movement.py`); `travel stop`
+  dispatches `StopTravelAction` (key `stop_travel`). Mirrors `CmdWhere`'s public-only
+  scope — `find_route()` (`world.areas.positioning.travel`) only routes through
+  same-Area, publicly-listed rooms. Overrides `func()` directly (like `CmdPosition`)
+  rather than the base `ArxCommand._execute()` single-action recipe, since resolving
+  the destination argument needs custom logic before dispatch. No business logic in
+  the command.
 - **`who.py`**: `CmdWho` (`who`, #1463) — the online roster. Thin read over
   `world.scenes.presence.who_listing`: online characters by **active** persona with a **coarse**
   idle marker (active / idle / away — never exact, so identical idle times can't out an account's

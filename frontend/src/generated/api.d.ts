@@ -7806,6 +7806,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/crafting/create/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Roll the crafting check and (on success) mint a new ItemInstance. */
+    post: operations['items_crafting_create_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/equipped-items/': {
     parameters: {
       query?: never;
@@ -14715,6 +14732,40 @@ export interface paths {
     put?: never;
     /** @description List and send player mail. */
     post: operations['roster_mail_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/mail/{id}/mark-read/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Mark this mail as read (idempotent). Recipient-only via the scoped queryset. */
+    post: operations['roster_mail_mark_read_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/mail/unread-count/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Count of unread, unarchived mail across the requester's tenures. */
+    get: operations['roster_mail_unread_count_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -29226,6 +29277,7 @@ export interface components {
         | null;
       readonly reach: string | null;
       readonly protective_flavor: string | null;
+      readonly position_target_shape: string;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
@@ -33628,6 +33680,10 @@ export interface components {
      * @enum {string}
      */
     UnlockTypeEnum: 'class_level' | 'thread_xp_lock' | 'skill_breakthrough';
+    /** @description Response shape for ``PlayerMailViewSet.unread_count`` -- schema only, never a model. */
+    UnreadMailCount: {
+      readonly count: number;
+    };
     /**
      * @description Input for PATCH /api/table-bulletin-posts/{id}/.
      *
@@ -44248,6 +44304,24 @@ export interface operations {
       };
     };
   };
+  items_crafting_create_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   items_equipped_items_list: {
     parameters: {
       query: {
@@ -54576,6 +54650,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PlayerMail'];
+        };
+      };
+    };
+  };
+  roster_mail_mark_read_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this player mail. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerMail'];
+        };
+      };
+    };
+  };
+  roster_mail_unread_count_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UnreadMailCount'];
         };
       };
     };

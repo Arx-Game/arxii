@@ -90,7 +90,7 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   recipes + a cap ladder + a consequence pool.
 
 **Deferred to follow-up issues:**
-- Item-creation pipeline (crafted items with stats, facets, fashion properties) — still future
+- ~~Item-creation pipeline (crafted items with stats, facets, fashion properties)~~ — **DONE (#2195).** `CraftingRecipeKind.ITEM_CREATE` + `ItemCreateHandler` mints a new `ItemInstance` from a recipe's `output_item_template`, with player-authored name/description, quality-scaled stats via `CraftingRecipeModifier`, `OwnershipEvent.CREATED` provenance, and physical `ObjectDB` materialization. `run_crafting_recipe` accepts `item_instance=None` for ITEM_CREATE; `build_crafting_quote` resolves by `(kind, output_template)`. `CreateItemAction` (telnet `craft create` + `POST /api/items/crafting/create/`) is the shared seam.
 - Telnet crafting action — **DONE (#1866).** `CmdCraft`
   (`src/commands/crafting.py`) drives facet attach/detach + style attach
   through `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`
@@ -204,7 +204,7 @@ out-of-scope list stands as written on the issue.
 
 ## What's Needed for MVP
 - Material/resource models — types, sources, quantities, storage
-- Item creation pipeline — crafted items with stats, facets, and fashion properties
+- ~~Item creation pipeline — crafted items with stats, facets, and fashion properties~~ — **DONE (#2195)**
 - Fashion system — how worn item facets map to resonances, admiration mechanics (outfit
   trickle is live; admiration mechanics remain future)
 - Player housing — room purchase/construction, decoration system, room stats from decor

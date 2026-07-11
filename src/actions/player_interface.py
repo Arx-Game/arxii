@@ -489,7 +489,10 @@ def _combat_actions(
     )
     from world.magic.services.fury import provocation_cap  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
-    from world.magic.services.targeting import protective_flavor  # noqa: PLC0415
+    from world.magic.services.targeting import (  # noqa: PLC0415
+        position_target_shape,
+        protective_flavor,
+    )
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     grants = list(grants)
@@ -551,6 +554,7 @@ def _combat_actions(
                 # silently shipping: if this loop is ever hoisted to a batched form,
                 # protective_flavor's traversal would need batching too.
                 protective_flavor=protective_flavor(technique),
+                position_target_shape=position_target_shape(technique),
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
                 eligible_fury_anchors=eligible_fury_anchors,

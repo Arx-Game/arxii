@@ -155,3 +155,32 @@ class SocialAffectionDeltaTest(TestCase):
                 npc_persona=pc_target_persona,
             ).exists()
         )
+
+    def test_success_returns_qualitative_message(self) -> None:
+        """A successful check returns a ready-to-display warm message, not None."""
+        from world.npc_services.social_disposition import apply_social_disposition_delta
+
+        success = CheckOutcomeFactory(name="Social Success", success_level=5)
+        with force_check_outcome(success):
+            result = PersuadeAction().run(
+                self.pc_character,
+                target_persona_id=self.npc_persona.pk,
+            )
+        resolution = result.data["resolution"]
+        message = apply_social_disposition_delta(self.pc_character, self.npc_persona.pk, resolution)
+        self.assertIsNotNone(message)
+        self.assertIn("warms considerably", message)
+
+    def test_no_movement_returns_none(self) -> None:
+        """A failed check (no delta) returns None, not an empty message."""
+        from world.npc_services.social_disposition import apply_social_disposition_delta
+
+        failure = CheckOutcomeFactory(name="Social Failure", success_level=0)
+        with force_check_outcome(failure):
+            result = PersuadeAction().run(
+                self.pc_character,
+                target_persona_id=self.npc_persona.pk,
+            )
+        resolution = result.data["resolution"]
+        message = apply_social_disposition_delta(self.pc_character, self.npc_persona.pk, resolution)
+        self.assertIsNone(message)

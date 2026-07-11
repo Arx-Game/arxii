@@ -54,6 +54,7 @@ class WhereEntry:
 
     persona_name: str
     room_path: str
+    room_id: int
 
 
 def _room_display_name(room: ObjectDB) -> str:
@@ -129,7 +130,13 @@ def where_listing(viewer_account: object | None = None) -> list[WhereEntry]:
         except (AttributeError, ObjectDoesNotExist):
             continue
         persona = active_persona_for_sheet(sheet)
-        entries.append(WhereEntry(persona_name=persona.name, room_path=colored_area_path(room)))
+        entries.append(
+            WhereEntry(
+                persona_name=persona.name,
+                room_path=colored_area_path(room),
+                room_id=room.id,
+            )
+        )
     entries.sort(key=lambda entry: entry.persona_name.lower())
     return entries
 

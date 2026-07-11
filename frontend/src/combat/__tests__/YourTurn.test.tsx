@@ -1626,3 +1626,35 @@ describe('YourTurn — first-timer wayfinding tooltips (#2157)', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cast-position mount-reset guard (#2206 review finding)
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — cast-position mount-reset guard (#2206 review finding)', () => {
+  it('does not clobber a caller-lifted castPosition on mount', async () => {
+    setupMocks();
+    const onCastPositionChange = vi.fn();
+
+    render(
+      <YourTurn
+        {...defaultProps()}
+        castPosition={{ destinationId: 5 }}
+        onCastPositionChange={onCastPositionChange}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    // Flush any effects that would fire on mount.
+    await waitFor(() => {
+      expect(screen.getByTestId('action-card-focused')).toBeInTheDocument();
+    });
+
+    // Both reset effects key off values that also "change" on first mount
+    // (roundNumber, focusedContext.techniqueId going to undefined) — without
+    // the did-mount guard, either would fire setCastPosition({}) and wipe out
+    // the position the caller already lifted (e.g. surviving a Map -> Your
+    // Turn tab remount).
+    expect(onCastPositionChange).not.toHaveBeenCalledWith({});
+  });
+});

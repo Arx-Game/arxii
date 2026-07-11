@@ -10,11 +10,13 @@ from django.test import TestCase
 
 from actions.models import ActionEnhancement
 from world.checks.factories import create_social_action_templates
+from world.checks.test_helpers import force_check_outcome
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
     TechniqueFactory,
 )
+from world.npc_services.models import NPCStanding
 from world.scenes.action_constants import (
     ActionRequestStatus,
     ConsentDecision,
@@ -23,7 +25,7 @@ from world.scenes.action_constants import (
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.place_models import InteractionReceiver
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
 from world.traits.models import CharacterTraitValue, Trait
 
 
@@ -141,6 +143,46 @@ class TestSceneActionIntegration(_BaseActionIntegrationTest):
         assert result is not None
         request.refresh_from_db()
         assert request.resolved_difficulty == 60  # HARD = 60
+
+    def test_accept_resolves_with_disposition_message_for_npc_target(self) -> None:
+        """Accepting against a persona-bearing NPC target moves real disposition.
+
+        Forces the check outcome to a deterministic success_level=5 (mirroring
+        ``SocialAffectionDeltaTest.test_persuade_success_moves_durable_affection``
+        in ``world/npc_services/tests/test_social_affection_delta.py``) so the
+        assertions below are genuinely load-bearing on the #2158 wiring
+        (``_resolve_action_against_persona`` actually calling
+        ``apply_social_disposition_delta``) — unlike a bare ``hasattr`` check,
+        which would pass identically even if that wiring were deleted, since
+        ``disposition_message`` is a dataclass field with ``default=None``.
+        """
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,  # PersonaFactory default has no account -> NPC
+            action_key="persuade",
+        )
+        request.action_template = self.persuade_template
+        request.save(update_fields=["action_template"])
+
+        pc_persona = self.initiator.character_sheet.primary_persona
+        self.assertFalse(
+            NPCStanding.objects.filter(persona=pc_persona, npc_persona=self.target).exists()
+        )
+
+        success = CheckOutcomeFactory(name="Social Success", success_level=5)
+        with force_check_outcome(success):
+            result = respond_to_action_request(
+                action_request=request,
+                decision=ConsentDecision.ACCEPT,
+            )
+
+        assert result is not None
+        assert result.disposition_message is not None
+        assert "warms considerably" in result.disposition_message
+
+        standing = NPCStanding.objects.get(persona=pc_persona, npc_persona=self.target)
+        assert standing.affection == 5
 
     def test_request_without_template_raises(self) -> None:
         """A request whose action_key resolves no ActionTemplate still raises ValueError.
