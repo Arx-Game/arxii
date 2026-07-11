@@ -239,6 +239,8 @@ export interface ActionResultData {
   applied_effects: AppliedEffectData[];
   /** Present when an anima ritual resolves; absent for all other action types. */
   anima_recovery?: AnimaRecoveryData;
+  /** Set when this action moved a persona-bearing NPC's affection (#2158). */
+  disposition_message?: string | null;
 }
 
 export interface ActionRequestResponse {
