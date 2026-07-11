@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
@@ -267,19 +268,31 @@ class PerformPortalTravelTests(TestCase):
         greeter = CharacterFactory(location=dest)
 
         with (
-            patch.object(traveler, "msg"),
+            patch.object(traveler, "msg") as traveler_msg,
             patch.object(witness, "msg") as witness_msg,
             patch.object(greeter, "msg") as greeter_msg,
         ):
             _perform_portal_travel(traveler, route)
 
+        # Plain third-person text — no $You()/actor-stance — so the traveler's
+        # own screen and observers' screens read the IDENTICAL line (#2222
+        # task-2 review: $You() + a pre-conjugated phrasal verb read "You steps
+        # into ..." on the actor's own screen, since actor-stance only
+        # conjugates for non-actor viewers).
         departure_text = witness_msg.call_args.kwargs["text"][0]
-        self.assertIn("steps into", departure_text)
-        self.assertIn("a tall silvered mirror", departure_text)
+        traveler_departure_text = traveler_msg.call_args_list[0].kwargs["text"][0]
+        self.assertEqual(traveler_departure_text, departure_text)
+        self.assertTrue(departure_text.endswith("steps into a tall silvered mirror."))
+        self.assertNotIn("You steps", departure_text)
 
         arrival_text = greeter_msg.call_args.kwargs["text"][0]
-        self.assertIn("steps out of", arrival_text)
-        self.assertIn("a dusty hand mirror", arrival_text)
+        # index 2, not 1: move_object's non-quiet arrival auto-look sends an
+        # intervening "text" call (index 1) between the departure (0) and
+        # arrival (2) broadcasts.
+        traveler_arrival_text = traveler_msg.call_args_list[2].kwargs["text"][0]
+        self.assertEqual(traveler_arrival_text, arrival_text)
+        self.assertTrue(arrival_text.endswith("steps out of a dusty hand mirror."))
+        self.assertNotIn("You steps", arrival_text)
 
     def test_deducts_anima(self) -> None:
         traveler, route, *_ = self._make_route_and_traveler()
@@ -355,6 +368,30 @@ class InstallPortalAnchorTests(TestCase):
         with self.assertRaises(PortalAnchorFundsInsufficient):
             install_portal_anchor(persona, room, kind, "a mirror")
 
+        self.assertFalse(PortalAnchor.objects.active().filter(room_profile=room_profile).exists())
+
+    def test_concurrent_debit_race_contained_as_funds_insufficient(self) -> None:
+        """A concurrent debit racing the balance pre-check must still surface as
+        ``PortalAnchorFundsInsufficient`` — never a raw ``ValidationError`` escaping
+        from ``transfer()`` (#2222 task-2 review)."""
+        room, room_profile = _make_room("Tenant Room")
+        sheet = CharacterSheetFactory()
+        persona = sheet.primary_persona
+        LocationTenancyFactory(room_profile=room_profile, tenant_persona=persona)
+        purse = CharacterPurse.objects.create(character_sheet=sheet, balance=10_000)
+        kind = PortalAnchorKindFactory()
+
+        with (
+            patch(
+                "world.currency.services.transfer",
+                side_effect=ValidationError("Insufficient funds: raced by a concurrent debit."),
+            ),
+            self.assertRaises(PortalAnchorFundsInsufficient),
+        ):
+            install_portal_anchor(persona, room, kind, "a mirror")
+
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 10_000)  # mocked transfer never actually debited
         self.assertFalse(PortalAnchor.objects.active().filter(room_profile=room_profile).exists())
 
 

@@ -236,9 +236,16 @@ def perform_portal_travel(character: ObjectDB, route: PortalRoute) -> None:
 
     sdm = SceneDataManager()
     actor_state = sdm.initialize_state_for_object(character)
+    actor_name = actor_state.get_display_name()
+
+    # Plain third-person text, not $You()/actor-stance — actor-stance conjugates
+    # the verb only for non-actor viewers, so a pre-conjugated phrasal verb like
+    # "steps into" reads "You steps into ..." on the traveler's own screen. Every
+    # viewer, including the traveler, sees the identical third-person line (#2222
+    # task-2 review).
     message_location(
         actor_state,
-        f"$You() {route.origin_anchor.kind.departure_verb} {route.origin_anchor.name}.",
+        f"{actor_name} {route.origin_anchor.kind.departure_verb} {route.origin_anchor.name}.",
     )
 
     destination_room = route.destination_anchor.room_profile.objectdb
@@ -246,9 +253,10 @@ def perform_portal_travel(character: ObjectDB, route: PortalRoute) -> None:
     move_object(actor_state, dest_state, quiet=True)
 
     actor_state = sdm.initialize_state_for_object(character)
+    dest_anchor = route.destination_anchor
     message_location(
         actor_state,
-        f"$You() {route.destination_anchor.kind.arrival_verb} {route.destination_anchor.name}.",
+        f"{actor_name} {dest_anchor.kind.arrival_verb} {dest_anchor.name}.",
     )
     send_room_state(actor_state)
 
@@ -266,27 +274,42 @@ def install_portal_anchor(
     anchor of ``kind`` already there, and a flat
     ``settings.PORTAL_ANCHOR_INSTALL_COST`` copper debit from the persona's
     purse (checked before debiting — never take the installer's money for an
-    install that would be rejected anyway).
+    install that would be rejected anyway). The balance pre-check covers the
+    common case; ``transfer()``'s own row-locked check is the guaranteed
+    backstop against a concurrent debit racing the pre-check (#2222 task-2
+    review) — its ``ValidationError`` is caught and re-raised as
+    ``PortalAnchorFundsInsufficient`` so callers never see a raw currency
+    exception.
     """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
     from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
     from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
 
     if not (is_owner(persona, room) or is_tenant(persona, room)):
-        raise PortalAnchorStandingRequired
+        msg = f"persona={persona.pk} has no owner/tenant standing at room={room.pk}."
+        raise PortalAnchorStandingRequired(msg)
 
     room_profile = _room_profile_for(room)
     if room_profile is None:
-        raise PortalAnchorStandingRequired
+        msg = f"room={room.pk} has no RoomProfile."
+        raise PortalAnchorStandingRequired(msg)
 
     if PortalAnchor.objects.active().filter(room_profile=room_profile, kind=kind).exists():
-        raise PortalAnchorKindAlreadyInstalled
+        msg = f"room_profile={room_profile.pk} already has an active anchor of kind={kind.pk}."
+        raise PortalAnchorKindAlreadyInstalled(msg)
 
     cost = settings.PORTAL_ANCHOR_INSTALL_COST
     purse = get_or_create_purse(persona.character_sheet)
     if purse.balance < cost:
-        raise PortalAnchorFundsInsufficient
+        msg = f"purse={purse.pk} balance={purse.balance} < install cost={cost}."
+        raise PortalAnchorFundsInsufficient(msg)
 
-    transfer(amount=cost, reason="portal_anchor_install", from_purse=purse)
+    try:
+        transfer(amount=cost, reason="portal_anchor_install", from_purse=purse)
+    except ValidationError as exc:
+        msg = f"purse={purse.pk} transfer of cost={cost} failed: {exc}."
+        raise PortalAnchorFundsInsufficient(msg) from exc
 
     return PortalAnchor.objects.create(
         room_profile=room_profile,
@@ -302,7 +325,8 @@ def dissolve_portal_anchor(persona: Persona, anchor: PortalAnchor) -> None:
 
     room = anchor.room_profile.objectdb
     if not is_owner(persona, room):
-        raise PortalAnchorDissolveNotAllowed
+        msg = f"persona={persona.pk} lacks owner standing to dissolve anchor={anchor.pk}."
+        raise PortalAnchorDissolveNotAllowed(msg)
 
     anchor.dissolved_at = timezone.now()
     anchor.save(update_fields=["dissolved_at"])
