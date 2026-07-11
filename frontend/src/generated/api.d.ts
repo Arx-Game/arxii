@@ -4374,7 +4374,8 @@ export interface paths {
     /**
      * @description Read-only viewset for social consent categories.
      *
-     *     Categories are authored by staff and shared across all players.
+     *     Categories are authored by staff and shared across all players. Each row carries
+     *     ``parent`` + ``default_mode`` so the client can render the category tree (#2170).
      */
     get: operations['consent_categories_list'];
     put?: never;
@@ -4395,9 +4396,33 @@ export interface paths {
     /**
      * @description Read-only viewset for social consent categories.
      *
-     *     Categories are authored by staff and shared across all players.
+     *     Categories are authored by staff and shared across all players. Each row carries
+     *     ``parent`` + ``default_mode`` so the client can render the category tree (#2170).
      */
     get: operations['consent_categories_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/consent/categories/modes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The consent-mode picker rows — ``{value, label, guidance}`` (#2170).
+     *
+     *     The "explain the pros and cons of each mode" surface the settings page renders next
+     *     to the mode selector, so a player chooses their antagonism openness understanding the
+     *     trade-off. Guidance copy is PLACEHOLDER pending an authored pass.
+     */
+    get: operations['consent_categories_modes_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -20438,6 +20463,20 @@ export interface components {
      */
     DefaultDurationTypeEnum: 'rounds' | 'until_cured' | 'until_used' | 'end_combat' | 'permanent';
     /**
+     * @description * `everyone` - Everyone
+     *     * `all_but_blacklist` - Everyone except my blacklist
+     *     * `friends_whitelist` - Friends and my whitelist
+     *     * `rivals` - My declared rivals (and whitelist)
+     *     * `allowlist` - Allowlist only
+     * @enum {string}
+     */
+    DefaultModeEnum:
+      | 'everyone'
+      | 'all_but_blacklist'
+      | 'friends_whitelist'
+      | 'rivals'
+      | 'allowlist';
+    /**
      * @description * `attacker` - Attacker
      *     * `defender` - Defender
      * @enum {string}
@@ -24099,6 +24138,15 @@ export interface components {
      * @enum {string}
      */
     Mode081Enum: 'open' | 'pose_order' | 'strict';
+    /**
+     * @description * `everyone` - Everyone
+     *     * `all_but_blacklist` - Everyone except my blacklist
+     *     * `friends_whitelist` - Friends and my whitelist
+     *     * `rivals` - My declared rivals (and whitelist)
+     *     * `allowlist` - Allowlist only
+     * @enum {string}
+     */
+    Mode447Enum: 'everyone' | 'all_but_blacklist' | 'friends_whitelist' | 'rivals' | 'allowlist';
     /**
      * @description * `pose` - Pose
      *     * `emit` - Emit
@@ -28271,7 +28319,7 @@ export interface components {
        *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
-      mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
+      mode?: components['schemas']['Mode447Enum'];
     };
     /** @description Serializer for per-tenure social consent preferences. */
     PatchedSocialConsentPreferenceRequest: {
@@ -31266,7 +31314,13 @@ export interface components {
       /** @description Blacklist is scoped per category. */
       category: number;
     };
-    /** @description Read-only serializer for social consent categories. */
+    /**
+     * @description Read-only serializer for social consent categories.
+     *
+     *     Exposes ``parent`` and ``default_mode`` (#2170) so the frontend can render the category
+     *     tree (nested by ``parent``) and show the root's inherited default; ``parent=None`` marks
+     *     a root group like "All Antagonism".
+     */
     SocialConsentCategory: {
       readonly id: number;
       /** @description Stable slug (e.g. 'romantic', 'hostile'). */
@@ -31277,6 +31331,18 @@ export interface components {
       readonly description: string;
       /** @description Sort order in the consent UI. */
       readonly display_order: number;
+      /** @description Parent category in the consent tree (#2170); None = a root group. A category with no player rule of its own inherits its parent's effective mode, walking up to the root's default_mode. Lets a player set one node (e.g. 'All Antagonism') and have every category beneath it follow, overriding only where they want an exception. */
+      readonly parent: number | null;
+      /**
+       * @description Targeting mode when NOTHING is set anywhere up this category's parent chain. Only consulted on the ROOT of a tree (a category with no parent) — a non-root category inherits its parent instead of consulting its own default_mode. EVERYONE is default-allow; FRIENDS_WHITELIST/RIVALS/ALLOWLIST make it opt-in.
+       *
+       *     * `everyone` - Everyone
+       *     * `all_but_blacklist` - Everyone except my blacklist
+       *     * `friends_whitelist` - Friends and my whitelist
+       *     * `rivals` - My declared rivals (and whitelist)
+       *     * `allowlist` - Allowlist only
+       */
+      readonly default_mode: components['schemas']['DefaultModeEnum'];
       /** @description Return the names of action templates tagged with this category. */
       readonly action_templates: string[];
     };
@@ -31294,22 +31360,8 @@ export interface components {
        *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
-      mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
+      mode?: components['schemas']['Mode447Enum'];
     };
-    /**
-     * @description * `everyone` - Everyone
-     *     * `all_but_blacklist` - Everyone except my blacklist
-     *     * `friends_whitelist` - Friends and my whitelist
-     *     * `rivals` - My declared rivals (and whitelist)
-     *     * `allowlist` - Allowlist only
-     * @enum {string}
-     */
-    SocialConsentCategoryRuleModeEnum:
-      | 'everyone'
-      | 'all_but_blacklist'
-      | 'friends_whitelist'
-      | 'rivals'
-      | 'allowlist';
     /** @description Serializer for per-category consent rules. */
     SocialConsentCategoryRuleRequest: {
       preference: number;
@@ -31323,7 +31375,7 @@ export interface components {
        *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
-      mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
+      mode?: components['schemas']['Mode447Enum'];
     };
     /** @description Serializer for per-tenure social consent preferences. */
     SocialConsentPreference: {
@@ -39378,6 +39430,25 @@ export interface operations {
         /** @description A unique integer value identifying this Social Consent Category. */
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentCategory'];
+        };
+      };
+    };
+  };
+  consent_categories_modes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;

@@ -86,6 +86,11 @@ The friction this introduces (a thief can't just steal from any PC) is
 intentional. Drama between PCs is high-value when both players are invested;
 toxic when one player is being targeted without consent.
 
+Realized by the antagonism-consent register (`world/consent/`, #1698/#1141/#1909) and its
+hierarchical default tree (#2170, ADR-0113): antagonism categories hang under an
+**All Antagonism** root that defaults to `FRIENDS_WHITELIST` (opt-in — only OOC friends +
+whitelist until the player widens it), and a player sets one node to move all of them.
+
 ### Constrained bystander reactions
 
 Witnesses to a scene get **pop-up choice menus** (predefined reactions:

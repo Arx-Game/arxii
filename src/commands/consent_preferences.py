@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 _MSG_USAGE = (
     "Usage:\n"
     "  consent                          - show your consent settings\n"
+    "  consent modes                    - explain what each mode means\n"
     "  consent on|off                   - allow or block all social actions\n"
     "  consent category <key>=<mode> - everyone|whitelist|blacklist|friends|rivals|default\n"
     "  consent whitelist add <name> to <category>       (people you always allow)\n"
@@ -89,6 +90,10 @@ class CmdConsent(DispatchCommand):
         parts = raw.split(maxsplit=1)
         self._subverb = parts[0].lower()
         self._rest = parts[1].strip() if len(parts) > 1 else ""
+
+        if self._subverb == "modes":  # noqa: STRING_LITERAL — #2170 mode guidance
+            self._show_mode_guidance()
+            return
 
         if self._subverb in _SUBVERBS:
             self._registry_key = _SUBVERBS[self._subverb]
@@ -228,6 +233,18 @@ class CmdConsent(DispatchCommand):
     # -----------------------------------------------------------------------
     # Summary display
     # -----------------------------------------------------------------------
+
+    def _show_mode_guidance(self) -> None:
+        """Print each consent mode with its pros/cons (`consent modes`, #2170).
+
+        Telnet parity for the web ``/api/consent-categories/modes/`` endpoint — the
+        "explain each mode before you choose" surface.
+        """
+        from world.consent.constants import consent_mode_guidance  # noqa: PLC0415
+
+        lines = ["|wConsent modes|n (set with |wconsent category <key>=<mode>|n):"]
+        lines.extend(f"  |w{row['label']}|n — {row['guidance']}" for row in consent_mode_guidance())
+        self.msg("\n".join(lines))
 
     def _show_summary(self, category_key: str | None = None) -> None:
         """Render the caller's social-consent summary."""
