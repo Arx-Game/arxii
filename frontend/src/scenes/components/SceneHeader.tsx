@@ -94,13 +94,20 @@ function GrantSceneGMControl() {
  * every scene participant, not just the GM. Mirrors the round state
  * `RoundSettingsDialog` lets the GM edit, but is rendered unconditionally.
  */
+function formatRoundStatus(status: string): string {
+  return status
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 function RoundStateBadge({ activeRound }: { activeRound: SceneRoundState | null }) {
   if (activeRound === null) {
     return null;
   }
   return (
     <span className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
-      Round {activeRound.round_number} · {activeRound.status}
+      Round {activeRound.round_number} · {formatRoundStatus(activeRound.status)}
     </span>
   );
 }
