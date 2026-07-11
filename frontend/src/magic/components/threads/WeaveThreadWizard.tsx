@@ -5,6 +5,11 @@
  *   1. Pick anchor kind (TargetKind) — disabled if character has no unlock for that kind.
  *   2. Pick anchor — kind-specific picker. FACET, COVENANT_ROLE, TRAIT, TECHNIQUE, SANCTUM,
  *      and RELATIONSHIP_TRACK are supported; RELATIONSHIP_CAPSTONE is deferred per spec.
+ *      RELATIONSHIP_TRACK is a "with whom" partner-then-track picker (#2159): partner
+ *      choices are my scoped relationships with at least one `track_progress` row among
+ *      `weavable_relationship_track_ids`; picking a partner reveals that partner's
+ *      qualifying tracks (still step 2 — see `renderRelationshipTrackStep2`). The payload
+ *      adds `target_persona_id` (the partner's resolved Persona pk) for this kind only.
  *   3. Pick resonance — combobox over useCharacterResonances().
  *   4. Narrative — optional name (max 120) and description.
  *   5. Confirm — summary card + [Weave] button.
@@ -30,13 +35,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCharacterResonances, useWeaveThread } from '../../queries';
-import type {
-  CharacterResonance,
-  RelationshipTrack,
-  TargetKind,
-  ThreadHubSummary,
-} from '../../types';
+import type { CharacterResonance, TargetKind, ThreadHubSummary } from '../../types';
 import { apiFetch } from '@/evennia_replacements/api';
+import { getMyOutboundRelationships, getRelationshipDetail } from '@/relationships/api';
 
 // ---------------------------------------------------------------------------
 // Local anchor-picker data types
@@ -46,6 +47,20 @@ interface AnchorOption {
   id: number;
   label: string;
   sublabel?: string;
+}
+
+/**
+ * RELATIONSHIP_TRACK only (#2159): a "with whom" candidate — one of the
+ * caller's outbound relationships that has at least one `track_progress` row
+ * among `weavable_relationship_track_ids`. `id`/`label` name the partner's
+ * CharacterSheet; `personaId` is the partner's resolved Persona pk (the
+ * write payload's `target_persona_id`); `qualifyingTracks` are that
+ * partner's tracks eligible to anchor a thread (fed straight into the
+ * existing `anchorOptions` picker once a partner is chosen).
+ */
+interface PartnerOption extends AnchorOption {
+  personaId: number;
+  qualifyingTracks: AnchorOption[];
 }
 
 // ---------------------------------------------------------------------------
@@ -144,17 +159,6 @@ function fetchTechniqueOptions(summary: ThreadHubSummary | undefined): AnchorOpt
   }));
 }
 
-async function fetchRelationshipTrackOptions(
-  summary: ThreadHubSummary | undefined
-): Promise<AnchorOption[]> {
-  const allowedIds = new Set(summary?.weavable_relationship_track_ids ?? []);
-  if (allowedIds.size === 0) return [];
-  const res = await apiFetch('/api/relationships/tracks/');
-  if (!res.ok) throw new Error('Failed to load relationship tracks');
-  const data = (await res.json()) as RelationshipTrack[];
-  return data.filter((t) => allowedIds.has(t.id)).map((t) => ({ id: t.id, label: t.name }));
-}
-
 async function fetchAnchorOptions(
   kind: TargetKind,
   summary: ThreadHubSummary | undefined
@@ -168,11 +172,73 @@ async function fetchAnchorOptions(
       return fetchTraitOptions(summary);
     case 'TECHNIQUE':
       return fetchTechniqueOptions(summary);
-    case 'RELATIONSHIP_TRACK':
-      return fetchRelationshipTrackOptions(summary);
     default:
+      // RELATIONSHIP_TRACK is handled separately by
+      // fetchRelationshipPartnerOptions — it needs a partner-then-track
+      // picker, not a flat option list (#2159).
       return [];
   }
+}
+
+// ---------------------------------------------------------------------------
+// RELATIONSHIP_TRACK partner picker (#2159)
+// ---------------------------------------------------------------------------
+
+/** Resolve a CharacterSheet's primary Persona pk (falls back to its first persona). */
+async function resolvePrimaryPersonaId(characterSheetId: number): Promise<number | null> {
+  const res = await apiFetch(`/api/personas/?character_sheet=${characterSheetId}&page_size=50`);
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    results?: Array<{ id: number; persona_type: string }>;
+  };
+  const personas = data.results ?? [];
+  return personas.find((p) => p.persona_type === 'primary')?.id ?? personas[0]?.id ?? null;
+}
+
+/**
+ * "With whom" step 1 (#2159): my scoped relationships that have at least one
+ * `track_progress` row among `weavable_relationship_track_ids` — the only
+ * relationships that could possibly anchor a RELATIONSHIP_TRACK thread.
+ * `track_progress` only exists on the detail retrieve (the list serializer
+ * omits it), so this fetches one detail per outbound relationship. A partner
+ * whose CharacterSheet has no resolvable Persona is dropped — there would be
+ * no legal `target_persona_id` to submit for them.
+ */
+async function fetchRelationshipPartnerOptions(
+  characterSheetId: number,
+  summary: ThreadHubSummary | undefined
+): Promise<PartnerOption[]> {
+  const allowedTrackIds = new Set(summary?.weavable_relationship_track_ids ?? []);
+  if (allowedTrackIds.size === 0) return [];
+
+  const relationships = await getMyOutboundRelationships(characterSheetId);
+  const withQualifyingTracks = await Promise.all(
+    relationships.map(async (rel) => {
+      const detail = await getRelationshipDetail(rel.id);
+      const qualifyingTracks = detail.track_progress
+        .filter((tp) => allowedTrackIds.has(tp.track))
+        .map((tp) => ({ id: tp.track, label: tp.track_name }));
+      return { rel, qualifyingTracks };
+    })
+  );
+
+  const qualifying = withQualifyingTracks.filter((x) => x.qualifyingTracks.length > 0);
+  const personaIds = await Promise.all(
+    qualifying.map((x) => resolvePrimaryPersonaId(x.rel.target))
+  );
+
+  const options: PartnerOption[] = [];
+  qualifying.forEach((x, i) => {
+    const personaId = personaIds[i];
+    if (personaId == null) return;
+    options.push({
+      id: x.rel.target,
+      label: x.rel.target_name,
+      personaId,
+      qualifyingTracks: x.qualifyingTracks,
+    });
+  });
+  return options;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +255,11 @@ interface WizardState {
   selectedResonanceId: number | null;
   name: string;
   description: string;
+  /** RELATIONSHIP_TRACK only (#2159): the chosen partner's CharacterSheet pk. */
+  selectedPartnerSheetId: number | null;
+  /** RELATIONSHIP_TRACK only (#2159): the chosen partner's Persona pk — the payload's `target_persona_id`. */
+  selectedPartnerPersonaId: number | null;
+  selectedPartnerLabel: string | null;
 }
 
 const INITIAL_STATE: WizardState = {
@@ -199,6 +270,9 @@ const INITIAL_STATE: WizardState = {
   selectedResonanceId: null,
   name: '',
   description: '',
+  selectedPartnerSheetId: null,
+  selectedPartnerPersonaId: null,
+  selectedPartnerLabel: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -284,6 +358,9 @@ export function WeaveThreadWizard({
   const [anchorOptions, setAnchorOptions] = useState<AnchorOption[]>([]);
   const [anchorLoading, setAnchorLoading] = useState(false);
   const [anchorError, setAnchorError] = useState<string | null>(null);
+  // RELATIONSHIP_TRACK only (#2159): partner candidates for the "with whom"
+  // step, fetched once per kind selection (see selectKind below).
+  const [partnerOptions, setPartnerOptions] = useState<PartnerOption[]>([]);
 
   // Derived eligibility from summary
   const eligibility = summary?.weaving_eligibility ?? {};
@@ -296,10 +373,18 @@ export function WeaveThreadWizard({
     setState(INITIAL_STATE);
     setAnchorOptions([]);
     setAnchorError(null);
+    setPartnerOptions([]);
     onOpenChange(false);
   }
 
   function goBack() {
+    // RELATIONSHIP_TRACK's track sub-view (a partner is already chosen) goes
+    // back to the partner list rather than all the way to kind selection —
+    // mirrors "Change partner" below (#2159).
+    if (state.selectedKind === 'RELATIONSHIP_TRACK' && state.selectedPartnerSheetId != null) {
+      changePartner();
+      return;
+    }
     setState((prev) => ({ ...prev, step: (prev.step - 1) as WizardStep }));
   }
 
@@ -309,23 +394,62 @@ export function WeaveThreadWizard({
       selectedKind: kind,
       selectedAnchorId: null,
       selectedAnchorLabel: null,
+      selectedPartnerSheetId: null,
+      selectedPartnerPersonaId: null,
+      selectedPartnerLabel: null,
       step: 2,
     }));
     setAnchorOptions([]);
     setAnchorError(null);
+    setPartnerOptions([]);
 
     const meta = KIND_META[kind];
     if (!meta?.supported) return;
 
     setAnchorLoading(true);
     try {
-      const options = await fetchAnchorOptions(kind, summary);
-      setAnchorOptions(options);
+      if (kind === 'RELATIONSHIP_TRACK') {
+        const options =
+          characterSheetId == null
+            ? []
+            : await fetchRelationshipPartnerOptions(characterSheetId, summary);
+        setPartnerOptions(options);
+      } else {
+        const options = await fetchAnchorOptions(kind, summary);
+        setAnchorOptions(options);
+      }
     } catch (err) {
       setAnchorError(err instanceof Error ? err.message : 'Failed to load options.');
     } finally {
       setAnchorLoading(false);
     }
+  }
+
+  /** RELATIONSHIP_TRACK "with whom" pick — reveals that partner's qualifying tracks. */
+  function selectPartner(partner: PartnerOption) {
+    setState((prev) => ({
+      ...prev,
+      selectedPartnerSheetId: partner.id,
+      selectedPartnerPersonaId: partner.personaId,
+      selectedPartnerLabel: partner.label,
+      selectedAnchorId: null,
+      selectedAnchorLabel: null,
+    }));
+    setAnchorOptions(partner.qualifyingTracks);
+    setAnchorError(null);
+  }
+
+  /** Return from the track sub-view to the partner list (still step 2). */
+  function changePartner() {
+    setState((prev) => ({
+      ...prev,
+      selectedPartnerSheetId: null,
+      selectedPartnerPersonaId: null,
+      selectedPartnerLabel: null,
+      selectedAnchorId: null,
+      selectedAnchorLabel: null,
+    }));
+    setAnchorOptions([]);
   }
 
   function selectAnchor(option: AnchorOption) {
@@ -354,6 +478,10 @@ export function WeaveThreadWizard({
     ) {
       return;
     }
+    const isRelationshipTrack = state.selectedKind === 'RELATIONSHIP_TRACK';
+    if (isRelationshipTrack && state.selectedPartnerPersonaId == null) {
+      return;
+    }
     weaveThread(
       {
         target_kind: state.selectedKind,
@@ -362,6 +490,7 @@ export function WeaveThreadWizard({
         character_sheet_id: characterSheetId,
         name: state.name || undefined,
         description: state.description || undefined,
+        ...(isRelationshipTrack ? { target_persona_id: state.selectedPartnerPersonaId! } : {}),
       },
       {
         onSuccess: (newThread) => {
@@ -435,6 +564,10 @@ export function WeaveThreadWizard({
       );
     }
 
+    if (kind === 'RELATIONSHIP_TRACK') {
+      return renderRelationshipTrackStep2();
+    }
+
     return (
       <div className="space-y-3" data-testid="wizard-step-2">
         <p className="text-sm text-muted-foreground">
@@ -475,6 +608,96 @@ export function WeaveThreadWizard({
                 {opt.sublabel && (
                   <span className="text-xs text-muted-foreground">{opt.sublabel}</span>
                 )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Step 2 (RELATIONSHIP_TRACK only): "with whom" partner-then-track picker (#2159)
+  // ---------------------------------------------------------------------------
+
+  function renderRelationshipTrackStep2() {
+    if (state.selectedPartnerSheetId == null) {
+      return (
+        <div className="space-y-3" data-testid="wizard-step-2-partner">
+          <p className="text-sm text-muted-foreground">
+            Whose relationship track will this Thread anchor to?
+          </p>
+
+          {anchorLoading && (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full rounded-lg" />
+              ))}
+            </div>
+          )}
+
+          {anchorError && (
+            <p className="text-sm text-destructive" role="alert" data-testid="anchor-error">
+              {anchorError}
+            </p>
+          )}
+
+          {!anchorLoading && !anchorError && partnerOptions.length === 0 && (
+            <p className="text-sm text-muted-foreground" data-testid="partner-empty">
+              No relationships with a developed track yet. Develop a relationship first.
+            </p>
+          )}
+
+          {!anchorLoading && partnerOptions.length > 0 && (
+            <div className="max-h-72 space-y-1 overflow-y-auto" data-testid="partner-list">
+              {partnerOptions.map((partner) => (
+                <button
+                  key={partner.id}
+                  type="button"
+                  data-testid={`partner-option-${partner.id}`}
+                  onClick={() => selectPartner(partner)}
+                  className="flex w-full flex-col items-start rounded-lg border px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground"
+                >
+                  <span className="font-medium">{partner.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3" data-testid="wizard-step-2-track">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground">
+            Select the track with {state.selectedPartnerLabel}.
+          </p>
+          <button
+            type="button"
+            data-testid="wizard-change-partner"
+            onClick={changePartner}
+            className="shrink-0 text-xs text-muted-foreground underline underline-offset-2"
+          >
+            Change partner
+          </button>
+        </div>
+
+        {anchorOptions.length === 0 ? (
+          <p className="text-sm text-muted-foreground" data-testid="anchor-empty">
+            No qualifying tracks found for this partner.
+          </p>
+        ) : (
+          <div className="max-h-72 space-y-1 overflow-y-auto" data-testid="anchor-list">
+            {anchorOptions.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                data-testid={`anchor-option-${opt.id}`}
+                onClick={() => selectAnchor(opt)}
+                className="flex w-full flex-col items-start rounded-lg border px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground"
+              >
+                <span className="font-medium">{opt.label}</span>
               </button>
             ))}
           </div>
@@ -596,6 +819,12 @@ export function WeaveThreadWizard({
                 : '—'}
             </span>
           </div>
+          {state.selectedKind === 'RELATIONSHIP_TRACK' && (
+            <div className="flex gap-2">
+              <span className="w-28 shrink-0 text-muted-foreground">Partner</span>
+              <span className="font-medium">{state.selectedPartnerLabel ?? '—'}</span>
+            </div>
+          )}
           <div className="flex gap-2">
             <span className="w-28 shrink-0 text-muted-foreground">Anchor</span>
             <span className="font-medium">{state.selectedAnchorLabel ?? '—'}</span>

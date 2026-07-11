@@ -84,7 +84,10 @@ emits real components; re-exported instead of hand-rolled so they can't drift):
 
 **Local types** (no 1:1 serializer to re-export):
 
-- `WeaveThreadRequest` — body for POST /threads/ (weave new thread)
+- `WeaveThreadRequest` — body for POST /threads/ (weave new thread). `target_persona_id`
+  (optional) is RELATIONSHIP_TRACK-only — the generated `ThreadRequest` schema already
+  carries it (#2159 Task 3's backend contract), re-declared here since this type is
+  hand-rolled rather than a 1:1 schema re-export.
 - `PatchThreadRequest` — `{ name?, description? }` for PATCH /threads/{id}/
 - `ImbueRequest` — `{ ritual_id, character_sheet_id, kwargs: { thread_id, amount } }`
 - `ImbueResponse` — `{ success, message? }`
@@ -371,8 +374,16 @@ Multi-step wizard for weaving a new thread. Step 1: select `TargetKind` (TRAIT, 
 FACET, SANCTUM, COVENANT_ROLE, and RELATIONSHIP_TRACK are all live; RELATIONSHIP_CAPSTONE
 is the one kind still stubbed "coming soon", #2033). The bare ROOM anchor was removed
 (#879/#1199) — room-anchored threads now use the dedicated SANCTUM slot-based weaving flow,
-not this generic wizard. Step 2: select anchor. Step 3: name + description + confirm.
-Calls `useWeaveThread`.
+not this generic wizard. Step 2: select anchor — for RELATIONSHIP_TRACK this is a "with
+whom" partner-then-track picker (#2159): partner choices come from
+`@/relationships/api.getMyOutboundRelationships` filtered to relationships with at least
+one `track_progress` row (fetched per-partner via `getRelationshipDetail` — the list
+serializer omits it) among `ThreadHubSummary.weavable_relationship_track_ids`; picking a
+partner reveals only that partner's qualifying tracks, still within step 2
+(`renderRelationshipTrackStep2`). The payload adds `target_persona_id` (the partner's
+primary Persona pk, resolved via `/api/personas/?character_sheet=`) for this kind only —
+`ThreadSerializer._resolve_partner_sheet` requires it server-side. Step 3: name +
+description + confirm. Calls `useWeaveThread`.
 
 ### `components/threads/TeachingOfferCard.tsx`
 

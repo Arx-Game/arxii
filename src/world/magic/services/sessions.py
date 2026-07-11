@@ -51,6 +51,9 @@ def draft_session(  # noqa: PLR0913
     Initiator is auto-created as ACCEPTED with their participant_kwargs +
     references. Invitees start as INVITED.
 
+    ``scene`` is server-derived from the initiator's active scene (if any) via
+    ``get_active_scene`` — never client-supplied.
+
     Raises ParticipantCountError if the ritual's min/max_participants bounds
     are violated by the total participant count (initiator + invitees).
     """
@@ -69,10 +72,14 @@ def draft_session(  # noqa: PLR0913
     ):
         raise ParticipantCountError
 
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
     with transaction.atomic():
+        scene = get_active_scene(getattr(initiator.character, "location", None))  # noqa: GETATTR_LITERAL
         session = RitualSession.objects.create(
             ritual=ritual,
             initiator=initiator,
+            scene=scene,
             proposed_terms=proposed_terms,
             session_kwargs=session_kwargs,
             expires_at=expires_at,

@@ -24,6 +24,7 @@ import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { PendingActionAttachments } from '../components/PendingActionAttachments';
 import { usePendingUnlinkedActions } from '../hooks/usePendingUnlinkedActions';
 import { useBattleForSceneQuery } from '@/battles/queries';
+import { RitualProposedChip } from '@/rituals/components/RitualProposedChip';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -176,6 +177,7 @@ export function SceneDetailPage() {
             Battle Writeup
           </Link>
         )}
+        {scene && <RitualProposedChip sceneId={scene.id} />}
         {isActive && <ConsentPrompt sceneId={id} />}
         {isActive && <SineatingInbox />}
         {isActive && <SoulTetherRescuePrompt />}

@@ -436,7 +436,12 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
 
 class SceneActionRequestCreateSerializer(serializers.Serializer):
     scene = serializers.IntegerField()
-    initiator_persona = serializers.IntegerField()
+    # Not required at the field level: the entrance-technique branch resolves the
+    # actor's own puppet instead of trusting a client-supplied persona id (see
+    # SceneActionRequestViewSet._create_technique_entrance). The view still 400s
+    # when it's missing on every OTHER action_key, so this is a behavior-preserving
+    # relaxation of this one field, not a broadening of the generic path (#2183).
+    initiator_persona = serializers.IntegerField(required=False, allow_null=True)
     target_persona = serializers.IntegerField(required=False)
     target_persona_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, allow_empty=False
@@ -446,6 +451,11 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
         choices=EffortLevel.choices, required=False, default="medium"
     )
     technique_id = serializers.IntegerField(required=False, allow_null=True)
+    # Technique-driven combat entrance (#2183): the freshly-created ENTRY pose
+    # Interaction id, so EntranceAction can anchor the entrance to the pose that
+    # announced it. Only meaningful when action_key == "entrance" and technique_id
+    # is set — see EntranceAction._execute_technique_entrance.
+    entry_interaction_id = serializers.IntegerField(required=False, allow_null=True)
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
     fury_commitment_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)

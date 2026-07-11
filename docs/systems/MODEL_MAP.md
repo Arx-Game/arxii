@@ -626,6 +626,7 @@
   - damage_type -> conditions.DamageType [FK]
 
 ### Service Functions
+- `area_for_scene(scene: 'Scene | None') -> 'Area | None' — Resolve the Area for a scene's location, or None.`
 - `area_subtree_pks(area: 'Area') -> 'list[int]' — Return pks of ``area`` and all its descendants.`
 - `colored_area_path(room: 'ObjectDB') -> 'str' — Render a room's full area-hierarchy path with per-area colours (#1463).`
 - `get_ancestor_at_level(area: 'Area', target_level: 'AreaLevel') -> 'Area | None' — Walk the ancestry to find the ancestor at the given AreaLevel.`
@@ -1236,6 +1237,7 @@
   - anima_ritual_participations <- magic.AnimaRitualPerformance
   - resonances <- magic.CharacterResonance
   - dramatic_moment_tags <- magic.DramaticMomentTag
+  - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - poseendorsement_given <- magic.PoseEndorsement
   - poseendorsement_received <- magic.PoseEndorsement
   - sceneentryendorsement_given <- magic.SceneEntryEndorsement
@@ -3737,6 +3739,7 @@
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - tags <- magic.DramaticMomentTag
+  - suggestions <- magic.DramaticMomentSuggestion
 
 ### DramaticMomentTag
 **Foreign Keys:**
@@ -3746,7 +3749,17 @@
   - tagged_by -> accounts.AccountDB [FK]
   - interaction -> scenes.Interaction [FK] (nullable)
 **Pointed to by:**
+  - source_suggestion <- magic.DramaticMomentSuggestion
   - resonance_grants <- magic.ResonanceGrant
+
+### DramaticMomentSuggestion
+**Foreign Keys:**
+  - moment_type -> magic.DramaticMomentType [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - interaction -> scenes.Interaction [FK] (nullable)
+  - resolved_by -> accounts.AccountDB [FK] (nullable)
+  - confirmed_tag -> magic.DramaticMomentTag [OneToOne] (nullable)
 
 ### PoseEndorsement
 **Foreign Keys:**
@@ -4063,6 +4076,7 @@
 **Foreign Keys:**
   - ritual -> magic.Ritual [FK]
   - initiator -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
 **Pointed to by:**
   - participants <- magic.RitualSessionParticipant
   - references <- magic.RitualSessionReference
@@ -5661,9 +5675,11 @@
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - dramatic_moment_tags <- magic.DramaticMomentTag
+  - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - entry_endorsements <- magic.SceneEntryEndorsement
   - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
+  - ritual_sessions <- magic.RitualSession
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
@@ -5844,6 +5860,7 @@
   - target_personas -> scenes.Persona [M2M]
 **Pointed to by:**
   - dramatic_moment_tags <- magic.DramaticMomentTag
+  - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - endorsements <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - favorites <- scenes.InteractionFavorite

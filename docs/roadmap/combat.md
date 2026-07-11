@@ -58,6 +58,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   than defaulting everyone to the same spot (journey test in `world/combat/tests/
   test_declare_reach_gate.py`). Full telnet parity: `position` / `position <name>`
   (`CmdPosition`) lists/takes/moves the same way the web position panel does.
+- **Technique-driven combat entrance (#2183, ADR-0113).** A hostile technique cast made
+  as an entrance (`enter <technique>=<target>`) seeds/feeds the encounter exactly like a
+  normal declared hostile cast, additionally stamping `CombatRoundAction.from_entrance`
+  so round resolution can fire the GM-facing Dramatic Moment Suggestion check once the
+  real success level is known (`_maybe_suggest_entrance_dramatic_moment`,
+  `world/combat/services.py`; journey test:
+  `world/scenes/tests/test_entrance_cast_threading.py`
+  ::`test_accepted_hostile_entrance_declaration_marked_from_entrance`). A *benign*
+  entrance cast that lands on an already-embattled ally seats the caster into the fight
+  (`seed_or_feed_encounter_from_benign_intervention`) with no opponent row and no stakes
+  lock — the cast already resolved standalone; this only adds the intervener to the
+  scene's live encounter. See [magic.md](../systems/magic.md#technique-entrance-2183).
 - **Tactical encounter map — spatial rendering (#2006).** The position graph (#2005) is
   now rendered, not just listed: `TacticalMap` (`frontend/src/areas/components/`), a
   read-only `@xyflow/react` canvas with occupant avatars per node, edges styled by

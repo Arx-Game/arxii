@@ -1036,7 +1036,12 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(51):  # 49 + #1278 block-gate + mute-gate loads
+        with self.assertNumQueries(53):  # 49 + #1278 block/mute-gate loads + #2183 (below)
+            # #2183 adds exactly 2 flat (not per-row) queries: the
+            # dramatic_moment_suggestions Prefetch itself, and the one
+            # SceneParticipation.exists() query that resolves viewer_can_gm for
+            # the ?scene= filter (see InteractionViewSet.get_serializer_context).
+            # Both are bounded by "one query per request", never by row count.
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
@@ -1116,7 +1121,12 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(51):  # 49 + #1278 block-gate + mute-gate loads
+        with self.assertNumQueries(53):  # 49 + #1278 block/mute-gate loads + #2183 (below)
+            # #2183 adds exactly 2 flat (not per-row) queries: the
+            # dramatic_moment_suggestions Prefetch itself, and the one
+            # SceneParticipation.exists() query that resolves viewer_can_gm for
+            # the ?scene= filter (see InteractionViewSet.get_serializer_context).
+            # Both are bounded by "one query per request", never by row count.
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset

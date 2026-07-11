@@ -9263,6 +9263,90 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/dramatic-moment-suggestions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+     *
+     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+     *     POST .../{id}/dismiss/ — dismiss.
+     *
+     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
+     *     (which independently re-checks it again — defense in depth for a direct-call caller).
+     */
+    get: operations['magic_dramatic_moment_suggestions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/dramatic-moment-suggestions/{id}/confirm/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+     *
+     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+     *     POST .../{id}/dismiss/ — dismiss.
+     *
+     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
+     *     (which independently re-checks it again — defense in depth for a direct-call caller).
+     */
+    post: operations['magic_dramatic_moment_suggestions_confirm_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/dramatic-moment-suggestions/{id}/dismiss/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+     *
+     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+     *     POST .../{id}/dismiss/ — dismiss.
+     *
+     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
+     *     (which independently re-checks it again — defense in depth for a direct-call caller).
+     */
+    post: operations['magic_dramatic_moment_suggestions_dismiss_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/dramatic-moment-tags/': {
     parameters: {
       query?: never;
@@ -14417,6 +14501,31 @@ export interface paths {
     put?: never;
     /** @description Move developed points between tracks in an existing relationship. */
     post: operations['relationships_relationship_updates_redistribute_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationship-updates/timeline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Merged Update/Development/Capstone writeup history (#2159).
+     *
+     *     Exactly one of `about_character` or `relationship` must be provided (400
+     *     otherwise); see ``_timeline_about_character_queryset`` /
+     *     ``_timeline_relationship_queryset`` for each mode's visibility rule. Results
+     *     are type-tagged (``kind``), ordered ``-created_at``, and paginated per this
+     *     viewset's ``pagination_class``.
+     */
+    get: operations['relationships_relationship_updates_timeline_list'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -20831,6 +20940,41 @@ export interface components {
       distinctions: components['schemas']['DraftDistinctionEntry'][];
     };
     /**
+     * @description Read-only GM confirm/dismiss inbox row (#2183).
+     *
+     *     List/confirm/dismiss all render this shape; there is no client-writable field —
+     *     resolution (confirm/dismiss) happens exclusively through the viewset's dispatch
+     *     of the REGISTRY actions, never through a serializer ``create``/``update``.
+     */
+    DramaticMomentSuggestion: {
+      readonly id: number;
+      readonly moment_type: number;
+      readonly moment_type_label: string;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number;
+      /** @description Scene context; nullable for resilience to scene cleanup. */
+      readonly scene: number | null;
+      /** @description The entrance pose that triggered this suggestion; nullable. */
+      readonly interaction: number | null;
+      /** @description Cast success level that triggered this suggestion. */
+      readonly success_level: number;
+      /** @default pending */
+      readonly status: components['schemas']['DramaticMomentSuggestionStatusEnum'];
+      /** @description GM account that confirmed or dismissed this suggestion. */
+      readonly resolved_by: number | null;
+      /** @description The DramaticMomentTag minted on confirmation, if any. */
+      readonly confirmed_tag: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `confirmed` - Confirmed
+     *     * `dismissed` - Dismissed
+     * @enum {string}
+     */
+    DramaticMomentSuggestionStatusEnum: 'pending' | 'confirmed' | 'dismissed';
+    /**
      * @description Create + read dramatic-moment tags (#1139).
      *
      *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
@@ -22777,6 +22921,16 @@ export interface components {
         [key: string]: unknown;
       }[];
       /**
+       * @description PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+       *
+       *     GM-gated: a plain participant sees an empty list. Reads
+       *     ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
+       *     queryset, already filtered to PENDING) — never a fresh query.
+       */
+      readonly dramatic_moment_suggestions: {
+        [key: string]: unknown;
+      }[];
+      /**
        * @description List of resonances claimed by the endorsee (pose author).
        *
        *     Reads from the prefetched ``persona__character_sheet__resonances``
@@ -22910,6 +23064,16 @@ export interface components {
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
       readonly dramatic_moment_tags: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * @description PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+       *
+       *     GM-gated: a plain participant sees an empty list. Reads
+       *     ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
+       *     queryset, already filtered to PENDING) — never a fresh query.
+       */
+      readonly dramatic_moment_suggestions: {
         [key: string]: unknown;
       }[];
       /**
@@ -23230,6 +23394,13 @@ export interface components {
       can_tell_tale: boolean;
       readonly last_unseen_count: number;
     };
+    /**
+     * @description * `update` - update
+     *     * `development` - development
+     *     * `capstone` - capstone
+     * @enum {string}
+     */
+    Kind4adEnum: 'update' | 'development' | 'capstone';
     /**
      * @description * `wall` - Wall
      *     * `gate` - Gate
@@ -25509,6 +25680,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['DraftApplication'][];
     };
+    PaginatedDramaticMomentSuggestionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DramaticMomentSuggestion'][];
+    };
     PaginatedDramaticMomentTagList: {
       /** @example 123 */
       count: number;
@@ -26634,6 +26820,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['RelationshipCapstone'][];
+    };
+    PaginatedRelationshipTimelineEntryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RelationshipTimelineEntry'][];
     };
     PaginatedRelationshipUpdateList: {
       /** @example 123 */
@@ -28685,6 +28886,7 @@ export interface components {
        */
       target_kind?: components['schemas']['ThreadTargetKindEnum'];
       target_id?: number;
+      target_persona_id?: number | null;
       character_sheet_id?: number;
       /** @default  */
       name: string;
@@ -30076,6 +30278,29 @@ export interface components {
       /** @description Narrative description of what this tier represents */
       readonly description: string;
     };
+    /**
+     * @description One row of the merged Update/Development/Capstone writeup timeline (#2159).
+     *
+     *     Serializes a plain dict row (not a model instance) — projected by
+     *     ``RelationshipUpdateViewSet.timeline``'s ``_timeline_rows``/``.union()`` query,
+     *     which gives ``RelationshipUpdate``/``RelationshipDevelopment``/
+     *     ``RelationshipCapstone`` rows the same shared column shape regardless of which
+     *     of the three writeup models a given row came from.
+     */
+    RelationshipTimelineEntry: {
+      kind: components['schemas']['Kind4adEnum'];
+      id: number;
+      relationship: number;
+      author: number;
+      author_name: string;
+      track: number;
+      track_name: string;
+      title: string;
+      writeup: string;
+      visibility: components['schemas']['VisibilityFdaEnum'];
+      /** Format: date-time */
+      created_at: string;
+    };
     /** @description Serializer for RelationshipTrack with nested tiers. */
     RelationshipTrack: {
       readonly id: number;
@@ -30789,13 +31014,14 @@ export interface components {
     };
     SceneActionRequestCreateRequest: {
       scene: number;
-      initiator_persona: number;
+      initiator_persona?: number | null;
       target_persona?: number;
       target_persona_ids?: number[];
       action_key: string;
       /** @default medium */
       effort_level: components['schemas']['EffortLevelEnum'];
       technique_id?: number | null;
+      entry_interaction_id?: number | null;
       /** @default 0 */
       strain_commitment: number;
       fury_commitment_id?: number | null;
@@ -33044,6 +33270,7 @@ export interface components {
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
       target_id: number;
+      target_persona_id?: number | null;
       character_sheet_id: number;
       /** @default  */
       name: string;
@@ -46289,6 +46516,82 @@ export interface operations {
       };
     };
   };
+  magic_dramatic_moment_suggestions_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        scene?: number;
+        /**
+         * @description * `pending` - Pending
+         *     * `confirmed` - Confirmed
+         *     * `dismissed` - Dismissed
+         */
+        status?: 'confirmed' | 'dismissed' | 'pending';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDramaticMomentSuggestionList'];
+        };
+      };
+    };
+  };
+  magic_dramatic_moment_suggestions_confirm_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this dramatic moment suggestion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DramaticMomentSuggestion'];
+        };
+      };
+    };
+  };
+  magic_dramatic_moment_suggestions_dismiss_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this dramatic moment suggestion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DramaticMomentSuggestion'];
+        };
+      };
+    };
+  };
   magic_dramatic_moment_tags_list: {
     parameters: {
       query?: {
@@ -54036,6 +54339,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RedistributeWrite'];
+        };
+      };
+    };
+  };
+  relationships_relationship_updates_timeline_list: {
+    parameters: {
+      query?: {
+        /** @description CharacterSheet pk. Every non-PRIVATE writeup about this character from any author, plus PRIVATE writeups where the caller is the author or the subject. Mutually exclusive with `relationship`. */
+        about_character?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description CharacterRelationship pk. Full history (incl. PRIVATE) of one relationship; caller must be its tenure-owned source. Mutually exclusive with `about_character`. */
+        relationship?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRelationshipTimelineEntryList'];
         };
       };
     };

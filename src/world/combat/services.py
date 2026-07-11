@@ -5619,6 +5619,38 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
 
+def _maybe_suggest_entrance_dramatic_moment(
+    participant: CombatParticipant,
+    combat_result: CombatTechniqueResult,
+) -> None:
+    """Fire the #2183 dramatic-moment suggestion for a resolved entrance-declared cast.
+
+    The combat-round sibling of ``run_entrance_success_hooks``'s suggestion half —
+    fired here (not at declaration time) because the real success level is only known
+    once the declared cast actually resolves. Best-effort: a suggestion failure must
+    never break round resolution.
+    """
+    if not combat_result.technique_use_result.confirmed:
+        return
+    resolution = combat_result.technique_use_result.resolution_result
+    if not isinstance(resolution, CombatTechniqueResolution):
+        return
+    try:
+        from world.magic.services.gain import maybe_suggest_dramatic_moments  # noqa: PLC0415
+
+        maybe_suggest_dramatic_moments(
+            character_sheet=participant.character_sheet,
+            scene=participant.encounter.scene,
+            success_level=resolution.check_result.success_level,
+            interaction=None,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to suggest a dramatic moment for entrance-declared cast (participant_id=%s)",
+            participant.pk,
+        )
+
+
 def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -5712,6 +5744,8 @@ def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
             offense_check_fn=offense_check_fn,
         )
         outcome.damage_results.extend(combat_result.damage_results)
+        if action.from_entrance:
+            _maybe_suggest_entrance_dramatic_moment(participant, combat_result)
 
     # Combo rider: appended in addition to the pipeline result when the
     # action is combo-upgraded and the target is alive.

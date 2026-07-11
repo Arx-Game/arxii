@@ -17,7 +17,9 @@ function render(ui: ReactElement, options?: RenderOptions) {
 }
 
 const sendMock = vi.fn();
-const submitPoseMock = vi.fn(() => Promise.resolve());
+// Loosely typed: submitPose resolves with the created interaction payload
+// (#2183 reads `id` off it) or undefined in older tests.
+const submitPoseMock = vi.fn((): Promise<unknown> => Promise.resolve());
 const fetchSceneMock = vi.fn();
 const toastErrorMock = vi.fn();
 
@@ -77,6 +79,40 @@ vi.mock('@/scenes/components/ActionAttachment', () => ({
   ),
 }));
 
+// Mock EntranceTechniqueAttachment (#2183) — a thin stub that lets tests
+// simulate picking a technique+target via `onChange`, without pulling in the
+// real popover/TargetPicker/query machinery (covered by its own test file).
+const createActionRequestMock = vi.fn(
+  (..._args: [string, Record<string, unknown>]): Promise<unknown> =>
+    Promise.resolve({ status: 'resolved' })
+);
+
+vi.mock('@/scenes/components/EntranceTechniqueAttachment', () => ({
+  EntranceTechniqueAttachment: ({
+    value,
+    onChange,
+  }: {
+    value: { techniqueId: number; targetPersonaId?: number } | null;
+    onChange: (value: { techniqueId: number; targetPersonaId?: number } | null) => void;
+  }) => (
+    <div data-testid="entrance-technique-attachment">
+      <button
+        type="button"
+        data-testid="attach-entrance-technique"
+        onClick={() => onChange({ techniqueId: 7, targetPersonaId: 3 })}
+      >
+        attach
+      </button>
+      {value && <span data-testid="entrance-technique-attached">{value.techniqueId}</span>}
+    </div>
+  ),
+}));
+
+vi.mock('@/scenes/actionQueries', () => ({
+  createActionRequest: (...args: unknown[]) =>
+    createActionRequestMock(...(args as [string, Record<string, unknown>])),
+}));
+
 describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
@@ -84,6 +120,8 @@ describe('CommandInput', () => {
     submitPoseMock.mockImplementation(() => Promise.resolve());
     fetchSceneMock.mockClear();
     toastErrorMock.mockClear();
+    createActionRequestMock.mockClear();
+    createActionRequestMock.mockImplementation(() => Promise.resolve({ status: 'resolved' }));
     queryClient.clear();
   });
 
@@ -385,6 +423,106 @@ describe('CommandInput', () => {
     // The draft survives the rejection — never silently eaten.
     expect(textarea.value).toBe('looks around');
     expect(onPoseSubmitted).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Entrance technique attachment (#2183)
+  // ---------------------------------------------------------------------------
+
+  it('does not render the entrance technique attachment when the entrance toggle is off', () => {
+    render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
+    expect(screen.queryByTestId('entrance-technique-attachment')).toBeNull();
+  });
+
+  it('renders the entrance technique attachment once the entrance toggle is on', () => {
+    render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Make an entrance' }));
+    expect(screen.getByTestId('entrance-technique-attachment')).toBeInTheDocument();
+  });
+
+  it('toggling the entrance button back off drops the entrance technique attachment', () => {
+    render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
+    const toggle = screen.getByRole('button', { name: 'Make an entrance' });
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByTestId('attach-entrance-technique'));
+    expect(screen.getByTestId('entrance-technique-attached')).toHaveTextContent('7');
+
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId('entrance-technique-attachment')).toBeNull();
+
+    // Re-opening shows a clean slate — the attachment was dropped, not preserved.
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId('entrance-technique-attached')).toBeNull();
+  });
+
+  it('submitting an entrance pose with an attached technique dispatches createActionRequest with the submitPose response id (#2183)', async () => {
+    submitPoseMock.mockImplementation(() => Promise.resolve({ id: 123 }));
+
+    render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Make an entrance' }));
+    fireEvent.click(screen.getByTestId('attach-entrance-technique'));
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'strides in dramatically' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 1,
+      content: 'strides in dramatically',
+      pose_kind: 'entry',
+    });
+
+    await waitFor(() => expect(createActionRequestMock).toHaveBeenCalled());
+    expect(createActionRequestMock).toHaveBeenCalledWith('1', {
+      action_key: 'entrance',
+      technique_id: 7,
+      target_persona_id: 3,
+      entry_interaction_id: 123,
+    });
+  });
+
+  it('plain entrance (no technique attached) sends no action request — regression', async () => {
+    submitPoseMock.mockImplementation(() => Promise.resolve({ id: 456 }));
+
+    render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Make an entrance' }));
+    // No technique attached this time.
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'simply walks in' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 1,
+      content: 'simply walks in',
+      pose_kind: 'entry',
+    });
+
+    await waitFor(() => expect(submitPoseMock).toHaveBeenCalled());
+    expect(createActionRequestMock).not.toHaveBeenCalled();
+  });
+
+  it('a plain (non-entrance) pose sends no action request — byte-identical regression', async () => {
+    submitPoseMock.mockImplementation(() => Promise.resolve({ id: 789 }));
+
+    render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'looks around calmly' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 1,
+      content: 'looks around calmly',
+    });
+
+    await waitFor(() => expect(submitPoseMock).toHaveBeenCalled());
+    expect(createActionRequestMock).not.toHaveBeenCalled();
   });
 });
 

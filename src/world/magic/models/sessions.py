@@ -27,6 +27,14 @@ class RitualSession(SharedMemoryModel):
 
     ritual = models.ForeignKey(Ritual, on_delete=models.PROTECT)
     initiator = models.ForeignKey(CharacterSheet, on_delete=models.PROTECT)
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ritual_sessions",
+        help_text="The initiator's active scene at draft time, if any. Server-derived only.",
+    )
     proposed_terms = models.TextField(blank=True)
     session_kwargs = models.JSONField(default=dict, blank=True)
     expires_at = models.DateTimeField()

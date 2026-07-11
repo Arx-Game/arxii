@@ -73,6 +73,7 @@ INSTALLED_APPS += [
     "world.goals.apps.GoalsConfig",
     "world.societies.apps.SocietiesConfig",
     "world.currency.apps.CurrencyConfig",
+    "world.agriculture.apps.AgricultureConfig",
     "world.action_points.apps.ActionPointsConfig",
     "world.consent.apps.ConsentConfig",
     "world.boundaries.apps.BoundariesConfig",

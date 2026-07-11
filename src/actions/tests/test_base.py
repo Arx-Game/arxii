@@ -205,6 +205,9 @@ class ActionRegistryTests(TestCase):
             "use_item",
             "grant_item",
             "gm_award_distinction",
+            # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
+            "confirm_dramatic_moment_suggestion",
+            "dismiss_dramatic_moment_suggestion",
             "craft_attach_facet",
             "craft_detach_facet",
             "craft_attach_style",
@@ -411,6 +414,7 @@ class ActionRegistryTests(TestCase):
             "spawn_battle_units",
             "enlist_battle_participant",
             "browse_battle_catalog",
+            "collect_food",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -285,7 +285,22 @@ They do not use the command system, dispatchers, or handlers.
   `StopTravelAction` (`"stop_travel"`, `target_type=SELF`) cancels the pending
   `.ndb.active_travel_task` and clears the token. Shared by telnet `CmdTravel`
   (`travel <name>` / `travel stop`, `src/commands/travel.py`) and the web "Go
-  there" buttons on the scene browser + presence panel.)
+  there" buttons on the scene browser + presence panel.
+  `social.py` (#2183, ADR-0113) — `EntranceAction` (key `"entrance"`) gains a
+  technique-driven path: `execute()` branches on a `technique_id` kwarg to
+  `_execute_technique_entrance`, which mirrors `CastTechniqueAction.execute` (scene/
+  persona/technique/target resolution, soulfray gating) but routes the outcome through
+  a deferral matrix instead of a flat success/failure — a technique cast IS the
+  entrance's check (one roll, not two), so flourish/disposition/the Dramatic Moment
+  Suggestion (see `world/magic/CLAUDE.md` "Dramatic Moment Suggestion") fire whenever
+  the real success level becomes known: immediately (inline resolution), at combat
+  round resolution (hostile, `CombatRoundAction.from_entrance`), or at consent-accept
+  (`SceneActionRequest.originated_as_entrance`). Reached via telnet `enter
+  <technique>[=<target>]` and the web `EntranceTechniqueAttachment` popover, both via
+  `action.run()`; `dramatic_moments.py`'s `ConfirmDramaticMomentSuggestionAction` /
+  `DismissDramaticMomentSuggestionAction` (account-authorized, mirroring
+  `events.py`'s host-lifecycle actions) close the recognition loop a qualifying
+  entrance opens.
 
   **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
   (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager

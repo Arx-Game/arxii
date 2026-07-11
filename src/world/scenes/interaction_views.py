@@ -4,7 +4,7 @@ from http import HTTPMethod
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -59,6 +59,7 @@ from world.scenes.models import (
     Persona,
     ReactionEmoji,
     Scene,
+    SceneParticipation,
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
@@ -126,13 +127,37 @@ class InteractionViewSet(
             for r in rows:
                 entry_map.setdefault(r.endorsee_sheet_id, []).append(r)
         context["scene_entry_endorsements"] = entry_map
+        # Viewer's GM/owner status for the ?scene= filter, computed once per
+        # request (not once per interaction row, and not via Scene.is_gm()/
+        # is_owner()'s participations_cached — a fresh query per distinct
+        # in-memory Scene instance since select_related builds a new one per
+        # row). Pre-seeds InteractionListSerializer._viewer_can_gm_scene's
+        # per-scene cache directly so the dramatic_moment_suggestions field
+        # never re-derives it (#2183).
+        viewer_can_gm_cache: dict[int, bool] = {}
+        if scene_id:
+            user = self.request.user
+            if user.is_authenticated:
+                viewer_can_gm_cache[int(scene_id)] = bool(
+                    user.is_staff
+                    or SceneParticipation.objects.filter(
+                        Q(is_gm=True) | Q(is_owner=True),
+                        scene_id=scene_id,
+                        account_id=user.pk,
+                    ).exists()
+                )
+        context["_viewer_can_gm_cache"] = viewer_can_gm_cache
         return context
 
     def get_queryset(self) -> QuerySet[Interaction]:
         # Deferred: world.combat imports world.scenes at module scope elsewhere;
         # importing CombatRoundAction lazily keeps this view free of an import cycle.
         from world.combat.models import CombatRoundAction  # noqa: PLC0415
-        from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
+        from world.magic.constants import SuggestionStatus  # noqa: PLC0415
+        from world.magic.models.dramatic_moment import (  # noqa: PLC0415
+            DramaticMomentSuggestion,
+            DramaticMomentTag,
+        )
 
         base_qs = Interaction.objects.select_related(
             "persona__character_sheet",
@@ -212,6 +237,13 @@ class InteractionViewSet(
                 "dramatic_moment_tags",
                 queryset=DramaticMomentTag.objects.select_related("moment_type"),
                 to_attr="cached_dramatic_moment_tags",
+            ),
+            Prefetch(
+                "dramatic_moment_suggestions",
+                queryset=DramaticMomentSuggestion.objects.filter(
+                    status=SuggestionStatus.PENDING
+                ).select_related("moment_type"),
+                to_attr="cached_dramatic_moment_suggestions",
             ),
         )
 
@@ -382,6 +414,7 @@ class InteractionViewSet(
         interaction.cached_reactions = []
         interaction.cached_action_links = []
         interaction.cached_dramatic_moment_tags = []
+        interaction.cached_dramatic_moment_suggestions = []
         interaction.cached_endorsements = []
         # ENTRY poses opened a window above; let the serializer query it (no
         # cached attr) so the fresh response includes the reactable strip.

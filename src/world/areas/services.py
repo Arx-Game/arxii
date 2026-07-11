@@ -215,6 +215,31 @@ def get_room_profile(room_obj: ObjectDB) -> RoomProfile:
     return profile
 
 
+def area_for_scene(scene: Scene | None) -> Area | None:
+    """Resolve the Area for a scene's location, or None.
+
+    A ``Scene.location`` FK points at the room's bare ``ObjectDB`` — the room
+    typeclass carries no ``.area`` attribute of its own; the Area lives on the
+    room's ``RoomProfile`` (reverse OneToOne, accessor ``room_profile``, absent
+    for a room with no profile row yet). Shared home for a walk that used to be
+    inlined (and duplicated, untested) in two places: ``world.magic``'s
+    ``services/gain.py`` (dramatic-moment renown award) and
+    ``audere_majora._mint_crossing_deed`` — both wrote a bare
+    ``scene.location.area`` that raised ``AttributeError`` on any scene whose
+    location lacks a ``RoomProfile`` (#2183). ``world.magic`` already depends on
+    ``world.areas`` at module level elsewhere (e.g.
+    ``services/resonance_environment.py``); the reverse import would be a
+    circular-import failure (``world.magic.models`` imports ``audere_majora`` at
+    package-init time), so this module — not ``world.magic`` — is the safe home
+    for the shared helper.
+    """
+    location = getattr(scene, "location", None) if scene is not None else None  # noqa: GETATTR_LITERAL
+    if location is None:
+        return None
+    profile = getattr(location, "room_profile", None)  # noqa: GETATTR_LITERAL
+    return profile.area if profile is not None else None
+
+
 def societies_for_scene(scene: Scene) -> list[Society]:
     """Resolve which societies are relevant at a scene's location (#1464 walk fix).
 
@@ -228,17 +253,10 @@ def societies_for_scene(scene: Scene) -> list[Society]:
     the location, its RoomProfile, its area, or any realm cannot be resolved.
     Callers: fashion perception (checks), scandal reach minting (#1464).
     """
-    location = getattr(scene, "location", None)  # noqa: GETATTR_LITERAL
-    if location is None:
+    area = area_for_scene(scene)
+    if area is None:
         return []
-
-    # room_profile is a reverse OneToOne; its accessor raises RelatedObjectDoesNotExist
-    # (a subclass of AttributeError) when absent, so getattr-with-default is the idiom.
-    profile = getattr(location, "room_profile", None)  # noqa: GETATTR_LITERAL
-    if profile is None:
-        return []
-
-    return societies_for_area(profile.area)
+    return societies_for_area(area)
 
 
 def societies_for_area(area: Area | None) -> list[Society]:

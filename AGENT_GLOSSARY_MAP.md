@@ -259,6 +259,14 @@ non-`redirect` protective flavor (`world.magic.services.targeting.protective_fla
 instead rolls the guardian's own cast check and pays anima, not fatigue (ADR-0118). The
 combat per-app glossary has the full entry. _Avoid_: guardian ward, protect action.
 
+**Technique Entrance** (#2183):
+An Entrance whose check IS a technique cast — the cast's success level substitutes for the
+entrance's social roll entirely (ADR-0113). Distinct from Entry Flourish (the resonance
+self-grant it unlocks), Dramatic Moment (the GM-tagged reward category it may *suggest*, never
+auto-grant), and Dramatic Surge (an unrelated combat intensity-modifier jump). Full entry:
+[magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Technique Entrance"); Dramatic
+Surge lives in [combat AGENT_GLOSSARY](src/world/combat/AGENT_GLOSSARY.md).
+
 ## Magic spine
 
 **Thread**:
