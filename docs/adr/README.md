@@ -168,6 +168,7 @@ treat those names as hints to confirm, not gospel.
 - [0063 — The level-3 (Prospect→Potential) semi-crossing lives in the Ritual of the Durance, not Audere Majora](0063-level-3-semi-crossing-lives-in-the-durance.md)
 - [0064 — Dispel is a technique payload row, not an EffectKind (thread-pull) entry](0064-dispel-is-a-technique-payload-not-an-effectkind.md)
 - [0065 — A trainer-of-record bound to a room (DuranceTrainingSite) enables automated self-conduct of the Ritual of the Durance from telnet](0065-durance-trainer-of-record-enables-automated-self-conduct.md)
+- [0113 — A technique-driven entrance carries the cast: one check, not two](0113-entrance-carries-the-cast.md)
 
 ### Story & stakes
 - [0067 — Beat.risk is the stakes-wager declaration](0067-beat-risk-is-the-stakes-wager-declaration.md)

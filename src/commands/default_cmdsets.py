@@ -47,6 +47,7 @@ from commands.crafting_station import CmdLabStation
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
+from commands.dramatic_moments import CmdMoment
 from commands.duels import CmdDuel
 from commands.durance import CmdDurance
 from commands.encounter import CmdEncounter
@@ -218,6 +219,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdSignature,
             # #2030 — motif style-binding namespace (bindstyle/unbindstyle/list).
             CmdMotif,
+            # #2183 — dramatic-moment suggestion inbox (suggestions/confirm/dismiss).
+            CmdMoment,
             CmdWeaveThread,
             CmdImbue,
             # #1490 — telnet face of ResolveAlterationAction; list/resolve Mage Scars.

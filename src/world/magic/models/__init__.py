@@ -83,7 +83,11 @@ from world.magic.models.crossing import (
     PendingCrossingOffer,
 )
 from world.magic.models.crossings import ThreadCrossingThreshold
-from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
+from world.magic.models.dramatic_moment import (
+    DramaticMomentSuggestion,
+    DramaticMomentTag,
+    DramaticMomentType,
+)
 from world.magic.models.endorsement import (
     EntryFlourishRecord,
     PoseEndorsement,
@@ -268,6 +272,8 @@ __all__ = [
     "DistinctionResonanceRankThreshold",
     # dramatic moment tagging (#545)
     "DistinctionRitualGrant",
+    # dramatic moment GM suggestion bridge (#2183)
+    "DramaticMomentSuggestion",
     "DramaticMomentTag",
     "DramaticMomentType",
     "EffectType",

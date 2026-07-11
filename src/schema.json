@@ -14496,6 +14496,128 @@ paths:
               schema:
                 $ref: '#/components/schemas/CrossingResult'
           description: ''
+  /api/magic/dramatic-moment-suggestions/:
+    get:
+      operationId: magic_dramatic_moment_suggestions_list
+      description: |-
+        GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+
+        GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+        POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+        POST .../{id}/dismiss/ — dismiss.
+
+        List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+        .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+        same gate against the suggestion's own scene before dispatching the REGISTRY action
+        (which independently re-checks it again — defense in depth for a direct-call caller).
+      parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: scene
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - confirmed
+          - dismissed
+          - pending
+        description: |-
+          * `pending` - Pending
+          * `confirmed` - Confirmed
+          * `dismissed` - Dismissed
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDramaticMomentSuggestionList'
+          description: ''
+  /api/magic/dramatic-moment-suggestions/{id}/confirm/:
+    post:
+      operationId: magic_dramatic_moment_suggestions_confirm_create
+      description: |-
+        GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+
+        GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+        POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+        POST .../{id}/dismiss/ — dismiss.
+
+        List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+        .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+        same gate against the suggestion's own scene before dispatching the REGISTRY action
+        (which independently re-checks it again — defense in depth for a direct-call caller).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this dramatic moment suggestion.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DramaticMomentSuggestion'
+          description: ''
+  /api/magic/dramatic-moment-suggestions/{id}/dismiss/:
+    post:
+      operationId: magic_dramatic_moment_suggestions_dismiss_create
+      description: |-
+        GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+
+        GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
+        POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
+        POST .../{id}/dismiss/ — dismiss.
+
+        List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
+        .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
+        same gate against the suggestion's own scene before dispatching the REGISTRY action
+        (which independently re-checks it again — defense in depth for a direct-call caller).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this dramatic moment suggestion.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DramaticMomentSuggestion'
+          description: ''
   /api/magic/dramatic-moment-tags/:
     get:
       operationId: magic_dramatic_moment_tags_list
@@ -36291,6 +36413,83 @@ components:
             $ref: '#/components/schemas/DraftDistinctionEntry'
       required:
       - distinctions
+    DramaticMomentSuggestion:
+      type: object
+      description: |-
+        Read-only GM confirm/dismiss inbox row (#2183).
+
+        List/confirm/dismiss all render this shape; there is no client-writable field —
+        resolution (confirm/dismiss) happens exclusively through the viewset's dispatch
+        of the REGISTRY actions, never through a serializer ``create``/``update``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        moment_type:
+          type: integer
+          readOnly: true
+        moment_type_label:
+          type: string
+          readOnly: true
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
+        scene:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Scene context; nullable for resilience to scene cleanup.
+        interaction:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The entrance pose that triggered this suggestion; nullable.
+        success_level:
+          type: integer
+          readOnly: true
+          description: Cast success level that triggered this suggestion.
+        status:
+          allOf:
+          - $ref: '#/components/schemas/DramaticMomentSuggestionStatusEnum'
+          readOnly: true
+          default: pending
+        resolved_by:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: GM account that confirmed or dismissed this suggestion.
+        confirmed_tag:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The DramaticMomentTag minted on confirmation, if any.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - character_sheet
+      - confirmed_tag
+      - created_at
+      - id
+      - interaction
+      - moment_type
+      - moment_type_label
+      - resolved_by
+      - scene
+      - status
+      - success_level
+    DramaticMomentSuggestionStatusEnum:
+      enum:
+      - pending
+      - confirmed
+      - dismissed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `confirmed` - Confirmed
+        * `dismissed` - Dismissed
     DramaticMomentTag:
       type: object
       description: |-
@@ -40413,6 +40612,18 @@ components:
             type: object
             additionalProperties: {}
           readOnly: true
+        dramatic_moment_suggestions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+
+            GM-gated: a plain participant sees an empty list. Reads
+            ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
+            queryset, already filtered to PENDING) — never a fresh query.
+          readOnly: true
         endorsable_resonances:
           type: array
           items:
@@ -40472,6 +40683,7 @@ components:
       required:
       - action_links
       - content
+      - dramatic_moment_suggestions
       - dramatic_moment_tags
       - endorsable_resonances
       - endorsee_sheet_id
@@ -40657,6 +40869,18 @@ components:
             type: object
             additionalProperties: {}
           readOnly: true
+        dramatic_moment_suggestions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+
+            GM-gated: a plain participant sees an empty list. Reads
+            ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
+            queryset, already filtered to PENDING) — never a fresh query.
+          readOnly: true
         endorsable_resonances:
           type: array
           items:
@@ -40711,6 +40935,7 @@ components:
       required:
       - action_links
       - content
+      - dramatic_moment_suggestions
       - dramatic_moment_tags
       - endorsable_resonances
       - endorsee_sheet_id
@@ -45649,6 +45874,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DraftApplication'
+    PaginatedDramaticMomentSuggestionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DramaticMomentSuggestion'
     PaginatedDramaticMomentTagList:
       type: object
       required:
@@ -55147,6 +55395,7 @@ components:
           type: integer
         initiator_persona:
           type: integer
+          nullable: true
         target_persona:
           type: integer
         target_persona_ids:
@@ -55162,6 +55411,9 @@ components:
           - $ref: '#/components/schemas/EffortLevelEnum'
           default: medium
         technique_id:
+          type: integer
+          nullable: true
+        entry_interaction_id:
           type: integer
           nullable: true
         strain_commitment:
@@ -55201,7 +55453,6 @@ components:
           nullable: true
       required:
       - action_key
-      - initiator_persona
       - scene
     SceneActionTarget:
       type: object

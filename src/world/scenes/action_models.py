@@ -254,6 +254,13 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         related_name="action_request_action",
         help_text="ACTION-mode Interaction for this cast (carries the power ledger).",
     )
+    originated_as_entrance = models.BooleanField(
+        default=False,
+        help_text=(
+            "This cast was dispatched as a technique-driven entrance (#2183); "
+            "resolve_accepted_cast fires the entrance hooks when set."
+        ),
+    )
     created_at = models.DateTimeField(default=timezone.now)
     resolved_at = models.DateTimeField(
         null=True,
