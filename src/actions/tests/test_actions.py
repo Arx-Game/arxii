@@ -14,7 +14,12 @@ from actions.definitions.movement import (
     TraverseExitAction,
 )
 from actions.definitions.perception import InventoryAction, LookAction
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from evennia_extensions.models import RoomProfile
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -29,6 +34,12 @@ from world.gm.factories import GMProfileFactory
 from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
 from world.items.factories import ItemInstanceFactory
 from world.items.models import EquippedItem, OwnershipEvent
+from world.magic.factories import (
+    CharacterTechniqueFactory,
+    PortalAnchorFactory,
+    PortalAnchorKindFactory,
+    TechniqueFactory,
+)
 from world.mechanics.constants import ChallengeType
 from world.mechanics.factories import ChallengeTemplateFactory
 from world.mechanics.models import ChallengeInstance
@@ -764,6 +775,124 @@ class TravelActionTests(TestCase):
         assert result.success is False
         actor.refresh_from_db()
         assert actor.location == room_a
+
+
+class PortalTravelTests(TestCase):
+    """#2222 — TravelAction's portal branch, tried before the walking pathfinder.
+
+    The branch is tried FIRST inside execute() (after the raw-int destination
+    resolution); on a portal_route() hit it relocates instantly via
+    perform_portal_travel and returns without ever touching find_route or
+    scheduling a hop via evennia.utils.delay(). On a miss it falls through to
+    the pre-existing walking path, byte-identical to before this issue.
+    """
+
+    @staticmethod
+    def _make_room(key):
+        room = ObjectDBFactory(db_key=key, db_typeclass_path="typeclasses.rooms.Room")
+        room_profile = RoomProfileFactory(objectdb=room)
+        return room, room_profile
+
+    @staticmethod
+    def _make_traveler(location, *, technique=None):
+        actor = CharacterFactory(location=location)
+        sheet = CharacterSheetFactory(character=actor)
+        if technique is not None:
+            CharacterTechniqueFactory(character=sheet, technique=technique)
+        return actor
+
+    @tag("postgres")  # perform_portal_travel calls send_room_state -> get_ancestry,
+    # which walks the areas_areaclosure materialized view (PG-only).
+    def test_portal_eligible_travel_relocates_instantly_no_hop_pacing(self):
+        kind = PortalAnchorKindFactory()
+        technique = TechniqueFactory(travel_anchor_kind=kind, anima_cost=0)
+        origin, origin_rp = self._make_room("Origin Mirror Room")
+        dest, dest_rp = self._make_room("Dest Mirror Room")
+        PortalAnchorFactory(room_profile=origin_rp, kind=kind)
+        PortalAnchorFactory(room_profile=dest_rp, kind=kind)
+        actor = self._make_traveler(origin, technique=technique)
+        action = TravelAction()
+
+        with (
+            patch.object(actor, "msg"),
+            patch("actions.definitions.movement.delay") as mock_delay,
+        ):
+            result = action.run(actor, target=dest)
+
+        assert result.success is True
+        actor.refresh_from_db()
+        assert actor.location == dest
+        # No hop pacing at all — the portal branch never calls find_route or
+        # schedules a delayed hop, unlike the walking path.
+        mock_delay.assert_not_called()
+        assert actor.ndb.active_travel_token is None
+
+    @tag("postgres")  # a successful hop calls send_room_state -> get_ancestry (PG-only).
+    def test_no_known_technique_falls_back_to_walking(self):
+        """Anchors exist at both ends, but the traveler knows no portal-travel
+        technique — portal_route() returns None and the walking path
+        (paced hop via evennia.utils.delay) runs exactly as it did pre-#2222.
+        """
+        area = AreaFactory()
+        kind = PortalAnchorKindFactory()
+        origin, origin_rp = self._make_room("Walk Origin")
+        dest, dest_rp = self._make_room("Walk Dest")
+        # Instance-attribute save, NOT queryset.update() — a raw UPDATE bypasses
+        # the SharedMemoryModel identity map, leaving the cached RoomProfile
+        # stale (area=None) so find_route would see a non-public, area-less room
+        # and the walk would fail (caught on the PG parity run of this test).
+        for room_profile in (origin_rp, dest_rp):
+            room_profile.area = area
+            room_profile.is_public = True
+            room_profile.save()
+        PortalAnchorFactory(room_profile=origin_rp, kind=kind)
+        PortalAnchorFactory(room_profile=dest_rp, kind=kind)
+        ObjectDBFactory(
+            db_key="walk-exit",
+            db_typeclass_path="typeclasses.exits.Exit",
+            location=origin,
+            destination=dest,
+        )
+        actor = self._make_traveler(origin)  # no known technique
+
+        with patch.object(actor, "msg"), patch("actions.definitions.movement.delay") as mock_delay:
+
+            def run_immediately(_seconds, callback, *args, **kwargs):
+                callback(*args, **kwargs)
+
+            mock_delay.side_effect = run_immediately
+            result = TravelAction().run(actor, target=dest)
+
+        assert result.success is True
+        mock_delay.assert_called()  # the walking path paced at least one hop
+        actor.refresh_from_db()
+        assert actor.location == dest
+
+    @tag("postgres")  # perform_portal_travel calls send_room_state -> get_ancestry (PG-only).
+    def test_portal_eligible_rest_raw_int_destination_works(self):
+        """REST dispatch (`_dispatch_registry`) passes kwargs straight to
+        execute() — `target` arrives as a raw int, not a pre-resolved
+        ObjectDB (#2163 gotcha). The portal branch must handle this exactly
+        like TravelAction's own pre-existing int-resolution.
+        """
+        kind = PortalAnchorKindFactory()
+        technique = TechniqueFactory(travel_anchor_kind=kind, anima_cost=0)
+        origin, origin_rp = self._make_room("REST Origin")
+        dest, dest_rp = self._make_room("REST Dest")
+        PortalAnchorFactory(room_profile=origin_rp, kind=kind)
+        PortalAnchorFactory(room_profile=dest_rp, kind=kind)
+        actor = self._make_traveler(origin, technique=technique)
+        action = TravelAction()
+
+        with patch.object(actor, "msg"), patch("actions.definitions.movement.delay") as mock_delay:
+            # target is a plain int, exactly as it arrives from a REST dispatch's
+            # raw JSON kwargs — NOT dest (the ObjectDB).
+            result = action.run(actor, target=dest.id)
+
+        assert result.success is True
+        actor.refresh_from_db()
+        assert actor.location == dest
+        mock_delay.assert_not_called()
 
 
 class TraverseExitWithChallengesTest(TestCase):
