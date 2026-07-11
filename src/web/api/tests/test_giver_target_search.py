@@ -19,26 +19,32 @@ class MissionGiverTargetSearchAPIViewTests(TestCase):
         cls.non_staff = AccountFactory(username="non-staff-target-search")
 
         cls.area = AreaFactory(name="Test District")
-        cls.room = ObjectDBFactory(
+
+    def setUp(self) -> None:
+        # Evennia ObjectDB instances (SharedMemoryModel) carry DbHolder
+        # attributes that are un-deepcopyable. setUpTestData class attrs get
+        # deep-copied per test method by Django's TestCase descriptor, so
+        # ObjectDB objects must be created in setUp instead.
+        super().setUp()
+        self.room = ObjectDBFactory(
             db_key="Notice Board Plaza", db_typeclass_path="typeclasses.rooms.Room"
         )
-        RoomProfile.objects.filter(objectdb=cls.room).update(area=cls.area)
+        RoomProfile.objects.update_or_create(objectdb=self.room, defaults={"area": self.area})
 
-        cls.other_room = ObjectDBFactory(
+        self.other_room = ObjectDBFactory(
             db_key="Other Room", db_typeclass_path="typeclasses.rooms.Room"
         )
 
-        cls.prop = ObjectDBFactory(
+        self.prop = ObjectDBFactory(
             db_key="Dusty Ledger", db_typeclass_path="typeclasses.objects.Object"
         )
-        cls.prop.db_location = cls.room
-        cls.prop.save(update_fields=["db_location"])
+        self.prop.db_location = self.room
+        self.prop.save(update_fields=["db_location"])
 
-        cls.character = ObjectDBFactory(
+        self.character = ObjectDBFactory(
             db_key="Some Character", db_typeclass_path="typeclasses.characters.Character"
         )
 
-    def setUp(self) -> None:
         self.client = APIClient()
         self.client.force_authenticate(self.staff)
 
