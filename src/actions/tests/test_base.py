@@ -408,6 +408,7 @@ class ActionRegistryTests(TestCase):
             "spawn_battle_units",
             "enlist_battle_participant",
             "browse_battle_catalog",
+            "collect_food",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

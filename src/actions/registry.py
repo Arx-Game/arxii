@@ -21,6 +21,7 @@ from actions.definitions.battles import (
 )
 from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.coercion import coerce, reveal_secret
+from actions.definitions.collect_food import CollectFoodAction
 from actions.definitions.combat_maneuvers import (
     CoverAction,
     DemoralizeAction,
@@ -593,6 +594,7 @@ _ALL_ACTIONS: list[Action] = [
     SpawnBattleUnitsAction(),
     EnlistBattleParticipantAction(),
     BrowseBattleCatalogAction(),
+    CollectFoodAction(),
 ]
 
 # Lookup by key
