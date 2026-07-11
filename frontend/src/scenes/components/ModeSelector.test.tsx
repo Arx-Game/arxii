@@ -55,4 +55,13 @@ describe('ModeSelector', () => {
     render(<ModeSelector currentMode="whisper" onModeChange={vi.fn()} isAtPlace={false} />);
     expect(screen.getByRole('button', { name: /whisper/i })).toBeInTheDocument();
   });
+
+  it('renders a locked, non-interactive label with no dropdown trigger when locked (#2165)', () => {
+    render(<ModeSelector currentMode="whisper" onModeChange={vi.fn()} isAtPlace={false} locked />);
+
+    const lockedLabel = screen.getByTitle('Audience is locked to this conversation tab');
+    expect(lockedLabel.tagName).toBe('SPAN');
+    expect(lockedLabel).toHaveTextContent(/whisper/i);
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
 });

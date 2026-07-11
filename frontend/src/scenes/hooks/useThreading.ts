@@ -28,7 +28,10 @@ export interface UseThreadingOpts {
 
 export interface ThreadingState {
   threads: Thread[];
-  /** Interactions grouped by thread key (#2165 per-tab feeds) — same grouping the threads list is built from. */
+  /**
+   * Interactions grouped by thread key (#2165 per-tab feeds) — same
+   * grouping the threads list is built from.
+   */
   interactionsByThread: Map<string, Interaction[]>;
   filteredInteractions: Interaction[];
   selectedThreadKey: string;

@@ -10,7 +10,10 @@ interface ModeSelectorProps {
   currentMode: string;
   onModeChange: (mode: string) => void;
   isAtPlace: boolean;
-  /** #2165: audience is fixed by the active conversation tab — renders a static label, no dropdown. */
+  /**
+   * #2165: audience is fixed by the active conversation tab — renders a
+   * static label, no dropdown.
+   */
   locked?: boolean;
 }
 
