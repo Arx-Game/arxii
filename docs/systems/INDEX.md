@@ -1190,7 +1190,7 @@ Multi-stage character creation flow with draft system.
   enrollment"), which auto-defaults both Evennia `home` and `CharacterSheet.current_residence` via
   `maybe_default_residence()` — closes the "Academy auto-residence" story with zero manual player
   step, making the daily residence-trickle gate reachable straight out of CG.
-- **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stat Traits/Rosters/Path so `finalize_character` runs on a fresh DB. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
+- **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stat Traits/Rosters/Path so `finalize_character` runs on a fresh DB, plus (#2162) every `CGExplanation` stage heading/intro/desc row (`CG_EXPLANATION_COPY`, 28 keys, `update_or_create`d so repo copy fixes keep reaching seeded deploys) so a fresh DB never ships blank CG stage copy. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)

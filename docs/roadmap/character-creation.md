@@ -1,5 +1,17 @@
 # Character Creation & Identity
 
+## Built (2026-07-11, #2162 — CGExplanation stage copy seeded)
+
+- The `character_creation` cluster seeder now writes real heading/intro/desc prose
+  for every one of the 11 stages via `CG_EXPLANATION_COPY`
+  (`world.seeds.character_creation._seed_cg_explanations`, called from
+  `seed_character_creation_dev()`), covering all 28 `copy?.<key>` lookups the stage
+  components read (`frontend/src/character-creation/components/*Stage.tsx`). Rows
+  are re-synced (`update_or_create`) on every seeder run so in-repo copy fixes keep
+  reaching already-seeded deploys; staff can still edit any row directly in the
+  admin. `CGExplanation` is now listed under the `character_creation` cluster in
+  `seeded_models_by_cluster()` (Game Setup inventory).
+
 ## Built (2026-07-09, #2121 — guaranteed starting room)
 
 - Every seeded `StartingArea`/`Beginnings` now resolves to a real room. The dev-seeded
@@ -55,7 +67,6 @@ The 11-stage character creation flow that takes a player from concept to approve
 ## What's Needed for MVP
 - Email verification and approval flow needs testing/completion
 - Hundreds of distinctions still need to be authored as game content
-- Lore text for all CG stages needs to be written and entered via CGExplanation
 - Roster character system integration (characters that change players need strong records)
 - Polish pass on UX — the skeleton works but the experience needs to feel exciting and informative
 
