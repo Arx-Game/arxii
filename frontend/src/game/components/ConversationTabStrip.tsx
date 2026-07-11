@@ -51,6 +51,7 @@ export function ConversationTabStrip({
       className="mb-2 flex gap-1 overflow-x-auto border-b"
     >
       <button
+        type="button"
         role="tab"
         aria-selected={activeKey === null}
         onClick={() => onSelect(null)}
@@ -62,6 +63,7 @@ export function ConversationTabStrip({
       {tabs.map((tab) => (
         <span key={tab.key} className="flex items-center">
           <button
+            type="button"
             role="tab"
             aria-selected={activeKey === tab.key}
             onClick={() => onSelect(tab.key)}
