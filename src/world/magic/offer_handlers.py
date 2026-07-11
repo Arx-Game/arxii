@@ -45,7 +45,7 @@ class SoulfrayPendingHandler:
                 k: v for k, v in pending.kwargs.items() if k != _ENTRANCE_MARKER_KEY
             }
             ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="entrance")
-            dispatch_player_action(
+            result = dispatch_player_action(
                 caller,
                 ref,
                 {
@@ -55,6 +55,8 @@ class SoulfrayPendingHandler:
                     "confirm_soulfray_risk": True,
                 },
             )
+            if result.detail is not None and result.detail.message:
+                return result.detail.message
             return "You steel yourself and complete the casting."
 
         ref = ActionRef(
@@ -62,7 +64,7 @@ class SoulfrayPendingHandler:
             registry_key="cast_technique",
             technique_id=pending.technique_id,
         )
-        dispatch_player_action(
+        result = dispatch_player_action(
             caller,
             ref,
             {
@@ -71,6 +73,8 @@ class SoulfrayPendingHandler:
                 "confirm_soulfray_risk": True,
             },
         )
+        if result.detail is not None and result.detail.message:
+            return result.detail.message
         return "You steel yourself and complete the casting."
 
     def decline(self, offer, caller) -> str:  # noqa: ARG002

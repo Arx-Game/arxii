@@ -5523,7 +5523,7 @@ def _maybe_suggest_entrance_dramatic_moment(
 ) -> None:
     """Fire the #2183 dramatic-moment suggestion for a resolved entrance-declared cast.
 
-    The combat-round sibling of ``_run_entrance_success_hooks``'s suggestion half —
+    The combat-round sibling of ``run_entrance_success_hooks``'s suggestion half —
     fired here (not at declaration time) because the real success level is only known
     once the declared cast actually resolves. Best-effort: a suggestion failure must
     never break round resolution.

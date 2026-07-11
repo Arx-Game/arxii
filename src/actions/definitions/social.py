@@ -229,7 +229,7 @@ class PerformAction(_SocialTemplateAction):
     description: str = "Captivate an audience through music, oration, or storytelling."
 
 
-def _run_entrance_success_hooks(  # noqa: PLR0913 - cohesive entrance-hook params; shared w/ Task 5
+def run_entrance_success_hooks(  # noqa: PLR0913 - cohesive entrance-hook params; shared w/ Task 5
     actor: ObjectDB,
     scene: Scene | None,
     *,
@@ -533,7 +533,7 @@ class EntranceAction(_SocialTemplateAction):
         """
         from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
 
-        prompt = _run_entrance_success_hooks(
+        prompt = run_entrance_success_hooks(
             actor,
             scene,
             success_level=None,
@@ -585,7 +585,7 @@ class EntranceAction(_SocialTemplateAction):
         if success_level <= 0:
             return _ActionResult(success=False, message="Your entrance fails to draw notice.")
 
-        prompt = _run_entrance_success_hooks(
+        prompt = run_entrance_success_hooks(
             actor,
             scene,
             success_level=success_level,

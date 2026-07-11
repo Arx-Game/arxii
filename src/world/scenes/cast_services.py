@@ -475,9 +475,9 @@ def resolve_accepted_cast(
             # EntranceAction._resolve_hostile_entrance_result); Task 5's combat
             # round-resolution hook fires the suggestion once the real success
             # level is known (#2183).
-            from actions.definitions.social import _run_entrance_success_hooks  # noqa: PLC0415
+            from actions.definitions.social import run_entrance_success_hooks  # noqa: PLC0415
 
-            _run_entrance_success_hooks(
+            run_entrance_success_hooks(
                 initiator.character_sheet.character,
                 action_request.scene,
                 success_level=None,
@@ -561,7 +561,7 @@ def _run_entrance_benign_accept_hooks(
     resolved success level clears 0, and a benign-intervention combat join when the
     target is another sheet's ACTIVE combatant.
     """
-    from actions.definitions.social import _run_entrance_success_hooks  # noqa: PLC0415
+    from actions.definitions.social import run_entrance_success_hooks  # noqa: PLC0415
     from world.combat.cast_seed import (  # noqa: PLC0415
         seed_or_feed_encounter_from_benign_intervention,
     )
@@ -579,7 +579,7 @@ def _run_entrance_benign_accept_hooks(
     if success_level <= 0:
         return
 
-    _run_entrance_success_hooks(
+    run_entrance_success_hooks(
         actor,
         action_request.scene,
         success_level=success_level,

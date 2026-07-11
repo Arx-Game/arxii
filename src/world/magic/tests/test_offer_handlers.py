@@ -167,3 +167,44 @@ class SoulfrayPendingHandlerAcceptEntranceTests(CastScenarioMixin):
                 character_sheet=self.caster.character_sheet
             ).exists(),
         )
+
+    def test_accept_entrance_soulfray_surfaces_redispatch_failure(self) -> None:
+        """A failed entrance re-dispatch surfaces its real failure message.
+
+        Before the fix, ``accept()`` discarded ``dispatch_player_action``'s
+        ``DispatchResult`` entirely and always returned the canned "You steel
+        yourself..." success-flavored fallback — so a failed re-dispatch (e.g. "There
+        is no active scene here.") was silently reported as success (#2183 finding 1).
+        """
+        from actions.constants import ActionBackend
+        from actions.types import ActionResult, DispatchResult
+        from world.magic.offer_handlers import SoulfrayPendingHandler
+
+        technique = make_benign_castable_technique()
+        grant_technique(self.caster, technique)
+        actor = self.caster.character_sheet.character
+
+        warning = SoulfrayWarning(
+            stage_name="Stage One",
+            stage_description="Your soul frays at the edges.",
+            has_death_risk=False,
+        )
+
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=warning):
+            gate_result = EntranceAction().execute(
+                actor,
+                None,
+                technique_id=technique.pk,
+                confirm_soulfray_risk=False,
+            )
+        self.assertFalse(gate_result.success)
+
+        failure = DispatchResult(
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(success=False, message="There is no active scene here."),
+        )
+        with patch("actions.player_interface.dispatch_player_action", return_value=failure):
+            message = SoulfrayPendingHandler().accept(offer=None, caller=actor, args="")
+
+        self.assertEqual(message, "There is no active scene here.")
