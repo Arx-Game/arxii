@@ -39,9 +39,11 @@ def _seed_battles() -> None:
     from world.seeds.game_content.battles import (  # noqa: PLC0415
         seed_battle_staging_catalog,
         seed_champion_duel_outcome_wiring,
+        seed_place_encounter_outcome_wiring,
     )
 
     seed_champion_duel_outcome_wiring()
+    seed_place_encounter_outcome_wiring()
     # Starter GM battle-staging catalog: 2 BattleMapBlueprint + 3
     # BattleUnitTemplate rows (#2010) — self-contained (get-or-creates its own
     # Property/CapabilityType rows by name), no ordering dependency on another

@@ -1146,3 +1146,53 @@ def open_siege_engine_encounter(
     battle_place.combat_encounter = enc
     battle_place.save(update_fields=["combat_encounter"])
     return enc
+
+
+@transaction.atomic
+def open_place_encounter(*, battle_place: BattlePlace) -> CombatEncounter:
+    """Bind *battle_place* to a new general party-scale combat encounter (#2008).
+
+    Unlike ``open_champion_duel``/``open_siege_engine_encounter`` (both seed exactly
+    one PC participant and one significant-NPC opponent via ``create_lethal_duel``),
+    this creates a bare ``CombatEncounter`` — no pre-seeded participant or opponent.
+    The GM populates it afterward via the existing, unmodified
+    ``AddOpponentAction``/``AddEncounterParticipantAction``
+    (``actions/definitions/gm_combat.py``). ``encounter_type`` is ``PARTY_COMBAT``
+    (the model's own default), distinguishing a general front fight from the two
+    duel-shaped creators, which use ``DUEL``. No Champion-role gate — a GM verb, not
+    a player challenge, so there is no "opener" participant argument.
+
+    Args:
+        battle_place: The front the encounter is bound to. Must have no existing
+            ``combat_encounter``.
+
+    Raises:
+        PlaceAlreadyDuelingError: If ``battle_place.combat_encounter`` is already
+            set.
+
+    Returns:
+        The newly created ``CombatEncounter``, in DECLARING status.
+    """
+    from world.battles.place_encounter_wiring import (  # noqa: PLC0415
+        install_place_encounter_trigger,
+    )
+    from world.combat.constants import EncounterType  # noqa: PLC0415
+    from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+
+    if battle_place.combat_encounter_id is not None:
+        raise PlaceAlreadyDuelingError
+
+    enc = CombatEncounter.objects.create(
+        room=battle_place.battle.scene.location,
+        scene=battle_place.battle.scene,
+        encounter_type=EncounterType.PARTY_COMBAT,
+        risk_level=RiskLevel.LETHAL,
+        status=RoundStatus.DECLARING,
+    )
+    assign_default_escalation_curve(enc)
+
+    battle_place.combat_encounter = enc
+    battle_place.save(update_fields=["combat_encounter"])
+    install_place_encounter_trigger(enc)
+    return enc

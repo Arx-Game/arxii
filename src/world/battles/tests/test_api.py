@@ -40,7 +40,7 @@ from world.battles.factories import (
 from world.battles.resolution import resolve_battle_round
 from world.battles.services import begin_battle_round, conclude_battle, enlist_participant
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.factories import CombatEncounterFactory
+from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.covenants.factories import CovenantFactory
 from world.roster.factories import PlayerMediaFactory
 from world.scenes.constants import RoundStatus, ScenePrivacyMode
@@ -209,6 +209,7 @@ class BattleApiJourneyTest(TestCase):
         self.assertEqual(yard["encounter_scene_id"], self.encounter.scene_id)
         self.assertIsNone(yard["vehicle"])
         self.assertEqual(yard["fortifications"], [])
+        self.assertIn("encounter_roster", yard)
 
     def _assert_units_shape(self, units: list[dict]) -> None:
         units_by_name = {unit["name"]: unit for unit in units}
@@ -248,6 +249,39 @@ class BattleApiJourneyTest(TestCase):
         response = client.get(f"/api/battles/{self.battle.pk}/")
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         self._assert_detail_shape(response.data)
+
+    def test_encounter_roster_reflects_live_participants(self) -> None:
+        from world.combat.services import join_encounter
+
+        sheet = CharacterSheetFactory()
+        join_encounter(self.encounter, sheet)
+        opponent = CombatOpponentFactory(encounter=self.encounter, name="Yard Brute")
+
+        client = APIClient()
+        client.force_authenticate(user=self.pc_account)
+        response = client.get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+
+        yard = next(p for p in response.data["places"] if p["id"] == self.place_yard.pk)
+        roster = yard["encounter_roster"]
+        self.assertIsNotNone(roster)
+        self.assertEqual(roster["status"], self.encounter.get_status_display())
+        self.assertIsNone(roster["outcome"])
+        self.assertEqual(len(roster["participants"]), 1)
+        self.assertEqual(roster["participants"][0]["character_name"], sheet.character.db_key)
+        self.assertEqual(len(roster["opponents"]), 1)
+        self.assertEqual(roster["opponents"][0]["name"], opponent.name)
+        self.assertEqual(roster["opponents"][0]["status"], opponent.get_status_display())
+
+    def test_encounter_roster_is_none_when_no_encounter_bound(self) -> None:
+        empty_place = BattlePlaceFactory(battle=self.battle, name="Empty Front")
+
+        client = APIClient()
+        client.force_authenticate(user=self.pc_account)
+        response = client.get(f"/api/battles/{self.battle.pk}/")
+
+        place = next(p for p in response.data["places"] if p["id"] == empty_place.pk)
+        self.assertIsNone(place["encounter_roster"])
 
     def test_staff_can_retrieve_detail(self) -> None:
         client = APIClient()

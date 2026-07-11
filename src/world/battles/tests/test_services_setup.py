@@ -441,6 +441,40 @@ class OpenSiegeEngineEncounterTests(TestCase):
             )
 
 
+class OpenPlaceEncounterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.battle = BattleFactory()
+        cls.place = BattlePlaceFactory(battle=cls.battle)
+
+    def setUp(self):
+        self.room = create_object("typeclasses.rooms.Room", key="Front Fight Room", nohome=True)
+        self.battle.scene.location = self.room
+        self.battle.scene.save(update_fields=["location"])
+
+    def test_opens_bare_party_combat_encounter_and_binds_place(self) -> None:
+        from world.battles.services import open_place_encounter
+
+        enc = open_place_encounter(battle_place=self.place)
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.combat_encounter_id, enc.pk)
+        self.assertEqual(enc.encounter_type, EncounterType.PARTY_COMBAT)
+        self.assertEqual(enc.risk_level, RiskLevel.LETHAL)
+        self.assertEqual(enc.room_id, self.room.id)
+        self.assertEqual(enc.participants.count(), 0)
+        self.assertEqual(enc.opponents.count(), 0)
+
+    def test_raises_when_place_already_bound(self) -> None:
+        from world.battles.services import open_place_encounter
+
+        open_place_encounter(battle_place=self.place)
+        self.place.refresh_from_db()
+
+        with self.assertRaises(PlaceAlreadyDuelingError):
+            open_place_encounter(battle_place=self.place)
+
+
 class AddUnitTaxonomyTests(TestCase):
     def test_add_unit_accepts_quality_commander(self) -> None:
         from world.battles.services import add_side, add_unit, create_battle

@@ -252,6 +252,44 @@ class BattleDuelOutcomeTriggerDefinitionFactory(factory_django.DjangoModelFactor
     base_filter_condition = None
 
 
+def _build_place_encounter_outcome_flow() -> object:
+    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the outcome handler."""
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+    from world.battles.place_encounter_wiring import PLACE_ENCOUNTER_TRIGGER_NAME
+
+    flow, _ = FlowDefinition.objects.get_or_create(name=PLACE_ENCOUNTER_TRIGGER_NAME)
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.battles.place_encounter_wiring.apply_place_encounter_outcome",
+            parameters={"payload": _PAYLOAD_PARAM},
+        )
+    return flow
+
+
+class BattlePlaceEncounterOutcomeTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the ENCOUNTER_COMPLETED -> place-encounter outcome consumer (#2008).
+
+    Installed on place-encounter rooms by ``install_place_encounter_trigger``;
+    dispatches ENCOUNTER_COMPLETED to ``apply_place_encounter_outcome``, which
+    routs the losing side's units at the bound BattlePlace and credits the winner's
+    side.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "encounter_completed_place_encounter_outcome"
+    event_name = "encounter_completed"
+    flow_definition = factory.LazyFunction(_build_place_encounter_outcome_flow)
+    priority = 40
+    base_filter_condition = None
+
+
 def ensure_battle_command_modifier_target():
     """Idempotently seed the "Battle Command" ModifierTarget (#1711).
 

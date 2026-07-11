@@ -18,42 +18,15 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from world.battles.constants import BattleUnitStatus
+from world.battles.wiring_helpers import rout_units_at_place
 
 if TYPE_CHECKING:
-    from world.battles.models import BattlePlace
     from world.combat.models import CombatEncounter
 
 logger = logging.getLogger(__name__)
 
 CHAMPION_DUEL_TRIGGER_NAME = "encounter_completed_champion_duel_outcome"
 CHAMPION_DUEL_VP_BONUS = 25
-
-
-def _rout_units_at_place(battle_place: BattlePlace, *, side_id: int) -> None:
-    """Rout (or destroy, if already weak) every ACTIVE unit for *side_id* at *battle_place*.
-
-    Preserves the existing severity rule byte-for-byte — a unit already at or below
-    ROUTED_STRENGTH_THRESHOLD is wiped out when this fires (on the losing side's units,
-    whether that's the enemy after a Champion victory or the challenger's own side after
-    a defeat), not merely routed — but expresses it through the numeric resources + the
-    shared derivation (#1712) instead of writing `status` directly: status must always
-    be a derived view, or a later ROUT/RALLY/STRIKE recomputing it for this unit would
-    silently clobber a directly-written value.
-    """
-    from world.battles.constants import ROUTED_STRENGTH_THRESHOLD  # noqa: PLC0415
-    from world.battles.models import BattleUnit  # noqa: PLC0415
-    from world.battles.resolution import _compute_unit_status  # noqa: PLC0415
-
-    units = BattleUnit.objects.filter(
-        place=battle_place, side_id=side_id, status=BattleUnitStatus.ACTIVE
-    )
-    for unit in units:
-        if unit.strength <= ROUTED_STRENGTH_THRESHOLD:
-            unit.strength = 0
-        unit.morale = 0
-        unit.status = _compute_unit_status(unit.strength, unit.morale)
-        unit.save(update_fields=["strength", "morale", "status"])
 
 
 def apply_champion_duel_outcome(*, payload: object) -> None:
@@ -67,8 +40,19 @@ def apply_champion_duel_outcome(*, payload: object) -> None:
     TriggerDefinition.
     """
     from world.battles.models import BattleParticipant  # noqa: PLC0415
+    from world.combat.constants import EncounterType  # noqa: PLC0415
 
     encounter: CombatEncounter = payload.encounter
+    if encounter.encounter_type == EncounterType.PARTY_COMBAT:
+        # General party encounters are handled by place_encounter_wiring instead —
+        # the room-level ENCOUNTER_COMPLETED Trigger fires for every encounter in
+        # the battle's shared room, so this handler must ignore encounter types it
+        # isn't for (#2008 final-review Critical finding: cross-firing between the
+        # two outcome-wiring modules). Champion duels (create_lethal_duel) and siege
+        # encounters both stay DUEL-typed, so this guard doesn't change behavior for
+        # either existing duel-shaped creator.
+        return
+
     battle_place = encounter.battle_places.select_related("battle").first()
     if battle_place is None:
         return
@@ -85,7 +69,7 @@ def apply_champion_duel_outcome(*, payload: object) -> None:
         # Champion victory: rout the enemy unit(s) at this front, credit the side.
         enemy_sides = battle_place.battle.sides.exclude(pk=challenger.side_id)
         for enemy_side in enemy_sides:
-            _rout_units_at_place(battle_place, side_id=enemy_side.pk)
+            rout_units_at_place(battle_place, side_id=enemy_side.pk)
         side = challenger.side
         side.victory_points += CHAMPION_DUEL_VP_BONUS
         side.save(update_fields=["victory_points"])
@@ -100,7 +84,7 @@ def apply_champion_duel_outcome(*, payload: object) -> None:
     ).first()
     if any_participant is None:
         return
-    _rout_units_at_place(battle_place, side_id=any_participant.side_id)
+    rout_units_at_place(battle_place, side_id=any_participant.side_id)
 
 
 def install_champion_duel_trigger(encounter: CombatEncounter) -> None:
