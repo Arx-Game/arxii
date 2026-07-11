@@ -214,6 +214,7 @@ def portal_route(character: ObjectDB, destination_room: ObjectDB) -> PortalRoute
     return None
 
 
+@transaction.atomic
 def perform_portal_travel(character: ObjectDB, route: PortalRoute) -> None:
     """Commit an eligible portal travel: debit, broadcast, move, broadcast, push.
 
