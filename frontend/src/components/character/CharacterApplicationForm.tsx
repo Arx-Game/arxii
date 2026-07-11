@@ -40,8 +40,8 @@ export function CharacterApplicationForm({ entryId }: CharacterApplicationFormPr
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          mutation.mutate(message);
-          setMessage('');
+          if (mutation.isPending) return;
+          mutation.mutate(message, { onSuccess: () => setMessage('') });
         }}
         className="space-y-2"
       >

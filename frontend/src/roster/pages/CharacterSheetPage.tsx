@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAccount } from '@/store/hooks';
 import { useRosterEntryQuery, useMyRosterEntriesQuery } from '../queries';
 import { useOrganizationByName } from '@/orgs/queries';
 import {
@@ -8,7 +8,7 @@ import {
   StatsSection,
   RelationshipsSection,
   GalleriesSection,
-  CharacterApplicationForm,
+  ApplicationSlot,
 } from '@/components/character';
 import { MessagesSection } from '@/narrative/components/MessagesSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -30,6 +30,7 @@ export function CharacterSheetPage() {
   const entryId = Number(id);
   const { data: entry, isLoading } = useRosterEntryQuery(entryId);
   const { data: myEntries } = useMyRosterEntriesQuery();
+  const account = useAccount();
 
   // Show messages section only when the viewing user owns this character.
   const isMyCharacter = myEntries?.some((e) => e.id === entryId) ?? false;
@@ -137,7 +138,7 @@ export function CharacterSheetPage() {
             socialRank={entry.character.social_rank}
           />
           <GalleriesSection galleries={entry.character.galleries} />
-          {entry.can_apply && <CharacterApplicationForm entryId={entry.id} />}
+          <ApplicationSlot entry={entry} account={account} />
           {isMyCharacter && (
             <div id="messages">
               <MessagesSection />
