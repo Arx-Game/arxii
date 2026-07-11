@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from commands.consent import CmdAccept, CmdDeny, CmdIntimidate, ConsentRequestCommand
+from commands.consent import CmdAccept, CmdDeny, CmdIntimidate, CmdSeduce, ConsentRequestCommand
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
@@ -107,6 +107,62 @@ class CmdIntimidateTests(TestCase):
         """The base reads ``action_key`` from the subclass — no hardcoding."""
         self.assertEqual(CmdIntimidate.action_key, "intimidate")
         self.assertTrue(issubclass(CmdIntimidate, ConsentRequestCommand))
+
+
+class CmdSeduceTests(TestCase):
+    """Initiator runs ``seduce <target>``; a PENDING request is created (#1695).
+
+    Mirrors ``CmdIntimidateTests`` — ``CmdSeduce`` is the same thin
+    ``ConsentRequestCommand`` shell as ``CmdFlirt``, just with
+    ``action_key = "seduce"``.
+    """
+
+    def setUp(self) -> None:
+        # DbHolder trap: Evennia ObjectDB fixtures must be built in setUp.
+        self.room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.initiator_char = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.target_char = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.initiator_sheet = CharacterSheetFactory(character=self.initiator_char)
+        self.target_sheet = CharacterSheetFactory(character=self.target_char)
+        self.initiator_persona = self.initiator_sheet.primary_persona
+        self.target_persona = self.target_sheet.primary_persona
+        self.scene = SceneFactory(is_active=True, location=self.room)
+        if hasattr(self.room, "_active_scene_cache"):
+            del self.room._active_scene_cache
+
+    def _run(self, caller: object, args: str) -> CmdSeduce:
+        cmd = CmdSeduce()
+        cmd.caller = caller
+        cmd.args = args
+        cmd.raw_string = f"seduce {args}"
+        caller.msg = MagicMock()
+        cmd.func()
+        return cmd
+
+    def test_seduce_creates_pending_request(self) -> None:
+        cmd = self._run(self.initiator_char, self.target_char.key)
+
+        req = SceneActionRequest.objects.get(initiator_persona=self.initiator_persona)
+        self.assertEqual(req.status, ActionRequestStatus.PENDING)
+        self.assertEqual(req.target_persona, self.target_persona)
+        self.assertEqual(req.action_key, "seduce")
+        self.assertEqual(req.scene, self.scene)
+        cmd.caller.msg.assert_called()
+
+    def test_action_key_class_attr_drives_request(self) -> None:
+        self.assertEqual(CmdSeduce.action_key, "seduce")
+        self.assertTrue(issubclass(CmdSeduce, ConsentRequestCommand))
 
 
 class RespondCommandTests(TestCase):
@@ -254,6 +310,7 @@ class AllSocialCommandsRegisteredTests(TestCase):
             "persuade": CmdPersuade,
             "deceive": CmdDeceive,
             "flirt": CmdFlirt,
+            "seduce": CmdSeduce,
             "perform": CmdPerform,
             "entrance": CmdEntrance,
             "restore_sense": CmdRestoreSense,

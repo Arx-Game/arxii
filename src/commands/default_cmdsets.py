@@ -39,6 +39,7 @@ from commands.consent import (
     CmdPerform,
     CmdPersuade,
     CmdRestoreSense,
+    CmdSeduce,
 )
 from commands.consent_preferences import CmdConsent
 from commands.covenant import CmdCovenant
@@ -239,6 +240,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPersuade,
             CmdDeceive,
             CmdFlirt,
+            CmdSeduce,
             CmdPerform,
             CmdEntrance,
             CmdRestoreSense,

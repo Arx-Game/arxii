@@ -129,7 +129,7 @@ actions, backends, and service functions.
   `_actor_may_gm_encounter` (staff or `encounter.scene.is_gm(account)`) in the Action layer —
   reads the same `SceneParticipation.is_gm` flag `enroll_present_table_gms`/
   `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113). No business logic in the command.
-- **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept` (extended to check offer registry first; consent
+- **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdSeduce`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338/#1695); `CmdAccept` (extended to check offer registry first; consent
   fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
 - **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of

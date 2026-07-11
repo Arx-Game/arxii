@@ -175,6 +175,17 @@ class CmdFlirt(ConsentRequestCommand):
     action_key = "flirt"
 
 
+class CmdSeduce(ConsentRequestCommand):
+    """Seduce another character (they must accept or deny).
+
+    Usage:
+        seduce <character>
+    """
+
+    key = "seduce"
+    action_key = "seduce"
+
+
 class CmdPerform(ConsentRequestCommand):
     """Captivate another character through music, oration, or storytelling.
 
