@@ -749,6 +749,24 @@ a scene, not a room, so this is unrelated to room id.
 there; that's a separate, pre-existing latent bug on that page, left untouched
 by this slate.
 
+**#2165 conversation tabs:** `/game` can keep several conversations open at once
+— the room feed as a permanent anchor plus a closable tab per broken-out
+place/whisper/target thread (`ConversationTabStrip.tsx`, rendered above the feed
+in `GameWindow`). Tab state (`openThreadTabs`/`activeThreadTab`) lives in
+`gameSlice`'s per-character `Session`, one tab set per session. The
+`ConversationSidebar` is the **open-a-tab surface**: clicking a thread row opens
+or focuses its tab; clicking the room row or "All" re-anchors the strip back to
+the room feed. The composer's audience is **derived from the active tab and
+locked**, never stored independently — `tabKeyToComposerMode` (in
+`threadToComposerMode.ts`) translates the active tab's key into a locked
+`ComposerMode` every render, which is the mis-send guard (a stale composer
+audience surviving a tab switch is the failure mode this closes). The open-tab
+layout is persisted client-locally per character+scene (thread **keys** only,
+never message content) via `threadTabsStorage.ts`'s `localStorage` helpers, and
+`gameSlice` resets both tab fields whenever the session's scene id actually
+changes, since a tab pointing at a previous scene's thread set is unsafe to keep
+open.
+
 ---
 
 ## Permissions

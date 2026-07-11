@@ -1141,6 +1141,8 @@ describe('gameSlice', () => {
             sceneInteractions: [],
             threadLastSeen: { room: 5 },
             sceneBaselineId: null,
+            openThreadTabs: ['whisper:1'],
+            activeThreadTab: 'whisper:1',
           },
         },
         active: 'Hero',
