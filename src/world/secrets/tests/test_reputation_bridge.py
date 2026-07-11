@@ -9,12 +9,18 @@ reputation delta, independent of that org's philosophy). Persona victims are rec
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.narrative.models import NarrativeMessageDelivery
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 from world.secrets.constants import DEFAULT_VICTIM_SEVERITY_BY_LEVEL, SecretLevel
 from world.secrets.factories import SecretFactory, SecretVictimFactory
-from world.secrets.services import expose_secret, grant_secret_knowledge, secret_known_to
+from world.secrets.services import (
+    expose_secret,
+    grant_secret_knowledge,
+    mint_accusation,
+    secret_known_to,
+)
 from world.societies.factories import (
     OrganizationFactory,
     PhilosophicalArchetypeFactory,
@@ -155,3 +161,42 @@ class SecretReputationBridgeTests(TestCase):
         expected = -DEFAULT_VICTIM_SEVERITY_BY_LEVEL[SecretLevel.WHISPERS]
         rep = OrganizationReputation.objects.get(persona=persona, organization=org)
         assert rep.value == expected
+
+
+class AccusationExposureTests(TestCase):
+    """A minted false ACCUSATION exposes + mints reputation exactly like a true scandal (#1825).
+
+    The feature's central claim: falsity is emergent, so the reveal→reputation bridge is
+    provenance-agnostic — a frame-job hits the target's standing until disproven.
+    """
+
+    def test_false_accusation_hits_reputation_like_a_true_one(self) -> None:
+        accuser = CharacterSheetFactory()
+        target = CharacterSheetFactory()
+        secret = mint_accusation(
+            accuser_persona=accuser.primary_persona,
+            subject_sheet=target,
+            content="They betrayed the Crown.",
+            level=SecretLevel.CAREFULLY_KEPT,
+        )
+        secret.archetypes.add(PhilosophicalArchetypeFactory(power_delta=2))
+        victim_org = OrganizationFactory()
+        SecretVictimFactory(secret=secret, organization=victim_org, severity=None)
+        society = SocietyFactory(name="Pro-power", power=5)
+
+        result = expose_secret(secret, societies=[society])
+
+        # Diffuse channel fires regardless of provenance, and the accusation is now public
+        # (in societies_exposed — what the tidings scandal feed reads).
+        assert result.society_reputation_deltas[society.pk] != 0
+        assert society in secret.societies_exposed.all()
+        # The named victim takes the same direct hit a true secret would deal.
+        expected = -DEFAULT_VICTIM_SEVERITY_BY_LEVEL[SecretLevel.CAREFULLY_KEPT]
+        assert result.organization_victim_deltas[victim_org.pk] == expected
+        # The reputation lands on the framed *target*, not the framer.
+        assert (
+            OrganizationReputation.objects.get(
+                persona=target.primary_persona, organization=victim_org
+            ).value
+            == expected
+        )
