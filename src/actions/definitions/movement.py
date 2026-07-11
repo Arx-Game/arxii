@@ -280,6 +280,8 @@ class TravelAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         destination = kwargs.get("target")
+        if isinstance(destination, int):
+            destination = ObjectDB.objects.filter(pk=destination).first()
         if destination is None:
             return ActionResult(success=False, message="Travel where?")
 
@@ -335,6 +337,10 @@ class TravelAction(Action):
             actor.ndb.active_travel_task = None
             actor.msg(f"Your route stops here: {err}")
             return
+        except Exception:
+            actor.ndb.active_travel_token = None
+            actor.ndb.active_travel_task = None
+            raise
 
         next_index = hop_index + 1
         if next_index >= len(route):

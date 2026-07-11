@@ -709,6 +709,62 @@ class TravelActionTests(TestCase):
         # The stale callback did NOT move the actor — token mismatch caught it.
         assert actor.location == rooms[0]
 
+    @tag("postgres")  # a successful hop calls send_room_state -> get_ancestry,
+    # which walks the areas_areaclosure materialized view (PG-only).
+    def test_travel_resolves_int_target_like_a_rest_dispatch_would(self):
+        """Regression test for the web dispatch path (#2163 final-review Critical
+        finding): REST dispatch (`_dispatch_registry`) does NOT resolve
+        objectdb_target_kwargs — it passes kwargs straight to execute(). This test
+        calls TravelAction exactly as the REST path does: target as a raw int, not
+        a pre-resolved ObjectDB, mirroring what `dispatch_player_action` /
+        `_dispatch_registry` actually does (see `src/actions/player_interface.py`).
+        """
+        rooms, _exits = self._make_route(2)
+        actor = ObjectDBFactory(
+            db_key="RestTraveler",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=rooms[0],
+        )
+        action = TravelAction()
+
+        with patch.object(actor, "msg"), patch("actions.definitions.movement.delay") as mock_delay:
+
+            def run_immediately(_seconds, callback, *args, **kwargs):
+                callback(*args, **kwargs)
+
+            mock_delay.side_effect = run_immediately
+            # target is a plain int, exactly as it arrives from a REST dispatch's
+            # raw JSON kwargs — NOT rooms[-1] (the ObjectDB), which is what a
+            # telnet .run() call would pass.
+            result = action.run(actor, target=rooms[-1].id)
+
+        assert result.success is True
+        actor.refresh_from_db()
+        assert actor.location == rooms[-1]
+
+    def test_travel_int_target_that_does_not_exist_fails_gracefully(self):
+        area = AreaFactory()
+        room_a = ObjectDBFactory(db_key="OnlyRoom", db_typeclass_path="typeclasses.rooms.Room")
+        # typeclasses.rooms.Room.at_object_creation() already auto-creates a bare
+        # RoomProfile via get_or_create — update_or_create (not create) applies
+        # our area/is_public onto that existing row instead of colliding with it
+        # (same gotcha documented in _make_route above).
+        RoomProfile.objects.update_or_create(
+            objectdb=room_a, defaults={"area": area, "is_public": True}
+        )
+        actor = ObjectDBFactory(
+            db_key="LostTraveler",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room_a,
+        )
+        action = TravelAction()
+
+        result = action.run(actor, target=999999999)
+
+        assert result.success is False
+        actor.refresh_from_db()
+        assert actor.location == room_a
+
 
 class TraverseExitWithChallengesTest(TestCase):
     """Test that INHIBITOR challenges block exit traversal."""
