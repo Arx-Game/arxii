@@ -63,16 +63,17 @@ latent GIFT thread (#1578, ADR-0055):
   thread (the specialization substrate), idempotent on `(owner, gift)` and write-once on
   resonance. One active GIFT thread per gift.
 - The resonance is read from `draft.draft_data["selected_gift_resonance_id"]`. The
-  frontend CG resonance picker is a deferred needs-design follow-up; until it lands,
-  that draft key is never written in production or tests (the E2E test calls
-  `provision_latent_gift_thread(..., resonance=...)` directly). When unset, the
-  provisioning falls back to `gift.resonances.first()` with a warning, and skips
-  entirely if the gift supports no resonances.
+  frontend CG resonance picker is built (#1620): the `CantripSelector` component
+  renders a resonance dropdown (via `useResonances()`) that writes this key, and
+  `compute_magic_errors` requires it — submission is blocked until a resonance is
+  selected. When unset (legacy drafts), the provisioning falls back to
+  `gift.resonances.first()` with a warning, and skips entirely if the gift
+  supports no resonances.
 - The cantrip's starting technique may also carry a chosen consequence-pool "flavor"
   (#1320): `draft.draft_data["selected_consequence_pool_id"]` is read and resolved via
   `world.magic.services.technique_builder.resolve_cast_action_template()` to pick the
-  `Technique.action_template`. Unlike the resonance picker, the frontend picker (CG
-  magic stage's `CantripSelector`) is built and writes this key. An unset key resolves
+  `Technique.action_template`. The frontend picker (CG magic stage's
+  `CantripSelector`) is built and writes this key. An unset key resolves
   to the shared default template (`resolve_cast_action_template(None)`); a stale/invalid
   id raises `InvalidConsequencePoolChoice`, which finalize catches, logs a warning, and
   falls back to the shared default template — finalize never fails on a bad pool id.
