@@ -1,7 +1,7 @@
 """API views for the relationships system."""
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Count, Exists, OuterRef, Prefetch
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
@@ -99,28 +99,52 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
     filterset_fields = ["source", "target", "is_active", "is_pending", "is_soul_tether"]
 
     def get_queryset(self):  # type: ignore[override]
-        """Return relationships with related data prefetched."""
-        return CharacterRelationship.objects.select_related(
-            "source",
-            "source__character",
-            "target",
-            "target__character",
-        ).prefetch_related(
-            Prefetch(
-                "track_progress",
-                queryset=RelationshipTrackProgress.objects.select_related("track"),
-                to_attr="cached_track_progress",
-            ),
-            Prefetch(
-                "updates",
-                queryset=RelationshipUpdate.objects.all(),
-                to_attr="cached_updates",
-            ),
-            Prefetch(
-                "conditions",
-                queryset=RelationshipCondition.objects.all(),
-                to_attr="cached_conditions",
-            ),
+        """Return relationships the caller may read, with related data prefetched.
+
+        Numeric relationship state (tracks, affection, tiers) is author-private:
+        scoped to rows where ``source`` belongs to one of the caller's own
+        characters, via a current (``end_date__isnull=True``) ``RosterTenure``
+        join — mirroring ``RelationshipUpdateViewSet.get_queryset``'s tenure
+        join rather than Evennia's live-puppet ``db_account`` field, so an
+        owner browsing while not currently puppeting that character still sees
+        their own outbound rows. ``is_soul_tether=True`` rows are a ratified
+        carve-out and stay universally readable regardless of ownership: the
+        Soul Tether panel rendered on a *foreign* character's sheet depends on
+        being able to read the tether row (see ADR-0117).
+        """
+        user = self.request.user
+        return (
+            CharacterRelationship.objects.filter(
+                Q(
+                    source__roster_entry__tenures__player_data__account=user,
+                    source__roster_entry__tenures__end_date__isnull=True,
+                )
+                | Q(is_soul_tether=True)
+            )
+            .distinct()
+            .select_related(
+                "source",
+                "source__character",
+                "target",
+                "target__character",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "track_progress",
+                    queryset=RelationshipTrackProgress.objects.select_related("track"),
+                    to_attr="cached_track_progress",
+                ),
+                Prefetch(
+                    "updates",
+                    queryset=RelationshipUpdate.objects.all(),
+                    to_attr="cached_updates",
+                ),
+                Prefetch(
+                    "conditions",
+                    queryset=RelationshipCondition.objects.all(),
+                    to_attr="cached_conditions",
+                ),
+            )
         )
 
     def get_serializer_class(self):  # type: ignore[override]

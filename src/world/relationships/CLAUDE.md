@@ -143,7 +143,12 @@ The positive relationship-building loop is reachable from both web and telnet:
 
 - **Web** — `RelationshipUpdateViewSet` exposes four POST endpoints (`first_impression` /
   `develop` / `capstone` / `redistribute`) that dispatch the Actions via `action.run()`.
-  Relationship state list/detail reads live on `CharacterRelationshipViewSet` (read-only).
+  Relationship state list/detail reads live on `CharacterRelationshipViewSet` (read-only),
+  **privacy-scoped** (#2159, ADR-0117): numeric state is author-private, so `get_queryset`
+  filters to rows whose `source` is one of the caller's own tenure-owned characters (same
+  tenure join as `RelationshipUpdateViewSet`, never Evennia's live-puppet `db_account`), OR
+  `is_soul_tether=True` (a ratified carve-out — the tether panel on a foreign character's
+  sheet depends on reading that row).
   The same `RelationshipUpdateViewSet` also mixes in `ListModelMixin` for a narrow `GET`
   list route (#2031) — **not** a general writeup browser: scoped to `RelationshipUpdate`
   rows where the requesting user's account has a **current RosterTenure** (mirroring
