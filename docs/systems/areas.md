@@ -141,8 +141,8 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 
 | Model | Purpose | Key Fields / Constraints |
 |-------|---------|--------------------------|
-| `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name; `elevation_anchor` (self-referential FK → `Position`, null=floor/top-level) — the ground `Position` this AERIAL or CHASM node is anchored to (**omitted from `MODEL_MAP.md`** — the auto-generation tool skips self-referential FKs) |
-| `PositionEdge` | Traversable adjacency between two `Position` nodes | `position_a` / `position_b` FK (canonical pk order); `is_passable`; `gating_challenge` FK → `mechanics.ChallengeInstance` (nullable) |
+| `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name; `elevation_anchor` (self-referential FK → `Position`, null=floor/top-level) — the ground `Position` this AERIAL or CHASM node is anchored to (**omitted from `MODEL_MAP.md`** — the auto-generation tool skips self-referential FKs); `layout_x`/`layout_y` (nullable floats) — cosmetic tactical-map coordinates (#2006); `null` on both means "let the frontend auto-layout" (`computeTacticalLayout`'s BFS-ring placement) rather than "place at the origin" |
+| `PositionEdge` | Traversable adjacency between two `Position` nodes | `position_a` / `position_b` FK (canonical pk order); `is_passable`; `blocks_flight` — obstructs AERIAL-layer traversal; `gating_challenge` FK → `mechanics.ChallengeInstance` (nullable) |
 | `ObjectPosition` | One-to-one occupancy record | `objectdb` OneToOne PK; `position` FK — mirrors `db_location` |
 
 **Blueprint template graph** (room-independent):
@@ -150,7 +150,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 | Model | Purpose | Key Fields / Constraints |
 |-------|---------|--------------------------|
 | `PositionBlueprint` | GM-authored reusable terrain layout | `name` (unique), `description` |
-| `BlueprintPosition` | Position node template inside a blueprint | `blueprint` FK; name unique per blueprint |
+| `BlueprintPosition` | Position node template inside a blueprint | `blueprint` FK; name unique per blueprint; `layout_x`/`layout_y` (nullable floats, #2006) |
 | `BlueprintEdge` | Edge template inside a blueprint | `blueprint` FK; `position_a` / `position_b` FK → `BlueprintPosition` (canonical pk order); `is_passable`; `gating_challenge_template` FK → `mechanics.ChallengeTemplate` (nullable, `on_delete=PROTECT`) |
 
 **Room profile link** (in `evennia_extensions.RoomProfile`):
@@ -195,6 +195,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 | `room_position_adjacency(room)` | Full ADJACENT-reach adjacency map for a room (uses prefetched attrs when available) |
 | `adjacent_open_positions(position)` | Edges to passable, non-actively-gated neighbors |
 | `reachable_positions(objectdb)` | Multi-hop BFS over passable, non-gated edges |
+| `position_graph(room) -> PositionGraph` | Full node+edge graph for the tactical map (#2006) — every position and every edge (unlike `room_position_adjacency`, keeps impassable/gated edges so the UI can render them). `PositionGraph` is `{nodes: list[PositionNode], edges: list[PositionEdgeInfo]}`; `PositionNode` is `{id, name, kind, elevation_anchor_id, layout_x, layout_y}`, `PositionEdgeInfo` is `{position_a_id, position_b_id, is_passable, blocks_flight, gating_challenge_name}`. Zero extra queries when the caller's queryset prefetches `room.positions_cached` (with each position's edges onto `all_edges_as_a`); falls back to 2 queries otherwise. |
 
 *Placement + movement:*
 
@@ -244,21 +245,38 @@ Registered in `commands/default_cmdsets.py` alongside `CmdPlaces`.
 | `PositionSummarySerializer` | `{id, name}` |
 | `PersonaPositionSerializer` | `{persona_id, position: {id, name} | null}` |
 | `PositionAdjacencyItemSerializer` | `{position_id, adjacent_position_ids: [int]}` |
+| `PositionNodeSerializer` | `{id, name, kind, elevation_anchor_id, layout_x, layout_y}` — tactical-map node shape (#2006) |
+| `PositionEdgeSerializer` | `{position_a_id, position_b_id, is_passable, blocks_flight, gating_challenge_name}` — tactical-map edge shape (#2006) |
 
 ### Scene API Extension [BUILT & WIRED]
 
-`SceneDetailSerializer` (`src/world/scenes/serializers.py`) exposes three additional fields on the scene detail endpoint:
+`SceneDetailSerializer` (`src/world/scenes/serializers.py`) exposes fields on the scene detail endpoint:
 
 | Field | Type | Content |
 |-------|------|---------|
 | `positions` | `[{id, name}]` | All positions in the scene's room |
 | `position_adjacency` | `[{position_id, adjacent_position_ids}]` | ADJACENT-reach adjacency map |
 | `persona_positions` | `[{persona_id, position}]` | Per-participant position (null if unplaced) |
+| `position_nodes` | `[PositionNode]` | Full tactical-map graph nodes for the scene's room, via `position_graph(obj.location)` (#2006) |
+| `position_edges` | `[PositionEdgeInfo]` | Full tactical-map graph edges for the scene's room, via `position_graph(obj.location)` (#2006) |
+
+### Combat API Extension [BUILT & WIRED]
+
+`EncounterDetailSerializer` (`src/world/combat/serializers.py`) exposes the same two graph fields on the combat encounter detail endpoint, sourced from `position_graph(obj.room)`:
+
+| Field | Type | Content |
+|-------|------|---------|
+| `position_nodes` | `[PositionNode]` | Full tactical-map graph nodes for the encounter's room (#2006) |
+| `position_edges` | `[PositionEdgeInfo]` | Full tactical-map graph edges for the encounter's room (#2006) |
+
+`Participant.current_position` / `Opponent.current_position` (both `PositionSummarySerializer` — `{id, name} | null`) locate each combatant on the graph; unlike the scene side's `persona_positions` list, combat tracks position directly on the participant/opponent row.
 
 ### Frontend [BUILT & WIRED]
 
-- `MovementActions` — shared component (extracted from combat; lives in `frontend/src/combat/components/`); renders adjacent-position move buttons.
-- `RoomPositionsPanel` — scene detail component (`frontend/src/scenes/components/`); renders positions, persona placement, the move action, and a staff "Set the stage" control using the scene's positions payload.
+- `TacticalMap` (`frontend/src/areas/components/TacticalMap.tsx`) — shared read-only `@xyflow/react` canvas rendering a Position graph: occupant avatars per node (`PositionMapNode.tsx`), edges styled by passability/gating (`edgeStyle`), click-to-move via the caller-supplied `moveActions`/`onDispatchMove`. Auto-layout (`tacticalLayout.ts`'s `computeTacticalLayout`, a pure BFS-ring placement) is used per-node when `layout_x`/`layout_y` are both null; explicit cosmetic coordinates take precedence. Dragging is disabled — coordinate authoring is out of scope for #2006.
+- `SceneTacticalMap` (`frontend/src/scenes/components/SceneTacticalMap.tsx`) — non-combat wrapper; builds `occupantsByPosition` from the scene's `persona_positions`, renders nothing when the room has no positions. Replaced the old `RoomPositionsPanel` text-list UI (#2006).
+- `CombatTacticalMap` (`frontend/src/combat/components/CombatTacticalMap.tsx`) — combat wrapper; builds `occupantsByPosition` from `Participant.current_position`/`Opponent.current_position` instead of `persona_positions`. Mounted as a "Map" tab in `CombatScenePage`'s right rail, alongside the existing "Your Turn" tab (`CombatTurnPanel`) — tab defaults to "Your Turn" (#2006).
+- `MovementActions` — shared component (extracted from combat; lives in `frontend/src/combat/components/`); renders adjacent-position move buttons (a non-map fallback list still used elsewhere).
 
 ### Exceptions
 

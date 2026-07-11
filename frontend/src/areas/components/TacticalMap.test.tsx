@@ -56,8 +56,23 @@ const edge = (
 const moveAction = (positionId: number): PlayerAction => ({
   backend: 'registry',
   display_name: `Move to Position ${positionId}`,
-  ref: { backend: 'registry', registry_key: 'move_to_position', position_id: positionId },
   description: '',
+  difficulty: null,
+  prerequisite_met: true,
+  prerequisite_reasons: [],
+  check_type: { id: 1, name: 'Standard' },
+  action_template: null,
+  ref: {
+    backend: 'registry',
+    challenge_instance_id: null,
+    approach_id: null,
+    technique_id: null,
+    registry_key: 'move_to_position',
+    position_id: positionId,
+  },
+  target_spec: null,
+  enhancements: [],
+  strain: null,
   action_category: 'physical',
 });
 

@@ -147,6 +147,8 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     forced_escape: false,
     resolution_order: [],
     position_adjacency: [],
+    position_nodes: [],
+    position_edges: [],
     is_lethal: false,
     duel_winner: null,
     surge_beats: [],

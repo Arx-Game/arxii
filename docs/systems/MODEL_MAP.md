@@ -278,6 +278,9 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - cast_destination -> areas.Position [FK] (nullable)
+  - cast_position_a -> areas.Position [FK] (nullable)
+  - cast_position_b -> areas.Position [FK] (nullable)
   - detected_by -> character_sheets.CharacterSheet [M2M]
 **Pointed to by:**
   - triggers <- flows.Trigger
@@ -565,6 +568,9 @@
   - room -> objects.ObjectDB [FK]
   - elevation_anchor -> areas.Position [FK] (nullable)
 **Pointed to by:**
+  - cast_destination_instances <- conditions.ConditionInstance
+  - cast_position_a_instances <- conditions.ConditionInstance
+  - cast_position_b_instances <- conditions.ConditionInstance
   - elevated_over <- areas.Position
   - edges_as_a <- areas.PositionEdge
   - edges_as_b <- areas.PositionEdge
@@ -577,6 +583,7 @@
   - position_a -> areas.Position [FK]
   - position_b -> areas.Position [FK]
   - gating_challenge -> mechanics.ChallengeInstance [FK] (nullable)
+  - created_by_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### PositionBlueprint
 **Pointed to by:**
@@ -1277,6 +1284,7 @@
   - stat_trackers <- achievements.StatTracker
   - achievements <- achievements.CharacterAchievement
   - titles <- achievements.CharacterTitle
+  - conjured_obstacles <- areas.PositionEdge
   - owned_instances <- instances.InstancedRoom
   - captivities <- captivity.Captivity
   - journal_entries <- journals.JournalEntry
@@ -1309,6 +1317,7 @@
   - summoned_battle_units <- battles.BattleUnit
   - battle_participations <- battles.BattleParticipant
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
+  - conjured_hazards <- room_features.Trap
   - detected_traps <- room_features.Trap
 
 ### Gender
@@ -1856,6 +1865,9 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - cast_destination -> areas.Position [FK] (nullable)
+  - cast_position_a -> areas.Position [FK] (nullable)
+  - cast_position_b -> areas.Position [FK] (nullable)
   - detected_by -> character_sheets.CharacterSheet [M2M]
 **Pointed to by:**
   - triggers <- flows.Trigger
@@ -2606,6 +2618,7 @@
   - item_instances <- items.ItemInstance
   - itemfacet_attachments <- items.ItemFacet
   - itemstyle_attachments <- items.ItemStyle
+  - crafted_item_recipes <- items.CraftedItemRecipe
 
 ### InteractionType
 **Pointed to by:**
@@ -2662,10 +2675,10 @@
   - ownership_events <- items.OwnershipEvent
   - item_facets <- items.ItemFacet
   - item_styles <- items.ItemStyle
-  - crafted_recipes <- items.CraftedItemRecipe
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
+  - crafted_recipes <- items.CraftedItemRecipe
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - project_contributions <- projects.Contribution
@@ -2961,6 +2974,7 @@
 - `set_primary_home(*, persona: 'Persona', room: 'DefaultObject', notes: 'str' = '') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670, #2036).`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
 - `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
+- `set_room_stat_modifier(room_profile: 'RoomProfile', stat_key: 'StatKey', *, source: 'str', value: 'int') -> 'LocationValueModifier | None' — Set the room-level ``(room_profile, stat_key, source)`` cascade row to ``value``.`
 - `tenancies_for(persona: 'Persona', room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return the QuerySet of currently-active tenancies that give this`
 - `tenancies_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, list[LocationTenancy]]' — Bulk-resolve currently-active tenancies for many rooms.`
 - `tenancy_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationTenancy]' — Return ALL LocationTenancy rows (active and ended) for a`

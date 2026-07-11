@@ -43,6 +43,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   than defaulting everyone to the same spot (journey test in `world/combat/tests/
   test_declare_reach_gate.py`). Full telnet parity: `position` / `position <name>`
   (`CmdPosition`) lists/takes/moves the same way the web position panel does.
+- **Tactical encounter map — spatial rendering (#2006).** The position graph (#2005) is
+  now rendered, not just listed: `TacticalMap` (`frontend/src/areas/components/`), a
+  read-only `@xyflow/react` canvas with occupant avatars per node, edges styled by
+  passability/gating, and click-to-move via the existing `move_to_position`/
+  `take_position` actions. `SceneTacticalMap` replaced the old `RoomPositionsPanel`
+  text-list UI on the scene page; `CombatTacticalMap` mounts as a "Map" tab in
+  `CombatScenePage`'s right rail (default tab stays "Your Turn"). Both `SceneDetail`
+  and `EncounterDetail` now serve the full node+edge graph (`position_nodes`/
+  `position_edges`, via the new `position_graph(room)` service) — unlike the
+  ADJACENT-reach-only `position_adjacency`, this keeps impassable/gated edges so
+  obstacles are visible. See [areas.md](../systems/areas.md#frontend-built--wired).
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
