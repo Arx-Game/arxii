@@ -312,7 +312,13 @@ class InteractionListSerializer(serializers.ModelSerializer):
         """Mirror ``SceneListSerializer.get_viewer_can_gm`` for this interaction's scene (#2183).
 
         Cached on the serializer context per scene id (a page of interactions can, in
-        principle, span more than one scene).
+        principle, span more than one scene). For the common ``?scene=<id>`` list request,
+        ``InteractionViewSet.get_serializer_context`` pre-seeds this cache with the one
+        relevant scene's answer computed via a single targeted ``SceneParticipation``
+        query — so this field never falls through to ``scene.is_gm()``/``scene.is_owner()``
+        (which would cost a fresh ``participations_cached`` query per distinct in-memory
+        Scene instance, since ``select_related`` builds a new one per row). The fallback
+        below only fires for requests without a scene filter.
         """
         if scene is None:
             return False

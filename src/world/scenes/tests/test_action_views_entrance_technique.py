@@ -55,15 +55,24 @@ class EntranceTechniqueRestDispatchTests(CastScenarioMixin):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        character = cls.caster.character_sheet.character
-        character.db_location = cls.scene.location
-        character.save()
-
         moment_type = ensure_dramatic_entrance_content()
         CharacterResonanceFactory(
             character_sheet=cls.caster.character_sheet,
             resonance=moment_type.resonance,
         )
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Mutating + saving a typeclass instance must happen per-test (on the
+        # TestData-deep-copied ``self.caster``), never in ``setUpTestData`` —
+        # Evennia's ``DbHolder`` (attached the moment ``.db``/``.attributes`` is
+        # touched anywhere in the process) is un-deepcopyable, so doing this at
+        # the classmethod level breaks Django's per-test ``cls.data`` copy in a
+        # full-app run (#2183 CI fix; see the DbHolder note in
+        # world/buildings/tests/test_manager_api.py for the same trap).
+        character = self.caster.character_sheet.character
+        character.db_location = self.scene.location
+        character.save()
 
     def _post(self, payload: dict):
         factory = APIRequestFactory()
