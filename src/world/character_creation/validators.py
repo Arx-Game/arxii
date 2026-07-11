@@ -190,6 +190,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     Cantrip-based validation:
     - Must have selected_cantrip_id in draft_data
     - If cantrip requires_facet, must have selected_facet_id that is in allowed_facets
+    - Must have selected_gift_resonance_id (anchors the latent GIFT thread, #1620)
     """
     from world.magic.models import Cantrip  # noqa: PLC0415
 
@@ -209,5 +210,10 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
             return [prompt]
         if not cantrip.allowed_facets.filter(pk=facet_id).exists():
             return ["Selected option is not valid for this cantrip"]
+
+    # Resonance is required — anchors the latent GIFT thread (#1620)
+    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+    if not resonance_id:
+        return ["Select a gift resonance"]
 
     return []
