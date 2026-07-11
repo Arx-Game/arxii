@@ -160,3 +160,29 @@ class BlueprintEdgeGatingTemplateTests(TestCase):
         template = ChallengeTemplateFactory()
         edge = BlueprintEdgeFactory(gating_challenge_template=template)
         self.assertEqual(edge.gating_challenge_template_id, template.pk)
+
+
+class PositionLayoutCoordinatesTests(TestCase):
+    def test_layout_coordinates_default_to_null(self) -> None:
+        from world.areas.positioning.factories import PositionFactory
+
+        position = PositionFactory()
+        self.assertIsNone(position.layout_x)
+        self.assertIsNone(position.layout_y)
+
+    def test_layout_coordinates_can_be_set(self) -> None:
+        from world.areas.positioning.factories import PositionFactory
+
+        position = PositionFactory(layout_x=3, layout_y=-2)
+        position.refresh_from_db()
+        self.assertEqual(position.layout_x, 3)
+        self.assertEqual(position.layout_y, -2)
+
+
+class BlueprintPositionLayoutCoordinatesTests(TestCase):
+    def test_layout_coordinates_default_to_null(self) -> None:
+        from world.areas.positioning.factories import BlueprintPositionFactory
+
+        bp_position = BlueprintPositionFactory()
+        self.assertIsNone(bp_position.layout_x)
+        self.assertIsNone(bp_position.layout_y)

@@ -68,6 +68,19 @@ class Position(PositionNodeBase):
         related_name="elevated_over",
         help_text="The position immediately below this one (null = solid floor / bottom).",
     )
+    layout_x = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Cosmetic tactical-map column (#2006) — never gates creation or "
+            "movement. NULL (with layout_y) = auto-laid-out on the map."
+        ),
+    )
+    layout_y = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Cosmetic tactical-map row (#2006). See layout_x.",
+    )
 
     class Meta:
         app_label = "areas"
@@ -171,6 +184,19 @@ class BlueprintPosition(PositionNodeBase):
 
     blueprint = models.ForeignKey(
         PositionBlueprint, on_delete=models.CASCADE, related_name="positions"
+    )
+    layout_x = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Cosmetic tactical-map column (#2006), copied to the cloned "
+            "Position by instantiate_blueprint. NULL = auto-laid-out."
+        ),
+    )
+    layout_y = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Cosmetic tactical-map row (#2006). See layout_x.",
     )
 
     class Meta:

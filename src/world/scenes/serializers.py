@@ -5,6 +5,8 @@ from rest_framework import serializers
 from world.areas.positioning.serializers import (
     PersonaPositionSerializer,
     PositionAdjacencyItemSerializer,
+    PositionEdgeSerializer,
+    PositionNodeSerializer,
     PositionSummarySerializer,
 )
 from world.scenes.constants import ScenePrivacyMode, SceneRoundMode, SceneRoundStartReason
@@ -272,6 +274,8 @@ class SceneDetailSerializer(SceneListSerializer):
     personas = serializers.SerializerMethodField()
     positions = serializers.SerializerMethodField()
     position_adjacency = serializers.SerializerMethodField()
+    position_nodes = serializers.SerializerMethodField()
+    position_edges = serializers.SerializerMethodField()
     persona_positions = serializers.SerializerMethodField()
     active_round = serializers.SerializerMethodField()
 
@@ -285,6 +289,8 @@ class SceneDetailSerializer(SceneListSerializer):
             "personas",
             "positions",
             "position_adjacency",
+            "position_nodes",
+            "position_edges",
             "persona_positions",
             "active_round",
         ]
@@ -323,6 +329,35 @@ class SceneDetailSerializer(SceneListSerializer):
 
         entries = room_position_adjacency(obj.location)
         return PositionAdjacencyItemSerializer(entries, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(PositionNodeSerializer(many=True))
+    def get_position_nodes(self, obj: Scene) -> list[dict]:
+        """Return the full position-node list for the scene's room (#2006).
+
+        Unlike ``positions`` (id+name only), carries kind/elevation/layout for
+        spatial rendering. Empty list when the scene has no location.
+        """
+        if obj.location is None:
+            return []
+        from world.areas.positioning.services import position_graph  # noqa: PLC0415
+
+        graph = position_graph(obj.location)
+        return PositionNodeSerializer(graph.nodes, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(PositionEdgeSerializer(many=True))
+    def get_position_edges(self, obj: Scene) -> list[dict]:
+        """Return every edge (obstacle/gate visibility) for the scene's room (#2006).
+
+        Unlike ``position_adjacency`` (the reach graph), carries every edge
+        with is_passable/blocks_flight/gating_challenge_name. Empty list when
+        the scene has no location.
+        """
+        if obj.location is None:
+            return []
+        from world.areas.positioning.services import position_graph  # noqa: PLC0415
+
+        graph = position_graph(obj.location)
+        return PositionEdgeSerializer(graph.edges, many=True).data  # type: ignore[return-value]
 
     @extend_schema_field(PersonaPositionSerializer(many=True))
     def get_persona_positions(self, obj: Scene) -> list[dict]:

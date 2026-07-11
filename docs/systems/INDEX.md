@@ -700,24 +700,28 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
 - **Source:** `src/world/locations/`
 - **Details:** `src/world/locations/CLAUDE.md`
 
-### Positioning (#530 + #1017 + #1018)
+### Positioning (#530 + #1017 + #1018 + #2006)
 Room-anchored spatial graph: named position nodes, traversable edges, per-object
-occupancy, capability-gated movement, GM terrain blueprints, non-combat scene
-positioning UI, and dynamic battlefield reshaping (aerial layer, chasms, consequence
-effects for graph mutation and flight).
+occupancy, capability-gated movement, GM terrain blueprints, a spatial tactical-map
+UI (scene + combat), and dynamic battlefield reshaping (aerial layer, chasms,
+consequence effects for graph mutation and flight).
 
 - **Models:** `Position` (`PositionKind` discriminator; `elevation_anchor` self-FK —
-  the ground node an AERIAL or CHASM node is anchored to), `PositionEdge` (optional
-  `gating_challenge` FK + `is_passable`), `ObjectPosition` (OneToOne occupancy);
-  **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live and blueprint
-  layers; **blueprint models** `PositionBlueprint` (reusable GM-authored layout),
-  `BlueprintPosition`, `BlueprintEdge`; `RoomProfile.default_blueprint` FK
-  (`evennia_extensions`) links a room to its preferred layout.
+  the ground node an AERIAL or CHASM node is anchored to; `layout_x`/`layout_y`
+  nullable-small-integer cosmetic tactical-map coordinates, #2006), `PositionEdge` (optional
+  `gating_challenge` FK + `is_passable` + `blocks_flight`), `ObjectPosition` (OneToOne
+  occupancy); **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live
+  and blueprint layers; **blueprint models** `PositionBlueprint` (reusable GM-authored
+  layout), `BlueprintPosition` (`layout_x`/`layout_y` too), `BlueprintEdge`;
+  `RoomProfile.default_blueprint` FK (`evennia_extensions`) links a room to its
+  preferred layout.
 - **Key Services:** `create_position` / `remove_position` / `connect_positions` /
   `disconnect_positions` / `edge_between` / `place_in_position` /
   `move_to_position` (adjacency + passability + MOVEMENT capability + active-gating) /
   `force_move_to_position` / `position_of` / `reachable_positions` /
-  `adjacent_open_positions`; **blueprint authoring** `create_blueprint` /
+  `adjacent_open_positions` / `position_graph(room) -> PositionGraph` (full node+edge
+  graph for the tactical map — keeps impassable/gated edges, unlike
+  `room_position_adjacency`; #2006); **blueprint authoring** `create_blueprint` /
   `add_blueprint_position` / `connect_blueprint_positions` / `remove_blueprint`;
   **staging** `instantiate_blueprint(blueprint, room, *, replace=False)`;
   **aerial layer** `materialize_aerial_layer(room)` / `teardown_aerial_layer(room)` /
@@ -730,8 +734,9 @@ effects for graph mutation and flight).
 - **Seed factory:** `AerialPropertyFactory` (`world/mechanics/factories.py`) — get-or-create
   factory for the `"aerial"` `Property` tag used to track airborne objects
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
-  `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer` (used by both combat
-  and scenes layers)
+  `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer`, `PositionNodeSerializer`,
+  `PositionEdgeSerializer` (the last two are the tactical-map node/edge shapes, #2006 —
+  used by both combat and scenes layers)
 - **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`), `TakePositionAction`
   (`registry_key="take_position"` — voluntary PRIMARY/FEATURE entry for an UNPLACED actor,
   #2005), `GMPlaceInPositionAction` (`registry_key="gm_place_in_position"` — staff/scene-GM
@@ -741,9 +746,19 @@ effects for graph mutation and flight).
   `TakePositionAction`/`MoveToPositionAction`, room-scoped name resolution; see
   [areas.md](areas.md) "Telnet" section
 - **Scene API:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`,
-  `persona_positions`
-- **Frontend:** `MovementActions` (shared, in `frontend/src/combat/components/`) +
-  `RoomPositionsPanel` (scene detail, in `frontend/src/scenes/components/`)
+  `persona_positions`, and (#2006) `position_nodes`/`position_edges` — the full tactical-map
+  graph for the scene's room, via `position_graph(obj.location)`
+- **Combat API:** `EncounterDetailSerializer` exposes `position_nodes`/`position_edges`
+  (same shape, via `position_graph(obj.room)`, #2006); `Participant.current_position` /
+  `Opponent.current_position` (`PositionSummarySerializer | null`) locate each combatant
+  directly on the row (combat doesn't use a `persona_positions`-style side list)
+- **Frontend (#2006):** `TacticalMap` (shared read-only `@xyflow/react` canvas,
+  `frontend/src/areas/components/`) + `SceneTacticalMap` (scene wrapper, replaces the old
+  `RoomPositionsPanel`, `frontend/src/scenes/components/`) + `CombatTacticalMap` (combat
+  wrapper — occupants from `current_position` not `persona_positions` — mounted as a "Map"
+  tab in `CombatScenePage`'s right rail alongside "Your Turn"/`CombatTurnPanel`,
+  `frontend/src/combat/components/`) + `MovementActions` (shared adjacent-position button
+  list, `frontend/src/combat/components/`)
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
   aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
 - **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /

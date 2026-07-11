@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.test import TestCase
 from evennia import create_object
 
+from world.areas.positioning.factories import PositionEdgeFactory
 from world.areas.positioning.services import (
     connect_positions,
     create_position,
@@ -105,3 +106,27 @@ class SceneDetailSerializerPositionsTestCase(TestCase):
         ]
         assert len(persona_entries) == 1
         assert persona_entries[0]["position"] is None
+
+
+class ScenePositionGraphFieldsTests(TestCase):
+    """SceneDetailSerializer exposes position_nodes/position_edges (#2006)."""
+
+    def test_position_nodes_and_edges_reflect_the_room_graph(self) -> None:
+        edge = PositionEdgeFactory()
+        scene = SceneFactory(location=edge.position_a.room)
+
+        data = SceneDetailSerializer(scene).data
+
+        node_ids = {n["id"] for n in data["position_nodes"]}
+        self.assertEqual(node_ids, {edge.position_a_id, edge.position_b_id})
+        self.assertEqual(len(data["position_edges"]), 1)
+        self.assertEqual(data["position_edges"][0]["position_a_id"], edge.position_a_id)
+        self.assertEqual(data["position_edges"][0]["position_b_id"], edge.position_b_id)
+
+    def test_no_location_returns_empty_lists(self) -> None:
+        scene = SceneFactory(location=None)
+
+        data = SceneDetailSerializer(scene).data
+
+        self.assertEqual(data["position_nodes"], [])
+        self.assertEqual(data["position_edges"], [])

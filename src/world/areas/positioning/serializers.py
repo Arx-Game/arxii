@@ -26,3 +26,24 @@ class PositionAdjacencyItemSerializer(serializers.Serializer):
 
     position_id = serializers.IntegerField(read_only=True)
     adjacent_position_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)
+
+
+class PositionNodeSerializer(serializers.Serializer):
+    """Read-only serializer for one PositionNode — tactical-map node shape (#2006)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    kind = serializers.CharField(read_only=True)
+    elevation_anchor_id = serializers.IntegerField(read_only=True, allow_null=True)
+    layout_x = serializers.IntegerField(read_only=True, allow_null=True)
+    layout_y = serializers.IntegerField(read_only=True, allow_null=True)
+
+
+class PositionEdgeSerializer(serializers.Serializer):
+    """Read-only serializer for one PositionEdgeInfo — obstacle/gate visibility (#2006)."""
+
+    position_a_id = serializers.IntegerField(read_only=True)
+    position_b_id = serializers.IntegerField(read_only=True)
+    is_passable = serializers.BooleanField(read_only=True)
+    blocks_flight = serializers.BooleanField(read_only=True)
+    gating_challenge_name = serializers.CharField(read_only=True, allow_null=True)

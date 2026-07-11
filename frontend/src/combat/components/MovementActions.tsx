@@ -2,7 +2,7 @@
  * MovementActions — reusable move-to-position button list.
  *
  * Extracted from YourTurn.tsx (lines 655–685) to share with the
- * non-combat RoomPositionsPanel.  Renders one button per move action;
+ * non-combat SceneTacticalMap.  Renders one button per move action;
  * clicking dispatches `{ ref, kwargs: {} }` via the caller-supplied
  * dispatchAction function.
  */

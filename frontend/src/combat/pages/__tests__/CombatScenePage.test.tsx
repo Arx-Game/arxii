@@ -19,6 +19,7 @@
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
@@ -123,6 +124,25 @@ vi.mock('@/combat/CombatTurnPanel', () => ({
       data-character-sheet-id={characterSheetId}
     >
       CombatTurnPanel [{encounterId}]
+    </div>
+  ),
+}));
+
+// Stub CombatTacticalMap — exposes encounterId/characterId so we can assert them
+vi.mock('@/combat/components/CombatTacticalMap', () => ({
+  CombatTacticalMap: ({
+    encounterId,
+    characterId,
+  }: {
+    encounterId: number;
+    characterId: number;
+  }) => (
+    <div
+      data-testid="combat-tactical-map"
+      data-encounter-id={encounterId}
+      data-character-id={characterId}
+    >
+      CombatTacticalMap [{encounterId}]
     </div>
   ),
 }));
@@ -237,6 +257,25 @@ describe('CombatScenePage — smoke render', () => {
     const panel = screen.getByTestId('combat-turn-panel-stub');
     expect(panel).toBeInTheDocument();
     expect(panel).toHaveAttribute('data-encounter-id', '7');
+  });
+
+  it('defaults the right rail to the "Your Turn" tab', () => {
+    render(<CombatScenePage />, { wrapper: createWrapper() });
+    expect(screen.getByTestId('combat-turn-panel-stub')).toBeInTheDocument();
+    expect(screen.queryByTestId('combat-tactical-map')).not.toBeInTheDocument();
+  });
+
+  it('switches to the map tab and renders CombatTacticalMap', async () => {
+    const user = userEvent.setup();
+    render(<CombatScenePage />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByTestId('rail-tab-map'));
+
+    const map = screen.getByTestId('combat-tactical-map');
+    expect(map).toBeInTheDocument();
+    expect(map).toHaveAttribute('data-encounter-id', '7');
+    expect(map).toHaveAttribute('data-character-id', '10');
+    expect(screen.queryByTestId('combat-turn-panel-stub')).not.toBeInTheDocument();
   });
 
   it('passes characterId and characterSheetId from the active roster entry', () => {

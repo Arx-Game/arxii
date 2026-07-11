@@ -1,10 +1,10 @@
 /**
- * RoomPositionsPanel — non-combat scene positions display.
+ * SceneTacticalMap — spatial rendering of the scene's Position graph (#2006).
  *
- * Renders:
- *   - The room's positions with which personas currently occupy them
- *   - Move-to-position buttons for the current player (reusing MovementActions)
- *   - A "Set the Stage" staff control when that action is available
+ * Replaces RoomPositionsPanel's text list + button list with the tactical
+ * map: occupant avatars per node, edges styled by obstacle/gate state,
+ * click-to-move via the existing single-hop move_to_position/take_position
+ * PlayerActions. Keeps the "Set the Stage" staff/GM affordance.
  *
  * If the scene has no positions, renders nothing.
  */
@@ -14,7 +14,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
-import { MovementActions } from '@/combat/components/MovementActions';
+import { TacticalMap } from '@/areas/components/TacticalMap';
+import type { OccupantSummary } from '@/areas/components/PositionMapNode';
 import { fetchScene, sceneKeys } from '../queries';
 import { fetchAvailableActions } from '../actionQueries';
 import type { SceneDetail } from '../types';
@@ -24,7 +25,7 @@ interface Props {
   sceneId: string;
 }
 
-export function RoomPositionsPanel({ sceneId }: Props) {
+export function SceneTacticalMap({ sceneId }: Props) {
   // ---------------------------------------------------------------------------
   // Resolve active character → characterId for the actions endpoint
   // ---------------------------------------------------------------------------
@@ -36,7 +37,7 @@ export function RoomPositionsPanel({ sceneId }: Props) {
   );
 
   // ---------------------------------------------------------------------------
-  // Scene detail — positions, adjacency, persona_positions
+  // Scene detail — position graph nodes/edges, persona_positions
   // ---------------------------------------------------------------------------
   const { data: scene } = useQuery<SceneDetail>({
     queryKey: sceneKeys.detail(sceneId),
@@ -44,7 +45,7 @@ export function RoomPositionsPanel({ sceneId }: Props) {
   });
 
   // ---------------------------------------------------------------------------
-  // Available actions — move_to_position + set_the_stage
+  // Available actions — move_to_position/take_position + set_the_stage
   // ---------------------------------------------------------------------------
   const { data: actionsData } = useQuery({
     queryKey: ['available-actions', characterId],
@@ -55,7 +56,9 @@ export function RoomPositionsPanel({ sceneId }: Props) {
   const availableActions: PlayerAction[] = actionsData?.results ?? [];
 
   const moveActions = availableActions.filter(
-    (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'move_to_position'
+    (a) =>
+      a.ref.backend === 'registry' &&
+      (a.ref.registry_key === 'move_to_position' || a.ref.registry_key === 'take_position')
   );
 
   const setTheStageAction =
@@ -71,7 +74,8 @@ export function RoomPositionsPanel({ sceneId }: Props) {
   // ---------------------------------------------------------------------------
   // Derived data — build memos before any conditional return (rules of hooks)
   // ---------------------------------------------------------------------------
-  const scenePositions = scene?.positions ?? [];
+  const positionNodes = scene?.position_nodes ?? [];
+  const positionEdges = scene?.position_edges ?? [];
 
   const personaNameById = useMemo(() => {
     const personas = scene?.personas ?? [];
@@ -80,13 +84,13 @@ export function RoomPositionsPanel({ sceneId }: Props) {
 
   const occupantsByPosition = useMemo(() => {
     const personaPositions = scene?.persona_positions ?? [];
-    const map = new Map<number, string[]>();
+    const map = new Map<number, OccupantSummary[]>();
     for (const pp of personaPositions) {
       if (pp.position !== null) {
-        const names = map.get(pp.position.id) ?? [];
+        const occupants = map.get(pp.position.id) ?? [];
         const name = personaNameById.get(pp.persona_id);
-        if (name) names.push(name);
-        map.set(pp.position.id, names);
+        if (name) occupants.push({ name });
+        map.set(pp.position.id, occupants);
       }
     }
     return map;
@@ -95,41 +99,29 @@ export function RoomPositionsPanel({ sceneId }: Props) {
   // ---------------------------------------------------------------------------
   // Early exit — no positions defined for this room
   // ---------------------------------------------------------------------------
-  if (!scene || scenePositions.length === 0) return null;
+  if (!scene || positionNodes.length === 0) return null;
+
+  const handleDispatchMove = (action: PlayerAction) => {
+    dispatchAction({ ref: action.ref, kwargs: {} }).catch(() => {});
+  };
 
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
   return (
-    <div className="mt-2 space-y-2" data-testid="room-positions-panel">
+    <div className="mt-2 space-y-2" data-testid="scene-tactical-map">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Positions
       </p>
-
-      <div className="space-y-1">
-        {scenePositions.map((pos) => {
-          const occupants = occupantsByPosition.get(pos.id) ?? [];
-          return (
-            <div
-              key={pos.id}
-              className="flex items-center justify-between rounded bg-muted/30 px-2 py-1 text-xs"
-            >
-              <span className="font-medium">{pos.name}</span>
-              {occupants.length > 0 && (
-                <span className="ml-2 text-muted-foreground">{occupants.join(', ')}</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {moveActions.length > 0 && (
-        <MovementActions
-          actions={moveActions}
-          isLocked={isPending}
-          dispatchAction={dispatchAction}
+      <div className="h-[320px] rounded-md border border-border">
+        <TacticalMap
+          nodes={positionNodes}
+          edges={positionEdges}
+          occupantsByPosition={occupantsByPosition}
+          moveActions={moveActions}
+          onDispatchMove={handleDispatchMove}
         />
-      )}
+      </div>
 
       {setTheStageAction && (
         <button

@@ -81,6 +81,8 @@ function makeEncounter(
     forced_escape: false,
     resolution_order: [],
     position_adjacency: [],
+    position_nodes: [],
+    position_edges: [],
     is_lethal: false,
     duel_winner: null,
     ...overrides,

@@ -219,6 +219,11 @@ class CombatEncounterViewSet(ModelViewSet):
                         ),
                         to_attr="passable_edges_as_b",
                     ),
+                    Prefetch(
+                        "edges_as_a",
+                        queryset=PositionEdge.objects.select_related("gating_challenge__template"),
+                        to_attr="all_edges_as_a",
+                    ),
                 ),
                 to_attr="positions_cached",
             ),

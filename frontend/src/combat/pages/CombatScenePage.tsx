@@ -4,16 +4,20 @@
  * Route: /scenes/:id/combat
  *
  * Layout:
- *   [ SceneHeader (full width)                             ]
- *   [ SceneInteractionPanel (pose log)  ] [ CombatTurnPanel ]
- *   [ PendingActionAttachments          ] [   YourTurn       ]
- *   [ CommandInput (composer)           ] [   Rail sections  ]
+ *   [ SceneHeader (full width)                                    ]
+ *   [ SceneInteractionPanel (pose log)  ] [ Your Turn | Map tabs   ]
+ *   [ PendingActionAttachments          ] [   CombatTurnPanel  or  ]
+ *   [ CommandInput (composer)           ] [   CombatTacticalMap    ]
  *
  * The scene's active encounter is resolved via useEncounterForScene.
  * The viewer's characterId/characterSheetId are resolved from the
  * active roster entry — MyRosterEntry.character_id doubles as the
  * character_sheet pk (CharacterSheet uses primary_key=True on its
  * OneToOne to ObjectDB).
+ *
+ * The right rail is a tab switcher (defaults to "Your Turn") between
+ * CombatTurnPanel and CombatTacticalMap — the encounter's spatial Position
+ * graph rendering (#2006), mirroring SceneTacticalMap's non-combat wiring.
  *
  * Phase 11 of the unified-combat-ui plan.
  * See: docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §2
@@ -37,8 +41,10 @@ import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
 import { useEncounterForScene, useDuelChallengeInbox, combatKeys } from '@/combat/queries';
 import { CombatTurnPanel } from '@/combat/CombatTurnPanel';
+import { CombatTacticalMap } from '@/combat/components/CombatTacticalMap';
 import { DeepLinkModalHost } from '@/combat/modals/DeepLinkModalHost';
 import { DuelChallengeControls } from '@/combat/duels/DuelChallengeControls';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // ---------------------------------------------------------------------------
 // CombatScenePage
@@ -88,6 +94,10 @@ export function CombatScenePage() {
 
   // Detached action IDs for the chip strip
   const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
+
+  // Right-rail tab — "Your Turn" (CombatTurnPanel) vs "Map" (CombatTacticalMap, #2006).
+  // Defaults to 'turn' so existing behavior is unchanged for anyone not opting into the map.
+  const [rightRailTab, setRightRailTab] = useState<'turn' | 'map'>('turn');
 
   const handleDetach = useCallback((actionId: number) => {
     setDetachedActionIds((prev) => (prev.includes(actionId) ? prev : [...prev, actionId]));
@@ -231,7 +241,7 @@ export function CombatScenePage() {
           )}
         </div>
 
-        {/* Right column: CombatTurnPanel */}
+        {/* Right column: CombatTurnPanel / CombatTacticalMap (tabbed, #2006) */}
         <div className="min-h-0 overflow-y-auto" data-testid="combat-scene-right">
           {encounterLoading ? (
             <div
@@ -241,11 +251,30 @@ export function CombatScenePage() {
               Loading combat state…
             </div>
           ) : hasActiveEncounter ? (
-            <CombatTurnPanel
-              encounterId={encounterId}
-              characterId={characterId}
-              characterSheetId={characterSheetId}
-            />
+            <Tabs
+              value={rightRailTab}
+              onValueChange={(value) => setRightRailTab(value as 'turn' | 'map')}
+              className="flex h-full flex-col"
+            >
+              <TabsList className="grid w-full shrink-0 grid-cols-2">
+                <TabsTrigger value="turn" data-testid="rail-tab-turn" className="text-xs">
+                  Your Turn
+                </TabsTrigger>
+                <TabsTrigger value="map" data-testid="rail-tab-map" className="text-xs">
+                  Map
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="turn" className="mt-2 min-h-0 flex-1 overflow-y-auto">
+                <CombatTurnPanel
+                  encounterId={encounterId}
+                  characterId={characterId}
+                  characterSheetId={characterSheetId}
+                />
+              </TabsContent>
+              <TabsContent value="map" className="mt-2 min-h-0 flex-1 overflow-y-auto">
+                <CombatTacticalMap encounterId={encounterId} characterId={characterId} />
+              </TabsContent>
+            </Tabs>
           ) : (
             <div className="flex flex-col gap-3">
               {/* Duel challenge accept/decline prompt — shown when there is no active

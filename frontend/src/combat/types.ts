@@ -27,6 +27,9 @@ export type PositionSummary = components['schemas']['PositionSummary'];
 
 export type PositionAdjacencyItem = components['schemas']['PositionAdjacencyItem'];
 
+export type PositionNode = components['schemas']['PositionNode'];
+export type PositionEdgeInfo = components['schemas']['PositionEdge'];
+
 export type EncounterDetail = components['schemas']['EncounterDetail'];
 
 // current_round_actions is typed as {[key: string]: unknown}[] in the schema —

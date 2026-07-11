@@ -1126,7 +1126,7 @@ least one staging ref (`create_battle`/`stage_battle_map`/`spawn_battle_units`/
 Battle yet for this scene shows the "Create Battle" form (dispatching
 `create_battle`); a Battle exists shows Apply Blueprint (with a replace-confirm step),
 Spawn Units, and Enlist Participant forms, each gated independently on its own action
-ref being present. Mirrors `RoomPositionsPanel`'s dispatch idiom exactly
+ref being present. Mirrors `SceneTacticalMap`'s dispatch idiom exactly
 (`useDispatchPlayerAction`); a failed dispatch (`result.success === false`) shows
 error styling and leaves the form/state alone; a successful dispatch resets its form
 and invalidates the battle detail + for-scene queries so `BattleMapCanvas` refetches.

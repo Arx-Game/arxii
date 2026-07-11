@@ -4,10 +4,11 @@
  * Server-authoritative gating: renders only when the viewer's dispatchable
  * registry actions include at least one staging ref (`create_battle`,
  * `stage_battle_map`, `spawn_battle_units`, `enlist_battle_participant`) —
- * no client-side GM-level check. Mirrors `RoomPositionsPanel`'s
+ * no client-side GM-level check. Mirrors `SceneTacticalMap`'s
  * `setTheStageAction` pattern exactly: resolve the active character ->
  * fetch available actions -> find refs by `registry_key` -> dispatch via
- * `useDispatchPlayerAction` (`frontend/src/scenes/components/RoomPositionsPanel.tsx:69-139`).
+ * `useDispatchPlayerAction` (`frontend/src/scenes/components/SceneTacticalMap.tsx:31-72`,
+ * mounted from `frontend/src/scenes/pages/SceneDetailPage.tsx:165`).
  *
  * Two render modes:
  *   - No Battle yet for this scene: the empty-battle "Create Battle" form

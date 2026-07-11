@@ -219,9 +219,9 @@ called `set_active_persona` directly (bypassing `action.run()`); telnet had no w
 
 **Details:** [appearance_and_identity.md](../systems/appearance_and_identity.md) §"Layer 1 — Persona"
 
-### Positioning in Scenes — DONE (#1017)
-- **Scene API extension:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`, `persona_positions` for the scene's room.
-- **Frontend:** `RoomPositionsPanel` component (`frontend/src/scenes/components/`) renders positions, persona placement, move action, and a staff "Set the stage" control. `MovementActions` extracted as a shared component (`frontend/src/combat/components/`).
+### Positioning in Scenes — DONE (#1017, spatial map #2006)
+- **Scene API extension:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`, `persona_positions`, and (#2006) `position_nodes`/`position_edges` — the full tactical-map graph — for the scene's room.
+- **Frontend:** `SceneTacticalMap` component (`frontend/src/scenes/components/`) renders the position graph as a spatial `@xyflow/react` map — occupant avatars per node, edges styled by passability/gating, click-to-move, and a staff "Set the stage" control — replacing the earlier `RoomPositionsPanel` text-list UI (#2006). `MovementActions` extracted as a shared component (`frontend/src/combat/components/`).
 - **Blueprint authoring + staging:** see `docs/roadmap/combat.md` (Positioning — Blueprints + Non-Combat Scene UI section) and `docs/systems/areas.md`.
 
 ### Relationship Integration
