@@ -65,6 +65,7 @@ const MOCK_BATTLE: BattleDetail = {
       footprint_radius: 2.0,
       controlled_by_id: 1,
       encounter_scene_id: null,
+      encounter_roster: null,
       vehicle: null,
       fortifications: [],
     },

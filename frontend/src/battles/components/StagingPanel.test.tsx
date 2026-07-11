@@ -319,6 +319,7 @@ describe('StagingPanel', () => {
           footprint_radius: 1,
           controlled_by_id: null,
           encounter_scene_id: null,
+          encounter_roster: null,
           vehicle: null,
           fortifications: [],
         },
