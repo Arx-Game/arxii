@@ -14,12 +14,17 @@ testable today.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from world.npc_services.constants import DrawMode, OfferKind
 from world.npc_services.models import (
     NPCRole,
     NPCServiceOffer,
     PermitOfferDetails,
 )
+
+if TYPE_CHECKING:
+    from world.buildings.models import BuildingKind
 
 BUILDERS_GUILD_CLERK_ROLE_NAME = "Builders Guild Clerk"
 
@@ -72,12 +77,23 @@ def ensure_builders_guild_clerk_role() -> NPCRole:
     return role
 
 
-def _ensure_offer(role: NPCRole, label: str, **overrides: object) -> NPCServiceOffer:
+def _ensure_offer(
+    role: NPCRole,
+    label: str,
+    *,
+    building_kind: BuildingKind | None = None,
+    max_target_size: int | None = None,
+    **overrides: object,
+) -> NPCServiceOffer:
     """Inner helper: idempotent (role, label)-keyed offer + details row.
 
     ``overrides`` accepts any NPCServiceOffer field (rapport_requirement,
     is_final, rapport_delta_success/failure, etc.). Defaults to a final
     PERMIT MENU offer with zero rapport requirement and zero deltas.
+
+    When ``building_kind`` is provided, it is set on the offer's
+    ``PermitOfferDetails`` row at creation time. When ``max_target_size``
+    is provided, it overrides the default (10) on the details row.
     """
     defaults: dict[str, object] = {
         "kind": OfferKind.PERMIT,
@@ -93,5 +109,10 @@ def _ensure_offer(role: NPCRole, label: str, **overrides: object) -> NPCServiceO
         role=role, label=label, defaults=defaults
     )
     if created:
-        PermitOfferDetails.objects.create(offer=offer)
+        details_defaults: dict[str, object] = {}
+        if building_kind is not None:
+            details_defaults["building_kind"] = building_kind
+        if max_target_size is not None:
+            details_defaults["default_max_target_size"] = max_target_size
+        PermitOfferDetails.objects.create(offer=offer, **details_defaults)
     return offer
