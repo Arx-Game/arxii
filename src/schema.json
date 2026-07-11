@@ -34176,6 +34176,20 @@ components:
       description: |-
         * `therefore` - Therefore
         * `but` - But
+    ConsentModeEnum:
+      enum:
+      - everyone
+      - all_but_blacklist
+      - friends_whitelist
+      - rivals
+      - allowlist
+      type: string
+      description: |-
+        * `everyone` - Everyone
+        * `all_but_blacklist` - Everyone except my blacklist
+        * `friends_whitelist` - Friends and my whitelist
+        * `rivals` - My declared rivals (and whitelist)
+        * `allowlist` - Allowlist only
     ConsentResponseRequest:
       type: object
       properties:
@@ -35493,20 +35507,6 @@ components:
         * `until_used` - Until Used (consumed on trigger)
         * `end_combat` - Until End of Combat
         * `permanent` - Permanent (until removed)
-    DefaultModeEnum:
-      enum:
-      - everyone
-      - all_but_blacklist
-      - friends_whitelist
-      - rivals
-      - allowlist
-      type: string
-      description: |-
-        * `everyone` - Everyone
-        * `all_but_blacklist` - Everyone except my blacklist
-        * `friends_whitelist` - Friends and my whitelist
-        * `rivals` - My declared rivals (and whitelist)
-        * `allowlist` - Allowlist only
     DefendingSideRoleEnum:
       enum:
       - attacker
@@ -43118,20 +43118,6 @@ components:
         * `open` - Open (immediate, unbounded)
         * `pose_order` - Pose order (immediate, quota-gated)
         * `strict` - Strict (declare, batch-resolved)
-    Mode447Enum:
-      enum:
-      - everyone
-      - all_but_blacklist
-      - friends_whitelist
-      - rivals
-      - allowlist
-      type: string
-      description: |-
-        * `everyone` - Everyone
-        * `all_but_blacklist` - Everyone except my blacklist
-        * `friends_whitelist` - Friends and my whitelist
-        * `rivals` - My declared rivals (and whitelist)
-        * `allowlist` - Allowlist only
     Mode8baEnum:
       enum:
       - pose
@@ -50151,7 +50137,7 @@ components:
           type: integer
         mode:
           allOf:
-          - $ref: '#/components/schemas/Mode447Enum'
+          - $ref: '#/components/schemas/ConsentModeEnum'
           description: |-
             EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
@@ -56300,7 +56286,7 @@ components:
             overriding only where they want an exception.
         default_mode:
           allOf:
-          - $ref: '#/components/schemas/DefaultModeEnum'
+          - $ref: '#/components/schemas/ConsentModeEnum'
           readOnly: true
           description: |-
             Targeting mode when NOTHING is set anywhere up this category's parent chain. Only consulted on the ROOT of a tree (a category with no parent) — a non-root category inherits its parent instead of consulting its own default_mode. EVERYONE is default-allow; FRIENDS_WHITELIST/RIVALS/ALLOWLIST make it opt-in.
@@ -56338,7 +56324,7 @@ components:
           type: integer
         mode:
           allOf:
-          - $ref: '#/components/schemas/Mode447Enum'
+          - $ref: '#/components/schemas/ConsentModeEnum'
           description: |-
             EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
@@ -56361,7 +56347,7 @@ components:
           type: integer
         mode:
           allOf:
-          - $ref: '#/components/schemas/Mode447Enum'
+          - $ref: '#/components/schemas/ConsentModeEnum'
           description: |-
             EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 

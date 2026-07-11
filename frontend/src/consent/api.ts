@@ -1,5 +1,6 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import type { components } from '@/generated/api';
+import type { ConsentModeGuidance } from './consentModes';
 import type {
   SocialConsentPreference,
   SocialConsentPreferenceRequest,
@@ -24,6 +25,15 @@ export async function fetchCategories(): Promise<PaginatedCategories> {
   const res = await apiFetch('/api/consent/categories/');
   if (!res.ok) {
     throw new Error('Failed to load consent categories');
+  }
+  return res.json();
+}
+
+export async function fetchConsentModes(): Promise<ConsentModeGuidance[]> {
+  // Not paginated — the modes action returns a plain list of {value, label, guidance} (#2170).
+  const res = await apiFetch('/api/consent/categories/modes/');
+  if (!res.ok) {
+    throw new Error('Failed to load consent modes');
   }
   return res.json();
 }

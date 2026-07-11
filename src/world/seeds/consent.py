@@ -8,14 +8,16 @@ are preserved. Parents are applied in a second pass so already-seeded rows are a
 Category tree (#2170 — a leaf with no rule inherits its parent, up to the root's default):
   All Antagonism (root, default FRIENDS_WHITELIST — antagonism is opt-in)
     ├─ Hostile        → Intimidate
-    └─ Blackmail      → Blackmail
-  Romantic     → Flirt                       (root, EVERYONE)
-  Manipulative → Deceive, Persuade           (root, EVERYONE)
+    ├─ Blackmail      → Blackmail
+    ├─ Manipulative   → Deceive, Persuade        (a social imperative can force action)
+    └─ Theft          → (physical steal gate, #1909)
+  Romantic     → Flirt                            (root, EVERYONE — own intimacy opt-in axis)
   General      → Perform, Entrance, Restore to Sense  (root, EVERYONE)
 
-`theft` (ALLOWLIST, lazily seeded by ``services.theft_category``) is deliberately left as
-its own root, NOT under All Antagonism, so the #1909 steal gate keeps its strict opt-in
-default rather than loosening to the antagonism root — flagged for review on #2170.
+Every detriment-capable category hangs under All Antagonism (Apostate: anything usable to a
+character's detriment is gated antagonism). `theft` moves under it too — its effective default
+becomes the root's FRIENDS_WHITELIST (its own ALLOWLIST is kept only for the unseeded
+``services.theft_category`` fallback + the orphaned-row case).
 """
 
 from __future__ import annotations
@@ -69,10 +71,23 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         ConsentMode.FRIENDS_WHITELIST,
     ),
     (
+        "theft",
+        "Theft & Antagonism",
+        "Stealing from you and your belongings.",
+        27,
+        # Physical-theft gate (#1909). Now parented under All Antagonism, so its effective
+        # default is the root's FRIENDS_WHITELIST (friends may steal-in-RP by default) —
+        # Apostate's "no floors, fully inherit" call (#2170). Own value kept at ALLOWLIST so
+        # the lazy `theft_category()` fallback (unseeded) and any orphaned row stay strict.
+        ConsentMode.ALLOWLIST,
+    ),
+    (
         "manipulative",
         "Manipulative",
-        "Deceptive, persuasive, or psychologically influencing social actions.",
+        "Deceptive, persuasive, or psychologically influencing social actions "
+        "(a social imperative can force a character to act — gated antagonism, #2170).",
         30,
+        # Inherits All Antagonism (FRIENDS_WHITELIST); own value moot while parented.
         ConsentMode.EVERYONE,
     ),
     (
@@ -85,10 +100,14 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
 )
 
 # child key → parent key (#2170). Applied after all rows exist so already-seeded rows are
-# adopted too. Only antagonism leaves are parented; romantic/manipulative/general stay roots.
+# adopted too. Every detriment-capable category is parented under All Antagonism (Apostate:
+# anything usable to a character's detriment is gated antagonism); romantic (its own intimacy
+# opt-in axis) and general (public performance) stay independent EVERYONE roots.
 _CATEGORY_PARENTS: dict[str, str] = {
     "hostile": "antagonism",
     "blackmail": "antagonism",
+    "manipulative": "antagonism",
+    "theft": "antagonism",
 }
 
 # ActionTemplate.name → category key

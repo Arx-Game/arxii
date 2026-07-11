@@ -230,7 +230,12 @@ def consent_blocks_targeting(
         is_rival as _is_rival,
     )
 
-    pref = SocialConsentPreference.objects.filter(tenure=owner_tenure).first()
+    # Reverse OneToOne accessor (cached on the tenure instance) rather than a fresh filter,
+    # so a warmed caller doesn't pay a query for the common has-a-preference-row path.
+    try:
+        pref: SocialConsentPreference | None = owner_tenure.social_consent_preference
+    except SocialConsentPreference.DoesNotExist:
+        pref = None
     if pref is not None and not pref.allow_social_actions:
         return True
 
@@ -239,24 +244,33 @@ def consent_blocks_targeting(
 
     chain = category.ancestor_chain()
     rule_mode = _effective_mode_from_chain(pref, chain)
-    if actor_tenure is None:
+    if actor_tenure is None or rule_mode is None or rule_mode == ConsentMode.EVERYONE:
+        # No actor, or default-allow: no relational signal is consulted.
         return _decide_consent_block(
             rule_mode,
-            actor_present=False,
+            actor_present=actor_tenure is not None,
             whitelisted=False,
             blacklisted=False,
             is_friend=False,
             is_rival=False,
         )
 
-    whitelisted = SocialConsentWhitelist.objects.filter(
-        owner_tenure=owner_tenure, allowed_tenure=actor_tenure, category__in=chain
-    ).exists()
-    blacklisted = SocialConsentBlacklist.objects.filter(
-        owner_tenure=owner_tenure, blocked_tenure=actor_tenure, category__in=chain
-    ).exists()
-    friended = _is_friend(owner_tenure=owner_tenure, friend_tenure=actor_tenure)
-    rivaled = _is_rival(owner_tenure=owner_tenure, rival_tenure=actor_tenure)
+    # Compute ONLY the signals the resolved mode consults. This gate is hot — the steal check
+    # runs it per item — so a default-deny mode costs one relational query (the whitelist), not
+    # four. Whitelist/blacklist are chain-scoped (a parent entry admits/bars for children).
+    whitelisted = blacklisted = friended = rivaled = False
+    if rule_mode == ConsentMode.ALL_BUT_BLACKLIST:
+        blacklisted = SocialConsentBlacklist.objects.filter(
+            owner_tenure=owner_tenure, blocked_tenure=actor_tenure, category__in=chain
+        ).exists()
+    else:  # FRIENDS_WHITELIST / RIVALS / ALLOWLIST all consult the whitelist first.
+        whitelisted = SocialConsentWhitelist.objects.filter(
+            owner_tenure=owner_tenure, allowed_tenure=actor_tenure, category__in=chain
+        ).exists()
+        if not whitelisted and rule_mode == ConsentMode.FRIENDS_WHITELIST:
+            friended = _is_friend(owner_tenure=owner_tenure, friend_tenure=actor_tenure)
+        elif not whitelisted and rule_mode == ConsentMode.RIVALS:
+            rivaled = _is_rival(owner_tenure=owner_tenure, rival_tenure=actor_tenure)
     return _decide_consent_block(
         rule_mode,
         actor_present=True,

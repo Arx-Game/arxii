@@ -36,11 +36,20 @@ class BlackmailConsentCategoryTests(TestCase):
         root = SocialConsentCategory.objects.get(key="antagonism")
         self.assertEqual(root.default_mode, ConsentMode.FRIENDS_WHITELIST)
         self.assertIsNone(root.parent_id)
-        for key in ("hostile", "blackmail"):
+        # Every detriment-capable category hangs under All Antagonism (#2170) — including
+        # theft, whose effective default therefore moves from ALLOWLIST to FRIENDS_WHITELIST.
+        for key in ("hostile", "blackmail", "manipulative", "theft"):
             leaf = SocialConsentCategory.objects.get(key=key)
             self.assertEqual(leaf.parent_id, root.pk, msg=f"{key} should hang under All Antagonism")
             # No preference row → the leaf resolves to the root's opt-in default via inheritance.
             self.assertEqual(effective_consent_mode(None, leaf), ConsentMode.FRIENDS_WHITELIST)
+
+    def test_romantic_and_general_stay_independent_roots(self) -> None:
+        seed_social_consent_categories()
+        for key in ("romantic", "general"):
+            cat = SocialConsentCategory.objects.get(key=key)
+            self.assertIsNone(cat.parent_id, msg=f"{key} stays an independent EVERYONE root")
+            self.assertEqual(effective_consent_mode(None, cat), ConsentMode.EVERYONE)
 
     def test_idempotent(self) -> None:
         seed_social_consent_categories()

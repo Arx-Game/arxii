@@ -7,8 +7,9 @@ export type SocialConsentPreferenceRequest =
 export type SocialConsentCategoryRule = components['schemas']['SocialConsentCategoryRule'];
 export type SocialConsentCategoryRuleRequest =
   components['schemas']['SocialConsentCategoryRuleRequest'];
-export type SocialConsentCategoryRuleModeEnum =
-  components['schemas']['SocialConsentCategoryRuleModeEnum'];
+// ConsentMode is one shared enum (pinned `ConsentModeEnum`, #2170) used by both the rule
+// `mode` and the category `default_mode`.
+export type SocialConsentCategoryRuleModeEnum = components['schemas']['ConsentModeEnum'];
 export type SocialConsentWhitelist = components['schemas']['SocialConsentWhitelist'];
 export type SocialConsentWhitelistRequest = components['schemas']['SocialConsentWhitelistRequest'];
 export type SocialConsentBlacklist = components['schemas']['SocialConsentBlacklist'];

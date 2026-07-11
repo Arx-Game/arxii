@@ -19813,6 +19813,20 @@ export interface components {
      * @enum {string}
      */
     ConnectionTypeEnum: 'therefore' | 'but';
+    /**
+     * @description * `everyone` - Everyone
+     *     * `all_but_blacklist` - Everyone except my blacklist
+     *     * `friends_whitelist` - Friends and my whitelist
+     *     * `rivals` - My declared rivals (and whitelist)
+     *     * `allowlist` - Allowlist only
+     * @enum {string}
+     */
+    ConsentModeEnum:
+      | 'everyone'
+      | 'all_but_blacklist'
+      | 'friends_whitelist'
+      | 'rivals'
+      | 'allowlist';
     ConsentResponseRequest: {
       decision: components['schemas']['DecisionEnum'];
       target_persona_id?: number;
@@ -20462,20 +20476,6 @@ export interface components {
      * @enum {string}
      */
     DefaultDurationTypeEnum: 'rounds' | 'until_cured' | 'until_used' | 'end_combat' | 'permanent';
-    /**
-     * @description * `everyone` - Everyone
-     *     * `all_but_blacklist` - Everyone except my blacklist
-     *     * `friends_whitelist` - Friends and my whitelist
-     *     * `rivals` - My declared rivals (and whitelist)
-     *     * `allowlist` - Allowlist only
-     * @enum {string}
-     */
-    DefaultModeEnum:
-      | 'everyone'
-      | 'all_but_blacklist'
-      | 'friends_whitelist'
-      | 'rivals'
-      | 'allowlist';
     /**
      * @description * `attacker` - Attacker
      *     * `defender` - Defender
@@ -24138,15 +24138,6 @@ export interface components {
      * @enum {string}
      */
     Mode081Enum: 'open' | 'pose_order' | 'strict';
-    /**
-     * @description * `everyone` - Everyone
-     *     * `all_but_blacklist` - Everyone except my blacklist
-     *     * `friends_whitelist` - Friends and my whitelist
-     *     * `rivals` - My declared rivals (and whitelist)
-     *     * `allowlist` - Allowlist only
-     * @enum {string}
-     */
-    Mode447Enum: 'everyone' | 'all_but_blacklist' | 'friends_whitelist' | 'rivals' | 'allowlist';
     /**
      * @description * `pose` - Pose
      *     * `emit` - Emit
@@ -28319,7 +28310,7 @@ export interface components {
        *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
-      mode?: components['schemas']['Mode447Enum'];
+      mode?: components['schemas']['ConsentModeEnum'];
     };
     /** @description Serializer for per-tenure social consent preferences. */
     PatchedSocialConsentPreferenceRequest: {
@@ -31342,7 +31333,7 @@ export interface components {
        *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
-      readonly default_mode: components['schemas']['DefaultModeEnum'];
+      readonly default_mode: components['schemas']['ConsentModeEnum'];
       /** @description Return the names of action templates tagged with this category. */
       readonly action_templates: string[];
     };
@@ -31360,7 +31351,7 @@ export interface components {
        *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
-      mode?: components['schemas']['Mode447Enum'];
+      mode?: components['schemas']['ConsentModeEnum'];
     };
     /** @description Serializer for per-category consent rules. */
     SocialConsentCategoryRuleRequest: {
@@ -31375,7 +31366,7 @@ export interface components {
        *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
-      mode?: components['schemas']['Mode447Enum'];
+      mode?: components['schemas']['ConsentModeEnum'];
     };
     /** @description Serializer for per-tenure social consent preferences. */
     SocialConsentPreference: {
