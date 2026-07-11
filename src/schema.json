@@ -51817,6 +51817,9 @@ components:
           type: string
           readOnly: true
           nullable: true
+        position_target_shape:
+          type: string
+          readOnly: true
         soulfray_warning:
           allOf:
           - $ref: '#/components/schemas/SoulfrayWarning'
@@ -51843,6 +51846,7 @@ components:
       - display_name
       - eligible_fury_anchors
       - enhancements
+      - position_target_shape
       - prerequisite_met
       - prerequisite_reasons
       - reach
