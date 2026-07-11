@@ -327,6 +327,11 @@ export interface CastResponse {
    * read `result.power_ledger` instead.
    */
   action_interaction?: number | null;
+  /**
+   * Present when this cast seeded or joined a CombatEncounter
+   * (`action_views.py:601-605`). Absent for casts that don't touch combat.
+   */
+  encounter?: { id: number; status: string };
 }
 
 // Mirrors SceneActionTargetSerializer (#1177). Kept in sync with the backend.

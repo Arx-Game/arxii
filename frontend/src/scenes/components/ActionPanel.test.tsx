@@ -87,6 +87,17 @@ vi.mock('@/magic/components/threads/ThreadPullPicker', () => ({
   ),
 }));
 
+const toastSuccessMock = vi.fn();
+vi.mock('sonner', () => ({
+  toast: { success: (...args: unknown[]) => toastSuccessMock(...args), error: vi.fn() },
+}));
+
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => mockNavigate };
+});
+
 import {
   fetchAvailableActions,
   createActionRequest,
@@ -642,6 +653,58 @@ describe('ActionPanel', () => {
       expect(screen.queryByTestId('cast-ledger-result')).not.toBeInTheDocument();
     });
     expect(document.getElementById('cast-section')).toBeNull();
+  });
+
+  it('fires a "Combat has begun" toast with a Join Combat action when the cast seeds an encounter', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({
+      id: 3,
+      status: 'pending',
+      encounter: { id: 55, status: 'declaring' },
+    });
+    const user = userEvent.setup();
+
+    await openCastDialogWithEmberTouch(user);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith(
+        'Combat has begun',
+        expect.objectContaining({
+          action: expect.objectContaining({
+            label: 'Join Combat',
+          }),
+        })
+      );
+    });
+
+    // Clicking the toast action navigates to the combat route for this scene.
+    const call = toastSuccessMock.mock.calls[0];
+    const options = call[1] as { action: { onClick: () => void } };
+    options.action.onClick();
+    expect(mockNavigate).toHaveBeenCalledWith('/scenes/42/combat');
+  });
+
+  it('does not fire a combat-start toast when the cast has no encounter', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 4, status: 'pending' });
+    const user = userEvent.setup();
+
+    await openCastDialogWithEmberTouch(user);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalled();
+    });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
   });
 
   it('closes the panel normally after a benign (pending) cast', async () => {

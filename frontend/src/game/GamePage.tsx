@@ -14,7 +14,6 @@ import { StatusPanel } from '@/status/components/StatusPanel';
 import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
-import { Toaster } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -395,7 +394,6 @@ export function GamePage() {
         viewerEntryId={viewerEntryId}
         onWhisper={handleWhisper}
       />
-      <Toaster />
     </>
   );
 }
