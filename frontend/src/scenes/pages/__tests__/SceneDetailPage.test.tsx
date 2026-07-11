@@ -233,6 +233,10 @@ vi.mock('../../components/HighlightReel', () => ({
   HighlightReel: () => <div data-testid="highlight-reel">HighlightReel</div>,
 }));
 
+vi.mock('@/rituals/components/RitualProposedChip', () => ({
+  RitualProposedChip: () => <div data-testid="ritual-proposed-chip">RitualProposedChip</div>,
+}));
+
 vi.mock('@/game/components/CommandInput', () => ({
   CommandInput: () => <div data-testid="command-input">CommandInput</div>,
 }));
