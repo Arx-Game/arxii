@@ -26,7 +26,7 @@ from world.magic.exceptions import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.magic.models import PortalAnchor
+    from world.magic.models import PortalAnchor, PortalAnchorKind
 
 
 _MSG_NO_ACTIVE_CHARACTER = "No active character."
@@ -39,6 +39,51 @@ _INSTALL_EXC = (
     PortalAnchorKindAlreadyInstalled,
     PortalAnchorFundsInsufficient,
 )
+
+
+def _resolve_kind_kwarg(value: Any) -> PortalAnchorKind | None:
+    """Resolve the ``kind`` kwarg to a ``PortalAnchorKind`` instance.
+
+    Telnet (`commands/portals.py`) always resolves the kind from parsed text
+    before calling ``.run()``, so ``value`` is already a model instance there.
+    The generic REST dispatch path (``DispatchActionView`` ->
+    ``_dispatch_registry``, `actions/player_interface.py`) does **no**
+    ObjectDB/FK resolution of its own and hands ``execute()`` the raw wire
+    kwarg — an int pk today, or (accepted here for symmetry, trivial to
+    support) a kind name string. Mirrors ``_resolve_room()`` in
+    `actions/definitions/locations.py:92-100`. Returns ``None`` on a failed
+    lookup rather than raising — the caller folds that into the existing
+    usage-failure message.
+    """
+    from world.magic.models import PortalAnchorKind  # noqa: PLC0415
+
+    if value is None or isinstance(value, PortalAnchorKind):
+        return value
+    if isinstance(value, int):
+        return PortalAnchorKind.objects.filter(pk=value).first()
+    if isinstance(value, str):
+        return PortalAnchorKind.objects.filter(name__iexact=value.strip()).first()
+    return None
+
+
+def _resolve_anchor_kwarg(value: Any) -> PortalAnchor | None:
+    """Resolve the ``anchor`` kwarg to a ``PortalAnchor`` instance.
+
+    Telnet (`commands/portals.py`) always resolves the anchor from parsed
+    text before calling ``.run()``, so ``value`` is already a model instance
+    there. The REST dispatch path passes a raw int pk — see
+    ``_resolve_kind_kwarg`` above for the full rationale. Returns ``None`` on
+    a failed (or dissolved) lookup rather than raising; the caller falls
+    through to the existing room-based disambiguation, which fails gracefully
+    on its own.
+    """
+    from world.magic.models import PortalAnchor  # noqa: PLC0415
+
+    if value is None or isinstance(value, PortalAnchor):
+        return value
+    if isinstance(value, int):
+        return PortalAnchor.objects.active().filter(pk=value).first()
+    return None
 
 
 def anchors_in_room(location: Any) -> list[PortalAnchor]:
@@ -109,7 +154,7 @@ class InstallPortalAnchorAction(PortalAnchorActionBase):
         if room is None:
             return self._fail(_MSG_NO_LOCATION)
 
-        kind = kwargs.get("kind")
+        kind = _resolve_kind_kwarg(kwargs.get("kind"))
         anchor_name = (kwargs.get("name") or "").strip()
         if kind is None or not anchor_name:
             return self._fail(_MSG_INSTALL_USAGE)
@@ -147,7 +192,7 @@ class DissolvePortalAnchorAction(PortalAnchorActionBase):
         if persona is None:
             return self._fail(_MSG_NO_ACTIVE_CHARACTER)
 
-        anchor = kwargs.get("anchor")
+        anchor = _resolve_anchor_kwarg(kwargs.get("anchor"))
         if anchor is None:
             candidates = anchors_in_room(actor.location)
             if not candidates:

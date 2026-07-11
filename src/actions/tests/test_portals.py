@@ -106,6 +106,31 @@ class InstallPortalAnchorActionTests(TestCase):
         assert result.success is False
         assert result.message == "Install what, and of what kind?"
 
+    def test_raw_int_kind_kwarg_resolves_and_installs(self):
+        """REST dispatch (`_dispatch_registry`) passes raw wire kwargs straight to
+        ``execute()`` with no ObjectDB/FK resolution (#2222 task-3 review) — a plain
+        int pk must resolve the same as a pre-resolved ``PortalAnchorKind`` instance.
+        """
+        room, room_profile = _make_room("REST Room")
+        actor, _sheet, _persona = _make_resident(room, room_profile, tenant=True)
+        kind = PortalAnchorKindFactory(name="Mirror")
+
+        result = InstallPortalAnchorAction().run(actor, kind=kind.pk, name="a tall silvered mirror")
+
+        assert result.success is True
+        anchor = PortalAnchor.objects.active().get(room_profile=room_profile, kind=kind)
+        assert anchor.name == "a tall silvered mirror"
+
+    def test_bogus_int_kind_kwarg_fails_gracefully(self):
+        room, room_profile = _make_room("Bogus Kind Room")
+        actor, _sheet, _persona = _make_resident(room, room_profile, tenant=True)
+
+        result = InstallPortalAnchorAction().run(actor, kind=999_999, name="a mirror")
+
+        assert result.success is False
+        assert result.message == "Install what, and of what kind?"
+        assert not PortalAnchor.objects.active().filter(room_profile=room_profile).exists()
+
 
 class DissolvePortalAnchorActionTests(TestCase):
     def test_owner_dissolves_sole_anchor_in_room(self):
@@ -168,3 +193,34 @@ class DissolvePortalAnchorActionTests(TestCase):
         doorway.refresh_from_db()
         assert mirror.dissolved_at is not None
         assert doorway.dissolved_at is None
+
+    def test_raw_int_anchor_kwarg_resolves_and_dissolves(self):
+        """REST dispatch passes raw wire kwargs straight to ``execute()`` with no
+        ObjectDB/FK resolution (#2222 task-3 review) — a plain int pk must resolve
+        the same as a pre-resolved ``PortalAnchor`` instance.
+        """
+        room, room_profile = _make_room("REST Dissolve Room")
+        actor, _sheet, _persona = _make_resident(room, room_profile, owner=True)
+        mirror = PortalAnchorFactory(
+            room_profile=room_profile, kind=PortalAnchorKindFactory(name="Mirror")
+        )
+        doorway = PortalAnchorFactory(
+            room_profile=room_profile, kind=PortalAnchorKindFactory(name="Doorway")
+        )
+
+        result = DissolvePortalAnchorAction().run(actor, anchor=mirror.pk)
+
+        assert result.success is True
+        mirror.refresh_from_db()
+        doorway.refresh_from_db()
+        assert mirror.dissolved_at is not None
+        assert doorway.dissolved_at is None
+
+    def test_bogus_int_anchor_kwarg_fails_gracefully(self):
+        room, room_profile = _make_room("Bogus Anchor Room")
+        actor, _sheet, _persona = _make_resident(room, room_profile, owner=True)
+
+        result = DissolvePortalAnchorAction().run(actor, anchor=999_999)
+
+        assert result.success is False
+        assert result.message == "There is no portal anchor here to dissolve."
