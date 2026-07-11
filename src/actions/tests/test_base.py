@@ -357,6 +357,8 @@ class ActionRegistryTests(TestCase):
             "conclude_battle",
             "declare_battle_action",
             "challenge_champion_duel",
+            "open_place_encounter",
+            "join_place_encounter",
             "signature_set",
             "signature_clear",
             "signature_list",

@@ -369,6 +369,124 @@ class ChallengeChampionDuelAction(Action):
         )
 
 
+@dataclass
+class OpenPlaceEncounterAction(Action):
+    """Open a general party encounter at a BattlePlace (#2008).
+
+    GM verb, battle-scoped — re-verifies ``_actor_may_gm_battle`` (mirrors
+    ``EnlistBattleParticipantAction``). Thin wrapper over
+    ``world.battles.services.open_place_encounter``.
+    """
+
+    key: str = "open_place_encounter"
+    name: str = "Open Front Encounter"
+    icon: str = "swords"
+    category: str = "battle"
+    target_type: TargetType = TargetType.AREA
+    costs_turn: bool = False
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.battles.exceptions import BattleError  # noqa: PLC0415
+        from world.battles.models import BattlePlace  # noqa: PLC0415
+        from world.battles.services import open_place_encounter  # noqa: PLC0415
+
+        battle_place_id = kwargs.get("battle_place_id")
+        try:
+            battle_place = BattlePlace.objects.select_related("battle__scene").get(
+                pk=battle_place_id
+            )
+        except (BattlePlace.DoesNotExist, TypeError, ValueError):
+            return ActionResult(success=False, message=_NO_SUCH_PLACE)
+
+        if not _actor_may_gm_battle(actor, battle_place.battle):
+            return ActionResult(success=False, message=_NO_GM_PERMISSION)
+
+        try:
+            enc = open_place_encounter(battle_place=battle_place)
+        except BattleError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=f"You open a fight at {battle_place.name}!",
+            data={"encounter_id": enc.pk},
+        )
+
+
+@dataclass
+class JoinPlaceEncounterAction(Action):
+    """Join a party encounter open at a stationed BattlePlace (#2008).
+
+    Player verb (unlike the GM-gated ``OpenPlaceEncounterAction``). Enforces that
+    the actor's ``BattleParticipant`` is actually stationed at the target place —
+    ``world.combat.services.join_encounter`` has no such check (ADR-0010: battles
+    depends on combat, never the reverse, so the stationing check can't live
+    there).
+    """
+
+    key: str = "join_place_encounter"
+    name: str = "Join Front Encounter"
+    icon: str = "swords"
+    category: str = "battle"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.battles.models import BattleParticipant, BattlePlace  # noqa: PLC0415
+        from world.combat.beat_wiring import activate_stakes_for_scene  # noqa: PLC0415
+        from world.combat.services import join_encounter  # noqa: PLC0415
+
+        try:
+            sheet = actor.sheet_data
+        except ObjectDoesNotExist:
+            return ActionResult(success=False, message=_NO_CHARACTER_SHEET)
+
+        battle_place_id = kwargs.get("battle_place_id")
+        try:
+            battle_place = BattlePlace.objects.select_related("battle").get(pk=battle_place_id)
+        except (BattlePlace.DoesNotExist, TypeError, ValueError):
+            return ActionResult(success=False, message=_NO_SUCH_PLACE)
+
+        if battle_place.combat_encounter_id is None:
+            return ActionResult(success=False, message="No encounter is open at that front.")
+
+        participant = BattleParticipant.objects.filter(
+            battle=battle_place.battle, character_sheet=sheet
+        ).first()
+        if participant is None:
+            return ActionResult(success=False, message=_NOT_IN_BATTLE)
+        if participant.place_id != battle_place.id:
+            return ActionResult(success=False, message="You aren't stationed at that front.")
+
+        encounter = battle_place.combat_encounter
+        try:
+            join_encounter(encounter, sheet)
+        except ValueError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        activate_stakes_for_scene(encounter.scene, [sheet])
+
+        return ActionResult(
+            success=True,
+            message=f"You join the fight at {battle_place.name}!",
+            data={"encounter_id": encounter.pk},
+        )
+
+
 # ---------------------------------------------------------------------------
 # #2010 — GM battle staging: JUNIOR-gated REGISTRY actions turning a catalog
 # pick (BattleMapBlueprint/BattleUnitTemplate) into a live Battle. Unlike the

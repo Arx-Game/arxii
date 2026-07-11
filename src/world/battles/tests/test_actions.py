@@ -16,6 +16,8 @@ from actions.definitions.battles import (
     ChallengeChampionDuelAction,
     ConcludeBattleAction,
     DeclareBattleActionAction,
+    JoinPlaceEncounterAction,
+    OpenPlaceEncounterAction,
     ResolveBattleRoundAction,
 )
 from actions.factories import ActionTemplateFactory
@@ -38,6 +40,8 @@ from world.covenants.constants import CommandTier, CovenantType
 from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
 from world.covenants.models import CharacterCovenantRole
 from world.covenants.services import set_engaged_membership
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
 from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
@@ -621,3 +625,74 @@ class ChallengeChampionDuelActionTests(BattleActionTestBase):
         self.assertTrue(result.success, result.message)
         self.place.refresh_from_db()
         self.assertIsNotNone(self.place.combat_encounter_id)
+
+
+class OpenPlaceEncounterActionTests(BattleActionTestBase):
+    """OpenPlaceEncounterAction opens a general party encounter at a front (#2008)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.place = BattlePlaceFactory(battle=self.battle)
+        # MinimumGMLevelPrerequisite's staff bypass checks the live-puppet
+        # `.account` attribute, not `active_account` (roster tenure) —
+        # self.gm_actor has no live session here, so it needs its own
+        # GMProfile to clear the prerequisite (mirrors
+        # actions/tests/test_battle_staging_actions.py's staging-action fixtures).
+        GMProfileFactory(account=self.gm_account, level=GMLevel.JUNIOR)
+
+    def test_gm_opens_encounter_at_place(self) -> None:
+        result = OpenPlaceEncounterAction().run(self.gm_actor, battle_place_id=self.place.pk)
+
+        self.assertTrue(result.success, result.message)
+        self.place.refresh_from_db()
+        self.assertIsNotNone(self.place.combat_encounter_id)
+
+    def test_non_gm_is_refused(self) -> None:
+        result = OpenPlaceEncounterAction().run(self.player_char, battle_place_id=self.place.pk)
+
+        self.assertFalse(result.success)
+        self.place.refresh_from_db()
+        self.assertIsNone(self.place.combat_encounter_id)
+
+    def test_already_bound_place_is_refused(self) -> None:
+        from world.battles.services import open_place_encounter
+
+        open_place_encounter(battle_place=self.place)
+
+        result = OpenPlaceEncounterAction().run(self.gm_actor, battle_place_id=self.place.pk)
+
+        self.assertFalse(result.success)
+
+
+class JoinPlaceEncounterActionTests(BattleActionTestBase):
+    """JoinPlaceEncounterAction lets a stationed participant join an open front (#2008)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from world.battles.services import open_place_encounter
+
+        self.place = BattlePlaceFactory(battle=self.battle)
+        self.participant = BattleParticipantFactory(
+            battle=self.battle,
+            side=self.defender_side,
+            character_sheet=self.player_sheet,
+            place=None,
+        )
+        self.encounter = open_place_encounter(battle_place=self.place)
+
+    def test_stationed_participant_can_join(self) -> None:
+        self.participant.place = self.place
+        self.participant.save(update_fields=["place"])
+
+        result = JoinPlaceEncounterAction().run(self.player_char, battle_place_id=self.place.pk)
+
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(self.encounter.participants.count(), 1)
+
+    def test_non_stationed_participant_is_refused(self) -> None:
+        # self.participant.place is None (set explicitly above) — not stationed
+        # at self.place.
+        result = JoinPlaceEncounterAction().run(self.player_char, battle_place_id=self.place.pk)
+
+        self.assertFalse(result.success)
+        self.assertEqual(self.encounter.participants.count(), 0)
