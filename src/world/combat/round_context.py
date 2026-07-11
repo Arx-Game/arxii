@@ -195,16 +195,24 @@ class CombatRoundContext(RoundContext):
         technique: Any,
         existing: CombatRoundAction | None,
         kwargs: dict[str, Any],
-    ) -> tuple[Any, Any, Any, Any, CombatOpponent | None, CombatParticipant | None, list]:
+    ) -> tuple[
+        Any, Any, Any, Any, CombatOpponent | None, CombatParticipant | None, list, dict[str, Any]
+    ]:
         """Apply the named slot's technique onto the existing CombatRoundAction's slots.
 
         Reads the existing row's slot values, overwrites only the slot this
         dispatch names, and returns the merged
-        ``(focused, physical, social, mental, opponent_target, ally_target, aoe_opponents)``.
+        ``(focused, physical, social, mental, opponent_target, ally_target,
+        aoe_opponents, cast_positions)``.
 
         ``aoe_opponents`` is the full ordered opponent list for AoE/FILTERED_GROUP
         dispatches (empty for SINGLE/SELF).  The caller writes
         ``CombatRoundActionTarget`` join rows from this list.
+
+        ``cast_positions`` is the ``resolve_cast_position_params`` result dict
+        (``cast_destination``/``cast_position_a``/``cast_position_b``). Like the
+        opponent/ally targets, declared positions belong to the focused slot only
+        and are preserved across passive-only merges.
         """
         from actions.constants import CombatActionSlot  # noqa: PLC0415
         from world.combat.constants import ActionCategory  # noqa: PLC0415
@@ -218,10 +226,16 @@ class CombatRoundContext(RoundContext):
         opponent_target = existing.focused_opponent_target if existing else None
         ally_target = existing.focused_ally_target if existing else None
         aoe_opponents: list[CombatOpponent] = []
+        cast_positions: dict[str, Any] = {
+            "cast_destination": existing.cast_destination if existing else None,
+            "cast_position_a": existing.cast_position_a if existing else None,
+            "cast_position_b": existing.cast_position_b if existing else None,
+        }
 
         if slot == CombatActionSlot.FOCUSED:
             focused = technique
             opponent_target, ally_target, aoe_opponents = self._resolve_focused_targets(kwargs)
+            cast_positions = self._resolve_cast_positions(technique, kwargs)
             # XOR authority lives on the backend: the just-declared focused action
             # WINS over any previously-declared passive in the same category, so we
             # clear that colliding passive before declare_action validates. This
@@ -241,7 +255,35 @@ class CombatRoundContext(RoundContext):
         elif slot == CombatActionSlot.PASSIVE_MENTAL:
             mental = technique
 
-        return focused, physical, social, mental, opponent_target, ally_target, aoe_opponents
+        return (
+            focused,
+            physical,
+            social,
+            mental,
+            opponent_target,
+            ally_target,
+            aoe_opponents,
+            cast_positions,
+        )
+
+    def _resolve_cast_positions(
+        self,
+        technique: Any,
+        kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Validate+resolve ``kwargs["position_params"]`` into cast position FKs.
+
+        Empty/absent ``position_params`` resolves to all-None (no positions
+        declared). Raises ``ActionDispatchError`` on invalid input — same error
+        path as ``_resolve_focused_targets`` for an unresolvable ally id (#2206).
+        """
+        position_params = kwargs.get("position_params")
+        if not position_params:
+            return {"cast_destination": None, "cast_position_a": None, "cast_position_b": None}
+
+        from world.combat.services import resolve_cast_position_params  # noqa: PLC0415
+
+        return resolve_cast_position_params(self._participant, technique, position_params)
 
     @transaction.atomic
     def _record_combat_declaration(
@@ -284,9 +326,16 @@ class CombatRoundContext(RoundContext):
             round_number=self._encounter.round_number,
         ).first()
 
-        focused, physical, social, mental, opponent_target, ally_target, aoe_opponents = (
-            self._merge_slot_into_existing(slot, technique, existing, kwargs)
-        )
+        (
+            focused,
+            physical,
+            social,
+            mental,
+            opponent_target,
+            ally_target,
+            aoe_opponents,
+            cast_positions,
+        ) = self._merge_slot_into_existing(slot, technique, existing, kwargs)
 
         effort = (
             kwargs.get(_EFFORT_LEVEL_KEY)
@@ -323,6 +372,9 @@ class CombatRoundContext(RoundContext):
             confirm_soulfray_risk=confirm_soulfray_risk,
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
+            cast_destination=cast_positions["cast_destination"],
+            cast_position_a=cast_positions["cast_position_a"],
+            cast_position_b=cast_positions["cast_position_b"],
         )
 
         # AoE / FILTERED_GROUP: persist the full target set as join rows so the

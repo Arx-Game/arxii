@@ -34,7 +34,7 @@ export function StoryTray({ roomKey }: StoryTrayProps) {
     return (
       <div className="space-y-2 p-3 text-sm text-muted-foreground" data-testid="story-tray-empty">
         <p>No stories pull at you right now.</p>
-        <Link to="/journal" className="text-xs underline">
+        <Link to="/missions/journal" className="text-xs underline">
           Open your journal
         </Link>
       </div>
@@ -53,7 +53,7 @@ export function StoryTray({ roomKey }: StoryTrayProps) {
         />
       ))}
       <div className="px-1">
-        <Link to="/journal" className="text-xs text-muted-foreground underline">
+        <Link to="/missions/journal" className="text-xs text-muted-foreground underline">
           Full journal →
         </Link>
       </div>

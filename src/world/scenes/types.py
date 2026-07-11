@@ -61,6 +61,10 @@ class EnhancedSceneActionResult:
     """When a thread pull was declared but failed at charge time (#1919), this
     carries the player-facing explanation so the OUTCOME pose can note the
     fizzle. ``None`` when no pull was declared or the pull succeeded."""
+    disposition_message: str | None = None
+    """Set when this action's resolution moved a persona-bearing NPC's
+    NPCStanding.affection (#1591) — a ready-to-toast qualitative message
+    (#2158). None when no NPC-affection movement occurred."""
 
 
 @dataclass(frozen=True)

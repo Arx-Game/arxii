@@ -51,3 +51,14 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   end reasons (disowned / married-out / renounced / annulled), with dates.
   `Kinsperson.family` is only the surname denorm of the active primary
   claim. _Avoid:_ family as a container that owns people.
+- **Letter (PlayerMail)** — a `PlayerMail` row: private, tenure-to-tenure
+  correspondence (`sender_tenure` → `recipient_tenure`, threaded via
+  `in_reply_to`), routed by `RosterTenure` rather than `AccountDB` so it
+  preserves player-anonymity: the recipient is addressed and displayed as
+  the current player of a character, never by account (#2160,
+  ADR-0116). Web is the letters surface — compose/inbox at
+  `/profile/mail`, an in-scene quick-compose from the character card, an
+  unread badge, and a `MAIL_ARRIVED` websocket push on send; there is
+  deliberately no telnet mail command. _Avoid:_ "mail Ariel" as a telnet
+  verb (retired aspiration, never built); messenger/courier (a distinct,
+  not-yet-built in-fiction delivery layer — see ADR-0116).

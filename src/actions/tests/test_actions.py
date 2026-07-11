@@ -2,12 +2,21 @@
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from actions.definitions.communication import PoseAction, SayAction, WhisperAction
-from actions.definitions.movement import DropAction, GetAction, GiveAction, TraverseExitAction
+from actions.definitions.movement import (
+    DropAction,
+    GetAction,
+    GiveAction,
+    StopTravelAction,
+    TravelAction,
+    TraverseExitAction,
+)
 from actions.definitions.perception import InventoryAction, LookAction
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.models import RoomProfile
+from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -523,6 +532,238 @@ class TraverseExitActionTests(TestCase):
         assert result.success is True
         actor.refresh_from_db()
         assert actor.location == room2
+
+
+class TravelActionTests(TestCase):
+    def _make_route(self, hop_count):
+        """origin -> room_1 -> ... -> room_N, each room public, same Area."""
+        area = AreaFactory()
+        rooms = []
+        for i in range(hop_count + 1):
+            room = ObjectDBFactory(
+                db_key=f"TravelRoom{i}",
+                db_typeclass_path="typeclasses.rooms.Room",
+            )
+            # typeclasses.rooms.Room.at_object_creation() already auto-creates a
+            # bare RoomProfile via get_or_create — update_or_create (not create)
+            # applies our area/is_public onto that existing row instead of
+            # colliding with it (same gotcha documented in Task 1's
+            # world/areas/positioning/tests/test_travel.py:make_room).
+            RoomProfile.objects.update_or_create(
+                objectdb=room, defaults={"area": area, "is_public": True}
+            )
+            rooms.append(room)
+        exits = [
+            ObjectDBFactory(
+                db_key=f"exit{i}",
+                db_typeclass_path="typeclasses.exits.Exit",
+                location=rooms[i],
+                destination=rooms[i + 1],
+            )
+            for i in range(hop_count)
+        ]
+        return rooms, exits
+
+    @tag("postgres")  # a successful hop calls send_room_state -> get_ancestry,
+    # which walks the areas_areaclosure materialized view (PG-only).
+    def test_travel_walks_full_route_and_arrives(self):
+        rooms, _exits = self._make_route(3)
+        actor = ObjectDBFactory(
+            db_key="Traveler",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=rooms[0],
+        )
+        action = TravelAction()
+
+        with patch.object(actor, "msg"), patch("actions.definitions.movement.delay") as mock_delay:
+            # Capture-and-run: TravelAction schedules its next hop via
+            # evennia.utils.delay(seconds, callback, ...) — since this test
+            # runs synchronously (no real reactor), replace delay with an
+            # immediate call to the callback so the whole route walks in
+            # one test tick. This exercises the exact same callback logic
+            # the real delayed path uses, just without the real pause.
+            def run_immediately(_seconds, callback, *args, **kwargs):
+                callback(*args, **kwargs)
+
+            mock_delay.side_effect = run_immediately
+            result = action.run(actor, target=rooms[-1])
+
+        assert result.success is True
+        actor.refresh_from_db()
+        assert actor.location == rooms[-1]
+        assert actor.ndb.active_travel_token is None
+
+    def test_travel_no_route_fails_immediately(self):
+        area = AreaFactory()
+        room_a = ObjectDBFactory(db_key="A", db_typeclass_path="typeclasses.rooms.Room")
+        room_b = ObjectDBFactory(db_key="B", db_typeclass_path="typeclasses.rooms.Room")
+        RoomProfile.objects.update_or_create(
+            objectdb=room_a, defaults={"area": area, "is_public": True}
+        )
+        RoomProfile.objects.update_or_create(
+            objectdb=room_b, defaults={"area": area, "is_public": True}
+        )
+        # No exit connects them.
+        actor = ObjectDBFactory(
+            db_key="Stuck",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room_a,
+        )
+        action = TravelAction()
+
+        result = action.run(actor, target=room_b)
+
+        assert result.success is False
+        assert actor.location == room_a
+
+    @tag("postgres")  # hop 1 succeeds and calls send_room_state -> get_ancestry,
+    # which walks the areas_areaclosure materialized view (PG-only).
+    def test_travel_stops_early_when_a_waypoint_goes_private_mid_walk(self):
+        rooms, _exits = self._make_route(2)
+        actor = ObjectDBFactory(
+            db_key="Traveler2",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=rooms[0],
+        )
+        action = TravelAction()
+
+        hop_count = {"n": 0}
+
+        def run_and_flip_privacy(_seconds, callback, *args, **kwargs):
+            hop_count["n"] += 1
+            if hop_count["n"] == 2:
+                # Simulate a GM flipping the final waypoint private between
+                # dispatch and this hop's execution.
+                rooms[2].room_profile.is_public = False
+                rooms[2].room_profile.save()
+            callback(*args, **kwargs)
+
+        with (
+            patch.object(actor, "msg"),
+            patch("actions.definitions.movement.delay", side_effect=run_and_flip_privacy),
+        ):
+            action.run(actor, target=rooms[-1])
+
+        actor.refresh_from_db()
+        # Stopped at the last successfully-reached room, never entered the
+        # now-private room 2.
+        assert actor.location == rooms[1]
+        assert actor.ndb.active_travel_token is None
+
+    def test_stop_travel_clears_active_token(self):
+        rooms, _exits = self._make_route(3)
+        actor = ObjectDBFactory(
+            db_key="Traveler3",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=rooms[0],
+        )
+        with patch.object(actor, "msg"), patch("actions.definitions.movement.delay") as mock_delay:
+            # Don't run the callback — leave the walk "in flight".
+            mock_delay.return_value = None
+            TravelAction().run(actor, target=rooms[-1])
+
+        assert actor.ndb.active_travel_token is not None
+
+        with patch.object(actor, "msg"):
+            result = StopTravelAction().run(actor)
+
+        assert result.success is True
+        assert actor.ndb.active_travel_token is None
+        # Actor never actually moved past the origin (walk was stopped
+        # before any hop callback fired).
+        actor.refresh_from_db()
+        assert actor.location == rooms[0]
+
+    def test_redispatch_supersedes_prior_walk_no_orphaned_movement(self):
+        rooms, _exits = self._make_route(3)
+        actor = ObjectDBFactory(
+            db_key="Traveler4",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=rooms[0],
+        )
+        stale_callbacks = []
+
+        def capture_but_dont_run(_seconds, callback, *args, **kwargs):
+            stale_callbacks.append((callback, args, kwargs))
+
+        with (
+            patch.object(actor, "msg"),
+            patch("actions.definitions.movement.delay", side_effect=capture_but_dont_run),
+        ):
+            TravelAction().run(actor, target=rooms[-1])
+            first_token = actor.ndb.active_travel_token
+
+            # Re-dispatch mid-walk — supersedes the first walk.
+            TravelAction().run(actor, target=rooms[1])
+            second_token = actor.ndb.active_travel_token
+
+        assert first_token != second_token
+
+        # Now fire the STALE callback from the first walk (as if its delay
+        # had actually elapsed after being superseded) — it must no-op.
+        stale_callback, stale_args, stale_kwargs = stale_callbacks[0]
+        with patch.object(actor, "msg"):
+            stale_callback(*stale_args, **stale_kwargs)
+
+        actor.refresh_from_db()
+        # The stale callback did NOT move the actor — token mismatch caught it.
+        assert actor.location == rooms[0]
+
+    @tag("postgres")  # a successful hop calls send_room_state -> get_ancestry,
+    # which walks the areas_areaclosure materialized view (PG-only).
+    def test_travel_resolves_int_target_like_a_rest_dispatch_would(self):
+        """Regression test for the web dispatch path (#2163 final-review Critical
+        finding): REST dispatch (`_dispatch_registry`) does NOT resolve
+        objectdb_target_kwargs — it passes kwargs straight to execute(). This test
+        calls TravelAction exactly as the REST path does: target as a raw int, not
+        a pre-resolved ObjectDB, mirroring what `dispatch_player_action` /
+        `_dispatch_registry` actually does (see `src/actions/player_interface.py`).
+        """
+        rooms, _exits = self._make_route(2)
+        actor = ObjectDBFactory(
+            db_key="RestTraveler",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=rooms[0],
+        )
+        action = TravelAction()
+
+        with patch.object(actor, "msg"), patch("actions.definitions.movement.delay") as mock_delay:
+
+            def run_immediately(_seconds, callback, *args, **kwargs):
+                callback(*args, **kwargs)
+
+            mock_delay.side_effect = run_immediately
+            # target is a plain int, exactly as it arrives from a REST dispatch's
+            # raw JSON kwargs — NOT rooms[-1] (the ObjectDB), which is what a
+            # telnet .run() call would pass.
+            result = action.run(actor, target=rooms[-1].id)
+
+        assert result.success is True
+        actor.refresh_from_db()
+        assert actor.location == rooms[-1]
+
+    def test_travel_int_target_that_does_not_exist_fails_gracefully(self):
+        area = AreaFactory()
+        room_a = ObjectDBFactory(db_key="OnlyRoom", db_typeclass_path="typeclasses.rooms.Room")
+        # typeclasses.rooms.Room.at_object_creation() already auto-creates a bare
+        # RoomProfile via get_or_create — update_or_create (not create) applies
+        # our area/is_public onto that existing row instead of colliding with it
+        # (same gotcha documented in _make_route above).
+        RoomProfile.objects.update_or_create(
+            objectdb=room_a, defaults={"area": area, "is_public": True}
+        )
+        actor = ObjectDBFactory(
+            db_key="LostTraveler",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room_a,
+        )
+        action = TravelAction()
+
+        result = action.run(actor, target=999999999)
+
+        assert result.success is False
+        actor.refresh_from_db()
+        assert actor.location == room_a
 
 
 class TraverseExitWithChallengesTest(TestCase):

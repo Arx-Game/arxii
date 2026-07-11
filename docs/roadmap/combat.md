@@ -25,7 +25,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).
-- **Ward your allies (#2208, ADR-0116).** Aegis Field / Mirror Ward / Phase Step each gained
+- **Ward your allies (#2208, ADR-0117).** Aegis Field / Mirror Ward / Phase Step each gained
   an ALLY-single (Aegis Ward, Mirror Vigil, Phase Guard — castable in or out of combat) and an
   ALLY-`FILTERED_GROUP` party-preparation variant (Aegis Communion, Mirror Communion, Phase
   Communion — out-of-combat only, consent-free per ADR-0045; party `anima_cost` is 2x the
@@ -65,6 +65,26 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `position_edges`, via the new `position_graph(room)` service) — unlike the
   ADJACENT-reach-only `position_adjacency`, this keeps impassable/gated edges so
   obstacles are visible. See [areas.md](../systems/areas.md#frontend-built--wired).
+- **Cast-position targeting for the position-consuming effect palette (#2206).**
+  Barricade/Phase Jump/Force Grip previously embedded a placeholder
+  `destination_position_id=0` at seed time (no runtime destination selection); a player
+  now declares a real `areas.Position` (single point for Phase Jump/Force Grip, an
+  endpoint pair for Barricade) at cast-declaration time. `resolve_cast_position_params`
+  validates room-scope + technique reach; the three FKs (`cast_destination`/
+  `cast_position_a`/`cast_position_b`) persist on the `CombatRoundAction` and are
+  forwarded through `CombatTechniqueResolver._apply_conditions` into the shared
+  `apply_technique_conditions` seam. Root-cause fix in the conditions layer: position ids
+  are now stamped onto the `ConditionInstance` (`_stamp_cast_positions`) **before**
+  `CONDITION_APPLIED` fires, replacing a post-hoc helper that raced same-event reactive
+  handlers — this also fixed the previously-broken non-combat live path. Frontend: a
+  reach-greyed, shape-aware Positions picker in `ActionDeclarationCard` plus map-click
+  picking on the tactical map. Telnet needed no changes — #2019's `position=` grammar now
+  actually reaches validation/persistence in combat. Journey-tested at the round seam
+  (`world/combat/tests/test_cast_position_declaration.py`: foreign-room rejection +
+  full declare → resolve → condition → sealed-edge for Barricade). Non-combat web casting
+  still has no position picker (telnet-only there). See
+  [magic.md](../systems/magic.md) (Effect Palette) and [INDEX.md](../systems/INDEX.md)
+  (Combat § "Cast-position targeting") for the full wiring.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
@@ -73,8 +93,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 
 - **Effect palette** — SHIPPED (#1584: summon, reflect, incorporeal, sink, telekinesis, teleport,
-  obstacle, force-field; combat position-targeting #2206; ally/party ward variants #2208). Remaining
-  per-effect follow-ups live in the capability ledger, not here.
+  obstacle, force-field; combat position-targeting #2206; ally/party ward variants #2208). The
+  three position-consuming effects (telekinesis/teleport/obstacle → Force Grip/Phase Jump/Barricade)
+  have real runtime destination selection for combat (#2206) — the non-combat web cast path still
+  lacks a position picker. Remaining per-effect follow-ups live in the capability ledger, not here.
 - **Charm / switch-sides** an enemy NPC; **negotiate / parley** an NPC down (built in this PR,
   #1590/#1591, ADR-0058); **dispel** a condition.
 - **Companions / pets / summons** with breath weapons & ordered abilities.

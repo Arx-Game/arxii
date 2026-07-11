@@ -27,3 +27,22 @@ export async function searchTenures(term: string): Promise<PaginatedResponse<Ros
   }
   return res.json();
 }
+
+/** Mark a received letter as read (idempotent; recipient-only via the scoped queryset). */
+export async function markMailRead(id: number): Promise<PlayerMail> {
+  const res = await apiFetch(`/api/roster/mail/${id}/mark-read/`, { method: 'POST' });
+  if (!res.ok) {
+    throw new Error('Failed to mark mail as read');
+  }
+  return res.json();
+}
+
+/** Count of unread, unarchived mail across the requester's tenures. */
+export async function fetchUnreadMailCount(): Promise<number> {
+  const res = await apiFetch('/api/roster/mail/unread-count/');
+  if (!res.ok) {
+    throw new Error('Failed to load unread mail count');
+  }
+  const data: { count: number } = await res.json();
+  return data.count;
+}

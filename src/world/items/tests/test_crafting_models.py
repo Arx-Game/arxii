@@ -71,14 +71,21 @@ class CraftingRecipeModelTests(TestCase):
         """PARTIAL_FRACTION is 0.5."""
         self.assertEqual(PARTIAL_FRACTION, 0.5)
 
-    def test_unique_kind_constraint(self) -> None:
-        """Two recipes with the same kind violate the unique constraint."""
-        CraftingRecipeFactory(name="Attach Facet", kind=CraftingRecipeKind.FACET_ATTACH)
-        # The factory get_or_creates on ``kind`` (so a second factory call would reuse the
-        # row); assert the DB constraint directly via the model to exercise it (#1243).
+    def test_composite_kind_output_constraint(self) -> None:
+        """Two ITEM_CREATE recipes with the same output template violate the constraint."""
+        from world.items.factories import ItemTemplateFactory
+
+        template = ItemTemplateFactory()
+        CraftingRecipeFactory(
+            name="Create Item A",
+            kind=CraftingRecipeKind.ITEM_CREATE,
+            output_item_template=template,
+        )
         with self.assertRaises(IntegrityError):
             CraftingRecipe.objects.create(
-                name="Attach Facet 2", kind=CraftingRecipeKind.FACET_ATTACH
+                name="Create Item B",
+                kind=CraftingRecipeKind.ITEM_CREATE,
+                output_item_template=template,
             )
 
     def test_ordering(self) -> None:

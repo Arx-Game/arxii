@@ -25,6 +25,7 @@ import { useCastPullSelection } from '../hooks/useCastPullSelection';
 import { extractErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { magicKeys } from '@/magic/queries';
 import type {
   PlayerAction,
   AvailableEnhancement,
@@ -84,6 +85,18 @@ export function ActionPanel({ sceneId }: Props) {
 
   const queryClient = useQueryClient();
 
+  // Shared by performCast and performAction's onSuccess — a cast or dispatched
+  // action may have spent anima/resonance, so both invalidate the same set
+  // of caches (#2158).
+  function invalidateActionOutcomeQueries() {
+    queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+    queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
+    if (characterId !== null) {
+      queryClient.invalidateQueries({ queryKey: magicKeys.characterAnima(characterId) });
+      queryClient.invalidateQueries({ queryKey: magicKeys.characterResonanceList() });
+    }
+  }
+
   // Resolve the active character name to its numeric ObjectDB pk and primary persona.
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
@@ -135,8 +148,7 @@ export function ActionPanel({ sceneId }: Props) {
         ...params,
       }),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
-      queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
+      invalidateActionOutcomeQueries();
       setSelectedTechnique(null);
       setCastTargetPersonaId(null);
       setCastTargetPersonaIds([]);
@@ -171,8 +183,7 @@ export function ActionPanel({ sceneId }: Props) {
       effort_level?: string;
     }) => createActionRequest(sceneId, params),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
-      queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
+      invalidateActionOutcomeQueries();
       setOpen(false);
       setTargetingAction(null);
       setStrainByAction({});

@@ -8,6 +8,7 @@ from world.items.views import (
     FashionJudgementViewSet,
     FashionPresentationViewSet,
     InteractionTypeViewSet,
+    ItemCreateCraftViewSet,
     ItemFacetViewSet,
     ItemInstanceViewSet,
     ItemStyleCraftViewSet,
@@ -30,6 +31,7 @@ router.register("interaction-types", InteractionTypeViewSet, basename="interacti
 router.register("templates", ItemTemplateViewSet, basename="item-template")
 router.register("item-facets", ItemFacetViewSet, basename="item-facet")
 router.register("item-styles", ItemStyleCraftViewSet, basename="item-style")
+router.register("crafting/create", ItemCreateCraftViewSet, basename="item-craft-create")
 router.register("equipped-items", EquippedItemViewSet, basename="equipped-item")
 router.register("inventory", ItemInstanceViewSet, basename="item-instance")
 router.register("outfits", OutfitViewSet, basename="outfit")

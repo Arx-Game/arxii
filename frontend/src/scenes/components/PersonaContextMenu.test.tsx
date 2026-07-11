@@ -43,7 +43,7 @@ vi.mock('@/combat/queries', () => ({
 }));
 
 import { PersonaContextMenu } from './PersonaContextMenu';
-import { createActionRequest } from '../actionQueries';
+import { createActionRequest, fetchAvailableActions } from '../actionQueries';
 import { useDispatchPlayerAction } from '@/combat/queries';
 
 function makeAction(
@@ -360,5 +360,77 @@ describe('PersonaContextMenu', () => {
     });
 
     expect(screen.queryByText('Attach to Pose')).not.toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Consistency with ActionPanel (#2158)
+  // ---------------------------------------------------------------------------
+
+  it('shows an unmet-prerequisite action disabled with its reason, not omitted (#2158)', async () => {
+    const user = userEvent.setup();
+    // Same action-object shape ActionPanel.test.tsx's disabled-tooltip test exercises.
+    const actionsWithUnmet: PlayerActionsResponse = {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        makeAction({
+          display_name: 'Intimidate',
+          prerequisite_met: false,
+          prerequisite_reasons: ['Must be in combat'],
+          ref: {
+            backend: 'registry',
+            challenge_instance_id: null,
+            approach_id: null,
+            technique_id: null,
+            registry_key: 'intimidate',
+          },
+        }),
+      ],
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    queryClient.setQueryData(['available-actions', 42], actionsWithUnmet);
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      }
+    );
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Intimidate')).toBeInTheDocument();
+    });
+    const item = screen.getByText('Intimidate').closest('[role="menuitem"], button');
+    expect(item).toHaveAttribute('title', expect.stringContaining('Must be in combat'));
+    expect(item).toBeDisabled();
+  });
+
+  it('fetches available actions itself, not only from a pre-populated cache (#2158)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      // No pre-populated cache — the opposite of every other test in this file.
+      { wrapper: createWrapper(false) }
+    );
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Intimidate')).toBeInTheDocument();
+    });
+    // Proves the component's own fetch populated the menu, not a
+    // pre-existing cache entry.
+    expect(fetchAvailableActions).toHaveBeenCalledWith(42);
   });
 });

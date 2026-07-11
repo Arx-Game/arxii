@@ -11,6 +11,7 @@ class CraftingRecipeKind(models.TextChoices):
 
     FACET_ATTACH = "facet_attach", "Facet Attach"
     STYLE_ATTACH = "style_attach", "Style Attach"
+    ITEM_CREATE = "item_create", "Item Create"
 
 
 class CostConsumption(models.TextChoices):
