@@ -87,6 +87,7 @@ from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.grant_distinction import CmdGrantDistinction
 from commands.grant_item import CmdGrantItem
 from commands.hire import CmdHire
+from commands.identification import CmdIdentify  # #1107
 from commands.imbue import CmdImbue
 from commands.investigation import CmdSearch  # #1866
 from commands.journals import CmdJournal
@@ -285,6 +286,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRest,
             # #1866 — telnet face of SearchAction; search for clues in a room.
             CmdSearch,
+            # #1107 slice 5 — telnet face of IdentifyAction; see through a mask/disguise.
+            CmdIdentify,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
             # #2003 — staff canon-review queue (perm(Admin)).

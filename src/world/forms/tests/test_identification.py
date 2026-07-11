@@ -371,3 +371,36 @@ class AttemptIdentificationTests(TestCase):
                 self.viewer_character, self.target_character, guess_name="Definitely Not Them"
             )
         self.assertEqual(capture_wrong.target_difficulty, odds.difficulty)
+
+    # --- ruling 1b (#1107 Task 3 review): overlay-only degenerate pair short-circuits ------------
+
+    def test_overlay_only_degenerate_pair_short_circuits_before_rolling(self):
+        # apply_disguise alone (no create_mask) never swaps active_persona_for_sheet, so
+        # presented == true even though identification_difficulty computes a rollable baseline
+        # from the overlay (MUNDANE/DESCRIPTOR — well under the auto-fail band, so this is NOT
+        # the AUTO_FAIL short-circuit). Forced to a SUCCESS-level outcome to prove the guard wins
+        # BEFORE any roll happens: if it reached perform_check, a forced success would hit the
+        # (pre-fix) SUCCESS path and mint a no-op PersonaDiscovery.
+        target = CharacterFactory()
+        CharacterSheetFactory(character=target)
+        disguise = CharacterFormFactory(character=target, form_type=FormType.DISGUISE)
+        apply_disguise(
+            target,
+            disguise,
+            kind=DisguiseKind.MUNDANE,
+            concealment_level=ConcealmentLevel.DESCRIPTOR,
+        )
+        success = CheckOutcomeFactory(
+            name="Identification Test Overlay Degenerate", success_level=2
+        )
+        with force_check_outcome(success):
+            result = attempt_identification(self.viewer_character, target)
+
+        self.assertEqual(result.outcome, IdentificationOutcome.FAILURE)
+        self.assertIsNone(result.persona_discovery)
+        self.assertEqual(result.revealed_name, "")
+        self.assertFalse(PersonaDiscovery.objects.exists())
+
+        # No success message leaks through — it's the same oracle-rule FAILURE/AUTO_FAIL string.
+        auto_fail = attempt_identification(self.viewer_character, self._magical_full_target())
+        self.assertEqual(result.player_message, auto_fail.player_message)

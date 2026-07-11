@@ -303,7 +303,7 @@ def attempt_identification(
     """Roll an Identification check for ``viewer_character`` against ``target_character`` (#1107
     Task 2), writing a ``PersonaDiscovery`` row on success.
 
-    Short-circuits BEFORE rolling in three cases:
+    Short-circuits BEFORE rolling in four cases (checked in this order):
 
     - ``ALREADY_KNOWN`` — the viewer already holds a ``PersonaDiscovery`` linking the target's
       currently-presented persona to their TRUE (PRIMARY) persona.
@@ -312,6 +312,15 @@ def attempt_identification(
       gate that keeps a caller from reaching this at all in that case.
     - ``AUTO_FAIL`` — ``identification_difficulty`` says the gap is unrollable (Decision 4); no
       roll is wasted, and this is player-indistinguishable from a plain ``FAILURE``.
+    - a degenerate presented==true persona pair, checked AFTER the AUTO_FAIL check (Task 3
+      review ruling 1b) — an overlay-only disguise that never swapped
+      ``active_persona_for_sheet`` has nothing left to reveal even though the baseline it fed
+      into ``identification_difficulty`` was rollable; degrades to ``FAILURE`` with no success
+      message. Checked last (not first) so an overlay-only target that's ALSO past the
+      auto-fail band still reports ``AUTO_FAIL`` — indistinguishable from any other
+      auto-failing attempt — rather than being reclassified. Defense-in-depth —
+      ``IdentifyAction``'s prerequisites (ruling 1a) are the primary gate that keeps normal
+      play from reaching this rollable-but-degenerate case at all.
 
     Otherwise rolls ``perform_check`` against the seeded Identification ``CheckType``, easing the
     target difficulty when ``guess_name`` correctly names the target's TRUE persona (Decision 3,
@@ -341,6 +350,29 @@ def attempt_identification(
         return _failure_result()
     if odds.auto_fail:
         return _auto_fail_result()
+
+    # Ruling 1b (#1107 Task 3 review — closing the overlay-only degenerate-SUCCESS hole).
+    # An overlay-only disguise doesn't swap active_persona_for_sheet (apply_disguise alone,
+    # without create_mask, leaves the target presenting PRIMARY — see the Task 2 report's
+    # documented concern), so presented == true is a degenerate pair: identification_difficulty
+    # can still say there's a rollable, non-auto-fail baseline (from the overlay), but there is
+    # genuinely no identity left to reveal. Guard BEFORE rolling so a "successful" roll can never
+    # mint a no-op PersonaDiscovery or imply a reveal that isn't there. Placed AFTER the
+    # AUTO_FAIL check on purpose: AUTO_FAIL already never rolls and never writes, so an
+    # auto-failing overlay-only target (e.g. a magical FULL disguise against a stranger) stays
+    # AUTO_FAIL — correctly indistinguishable from any other AUTO_FAIL — rather than being
+    # reclassified as FAILURE by this guard. IdentifyAction's prerequisites (Task 3 ruling 1a,
+    # actions/definitions/identification.py) are the primary gate that keeps normal play from
+    # reaching this rollable-but-degenerate case at all; reusing the plain FAILURE/
+    # applicable=False semantics here (the brief's "reuse applicable=False semantics" option,
+    # rather than growing the outcome enum) both carries no success message and keeps the oracle
+    # rule's FAILURE/AUTO_FAIL indistinguishability intact for free.
+    if (
+        presented_persona is not None
+        and true_persona is not None
+        and presented_persona.pk == true_persona.pk
+    ):
+        return _failure_result()
 
     target_difficulty = _target_difficulty(odds, guess_name, true_persona)
     check_type = CheckType.objects.get(name=IDENTIFICATION_CHECK_TYPE_NAME)

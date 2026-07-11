@@ -23,7 +23,7 @@ Backend resolution:
   ``FOCUSED`` slot and one ``PASSIVE`` slot per clash, per the design spec (§4 —
   every PC in the encounter sees every active clash; POV-filter is post-positioning).
 - REGISTRY    -- ``get_actions_for_target_type`` returns registry ``Action`` singletons;
-  these have no ``ActionTemplate`` / ``check_type`` so ALL current registry actions are
+  these have no ``ActionTemplate`` / ``check_type`` so by default registry actions are
   excluded from ``get_player_actions``.  ``dispatch_player_action`` still handles REGISTRY
   refs for immediate execution (no declaration gating needed for utility actions).
 
@@ -33,7 +33,11 @@ Registry exclusion note:
   requires a resolved ``CheckType`` instance (the unifying resolution anchor), which
   cannot be provided for registry actions until they are backed by ``ActionTemplate``
   rows.  They are excluded rather than emitted with a placeholder to avoid confusing the
-  dispatch layer.
+  dispatch layer -- UNLESS a small per-action adapter hand-builds the ``PlayerAction``
+  itself with ``check_type=None``, the pattern ``_positioning_actions``/
+  ``_set_the_stage_actions``/``_battle_staging_actions``/``_identification_actions``
+  use for REGISTRY actions that need web-panel visibility but aren't (and don't want to
+  become) ActionTemplate-backed.
 """
 
 from __future__ import annotations
@@ -396,9 +400,11 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_positioning_actions(character))
     actions.extend(_set_the_stage_actions(character))
     actions.extend(_battle_staging_actions(character))
-    # Registry backend: all current actions excluded (no ActionTemplate / check_type)
-    # — see module docstring.  When registry actions gain ActionTemplate backing,
-    # uncomment and implement _registry_actions(character).
+    actions.extend(_identification_actions(character))
+    # Registry backend: all remaining registry actions excluded (no ActionTemplate /
+    # check_type) — see module docstring.  When a registry action gains ActionTemplate
+    # backing, or needs web-panel visibility without one, add it to an adapter above
+    # (or a new one) rather than uncommenting a blanket _registry_actions(character).
 
     # Single batched pass: attach enhancements/target_spec/strain to each
     # PlayerAction. All queries happen once for the whole character.
@@ -1109,6 +1115,39 @@ def _battle_staging_actions(character: ObjectDB) -> list[PlayerAction]:
             action_category=ActionCategory.PHYSICAL,
         )
         for key, display_name in staging_keys
+    ]
+
+
+def _identification_actions(character: ObjectDB) -> list[PlayerAction]:
+    """Surface the ``identify`` REGISTRY action to the web (#1107 slice 5, Task 3).
+
+    ``IdentifyAction`` (``actions/definitions/identification.py``) is deliberately NOT
+    ActionTemplate-backed (see that module's docstring), so it doesn't reach the web via
+    ``_scene_actions`` the way Deceive/Persuade/Seduce do — it needs its own bespoke
+    adapter, mirroring ``_positioning_actions``/``_set_the_stage_actions``/
+    ``_battle_staging_actions``.
+
+    Offers one ``Identify`` entry whenever the character has a sheet and a location —
+    the only two things identifying anyone at all requires (target_kind=PERSONA is
+    resolved generically by ``_target_spec_for_action``'s hand-coded-Action branch,
+    reading ``IdentifyAction.target_kind``/``target_filters`` directly — no per-target
+    enumeration needed, same as the social ActionTemplate actions). Target validity
+    (co-located + presenting a fake-name persona) is deliberately NOT filtered here —
+    that's ``IdentifiableTargetPrerequisite``'s job at dispatch time. Filtering the
+    *picker* on "someone masked is present" would also be an oracle leak: the button's
+    mere appearance would become a free, actionless mask detector, whereas a targeted
+    attempt at least lands as a visible scene interaction (the spec's leak-analysis
+    table).
+    """
+    if _get_character_sheet(character) is None or character.location is None:
+        return []
+    return [
+        PlayerAction(
+            backend=ActionBackend.REGISTRY,
+            display_name="Identify",
+            ref=ActionRef(backend=ActionBackend.REGISTRY, registry_key="identify"),
+            description="Try to see through a mask or disguise to who's really underneath.",
+        )
     ]
 
 
