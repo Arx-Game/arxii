@@ -877,8 +877,14 @@ Character journal entries (public/private), praises, retorts, freeform tags, wee
 - **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses), `JournalTag`, `WeeklyJournalXP`
 - **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`; `JournalError` user-safe exception in `types.py`
 - **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit`) converge on `action.run()`
+- **Web surface (#2160):** previously zero web frontend (telnet-only); now `/journals`
+  (composer, public feed, own-entries tab) plus a `JournalTab` quick-compose panel in the
+  in-scene sidebar. `/journal` (singular) was freed from the missions ledger, which moved to
+  `/missions/journal` in the same PR — see Missions below and `journals/AGENT_GLOSSARY.md`'s
+  disambiguation entry for the "journal" homonym across apps.
 - **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M)
-- **Source:** `src/world/journals/`
+- **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
+  `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points
 Time/effort resource economy with regeneration via cron. The most complete gate pattern in the codebase.
 
@@ -1242,6 +1248,15 @@ Character lifecycle management with web-first applications and player anonymity.
   hosts the shared `_send_email`/`_get_staff_emails` primitives; `RosterEmailService`
   extends it unchanged. `world.character_creation.email_service.CGEmailService`
   extends the same base — see Character Creation above.
+- **Letters web surface (#2160, ADR-0116):** `PlayerMailViewSet` gained two actions —
+  `POST /api/roster/mail/{id}/mark-read/` (idempotent, recipient-scoped via the queryset) and
+  `GET /api/roster/mail/unread-count/` (unread + unarchived, across the requester's tenures).
+  Sending mail fires `notify_mail_arrived` via `transaction.on_commit` (the
+  `notify_battle_state_changed` pattern), pushing a new `WebsocketMessageType.MAIL_ARRIVED`
+  (`src/web/webclient/message_types.py`) payload — `mail_id`/`sender_display`/`subject` only, no
+  account identifiers. Frontend: in-scene quick-compose (`SendLetterDialog` pre-filling
+  `ComposeMailForm`) from the character card, an `UnreadMailBadge` in the header, and a
+  mark-read-on-open flow in `ReceivedMailList`. No telnet mail command exists or is planned.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)

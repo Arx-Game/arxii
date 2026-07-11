@@ -66,14 +66,17 @@ export interface PaginatedJournalEntries {
   results: JournalEntrySummary[];
 }
 
-export interface JournalEntryListFilters {
+// A `type` alias (not `interface`) so it structurally satisfies `buildQuery`'s
+// `Record<string, string | number | undefined>` parameter — TS only allows implicit
+// index-signature assignability for object type literals, not declared interfaces.
+export type JournalEntryListFilters = {
   /** CharacterSheet id — filter by author. */
   author?: number;
   /** Tag name — filter by tag. */
   tag?: string;
   page?: number;
   page_size?: number;
-}
+};
 
 export interface CreateJournalEntryRequest {
   title: string;
