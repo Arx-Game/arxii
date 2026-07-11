@@ -1,7 +1,8 @@
 # Combat — Status
 
-**Status:** core party and duel combat ship end-to-end; the frontier is the authored effect palette,
-embodied combat (companions, mounts, war), and *proving* the WIRED-UNPROVEN paths — not the round engine.
+**Status:** core party and duel combat ship end-to-end; the authored effect palette shipped (#1584,
+combat-wired for battlefield shaping by #2206); the frontier is embodied combat (companions, mounts,
+war) and *proving* the WIRED-UNPROVEN paths — not the round engine.
 
 This is the combat **status map**. Per-capability tiers, the MVP bar, and sequencing live in the
 [`player-capability-ledger.md`](player-capability-ledger.md) (the spine — read it first). The
@@ -71,7 +72,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 
-- **Effect palette** — summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field.
+- **Effect palette** — SHIPPED (#1584: summon, reflect, incorporeal, sink, telekinesis, teleport,
+  obstacle, force-field; combat position-targeting #2206; ally/party ward variants #2208). Remaining
+  per-effect follow-ups live in the capability ledger, not here.
 - **Charm / switch-sides** an enemy NPC; **negotiate / parley** an NPC down (built in this PR,
   #1590/#1591, ADR-0058); **dispel** a condition.
 - **Companions / pets / summons** with breath weapons & ordered abilities.

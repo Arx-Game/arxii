@@ -7082,8 +7082,10 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     ``source_character_id`` differs from the bearer's keeps the common
     self-ward path on the single-query-per-participant code path below.
 
-    Participants without a ``CharacterAnima`` row are skipped (defensive; they
-    cannot sustain reactive conditions without an anima pool).
+    Participants without a ``CharacterAnima`` row are skipped entirely — including
+    any caster-paid wards they bear (ADR-0116 edge: an anima-less bearer's ally
+    ward gets free upkeep; acceptable because player characters always have an
+    anima row).
 
     Anima is written at most once per participant (after the inner loop) so that
     a round with N self-sustained conditions produces a single UPDATE rather
