@@ -612,6 +612,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
+    originated_as_entrance: bool = False,
 ) -> CastResult:
     """Route a cast directed at another PC (not the caster's own sheet)."""
     if is_technique_hostile(technique):
@@ -623,6 +624,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             initiator_persona=initiator_persona,
             target_persona=target_persona,
             technique=technique,
+            originated_as_entrance=originated_as_entrance,
         )
     if cast_requires_consent(technique, caster=initiator_persona.character_sheet.character):
         return _route_benign_cast(
@@ -635,6 +637,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             fury_anchor=fury_anchor,
             cast_pull=cast_pull,
             confirm_soulfray_risk=confirm_soulfray_risk,
+            originated_as_entrance=originated_as_entrance,
         )
     return _route_immediate_cast(
         scene=scene,
@@ -665,6 +668,7 @@ def request_technique_cast(  # noqa: PLR0913
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
+    originated_as_entrance: bool = False,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
 
@@ -689,6 +693,12 @@ def request_technique_cast(  # noqa: PLR0913
             stage, the cast is halted before resolving and a ``CastResult`` with
             ``soulfray_warning`` populated (and no request row) is returned. Defaults
             ``True`` so all existing callers are unaffected.
+        originated_as_entrance: Marks the cast as dispatched by a technique-driven
+            combat entrance (#2183). Threaded onto the PENDING ``SceneActionRequest``
+            row on the other-PC (benign consent / hostile risk-gated) paths only —
+            the self/room/no-target immediate path resolves in this same call and
+            has no later resolution step to gate. Defaults ``False`` so all existing
+            callers are unaffected.
 
     Returns:
         A CastResult whose populated payload depends on the routing branch taken.
@@ -755,6 +765,7 @@ def request_technique_cast(  # noqa: PLR0913
             confirm_soulfray_risk=confirm_soulfray_risk,
             use_base_form=use_base_form,
             position_params=position_params,
+            originated_as_entrance=originated_as_entrance,
         )
 
     return _route_immediate_cast(
@@ -783,6 +794,7 @@ def _create_cast_request(  # noqa: PLR0913
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
     resolved_at: datetime | None = None,
+    originated_as_entrance: bool = False,
 ) -> SceneActionRequest:
     """Create a SceneActionRequest for a standalone cast.
 
@@ -801,6 +813,7 @@ def _create_cast_request(  # noqa: PLR0913
         fury_commitment=fury_commitment,
         fury_anchor=fury_anchor,
         resolved_at=resolved_at,
+        originated_as_entrance=originated_as_entrance,
     )
 
 
@@ -810,6 +823,7 @@ def _route_hostile_cast(
     initiator_persona: Persona,
     target_persona: Persona,
     technique: Technique,
+    originated_as_entrance: bool = False,
 ) -> CastResult:
     """Hostile cast at another PC → audit request + seed/feed a combat encounter.
 
@@ -827,6 +841,7 @@ def _route_hostile_cast(
             target_persona=target_persona,
             technique=technique,
             status=ActionRequestStatus.PENDING,
+            originated_as_entrance=originated_as_entrance,
         )
         return CastResult(request=request)
     with transaction.atomic():
@@ -837,6 +852,7 @@ def _route_hostile_cast(
             technique=technique,
             status=ActionRequestStatus.RESOLVED,
             resolved_at=timezone.now(),
+            originated_as_entrance=originated_as_entrance,
         )
         encounter = seed_or_feed_encounter_from_cast(
             caster_sheet=initiator_persona.character_sheet,
@@ -859,6 +875,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
     confirm_soulfray_risk: bool = True,  # noqa: ARG001 — resolution deferred to accept; kept for signature symmetry
+    originated_as_entrance: bool = False,
 ) -> CastResult:
     """Benign cast at another PC → PENDING request awaiting consent (resolved on accept).
 
@@ -875,6 +892,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
+            originated_as_entrance=originated_as_entrance,
         )
         if cast_pull is not None:
             declaration = SceneActionPullDeclaration.objects.create(
