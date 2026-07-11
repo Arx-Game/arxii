@@ -60,6 +60,14 @@ class NpcRegardEventCitationTests(TestCase):
         with self.assertRaises(ValidationError):
             event.full_clean()
 
+    def test_distinction_seed_accepts_no_citation(self):
+        event = NpcRegardEventFactory.build(
+            regard=NpcRegardFactory(),
+            reason=NpcRegardEventReason.DISTINCTION_SEED,
+            amount=5,
+        )
+        event.full_clean()  # does not raise
+
     def test_gm_manual_adjustment_allows_zero_or_one_citation(self):
         uncited = NpcRegardEventFactory.build(
             regard=NpcRegardFactory(),
