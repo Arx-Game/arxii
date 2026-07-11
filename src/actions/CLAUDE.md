@@ -204,11 +204,12 @@ They do not use the command system, dispatchers, or handlers.
   auto-concludes via `check_victory` when a side crosses threshold),
   `ConcludeBattleAction` (`"conclude_battle"`, `target_type=AREA`, GM/staff; natural win →
   timer → DEFENDER_MARGINAL default), `DeclareBattleActionAction` (`"declare_battle_action"`,
-  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 11
+  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 12
   `BattleActionKind` values through the same generic `action_kind`/`target_unit`/
   `target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs it
-  always had — #1712 added ROUT/RALLY/REPEL/HOLD, #1713 added BREACH/FORTIFY, #1715
-  added SET_ENVIRONMENT, and #2007 added MOVE, all with zero new Action classes; all new-kind validation
+  always had — #1712 added ROUT/RALLY/REPEL/HOLD, #1713 added BREACH/FORTIFY, #1714
+  added REPOSITION, #1715 added SET_ENVIRONMENT, and #2007 added MOVE, all with zero
+  new Action classes; all new-kind validation
   (command scope, `PlaceScopeRequiredError`, the #1713 Fortification target/ownership
   checks, `InvalidEnvironmentScopeError`/`MissingEnvironmentTargetError`) lives in
   `world.battles.services.declare_battle_action`. `ChallengeChampionDuelAction`
