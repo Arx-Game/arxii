@@ -1566,14 +1566,29 @@ def declare_use_item(
 
 def declare_interpose(
     participant: CombatParticipant,
-    ally: CombatParticipant | None,
+    ally: CombatParticipant | None = None,
+    technique: Technique | None = None,
 ) -> CombatRoundAction:
     """Declare an interposing maneuver — passives-only, auto-ready.
 
     ``ally=None`` means the participant will guard any ally hit this round;
     when a specific ally is given they must be active and in the same encounter.
-    Interpose resolves in a later task; this function only records the declaration.
+
+    ``technique=None`` (default) declares a plain interpose exactly as before
+    #2207 — passives only, ``focused_action`` zeroed. Supplying a *technique*
+    carries a protective reactive-trigger technique into the declaration: the
+    participant must know it (``CharacterTechnique``) and it must classify to a
+    protective flavor via ``protective_flavor`` (barrier/blink/redirect,
+    `world/magic/services/targeting.py`). The ``redirect`` flavor (Mirror
+    Ward-style reflection) is rejected here — sub 5 lifts this restriction. A
+    valid technique is written to ``focused_action`` instead of the usual
+    zeroing; passives are still zeroed either way.
     """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+    from world.magic.services.targeting import (  # noqa: PLC0415
+        PROTECTIVE_FLAVOR_REDIRECT,
+        protective_flavor,
+    )
     from world.vitals.services import is_dead  # noqa: PLC0415
 
     encounter = participant.encounter
@@ -1600,11 +1615,24 @@ def declare_interpose(
             msg = "Interpose target must be an active participant in this encounter."
             raise ValueError(msg)
 
+    if technique is not None:
+        knows_technique = CharacterTechnique.objects.filter(
+            character=participant.character_sheet,
+            technique=technique,
+        ).exists()
+        if not knows_technique:
+            msg = "Cannot interpose: character does not know that technique."
+            raise ValueError(msg)
+        flavor = protective_flavor(technique)
+        if flavor is None or flavor == PROTECTIVE_FLAVOR_REDIRECT:
+            msg = "Cannot interpose: that technique cannot guard yet."
+            raise ValueError(msg)
+
     action, _ = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,
         defaults={
-            "focused_action": None,
+            "focused_action": technique,
             "focused_category": None,
             "effort_level": EffortLevel.VERY_LOW,
             "focused_opponent_target": None,
