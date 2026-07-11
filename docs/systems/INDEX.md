@@ -113,6 +113,22 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     partial UniqueConstraint `(character_sheet, scene) WHERE scene IS NOT NULL`).
     `ResonanceGainConfig.entry_flourish_grant` (default 10). The #904
     reaction-window framework is peer-only and was rejected for this use.
+  - **Technique Entrance + Dramatic Moment Suggestion (#2183, ADR-0113):** a "make an
+    entrance" whose check IS a technique cast (`enter <technique>[=<target>]` /
+    `EntranceAction._execute_technique_entrance`) — one roll drives flourish +
+    disposition + a GM-facing recognition nudge instead of a separate social check.
+    `DramaticMomentType.suggest_on_technique_entrance` / `.suggestion_min_success_level`
+    opt a moment type into the bridge; `DramaticMomentSuggestion` (PENDING/CONFIRMED/
+    DISMISSED, unique per `(moment_type, character_sheet, scene)` while PENDING) is the
+    suggestion row. Services: `maybe_suggest_dramatic_moments` /
+    `resolve_dramatic_moment_suggestion` (`services/gain.py`). Actions:
+    `ConfirmDramaticMomentSuggestionAction` / `DismissDramaticMomentSuggestionAction`
+    (account-authorized, `actions/definitions/dramatic_moments.py`). Web:
+    `DramaticMomentSuggestionViewSet` (`/api/magic/dramatic-moment-suggestions/`).
+    Telnet: `CmdMoment` (`moment suggestions|confirm <id>|dismiss <id>`). See
+    magic.md "Technique Entrance" + "Dramatic Moment Suggestion" for the full deferral
+    matrix (inline / hostile-seeded / PENDING-consent / soulfray-gated) and the
+    combat-side `from_entrance` marker + benign-intervention join (see Combat section).
   - **Ritual Liturgy (#1352):** `RitualLiturgy` (OneToOne → `Ritual`; `opening_call`
     TextField — the officiant's authored ceremonial words; public, non-spoiler).
     Seeded alongside the Ritual of the Durance via `RitualLiturgyFactory`.
@@ -3301,6 +3317,19 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
   `ComboSignature` (covenant+combo narrative flourish, #2017), `Clash`,
   `ClashRound`, `ClashContribution`
+- **Technique-entrance combat integration (#2183):** `CombatRoundAction.from_entrance`
+  (bool, default False) — stamped when a hostile Technique Entrance (see magic.md
+  "Technique Entrance") seeds/feeds an encounter (`world.combat.cast_seed
+  .seed_or_feed_encounter_from_cast(..., from_entrance=True)`); read at round resolution
+  by `_maybe_suggest_entrance_dramatic_moment` (`world/combat/services.py`) to fire the
+  Dramatic Moment Suggestion check once the declared cast's real success level is known
+  (the entrance's own recognition hooks fired flourish-only at declaration time — the
+  suggestion was deferred). `world.combat.cast_seed
+  .seed_or_feed_encounter_from_benign_intervention(*, caster_sheet, target_sheet, scene)`
+  is the benign sibling: seats a non-combatant whose protective (non-hostile) entrance
+  cast landed on an already-embattled ally into the fight — no opponent row, no stakes
+  lock, no FOCUSED declaration (the cast already resolved standalone); no-ops when there
+  is no feedable encounter or the target isn't embattled in it.
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
     side-field; ALLY opponents fight *for* the party (summons, and future charm/

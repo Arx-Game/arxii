@@ -251,6 +251,14 @@ reflect (`reflect_damage`, priority 20), or blink (`blink_dodge`, priority 30). 
 The seeded set of nine castable combat effects (`ensure_effect_palette_content()` in
 `world/magic/effect_palette_content.py`). See the magic per-app glossary for the full entry.
 
+**Technique Entrance** (#2183):
+An Entrance whose check IS a technique cast — the cast's success level substitutes for the
+entrance's social roll entirely (ADR-0113). Distinct from Entry Flourish (the resonance
+self-grant it unlocks), Dramatic Moment (the GM-tagged reward category it may *suggest*, never
+auto-grant), and Dramatic Surge (an unrelated combat intensity-modifier jump). Full entry:
+[magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Technique Entrance"); Dramatic
+Surge lives in [combat AGENT_GLOSSARY](src/world/combat/AGENT_GLOSSARY.md).
+
 ## Magic spine
 
 **Thread**:

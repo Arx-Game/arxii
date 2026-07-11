@@ -224,6 +224,35 @@ called `set_active_persona` directly (bypassing `action.run()`); telnet had no w
 - **Frontend:** `SceneTacticalMap` component (`frontend/src/scenes/components/`) renders the position graph as a spatial `@xyflow/react` map — occupant avatars per node, edges styled by passability/gating, click-to-move, and a staff "Set the stage" control — replacing the earlier `RoomPositionsPanel` text-list UI (#2006). `MovementActions` extracted as a shared component (`frontend/src/combat/components/`).
 - **Blueprint authoring + staging:** see `docs/roadmap/combat.md` (Positioning — Blueprints + Non-Combat Scene UI section) and `docs/systems/areas.md`.
 
+### Technique-Driven Combat Entrance + Dramatic Moment Suggestion — DONE (#2183, ADR-0113)
+
+A "make an entrance" backed by a technique cast resolves through **one roll**, not two: the
+technique's own success level substitutes for the entrance's social check entirely and drives
+every downstream consequence via a deferral matrix (inline / hostile-seeded-into-combat /
+PENDING-consent / soulfray-gated), so nothing is lost when the real success level isn't known
+until later (a declared cast resolving at combat round resolution, or a consent-gated request
+resolving on accept).
+
+- **`EntranceAction._execute_technique_entrance`** (`actions/definitions/social.py`) — the
+  `enter <technique>[=<target>]` telnet grammar (`CmdEnter`) and the web
+  `EntranceTechniqueAttachment` popover both converge here. `SceneActionRequestViewSet
+  ._create_technique_entrance` (`world/scenes/action_views.py`, #2183 Task 8 fold-in)
+  dispatches the same seam for the REST caller rather than the unrelated technique-as-
+  `ActionEnhancement` consent path the rest of that endpoint uses.
+- **Recognition bridge:** a qualifying cast never auto-tags — it creates a
+  `DramaticMomentSuggestion` (PENDING) a GM later confirms (mints a real
+  `DramaticMomentTag`, full resonance + renown award) or dismisses, gated on
+  `DramaticMomentType.suggest_on_technique_entrance` / `.suggestion_min_success_level`.
+  Web: `DramaticMomentSuggestionViewSet`. Telnet: `CmdMoment`. Frontend:
+  `DramaticMomentSuggestionChip` in `PoseUnit`.
+- **Combat integration:** `CombatRoundAction.from_entrance` marks a hostile entrance-seeded
+  declaration so the suggestion fires at round resolution once the real success level is
+  known; a benign entrance cast landing on an embattled ally seats the caster into the fight
+  via `seed_or_feed_encounter_from_benign_intervention` — see
+  [combat.md](combat.md) "What's PROVEN".
+- **Details:** [magic.md](../systems/magic.md#technique-entrance-2183) · ADR:
+  [0113](../adr/0113-entrance-carries-the-cast.md).
+
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode
 
