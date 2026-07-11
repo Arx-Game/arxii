@@ -130,7 +130,12 @@ vi.mock('@/scenes/actionQueries', async (importOriginal) => {
 vi.mock('@/combat/queries', () => ({
   useOutcomeDetails: vi.fn().mockReturnValue({ data: [], isLoading: false }),
   useDispatchPlayerAction: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
+  useEncounterForScene: vi.fn().mockReturnValue({ data: null, isLoading: false, isError: false }),
   combatKeys: { duelChallengesAll: () => ['combat', 'duel-challenges'] },
+}));
+
+vi.mock('@/battles/queries', () => ({
+  useBattleForSceneQuery: vi.fn().mockReturnValue({ data: null, isLoading: false, isError: false }),
 }));
 
 // EndorsementControl mounts its own hook machinery per-pose (#1138); stubbed
