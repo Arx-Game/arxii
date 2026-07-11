@@ -144,6 +144,7 @@ treat those names as hints to confirm, not gospel.
 - [0112 — MOVE tracks in-progress position via personal transit coordinates, not a rounds-counter](0112-move-uses-transit-coordinates.md) (extends ADR-0085)
 - [0113 — Consent defaults are a category tree, not per-category flags](0113-consent-defaults-are-a-category-tree.md) (extends ADR-0024)
 - [0114 — Player-authored accusations are weight-bearing secrets, gated by consent not the model](0114-accusations-are-weight-bearing-player-secrets.md) (extends ADR-0062/0113)
+- [0115 — The accusation→heat bridge lives justice-side, and its tier is emergent from the real deed underneath](0115-accusation-heat-bridge-tier-is-emergent-from-the-deed.md) (extends ADR-0114/0010)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -27,6 +27,15 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
 - **`HeatSource`** — allegation provenance per heat row (`deed` nullable, `amount`).
   Never verifies actorship: a false accusation is a divergence between allegation
   and truth, not a stored flag.
+- **`AccusationCrimeClaim`** — `(secret OneToOne → secrets.Secret, crime_kind FK,
+  real_deed nullable → societies.LegendEntry)`. The bridge that makes a
+  player-authored ACCUSATION secret (frame-jobs, #1825) bite the *justice* system,
+  not only reputation. The tier is emergent from the deed: `real_deed` null = a
+  **wild L2** (a named crime with nothing underneath → fragile, easily refuted);
+  `real_deed` set = an **L3 frame** (a crime that genuinely happened, pinned on
+  someone who didn't do it → robust, because refuting it means proving innocence,
+  not disproving the crime). Lives justice-side (FK into `secrets.Secret`) so
+  `secrets` stays dependency-free (ADR-0010).
 
 ## Services (`world/justice/services.py`)
 
@@ -53,6 +62,19 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
 - `tag_deed_crimes(deed, crime_kinds)` — idempotent tagging.
 - `heat_decay_tick()` — daily cron (`justice.heat_decay` in `game_clock/tasks.py`),
   decays toward zero and deletes cold rows. Magnitudes PLACEHOLDER.
+- **Accusation heat bridge (#1825):**
+  - `record_accusation_crime(*, secret, crime_kind, real_deed=None)` — attaches (or
+    updates, idempotent per secret) the alleged crime to an ACCUSATION secret.
+  - `accrue_accusation_heat(*, secret, area, scale=1)` — reads the claim and defers
+    to `accrue_heat`, landing heat on `secret.subject_sheet.primary_persona` where
+    `area`'s law criminalizes the alleged kind. Returns None if there's no claim,
+    no subject persona, or nothing is criminal there.
+  - `file_criminal_accusation(*, accuser_persona, subject_sheet, content, crime_kind,
+    level=WHISPERS, real_deed=None, area=None, scale=1)` — the one-move composition:
+    `secrets.mint_accusation` + `record_accusation_crime` + (when `area` given)
+    `accrue_accusation_heat`. Lives justice-side because it depends on both systems
+    (justice → secrets is the allowed direction, ADR-0010), keeping `secrets`
+    unaware of justice.
 
 ## Writers (accrual)
 
@@ -92,9 +114,11 @@ deeds accept `crime_kinds=` on `create_solo_deed` / `create_legend_event`.
 ## Deferred (verified against code at spec time)
 
 Guard-encounter spawning (combat domain — no pursuit-NPC surface exists);
-#1334 secrets-outing writer (calls `associate_heat`); accusation-minting
-surfaces; allied-society warrant sharing; active heat-clearing (bribe/pardon);
-wanted-poster/public-knowledge surfaces.
+#1334 secrets-outing writer (calls `associate_heat`); allied-society warrant
+sharing; active heat-clearing (bribe/pardon — #1826); wanted-poster/public-knowledge
+surfaces. (Accusation minting + its heat bridge are now **built** — #1825,
+`file_criminal_accusation`; a criminal-accusation *player surface* that lets a
+player pick a crime kind / anchor a real deed is the next slice.)
 
 ## Authored law postures (Apostate, 2026-07-03 — transcribe to AreaLaw when the grid lands)
 

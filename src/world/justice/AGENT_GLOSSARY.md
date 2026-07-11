@@ -23,3 +23,13 @@
 - **Sanctuary** — an area (usually BUILDING level) whose `dominant_society`
   differs from the surrounding jurisdiction; reads SAFE by the same mismatch
   rule as cross-border immunity. Not a model — a data pattern.
+- **Accusation crime claim** — an `AccusationCrimeClaim` row; the bridge from a
+  player-authored ACCUSATION `Secret` (frame-jobs, #1825) into heat. Carries the
+  alleged `crime_kind` and an optional `real_deed`.
+- **Wild accusation** — an accusation crime claim with no `real_deed` (an L2):
+  a named crime with nothing underneath. Mints heat but is fragile — easily
+  refuted, because scrutiny finds no corroborating deed.
+- **Frame** — an accusation crime claim whose `real_deed` anchors a crime that
+  genuinely happened (an L3), pinned on someone who did not commit it. Robust:
+  refuting it means proving innocence, not disproving the crime. _Avoid_:
+  using "frame" loosely for any false accusation — a wild accusation is not a frame.

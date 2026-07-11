@@ -3,8 +3,9 @@ import factory.django
 
 from world.areas.factories import AreaFactory
 from world.justice.constants import DEFAULT_HEAT_WEIGHT
-from world.justice.models import AreaLaw, CrimeKind, PersonaHeat
+from world.justice.models import AccusationCrimeClaim, AreaLaw, CrimeKind, PersonaHeat
 from world.scenes.factories import PersonaFactory
+from world.secrets.factories import SecretFactory
 from world.societies.factories import SocietyFactory
 
 
@@ -36,3 +37,12 @@ class PersonaHeatFactory(factory.django.DjangoModelFactory):
     area = factory.SubFactory(AreaFactory)
     society = factory.SubFactory(SocietyFactory)
     value = 0
+
+
+class AccusationCrimeClaimFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AccusationCrimeClaim
+
+    secret = factory.SubFactory(SecretFactory)
+    crime_kind = factory.SubFactory(CrimeKindFactory)
+    real_deed = None

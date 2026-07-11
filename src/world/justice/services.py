@@ -20,8 +20,16 @@ from django.db.models import F
 from django.db.models.functions import Greatest
 
 from world.justice.constants import HEAT_DECAY_PER_DAY, tier_for_value
-from world.justice.models import AreaLaw, CrimeKind, DeedCrimeTag, HeatSource, PersonaHeat
+from world.justice.models import (
+    AccusationCrimeClaim,
+    AreaLaw,
+    CrimeKind,
+    DeedCrimeTag,
+    HeatSource,
+    PersonaHeat,
+)
 from world.justice.types import HeatReading
+from world.secrets.constants import SecretLevel
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -29,7 +37,9 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.areas.models import Area
+    from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Persona
+    from world.secrets.models import Secret
     from world.societies.models import LegendEntry, Society
 
 
@@ -214,3 +224,78 @@ def heat_decay_tick() -> int:
     )
     PersonaHeat.objects.filter(value=0).delete()
     return touched
+
+
+def record_accusation_crime(
+    *, secret: Secret, crime_kind: CrimeKind, real_deed: LegendEntry | None = None
+) -> AccusationCrimeClaim:
+    """Attach the alleged crime to an accusation secret — the heat bridge's data.
+
+    ``real_deed`` set = an L3 frame (a real crime pinned on the subject); null =
+    a wild L2 accusation (a named crime with nothing underneath). Idempotent per
+    secret (one claim per accusation).
+    """
+    claim, _ = AccusationCrimeClaim.objects.update_or_create(
+        secret=secret,
+        defaults={"crime_kind": crime_kind, "real_deed": real_deed},
+    )
+    return claim
+
+
+def accrue_accusation_heat(
+    *, secret: Secret, area: Area | None, scale: int = 1
+) -> PersonaHeat | None:
+    """Mint pursuit heat on an accusation's subject, where the allegation landed.
+
+    Reads the secret's ``AccusationCrimeClaim`` and defers to ``accrue_heat`` — so
+    the same jurisdiction rules apply: heat only mints where ``area``'s law
+    criminalizes the alleged ``crime_kind``. Returns None when the secret carries
+    no crime claim, the subject has no persona, or nothing is criminal there.
+    """
+    claim = AccusationCrimeClaim.objects.filter(secret=secret).first()
+    if claim is None:
+        return None
+    persona = secret.subject_sheet.primary_persona
+    if persona is None:
+        return None
+    return accrue_heat(
+        persona=persona,
+        crime_kind=claim.crime_kind,
+        area=area,
+        deed=claim.real_deed,
+        scale=scale,
+    )
+
+
+def file_criminal_accusation(  # noqa: PLR0913 — keyword-only; distinct accusation fields
+    *,
+    accuser_persona: Persona,
+    subject_sheet: CharacterSheet,
+    content: str,
+    crime_kind: CrimeKind,
+    level: int = SecretLevel.WHISPERS,
+    real_deed: LegendEntry | None = None,
+    area: Area | None = None,
+    scale: int = 1,
+) -> Secret:
+    """Author a criminal accusation and land its heat in one move.
+
+    Composes the frame-job primitive (``secrets.mint_accusation``) with the crime
+    claim and the heat bridge. Lives justice-side because it depends on both
+    systems (justice → secrets is the allowed direction; ADR-0010), keeping
+    ``secrets`` unaware of justice. When ``area`` is given, heat mints there
+    immediately (the accusation is "filed"); otherwise the claim is recorded and
+    heat can be accrued later via ``accrue_accusation_heat``.
+    """
+    from world.secrets.services import mint_accusation  # noqa: PLC0415
+
+    secret = mint_accusation(
+        accuser_persona=accuser_persona,
+        subject_sheet=subject_sheet,
+        content=content,
+        level=level,
+    )
+    record_accusation_crime(secret=secret, crime_kind=crime_kind, real_deed=real_deed)
+    if area is not None:
+        accrue_accusation_heat(secret=secret, area=area, scale=scale)
+    return secret

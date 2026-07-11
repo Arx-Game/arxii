@@ -188,3 +188,59 @@ class HeatSource(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"+{self.amount} heat on row {self.heat_id}"
+
+
+class AccusationCrimeClaim(SharedMemoryModel):
+    """The bridge from a player-authored ACCUSATION secret into pursuit heat (#1825).
+
+    Frame-jobs (``secrets`` #1825) let a player author a false scandal against a
+    target; this row is what makes a *criminal* accusation bite the justice
+    system rather than only reputation. The tier is emergent from how much real
+    crime sits underneath:
+
+    * **Wild accusation (L2)** — ``real_deed`` is null. The accuser names a
+      ``crime_kind`` off a dropdown with no crime underneath ("they murdered
+      someone I invented"). It still mints heat, but it is fragile: scrutiny
+      finds no corroborating deed, so it is easily refuted.
+    * **Frame for a real crime (L3)** — ``real_deed`` anchors a crime that
+      genuinely happened (a ``LegendEntry`` the accuser is shifting blame away
+      from, often their own) but which the subject did not commit. Robust:
+      the crime is real, so refuting it means proving the subject's innocence,
+      not disproving the crime.
+
+    Actorship is never verified here (false accusations are first-class, #1765) —
+    the row records the *allegation*. Lives justice-side (FK into
+    ``secrets.Secret``) so ``secrets`` stays dependency-free (ADR-0010).
+    """
+
+    secret = models.OneToOneField(
+        "secrets.Secret",
+        on_delete=models.CASCADE,
+        related_name="accusation_crime_claim",
+    )
+    crime_kind = models.ForeignKey(
+        CrimeKind,
+        on_delete=models.PROTECT,
+        related_name="accusation_claims",
+    )
+    real_deed = models.ForeignKey(
+        "societies.LegendEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="frame_claims",
+        help_text="The real crime being pinned on the subject (L3 frame); null for a wild L2.",
+    )
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_date"]
+
+    @property
+    def is_wild(self) -> bool:
+        """L2: a claimed crime with no real deed underneath — the fragile kind."""
+        return self.real_deed_id is None
+
+    def __str__(self) -> str:
+        kind = "wild" if self.is_wild else "frame"
+        return f"{kind} accusation claim: secret {self.secret_id} alleges {self.crime_kind}"
