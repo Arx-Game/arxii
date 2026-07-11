@@ -430,17 +430,17 @@ def install_full_lab_station(room_profile, *, level: int = 1):
 class CraftingRecipeFactory(factory.django.DjangoModelFactory):
     """Factory for CraftingRecipe.
 
-    Creates a minimal recipe with sensible defaults. ``kind`` carries a ``unique``
-    constraint (one recipe per kind), so the factory keys ``django_get_or_create`` on
-    ``kind`` — two bare ``CraftingRecipeFactory()`` calls return the *same* FACET_ATTACH
-    recipe instead of raising ``IntegrityError`` on the second. Override ``kind`` to
-    create a recipe of a different kind. (Per the ``django_get_or_create`` gotcha,
-    non-lookup kwargs are ignored when the row for a ``kind`` already exists.)
+    Creates a minimal recipe with sensible defaults. The composite unique
+    constraint is ``(kind, output_item_template)``, so the factory keys
+    ``django_get_or_create`` on both — two bare ``CraftingRecipeFactory()``
+    calls return the *same* FACET_ATTACH recipe (null output) instead of
+    raising ``IntegrityError`` on the second. Override ``kind`` (and
+    ``output_item_template`` for ITEM_CREATE) to create a different recipe.
     """
 
     class Meta:
         model = "items.CraftingRecipe"
-        django_get_or_create = ("kind",)
+        django_get_or_create = ("kind", "output_item_template")
 
     name = factory.Sequence(lambda n: f"Crafting Recipe {n}")
     kind = CraftingRecipeKind.FACET_ATTACH
