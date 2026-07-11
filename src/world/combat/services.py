@@ -59,7 +59,7 @@ from flows.events.payloads import (
     EncounterCompletedPayload,
 )
 from world.checks.constants import ModifierSourceKind
-from world.checks.services import collect_check_modifiers, compute_check_rating, perform_check
+from world.checks.services import collect_check_modifiers, perform_check
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
     COMBO_MIN_SLOTS,
@@ -6599,40 +6599,6 @@ def _resolve_clashes(
     return outcomes
 
 
-def _better_interpose_approach(interposer: ObjectDB) -> str | None:  # noqa: OBJECTDB_PARAM
-    """Compare the interposer's Reflexes vs Melee Defense rating; pick the better twin (#2207).
-
-    Deterministic — no dice roll (ADR-0019 keeps the one roll inside
-    ``resolve_challenge``/``perform_check``): reuses
-    :func:`world.checks.services.compute_check_rating`, the same pre-roll
-    trait/skill assembly ``perform_check`` uses, for both ``CheckType``s. Returns
-    the shared Melee-Defense-twin capability name
-    (:data:`world.combat.interpose_content.MELEE_GUARD_CAPABILITY_NAME`) — the
-    string ``dispatch_capability_reaction``'s ``approach`` param matches against
-    ``capability_source.capability_name`` — when Melee Defense strictly beats
-    Reflexes. Returns ``None`` to keep today's default (Reflexes-flavored)
-    approach otherwise, including when either ``CheckType`` hasn't been seeded.
-    """
-    from world.areas.positioning.constants import CATCH_CHECK_TYPE_NAME  # noqa: PLC0415
-    from world.checks.models import CheckType  # noqa: PLC0415
-    from world.combat.interpose_content import (  # noqa: PLC0415
-        MELEE_DEFENSE_CHECK_TYPE_NAME,
-        MELEE_GUARD_CAPABILITY_NAME,
-    )
-
-    reflexes = CheckType.objects.filter(name=CATCH_CHECK_TYPE_NAME).first()
-    melee_defense = CheckType.objects.filter(name=MELEE_DEFENSE_CHECK_TYPE_NAME).first()
-    if reflexes is None or melee_defense is None:
-        return None
-
-    reflexes_rating = compute_check_rating(interposer, reflexes)
-    melee_rating = compute_check_rating(interposer, melee_defense)
-
-    if melee_rating > reflexes_rating:
-        return MELEE_GUARD_CAPABILITY_NAME
-    return None
-
-
 def _try_interpose(
     participant: CombatParticipant,
     pre_payload: DamagePreApplyPayload,
@@ -6643,6 +6609,11 @@ def _try_interpose(
     ``INTERPOSE`` for *participant* (or any ally) in the current round, resolves
     the interposer's capability challenge via :func:`dispatch_interpose`, and
     mutates *pre_payload.amount* in place.
+
+    Passes ``select_best_check_rating=True`` (no explicit *approach*) so the
+    interposer's better-rated reaction action — Reflexes or the Melee-Defense
+    twin, whichever the guardian is actually built for — is picked deterministically
+    (#2207; see :func:`~world.mechanics.reactions._select_best_rated_action`).
 
     **Guard:** no-op when the encounter is not ``RESOLVING`` so that
     non-combat callers of :func:`apply_damage_to_participant` are unaffected.
@@ -6682,8 +6653,9 @@ def _try_interpose(
         interposer,
         protected,
         pre_payload,
-        approach=_better_interpose_approach(interposer),
+        approach=None,
         extra_modifiers=bond_bonus(interposer, protected),
+        select_best_check_rating=True,
     )
     if result is not None:
         # Charge fatigue to the interposer ONLY on fire (readiness is free).
@@ -6934,13 +6906,14 @@ def apply_interpose_outcome(
     # Failure (success_level < 0) — the blow continues at full damage.
 
 
-def dispatch_interpose(
+def dispatch_interpose(  # noqa: PLR0913 - select_best_check_rating extends existing signature
     interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
     pre_payload: DamagePreApplyPayload,
     *,
     approach: str | None,
     extra_modifiers: int = 0,
+    select_best_check_rating: bool = False,
 ) -> ChallengeResolutionResult | None:
     """Resolve *interposer*'s interpose attempt and apply the graded outcome.
 
@@ -6948,6 +6921,12 @@ def dispatch_interpose(
     looks up the active Interpose :class:`~world.mechanics.models.ChallengeInstance`
     bound to *protected*, resolves it through *interposer*'s capabilities, and
     calls :func:`apply_interpose_outcome` to mutate *pre_payload* in place.
+
+    *select_best_check_rating* (#2207) opts into the best-of-check reaction-action
+    selection (Reflexes vs. the Melee-Defense twin) when *approach* is ``None`` —
+    passed ``True`` by :func:`_try_interpose` (the combat damage path). Default
+    ``False`` preserves the plain first-match behavior for the scene-cover caller
+    (``world.scenes.sudden_harm``), which passes ``approach=None`` unchanged.
 
     Returns the :class:`~world.mechanics.types.ChallengeResolutionResult`, or
     ``None`` when no active Interpose challenge is bound to *protected* or
@@ -6968,6 +6947,7 @@ def dispatch_interpose(
             f"for protected target {protected!r}."
         ),
         outcome_fn=functools.partial(apply_interpose_outcome, pre_payload, interposer=interposer),
+        select_best_check_rating=select_best_check_rating,
         extra_modifiers=extra_modifiers,
     )
 
