@@ -110,12 +110,14 @@ export function CombatScenePage() {
   const [castPosition, setCastPosition] = useState<CastPosition>({});
   const [focusedPositionShape, setFocusedPositionShape] = useState<PositionTargetShape>('none');
 
-  // Map-click handler for the tactical-map tab (#2206) — mirrors the
-  // PositionPicker's shape-aware fill logic (ActionDeclarationCard): single
-  // shape sets/clears the one destination; pair shape fills A then B, and
-  // clicking an already-set slot clears just that slot. Returns false
-  // (consumes nothing) unless a position-shaped technique is selected, so
-  // TacticalMap's move-dispatch logic runs unchanged otherwise.
+  // Map-click handler for the tactical-map tab (#2206). Single-click UI needs
+  // its own fill/clear rules, distinct from ActionDeclarationCard's
+  // PositionPicker (which renders explicit, separately-clickable A/B slot
+  // pickers): single shape toggles the one destination on/off per click; pair
+  // shape fills whichever of A/B is still empty, and clicking a position
+  // already occupying a slot clears just that slot. Returns false (consumes
+  // nothing) unless a position-shaped technique is selected, so TacticalMap's
+  // move-dispatch logic runs unchanged otherwise.
   const handlePickPosition = useCallback(
     (positionId: number): boolean => {
       if (focusedPositionShape === 'none') return false;

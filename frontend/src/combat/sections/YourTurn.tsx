@@ -12,7 +12,7 @@
  * Phase 7 of the unified-combat-ui plan.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
 import type {
@@ -76,9 +76,10 @@ export interface YourTurnProps {
   /**
    * Cast-time position selection, controlled by the caller (#2206). CombatTurnPanel/
    * CombatScenePage lift this above the rail tabs so the tactical-map tab can share
-   * it with this panel. Optional and falls back to local state when the caller
-   * doesn't provide it (e.g. tests rendering YourTurn standalone) — same
-   * controlled/uncontrolled pattern as ActionDeclarationCard's castPosition prop.
+   * it with this panel. Optional and falls back to local `useState` when the caller
+   * doesn't provide it (e.g. tests rendering YourTurn standalone) — unlike
+   * ActionDeclarationCard's castPosition prop, which has no such local-state
+   * fallback and simply no-ops without a caller-supplied setter.
    */
   castPosition?: CastPosition;
   onCastPositionChange?: (next: CastPosition) => void;
@@ -492,8 +493,23 @@ export function YourTurn({
   const castPosition = castPositionProp ?? localCastPosition;
   const setCastPosition = onCastPositionChangeProp ?? setLocalCastPosition;
 
+  // Did-mount guards for the two reset effects below (#2206 review finding).
+  // Both effects' dependencies take on their "changed" value on first mount
+  // too (standard React) — without a guard, mounting/remounting this panel
+  // (e.g. switching from the Map tab back to Your Turn, which unmounts and
+  // remounts inactive TabsContent) would fire `setCastPosition({})` and wipe
+  // out a position the caller already lifted into `castPosition`/
+  // `onCastPositionChange`. Skip the reset on the mount that establishes each
+  // ref; only fire on genuine post-mount transitions.
+  const roundResetMounted = useRef(false);
+  const techniqueResetMounted = useRef(false);
+
   // Reset submitted, pull selection, and pull dialog when round advances.
   useEffect(() => {
+    if (!roundResetMounted.current) {
+      roundResetMounted.current = true;
+      return;
+    }
     setSubmitted(false);
     setPullDialogOpen(false);
     setSelectedPull(null);
@@ -503,20 +519,19 @@ export function YourTurn({
     setCoverAllyId('');
     setManeuverError(null);
     setCastPosition({});
-    // setCastPosition is either the raw useState setter or the caller's
-    // onCastPositionChange (CombatScenePage's raw useState setter, in
-    // practice) — both stable across renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundNumber]);
+  }, [roundNumber, setCastPosition]);
 
   // Reset cast-time position selection when the focused technique changes —
   // a position picked for a prior technique (e.g. a pair-shape technique's A/B)
   // must not silently leak into a differently-shaped technique's
   // `position_params` (#2206 review finding).
   useEffect(() => {
+    if (!techniqueResetMounted.current) {
+      techniqueResetMounted.current = true;
+      return;
+    }
     setCastPosition({});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedContext.techniqueId]);
+  }, [focusedContext.techniqueId, setCastPosition]);
 
   // ---------------------------------------------------------------------------
   // Slot composition
