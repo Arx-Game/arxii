@@ -3949,8 +3949,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Starting Area.
+          type: string
         required: true
       tags:
       - character-creation
@@ -12262,6 +12261,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/InteractionList'
           description: ''
+  /api/items/crafting/create/:
+    post:
+      operationId: items_crafting_create_create
+      description: Roll the crafting check and (on success) mint a new ItemInstance.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          description: No response body
   /api/items/equipped-items/:
     get:
       operationId: items_equipped_items_list
