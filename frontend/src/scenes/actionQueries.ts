@@ -62,6 +62,13 @@ export async function createActionRequest(
     target_condition_instance_id?: number;
     target_pending_alteration_id?: number;
     bond_thread_id?: number;
+    /**
+     * Technique-driven combat entrance (#2183): the freshly-created ENTRY pose
+     * Interaction id, so `EntranceAction` can anchor the entrance to the pose
+     * that announced it. Omit when the pose response didn't carry an id
+     * (e.g. an ephemeral scene).
+     */
+    entry_interaction_id?: number;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
@@ -107,6 +114,9 @@ export async function createActionRequest(
   }
   if (body.bond_thread_id !== undefined) {
     requestBody.bond_thread_id = body.bond_thread_id;
+  }
+  if (body.entry_interaction_id !== undefined) {
+    requestBody.entry_interaction_id = body.entry_interaction_id;
   }
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',

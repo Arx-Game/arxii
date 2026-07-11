@@ -703,3 +703,74 @@ describe('PoseUnit reaction regard-bump toast', () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// GM dramatic-moment suggestion chip (#2183)
+// ---------------------------------------------------------------------------
+
+describe('PoseUnit — GM dramatic-moment suggestion chip', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders the suggestion chip when canGm=true and a PENDING suggestion is present', () => {
+    const interaction = makeInteraction({
+      mode: 'pose',
+      dramatic_moment_suggestions: [
+        {
+          id: 7,
+          moment_type_id: 1,
+          moment_type_label: 'Grand Entrance',
+          character_sheet_id: 10,
+          success_level: 2,
+          status: 'pending',
+        },
+      ],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" canGm={true} />
+      </Wrapper>
+    );
+
+    expect(screen.getByTestId('dramatic-moment-suggestion-chip')).toBeInTheDocument();
+    expect(screen.getByText(/Grand Entrance/)).toBeInTheDocument();
+  });
+
+  it('does not render the suggestion chip when canGm is false, even with suggestions present', () => {
+    const interaction = makeInteraction({
+      mode: 'pose',
+      dramatic_moment_suggestions: [
+        {
+          id: 7,
+          moment_type_id: 1,
+          moment_type_label: 'Grand Entrance',
+          character_sheet_id: 10,
+          success_level: 2,
+          status: 'pending',
+        },
+      ],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" canGm={false} />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTestId('dramatic-moment-suggestion-chip')).toBeNull();
+  });
+
+  it('does not render the suggestion chip when canGm=true but there are no suggestions', () => {
+    const interaction = makeInteraction({ mode: 'pose', dramatic_moment_suggestions: [] });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" canGm={true} />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTestId('dramatic-moment-suggestion-chip')).toBeNull();
+  });
+});
