@@ -156,6 +156,11 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
         Soul Tether panel rendered on a *foreign* character's sheet depends on
         being able to read the tether row (see ADR-0117).
         """
+        # drf-spectacular introspects the filterset by calling get_queryset()
+        # with an anonymous dummy request; without this guard the user-filter
+        # makes introspection fail and the filter params vanish from the schema.
+        if getattr(self, "swagger_fake_view", False):  # noqa: GETATTR_LITERAL
+            return CharacterRelationship.objects.none()
         user = self.request.user
         return (
             CharacterRelationship.objects.filter(
