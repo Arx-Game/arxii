@@ -8,6 +8,7 @@ from factory.django import DjangoModelFactory
 
 from world.npc_services.constants import DrawMode, NpcRegardEventReason, OfferKind, RegardTargetType
 from world.npc_services.models import (
+    DistinctionRegardSeed,
     Functionary,
     MissionOfferDetails,
     NpcRegard,
@@ -164,3 +165,13 @@ class NpcRegardEventFactory(DjangoModelFactory):
     regard = factory.SubFactory(NpcRegardFactory)
     reason = NpcRegardEventReason.GM_MANUAL_ADJUSTMENT
     amount = 5
+
+
+class DistinctionRegardSeedFactory(DjangoModelFactory):
+    class Meta:
+        model = DistinctionRegardSeed
+
+    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    npc_persona = factory.SubFactory(_PERSONA_FACTORY)
+    starting_value = 50
+    reason = ""

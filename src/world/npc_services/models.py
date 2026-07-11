@@ -1045,3 +1045,47 @@ class NpcRegardEvent(SharedMemoryModel):
             f"NpcRegardEvent({self.get_reason_display()}, {self.amount:+d}) "
             f"on regard {self.regard_id}"
         )
+
+
+class DistinctionRegardSeed(SharedMemoryModel):
+    """Lookup sidecar: a Distinction pre-attaches a bond to a specific notable NPC (#2039).
+
+    Mirrors DistinctionResonanceGrant's shape (magic/models/grants.py) and
+    placement rationale (ADR-0010): lives in the dependent app npc_services, not
+    in distinctions — the general Distinction primitive must not import every
+    consumer that references it. Materialized onto a real NpcRegard/NpcRegardEvent
+    pair at chargen by reconcile_distinction_regard_seeds().
+    """
+
+    distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.CASCADE,
+        related_name="npc_regard_seeds",
+    )
+    npc_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.CASCADE,
+        related_name="regard_seeds_from_distinctions",
+        help_text="The specific notable NPC this distinction pre-attaches a bond to.",
+    )
+    starting_value = models.SmallIntegerField(
+        validators=regard_validators,
+        help_text="Initial NpcRegard.value applied at chargen.",
+    )
+    reason = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="GM-facing flavor for the seed, e.g. 'Marked by the Choir'.",
+    )
+
+    class Meta:
+        verbose_name = "Distinction Regard Seed"
+        verbose_name_plural = "Distinction Regard Seeds"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["distinction", "npc_persona"], name="unique_distinction_regard_seed"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.distinction} seeds regard with {self.npc_persona}"
