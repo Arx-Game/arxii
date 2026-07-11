@@ -147,7 +147,7 @@ export function CombatTurnPanel({
             Encounter Concluded — Round {encounter.round_number ?? 0}
           </h2>
         </div>
-        <EncounterOutcomeBanner outcome={outcome} />
+        <EncounterOutcomeBanner outcome={outcome} sceneId={encounter.scene} />
       </div>
     );
   }

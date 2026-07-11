@@ -17,6 +17,7 @@ import { render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
 // ---------------------------------------------------------------------------
 // Module mocks — hoisted before imports
@@ -120,7 +121,11 @@ function createWrapper() {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
   };
 }
 
@@ -464,6 +469,7 @@ describe('CombatTurnPanel — encounter outcome banner (#876)', () => {
       status: 'completed',
       outcome: 'victory',
       completed_at: '2026-06-12T00:00:00Z',
+      scene: 8,
     });
 
     render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
@@ -472,6 +478,8 @@ describe('CombatTurnPanel — encounter outcome banner (#876)', () => {
 
     const banner = screen.getByRole('status');
     expect(banner).toHaveTextContent('Victory');
+    const returnLink = screen.getByRole('link', { name: /return to scene/i });
+    expect(returnLink).toHaveAttribute('href', '/scenes/8');
     // Live sections are replaced by the banner.
     expect(screen.queryByTestId('your-turn-stub')).not.toBeInTheDocument();
     expect(screen.queryByTestId('round-flow-section')).not.toBeInTheDocument();
