@@ -365,6 +365,28 @@ def wire_enchanting_crafting(*, base_difficulty: int = 0):
             consequence_factory=ConsequenceFactory,
         )
 
+    # Seed an ITEM_CREATE recipe producing a simple craftable dagger.
+    craftable_template = ItemTemplateFactory(name="Craftable Dagger", is_craftable=True)
+    create_recipe, _ = CraftingRecipe.objects.update_or_create(
+        kind=CraftingRecipeKind.ITEM_CREATE,
+        output_item_template=craftable_template,
+        defaults={
+            "name": "Create Item (Enchanting)",
+            "check_type": check_type,
+            "skill_trait": enchanting,
+            "base_difficulty": base_difficulty,
+            "success_level_step": 10,
+            "min_success_level": 1,
+        },
+    )
+    _wire_recipe_caps_and_consequences(
+        recipe=create_recipe,
+        tiers=(common, fine, master),
+        success_tier=success_tier,
+        botch_tier=botch_tier,
+        consequence_factory=ConsequenceFactory,
+    )
+
     return facet_recipe
 
 
