@@ -27,6 +27,11 @@ if TYPE_CHECKING:
     from actions.prerequisites import Prerequisite
     from actions.types import ActionContext, ActionResult, PendingActionResolution
     from flows.scene_data_manager import SceneDataManager
+    from world.character_sheets.models import CharacterSheet
+    from world.magic.models import Technique
+    from world.magic.types import SoulfrayWarning
+    from world.scenes.models import Interaction, Persona, Scene
+    from world.scenes.types import CastResult
 
 
 @dataclass
@@ -224,6 +229,65 @@ class PerformAction(_SocialTemplateAction):
     description: str = "Captivate an audience through music, oration, or storytelling."
 
 
+def _run_entrance_success_hooks(  # noqa: PLR0913 - cohesive entrance-hook params; shared w/ Task 5
+    actor: ObjectDB,
+    scene: Scene | None,
+    *,
+    success_level: int | None,
+    target_persona_id: int | None,  # noqa: ARG001 - reserved: Task 5's combat-resolution reuse
+    technique: Technique,  # noqa: ARG001 - reserved: Task 5's combat-resolution reuse
+    interaction: Interaction | None = None,
+) -> str | None:
+    """Flourish offer + dramatic-moment suggestion for an entrance (#2183).
+
+    Shared by ``EntranceAction`` (both the bare ActionTemplate path and the
+    technique-driven ``_execute_technique_entrance`` path) and Task 5's deferred
+    combat-resolution hook — keep this signature stable.
+
+    Disposition is deliberately NOT here: it needs the raw
+    ``PendingActionResolution`` (not just an int success level), which only the
+    resolved-inline branch of ``_execute_technique_entrance`` has in hand — that
+    caller applies it directly.
+
+    - Flourish offer: gated on the "Entrance" ``ActionTemplate.grants_entry_flourish``
+      (fetched by name, independent of *technique*'s own action_template — a technique
+      cast has no ActionTemplate of its own tied to "Entrance").
+    - Suggestion: only when ``success_level`` is not None — the hostile-seeded branch
+      defers this to Task 5's combat-resolution hook, where the real success level
+      becomes known once the declared cast resolves.
+
+    Returns the flourish prompt string (or None if no offer was created) so the
+    caller can fold it into its own result message.
+    """
+    from actions.models import ActionTemplate  # noqa: PLC0415
+    from actions.prerequisites import resolve_actor_sheet  # noqa: PLC0415
+
+    prompt: str | None = None
+    template = ActionTemplate.objects.filter(name="Entrance").first()
+    if template is not None and template.grants_entry_flourish:
+        from world.magic.entry_flourish import (  # noqa: PLC0415
+            maybe_create_entry_flourish_offer,
+        )
+
+        offer = maybe_create_entry_flourish_offer(actor, scene)
+        if offer is not None:
+            prompt = "Use |wflourish <resonance>|n to declare your entrance."
+
+    if success_level is not None:
+        actor_sheet = resolve_actor_sheet(actor)
+        if actor_sheet is not None:
+            from world.magic.services.gain import maybe_suggest_dramatic_moments  # noqa: PLC0415
+
+            maybe_suggest_dramatic_moments(
+                character_sheet=actor_sheet,
+                scene=scene,
+                success_level=success_level,
+                interaction=interaction,
+            )
+
+    return prompt
+
+
 @dataclass
 class EntranceAction(_SocialTemplateAction):
     key: str = "entrance"
@@ -238,6 +302,12 @@ class EntranceAction(_SocialTemplateAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        technique_id = kwargs.pop("technique_id", None)
+        if technique_id is not None:
+            return self._execute_technique_entrance(
+                actor, context, technique_id=technique_id, **kwargs
+            )
+
         template, result = self._resolve_template(actor, context, **kwargs)
 
         # On a SUCCESSFUL entrance, open the entry-flourish offer (actor self-grant)
@@ -257,6 +327,288 @@ class EntranceAction(_SocialTemplateAction):
                 result.message = f"{result.message}\n{prompt}" if result.message else prompt
 
         return result
+
+    def _execute_technique_entrance(  # noqa: PLR0913 - mirrors CastTechniqueAction.execute
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None,
+        *,
+        technique_id: int,
+        target_persona_id: int | None = None,
+        confirm_soulfray_risk: bool = False,
+        entry_interaction_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        """Technique-driven combat entrance (#2183) — the ``enter <technique>`` path.
+
+        Mirrors ``CastTechniqueAction.execute`` (scene/persona/technique/target
+        resolution, soulfray ``PendingCast`` gating) but routes the outcome through
+        the deferral matrix instead of a flat success/failure — see
+        ``_dispatch_entrance_cast`` for the branch-by-branch breakdown.
+        """
+        from actions.prerequisites import resolve_actor_sheet  # noqa: PLC0415
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.combat.cast_seed import _feedable_encounter  # noqa: PLC0415
+        from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+        from world.combat.models import CombatParticipant  # noqa: PLC0415
+        from world.magic.models import Technique  # noqa: PLC0415
+        from world.scenes.models import Persona, Scene  # noqa: PLC0415
+        from world.scenes.services import persona_for_character  # noqa: PLC0415
+
+        scene = Scene.objects.filter(location=actor.location, is_active=True).first()
+        if scene is None:
+            return _ActionResult(success=False, message="There is no active scene here.")
+
+        actor_sheet = resolve_actor_sheet(actor)
+        if actor_sheet is not None:
+            feedable = _feedable_encounter(scene)
+            if (
+                feedable is not None
+                and CombatParticipant.objects.filter(
+                    encounter=feedable,
+                    character_sheet=actor_sheet,
+                    status=ParticipantStatus.ACTIVE,
+                ).exists()
+            ):
+                return _ActionResult(success=False, message="You're already in the fight.")
+
+        initiator = persona_for_character(actor)
+
+        try:
+            technique = Technique.objects.get(pk=technique_id)
+        except Technique.DoesNotExist:
+            return _ActionResult(success=False, message="Technique not found.")
+
+        target: Persona | None = None
+        if target_persona_id is not None:
+            try:
+                target = Persona.objects.get(pk=target_persona_id)
+            except Persona.DoesNotExist:
+                return _ActionResult(success=False, message="Target persona not found.")
+
+        return self._dispatch_entrance_cast(
+            actor,
+            scene,
+            actor_sheet,
+            initiator,
+            technique,
+            target,
+            technique_id=technique_id,
+            target_persona_id=target_persona_id,
+            confirm_soulfray_risk=confirm_soulfray_risk,
+            entry_interaction_id=entry_interaction_id,
+            entrance_kwargs=kwargs,
+        )
+
+    def _dispatch_entrance_cast(  # noqa: PLR0913 - cohesive entrance-cast dispatch params
+        self,
+        actor: ObjectDB,
+        scene: Scene,
+        actor_sheet: CharacterSheet | None,
+        initiator: Persona,
+        technique: Technique,
+        target: Persona | None,
+        *,
+        technique_id: int,
+        target_persona_id: int | None,
+        confirm_soulfray_risk: bool,
+        entry_interaction_id: int | None,
+        entrance_kwargs: dict[str, Any],
+    ) -> ActionResult:
+        """Call ``request_technique_cast`` and route the outcome per the #2183 deferral matrix.
+
+        - soulfray gate not confirmed → register a ``PendingCast`` (mirrors cast.py).
+        - PENDING (benign consent-gated, or hostile risk-gated) → no hooks now;
+          Task 5 wires them at accept-time resolution.
+        - hostile, seeded straight into combat → flourish only (the success level
+          isn't known until the declared cast resolves — Task 5's combat hook fires
+          the suggestion then).
+        - resolved inline → full hooks when the success level clears 0, plus a
+          benign-intervention combat join when the target is another sheet's
+          ACTIVE combatant.
+        """
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.magic.exceptions import MagicError  # noqa: PLC0415
+        from world.scenes.cast_services import request_technique_cast  # noqa: PLC0415
+        from world.scenes.models import Interaction  # noqa: PLC0415
+
+        try:
+            cast = request_technique_cast(
+                scene=scene,
+                initiator_persona=initiator,
+                target_persona=target,
+                technique=technique,
+                confirm_soulfray_risk=confirm_soulfray_risk,
+                originated_as_entrance=True,
+            )
+        except Exception as exc:
+            if not isinstance(exc, MagicError):
+                raise
+            return _ActionResult(success=False, message=str(exc))
+
+        if cast.soulfray_warning is not None and not confirm_soulfray_risk:
+            return self._register_entrance_soulfray_pending(
+                actor_sheet,
+                cast.soulfray_warning,
+                technique_id=technique_id,
+                target_persona_id=target_persona_id,
+                entry_interaction_id=entry_interaction_id,
+                entrance_kwargs=entrance_kwargs,
+            )
+
+        entry_interaction: Interaction | None = None
+        if entry_interaction_id is not None:
+            entry_interaction = Interaction.objects.filter(pk=entry_interaction_id).first()
+
+        if cast.result is None and cast.encounter is None:
+            # PENDING — benign consent-gated, or hostile risk-gated (#777). Task 5
+            # fires the deferred hooks when the request resolves on accept.
+            return _ActionResult(success=True, message="Your entrance hangs on their consent.")
+
+        if cast.encounter is not None:
+            return self._resolve_hostile_entrance_result(
+                actor, scene, technique, target_persona_id, entry_interaction
+            )
+
+        return self._resolve_inline_entrance_result(
+            actor, scene, actor_sheet, technique, target, target_persona_id, entry_interaction, cast
+        )
+
+    @staticmethod
+    def _register_entrance_soulfray_pending(  # noqa: PLR0913 - cohesive pending-cast registration
+        actor_sheet: CharacterSheet | None,
+        warning: SoulfrayWarning,
+        *,
+        technique_id: int,
+        target_persona_id: int | None,
+        entry_interaction_id: int | None,
+        entrance_kwargs: dict[str, Any],
+    ) -> ActionResult:
+        """Register a ``PendingCast`` for the soulfray consent gate, mirroring ``cast.py``.
+
+        Stores an ``"entrance": True`` marker in the pending kwargs so a future
+        re-dispatch can be routed back to the entrance path (not yet wired here —
+        the generic ``SoulfrayPendingHandler`` always re-dispatches to
+        ``cast_technique`` today).
+        """
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+
+        sheet_pk = actor_sheet.pk if actor_sheet is not None else None
+        if sheet_pk is not None:
+            from commands.pending_actions import PendingCast, register_pending  # noqa: PLC0415
+
+            register_pending(
+                sheet_pk,
+                PendingCast(
+                    technique_id=technique_id,
+                    target_persona_id=target_persona_id,
+                    kwargs={
+                        "entrance": True,
+                        "entry_interaction_id": entry_interaction_id,
+                        **entrance_kwargs,
+                    },
+                ),
+            )
+        return _ActionResult(
+            success=False,
+            message=(
+                f"{warning.stage_description} "  # type: ignore[attr-defined]
+                "Use |waccept soulfray|n to proceed or |wdecline soulfray|n to abort."
+            ),
+        )
+
+    @staticmethod
+    def _resolve_hostile_entrance_result(
+        actor: ObjectDB,
+        scene: Scene,
+        technique: Technique,
+        target_persona_id: int | None,
+        entry_interaction: Interaction | None,
+    ) -> ActionResult:
+        """Hostile technique erupted straight into open combat — flourish only.
+
+        The declared cast hasn't resolved yet, so the success level (and thus the
+        dramatic-moment suggestion) isn't known; Task 5's combat-resolution hook
+        fires the suggestion once the round resolves.
+        """
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+
+        prompt = _run_entrance_success_hooks(
+            actor,
+            scene,
+            success_level=None,
+            target_persona_id=target_persona_id,
+            technique=technique,
+            interaction=entry_interaction,
+        )
+        message = "Your entrance erupts into open combat!"
+        if prompt:
+            message = f"{message}\n{prompt}"
+        return _ActionResult(success=True, message=message)
+
+    @staticmethod
+    def _resolve_inline_entrance_result(  # noqa: PLR0913 - cohesive resolved-inline outcome params
+        actor: ObjectDB,
+        scene: Scene,
+        actor_sheet: CharacterSheet | None,
+        technique: Technique,
+        target: Persona | None,
+        target_persona_id: int | None,
+        entry_interaction: Interaction | None,
+        cast: CastResult,
+    ) -> ActionResult:
+        """Self/room/no-target cast, or a benign no-consent cast aimed at another PC.
+
+        (``request_technique_cast`` routes the latter through the immediate path too —
+        only a hostile or consent-requiring technique detours through the
+        combat-seed/PENDING branches in ``_dispatch_entrance_cast``.)
+        """
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.combat.cast_seed import (  # noqa: PLC0415
+            seed_or_feed_encounter_from_benign_intervention,
+        )
+        from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
+        from world.npc_services.social_disposition import (  # noqa: PLC0415
+            apply_social_disposition_delta,
+        )
+
+        main = cast.result.action_resolution.main_result if cast.result is not None else None  # type: ignore[attr-defined]
+        success_level = main.check_result.success_level if main is not None else 0
+
+        if not is_technique_hostile(technique) and target_persona_id is not None:
+            apply_social_disposition_delta(
+                actor,
+                target_persona_id,
+                cast.result.action_resolution,  # type: ignore[attr-defined]
+            )
+
+        if success_level <= 0:
+            return _ActionResult(success=False, message="Your entrance fails to draw notice.")
+
+        prompt = _run_entrance_success_hooks(
+            actor,
+            scene,
+            success_level=success_level,
+            target_persona_id=target_persona_id,
+            technique=technique,
+            interaction=entry_interaction,
+        )
+        message = "Your entrance commands the room."
+        if prompt:
+            message = f"{message}\n{prompt}"
+
+        if (
+            target is not None
+            and actor_sheet is not None
+            and target.character_sheet_id != actor_sheet.pk
+        ):
+            seed_or_feed_encounter_from_benign_intervention(
+                caster_sheet=actor_sheet,
+                target_sheet=target.character_sheet,
+                scene=scene,
+            )
+
+        return _ActionResult(success=True, message=message)
 
 
 @dataclass

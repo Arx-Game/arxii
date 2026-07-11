@@ -860,6 +860,7 @@ def _route_hostile_cast(
             technique=technique,
             scene=scene,
             room=scene.location,
+            from_entrance=originated_as_entrance,
         )
     return CastResult(request=request, encounter=encounter)
 
