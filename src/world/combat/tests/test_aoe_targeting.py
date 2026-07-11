@@ -565,7 +565,7 @@ class AoEConditionExpansionTests(TestCase):
         captured_targets = {}
 
         def capturing_apply(
-            technique, success_level, eff_intensity, targets_by_kind, source_character
+            technique, success_level, eff_intensity, targets_by_kind, source_character, **kwargs
         ):
             captured_targets.update(targets_by_kind)
             return []
