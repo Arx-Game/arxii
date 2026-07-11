@@ -83,3 +83,21 @@ class SummonsStatus(models.TextChoices):
 # #2050 — affection drop per refused/expired summons. PLACEHOLDER magnitude;
 # retunable by staff.
 SUMMONS_REFUSAL_AFFECTION_DELTA = -5
+
+
+class NpcRegardEventReason(models.TextChoices):
+    """Typed cause categories for NpcRegardEvent (#2039).
+
+    Each authoring path gets its own reason: the two combat reasons cite a
+    resolved CombatRoundAction/CombatOpponentAction; SOCIAL_ACTION_RESOLVED
+    cites the resolved Scene (structured-consequence path, #2039); STAKE_RESOLUTION
+    cites the StakeResolution row that pre-authored it; GM_MANUAL_ADJUSTMENT may
+    optionally cite any of the above; DISTINCTION_SEED cites nothing (chargen).
+    """
+
+    NPC_HARMED_PC_INTEREST = "npc_harmed_pc", "NPC harmed PC's interest"
+    PC_FOILED_NPC_PLAN = "pc_foiled_npc", "PC foiled NPC's plan"
+    SOCIAL_ACTION_RESOLVED = "social_action", "Social action resolved"
+    STAKE_RESOLUTION = "stake_resolution", "Stake resolution fired"
+    GM_MANUAL_ADJUSTMENT = "gm_manual", "GM manual adjustment"
+    DISTINCTION_SEED = "distinction_seed", "CG distinction seed"

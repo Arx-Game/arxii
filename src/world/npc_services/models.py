@@ -21,6 +21,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from core.mixins import DiscriminatorMixin
 from world.npc_services.constants import DrawMode, OfferKind, RegardTargetType, SummonsStatus
 
@@ -882,3 +883,38 @@ class OfferSummons(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Summons: {self.target_persona} ← {self.offer} ({self.status})"
+
+
+class RegardEventConfig(SharedMemoryModel):
+    """Singleton tuning surface (pk=1) for NpcRegardEvent buildup (#2039).
+
+    Access via ``get_regard_event_config()`` — singleton-by-convention, no DB-level
+    uniqueness constraint (mirrors ``BondCombatConfig``, ``SoulTetherConfig``).
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    max_event_delta = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Cap on |amount| for a single NpcRegardEvent — buildup is gradual.",
+    )
+    combat_defeat_amount = models.SmallIntegerField(
+        default=-15,
+        help_text="Regard delta when a PC defeats a notable NPC opponent in combat.",
+    )
+    combat_harm_amount = models.SmallIntegerField(
+        default=-15,
+        help_text="Regard delta when a notable NPC critically harms a PC in combat.",
+    )
+    story_vital_threshold = models.PositiveSmallIntegerField(
+        default=200,
+        help_text="|NpcRegard.value| at or above this marks the bond as story-vital.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Regard Event Config"
+        verbose_name_plural = "Regard Event Config"
+
+    def __str__(self) -> str:
+        return "Regard Event Config"
