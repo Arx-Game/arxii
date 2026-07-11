@@ -122,7 +122,7 @@ export async function createActionRequest(
     method: 'POST',
     body: JSON.stringify(requestBody),
   });
-  if (!res.ok) throw new Error('Failed to perform action');
+  if (!res.ok) await readErrorDetail(res, 'Failed to perform action');
   return res.json();
 }
 
