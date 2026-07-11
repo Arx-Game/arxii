@@ -95,6 +95,21 @@ class RecordNpcRegardEventTests(TestCase):
                 reason=NpcRegardEventReason.NPC_HARMED_PC_INTEREST,
             )
 
+    def test_invalid_citation_does_not_leave_orphan_regard_row(self):
+        holder = PersonaFactory()
+        target = PersonaFactory()
+        with self.assertRaises(ValidationError):
+            record_npc_regard_event(
+                holder_persona=holder,
+                target=target,
+                amount=-10,
+                reason=NpcRegardEventReason.NPC_HARMED_PC_INTEREST,
+            )
+        self.assertEqual(
+            NpcRegard.objects.filter(holder_persona=holder, target_persona=target).count(),
+            0,
+        )
+
     def test_npc_harmed_pc_with_citation_succeeds(self):
         holder = PersonaFactory()
         target = PersonaFactory()

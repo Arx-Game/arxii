@@ -70,7 +70,14 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
     event is created; ``NpcRegard.value`` is then clamped to REGARD_MIN/REGARD_MAX.
     Raises ``ValidationError`` (via ``full_clean()``) if ``reason``'s citation
     matrix isn't satisfied by the given source_* kwargs.
+
+    The full write sequence (NpcRegard get-or-create, NpcRegardEvent
+    full_clean+save, and the value update(s)) runs inside a single
+    ``transaction.atomic()`` block so a ``full_clean()`` failure (e.g. a
+    missing citation) cannot leave an orphan freshly-created NpcRegard row
+    committed with no accompanying event.
     """
+    from django.db import transaction  # noqa: PLC0415
     from django.db.models import F  # noqa: PLC0415
 
     from world.npc_services.constants import RegardTargetType  # noqa: PLC0415
@@ -84,35 +91,36 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
     cfg = get_regard_event_config()
     clamped_amount = max(-cfg.max_event_delta, min(cfg.max_event_delta, amount))
 
-    regard, _created = NpcRegard.objects.get_or_create(
-        holder_persona=holder_persona,
-        target_type=RegardTargetType.PERSONA,
-        target_persona=target,
-        ended_at__isnull=True,
-        defaults={"value": 0},
-    )
+    with transaction.atomic():
+        regard, _created = NpcRegard.objects.get_or_create(
+            holder_persona=holder_persona,
+            target_type=RegardTargetType.PERSONA,
+            target_persona=target,
+            ended_at__isnull=True,
+            defaults={"value": 0},
+        )
 
-    event = NpcRegardEvent(
-        regard=regard,
-        reason=reason,
-        amount=clamped_amount,
-        source_pc_combat_action=source_pc_combat_action,
-        source_npc_combat_action=source_npc_combat_action,
-        source_scene=source_scene,
-        source_stake_resolution=source_stake_resolution,
-    )
-    event.full_clean()
-    event.save()
+        event = NpcRegardEvent(
+            regard=regard,
+            reason=reason,
+            amount=clamped_amount,
+            source_pc_combat_action=source_pc_combat_action,
+            source_npc_combat_action=source_npc_combat_action,
+            source_scene=source_scene,
+            source_stake_resolution=source_stake_resolution,
+        )
+        event.full_clean()
+        event.save()
 
-    NpcRegard.objects.filter(pk=regard.pk).update(
-        value=F("value") + clamped_amount,
-    )
-    regard.flush_from_cache(force=True)
-    regard.refresh_from_db()
-    if regard.value > REGARD_MAX or regard.value < REGARD_MIN:
-        clamped_value = max(REGARD_MIN, min(REGARD_MAX, regard.value))
-        NpcRegard.objects.filter(pk=regard.pk).update(value=clamped_value)
+        NpcRegard.objects.filter(pk=regard.pk).update(
+            value=F("value") + clamped_amount,
+        )
         regard.flush_from_cache(force=True)
         regard.refresh_from_db()
+        if regard.value > REGARD_MAX or regard.value < REGARD_MIN:
+            clamped_value = max(REGARD_MIN, min(REGARD_MAX, regard.value))
+            NpcRegard.objects.filter(pk=regard.pk).update(value=clamped_value)
+            regard.flush_from_cache(force=True)
+            regard.refresh_from_db()
 
     return event
