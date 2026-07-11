@@ -837,6 +837,7 @@
 - `maybe_pause_battle_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live Battle on disconnect, unless it's large-scale`
 - `notify_battle_state_changed(battle: 'Battle') -> 'None' — Slim BATTLE_STATE ping -> connected participants; clients refetch the REST aggregate.`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
+- `open_place_encounter(*, battle_place: 'BattlePlace') -> 'CombatEncounter' — Bind *battle_place* to a new general party-scale combat encounter (#2008).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' — Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' — Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
 - `resolve_battle_beats(battle: 'Battle') -> 'None' — Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.`
@@ -5666,6 +5667,7 @@
   - founded_on -> secrets.Secret [FK]
 
 ### Service Functions
+- `accusation_permitted(*, framer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet') -> 'bool' — Target-side consent gate for a frame-job (#1825) — may *framer* accuse *target*?`
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' — Author a Level-1 player-flavor secret (the only tier a player may free-write).`
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `character_knows_secret(*, knower_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' — True if the character (by current tenure) holds knowledge of ``secret`` (#1680).`
@@ -5673,6 +5675,7 @@
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' — Record that a character knows a secret, unlocking the given layers (idempotent).`
 - `has_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet') -> 'bool' — True if ``holder_sheet`` holds any standing leverage over ``subject_sheet`` (#1680).`
 - `known_secrets_for(roster_entry: 'RosterEntry', *, subject_sheet: 'CharacterSheet | None' = None, sort: 'str' = 'recent') -> 'QuerySet[SecretKnowledge]' — The secrets a character has **learned about others** — held records (#1334).`
+- `mint_accusation(*, accuser_persona: 'Persona', subject_sheet: 'CharacterSheet', content: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, category: 'SecretCategory | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' — Mint a player-authored ACCUSATION — a false scandal about *someone else* (#1825).`
 - `mint_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet', founded_on: 'Secret') -> 'Leverage' — Record standing leverage ``holder_sheet`` holds over ``subject_sheet`` (#1680).`
 - `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '') -> 'RelationshipCapstone' — A secret's victim registers a grievance against its subject (#1429).`
 - `reveal_leveraged_secret(*, revealer_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' — Play the blackmail card: expose ``secret`` and spend the leverage founded on it (#1680).`

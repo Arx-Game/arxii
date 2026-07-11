@@ -39,7 +39,7 @@ A hidden fact, anchored to a subject.
 | `category` | FK `SecretCategory`, null — what it's about. **Null = Unknown** (first-class) |
 | `consequences` | Text, blank = Unknown |
 | `content` | The secret as narrated (player- or GM-authored prose) |
-| `provenance` | `SecretProvenance` ∈ GM / action / player-flavor |
+| `provenance` | `SecretProvenance` ∈ GM / action / player-flavor / **accusation** (#1825 — a player-authored false scandal, exempt from the player-flavor caps; see ADR-0114) |
 | `author_persona` | FK `Persona`, null — the narrating persona (OOC attribution); null for GM |
 | `legend_deed` | FK `societies.LegendEntry`, null — the public legend telling of the act this secret is the truth behind (#1573) |
 | `mission_deed` | FK `missions.MissionDeedRecord`, null — the recorded mission act (#1573) |
@@ -67,11 +67,27 @@ killed a god" and having it read as canon. Provenance is *attribution*, not a tr
 canonicity is read off author + anchor + level (a spectrum: GM-canon → action-anchored →
 player-flavor).
 
+**The `ACCUSATION` exception (#1825, ADR-0114).** A frame-job is a player-authored *false
+scandal about someone else* that must carry real weight (mint heat/reputation like a true one
+until disproven). So `ACCUSATION` is deliberately **exempt** from both `clean()` caps — it may
+sit at any level and anchor to an *alleged* deed. Its abuse guard is not the model but the
+**consent gate at the mint action** (`accusation_permitted` → the target's `hostile`
+antagonism-consent category, #2170); NPCs are always frameable. Falsity stays emergent. Do not
+widen the `PLAYER_FLAVOR` caps to catch it.
+
 ## Services (`services.py`)
 
 - `author_secret(...)` — author a secret, enforcing the invariant (raises `SecretError`).
-- `author_player_flavor_secret(...)` — the only path a player may free-write: Level-1 flavor,
+- `author_player_flavor_secret(...)` — the only *free* path a player may write: Level-1 flavor,
   attributed to their persona.
+- `mint_accusation(*, accuser_persona, subject_sheet, content, level=1, ...)` (#1825) — the
+  frame-job author path; thin over `author_secret` with `ACCUSATION` provenance. The first mint
+  where subject ≠ actor; rejects self-framing, clamps to `ACCUSATION_MAX_LEVEL` (PLACEHOLDER).
+- `accusation_permitted(*, framer_sheet, target_sheet) -> bool` (#1825) — the target-side consent
+  gate (mirrors `steal_permitted`): NPC always frameable; a played target must have opened their
+  `hostile` category. Enforced by `MintAccusationAction` (key `mint_accusation`, telnet `accuse
+  <char> = <claim>`); the minted accusation then leaks/mints heat + reputation via the existing
+  `expose_secret` / `accrue_heat` machinery like any scandal.
 - `grant_secret_knowledge(*, roster_entry, secret, knows_category=False, knows_consequences=False)`
   — record that a character knows a secret, unlocking layers (idempotent, monotonic). The single
   entry point discovery surfaces call.

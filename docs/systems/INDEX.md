@@ -976,6 +976,12 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
 - **Key functions (`world/secrets/services.py`):** `author_secret`, `author_player_flavor_secret`,
   `grant_secret_knowledge`, `secret_known_to`, `set_secret_act_anchor` /  `secrets_explaining`
   (the act-anchor cross-link both directions, #1573)
+- **Frame-jobs / accusations (#1825, ADR-0114):** `SecretProvenance.ACCUSATION` — a
+  player-authored false scandal about *someone else*, exempt from the player-flavor caps so it
+  carries weight + mints heat/reputation like a true scandal (falsity emergent). `mint_accusation`
+  (thin over `author_secret`) + `accusation_permitted` (consent gate: the target's `hostile`
+  category, #2170; NPC always frameable). `MintAccusationAction` (key `mint_accusation`), telnet
+  `accuse <char> = <claim>` (`commands/social/accusations.py`)
 - **Discovery:** secrets are a `Clue` `target_kind` (`SECRET` + `target_secret` FK) — found
   through the same Search / `acquire_clue` loop; `grant_clue_target` teaches the fact
 - **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
