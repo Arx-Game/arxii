@@ -23,7 +23,13 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.mixins import DiscriminatorMixin
-from world.npc_services.constants import DrawMode, OfferKind, RegardTargetType, SummonsStatus
+from world.npc_services.constants import (
+    DrawMode,
+    NpcRegardEventReason,
+    OfferKind,
+    RegardTargetType,
+    SummonsStatus,
+)
 
 # Cross-app FK string for the Persona model, referenced by several fields below.
 # Centralized to avoid the duplicated-literal SonarCloud smell (python:S1192).
@@ -918,3 +924,124 @@ class RegardEventConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return "Regard Event Config"
+
+
+class NpcRegardEvent(SharedMemoryModel):
+    """One typed, evidence-backed cause event feeding an NpcRegard's buildup (#2039).
+
+    Mirrors justice's HeatSource/PersonaHeat ledger shape. Unlike HeatSource's
+    optional LegendEntry citation, a PC-attributed reason here MUST cite a real,
+    structured, resolved record — never a freetext claim. clean() enforces the
+    citation matrix documented on NpcRegardEventReason.
+    """
+
+    regard = models.ForeignKey(
+        NpcRegard,
+        on_delete=models.CASCADE,
+        related_name="events",
+        help_text="The NpcRegard row this event moved.",
+    )
+    reason = models.CharField(
+        max_length=20,
+        choices=NpcRegardEventReason.choices,
+        help_text="Typed cause category — determines which citation field(s) are valid.",
+    )
+    amount = models.SmallIntegerField(
+        help_text=(
+            "Signed delta applied to NpcRegard.value. Clamped to RegardEventConfig.max_event_delta."
+        ),
+    )
+    source_pc_combat_action = models.ForeignKey(
+        "combat.CombatRoundAction",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="npc_regard_events",
+        help_text="Set for PC_FOILED_NPC_PLAN: the PC's resolved combat action that caused this.",
+    )
+    source_npc_combat_action = models.ForeignKey(
+        "combat.CombatOpponentAction",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="npc_regard_events",
+        help_text=(
+            "Set for NPC_HARMED_PC_INTEREST: the NPC's resolved combat action that caused this."
+        ),
+    )
+    source_scene = models.ForeignKey(
+        "scenes.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="npc_regard_events",
+        help_text="Set for SOCIAL_ACTION_RESOLVED: the scene the structured effect resolved in.",
+    )
+    source_stake_resolution = models.ForeignKey(
+        "stories.StakeResolution",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="npc_regard_events",
+        help_text="Set for STAKE_RESOLUTION: the pre-authored branch that fired this.",
+    )
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "NPC Regard Event"
+        verbose_name_plural = "NPC Regard Events"
+        ordering = ["-created_date"]
+        indexes = [
+            models.Index(fields=["regard", "-created_date"]),
+        ]
+
+    _CITED_REASONS = {
+        NpcRegardEventReason.NPC_HARMED_PC_INTEREST: ("source_npc_combat_action", "source_scene"),
+        NpcRegardEventReason.PC_FOILED_NPC_PLAN: ("source_pc_combat_action", "source_scene"),
+        NpcRegardEventReason.SOCIAL_ACTION_RESOLVED: ("source_scene",),
+        NpcRegardEventReason.STAKE_RESOLUTION: ("source_stake_resolution",),
+    }
+    _ALL_CITATION_FIELDS = (
+        "source_pc_combat_action",
+        "source_npc_combat_action",
+        "source_scene",
+        "source_stake_resolution",
+    )
+
+    def clean(self) -> None:
+        super().clean()
+        set_fields = [f for f in self._ALL_CITATION_FIELDS if getattr(self, f"{f}_id")]
+        if self.reason == NpcRegardEventReason.DISTINCTION_SEED:
+            if set_fields:
+                raise ValidationError(
+                    {"reason": "DISTINCTION_SEED events must not cite any source."}
+                )
+            return
+        if self.reason == NpcRegardEventReason.GM_MANUAL_ADJUSTMENT:
+            if len(set_fields) > 1:
+                raise ValidationError(
+                    {"reason": "GM_MANUAL_ADJUSTMENT may cite at most one source."}
+                )
+            return
+        allowed = self._CITED_REASONS[self.reason]
+        cited_allowed = [f for f in set_fields if f in allowed]
+        cited_disallowed = [f for f in set_fields if f not in allowed]
+        if cited_disallowed:
+            raise ValidationError(
+                {
+                    "reason": (
+                        f"{self.get_reason_display()} cannot cite {cited_disallowed} — "
+                        f"only {list(allowed)} are valid for this reason."
+                    )
+                }
+            )
+        if len(cited_allowed) != 1:
+            raise ValidationError(
+                {"reason": f"{self.get_reason_display()} must cite exactly one of {list(allowed)}."}
+            )
+
+    def __str__(self) -> str:
+        return (
+            f"NpcRegardEvent({self.get_reason_display()}, {self.amount:+d}) "
+            f"on regard {self.regard_id}"
+        )

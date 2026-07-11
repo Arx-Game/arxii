@@ -6,11 +6,12 @@ from django.utils import timezone
 import factory
 from factory.django import DjangoModelFactory
 
-from world.npc_services.constants import DrawMode, OfferKind, RegardTargetType
+from world.npc_services.constants import DrawMode, NpcRegardEventReason, OfferKind, RegardTargetType
 from world.npc_services.models import (
     Functionary,
     MissionOfferDetails,
     NpcRegard,
+    NpcRegardEvent,
     NPCRole,
     NPCRoleCooldown,
     NPCServiceOffer,
@@ -154,3 +155,12 @@ class NpcRegardFactory(DjangoModelFactory):
             target_persona=None,
             target_society=factory.SubFactory("world.societies.factories.SocietyFactory"),
         )
+
+
+class NpcRegardEventFactory(DjangoModelFactory):
+    class Meta:
+        model = NpcRegardEvent
+
+    regard = factory.SubFactory(NpcRegardFactory)
+    reason = NpcRegardEventReason.GM_MANUAL_ADJUSTMENT
+    amount = 5
