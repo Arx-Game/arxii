@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
@@ -5,6 +6,8 @@ import { BackgroundSection, StatsSection, CharacterLink } from '@/components/cha
 import { FriendButton } from '@/friends/components/FriendButton';
 import { useRosterEntryByNameQuery, useRosterEntryQuery } from '@/roster/queries';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
+import { JournalComposerDialog } from '@/journals/components/JournalComposerDialog';
+import { SendLetterDialog } from './SendLetterDialog';
 
 export interface CharacterCardDrawerProps {
   /** The clicked bubble's persona identity; `null` means the drawer is closed. */
@@ -32,6 +35,13 @@ export interface CharacterCardDrawerProps {
  * roster." and no sheet data, no FriendButton. Never resolve through
  * `receiver_persona_ids`, scene participation, or any other non-public linkage.
  *
+ * Quick actions (#2160): "Write a journal" opens `JournalComposerDialog`
+ * pre-tagged with the resolved character's name once `entry` resolves.
+ * "Send a letter" opens `SendLetterDialog` pre-addressed to the character's
+ * live tenure (`entry.tenures.find(t => t.end_date === null)`) — hidden when
+ * there's no live tenure, since a vacant character has no one to address
+ * (same gating philosophy as the FriendButton viewer-required gate below).
+ *
  * Radix note: `SheetContent`'s `hideOverlay` only removes the dimming backdrop —
  * the underlying Dialog is still `modal` (focus-trapped, outside pointer events
  * disabled) unless `Sheet` itself is given `modal={false}`, which most of this
@@ -51,6 +61,10 @@ export function CharacterCardDrawer({
   const match = searchResult?.results.find((entry) => entry.character.name === persona?.name);
   const matchId = match?.id;
   const { data: entry } = useRosterEntryQuery(matchId ?? 0);
+  const liveTenure = entry?.tenures.find((tenure) => tenure.end_date === null) ?? null;
+
+  const [journalOpen, setJournalOpen] = useState(false);
+  const [letterOpen, setLetterOpen] = useState(false);
 
   const handleWhisper = () => {
     if (!persona) return;
@@ -89,7 +103,43 @@ export function CharacterCardDrawer({
               <Button type="button" variant="outline" size="sm" onClick={handleWhisper}>
                 Whisper
               </Button>
+              {entry && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setJournalOpen(true)}
+                >
+                  Write a journal
+                </Button>
+              )}
+              {entry && liveTenure && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLetterOpen(true)}
+                >
+                  Send a letter
+                </Button>
+              )}
             </div>
+
+            {entry && (
+              <JournalComposerDialog
+                open={journalOpen}
+                onClose={() => setJournalOpen(false)}
+                initialTags={[entry.character.name]}
+              />
+            )}
+            {entry && liveTenure && (
+              <SendLetterDialog
+                open={letterOpen}
+                onClose={() => setLetterOpen(false)}
+                recipientTenureId={liveTenure.id}
+                recipientDisplay={entry.character.name}
+              />
+            )}
 
             {searching ? (
               <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
