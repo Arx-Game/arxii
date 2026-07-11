@@ -201,3 +201,17 @@ class EnsureDramaticEntranceContentTest(TestCase):
         moment_type = qs.get()
         self.assertTrue(moment_type.suggest_on_technique_entrance)
         self.assertEqual(moment_type.suggestion_min_success_level, 3)
+
+    def test_seed_preserves_staff_edits(self):
+        """A re-run must not clobber staff tuning of the existing row (#2183)."""
+        first = ensure_dramatic_entrance_content()
+        first.resonance_amount = 999
+        first.save(update_fields=["resonance_amount"])
+
+        second = ensure_dramatic_entrance_content()
+
+        self.assertEqual(first.pk, second.pk)
+        qs = DramaticMomentType.objects.filter(label="Grand Entrance")
+        self.assertEqual(qs.count(), 1)
+        moment_type = qs.get()
+        self.assertEqual(moment_type.resonance_amount, 999)

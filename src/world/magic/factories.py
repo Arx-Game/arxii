@@ -1763,8 +1763,10 @@ def ensure_dramatic_entrance_content() -> object:
 
     Does NOT use ``DramaticMomentTypeFactory`` — that factory's
     ``django_get_or_create = ("label",)`` drops every other kwarg on a pre-existing
-    row (the standard FactoryBoy gotcha, see CLAUDE.md); ``update_or_create`` on the
-    model directly keeps every authored knob current across re-runs.
+    row (the standard FactoryBoy gotcha, see CLAUDE.md); ``get_or_create`` on the
+    model directly instead, so a re-run preserves any staff tuning of the existing
+    row rather than resetting it (catalog rows are preserved; only pk=1 tuning
+    singletons get ``update_or_create`` resets — see CLAUDE.md).
 
     Returns the "Grand Entrance" DramaticMomentType.
     """
@@ -1783,7 +1785,7 @@ def ensure_dramatic_entrance_content() -> object:
         },
     )
 
-    moment_type, _ = DramaticMomentType.objects.update_or_create(
+    moment_type, _ = DramaticMomentType.objects.get_or_create(
         label="Grand Entrance",
         defaults={
             "description": "A technique cast with such flair the room takes notice.",

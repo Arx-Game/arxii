@@ -924,6 +924,9 @@ class DramaticMomentSuggestionAdmin(admin.ModelAdmin):
         # resolved via resolve_dramatic_moment_suggestion() — no admin-authored rows.
         return False
 
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
 
 @admin.register(GiftUnlock)
 class GiftUnlockAdmin(admin.ModelAdmin):
