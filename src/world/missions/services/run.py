@@ -85,6 +85,7 @@ def staff_assign_mission(
     character: ObjectDB,
     *,
     project: Project | None = None,
+    persona: Persona | None = None,
 ) -> MissionInstance:
     """Staff-power: drop a mission on a character without a giver context.
 
@@ -96,6 +97,12 @@ def staff_assign_mission(
     how MissionOfferDetails.target_project binds offer-issued runs. The GM
     assignment path (#2048's ``gm_assign_mission``) will take the same kwarg;
     coordinated in whichever PR lands second.
+
+    ``persona`` is the character's presenting persona at grant time (the same
+    mask ``template_visible_to`` already resolved for the visibility gate) —
+    stamped onto ``accepted_as_persona`` so ``has_completed_mission`` can find
+    this run later (#870/#1035). ``None`` (the default) preserves every
+    existing caller's behavior unchanged.
 
     Wrapped in ``@transaction.atomic`` so a failure in ``enter_node`` rolls
     back the half-created MissionInstance + MissionParticipant.
@@ -110,6 +117,7 @@ def staff_assign_mission(
         template=template,
         anchor_room=anchor_room_for(character),
         target_project=project,
+        accepted_as_persona=persona,
     )
     MissionParticipant.objects.create(
         instance=instance,

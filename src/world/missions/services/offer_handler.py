@@ -224,9 +224,17 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
 
     activate_stakes_for_instance(instance, [persona.character_sheet])
 
-    # ``template.cooldown`` is NOT NULL at the schema level, so the
-    # ``or`` fallback can never resolve to None; no guard needed.
-    cooldown_duration = details.role_cooldown_duration or template.cooldown
+    # Explicit None-check, NOT `or`: `timedelta(0)` is falsy, so an `or`
+    # fallback would silently discard an authored zero-cooldown override (a
+    # curated single-path chain, e.g. the tutorial's tutor offers, #1035
+    # Task 6 review fix) and fall back to `template.cooldown` anyway.
+    # ``template.cooldown`` is NOT NULL at the schema level, so this fallback
+    # can never itself resolve to None.
+    cooldown_duration = (
+        details.role_cooldown_duration
+        if details.role_cooldown_duration is not None
+        else template.cooldown
+    )
     NPCRoleCooldown.objects.update_or_create(
         role=offer.role,
         persona=persona,

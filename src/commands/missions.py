@@ -565,7 +565,9 @@ class CmdMission(ArxCommand):
             msg = "You are not in a room."
             raise CommandError(msg)
         giver = (
-            MissionGiver.objects.filter(target=room, giver_kind=GiverKind.BOARD, is_active=True)
+            MissionGiver.objects.filter(
+                target__db_location=room, giver_kind=GiverKind.BOARD, is_active=True
+            )
             .prefetch_related("templates")  # noqa: PREFETCH_STRING
             .first()
         )

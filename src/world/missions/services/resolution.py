@@ -225,6 +225,17 @@ def present_options_for_character(
     """
     presented: list[PresentedOption] = []
     for option in options:
+        if option.option_kind == OptionKind.EXTERNAL_ACT:
+            # EXTERNAL_ACT resolves when the player performs a real non-mission
+            # act (satisfy_external_act calls resolve_option directly) — it is
+            # never player-pickable, so it never enters the presented list.
+            # This is the single shared seam: both build_option_list (solo) and
+            # build_group_option_list (Phase 4) call present_options_for_character,
+            # so excluding here covers every presentation surface and — because
+            # resolve_beat_option/submit_group_pick validate the chosen id against
+            # this same presented list — every pick entrypoint too (an
+            # EXTERNAL_ACT option id is rejected exactly like an unknown one).
+            continue
         if option.source_kind == OptionSource.CHALLENGE:
             challenge = option.challenge
             if challenge is None:
@@ -268,6 +279,15 @@ def enter_node(instance: MissionInstance, node: MissionNode) -> None:
 
     M1: operates on the ``node`` argument and only WRITES the FK; it never
     reads a possibly-stale cached ``instance.current_node``.
+
+    Finally fast-forwards any durable EXTERNAL_ACT option authored on *node*
+    (#1035) — a THREAD_WOVEN/COVENANT_SWORN beat the contract holder's sheet
+    already satisfies auto-resolves with no player action. Local import: this
+    module is the one ``resolve_option``/``enter_node`` live in, and
+    ``external_acts`` imports both of those at module scope, so importing it
+    back at module scope here would cycle — deferred to call time instead,
+    mirroring the existing ``activate_stakes_for_instance`` import in
+    ``services/play.py``.
     """
     for participant in instance.participants.all():
         MissionNodeSnapshot.objects.create(
@@ -277,6 +297,10 @@ def enter_node(instance: MissionInstance, node: MissionNode) -> None:
         )
     instance.current_node = node
     instance.save()
+
+    from world.missions.services.external_acts import fast_forward_external_acts  # noqa: PLC0415
+
+    fast_forward_external_acts(instance, node)
 
 
 def _resolve_check_type(option: MissionOption) -> CheckType:
@@ -556,7 +580,7 @@ def resolve_option(  # noqa: PLR0913
     if option.spawns_instance:
         _spawn_mission_instance_room(instance, option, character)
 
-    if option.option_kind == OptionKind.BRANCH:
+    if option.option_kind in (OptionKind.BRANCH, OptionKind.EXTERNAL_ACT):
         return _resolve_branch(instance, node, option, character, advance=advance)
 
     # OptionKind.CHECK

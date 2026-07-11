@@ -113,8 +113,14 @@ Details: `docs/systems/roster.md`'s "Telnet Surface (#2122)" section, `docs/syst
 - Voting system — pose-of-the-scene, writing awards, community recognition. `WeeklyVote` +
   `VoteButton`/`VotesPanel` are built but unwired; reconciling the three applause axes
   (kudos/reactions/votes) is #2161
-- New player onboarding flow — #1035 (spec-approved, mission-chain tutorial); web funnel
-  polish is #2162
+- New player onboarding flow — ✅ **chain shipped (#1035, ADR-0112)**: a seeded seven-mission
+  tutorial chain (`docs/roadmap/missions.md`'s "Tutorial arc / External-Act Beats" entry) walks
+  a fresh character through the level-1 loops (room-trigger/examine grants, a crafted-power
+  beat, a Notice Board pickup, a covenant vow, a Legend-Risk Floor finale) on both web and
+  telnet, over the ordinary mission engine — no dedicated tutorial UI or engine. Still open:
+  the chain's prose is placeholder-quality in-world copy (content polish, explicitly deferred
+  inside #1035's scope), no dedicated web-side "you're new here" surfacing beyond the standard
+  `JournalPage`/`BeatCard`, and the web registration→application funnel polish is #2162.
 - Anti-harassment tools — blocking, muting, reporting
 - Scene discovery — finding active public scenes to join; the discovery→presence bridge
   is #2163

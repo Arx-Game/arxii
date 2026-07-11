@@ -1153,4 +1153,14 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         resolution_result=resolution_result,
     )
 
+    # #1035 external-act beat: cheap-guarded, failure-isolated via notify_external_act
+    # (ADR-0112) — a single indexed EXISTS check before any savepoint, so the combat
+    # cast path pays exactly one query per declaration when no tutorial mission is
+    # waiting. NPCs without a CharacterSheet have nothing to satisfy.
+    if sheet is not None:
+        from world.missions.constants import ExternalAct  # noqa: PLC0415
+        from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
+
+        notify_external_act(sheet, ExternalAct.TECHNIQUE_CAST)
+
     return technique_result

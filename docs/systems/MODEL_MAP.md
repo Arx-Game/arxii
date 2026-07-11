@@ -4398,7 +4398,7 @@
 - `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True, extra_modifiers: 'int' = 0) -> 'MissionDeedRecord' — Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
 - `respond_to_mission_invite(invite: 'MissionInvite', decision: 'MissionInvite.Response') -> 'MissionParticipant | None' — Resolve a PENDING invite. On ACCEPT, calls ``share_mission``.`
 - `share_mission(instance: 'MissionInstance', other_character: 'ObjectDB') -> 'MissionParticipant' — Add ``other_character`` as a non-holder participant to ``instance``.`
-- `staff_assign_mission(template: 'MissionTemplate', character: 'ObjectDB', *, project: 'Project | None' = None) -> 'MissionInstance' — Staff-power: drop a mission on a character without a giver context.`
+- `staff_assign_mission(template: 'MissionTemplate', character: 'ObjectDB', *, project: 'Project | None' = None, persona: 'Persona | None' = None) -> 'MissionInstance' — Staff-power: drop a mission on a character without a giver context.`
 - `validate_mission_option(option: 'MissionOption') -> 'None' — Validate post-save invariants for ``option``.`
 
 

@@ -44254,10 +44254,12 @@ components:
       enum:
       - branch
       - check
+      - external_act
       type: string
       description: |-
         * `branch` - Branch
         * `check` - Check
+        * `external_act` - External Act
     OrgBooks:
       type: object
       description: The whole books page in one read.

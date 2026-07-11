@@ -1871,6 +1871,53 @@ register as additional kinds.
   escalation), `core.mixins`.
 - **Source:** `src/world/npc_services/`
 
+### Missions & Living Grid
+Branching narrative quest chains — a character receives a mission with broad objectives,
+makes decisions at branching points gated by skills/traits/predicates, and the consequences
+reshape the world around them. No engine arbitration: the player picks, pick+check routes;
+state is node position + snapshots + already-applied consequences, never a scratch blob.
+
+- **Models:** `MissionTemplate` (authored graph: entry node + availability metadata — level
+  band, risk tier, draw weight, visibility) → `MissionNode` → `MissionOption` (`BRANCH` /
+  `CHECK` / `EXTERNAL_ACT`) → `MissionOptionRoute` (outcome-tier-keyed, optionally weighted
+  `Candidate`s) → `MissionOptionRouteReward` (`DeedRewardSink`: MONEY / LEGEND_POINTS /
+  RESONANCE / RUMOR / CRIME_WATCH / BEAT / ITEM / FOLLOW_ON_SUMMONS / PROJECT).
+  `MissionInstance` (the live run — `current_node`, participant set, status),
+  `MissionParticipant`, `MissionDeedRecord` (+ child `MissionDeedRewardLine` rows, no dict
+  payloads), `MissionRiskAcknowledgement`, `MissionRunTale` (#2047 player-authored epilogue),
+  `MissionGiver` (`GiverKind`: `ROOM_TRIGGER` / `ENVIRONMENTAL_DETAIL` / `BOARD` — a Notice
+  Board), `MissionAssistPattern` (support-move density catalog), `MissionInvite`/
+  `MissionGroupBallot` (co-op).
+- **External-Act Beat (#1035, ADR-0112):** `OptionKind.EXTERNAL_ACT` +
+  `MissionOption.required_act` (`ExternalAct`: `TECHNIQUE_CAST` / `THREAD_WOVEN` /
+  `COVENANT_SWORN`) — an option presented like any other but never pickable; it resolves when
+  `satisfy_external_act(character_sheet, act)` (`world.missions.services.external_acts`) is
+  called directly (log-and-continue) from `weave_thread`, `create_covenant`/
+  `induct_member_via_session`, and `use_technique` after each succeeds. Durable acts
+  (`THREAD_WOVEN`/`COVENANT_SWORN`) also fast-forward at `enter_node`; `TECHNIQUE_CAST` never
+  does. Powers the seeded Tutorial Chain (`world.seeds.game_content.tutorial`, `"tutorial"`
+  seed cluster) — seven templates walking a new character through the level-1 loops.
+- **Key services:** `services/resolution.py` (`resolve_option`, `enter_node`),
+  `services/play.py` (journal/beat presentation + `abandon_mission`), `services/report.py`
+  (after-action payout + `ReportStyle`), `services/boards.py` (Notice Board preview-then-take),
+  `services/opportunities.py` (here/nearby/your-orgs discovery), `services/multiplayer.py`
+  (GROUP_VOTE/JOINT group beats), `services/rewards.py` (deed reward routing).
+- **Legend-Risk Floor (ADR-0107):** any `LEGEND_POINTS`-sink reward or legend-paying renown
+  award requires the parent template's `risk_tier ≥ LEGEND_RISK_FLOOR_TIER` (4); enforced at
+  `clean()`. See also the Co-Presence (Solo-Darkness) Guard entry in the missions
+  `AGENT_GLOSSARY.md` for the broader solo-legend stance.
+- **API:** `/api/missions/journal/` (+ `.../opportunities/`, `.../{id}/report/`,
+  `.../{id}/tale/`, `.../{id}/invite/`, group-pick/vote/beat), `/api/missions/boards/<pk>/take/`.
+- **Telnet:** `CmdMission` (`commands/missions.py`) — thin face over `services.play`, no
+  separate Action; `mission`/`mission beat`/`mission resolve`/`mission report`/`mission take`/
+  `mission invite`/`mission pick`/`mission vote`.
+- **Integrates with:** `npc_services` (`NPCServiceOffer(kind=MISSION)`, Notice Board givers,
+  Directed Summons via `OfferSummons`), `magic` (thread weaves, technique casts),
+  `covenants` (covenant founding/induction), `predicates` (`availability_rule`/`rule_json`
+  gating, `has_completed_mission` chain leaf), `mechanics` (Challenge-sourced options),
+  `stakes contract engine` (`activate_stakes_for_instance`), `justice` (CRIME_WATCH sink).
+- **Source:** `src/world/missions/`. Roadmap: `docs/roadmap/missions.md`.
+
 ### Currency & Org Economy (#923–#932, #930 active collection)
 Ledger money (`transfer` is the single audited mutation point), org treasuries/books, and
 the **active-collection income model** (ADR-0081): income never lands passively — each

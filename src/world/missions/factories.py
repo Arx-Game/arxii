@@ -131,6 +131,7 @@ class MissionOptionFactory(DjangoModelFactory):
     authored_base_risk = 0
     authored_ic_framing = ""
     branch_target = None
+    required_act = ""
 
 
 class MissionOptionRouteFactory(DjangoModelFactory):

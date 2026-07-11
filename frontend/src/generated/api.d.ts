@@ -24706,9 +24706,10 @@ export interface components {
     /**
      * @description * `branch` - Branch
      *     * `check` - Check
+     *     * `external_act` - External Act
      * @enum {string}
      */
-    OptionKindEnum: 'branch' | 'check';
+    OptionKindEnum: 'branch' | 'check' | 'external_act';
     /** @description The whole books page in one read. */
     OrgBooks: {
       organization_id: number;

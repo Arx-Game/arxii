@@ -47,3 +47,27 @@ _Avoid_: hint, foreshadow, locked move (it's a teaser, not a gate).
 **Easing**:
 Bonus banked on a successful support check, injected into the resolving check via the `extra_modifiers` argument of `perform_check`. Additive aid: it stacks onto the primary actor's roll rather than replacing it.
 _Avoid_: assist bonus, donated stat, flat buff (it's banked on a helper's own roll, not a stat hand-off).
+
+**External-Act Beat**:
+A `MissionOption` with `option_kind=OptionKind.EXTERNAL_ACT` and `required_act` set to an `ExternalAct` (`TECHNIQUE_CAST`, `THREAD_WOVEN`, `COVENANT_SWORN`, `world.missions.constants`). Presented like any option (its authored framing shows) but never pickable — it resolves only when the player performs the real, non-mission act it names. `notify_external_act(character_sheet, act)` (`world.missions.services.external_acts`) is the entry point called directly from `weave_thread`, `create_covenant`/`induct_member_via_session`, and `use_technique` after each succeeds: a cheap `has_waiting_external_act` EXISTS guard first (so a cast with nothing waiting pays exactly one indexed query, no savepoint), then a savepoint-guarded, log-and-continue `satisfy_external_act` per ADR-0112; durable acts (`THREAD_WOVEN`/`COVENANT_SWORN`) also fast-forward at `enter_node` when already true, but `TECHNIQUE_CAST` is transient and never fast-forwards. See ADR-0112.
+_Avoid_: quest chain, onboarding engine, tutorial system.
+
+**Tutorial Chain**:
+The seven-`MissionTemplate` new-player arc (`world.seeds.game_content.tutorial.seed_tutorial_dev`, the `"tutorial"` seed cluster) walking a level-1 character through room-trigger and examine-driven grants, an NPC-offered External-Act Beat, a Notice Board pickup, a Directed Summons follow-on, a covenant vow, and a Legend-Risk Floor job. Each template gates the next via the ordinary `has_completed_mission` predicate leaf on `availability_rule` — chain progress is nothing but `MissionInstance` rows; there is no dedicated tutorial-progress model or status. See ADR-0112.
+_Avoid_: quest chain, onboarding engine, tutorial system.
+
+**Notice Board**:
+A `MissionGiver` with `giver_kind=GiverKind.BOARD` (#2044) — an examinable object (physically placed in a room; the giver's `target` is the board object, not the room) that lists every eligible posting for the viewer at once (preview-then-take), rather than rolling or auto-granting a single offer. `mission take <n>` (telnet, `CmdMission._handle_take`) and `POST /api/missions/boards/<pk>/take/` re-run eligibility before granting.
+_Avoid_: bulletin board, job board, quest board.
+
+**Directed Summons**:
+An `OfferSummons` (`world.npc_services.models`, #2050) — a master/NPC-role's wish aimed at one specific persona, riding `NPCServiceOffer`'s existing offer rails (accept delegates to `resolve_offer` → `issue_mission`, eligibility + risk-ack intact). Authored as a `MissionOptionRouteReward` with `sink=DeedRewardSink.FOLLOW_ON_SUMMONS` (`contract_holder_only=True`, a `followon_offer` FK, optional `followon_message`/`followon_expiry_hours`) on a route — the mechanism the tutorial chain uses to hand T4's completion to T5's tutor offer. Declining or lapsing is a recorded act, not a silent no-op.
+_Avoid_: quest referral, follow-up mission, forced summons (accepting still goes through the normal offer/consent path).
+
+**Legend-Risk Floor**:
+The `LEGEND_RISK_FLOOR_TIER` (4 = HIGH, `world.missions.constants`) gate: any `MissionOptionRouteReward` with `sink=LEGEND_POINTS`, or `MissionRenownAward` with legend-paying risk, requires its parent `MissionTemplate.risk_tier` to be at or above the floor — enforced at `clean()`/save time, not just convention. Keeps Legend rare and earned rather than a routine payout on a low-stakes job; the tutorial chain's final template (risk_tier=4) is the only rung that pays Legend Points. See ADR-0107.
+_Avoid_: legend gate, high-risk requirement, legend minimum (it's a hard floor, not a soft recommendation).
+
+**Co-Presence (Solo-Darkness) Guard**:
+The structural warning-not-lockout stance for legend-tier content (ADR-0107): a solo character can always attempt legend-risk work, but the system is honest that it is "warned-lethal solo" — no party-size gate blocks the attempt, but covenant vow power stays continuously co-presence-enforced (`revalidate_engagements`/`can_engage_membership` dim a vow the instant a covenant-mate leaves the room or the scene ends, `world.covenants`) and the mission surface's `Legend-Risk Floor` keeps the highest payouts tied to the tier where the game is upfront about the danger. Not a mission-specific mechanism — the missions system is one of its consumers via the risk-tier floor.
+_Avoid_: solo lockout, party-size gate, solo penalty (there is no penalty or lockout — only honest lethality and a lit-vow requirement).

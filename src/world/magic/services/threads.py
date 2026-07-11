@@ -13,6 +13,7 @@ Covers:
 from __future__ import annotations
 
 from decimal import Decimal
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -56,6 +57,8 @@ if TYPE_CHECKING:
         ThreadWeavingUnlock,
     )
     from world.magic.models.gifts import Gift
+
+logger = logging.getLogger(__name__)
 
 
 def thread_level_multiplier(level: int) -> Decimal:
@@ -457,6 +460,20 @@ def _weave_gift_thread(
     return thread
 
 
+def _satisfy_thread_woven(character_sheet: CharacterSheet) -> None:
+    """Fire the THREAD_WOVEN external-act beat for ``weave_thread`` (#1035).
+
+    Cheap-guarded, failure-isolated via ``notify_external_act`` (ADR-0112) — isolation
+    from the caller's own ``@transaction.atomic`` block now lives in that shared wrapper.
+    Shared by both ``weave_thread`` exit points (the GIFT early-return and the general
+    tail) so a successful GIFT weave fires the beat too.
+    """
+    from world.missions.constants import ExternalAct  # noqa: PLC0415
+    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
+
+    notify_external_act(character_sheet, ExternalAct.THREAD_WOVEN)
+
+
 @transaction.atomic
 def _has_weaving_unlock(
     character_sheet: CharacterSheet,
@@ -487,7 +504,7 @@ def _has_weaving_unlock(
 
 
 @transaction.atomic
-def weave_thread(  # noqa: PLR0913, PLR0912, C901
+def weave_thread(  # noqa: PLR0913, PLR0912, PLR0915, C901
     character_sheet: CharacterSheet,
     target_kind: str,
     target: object,
@@ -524,9 +541,11 @@ def weave_thread(  # noqa: PLR0913, PLR0912, C901
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
     if target_kind == TargetKind.GIFT:
-        return _weave_gift_thread(
+        thread = _weave_gift_thread(
             character_sheet, target, resonance, name=name, description=description
         )
+        _satisfy_thread_woven(character_sheet)
+        return thread
     if target_kind == TargetKind.COVENANT_ROLE:
         from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
 
@@ -630,6 +649,8 @@ def weave_thread(  # noqa: PLR0913, PLR0912, C901
         techniques = handler.acquired_techniques_for(resonance)
         for technique in techniques:
             CharacterTechnique.objects.get_or_create(character=character_sheet, technique=technique)
+
+    _satisfy_thread_woven(character_sheet)
 
     return thread
 
