@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         IntensityTier,
         MagicalAlterationTemplate,
         MishapPoolTier,
+        PortalAnchorKind,
         Resonance,
         Ritual,
         SoulfrayConfig,
@@ -2308,6 +2309,196 @@ def ensure_relationship_pull_content() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Task 6 (#2222) — ensure_portal_travel_content()
+# ---------------------------------------------------------------------------
+
+#: Catalog name for the mirror anchor kind (#2222 Decision 2/5b).
+_MIRROR_ANCHOR_KIND_NAME = "Mirror"
+
+#: The starter portal-travel Minor Gift + its single Technique (#2222 Decision 3).
+_MIRRORWALKING_GIFT_NAME = "Mirrorwalking"
+_MIRRORWALK_TECHNIQUE_NAME = "Mirrorwalk"
+
+#: No prior ``GiftUnlock`` row exists anywhere in seed content to read a norm
+#: from (verified — the model has shipped since #1587 but nothing has ever
+#: seeded a row). Matches the baseline this same module already uses twice for
+#: a single-purpose magic unlock (``seed_facet_thread_unlock`` /
+#: ``seed_relationship_track_thread_unlock``, both ``xp_cost=50``) rather than
+#: inventing a new number.
+_MIRRORWALK_UNLOCK_XP_COST = 50
+
+#: Starter public rooms that get a Mirror anchor so the network has real,
+#: reachable nodes on a fresh Big Button run — not just catalog rows (#2222
+#: "Seed content"). "The Wanderer's Rest" (the canonical fallback starting
+#: room every fresh character passes through) is guaranteed by calling
+#: ``ensure_canonical_fallback_room()`` directly. The two magic-story cascade
+#: rooms below are seeded earlier in THIS module by
+#: ``_seed_resonance_environment_rooms()`` (part of ``seed_starter_magic_story()``,
+#: which ``seed_magic_dev()`` calls before this function) — resolved
+#: defensively via ``filter().first()`` and skipped (never crash) when absent,
+#: e.g. if this function is ever called standalone ahead of that step. No
+#: other named public room exists in production seed content today (verified
+#: — grepped every ``game_content``/``seeds`` module for room creation).
+#: (room db_key, anchor's descriptive name)
+_MIRROR_ANCHOR_ROOM_SPECS: list[tuple[str, str]] = [
+    ("The Hallowed Threshold (Low)", "a clouded looking-glass"),
+    ("The Resonant Sanctum (Aligned)", "a smoke-dark mirror"),
+]
+
+
+def _ensure_mirror_anchor(kind: PortalAnchorKind, room: ObjectDB, name: str) -> None:
+    """Get-or-create an active Mirror ``PortalAnchor`` of ``kind`` in ``room``.
+
+    Mirrors the cascade-room ``RoomProfile`` resolution in
+    ``_seed_resonance_environment_rooms`` above (``get_or_create`` — a fresh
+    ``typeclasses.rooms.Room`` already carries an auto-created ``RoomProfile``
+    via ``at_object_creation``, but ``get_or_create`` is the defensive,
+    idempotent way to fetch it regardless).
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.magic.models import PortalAnchor  # noqa: PLC0415
+
+    profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+    PortalAnchor.objects.get_or_create(
+        room_profile=profile,
+        kind=kind,
+        defaults={"name": name, "is_network_open": True},
+    )
+
+
+def ensure_portal_travel_content() -> None:
+    """Idempotently seed the Mirror portal network's starter content (#2222).
+
+    Creates (get_or_create throughout):
+
+    1. ``PortalAnchorKind`` "Mirror" — arrival "steps out of" / departure
+       "steps into" (#2222 Decision 2).
+    2. A self-contained "Reflection" Resonance (Celestial affinity) + MINOR
+       ``Gift`` "Mirrorwalking" carrying it — mirrors
+       ``world.companions.content.ensure_companion_content``'s shape (a MINOR
+       gift gets its own dedicated Resonance rather than reusing one of the
+       canonical story resonances).
+    3. ``Technique`` "Mirrorwalk" — ``travel_anchor_kind=Mirror``,
+       ``anima_cost=0`` (#2222 Decision 5d: per-use cost is the technique's
+       own ``anima_cost``; 0 for the seeded starter technique is convenience
+       by design). Reuses the "Translocation Stance" style and "Teleport"
+       ``EffectType`` already seeded by ``ensure_teleport_content`` — both
+       fit movement/travel, so this is reuse, not a parallel catalog
+       (anti-reinvention pass) — plus the shared standalone cast template so
+       the technique is fully castable like every other technique.
+    4. A ``GiftUnlock`` row gating Mirrorwalking behind XP
+       (``xp_cost=50`` — see ``_MIRRORWALK_UNLOCK_XP_COST``).
+    5. Starter Mirror ``PortalAnchor`` rows in 2-3 seeded public rooms (see
+       ``_MIRROR_ANCHOR_ROOM_SPECS``) so the mirror network is actually
+       reachable, not just cataloged.
+
+    Idempotent at every layer. Re-running on a populated DB preserves staff
+    edits (never ``update_or_create``).
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    from actions.constants import ActionTargetType  # noqa: PLC0415
+    from world.magic.constants import GiftKind  # noqa: PLC0415
+    from world.magic.effect_palette_content import (  # noqa: PLC0415
+        TRANSLOCATION_STANCE_STYLE_NAME,
+    )
+    from world.magic.models import (  # noqa: PLC0415
+        Affinity,
+        EffectType,
+        Gift,
+        GiftUnlock,
+        PortalAnchorKind,
+        Resonance,
+        Technique,
+        TechniqueStyle,
+    )
+    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
+    from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
+
+    # 1. Anchor kind.
+    mirror_kind, _ = PortalAnchorKind.objects.get_or_create(
+        name=_MIRROR_ANCHOR_KIND_NAME,
+        defaults={
+            "description": (
+                "A tall, silvered mirror — a threshold to every other mirror open on its network."
+            ),
+            "arrival_verb": "steps out of",
+            "departure_verb": "steps into",
+        },
+    )
+
+    # 2. MINOR Gift + its own dedicated Resonance.
+    celestial, _ = Affinity.objects.get_or_create(name="Celestial")
+    reflection, _ = Resonance.objects.get_or_create(
+        name="Reflection",
+        defaults={
+            "description": "The resonance of thresholds and mirrored passage.",
+            "affinity": celestial,
+        },
+    )
+    gift, _ = Gift.objects.get_or_create(
+        name=_MIRRORWALKING_GIFT_NAME,
+        defaults={
+            "description": "Step through an open mirror here and out of its twin elsewhere.",
+            "kind": GiftKind.MINOR,
+        },
+    )
+    gift.resonances.add(reflection)  # idempotent M2M add
+
+    # 3. Technique — reuse the existing movement-fitting style + EffectType.
+    style, _ = TechniqueStyle.objects.get_or_create(
+        name=TRANSLOCATION_STANCE_STYLE_NAME,
+        defaults={"description": "A magical style for space-bending techniques."},
+    )
+    effect_type, _ = EffectType.objects.get_or_create(
+        name="Teleport",
+        defaults={
+            "description": "Instant relocation through bent space.",
+            "base_power": None,
+            "base_anima_cost": 0,
+            "has_power_scaling": False,
+        },
+    )
+    Technique.objects.get_or_create(
+        name=_MIRRORWALK_TECHNIQUE_NAME,
+        gift=gift,
+        defaults={
+            "description": (
+                "Step into an open mirror and out the other side, wherever its "
+                "twin waits open on the network."
+            ),
+            "style": style,
+            "effect_type": effect_type,
+            "level": 1,
+            "intensity": 1,
+            "control": 1,
+            "anima_cost": 0,
+            "target_type": ActionTargetType.SELF,
+            "travel_anchor_kind": mirror_kind,
+            "action_template": get_standalone_cast_template(),
+        },
+    )
+
+    # 4. XP-gated unlock.
+    GiftUnlock.objects.get_or_create(
+        gift=gift,
+        defaults={"xp_cost": _MIRRORWALK_UNLOCK_XP_COST},
+    )
+
+    # 5. Starter anchors — the canonical fallback room is guaranteed; the
+    #    magic-story cascade rooms are resolved defensively (skip if absent).
+    _ensure_mirror_anchor(mirror_kind, ensure_canonical_fallback_room(), "a tall silvered mirror")
+    for room_key, anchor_name in _MIRROR_ANCHOR_ROOM_SPECS:
+        room = ObjectDB.objects.filter(
+            db_key=room_key,
+            db_typeclass_path="typeclasses.rooms.Room",
+        ).first()
+        if room is None:
+            continue
+        _ensure_mirror_anchor(mirror_kind, room, anchor_name)
+
+
 def seed_cantrip_starter_catalog() -> CantripStarterCatalogResult:
     """Lazy-create the cantrip starter catalog: 5 styles × 5 archetypes = 25 cantrips.
 
@@ -2617,6 +2808,11 @@ def seed_magic_dev() -> MagicDevSeedResult:
     14. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
         flagged ``suggest_on_technique_entrance=True`` (#2183). Without this, the
         technique-entrance suggestion bridge has nothing authored to surface.
+    15. ``ensure_portal_travel_content()`` — "Mirror" PortalAnchorKind, the
+        "Mirrorwalking" MINOR Gift + "Mirrorwalk" Technique
+        (``travel_anchor_kind=Mirror``), its GiftUnlock, and starter Mirror
+        PortalAnchor rows in seeded public rooms (#2222). Without this, the
+        portal-travel network has no reachable content in a live game.
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved
@@ -2671,6 +2867,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
     )
 
     seed_elemental_interactions()
+
+    ensure_portal_travel_content()
 
     return MagicDevSeedResult(
         config=config,
