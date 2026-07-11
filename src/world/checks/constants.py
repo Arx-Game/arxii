@@ -10,6 +10,7 @@ class EffectType(models.TextChoices):
     REMOVE_CONDITION = "remove_condition", "Remove Condition"
     SET_RELATIONSHIP_CONDITION = "set_relationship_condition", "Set Relationship Condition"
     SHIFT_AFFECTION = "shift_affection", "Shift Affection"
+    SHIFT_NPC_REGARD = "shift_npc_regard", "Shift NPC Regard"
     ADD_PROPERTY = "add_property", "Add Property"
     REMOVE_PROPERTY = "remove_property", "Remove Property"
     GRANT_DISTINCTION = "grant_distinction", "Grant Distinction"

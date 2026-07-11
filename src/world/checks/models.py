@@ -278,6 +278,11 @@ class ConsequenceEffect(SharedMemoryModel):
     # first-per-scene-per-pair (see relationships.AffectionShift).
     affection_amount = models.IntegerField(null=True, blank=True)
 
+    # SHIFT_NPC_REGARD effects (#2039): signed delta applied to the TARGET's
+    # NpcRegard toward the actor (nemesis/toxic-bond buildup). Content-authored,
+    # mirrors affection_amount — never derived at resolution time.
+    npc_regard_amount = models.IntegerField(null=True, blank=True)
+
     # Property effects
     property = models.ForeignKey(
         "mechanics.Property",

@@ -1,1 +1,1 @@
-0022_consequenceeffect_distinction_and_more
+0023_consequenceeffect_npc_regard_amount_and_more
