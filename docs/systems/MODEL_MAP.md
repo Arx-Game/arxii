@@ -1694,19 +1694,19 @@
 
 ### StablesDetails
 **Foreign Keys:**
-  - feature_instance -> room_features.RoomFeatureInstance [OneToOne, PK]
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
 
 ### Service Functions
 - `bind_companion(*, owner: 'CharacterSheet', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' — Create a bonded Companion + its live CompanionObject in owner's current room.`
-- `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Total Companion Capacity character_sheet has via gift's Thread level + Stables bonus.`
+- `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Total Companion Capacity character_sheet has via gift's Thread level.`
 - `get_pull_effects_for_thread(thread: 'Thread', **filters: 'object') -> 'list[ThreadPullEffect]' — Return ThreadPullEffect rows for ``thread`` with gift-specific preference.`
-- `handle_stables_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — STABLES strategy: install/level RoomFeatureInstance + create StablesDetails (#1863).`
+- `handle_stables_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — STABLES strategy: row-only install/level + create StablesDetails (#1863).`
 - `materialize_companion_as_battle_vehicle(companion: 'Companion', battle: 'Battle', side: 'BattleSide') -> 'BattleVehicle' — Bridge a persistent Companion into a battle-scale BattleVehicle (#1873).`
 - `materialize_companion_as_combat_opponent(companion: 'Companion', encounter: 'CombatEncounter', *, threat_pool: 'ThreatPool | None' = None) -> 'CombatOpponent' — Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).`
 - `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) — Validate and upsert a CompanionOrder directive (#1921).`
 - `release_companion(companion: 'Companion') -> 'None' — Release a bonded companion: destroy its live object, keep the row.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' — Resolve a bridged companion's defeat consequence (#1873).`
-- `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' — Flat Companion Capacity bonus from all Stables the sheet has standing in (#1863).`
+- `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' — Flat Companion Capacity bonus from all Stables the sheet has standing in.`
 - `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Companion Capacity currently consumed by character_sheet's active companions via gift.`
 
 
@@ -2364,6 +2364,7 @@
   - temporary_changes <- forms.TemporaryFormChange
   - persona_descriptors <- forms.PersonaTraitDescriptor
   - appearance_changes <- forms.AppearanceChangeLog
+  - item_template_effects <- items.ItemTemplateAppearanceEffect
 
 ### FormTraitOption
 **Foreign Keys:**
@@ -2373,6 +2374,7 @@
   - character_values <- forms.CharacterFormValue
   - natural_for_values <- forms.CharacterFormValue
   - temporary_changes <- forms.TemporaryFormChange
+  - item_template_effects <- items.ItemTemplateAppearanceEffect
 
 ### SpeciesFormTrait
 **Foreign Keys:**
@@ -2667,6 +2669,7 @@
   - slots <- items.TemplateSlot
   - instances <- items.ItemInstance
   - interaction_bindings <- items.TemplateInteraction
+  - appearance_effects <- items.ItemTemplateAppearanceEffect
   - check_modifiers <- items.ItemCheckModifier
   - garment_mitigations <- items.GarmentMitigation
   - stock_listings <- items.StockListing
@@ -2711,6 +2714,12 @@
 **Foreign Keys:**
   - template -> items.ItemTemplate [FK]
   - interaction_type -> items.InteractionType [FK]
+
+### ItemTemplateAppearanceEffect
+**Foreign Keys:**
+  - item_template -> items.ItemTemplate [FK]
+  - trait -> forms.FormTrait [FK]
+  - target_option -> forms.FormTraitOption [FK]
 
 ### EquippedItem
 **Foreign Keys:**
@@ -3681,6 +3690,7 @@
 **Foreign Keys:**
   - ritual -> magic.Ritual [FK]
   - initiator -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
 **Pointed to by:**
   - participants <- magic.RitualSessionParticipant
   - references <- magic.RitualSessionReference
@@ -5282,6 +5292,7 @@
   - entry_endorsements <- magic.SceneEntryEndorsement
   - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
+  - ritual_sessions <- magic.RitualSession
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating

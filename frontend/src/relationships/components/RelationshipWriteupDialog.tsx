@@ -186,7 +186,9 @@ export function RelationshipWriteupDialog({
       );
     } else if (mode === 'development') {
       createDevelopment.mutate(
-        { ...shared, track_id: trackId as number },
+        // xp_awarded: no formula exists yet to compute it (docs/roadmap/relationships.md
+        // "XP reward formula"); the field defaults to 0 server-side, matching that gap.
+        { ...shared, track_id: trackId as number, xp_awarded: 0 },
         { onSuccess: onMutationSuccess, onError: onMutationError }
       );
     } else if (mode === 'capstone') {

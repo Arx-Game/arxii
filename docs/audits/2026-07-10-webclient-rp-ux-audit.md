@@ -119,19 +119,45 @@ Resolving this split is **#2156**, the structural core of the slate.
   sessions (draft→invite→accept/decline→fire) are well-built dialogs but **exiled from the
   scene**: reachable only via header inbox; no marker in the scene where the ritual was
   proposed; `/rituals` absent from top nav (only entry: own sheet → Magic tab footer).
+  **[FIXED #2159]** `RitualSession` now captures its origin scene server-side at draft time
+  (`RitualSession.scene`, `get_active_scene`-derived, never client-supplied); a
+  `RitualProposedChip` mounted on `/game`'s `RoomPanel` and on `SceneDetailPage` renders
+  while a PENDING/READY session has that scene as its origin, linking to the session. The
+  `/rituals` top-nav gap is unchanged (out of #2159's scope).
 - **Bug:** `WeaveThreadWizard`'s RELATIONSHIP_TRACK anchor posts a generic
   `RelationshipTrack` catalog id where the backend resolves
   `RelationshipTrackProgress.objects.get(pk=…)` (`magic/serializers.py:885-901`) — disjoint
   pk spaces, and the wizard never asks *with whom*. Presents as fully built; fails on
-  submit. Telnet's `track=<partner>/<track>` grammar is correct. RELATIONSHIP_CAPSTONE
-  weaving is honestly labeled deferred, but capstone *creation* has no web path either.
+  submit. Telnet's `track=<partner>/<track>` grammar is correct.
+  **[FIXED #2159]** `ThreadSerializer._resolve_target` now resolves RELATIONSHIP_TRACK by
+  `(RelationshipTrack catalog id, target_persona_id)` — mirroring telnet's
+  `_resolve_track_anchor` — and `WeaveThreadWizard` gained a with-whom step (a partner
+  picker) before the anchor step, so the wizard can no longer produce this disjoint-pk
+  submit failure.
+  RELATIONSHIP_CAPSTONE weaving is honestly labeled deferred.
+  **[CORRECTION]** "capstone *creation* has no web path either" was wrong at the time of
+  writing: `RelationshipUpdateViewSet.capstone` (POST, dispatching `CreateCapstoneAction`)
+  is pre-existing on `main`, predating this audit — the claim conflated it with
+  `RelationshipCapstoneViewSet`, which is read-only. Only RELATIONSHIP_CAPSTONE *weaving*
+  (a thread anchored to a capstone) remains deferred.
 - **Relationship state is invisible on the web**: `RelationshipsSection.tsx` renders a
   legacy `string[]` with "TBD"; the full REST family (`CharacterRelationshipViewSet`,
   `RelationshipUpdateViewSet`, capstones, tracks) has zero frontend consumers. The
   relationship-authoring loop (impression/development/capstone/redistribute) shipped
   web+telnet at the action layer (PR #1536 — this **corrects the 2026-06-25 audit's
-  NO-SURFACE row**), but the web side is viewset-only with no UI; writeup kudos/complain
-  endpoints are uncalled.
+  NO-SURFACE row**), but the web side is viewset-only with no UI.
+  **[FIXED #2159]** `RelationshipsSection`'s "Ties" subsection now renders a real
+  `RelationshipPanel` (`frontend/src/relationships/components/`): own sheet gets
+  `OwnRelationshipsList` (tracks/tiers, expandable per-relationship history via the new
+  `timeline` action) privacy-scoped per ADR-0117 (numeric state is author-private); foreign
+  sheet gets `ForeignRelationshipTimeline` (visible writeups only, deliberately no numeric
+  state).
+  **[CORRECTION]** "writeup kudos/complain endpoints are uncalled" was only half right:
+  writeup kudos was already called — the commend button on `RelationshipsSection` has
+  POSTed to `.../kudos/` since #2136 (pre-existing on `main`, predating this audit).
+  **[FIXED #2159]** The complaint endpoint is now called too: a Report button beside
+  Commend opens `WriteupComplaintDialog`, POSTing `{writeup_type, writeup_id, reason}` to
+  `.../complaint/`.
 - **The bright spot:** rel/plus / rel/neg as one-click valenced emoji on poses
   (`ReactionsFooter` → `RelationshipBumpAction`, #2132) is the model in-scene affordance —
   though its success is silent (response discarded; see #2158).
