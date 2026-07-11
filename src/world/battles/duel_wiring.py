@@ -40,8 +40,19 @@ def apply_champion_duel_outcome(*, payload: object) -> None:
     TriggerDefinition.
     """
     from world.battles.models import BattleParticipant  # noqa: PLC0415
+    from world.combat.constants import EncounterType  # noqa: PLC0415
 
     encounter: CombatEncounter = payload.encounter
+    if encounter.encounter_type == EncounterType.PARTY_COMBAT:
+        # General party encounters are handled by place_encounter_wiring instead —
+        # the room-level ENCOUNTER_COMPLETED Trigger fires for every encounter in
+        # the battle's shared room, so this handler must ignore encounter types it
+        # isn't for (#2008 final-review Critical finding: cross-firing between the
+        # two outcome-wiring modules). Champion duels (create_lethal_duel) and siege
+        # encounters both stay DUEL-typed, so this guard doesn't change behavior for
+        # either existing duel-shaped creator.
+        return
+
     battle_place = encounter.battle_places.select_related("battle").first()
     if battle_place is None:
         return

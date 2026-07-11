@@ -60,9 +60,16 @@ def apply_place_encounter_outcome(*, payload: object) -> None:
     encounter_completed_place_encounter_outcome TriggerDefinition.
     """
     from world.battles.wiring_helpers import rout_units_at_place  # noqa: PLC0415
-    from world.combat.constants import EncounterOutcome  # noqa: PLC0415
+    from world.combat.constants import EncounterOutcome, EncounterType  # noqa: PLC0415
 
     encounter: CombatEncounter = payload.encounter
+    if encounter.encounter_type != EncounterType.PARTY_COMBAT:
+        # Not a general party encounter (e.g. a Champion duel) — the room-level
+        # ENCOUNTER_COMPLETED Trigger fires for every encounter in the battle's
+        # shared room, so this handler must ignore encounter types it isn't for
+        # (#2008 final-review Critical finding: cross-firing with duel_wiring).
+        return
+
     battle_place = encounter.battle_places.select_related("battle").first()
     if battle_place is None:
         return
