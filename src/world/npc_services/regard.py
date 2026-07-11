@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from world.npc_services.models import NpcRegardEvent, RegardEventConfig
+    from world.npc_services.models import NpcRegard, NpcRegardEvent, RegardEventConfig
     from world.scenes.models import Persona
     from world.societies.models import Organization, Society
 
@@ -48,6 +48,16 @@ def get_regard_event_config() -> RegardEventConfig:
     if cfg is None:
         cfg, _ = RegardEventConfig.objects.get_or_create(pk=1)
     return cfg
+
+
+def is_bond_story_vital(regard: NpcRegard) -> bool:
+    """Whether |regard.value| crosses the story-vital threshold (#2039).
+
+    No stored flag — mirrors NpcRegard's existing "no separate enemy flag"
+    design: a strongly-valenced row (either sign) IS the declaration.
+    """
+    cfg = get_regard_event_config()
+    return abs(regard.value) >= cfg.story_vital_threshold
 
 
 def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a distinct citation fact
