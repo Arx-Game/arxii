@@ -1169,6 +1169,34 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         related_name="round_actions",
         help_text="If this action was upgraded to a combo, which combo.",
     )
+    cast_destination = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Declared cast destination for single-position techniques "
+            "(Phase Jump / Force Grip / zone hazards). Null when the cast "
+            "targets no position. (#2206)"
+        ),
+    )
+    cast_position_a = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="First endpoint of a declared position pair (Barricade). (#2206)",
+    )
+    cast_position_b = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Second endpoint of a declared position pair (Barricade). (#2206)",
+    )
     interaction = models.ForeignKey(
         "scenes.Interaction",
         on_delete=models.SET_NULL,
