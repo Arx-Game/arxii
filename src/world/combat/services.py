@@ -5663,6 +5663,35 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
         )
     outcome.damage_consequences.append(consequence)
 
+    # Nemesis/toxic-NPC-bond regard hook (#2039): a notable (persona-backed)
+    # NPC opponent critically harming a PC (death- or permanent-wound-eligible
+    # hit) records an NPC_HARMED_PC_INTEREST regard event. A mook/persona-less
+    # opponent's hit — or any non-critical hit from a notable NPC — is
+    # deliberately a no-op: no NpcRegard row is ever created for it.
+    if opponent.persona_id is not None and (
+        dmg_result.death_eligible or dmg_result.permanent_wound_eligible
+    ):
+        from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
+        from world.npc_services.regard import (  # noqa: PLC0415
+            get_regard_event_config,
+            record_npc_regard_event,
+        )
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        try:
+            pc_persona = target_participant.character_sheet.primary_persona
+        except Persona.DoesNotExist:
+            pc_persona = None
+        if pc_persona is not None:
+            cfg = get_regard_event_config()
+            record_npc_regard_event(
+                holder_persona=opponent.persona,
+                target=pc_persona,
+                amount=cfg.combat_harm_amount,
+                reason=NpcRegardEventReason.NPC_HARMED_PC_INTEREST,
+                source_npc_combat_action=npc_action,
+            )
+
     # Collect condition applications for bulk apply
     if dmg_result.damage_dealt > 0 and conditions:
         target_obj = target_participant.character_sheet.character
