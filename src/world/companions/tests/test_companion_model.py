@@ -45,3 +45,29 @@ class CompanionArchetypeIsMountTests(TestCase):
 
         archetype = CompanionArchetypeFactory(is_mount=True)
         self.assertTrue(archetype.is_mount)
+
+
+class StablesDetailsModelTests(TestCase):
+    """Tests for the StablesDetails model (#1863)."""
+
+    def test_stables_details_creation(self) -> None:
+        """StablesDetails can be created linked to a RoomFeatureInstance."""
+        from world.companions.models import StablesDetails
+        from world.room_features.factories import RoomFeatureInstanceFactory
+
+        instance = RoomFeatureInstanceFactory()
+        details = StablesDetails.objects.create(feature_instance=instance)
+        self.assertEqual(details.capacity_bonus_per_level, 1)
+        self.assertEqual(details.feature_instance, instance)
+
+    def test_stables_details_str(self) -> None:
+        from world.companions.models import StablesDetails
+        from world.room_features.factories import RoomFeatureInstanceFactory
+
+        instance = RoomFeatureInstanceFactory()
+        details = StablesDetails.objects.create(
+            feature_instance=instance,
+            capacity_bonus_per_level=3,
+        )
+        self.assertIn("Stables", str(details))
+        self.assertIn("3", str(details))

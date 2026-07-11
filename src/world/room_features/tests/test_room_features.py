@@ -41,6 +41,11 @@ class RoomFeatureKindTests(TestCase):
         kind = RoomFeatureKindFactory(name="Sanctum")
         self.assertEqual(str(kind), "Sanctum")
 
+    def test_stables_strategy_exists(self) -> None:
+        """STABLES is a registered strategy choice (#1863)."""
+        self.assertIn("STABLES", RoomFeatureServiceStrategy.names)
+        self.assertEqual(RoomFeatureServiceStrategy.STABLES.value, "STABLES")
+
     def test_max_level_check_constraint(self) -> None:
         with self.assertRaises(IntegrityError):
             RoomFeatureKind.objects.create(name="bad", max_level=0, service_strategy="LIBRARY")

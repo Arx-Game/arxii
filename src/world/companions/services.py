@@ -13,9 +13,11 @@ from world.magic.services.pull_effects import get_pull_effects_for_thread
 if TYPE_CHECKING:
     from world.battles.models import Battle, BattleSide, BattleVehicle
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import CheckOutcome
     from world.combat.models import CombatEncounter, CombatOpponent, ThreatPool
     from world.companions.models import Companion, CompanionArchetype
     from world.magic.models.gifts import Gift
+    from world.projects.models import Project
 
 
 class NoCompanionThreadError(Exception):
@@ -37,16 +39,57 @@ def _companion_thread(character_sheet: CharacterSheet, gift: Gift):
     return thread
 
 
+def stables_capacity_bonus_for_sheet(character_sheet: CharacterSheet) -> int:
+    """Flat Companion Capacity bonus from all Stables the sheet has standing in.
+
+    Derive-on-read: queries active Stables RoomFeatureInstances on rooms
+    where the sheet's primary persona is owner or tenant, sums
+    ``StablesDetails.capacity_bonus_per_level * instance.level`` across all
+    matches. Returns 0 if the character has no Stables or no primary persona.
+    """
+    from world.companions.models import StablesDetails  # noqa: PLC0415
+    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.room_features.constants import RoomFeatureServiceStrategy  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    try:
+        persona: Persona = active_persona_for_sheet(character_sheet)
+    except Persona.DoesNotExist:
+        return 0
+
+    instances = (
+        RoomFeatureInstance.objects.active()
+        .select_related("feature_kind", "room_profile", "stables_details")
+        .filter(feature_kind__service_strategy=RoomFeatureServiceStrategy.STABLES)
+    )
+    total = 0
+    for instance in instances:
+        room = instance.room_profile.objectdb
+        if room is None:
+            continue
+        if is_owner(persona, room) or is_tenant(persona, room):
+            try:
+                details = instance.stables_details
+            except StablesDetails.DoesNotExist:
+                continue
+            total += details.capacity_bonus_per_level * instance.level
+    return total
+
+
 def companion_capacity(character_sheet: CharacterSheet, gift: Gift) -> int:
     """Total Companion Capacity character_sheet has via gift's Thread level.
 
     Sums tier-0 (passive, always-on) FLAT_BONUS ThreadPullEffect rows whose
     min_thread_level is at or below the thread's current level — mirrors the
     ``row.min_thread_level > thread.level`` skip idiom in world/magic/handlers.py.
+    Adds a flat Stables capacity bonus (#1863).
     """
     thread = _companion_thread(character_sheet, gift)
     rows = get_pull_effects_for_thread(thread, tier=0, effect_kind=EffectKind.FLAT_BONUS)
-    return sum(row.flat_bonus_amount for row in rows if row.min_thread_level <= thread.level)
+    base = sum(row.flat_bonus_amount for row in rows if row.min_thread_level <= thread.level)
+    return base + stables_capacity_bonus_for_sheet(character_sheet)
 
 
 def used_companion_capacity(character_sheet: CharacterSheet, gift: Gift) -> int:
@@ -398,3 +441,25 @@ def order_companion(  # noqa: C901, PLR0912, PLR0913, PLR0915
 
     msg = "order_companion requires either an encounter or a battle (not both)."
     raise CompanionOrderError(msg, msg)
+
+
+def handle_stables_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """STABLES strategy: row-only install/level + create StablesDetails (#1863).
+
+    Mirrors handle_town_crier_progression's capture-then-side-effect shape:
+    ``_install_or_level_feature`` returns the progression details, which we
+    use to resolve the RoomFeatureInstance for the StablesDetails sidecar.
+    """
+    from world.companions.models import StablesDetails  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+    from world.room_features.services import _install_or_level_feature  # noqa: PLC0415
+
+    details = _install_or_level_feature(project, target_level)
+    instance = RoomFeatureInstance.objects.get(
+        room_profile=details.target_room_profile,
+    )
+    StablesDetails.objects.get_or_create(feature_instance=instance)
