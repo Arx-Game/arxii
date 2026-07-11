@@ -1902,6 +1902,45 @@ register as additional kinds.
   target)`. Deliberately separate from `NPCStanding` (see ADR-0085). Consumed by
   Covenant of the Court's `has_regarded_target_present` engagement gate
   (`world/covenants/court_missions.py`).
+- **Regard buildup / toxic-bond family (#2039):** `NpcRegardEvent` — a per-event
+  ledger on top of `NpcRegard`, mirroring justice's `HeatSource`/`PersonaHeat`
+  shape. `record_npc_regard_event(*, holder_persona, target, amount, reason,
+  source_pc_combat_action=None, source_npc_combat_action=None, source_scene=None,
+  source_stake_resolution=None)` (`world/npc_services/regard.py`) is the single
+  write seam — wrapped in `transaction.atomic()`, clamps `amount` to
+  `RegardEventConfig.max_event_delta` and the resulting `NpcRegard.value` to
+  `REGARD_MIN`/`REGARD_MAX`. `NpcRegardEventReason` (6 values) each carry a
+  distinct, DB-enforced citation requirement (`NpcRegardEvent.clean()`) — a
+  PC-attributed reason (`NPC_HARMED_PC_INTEREST`, `PC_FOILED_NPC_PLAN`) must cite
+  a real resolved `CombatOpponentAction`/`CombatRoundAction`, never a freetext
+  claim; `SOCIAL_ACTION_RESOLVED` cites the resolved `Scene`;
+  `STAKE_RESOLUTION` cites the `StakeResolution` row that pre-authored it;
+  `GM_MANUAL_ADJUSTMENT` may optionally cite any of those; `DISTINCTION_SEED`
+  cites none. `is_bond_story_vital(regard)` derives "vital to your story" status
+  from `|value| >= RegardEventConfig.story_vital_threshold` — no stored flag,
+  matching `NpcRegard`'s "no separate enemy flag" design; symmetric for hostile
+  and infatuated (toxic-bond-family) valence alike.
+  - **Four authoring paths:** (1) combat auto-hooks in
+    `world/combat/services.py`'s `_resolve_pc_action`/`_resolve_npc_action_on_target`
+    fire on a genuine defeat/critical-hit against a persona-backed opponent; (2) the
+    structured-consequence `EffectType.SHIFT_NPC_REGARD` +
+    `ConsequenceEffect.npc_regard_amount` + `_shift_npc_regard` handler
+    (`world/mechanics/effect_handlers.py`) mirrors `SHIFT_AFFECTION` for social
+    actions — content-authored amounts only, never GM-freehanded; (3)
+    `StakeResolution.npc_regard_delta` (`world/stories/`) lets a GM pre-bind "if
+    this stake resolves this way, regard shifts by N" before the scene plays out,
+    dispatched through the existing `NPC_FATE` `subject_kind` branch; (4)
+    `DistinctionRegardSeed` (lookup sidecar, mirrors `DistinctionResonanceGrant`'s
+    shape) lets a CG distinction pre-seed a bond with a named NPC, reconciled via
+    `reconcile_distinction_regard_seeds()` in the chargen `CharacterDistinction`
+    bulk-create loop.
+  - **Bridge to #2013:** `mirror_npc_regard_event_to_track(event)`
+    (`world/relationships/services.py`) reuses `apply_affection_shift`'s
+    track-selection/capstone-write-shape but dedups on the event row itself
+    (no `Scene`+`ConsequenceEffect` needed) — every `record_npc_regard_event` call
+    also mirrors onto the PC's own `CharacterRelationship`/`RelationshipTrackProgress`
+    Regard/Friction system tracks, so #2013's hated-foe surge (unmodified) picks
+    up nemesis buildup for free.
 - **Interaction state machine:** ephemeral `InteractionSession` (lives in caller's
   session for one interaction). `start_interaction(role, persona, character, npc_persona=None)`
   → `available_offers(session)` (single-predicate filtered) → `resolve_offer(session, offer)`

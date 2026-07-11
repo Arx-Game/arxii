@@ -213,3 +213,12 @@ not compel or provoke the target's behavior (ADR-0024).
   (`world/seeds/social_relationships.py`). Flirt/Seduce success-effect content wiring is a follow-up.
 - **Secret reputation consequences (#1429):** a secret's persona-victim, on learning who wronged
   them, registers a grievance via `register_grievance` (the relationship effect they *decide*).
+- **NpcRegard mirror-bridge (#2039):** `mirror_npc_regard_event_to_track(event)` reuses
+  `apply_affection_shift`'s track-selection (`TrackSystemKey.REGARD`/`FRICTION` by sign) and
+  capstone write-shape, but dedups on the `NpcRegardEvent` row itself rather than a
+  `Scene`+`ConsequenceEffect` — called automatically by `world.npc_services.regard
+  .record_npc_regard_event` for every nemesis/toxic-bond buildup event. Always writes
+  `source=<PC's own CharacterSheet>, target=<NPC's CharacterSheet>` regardless of which side
+  of the underlying `NpcRegardEvent` caused it, matching #2013's hated-foe surge read direction
+  (`world.combat.escalation`) — lets that already-shipped surge pick up nemesis buildup with
+  zero changes to its own code.

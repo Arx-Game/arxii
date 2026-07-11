@@ -1,1 +1,1 @@
-0024_alter_beat_referenced_chapter_and_more
+0025_stakeresolution_npc_regard_delta

@@ -40,6 +40,7 @@ from world.combat.models import (
     ClashRound,
     CombatEncounter,
     CombatOpponent,
+    CombatOpponentAction,
     CombatParticipant,
     CombatPull,
     CombatPullResolvedEffect,
@@ -322,6 +323,17 @@ class CombatRoundActionFactory(factory_django.DjangoModelFactory):
     round_number = 1
     focused_opponent_target = None
     focused_ally_target = None
+
+
+class CombatOpponentActionFactory(factory_django.DjangoModelFactory):
+    """Factory for CombatOpponentAction."""
+
+    class Meta:
+        model = CombatOpponentAction
+
+    opponent = factory.SubFactory(CombatOpponentFactory)
+    round_number = 1
+    threat_entry = factory.SubFactory(ThreatPoolEntryFactory)
 
 
 # =============================================================================

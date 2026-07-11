@@ -4539,6 +4539,8 @@
   - target_persona -> scenes.Persona [FK] (nullable)
   - target_organization -> societies.Organization [FK] (nullable)
   - target_society -> societies.Society [FK] (nullable)
+**Pointed to by:**
+  - events <- npc_services.NpcRegardEvent
 
 ### CourtGrantOfferDetails
 **Foreign Keys:**
@@ -4550,6 +4552,21 @@
   - offer -> npc_services.NPCServiceOffer [FK]
   - target_persona -> scenes.Persona [FK]
   - created_by -> gm.GMProfile [FK] (nullable)
+
+### RegardEventConfig
+
+### NpcRegardEvent
+**Foreign Keys:**
+  - regard -> npc_services.NpcRegard [FK]
+  - source_pc_combat_action -> combat.CombatRoundAction [FK] (nullable)
+  - source_npc_combat_action -> combat.CombatOpponentAction [FK] (nullable)
+  - source_scene -> scenes.Scene [FK] (nullable)
+  - source_stake_resolution -> stories.StakeResolution [FK] (nullable)
+
+### DistinctionRegardSeed
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - npc_persona -> scenes.Persona [FK]
 
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
@@ -5065,6 +5082,7 @@
 - `get_bond_combat_config() -> 'BondCombatConfig' — Get-or-create the BondCombatConfig singleton (pk=1).`
 - `give_writeup_kudos(*, giver_account: 'AccountDB', writeup) -> 'WriteupKudos' — Award a non-revocable commendation to the writeup author on behalf of the subject.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
+- `mirror_npc_regard_event_to_track(event: 'NpcRegardEvent') -> 'RelationshipTrackProgress | None' — Mirror one NpcRegardEvent onto the PC's Regard/Friction system track (#2039).`
 - `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' — Move developed points from one track to another. No new value is added.`
 - `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '', visibility: 'UpdateVisibility' = UpdateVisibility.PRIVATE) -> 'RelationshipCapstone' — Register a wronged character's one-sided grievance against whoever harmed them (#1429).`
 - `relationship_gated_contributions(*, perceiver: 'CharacterSheet', perceived: 'CharacterSheet') -> 'list[ModifierContribution]' — Modifier contributions the perceiver's regard for the perceived injects into a check (#1696).`
@@ -5290,6 +5308,7 @@
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - combat_encounters <- combat.CombatEncounter
   - battle <- battles.Battle
+  - npc_regard_events <- npc_services.NpcRegardEvent
 
 ### SceneParticipation
 **Foreign Keys:**
@@ -5389,6 +5408,7 @@
   - regards_held <- npc_services.NpcRegard
   - regards_as_target <- npc_services.NpcRegard
   - summonses_received <- npc_services.OfferSummons
+  - regard_seeds_from_distinctions <- npc_services.DistinctionRegardSeed
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - materials_contributed <- buildings.BuildingMaterial
@@ -6500,6 +6520,7 @@
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
   - reward_lines <- stories.StakeRewardLine
+  - npc_regard_events <- npc_services.NpcRegardEvent
 
 ### StakeRewardLine
 **Foreign Keys:**

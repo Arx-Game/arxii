@@ -5434,7 +5434,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
 
-def _resolve_pc_action(  # noqa: C901, PLR0911
+def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
     participant: CombatParticipant,
     action: CombatRoundAction,
     offense_check_fn: PerformCheckFn | None = None,
@@ -5560,6 +5560,38 @@ def _resolve_pc_action(  # noqa: C901, PLR0911
         combat_result=combat_result,
     )
 
+    # Nemesis/toxic-NPC-bond regard hook (#2039): a PC defeating a notable
+    # (persona-backed) NPC opponent records a PC_FOILED_NPC_PLAN regard event.
+    # A mook/persona-less opponent's defeat is deliberately a no-op — no
+    # NpcRegard row is ever created for it.
+    if target is not None and target.persona_id is not None:
+        defeated = any(
+            dr.opponent_id == target.pk and dr.defeated
+            for dr in outcome.damage_results
+            if hasattr(dr, "opponent_id")
+        )
+        if defeated:
+            from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
+            from world.npc_services.regard import (  # noqa: PLC0415
+                get_regard_event_config,
+                record_npc_regard_event,
+            )
+            from world.scenes.models import Persona  # noqa: PLC0415
+
+            try:
+                pc_persona = participant.character_sheet.primary_persona
+            except Persona.DoesNotExist:
+                pc_persona = None
+            if pc_persona is not None:
+                cfg = get_regard_event_config()
+                record_npc_regard_event(
+                    holder_persona=target.persona,
+                    target=pc_persona,
+                    amount=cfg.combat_defeat_amount,
+                    reason=NpcRegardEventReason.PC_FOILED_NPC_PLAN,
+                    source_pc_combat_action=action,
+                )
+
     return outcome
 
 
@@ -5630,6 +5662,35 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
             source_character=opponent.objectdb,
         )
     outcome.damage_consequences.append(consequence)
+
+    # Nemesis/toxic-NPC-bond regard hook (#2039): a notable (persona-backed)
+    # NPC opponent critically harming a PC (death- or permanent-wound-eligible
+    # hit) records an NPC_HARMED_PC_INTEREST regard event. A mook/persona-less
+    # opponent's hit — or any non-critical hit from a notable NPC — is
+    # deliberately a no-op: no NpcRegard row is ever created for it.
+    if opponent.persona_id is not None and (
+        dmg_result.death_eligible or dmg_result.permanent_wound_eligible
+    ):
+        from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
+        from world.npc_services.regard import (  # noqa: PLC0415
+            get_regard_event_config,
+            record_npc_regard_event,
+        )
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        try:
+            pc_persona = target_participant.character_sheet.primary_persona
+        except Persona.DoesNotExist:
+            pc_persona = None
+        if pc_persona is not None:
+            cfg = get_regard_event_config()
+            record_npc_regard_event(
+                holder_persona=opponent.persona,
+                target=pc_persona,
+                amount=cfg.combat_harm_amount,
+                reason=NpcRegardEventReason.NPC_HARMED_PC_INTEREST,
+                source_npc_combat_action=npc_action,
+            )
 
     # Collect condition applications for bulk apply
     if dmg_result.damage_dealt > 0 and conditions:
