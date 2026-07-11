@@ -2718,7 +2718,13 @@ prosperity.
   - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
     across all active Granaries in the domain's area subtree.
 - **Action:** `CollectFoodAction` (key `"collect_food"`, category
-  `"agriculture"`) — the single commit seam for telnet + web.
+  `"agriculture"`) — the single commit seam for telnet + web. Resolves its Field
+  from a pre-resolved `field_instance`, a `field_instance_id` (web/REST — the REST
+  path does no ObjectDB resolution, so the action resolves it), or the active FIELD
+  feature in `actor.location` (telnet). **Surfaces (#2237):** telnet `harvest`
+  (`commands/agriculture.py` `CmdHarvest`) + web `POST /api/agriculture/collect/`
+  (`CollectFoodView`, body `{field_instance_id}`). Without a surface the loop
+  couldn't close — the pool filled but never drained.
 - **Events:** `FOOD_COLLECTED`, `FOOD_SHORTAGE` (in `flows/constants.py`).
 - **Cron tasks:** `agriculture.field_production` (daily 24h),
   `agriculture.domain_consumption` (weekly, via weekly rollover).
