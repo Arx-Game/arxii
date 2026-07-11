@@ -13520,6 +13520,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterComfort'
           description: ''
+  /api/locations/portal-destinations/:
+    get:
+      operationId: locations_portal_destinations_list
+      description: |-
+        GET /?character_id=<id> — every anchor that character could portal-travel to now.
+
+        Rides ``world.magic.services.portal_travel.portal_destinations`` unmodified — the
+        service already applies the full leak-safe visibility contract (anchor kinds narrowed
+        to the character's known travel techniques; a locked anchor visible only with
+        owner/tenant standing at its room; the current room's own anchors excluded, since
+        that's not a destination). This view adds no filtering of its own.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the character to read destinations for (must be
+          your own).
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - locations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPortalDestinationList'
+          description: ''
   /api/magic/applicable-pulls/:
     post:
       operationId: magic_applicable_pulls_create
@@ -47589,6 +47631,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerTrust'
+    PaginatedPortalDestinationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalDestination'
     PaginatedProgressionUnlockItemList:
       type: object
       required:
@@ -52844,6 +52909,31 @@ components:
       required:
       - category
       - value
+    PortalDestination:
+      type: object
+      description: |-
+        One anchor a character could portal-travel to right now (mirrors ``PortalDestination``).
+
+        Explicit fields only — never a raw model/dataclass dump, since a locked anchor's
+        visibility is already gated upstream by
+        ``world.magic.services.portal_travel.portal_destinations`` (#2222 leak table).
+      properties:
+        anchor_id:
+          type: integer
+        room_id:
+          type: integer
+        room_name:
+          type: string
+        kind_name:
+          type: string
+        anchor_name:
+          type: string
+      required:
+      - anchor_id
+      - anchor_name
+      - kind_name
+      - room_id
+      - room_name
     PoseEndorsement:
       type: object
       description: |-

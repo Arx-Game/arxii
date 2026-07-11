@@ -192,8 +192,15 @@ class DissolvePortalAnchorAction(PortalAnchorActionBase):
         if persona is None:
             return self._fail(_MSG_NO_ACTIVE_CHARACTER)
 
-        anchor = _resolve_anchor_kwarg(kwargs.get("anchor"))
+        anchor_kwarg = kwargs.get("anchor")
+        anchor = _resolve_anchor_kwarg(anchor_kwarg)
         if anchor is None:
+            # An explicit anchor was named but didn't resolve (stale/bogus id) — fail loud
+            # rather than silently falling through to sole-anchor auto-resolution, which
+            # would dissolve a DIFFERENT anchor than the caller asked for (#2222 task-3
+            # review fold-in).
+            if anchor_kwarg is not None:
+                return self._fail(_MSG_NO_ANCHOR_HERE)
             candidates = anchors_in_room(actor.location)
             if not candidates:
                 return self._fail(_MSG_NO_ANCHOR_HERE)

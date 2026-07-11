@@ -224,3 +224,20 @@ class DissolvePortalAnchorActionTests(TestCase):
 
         assert result.success is False
         assert result.message == "There is no portal anchor here to dissolve."
+
+    def test_stale_anchor_kwarg_does_not_fall_through_to_sole_anchor_auto_resolve(self):
+        """A stale/bogus explicit ``anchor`` id must fail loud, not silently dissolve
+        whatever anchor happens to be alone in the room (#2222 task-4 review fold-in —
+        the guard the task-3 re-review flagged: an explicit-but-unresolvable kwarg is a
+        caller error, not "no kwarg supplied").
+        """
+        room, room_profile = _make_room("Stale Anchor Room")
+        actor, _sheet, _persona = _make_resident(room, room_profile, owner=True)
+        sole_anchor = PortalAnchorFactory(room_profile=room_profile)
+
+        result = DissolvePortalAnchorAction().run(actor, anchor=999_999)
+
+        assert result.success is False
+        assert result.message == "There is no portal anchor here to dissolve."
+        sole_anchor.refresh_from_db()
+        assert sole_anchor.dissolved_at is None
