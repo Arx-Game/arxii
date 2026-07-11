@@ -444,6 +444,7 @@ class CraftingRecipeFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Crafting Recipe {n}")
     kind = CraftingRecipeKind.FACET_ATTACH
+    output_item_template = None
     base_difficulty = 0
     success_level_step = 10
     min_success_level = 1
