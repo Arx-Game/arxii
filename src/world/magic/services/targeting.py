@@ -14,6 +14,7 @@ from actions.constants import ActionTargetType
 from flows.consts import FlowActionChoices
 from flows.models.flows import FlowStepDefinition
 from flows.models.triggers import TriggerDefinition
+from world.conditions.models import ConditionTemplate
 from world.conditions.services import is_untargetable
 from world.magic.models.techniques import ConditionTargetKind, Technique
 from world.magic.services.hostility import is_technique_hostile
@@ -175,8 +176,8 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
     return ConditionTargetKind.SELF
 
 
-def protective_flavor(technique: Technique) -> str | None:
-    """Classify *technique*'s reactive-trigger handler family for guardian declarations (#2207).
+def protective_condition_and_flavor(technique: Technique) -> tuple[ConditionTemplate, str] | None:
+    """Classify *technique*'s protective handler AND resolve the matched ConditionTemplate (#2207).
 
     Guardian declarations (Interpose) need to know whether a technique carries a
     protective reactive-trigger handler and, if so, which family: an absorb-pool
@@ -193,9 +194,16 @@ def protective_flavor(technique: Technique) -> str | None:
     CALL_SERVICE_FUNCTION steps, matching the step's `variable_name` (a dotted
     service-function path) against the known handler families.
 
-    Returns the flavor of the FIRST matching step encountered — authored techniques
-    carry at most one protective handler in practice — or None when no applied
-    condition's reactive triggers resolve to a known protective handler.
+    Returns the ``(ConditionTemplate, flavor)`` of the FIRST matching step
+    encountered — authored techniques carry at most one protective handler in
+    practice — or None when no applied condition's reactive triggers resolve to a
+    known protective handler.
+
+    Guardian resolution (``world.combat.services._try_technique_interpose``, #2207)
+    needs the template itself — its ``reactive_anima_cost`` pays the guardian's
+    reaction — not just the flavor string. :func:`protective_flavor` (declaration-time
+    validation only needs the flavor) is a thin wrapper over this function so both
+    call sites share one traversal.
     """
     applied_conditions = technique.condition_applications.select_related(
         "condition"
@@ -221,8 +229,19 @@ def protective_flavor(technique: Technique) -> str | None:
                 function_name = step.variable_name.rsplit(".", 1)[-1]
                 flavor = _PROTECTIVE_FLAVOR_BY_HANDLER.get(function_name)
                 if flavor is not None:
-                    return flavor
+                    return applied.condition, flavor
     return None
+
+
+def protective_flavor(technique: Technique) -> str | None:
+    """Classify *technique*'s reactive-trigger handler family for guardian declarations (#2207).
+
+    Thin wrapper over :func:`protective_condition_and_flavor` — declaration-time
+    validation (``declare_interpose``) only needs the flavor, not the resolved
+    ``ConditionTemplate``.
+    """
+    resolved = protective_condition_and_flavor(technique)
+    return resolved[1] if resolved is not None else None
 
 
 def _signature_alters_behavior(caster, technique: Technique) -> bool:

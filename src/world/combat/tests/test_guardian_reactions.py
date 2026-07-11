@@ -258,3 +258,151 @@ class InterposeBestOfCheckRealPathTest(TestCase):
             "Reflexes",
             "a reflexes-statted guardian must roll the base Reflexes approach",
         )
+
+
+class TechniqueGuardianBarrierResolutionTest(TestCase):
+    """Journey test: a technique guardian's BARRIER resolution (#2207 Task 3).
+
+    A guardian who knows Aegis Field (the seeded barrier-flavor protective
+    technique, `world.magic.effect_palette_content.ensure_force_field_content`)
+    declares Interpose "with" it on a named ally. Damage lands on the ally and
+    drives the REAL dispatch path: `apply_damage_to_participant` ->
+    `_try_interpose` -> (`action.focused_action_id` is set) ->
+    `_try_technique_interpose`, which rolls the guardian's own cast check
+    (`resolve_cast_check_type`) instead of a capability-reaction challenge and
+    pays anima instead of fatigue.
+
+    `perform_check` is mocked at the seam `_try_technique_interpose` actually
+    calls (`world.combat.services.perform_check`, imported at module scope from
+    `world.checks.services` — the same name `dispatch_interpose`'s sibling
+    call at services.py:745 resolves through) to force a clean success and
+    capture the `check_type` argument.
+
+    Untagged (SQLite fast tier): unlike `InterposeBestOfCheckRealPathTest`
+    above, this path never calls `apply_condition`/`get_available_actions`
+    (no DISTINCT ON dependency) — the technique branch classifies the
+    guardian's already-known technique via authored `condition_applications`
+    data and rolls a plain cast check, not a capability-reaction challenge.
+    """
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        from world.magic.effect_palette_content import ensure_force_field_content
+
+        # Seeds the "Interpose" ChallengeTemplate (severity=3, the shared
+        # target_difficulty both mundane and technique interpose roll against).
+        ensure_interpose_content()
+        # Seeds the "Aegis Field" barrier-flavor Technique + its ConditionTemplate
+        # (reactive_anima_cost) the technique branch reads.
+        ensure_force_field_content()
+
+    def test_technique_guardian_barrier_debits_anima_and_zeroes_damage(self) -> None:
+        """Clean success: guardian's cast check rolled, anima debited, ally damage zeroed."""
+        from types import SimpleNamespace
+
+        from evennia import create_object
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.services import apply_damage_to_participant
+        from world.magic.effect_palette_content import FORCE_FIELD_TECHNIQUE_NAME
+        from world.magic.factories import CharacterAnimaFactory
+        from world.magic.models import CharacterTechnique, Technique
+        from world.magic.services.anima import resolve_cast_check_type
+
+        room = create_object("typeclasses.rooms.Room", key="TechGuardianBarrierRoom", nohome=True)
+        encounter = CombatEncounterFactory(
+            status=RoundStatus.RESOLVING,
+            round_number=1,
+            room=room,
+        )
+
+        guardian_sheet = CharacterSheetFactory()
+        guardian_participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=guardian_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        guardian = guardian_sheet.character
+        guardian.db_location = room
+        guardian.save(update_fields=["db_location"])
+
+        ally_sheet = CharacterSheetFactory()
+        ally_participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=ally_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        ally = ally_sheet.character
+        ally.db_location = room
+        ally.save(update_fields=["db_location"])
+
+        # The guardian knows Aegis Field (real seeded content, not a test double).
+        aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
+        CharacterTechnique.objects.create(character=guardian_sheet, technique=aegis_field)
+
+        starting_anima = 10
+        anima = CharacterAnimaFactory(character=guardian, current=starting_anima, maximum=10)
+        expected_cost = aegis_field.condition_applications.get().condition.reactive_anima_cost
+        self.assertGreater(
+            expected_cost,
+            0,
+            "Aegis Field's reactive_anima_cost must be positive to prove the debit",
+        )
+
+        ally_vitals = _make_vitals(ally_participant, health=100, max_health=100)
+        _make_vitals(guardian_participant)
+
+        # Build the CombatRoundAction row directly (encounter is already
+        # RESOLVING here, so declare_interpose's DECLARING-status gate would
+        # reject it) — same row shape declare_interpose(technique=...) (Task 2)
+        # produces once validated: focused_action set, maneuver=INTERPOSE,
+        # focused_ally_target=ally.
+        CombatRoundAction.objects.create(
+            participant=guardian_participant,
+            round_number=1,
+            maneuver=CombatManeuver.INTERPOSE,
+            focused_ally_target=ally_participant,
+            focused_action=aegis_field,
+            is_ready=True,
+        )
+
+        expected_check_type = resolve_cast_check_type(guardian, aegis_field.action_template)
+        captured_check_types: list = []
+
+        def _fake_perform_check(character, check_type, *args, **kwargs):
+            captured_check_types.append(check_type)
+            return SimpleNamespace(success_level=2)
+
+        with patch(
+            "world.combat.services.perform_check",
+            side_effect=_fake_perform_check,
+        ):
+            apply_damage_to_participant(ally_participant, 40)
+
+        ally_vitals.refresh_from_db()
+        anima.refresh_from_db()
+
+        self.assertEqual(
+            len(captured_check_types),
+            1,
+            "technique interpose must roll perform_check exactly once",
+        )
+        self.assertEqual(
+            captured_check_types[0],
+            expected_check_type,
+            "the technique branch must roll the guardian's own cast check, "
+            "not a capability-reaction challenge",
+        )
+        self.assertEqual(
+            anima.current,
+            starting_anima - expected_cost,
+            "the guardian's anima must be debited by the technique's reactive_anima_cost",
+        )
+        self.assertEqual(
+            ally_vitals.health,
+            100,
+            "a forced clean success must zero the damage reaching the ally",
+        )

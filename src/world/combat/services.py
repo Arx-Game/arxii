@@ -6648,6 +6648,13 @@ def _try_interpose(
 
     Only the *first* eligible interposer is exercised in v1; multiple interposers
     covering the same target is a follow-up.
+
+    **Technique-guardian branch (#2207):** when the declaration carries a
+    validated protective technique (``action.focused_action_id`` set — see
+    :func:`declare_interpose`), dispatch replaces the mundane capability-reaction
+    challenge with :func:`_try_technique_interpose` (the guardian's own cast
+    check, anima cost instead of fatigue). The mundane path below is otherwise
+    unchanged.
     """
     encounter = participant.encounter
     if encounter.status != RoundStatus.RESOLVING:
@@ -6677,12 +6684,24 @@ def _try_interpose(
     # Bond combat bonus (#2021): relationship-scaled protection.
     from world.relationships.services import bond_bonus  # noqa: PLC0415
 
+    modifiers = bond_bonus(interposer, protected)
+
+    if action.focused_action_id is not None:
+        _try_technique_interpose(
+            action,
+            interposer,
+            protected,
+            pre_payload,
+            extra_modifiers=modifiers,
+        )
+        return
+
     result = dispatch_interpose(
         interposer,
         protected,
         pre_payload,
         approach=None,
-        extra_modifiers=bond_bonus(interposer, protected),
+        extra_modifiers=modifiers,
         select_best_check_rating=True,
     )
     if result is not None:
@@ -6695,6 +6714,113 @@ def _try_interpose(
             INTERPOSE_BASE_FATIGUE_COST,
             action.effort_level,
         )
+
+
+def _try_technique_interpose(
+    action: CombatRoundAction,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    pre_payload: DamagePreApplyPayload,
+    *,
+    extra_modifiers: int = 0,
+) -> None:
+    """Resolve a technique-guardian's protective reactive-trigger technique (#2207).
+
+    Runs when ``action.focused_action_id`` is set — the guardian declared a
+    known protective technique (``declare_interpose(technique=...)``) instead of
+    a plain mundane interpose. Diverges from :func:`dispatch_interpose` in three
+    ways:
+
+    1. **Affordability first.** Cost is the matched protective
+       ``ConditionTemplate.reactive_anima_cost`` (resolved via
+       :func:`~world.magic.services.targeting.protective_condition_and_flavor` —
+       the same traversal :func:`~world.magic.services.targeting.protective_flavor`
+       walks at declaration time, first protective-flavored template wins). Can't
+       pay -> the reaction fizzles silently: NO roll, NO fatigue, NO anima
+       charged, and damage proceeds unchanged to ``_try_companion_defend`` as
+       today.
+    2. **The roll is the guardian's own cast check**
+       (:func:`~world.magic.services.anima.resolve_cast_check_type`), rolled
+       against the same authored difficulty as the mundane Interpose challenge
+       (:data:`~world.combat.interpose_content.INTERPOSE_CHALLENGE_NAME`'s
+       ``ChallengeTemplate.severity``) — a technique guardian's protection is
+       spellcasting, not martial reflex, so it never touches
+       :func:`dispatch_capability_reaction`.
+    3. **Cost is anima, not fatigue.** On fire (any non-fizzle resolution) the
+       guardian's anima is debited directly (mirrors
+       :func:`~world.magic.services.effect_handlers._try_spend_reactive`'s debit
+       pattern, minus the ``ConditionInstance`` machinery — the guardian is
+       casting live, not carrying a passive buff). No
+       ``INTERPOSE_BASE_FATIGUE_COST`` is charged on this path.
+
+    Grading reuses :func:`_grade_interpose_damage` — the SAME clean/partial/fail
+    banding (including SHIELD divisor widening) the mundane path uses via
+    :func:`apply_interpose_outcome`, so a technique guardian and a mundane
+    guardian resolve identically once the check lands.
+
+    **BLINK flavor, clean success only:** relocates *protected* (the ward) to
+    *interposer*'s own current position — "you're with me now," out of harm's
+    way — via :func:`~world.areas.positioning.services.force_move_to_position`
+    (the same unchecked-move primitive
+    :func:`~world.magic.services.effect_handlers.blink_dodge` uses). Destination
+    is the guardian's own position because this branch predates #2206: once
+    ``CombatRoundAction.cast_destination`` lands, queue-time reconciliation
+    should prefer that declared destination over the guardian's own position.
+    No-op (damage still zeroed) if the guardian isn't currently placed anywhere.
+    """
+    from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+    from world.magic.services.targeting import (  # noqa: PLC0415
+        PROTECTIVE_FLAVOR_BLINK,
+        protective_condition_and_flavor,
+    )
+    from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
+
+    technique = action.focused_action
+
+    resolved = protective_condition_and_flavor(technique)
+    if resolved is None:
+        # declare_interpose already validated this at declaration time; fail
+        # safe (damage proceeds unchanged) rather than crash if authored
+        # content changed mid-encounter.
+        return
+    condition_template, flavor = resolved
+
+    # Affordability first (mirrors _try_spend_reactive's cost<=0 free-fire rule,
+    # world/magic/services/effect_handlers.py): a free-cost protective technique
+    # never needs a CharacterAnima row to fire.
+    cost = condition_template.reactive_anima_cost
+    anima = None
+    if cost > 0:
+        anima = CharacterAnima.objects.filter(character=interposer).first()
+        if anima is None or anima.current < cost:
+            return  # Fizzle: unaffordable — no roll, no cost, damage proceeds.
+
+    severity = ChallengeTemplate.objects.get(name=INTERPOSE_CHALLENGE_NAME).severity
+    check_type = resolve_cast_check_type(interposer, technique.action_template)
+    check_result = perform_check(
+        interposer,
+        check_type,
+        target_difficulty=severity,
+        extra_modifiers=extra_modifiers,
+    )
+
+    # Debit on fire (any non-fizzle resolution) — anima, not fatigue.
+    if cost > 0:
+        anima.current -= cost
+        anima.save(update_fields=["current"])
+
+    is_clean_block = _grade_interpose_damage(
+        pre_payload, check_result.success_level, interposer=interposer
+    )
+
+    if is_clean_block and flavor == PROTECTIVE_FLAVOR_BLINK:
+        from world.areas.positioning.services import force_move_to_position  # noqa: PLC0415
+
+        dest = action.participant.current_position
+        if dest is not None:
+            force_move_to_position(protected, dest)
 
 
 def _try_companion_defend(
@@ -6884,34 +7010,41 @@ def _ensure_interpose_challenges(
             )
 
 
-def apply_interpose_outcome(
+def _grade_interpose_damage(
     pre_payload: DamagePreApplyPayload,
-    result: ChallengeResolutionResult,
+    success_level: int,
     *,
     interposer: object | None = None,
-) -> None:
-    """Map a graded interpose resolution onto *pre_payload*.
+    force_clean: bool = False,
+) -> bool:
+    """Shared clean/partial/fail damage banding for BOTH interpose paths (#2207).
 
-    Mirrors :func:`~world.areas.positioning.plummet.resolve_catch`'s graded
-    branches but acts on the incoming damage amount rather than plummet state:
+    Extracted from :func:`apply_interpose_outcome` (the mundane
+    capability-reaction path) so :func:`_try_technique_interpose` (a technique
+    guardian's own cast-check resolution) grades identically without
+    duplicating the SHIELD-scaling partial-block math:
 
-    - **clean block** (``resolution_type == DESTROY`` or ``success_level > 0``):
-      the blow is fully turned aside — ``pre_payload.amount = 0``.
-    - **partial** (``success_level == 0``, not DESTROY): the interposer softens
-      but does not stop the blow — ``pre_payload.amount //= 2``. A SHIELD-role
-      interposer scales this reduction by their COVENANT_ROLE thread level (#2022):
-      the deeper the vow, the more damage the partial block absorbs.
+    - **clean block** (``force_clean`` or ``success_level > 0``): the blow is
+      fully turned aside — ``pre_payload.amount = 0``.
+    - **partial** (``success_level == 0``, not forced-clean): the interposer
+      softens but does not stop the blow — ``pre_payload.amount //= 2``. A
+      SHIELD-role interposer scales this reduction by their COVENANT_ROLE
+      thread level (#2022): the deeper the vow, the more damage the partial
+      block absorbs.
     - **failure** (``success_level < 0``): the interpose fails — no change.
-    """
-    from world.mechanics.constants import ResolutionType  # noqa: PLC0415
 
-    check_result = result.check_result
-    success_level = check_result.success_level if check_result is not None else 0
-    is_clean_block = result.resolution_type == ResolutionType.DESTROY or success_level > 0
+    ``force_clean`` lets a caller fold in a resolution-type override (the
+    mundane path's ``ChallengeResolutionResult.resolution_type == DESTROY``)
+    without leaking that concept into this shared helper's contract.
+
+    Returns ``True`` when this graded as a clean block — the technique path
+    uses this to gate BLINK ward relocation (clean success only).
+    """
+    is_clean_block = force_clean or success_level > 0
 
     if is_clean_block:
         pre_payload.amount = 0
-        return
+        return True
 
     if success_level == 0:
         # #2022: SHIELD archetype scaling — a deeper vow blocks more damage
@@ -6929,9 +7062,38 @@ def apply_interpose_outcome(
                 # blocking 67% instead of 50%.
                 divisor = int(2 + bonus)
         pre_payload.amount //= divisor
-        return
+        return False
 
     # Failure (success_level < 0) — the blow continues at full damage.
+    return False
+
+
+def apply_interpose_outcome(
+    pre_payload: DamagePreApplyPayload,
+    result: ChallengeResolutionResult,
+    *,
+    interposer: object | None = None,
+) -> None:
+    """Map a graded interpose resolution onto *pre_payload*.
+
+    Mirrors :func:`~world.areas.positioning.plummet.resolve_catch`'s graded
+    branches but acts on the incoming damage amount rather than plummet state.
+    Delegates the clean/partial/fail banding to :func:`_grade_interpose_damage`
+    (shared with the technique-guardian path, #2207) — this wrapper's only job
+    is converting a ``ChallengeResolutionResult`` into the ``(success_level,
+    force_clean)`` pair that helper expects: ``resolution_type == DESTROY``
+    forces a clean block even at ``success_level <= 0`` (a capability-authored
+    instant stop).
+    """
+    from world.mechanics.constants import ResolutionType  # noqa: PLC0415
+
+    check_result = result.check_result
+    success_level = check_result.success_level if check_result is not None else 0
+    force_clean = result.resolution_type == ResolutionType.DESTROY
+
+    _grade_interpose_damage(
+        pre_payload, success_level, interposer=interposer, force_clean=force_clean
+    )
 
 
 def dispatch_interpose(  # noqa: PLR0913 - select_best_check_rating extends existing signature
