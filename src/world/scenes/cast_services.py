@@ -464,11 +464,26 @@ def resolve_accepted_cast(
                 technique=technique,
                 scene=action_request.scene,
                 room=action_request.scene.location,
+                from_entrance=action_request.originated_as_entrance,
             )
             acknowledge_encounter_risk(encounter, target.character_sheet)
             action_request.status = ActionRequestStatus.RESOLVED
             action_request.resolved_at = timezone.now()
             action_request.save(update_fields=["status", "resolved_at"])
+        if action_request.originated_as_entrance:
+            # The declared cast hasn't resolved yet — flourish only (mirrors
+            # EntranceAction._resolve_hostile_entrance_result); Task 5's combat
+            # round-resolution hook fires the suggestion once the real success
+            # level is known (#2183).
+            from actions.definitions.social import _run_entrance_success_hooks  # noqa: PLC0415
+
+            _run_entrance_success_hooks(
+                initiator.character_sheet.character,
+                action_request.scene,
+                success_level=None,
+                target_persona_id=target.pk,
+                technique=technique,
+            )
         return None
 
     declaration = SceneActionPullDeclaration.objects.filter(request=action_request).first()
@@ -524,7 +539,60 @@ def resolve_accepted_cast(
         # anchor no longer in action, lock acquired, …) — degrade to the fizzle
         # path instead of failing the consent accept.
         result, _power_ledger, _pose = _resolve(None, _PULL_FIZZLE_NOTE)
+
+    if action_request.originated_as_entrance and result is not None:
+        _run_entrance_benign_accept_hooks(action_request, initiator, target, technique, result)
+
     return result  # result.power_ledger is already set from _resolve_cast
+
+
+def _run_entrance_benign_accept_hooks(
+    action_request: SceneActionRequest,
+    initiator: Persona,
+    target: Persona | None,
+    technique: Technique,
+    result: EnhancedSceneActionResult,
+) -> None:
+    """Fire the #2183 deferred hooks for an accepted benign entrance cast.
+
+    Mirrors ``EntranceAction._resolve_inline_entrance_result`` (the resolved-inline
+    branch), but at accept-time resolution instead of request-time: disposition
+    (non-hostile + target present, raw resolution), flourish + suggestion when the
+    resolved success level clears 0, and a benign-intervention combat join when the
+    target is another sheet's ACTIVE combatant.
+    """
+    from actions.definitions.social import _run_entrance_success_hooks  # noqa: PLC0415
+    from world.combat.cast_seed import (  # noqa: PLC0415
+        seed_or_feed_encounter_from_benign_intervention,
+    )
+    from world.npc_services.social_disposition import (  # noqa: PLC0415
+        apply_social_disposition_delta,
+    )
+
+    actor = initiator.character_sheet.character
+    main = result.action_resolution.main_result
+    success_level = main.check_result.success_level if main is not None else 0
+
+    if target is not None and not is_technique_hostile(technique):
+        apply_social_disposition_delta(actor, target.pk, result.action_resolution)
+
+    if success_level <= 0:
+        return
+
+    _run_entrance_success_hooks(
+        actor,
+        action_request.scene,
+        success_level=success_level,
+        target_persona_id=target.pk if target is not None else None,
+        technique=technique,
+    )
+
+    if target is not None and target.character_sheet_id != initiator.character_sheet_id:
+        seed_or_feed_encounter_from_benign_intervention(
+            caster_sheet=initiator.character_sheet,
+            target_sheet=target.character_sheet,
+            scene=action_request.scene,
+        )
 
 
 def _guard_area_consent(technique: Technique, *, caster: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM

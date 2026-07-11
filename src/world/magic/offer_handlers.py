@@ -4,6 +4,8 @@ from commands.exceptions import CommandError
 from world.magic.audere import PendingAudereOffer
 from world.magic.audere_majora import PendingAudereMajoraOffer
 
+_ENTRANCE_MARKER_KEY = "entrance"  # noqa: STRING_LITERAL
+
 
 class SoulfrayPendingHandler:
     """Offer handler for the soulfray consent gate on standalone technique casts.
@@ -33,6 +35,28 @@ class SoulfrayPendingHandler:
         pending = pop_pending(caller.sheet_data.pk)
         if pending is None:
             return "No pending soulfray cast."
+
+        # An entrance-originated halt (#2183) re-dispatches through the "entrance"
+        # REGISTRY action, not "cast_technique" — the flourish/suggestion/intervention
+        # hooks live only on the entrance path. The marker itself is stripped before
+        # forwarding; it isn't a real EntranceAction kwarg.
+        if pending.kwargs.get(_ENTRANCE_MARKER_KEY):
+            remaining_kwargs = {
+                k: v for k, v in pending.kwargs.items() if k != _ENTRANCE_MARKER_KEY
+            }
+            ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="entrance")
+            dispatch_player_action(
+                caller,
+                ref,
+                {
+                    **remaining_kwargs,
+                    "technique_id": pending.technique_id,
+                    "target_persona_id": pending.target_persona_id,
+                    "confirm_soulfray_risk": True,
+                },
+            )
+            return "You steel yourself and complete the casting."
+
         ref = ActionRef(
             backend=ActionBackend.SCENE_ADAPTIVE,
             registry_key="cast_technique",
