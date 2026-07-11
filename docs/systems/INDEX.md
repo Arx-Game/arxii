@@ -2656,6 +2656,48 @@ drain the well by physically visiting and performing an absorb action.
 - **Source:** `src/world/magic/models/sanctum.py`,
   `src/world/magic/services/sanctum*.py`.
 
+### Agriculture (Field + Granary crop/food system — #1864)
+A coupled pair of Room Feature kinds implementing an accrue-then-collect food
+system. The Field produces food into an `uncollected_pool` on a daily cron tick;
+a character actively collects it via a lossy check-based dispatch (mirrors
+`collect_org_income`); the Granary's level gates storage capacity; a domain's
+population consumes food weekly with shortage raising unrest and lowering
+prosperity.
+
+- **Models** (`world.agriculture.models`):
+  - `CropType` — staff-authored catalog (name, base_production, description).
+  - `FieldDetails` — OneToOne to `RoomFeatureInstance`; carries `crop_type` FK
+    and `uncollected_pool` (accrued food awaiting active collection).
+  - `GranaryDetails` — OneToOne to `RoomFeatureInstance`; no stored amount
+    (the domain-level `FoodStockpile` holds the balance; level→capacity is
+    derived at read time via `max_food_capacity(domain)`).
+  - `FoodStockpile` — OneToOne to `Domain`; `stored` balance + `last_collected_at`.
+    Lazily created via `get_or_create` in `collect_field_food`.
+  - `FoodConfig` — singleton (pk=1) tuning knobs: production rate, consumption
+    per capita, shortage penalties, granary capacity per level.
+- **Services** (`world.agriculture.services`):
+  - `field_production_tick()` — daily cron; accrues `base_production × level ×
+    multiplier` into each active Field's `uncollected_pool`.
+  - `collect_field_food(character, field_instance)` — active collection dispatch;
+    zeroes pool, rolls a Food Collection check, applies `COLLECTION_BAND_PCTS`
+    (reused from currency), lands food into domain's `FoodStockpile` (capped at
+    Granary capacity; excess is overflow/lost).
+  - `domain_consumption_tick()` — weekly cron (part of weekly rollover); each
+    domain's population consumes food; shortage raises unrest + lowers
+    prosperity; no stockpile row = perpetual shortage.
+  - `resolve_domain_for_feature(instance)` — walks `RoomProfile.area` →
+    `AreaClosure` ancestor chain to find the `Domain`.
+  - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
+    across all active Granaries in the domain's area subtree.
+- **Action:** `CollectFoodAction` (key `"collect_food"`, category
+  `"agriculture"`) — the single commit seam for telnet + web.
+- **Events:** `FOOD_COLLECTED`, `FOOD_SHORTAGE` (in `flows/constants.py`).
+- **Cron tasks:** `agriculture.field_production` (daily 24h),
+  `agriculture.domain_consumption` (weekly, via weekly rollover).
+- **Seeds:** `ensure_field_granary_kinds()` + `ensure_starter_crop_types()`
+  (Wheat/Barley/Root Vegetables with PLACEHOLDER production values).
+- **Source:** `src/world/agriculture/`
+
 ### Lab (crafting-station economy — #1234)
 Second Room Feature kind (`RoomFeatureServiceStrategy.LAB`), registered by
 `world.items`. A per-Lab durability meter gates and wears down under crafting

@@ -13,6 +13,7 @@ class RoomFeatureServiceStrategy(models.TextChoices):
     Unregistered values raise at dispatch time.
     """
 
+    FIELD = "FIELD", "Field"
     SANCTUM = "SANCTUM", "Sanctum"
     LIBRARY = "LIBRARY", "Library"
     TRAINING_ROOM = "TRAINING_ROOM", "Training Room"

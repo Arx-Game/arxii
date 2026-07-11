@@ -50,6 +50,7 @@ def weekly_rollover_task() -> None:
         ("relationship weekly reset", batch_relationship_weekly_reset),
         ("AP weekly regen", batch_ap_weekly_regen),
         ("weekly economy", _run_weekly_economy),
+        ("domain food consumption", _run_domain_food_consumption),
         ("social engagement kudos grant", _run_social_engagement_grant),
         ("idle table summary", _run_idle_table_summary),
     ]
@@ -66,6 +67,12 @@ def _run_weekly_economy() -> None:
     from world.currency.services import run_weekly_economy
 
     run_weekly_economy()
+
+
+def _run_domain_food_consumption() -> None:
+    from world.agriculture.services import domain_consumption_tick
+
+    domain_consumption_tick()
 
 
 def _run_idle_table_summary() -> None:
@@ -627,20 +634,7 @@ def register_all_tasks() -> None:
         )
     )
 
-    from world.roster.services.activity import sweep_activity_states
-
-    register_task(
-        CronDefinition(
-            task_key="roster.activity_sweep",
-            callable=sweep_activity_states,
-            interval=timedelta(days=7),
-            description=(
-                "Weekly inactivity-detection sweep (#671). Flips activity_state"
-                " ACTIVE↔INACTIVE based on decay_tier and expires HIATUS when"
-                " activity_state_until has passed."
-            ),
-        )
-    )
+    _register_agriculture_tasks()
 
     # Unified weekly rollover — orchestrates all weekly systems in sequence.
     # Advances the GameWeek, then processes votes, random scenes, skills,
@@ -690,5 +684,36 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
             callable=roll_and_echo_weather,
             interval=timedelta(hours=2),
             description="Roll regional weather (every 2 real hrs ≈ 6 IC hrs) and echo to rooms.",
+        )
+    )
+
+
+def _register_agriculture_tasks() -> None:
+    """Register agriculture + roster cron tasks (#1864, #671).
+
+    Extracted from ``register_all_tasks`` to keep that function under the
+    ruff PLR0915 statement limit.
+    """
+    from world.agriculture.services import field_production_tick
+    from world.roster.services.activity import sweep_activity_states
+
+    register_task(
+        CronDefinition(
+            task_key="agriculture.field_production",
+            callable=field_production_tick,
+            interval=timedelta(hours=24),
+            description="Daily Field production: accrue food into uncollected pools.",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="roster.activity_sweep",
+            callable=sweep_activity_states,
+            interval=timedelta(days=7),
+            description=(
+                "Weekly inactivity-detection sweep (#671). Flips activity_state"
+                " ACTIVE↔INACTIVE based on decay_tier and expires HIATUS when"
+                " activity_state_until has passed."
+            ),
         )
     )
