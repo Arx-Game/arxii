@@ -1019,15 +1019,36 @@ point calls all nine sub-builders:
 | Aegis Field | Aegis Field | `absorb_pool` (priority 10) | DAMAGE_PRE_APPLY; mutation-only; overflow lands |
 | Mirror Ward | Mirror Ward | `reflect_damage` (priority 20) | DAMAGE_PRE_APPLY; mutation-only; bounces via `bypass_pre_apply` |
 | Phase Step | Phase Step | `blink_dodge` (priority 30) | DAMAGE_PRE_APPLY; mutation-only; moves bearer on success |
-| Phase Jump | Phase Jump | `move_position_on_condition` adapter | CONDITION_APPLIED; placeholder destination (follow-up: #1584 note) |
-| Barricade | Barricade | `create_obstacle_on_condition` adapter | CONDITION_APPLIED; placeholder destination (follow-up: #1584 note) |
+| Phase Jump | Phase Jump | `move_position_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
+| Barricade | Barricade | `create_obstacle_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 | Ghostform | Ghostform | intangibility category only (`grants_intangibility=True`) | `ConditionCategory`; intangibility gate via `is_untargetable` |
 | Earthmeld | Earthmeld | intangibility category only (1-round duration) | `ConditionCategory`; as Ghostform |
-| Force Grip | Force Grip | `move_position_on_condition` adapter (ENEMY target) | CONDITION_APPLIED; placeholder destination (follow-up: #1584 note) |
+| Force Grip | Force Grip | `move_position_on_condition` adapter (ENEMY target) | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 
-**Placeholder-destination follow-up:** Phase Jump, Barricade, and Force Grip embed
-`destination_position_id=0` at seed time; runtime destination selection (player
-picks a position) is deferred to a follow-up issue.
+**Runtime destination selection (#2206 — supersedes the old placeholder-destination
+follow-up note):** Phase Jump, Barricade, and Force Grip still embed
+`destination_position_id=0` at seed time (`ensure_effect_palette_content()`), but that
+value is now only ever a fallback — for **combat**, the player picks a real position at
+declaration time. `CombatRoundAction` carries three nullable FKs to `areas.Position`:
+`cast_destination` (Phase Jump / Force Grip — single point) and `cast_position_a`/
+`cast_position_b` (Barricade — an endpoint pair). `resolve_cast_position_params`
+(`world/combat/services.py`) validates the declared position(s) against the encounter's
+own battlefield room and the technique's `reach`/`reach_hops` at declaration; a foreign-room
+position or a half-supplied pair is rejected outright. `position_target_shape(technique)`
+(`services/targeting.py`) classifies which shape (`pair`/`single`/`none`) a technique's
+effects consume, by walking its applied conditions' reactive-trigger flow steps for a
+`create_obstacle_on_condition`-family (pair) or `move_position_on_condition`-family
+(single) handler; this is exposed on available combat actions
+(`actions/player_interface.py` → `RoundActionSerializer.position_target_shape`) so the
+frontend picker knows whether to collect one point or two. See `docs/systems/INDEX.md`'s
+Combat section ("Cast-position targeting") for the full declaration → resolver →
+condition-handler wiring, including the shared-conditions root-cause fix
+(`_stamp_cast_positions` stamps the FKs onto the `ConditionInstance` before
+`CONDITION_APPLIED` fires, replacing the old post-hoc `_apply_position_params_to_instances`
+helper and also fixing the non-combat live path). **Non-combat web casting still has no
+position picker** — telnet's `position=`/`position_a=,position_b=` grammar (#2019,
+`commands/combat.py`) is the only non-combat-web-adjacent entry point today, and that
+grammar is what #2206 made actually reach validation/persistence in combat.
 
 **Handlers and adapters** (`src/world/magic/services/effect_handlers.py`):
 

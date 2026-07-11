@@ -34,6 +34,7 @@ import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import type { OutcomeDisplayRow } from './api';
 import type { components } from '@/generated/api';
+import type { CastPosition, PositionTargetShape } from '@/actions/types';
 
 type ConditionInstance = components['schemas']['ConditionInstance'];
 
@@ -45,6 +46,16 @@ export interface CombatTurnPanelProps {
   encounterId: number;
   characterId: number;
   characterSheetId: number;
+  /**
+   * Cast-time position selection, lifted to CombatScenePage (#2206) so this
+   * panel's YourTurn section and the sibling tactical-map tab share it.
+   * Optional — forwarded to YourTurn, which falls back to local state when
+   * the caller (e.g. tests rendering CombatTurnPanel standalone) omits it.
+   */
+  castPosition?: CastPosition;
+  onCastPositionChange?: (next: CastPosition) => void;
+  /** Forwarded to YourTurn — reports the selected technique's position shape. */
+  onPositionShapeChange?: (shape: PositionTargetShape) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +89,9 @@ export function CombatTurnPanel({
   encounterId,
   characterId,
   characterSheetId,
+  castPosition,
+  onCastPositionChange,
+  onPositionShapeChange,
 }: CombatTurnPanelProps) {
   // Encounter state
   const {
@@ -270,6 +284,9 @@ export function CombatTurnPanel({
           availableActions={combatActions}
           readOnly={false}
           encounter={encounter}
+          castPosition={castPosition}
+          onCastPositionChange={onCastPositionChange}
+          onPositionShapeChange={onPositionShapeChange}
         />
       ) : (
         <p className="text-xs text-muted-foreground">You are observing this encounter.</p>

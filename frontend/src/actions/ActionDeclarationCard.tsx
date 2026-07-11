@@ -26,9 +26,15 @@ import type { PlayerAction } from '@/scenes/actionTypes';
 import { useTechnique, useCharacterResonances } from '@/magic/queries';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import type { ApplicablePullsRequest } from '@/magic/types';
-import type { ActionContext, EffortLevel, TargetOption } from './types';
-import type { PositionAdjacencyItem } from '@/combat/types';
-import { isTargetReachable } from '@/combat/reach';
+import type {
+  ActionContext,
+  CastPosition,
+  EffortLevel,
+  PositionTargetShape,
+  TargetOption,
+} from './types';
+import type { PositionAdjacencyItem, PositionNode } from '@/combat/types';
+import { isPositionReachable, isTargetReachable } from '@/combat/reach';
 
 // ---------------------------------------------------------------------------
 // Public props contract
@@ -61,6 +67,20 @@ export interface ActionDeclarationCardProps {
   actorPositionId?: number | null;
   /** The encounter's position adjacency graph. */
   positionAdjacency?: PositionAdjacencyItem[];
+  /**
+   * Cast-time position-targeting props (#2206). When the selected technique's
+   * `positionTargetShape` is "single" or "pair", the card renders a Position
+   * group. `positions` is the same position-node source `CombatTacticalMap`
+   * uses (`EncounterDetail.position_nodes`), threaded down by the caller.
+   */
+  /** The selected technique's cast-time position-targeting shape. */
+  positionTargetShape?: PositionTargetShape;
+  /** The encounter's position nodes (id/name/kind) to pick from. */
+  positions?: PositionNode[];
+  /** Lifted position selection state (owned by the caller, e.g. YourTurn). */
+  castPosition?: CastPosition;
+  /** Setter for the lifted position selection state. */
+  onCastPositionChange?: (next: CastPosition) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +331,170 @@ function TargetPicker(props: TargetPickerProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Position picker sub-component (#2206) — cast-time position targeting
+// ---------------------------------------------------------------------------
+
+/** One position button — position name + kind label, styled like TargetButton. */
+function PositionSlotButton({
+  node,
+  selected,
+  disabled,
+  title,
+  onSelect,
+}: {
+  node: PositionNode;
+  selected: boolean;
+  disabled?: boolean;
+  title?: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title={title}
+      onClick={onSelect}
+      className={cn(
+        'rounded border px-2.5 py-1 text-left text-xs font-medium transition-colors',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        selected
+          ? 'border-primary bg-primary/10 text-primary'
+          : 'border-border bg-background text-foreground hover:border-primary/50'
+      )}
+    >
+      {node.name} <span className="text-[10px] text-muted-foreground">({node.kind})</span>
+    </button>
+  );
+}
+
+interface PositionPickerProps {
+  shape: PositionTargetShape;
+  positions: PositionNode[];
+  castPosition: CastPosition;
+  onCastPositionChange: (next: CastPosition) => void;
+  disabled?: boolean;
+  /** Reach pre-filter — technique's reach constraint (#532), single-shape only. */
+  reach?: string | null;
+  actorPositionId?: number | null;
+  positionAdjacency?: PositionAdjacencyItem[];
+}
+
+function PositionPicker({
+  shape,
+  positions,
+  castPosition,
+  onCastPositionChange,
+  disabled,
+  reach,
+  actorPositionId,
+  positionAdjacency,
+}: PositionPickerProps) {
+  if (positions.length === 0) {
+    return <p className="text-xs text-muted-foreground">No positions available.</p>;
+  }
+
+  if (shape === 'single') {
+    const hasSelection = castPosition.destinationId !== undefined;
+    return (
+      <div className="space-y-1" data-testid="position-picker-single">
+        <div className="flex flex-wrap gap-1.5">
+          {positions.map((node) => {
+            // Reach pre-filter (#2206): disable positions out of range for the technique.
+            const reachable = isPositionReachable(
+              reach,
+              actorPositionId,
+              node.id,
+              positionAdjacency ?? []
+            );
+            const isDisabledByReach = !reachable;
+            return (
+              <PositionSlotButton
+                key={node.id}
+                node={node}
+                selected={castPosition.destinationId === node.id}
+                disabled={disabled || isDisabledByReach}
+                title={isDisabledByReach ? 'Out of reach for this technique' : undefined}
+                onSelect={() => onCastPositionChange({ ...castPosition, destinationId: node.id })}
+              />
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          disabled={disabled || !hasSelection}
+          onClick={() => onCastPositionChange({ ...castPosition, destinationId: undefined })}
+          className={cn(
+            'text-[11px] underline-offset-2 transition-colors',
+            hasSelection
+              ? 'text-muted-foreground hover:text-foreground hover:underline'
+              : 'cursor-not-allowed text-muted-foreground/50'
+          )}
+        >
+          Clear position
+        </button>
+      </div>
+    );
+  }
+
+  // shape === 'pair' — two labelled slots (A/B); no reach pre-filter (#2206 brief §Step 2).
+  // A barrier needs two different endpoints — disable whichever node is already picked
+  // in the OTHER slot so the pair can't collapse onto a single position.
+  const renderSlot = (
+    label: string,
+    selectedId: number | undefined,
+    otherSelectedId: number | undefined,
+    onPick: (id: number) => void
+  ) => (
+    <div className="space-y-1">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {positions.map((node) => {
+          const isDisabledByPair = otherSelectedId !== undefined && node.id === otherSelectedId;
+          return (
+            <PositionSlotButton
+              key={node.id}
+              node={node}
+              selected={selectedId === node.id}
+              disabled={disabled || isDisabledByPair}
+              title={isDisabledByPair ? 'Already selected as the other endpoint' : undefined}
+              onSelect={() => onPick(node.id)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const hasSelection = castPosition.pairA !== undefined || castPosition.pairB !== undefined;
+
+  return (
+    <div className="space-y-2" data-testid="position-picker-pair">
+      {renderSlot('Position A', castPosition.pairA, castPosition.pairB, (id) =>
+        onCastPositionChange({ ...castPosition, pairA: id })
+      )}
+      {renderSlot('Position B', castPosition.pairB, castPosition.pairA, (id) =>
+        onCastPositionChange({ ...castPosition, pairB: id })
+      )}
+      <button
+        type="button"
+        disabled={disabled || !hasSelection}
+        onClick={() =>
+          onCastPositionChange({ ...castPosition, pairA: undefined, pairB: undefined })
+        }
+        className={cn(
+          'text-[11px] underline-offset-2 transition-colors',
+          hasSelection
+            ? 'text-muted-foreground hover:text-foreground hover:underline'
+            : 'cursor-not-allowed text-muted-foreground/50'
+        )}
+      >
+        Clear positions
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // I/C chip sub-component
 // ---------------------------------------------------------------------------
 
@@ -403,6 +587,10 @@ export function ActionDeclarationCard({
   reach,
   actorPositionId,
   positionAdjacency,
+  positionTargetShape,
+  positions,
+  castPosition,
+  onCastPositionChange,
 }: ActionDeclarationCardProps) {
   // Fetch available techniques for this character.
   const { data, isLoading } = useTQQuery({
@@ -558,6 +746,22 @@ export function ActionDeclarationCard({
           positionAdjacency={positionAdjacency}
         />
       </Section>
+
+      {/* Position section (#2206) — only when the selected technique targets positions */}
+      {hasTechnique && positionTargetShape != null && positionTargetShape !== 'none' && (
+        <Section label="Position">
+          <PositionPicker
+            shape={positionTargetShape}
+            positions={positions ?? []}
+            castPosition={castPosition ?? {}}
+            onCastPositionChange={onCastPositionChange ?? (() => {})}
+            disabled={readOnly}
+            reach={reach}
+            actorPositionId={actorPositionId}
+            positionAdjacency={positionAdjacency}
+          />
+        </Section>
+      )}
 
       {/* Effort section */}
       <Section label="Effort">

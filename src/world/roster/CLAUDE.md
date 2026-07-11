@@ -52,7 +52,10 @@ This file provides specific guidance for working with the roster system in Arx I
 
 ### Extended Models (evennia_extensions/models.py)
 - **PlayerData**: Extends AccountDB with player preferences and session tracking
-- **PlayerMail**: Mail system with tenure targeting ("mail Ariel" → routes to current player)
+- **PlayerMail**: Letters (mail) with tenure-to-tenure targeting, routed by `RosterTenure` so the
+  current player of a character receives it regardless of who that is. Web-only surface
+  (`/profile/mail` + in-scene quick-compose); no telnet mail command exists or is planned
+  (ADR-0116).
 - **PlayerAllowList/PlayerBlockList**: Social lists for player communication
 
 ## Command Implementation Guidelines
@@ -78,10 +81,15 @@ When implementing commands like `@ic`, `@characters`, `@apply`:
 - System updates PlayerData.current_character field
 - Must verify character is available via active RosterTenure
 
-### Mail System
-- Players send "mail Ariel" targeting character names
-- System routes to current player via RosterTenure.recipient_tenure
+### Mail System (Letters)
+- Web-only: players compose at `/profile/mail`, or quick-compose in-scene from a character's
+  card (pre-filled `ComposeMailForm` via `SendLetterDialog`, #2160) — no telnet mail command
+  exists; telnet parity is deliberately out of scope (ADR-0116).
+- Players target a character name; the system routes to that character's current player via
+  `RosterTenure.recipient_tenure`
 - Maintains character context while preserving player anonymity
+- Recipient gets a `MAIL_ARRIVED` websocket push (tenure-display-only payload) plus an unread
+  badge/count in the web header; `mark-read`/`unread-count` are `PlayerMailViewSet` actions
 
 ### Trust-Based Permissions
 - Approval permissions are tied to specific characters, stories, or domains

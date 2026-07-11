@@ -101,11 +101,18 @@ Resolving this split is **#2156**, the structural core of the slate.
   (ADR-0115) rather than an accident: `WeeklyVote` is wired end-to-end — `VoteButton` on
   every `PoseUnit` and `VotesPanel` on `/xp-kudos` — and the highlight reel re-ranks on
   all-time vote count first (reaction count as tie-break), not reaction count alone.
-- **`world.journals` (diary/praise-retort, weekly XP) has zero web frontend**; telnet
-  (`journal write`) is complete. The `/journal` route is a decoy — it's the *missions*
-  ledger, an unrelated system sharing the name.
-- **No messenger concept exists**; `PlayerMail` compose/inbox is at `/profile/mail` with no
-  in-scene compose, no unread badge, no arrival push.
+- [FIXED #2160] `world.journals` (diary/praise-retort, weekly XP) **had zero web frontend**;
+  telnet (`journal write`) was complete but the `/journal` route was a decoy — it's the
+  *missions* ledger, an unrelated system sharing the name. The missions ledger moved to
+  `/missions/journal`, freeing `/journal`/`/journals` for a real composer/feed page plus an
+  in-scene sidebar `JournalTab` quick-compose — see `src/world/journals/AGENT_GLOSSARY.md` for
+  the now-disambiguated "journal" homonym across journals/missions/clues.
+- [FIXED #2160] **No messenger concept exists** remains true by design (see ADR-0116 — an
+  in-fiction delivery layer is a deliberately deferred, distinct system), but the *web*
+  `PlayerMail` gaps are closed: an in-scene quick-compose (`SendLetterDialog` pre-filling
+  `ComposeMailForm`) from the character card, an `UnreadMailBadge` + arrival toast in the
+  header driven by a new `MAIL_ARRIVED` websocket push, and mark-read-on-open. Compose/inbox
+  stays at `/profile/mail`.
 - Latent gotcha: `KudosTransaction.awarded_by` serializes raw `username`; all callers pass
   `None` by convention only — no structural guard (ADR-0033 risk if a future caller passes
   an account).

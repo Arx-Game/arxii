@@ -492,6 +492,9 @@ class RoundActionSerializer(serializers.ModelSerializer):
             "combo_upgrade",
             "is_ready",
             "maneuver",
+            "cast_destination",
+            "cast_position_a",
+            "cast_position_b",
         ]
 
 

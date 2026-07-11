@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert, Check, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -10,10 +11,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { fetchPendingRequests, fetchPendingTargets, respondToRequest } from '../actionQueries';
-import type { ActionRequest, PendingActionTarget, StakesSummary } from '../actionTypes';
+import type {
+  ActionRequest,
+  ActionRequestResponse,
+  PendingActionTarget,
+  StakesSummary,
+} from '../actionTypes';
 
 interface Props {
   sceneId: string;
+}
+
+// Shared by respond and respondTarget's onSuccess — an NPC disposition shift
+// (#2158) may follow either the primary or an additional-target accept.
+function toastDispositionMessage(data: ActionRequestResponse) {
+  if (data.result?.disposition_message) {
+    toast.success(data.result.disposition_message);
+  }
 }
 
 /**
@@ -194,7 +208,8 @@ export function ConsentPrompt({ sceneId }: Props) {
       blacklist_actor?: boolean;
     }) =>
       respondToRequest(sceneId, requestId, { accept, difficulty, resist_effort, blacklist_actor }),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      toastDispositionMessage(data);
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
     },
@@ -229,7 +244,8 @@ export function ConsentPrompt({ sceneId }: Props) {
         blacklist_actor,
         target_persona_id: targetPersonaId,
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      toastDispositionMessage(data);
       queryClient.invalidateQueries({ queryKey: ['pending-targets', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
     },

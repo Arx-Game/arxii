@@ -1,5 +1,14 @@
 import { type ReactNode, useCallback, useState } from 'react';
-import { Activity, Backpack, BookOpen, Calendar, MapPin, Scroll, Users } from 'lucide-react';
+import {
+  Activity,
+  Backpack,
+  BookOpen,
+  Calendar,
+  MapPin,
+  PenLine,
+  Scroll,
+  Users,
+} from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface SidebarTabPanelProps {
@@ -14,6 +23,8 @@ interface SidebarTabPanelProps {
   statusPanel?: ReactNode;
   /** #1446 read-only carried-items tab — the sheet describes; the scene does. */
   inventoryPanel?: ReactNode;
+  /** #2160 journal tab — compose + the player's 5 most recent entries. */
+  journalPanel?: ReactNode;
   /**
    * Label for the room tab. Defaults to ``"Room"`` but the parent can
    * pass the currently-focused subject (a character or item name) so the
@@ -32,6 +43,7 @@ export function SidebarTabPanel({
   presencePanel,
   statusPanel,
   inventoryPanel,
+  journalPanel,
   roomTabLabel,
 }: SidebarTabPanelProps) {
   const [activeTab, setActiveTab] = useState('room');
@@ -51,7 +63,7 @@ export function SidebarTabPanel({
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col">
-      <TabsList className="mx-2 mt-2 grid w-auto grid-cols-7">
+      <TabsList className="mx-2 mt-2 grid w-auto grid-cols-8">
         <TabsTrigger value="room" className="gap-1 text-xs" title={label}>
           <MapPin className="h-3 w-3 shrink-0" />
           <span className="inline-block max-w-[8rem] truncate">{label}</span>
@@ -79,6 +91,10 @@ export function SidebarTabPanel({
         <TabsTrigger value="inventory" className="gap-1 text-xs">
           <Backpack className="h-3 w-3" />
           Items
+        </TabsTrigger>
+        <TabsTrigger value="journal" className="gap-1 text-xs">
+          <PenLine className="h-3 w-3" />
+          Journal
         </TabsTrigger>
       </TabsList>
       <TabsContent value="room" className="mt-0 flex-1 overflow-y-auto">
@@ -114,6 +130,13 @@ export function SidebarTabPanel({
       <TabsContent value="inventory" className="mt-0 flex-1 overflow-y-auto p-3">
         {activatedTabs.has('inventory')
           ? (inventoryPanel ?? <p className="text-sm text-muted-foreground">Nothing carried.</p>)
+          : null}
+      </TabsContent>
+      <TabsContent value="journal" className="mt-0 flex-1 overflow-y-auto">
+        {activatedTabs.has('journal')
+          ? (journalPanel ?? (
+              <p className="p-3 text-sm text-muted-foreground">No journal to show.</p>
+            ))
           : null}
       </TabsContent>
     </Tabs>

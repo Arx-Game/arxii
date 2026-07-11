@@ -213,9 +213,21 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
 - `GET /api/roster/tenures/` - List tenures with search by character name
 - `GET /api/roster/tenures/mine/` - Current user's active tenures (for dropdown selection)
 
-### Mail (`/api/roster/mail/`)
+### Mail (`/api/roster/mail/`) — the letters surface (#2160, ADR-0116)
 - `GET /api/roster/mail/` - List received mail (newest first)
-- `POST /api/roster/mail/` - Send mail (validates sender_tenure ownership)
+- `POST /api/roster/mail/` - Send mail (validates sender_tenure ownership); fires
+  `notify_mail_arrived(recipient_tenure, mail)` via `transaction.on_commit`, pushing a
+  `WebsocketMessageType.MAIL_ARRIVED` payload (`mail_id`/`sender_display`/`subject` — no
+  account identifiers) to the recipient's account. Fail-soft: an offline recipient's
+  `account.msg` is a harmless no-op; a push failure never blocks the send.
+- `POST /api/roster/mail/{id}/mark-read/` - Mark this mail read (idempotent; recipient-only,
+  enforced by the scoped queryset in `get_object()`)
+- `GET /api/roster/mail/unread-count/` - Count of unread, unarchived mail across the
+  requester's tenures (`UnreadMailCountSerializer`)
+
+Web-only surface: compose at `/profile/mail` or in-scene via `SendLetterDialog` (pre-fills
+`ComposeMailForm` from the character card quick actions), unread badge in the header
+(`UnreadMailBadge`), mark-read-on-open in `ReceivedMailList`. No telnet mail command.
 
 ### Families (`/api/roster/families/`)
 - `GET /api/roster/families/` - List playable families

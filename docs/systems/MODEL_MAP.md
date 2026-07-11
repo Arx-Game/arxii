@@ -1647,6 +1647,379 @@
   - entry -> codex.CodexEntry [FK]
 
 
+## world.combat
+
+### CombatEncounter
+**Foreign Keys:**
+  - scene -> scenes.Scene [FK]
+  - room -> objects.ObjectDB [FK] (nullable)
+  - escalation_curve -> combat.EscalationCurve [FK] (nullable)
+  - duel_winner -> character_sheets.CharacterSheet [FK] (nullable)
+  - story_beat -> stories.Beat [FK] (nullable)
+**Pointed to by:**
+  - companion_orders <- companions.CompanionOrder
+  - covenant_rite_instances <- covenants.CovenantRiteInstance
+  - opponents <- combat.CombatOpponent
+  - participants <- combat.CombatParticipant
+  - combat_pulls <- combat.CombatPull
+  - challenge_declarations <- combat.RoundChallengeDeclaration
+  - clashes <- combat.Clash
+  - clash_declarations <- combat.ClashContributionDeclaration
+  - risk_acknowledgements <- combat.EncounterRiskAcknowledgement
+  - dramatic_surges <- combat.DramaticSurgeRecord
+  - duel_challenge <- combat.DuelChallenge
+  - threat_records <- combat.ThreatRecord
+  - engagement_locks <- combat.EngagementLock
+  - battle_places <- battles.BattlePlace
+
+### ThreatPool
+**Pointed to by:**
+  - entries <- combat.ThreatPoolEntry
+  - opponents <- combat.CombatOpponent
+  - bossphase_set <- combat.BossPhase
+  - creature_templates <- combat.CreatureTemplate
+  - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
+
+### ThreatPoolEntry
+**Foreign Keys:**
+  - pool -> combat.ThreatPool [FK]
+  - damage_type -> conditions.DamageType [FK] (nullable)
+  - on_hit_consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - defense_check_type -> checks.CheckType [FK] (nullable)
+  - clash_resolution_pool -> actions.ConsequencePool [FK] (nullable)
+  - clash_per_round_pool -> actions.ConsequencePool [FK] (nullable)
+  - conditions_applied -> conditions.ConditionTemplate [M2M]
+  - effect_properties -> mechanics.Property [M2M]
+
+### CombatOpponent
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - threat_pool -> combat.ThreatPool [FK] (nullable)
+  - persona -> scenes.Persona [FK] (nullable)
+  - portrait -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - objectdb -> objects.ObjectDB [FK] (nullable)
+  - mirrors_participant -> combat.CombatParticipant [FK] (nullable)
+  - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
+  - barrier_break_pool -> actions.ConsequencePool [FK] (nullable)
+  - aftermath_pool -> actions.ConsequencePool [FK] (nullable)
+  - wall_breaker_combo -> combat.ComboDefinition [FK] (nullable)
+**Pointed to by:**
+  - phases <- combat.BossPhase
+  - action_targets <- combat.CombatRoundActionTarget
+  - round_actions <- combat.CombatOpponentAction
+  - incoming_opponent_attacks <- combat.CombatOpponentAction
+  - clashes <- combat.Clash
+  - threat_records <- combat.ThreatRecord
+  - engagement_locks <- combat.EngagementLock
+
+### BossPhase
+**Foreign Keys:**
+  - threat_pool -> combat.ThreatPool [FK] (nullable)
+  - reinforcement_template -> combat.CreatureTemplate [FK] (nullable)
+  - opponent -> combat.CombatOpponent [FK]
+
+### ComboDefinition
+**Foreign Keys:**
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
+  - required_clash_window_condition -> conditions.ConditionTemplate [FK] (nullable)
+**Pointed to by:**
+  - wall_breaker_for_opponents <- combat.CombatOpponent
+  - slots <- combat.ComboSlot
+  - learnings <- combat.ComboLearning
+  - signatures <- combat.ComboSignature
+  - round_actions <- combat.CombatRoundAction
+
+### ComboSlot
+**Foreign Keys:**
+  - combo -> combat.ComboDefinition [FK]
+  - required_action_type -> magic.EffectType [FK]
+  - resonance_requirement -> magic.Resonance [FK] (nullable)
+
+### ComboLearning
+**Foreign Keys:**
+  - combo -> combat.ComboDefinition [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+
+### ComboSignature
+**Foreign Keys:**
+  - covenant -> covenants.Covenant [FK]
+  - combo -> combat.ComboDefinition [FK]
+
+### CombatParticipant
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - covenant_role -> covenants.CovenantRole [FK] (nullable)
+**Pointed to by:**
+  - mirror_surface <- combat.CombatOpponent
+  - round_actions <- combat.CombatRoundAction
+  - incoming_attacks <- combat.CombatOpponentAction
+  - combat_pulls <- combat.CombatPull
+  - challenge_declarations <- combat.RoundChallengeDeclaration
+  - clash_declarations <- combat.ClashContributionDeclaration
+  - dramatic_surges <- combat.DramaticSurgeRecord
+  - threat_records <- combat.ThreatRecord
+  - engagement_locks <- combat.EngagementLock
+
+### CombatRoundAction
+**Foreign Keys:**
+  - fury_commitment -> magic.FuryTier [FK] (nullable)
+  - fury_anchor -> character_sheets.CharacterSheet [FK] (nullable)
+  - participant -> combat.CombatParticipant [FK]
+  - focused_action -> magic.Technique [FK] (nullable)
+  - focused_opponent_target -> combat.CombatOpponent [FK] (nullable)
+  - focused_ally_target -> combat.CombatParticipant [FK] (nullable)
+  - item_instance -> items.ItemInstance [FK] (nullable)
+  - physical_passive -> magic.Technique [FK] (nullable)
+  - social_passive -> magic.Technique [FK] (nullable)
+  - mental_passive -> magic.Technique [FK] (nullable)
+  - combo_upgrade -> combat.ComboDefinition [FK] (nullable)
+  - cast_destination -> areas.Position [FK] (nullable)
+  - cast_position_a -> areas.Position [FK] (nullable)
+  - cast_position_b -> areas.Position [FK] (nullable)
+  - interaction -> scenes.Interaction [FK] (nullable)
+**Pointed to by:**
+  - extra_targets <- combat.CombatRoundActionTarget
+
+### CombatRoundActionTarget
+**Foreign Keys:**
+  - action -> combat.CombatRoundAction [FK]
+  - opponent -> combat.CombatOpponent [FK] (nullable)
+
+### CombatOpponentAction
+**Foreign Keys:**
+  - opponent -> combat.CombatOpponent [FK]
+  - threat_entry -> combat.ThreatPoolEntry [FK]
+  - targets -> combat.CombatParticipant [M2M]
+  - opponent_targets -> combat.CombatOpponent [M2M]
+
+### CombatPull
+**Foreign Keys:**
+  - participant -> combat.CombatParticipant [FK]
+  - encounter -> combat.CombatEncounter [FK]
+  - resonance -> magic.Resonance [FK]
+  - threads -> magic.Thread [M2M]
+**Pointed to by:**
+  - resolved_effects <- combat.CombatPullResolvedEffect
+
+### CombatPullResolvedEffect
+**Foreign Keys:**
+  - pull -> combat.CombatPull [FK]
+  - source_thread -> magic.Thread [FK]
+  - granted_capability -> conditions.CapabilityType [FK] (nullable)
+  - resistance_damage_type -> conditions.DamageType [FK] (nullable)
+
+### RoundChallengeDeclaration
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - participant -> combat.CombatParticipant [FK]
+  - challenge_instance -> mechanics.ChallengeInstance [FK]
+  - challenge_approach -> mechanics.ChallengeApproach [FK]
+
+### StrainConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### ClashConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### FleeConfig
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+  - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### FleeTierModifier
+
+### EncounterAftermathRule
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+  - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+
+### EncounterOutcomeMapping
+**Foreign Keys:**
+  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+
+### OpponentTierTemplate
+
+### CreatureTemplate
+**Foreign Keys:**
+  - threat_pool -> combat.ThreatPool [FK] (nullable)
+**Pointed to by:**
+  - bossphase_set <- combat.BossPhase
+  - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
+  - phase_templates <- combat.CreaturePhaseTemplate
+
+### CreaturePhaseTemplate
+**Foreign Keys:**
+  - threat_pool -> combat.ThreatPool [FK] (nullable)
+  - reinforcement_template -> combat.CreatureTemplate [FK] (nullable)
+  - creature_template -> combat.CreatureTemplate [FK]
+**Pointed to by:**
+  - break_bar <- combat.BreakBarConfig
+
+### BreakBarConfig
+**Foreign Keys:**
+  - boss_phase -> combat.CreaturePhaseTemplate [OneToOne]
+
+### RiskScalingModifier
+
+### StakesLevelRequirement
+
+### StakesEscalationModifier
+**Foreign Keys:**
+  - default_curve -> combat.EscalationCurve [FK] (nullable)
+
+### EncounterScalingConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### Clash
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - npc_opponent -> combat.CombatOpponent [FK]
+  - initiator -> character_sheets.CharacterSheet [FK] (nullable)
+  - resolution_consequence_pool -> actions.ConsequencePool [FK]
+  - per_round_consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - triggering_threat_entry -> combat.ThreatPoolEntry [FK] (nullable)
+**Pointed to by:**
+  - rounds <- combat.ClashRound
+  - declarations <- combat.ClashContributionDeclaration
+  - engagement_locks <- combat.EngagementLock
+
+### ClashRound
+**Foreign Keys:**
+  - clash -> combat.Clash [FK]
+**Pointed to by:**
+  - contributions <- combat.ClashContribution
+
+### ClashContribution
+**Foreign Keys:**
+  - clash_round -> combat.ClashRound [FK]
+  - character -> character_sheets.CharacterSheet [FK]
+  - technique -> magic.Technique [FK] (nullable)
+  - check_outcome -> traits.CheckOutcome [FK]
+  - interaction -> scenes.Interaction [FK] (nullable)
+
+### ClashContributionDeclaration
+**Foreign Keys:**
+  - fury_commitment -> magic.FuryTier [FK] (nullable)
+  - fury_anchor -> character_sheets.CharacterSheet [FK] (nullable)
+  - encounter -> combat.CombatEncounter [FK]
+  - participant -> combat.CombatParticipant [FK]
+  - clash -> combat.Clash [FK]
+  - technique -> magic.Technique [FK]
+
+### EncounterRiskAcknowledgement
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+
+### EscalationCurve
+**Foreign Keys:**
+  - pace_check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - encounters <- combat.CombatEncounter
+
+### DramaticSurgeRecord
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - participant -> combat.CombatParticipant [FK]
+  - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+
+### DuelChallenge
+**Foreign Keys:**
+  - challenger_sheet -> character_sheets.CharacterSheet [FK]
+  - challenged_sheet -> character_sheets.CharacterSheet [FK]
+  - room -> objects.ObjectDB [FK] (nullable)
+  - resulting_encounter -> combat.CombatEncounter [FK] (nullable)
+
+### ThreatRecord
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - opponent -> combat.CombatOpponent [FK]
+  - participant -> combat.CombatParticipant [FK]
+
+### EngagementLock
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - opponent -> combat.CombatOpponent [FK]
+  - participant -> combat.CombatParticipant [FK]
+  - clash -> combat.Clash [FK] (nullable)
+  - break_in_consequence_pool -> actions.ConsequencePool [FK] (nullable)
+
+### Service Functions
+- `accumulate_threat(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant', amount: 'int') -> 'None' — Increment the threat value for an (opponent, participant) pairing (#2020).`
+- `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' — Idempotently record that a character acknowledged the encounter's risk (#777).`
+- `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`
+- `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Create a CombatParticipant linking a PC to an encounter.`
+- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
+- `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
+- `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' — Reduce ``damage`` by role-gated equipped-armor soak (#1174).`
+- `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' — Add fatigue to the pool.`
+- `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' — Map a graded interpose resolution onto *pre_payload*.`
+- `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' — Subtract attack-cover from damage.`
+- `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' — Assess break-bar damage for all boss opponents with a break bar.`
+- `begin_declaration_phase(encounter: 'CombatEncounter') -> 'None' — Advance round_number by 1 and set status to DECLARING.`
+- `check_and_advance_boss_phase(opponent: 'CombatOpponent') -> 'BossPhase | None' — Check whether a boss should advance to the next phase and apply it.`
+- `classify_source(source: object | None) -> flows.events.payloads.DamageSource — Return a ``DamageSource`` describing *source*'s origin.`
+- `cleanup_completed_encounter(encounter: 'CombatEncounter') -> 'None' — Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs`
+- `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None) -> world.checks.types.ModifierBreakdown — Aggregate all modifier contributions for a check into a ModifierBreakdown.`
+- `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent') -> 'dict[str, list]' — Return the combatants *actor* may attack, grouped by kind.`
+- `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' — Single completion seam for round resolution and the GM end endpoint (#876).`
+- `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' — Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.`
+- `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' — Declare a PC's action for the current round.`
+- `declare_clash_contribution(*, participant: 'CombatParticipant', clash: 'Clash', action_slot: 'str', technique: 'Technique', strain_commitment: 'int') -> 'ClashContributionDeclaration' — Write (or overwrite) a PC's clash contribution declaration for the current round.`
+- `declare_cover(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a covering maneuver for an ally -- passives-only, auto-ready.`
+- `declare_demoralize(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a demoralizing maneuver — break an opponent's nerve, auto-ready (#2015).`
+- `declare_flee(participant: 'CombatParticipant') -> 'CombatRoundAction' — Declare intent to flee -- passives-only maneuver, auto-ready.`
+- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None') -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
+- `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
+- `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
+- `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
+- `declare_taunt(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).`
+- `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' — Declare using a held on-use item as this round's action (#2023, #2120).`
+- `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' — Scan declared actions to find combos whose slots are all satisfied.`
+- `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0) -> 'ChallengeResolutionResult | None' — Resolve *interposer*'s interpose attempt and apply the graded outcome.`
+- `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', extra_modifiers: 'int' = 0) -> 'float' — Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
+- `drain_reactive_upkeep(encounter: 'CombatEncounter') -> 'None' — Debit per-round upkeep from each active participant's sustained conditions.`
+- `effective_soak_from_armor(character: 'Character') -> 'int' — Sum effective armor soak across the character's equipped armor pieces.`
+- `effective_weapon_profile(character: 'Character') -> 'WeaponContribution | None' — The character's strongest equipped weapon as a combat contribution.`
+- `elevation_bonus(attacker_sheet: 'CharacterSheet', attacker_pos: 'Position', target_pos: 'Position') -> 'int' — Flat to-hit bonus when attacker is elevated/aerial and target is not.`
+- `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
+- `end_encounter(encounter: 'CombatEncounter') -> 'CombatEncounter' — GM force-end: completes as ABANDONED (#876 §8).`
+- `expire_pulls_for_round(encounter: 'CombatEncounter') -> 'None' — Delete all CombatPull rows from prior rounds and recompute affected max_health.`
+- `get_clash_config() -> 'ClashConfig' — Get-or-create the ClashConfig singleton (pk=1).`
+- `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' — Return the check penalty for the current fatigue zone.`
+- `get_flee_config() -> 'FleeConfig' — Return the seeded FleeConfig singleton (#878).`
+- `get_or_create_threat_record(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant') -> 'ThreatRecord' — Get or create the ThreatRecord for an (opponent, participant) pairing (#2020).`
+- `get_penetration_check_type() -> 'CheckType' — Return the seeded 'penetration' CheckType for the ward contest (#639).`
+- `get_resolution_order(encounter: 'CombatEncounter') -> 'list[tuple[str, CombatParticipant | CombatOpponent]]' — Build the resolution order for a combat round.`
+- `get_strain_config() -> 'StrainConfig' — Get-or-create the StrainConfig singleton (pk=1).`
+- `has_persistent_identity_references(objectdb: 'ObjectDB') -> 'bool' — Return True if this ObjectDB is referenced by any model that signals`
+- `increment_probing(opponent: 'CombatOpponent', amount: 'int') -> 'None' — Add ``amount`` to an opponent's probing counter (clamped at zero) and persist.`
+- `is_combat_npc_typeclass(objectdb: 'ObjectDB') -> 'bool' — Return True iff the ObjectDB's typeclass is the CombatNPC class.`
+- `join_encounter(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Allow a PC to join an active combat encounter.`
+- `leave_encounter(participant: 'CombatParticipant') -> 'None' — Allow a participant to voluntarily leave an Open Encounter between rounds.`
+- `maybe_pause_encounter_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live CombatEncounter, if any, on disconnect (#1899).`
+- `maybe_resolve_on_ready(encounter: 'CombatEncounter') -> 'RoundResolutionResult | None' — Resolve the round early when every ACTIVE participant is ready (#2120).`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `remove_participant(participant: 'CombatParticipant') -> 'None' — Remove a participant: status write + combat engagement teardown (#872).`
+- `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' — Validate declared cast positions against the encounter's room + technique reach.`
+- `resolve_combat_technique(*, participant: 'CombatParticipant', action: 'CombatRoundAction', fatigue_category: 'str', offense_check_type: 'CheckType', offense_check_fn: 'PerformCheckFn | None') -> 'CombatTechniqueResult' — Route a damage-path combat technique through use_technique.`
+- `resolve_npc_attack(opponent_action: 'CombatOpponentAction', participant: 'CombatParticipant', check_type: 'CheckType', *, perform_check_fn: 'PerformCheckFn | None' = None) -> 'DefenseResult' — Resolve one NPC attack against one PC via a defensive check.`
+- `resolve_round(encounter: 'CombatEncounter', *, defense_check_fn: 'PerformCheckFn | None' = None, defense_check_type: 'CheckType | None' = None, offense_check_fn: 'PerformCheckFn | None' = None) -> 'RoundResolutionResult' — Orchestrate a full combat round: detect combos -> resolve -> consequences.`
+- `revert_combo_upgrade(action: 'CombatRoundAction') -> 'None' — Remove a combo upgrade from a round action, reverting to normal.`
+- `run_combo_detection(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' — Public entry point for combo detection during the DECLARING phase.`
+- `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' — Select and create NPC actions for the current round.`
+- `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None) -> 'CombatOpponent' — Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
+- `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' — Attacks a swarm makes this round — scales with remaining bodies (#875).`
+- `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' — Bodies a single landing attack clears from a swarm (#875).`
+- `toggle_action_ready(action: 'CombatRoundAction') -> 'CombatRoundAction' — Flip the ready flag on a round action and persist it.`
+- `upgrade_action_to_combo(action: 'CombatRoundAction', combo: 'ComboDefinition') -> 'None' — Mark a PC's round action as upgraded to a combo.`
+
+
 ## world.companions
 
 ### CompanionArchetype

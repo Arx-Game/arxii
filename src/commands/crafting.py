@@ -13,6 +13,7 @@ from typing import Any
 from actions.definitions.crafting import (
     AttachFacetAction,
     AttachStyleAction,
+    CreateItemAction,
     DetachFacetAction,
 )
 from commands.command import ArxCommand
@@ -20,7 +21,8 @@ from commands.exceptions import CommandError
 
 _USAGE = (
     "Usage: craft facet <name> item=<id> | craft removefacet <item_facet_id> | "
-    "craft style <name> item=<id> | craft quote facet=<name>|style=<name> item=<id>"
+    "craft style <name> item=<id> | craft quote facet=<name>|style=<name> item=<id> | "
+    "craft create <template>=<custom name>, <custom description>"
 )
 
 
@@ -71,6 +73,7 @@ class CmdCraft(ArxCommand):
             "removefacet": self._do_removefacet,
             "style": self._do_style,
             "quote": self._do_quote,
+            "create": self._do_create,
         }.get(subverb)
         if handler is None:
             self.msg(f"Unknown craft action '{subverb}'. {_USAGE}")
@@ -180,3 +183,35 @@ class CmdCraft(ArxCommand):
             f"Cost: {quote.costs}. Affordable: {quote.affordable}. "
             f"Max quality tier: {quote.max_quality_tier}."
         )
+
+    def _do_create(self, rest: str) -> None:
+        from world.items.models import ItemTemplate  # noqa: PLC0415
+
+        if "=" in rest:
+            name_part, _, desc_part = rest.partition("=")
+            name_part = name_part.strip()
+            desc_part = desc_part.strip()
+            if "," in desc_part:
+                custom_name, _, custom_desc = desc_part.partition(",")
+                custom_name = custom_name.strip()
+                custom_desc = custom_desc.strip()
+            else:
+                custom_name = desc_part
+                custom_desc = ""
+        else:
+            name_part = rest.strip()
+            custom_name = ""
+            custom_desc = ""
+
+        template = ItemTemplate.objects.filter(name__iexact=name_part, is_active=True).first()
+        if template is None:
+            msg = f"No craftable template called '{name_part}'."
+            raise CommandError(msg)
+        result = CreateItemAction().run(
+            actor=self.caller,
+            output_template=template,
+            custom_name=custom_name,
+            custom_description=custom_desc,
+        )
+        if result.message:
+            self.msg(result.message)

@@ -111,6 +111,77 @@ refresh_area_closure()
 
 ---
 
+## Presence & Travel (`where` / `travel`, #1463 + #2163)
+
+Room-to-room navigation layered on the Area hierarchy: a public presence directory
+(`where`) listing every character currently in a publicly-listed room, and a
+pathfinder + auto-walk pair (`travel`) that lets a player "go there" to any of them.
+
+### `where_listing` (`src/world/areas/services.py`, #1463)
+
+```python
+from world.areas.services import WhereEntry, where_listing
+
+# One entry per online, non-concealed, non-hidden character in a publicly-listed
+# room, sorted by persona name.
+entries = where_listing(viewer_account=account)
+# WhereEntry(persona_name: str, room_path: str, room_id: int)
+```
+
+`room_path` is the coloured `Area` ancestry path (`colored_area_path()`, see
+above). `room_id` (#2163 addition) is the destination room's pk — added so a
+`where` row can dispatch a `travel_to` Action directly without re-resolving the
+room by name.
+
+### `find_route()` (`src/world/areas/positioning/travel.py`, #2163)
+
+```python
+from world.areas.positioning.travel import find_route
+
+route = find_route(origin_room, destination_room)
+# -> list[ObjectDB] (an ordered list of Exit objects) | None
+```
+
+Frontier-batched BFS: each level fetches every outbound exit for the *entire*
+current frontier in one query (mirroring `area_subtree_pks`'s
+`parent_id__in=[...]` batching over the Area tree above), rather than one room
+at a time — the fix for the per-room-query blowup that breaks naive BFS at
+scale. Scoped to same-Area travel only — cross-Area routing needs
+Area-to-Area connectivity data this codebase doesn't have yet — and to
+publicly-listed rooms only (`room_is_publicly_listed`), matching the `where`
+privacy invariant (#1287): a route never passes through, or reveals, a private
+room. Capped at `settings.TRAVEL_MAX_HOPS` (default 50). Returns `None` when
+unreachable, off-Area, the destination isn't public, or the route would exceed
+the hop cap; returns `[]` when already at the destination.
+
+### `TravelAction` / `StopTravelAction` (`src/actions/definitions/movement.py`, #2163)
+
+REGISTRY actions (keys `"travel_to"` / `"stop_travel"`) — a server-paced,
+cancellable auto-walk. `TravelAction` computes a route via `find_route()` and
+schedules one hop per `hop_delay_seconds` (1.5s) via `evennia.utils.delay()`,
+reusing the same `check_exit_traversal`/`traverse_exit` primitives a manual
+`TraverseExitAction` hop uses, so room-state broadcasts happen exactly as they
+do for a manual walk. A per-caller `.ndb.active_travel_token` makes
+cancellation/re-dispatch safe: every scheduled hop callback checks its token
+against the caller's *current* active token before acting, so a stale callback
+from a superseded or stopped walk silently no-ops instead of moving the player
+unexpectedly. `StopTravelAction` cancels the pending `.ndb.active_travel_task`
+and clears the token.
+
+### Telnet (`src/commands/travel.py`, #2163)
+
+`CmdTravel` (`travel <character name>` / `travel stop`) resolves the named
+character's current room and dispatches `TravelAction`/`StopTravelAction`.
+
+### Frontend (#2163)
+
+"Go there" buttons on the scene browser (`ScenesListPage`,
+`frontend/src/scenes/pages/`) and the presence panel (`PresencePanel`,
+`frontend/src/game/components/`) dispatch the `travel_to` REGISTRY action with
+the row's room id (the scene's room, or `WhereEntry.room_id`).
+
+---
+
 ## Positioning Submodule (`src/world/areas/positioning/`)
 
 Room-anchored spatial graph: named position nodes, traversable edges, per-object occupancy, capability-gated movement, and GM terrain blueprints for non-combat scene staging.

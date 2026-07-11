@@ -8,6 +8,7 @@ cast routing downstream.
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.db.models import Prefetch
 
 from actions.constants import ActionTargetType
 from world.conditions.services import is_untargetable
@@ -152,6 +153,56 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
     if technique.removed_conditions.filter(target_kind=ConditionTargetKind.ALLY).exists():
         return ConditionTargetKind.ALLY
     return ConditionTargetKind.SELF
+
+
+#: Reactive-trigger handler families that consume a caster-declared position PAIR
+#: (origin + destination), e.g. an obstacle placed between two points.
+_PAIR_HANDLERS = ("create_obstacle_on_condition",)
+
+#: Reactive-trigger handler families that consume a single caster-declared position
+#: (a destination), e.g. teleport / force-move / zone-hazard placement.
+_SINGLE_HANDLERS = (
+    "move_position_on_condition",
+    "force_move_target_on_condition",
+    "create_zone_hazard_on_condition",
+)
+
+#: ``position_target_shape`` return values — module-level constants (not bare
+#: string literals) so the shape vocabulary has one spelling.
+POSITION_SHAPE_PAIR = "pair"
+POSITION_SHAPE_SINGLE = "single"
+POSITION_SHAPE_NONE = "none"
+
+
+def position_target_shape(technique: Technique) -> str:
+    """Classify which cast-position input (if any) the technique's effects consume.
+
+    Walks the technique's applied conditions to their reactive triggers' flow steps,
+    looking for a ``CALL_SERVICE_FUNCTION`` step whose dotted handler path names a
+    known position-consuming effect handler:
+
+    - ``POSITION_SHAPE_PAIR`` — an obstacle-family handler is present (origin + destination).
+    - ``POSITION_SHAPE_SINGLE`` — a teleport/force-move/zone-hazard-family handler is present.
+    - ``POSITION_SHAPE_NONE`` — no position-consuming handler found.
+    """
+    step_paths: list[str] = []
+    applications = technique.condition_applications.select_related("condition").prefetch_related(
+        Prefetch(
+            "condition__reactive_triggers__flow_definition__steps",
+            to_attr="prefetched_shape_steps",
+        )
+    )
+    for applied in applications:
+        for trigger in applied.condition.reactive_triggers.all():
+            step_paths.extend(
+                step.variable_name or "" for step in trigger.flow_definition.prefetched_shape_steps
+            )
+    joined = " ".join(step_paths)
+    if any(handler in joined for handler in _PAIR_HANDLERS):
+        return POSITION_SHAPE_PAIR
+    if any(handler in joined for handler in _SINGLE_HANDLERS):
+        return POSITION_SHAPE_SINGLE
+    return POSITION_SHAPE_NONE
 
 
 def _signature_alters_behavior(caster, technique: Technique) -> bool:

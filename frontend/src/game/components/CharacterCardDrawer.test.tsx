@@ -59,7 +59,7 @@ function emptySearch(isLoading = false): PaginatedResponse<RosterEntryData> | un
   return isLoading ? undefined : { count: 0, next: null, previous: null, results: [] };
 }
 
-function matchedEntry(): RosterEntryData {
+function matchedEntry(tenures: RosterEntryData['tenures'] = []): RosterEntryData {
   return {
     id: 42,
     character: {
@@ -70,7 +70,7 @@ function matchedEntry(): RosterEntryData {
       galleries: [],
     },
     profile_picture: null,
-    tenures: [],
+    tenures,
     can_apply: false,
     fullname: 'Alice',
     quote: '',
@@ -79,6 +79,25 @@ function matchedEntry(): RosterEntryData {
     creation_provenance_display: 'Player-created',
     created_for_table_name: null,
   };
+}
+
+function liveTenure(): RosterEntryData['tenures'][number] {
+  return {
+    id: 7,
+    player_number: 1,
+    start_date: '2026-01-01',
+    end_date: null,
+    applied_date: '2026-01-01',
+    approved_date: '2026-01-01',
+    approved_by: null,
+    tenure_notes: '',
+    photo_folder: '',
+    media: [],
+  };
+}
+
+function endedTenure(): RosterEntryData['tenures'][number] {
+  return { ...liveTenure(), id: 8, end_date: '2026-02-01' };
 }
 
 function mockNoSearchResult(isLoading = false) {
@@ -221,6 +240,34 @@ describe('CharacterCardDrawer', () => {
       );
       expect(screen.queryByRole('button', { name: /\+ friend/i })).not.toBeInTheDocument();
     });
+  });
+
+  // #2160 Task 4: quick actions.
+  it('renders both quick actions when entry+live tenure resolve; hides "Send a letter" with no live tenure', () => {
+    mockSearchMatch(matchedEntry([liveTenure()]));
+    const { unmount } = renderWithProviders(
+      <CharacterCardDrawer
+        persona={PERSONA}
+        onClose={vi.fn()}
+        viewerEntryId={7}
+        onWhisper={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('button', { name: /write a journal/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send a letter/i })).toBeInTheDocument();
+    unmount();
+
+    mockSearchMatch(matchedEntry([endedTenure()]));
+    renderWithProviders(
+      <CharacterCardDrawer
+        persona={PERSONA}
+        onClose={vi.fn()}
+        viewerEntryId={7}
+        onWhisper={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('button', { name: /write a journal/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /send a letter/i })).not.toBeInTheDocument();
   });
 
   describe('with no public roster match (disguise / temporary / unlisted persona)', () => {

@@ -24,6 +24,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `related_name="technique_draft"`; no JSON; all proper columns),
     `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` /
     `TechniqueDraftAppliedCondition` (draft payload children — inherit abstract bases)
+  - **Cast-position targeting (#2206):** `position_target_shape(technique)`
+    (`services/targeting.py`) classifies a technique's declared-position input shape
+    (pair/single/none); combat's declaration→resolver→condition-handler wiring for the
+    three placeholder-destination effect-palette techniques (Barricade/Phase Jump/Force
+    Grip) lives in `docs/systems/INDEX.md`'s Combat section ("Cast-position targeting");
+    see `docs/systems/magic.md`'s Effect Palette section for the updated per-effect status.
   - **Motif style binding (#2030):** `MotifResonanceStyle` (`motif_resonance` FK,
     `style` FK to `items.Style`; cap 3/resonance) is now player-authorable, not
     admin-only. Service (`services/motif_style.py`): `bind_motif_style` /
@@ -641,6 +647,14 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Models:** `Area`, `AreaClosure` (unmanaged, materialized view)
 - **Enums:** `AreaLevel` (Region, District, Neighborhood)
 - **Key Functions:** `get_ancestry()`, `get_descendant_areas()`, `get_rooms_in_area()`, `reparent_area()`
+- **Presence & Travel (#1463 + #2163):** `where_listing()` — public presence directory,
+  returns `WhereEntry(persona_name, room_path, room_id)` per online character in a
+  publicly-listed room; `find_route(origin_room, destination_room) -> list[ObjectDB] | None`
+  (`world.areas.positioning.travel`) — frontier-batched BFS pathfinder, same-Area +
+  public-rooms-only, capped at `settings.TRAVEL_MAX_HOPS`. `TravelAction`/`StopTravelAction`
+  (`registry_key`s `travel_to`/`stop_travel`) auto-walk a computed route one hop at a time;
+  shared by telnet `CmdTravel` and "Go there" buttons on the scene browser + presence panel.
+  See [areas.md](areas.md) "Presence & Travel" section.
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
 - **Source:** `src/world/areas/`
@@ -877,8 +891,14 @@ Character journal entries (public/private), praises, retorts, freeform tags, wee
 - **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses), `JournalTag`, `WeeklyJournalXP`
 - **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`; `JournalError` user-safe exception in `types.py`
 - **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit`) converge on `action.run()`
+- **Web surface (#2160):** previously zero web frontend (telnet-only); now `/journals`
+  (composer, public feed, own-entries tab) plus a `JournalTab` quick-compose panel in the
+  in-scene sidebar. `/journal` (singular) was freed from the missions ledger, which moved to
+  `/missions/journal` in the same PR — see Missions below and `journals/AGENT_GLOSSARY.md`'s
+  disambiguation entry for the "journal" homonym across apps.
 - **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M)
-- **Source:** `src/world/journals/`
+- **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
+  `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points
 Time/effort resource economy with regeneration via cron. The most complete gate pattern in the codebase.
 
@@ -1242,6 +1262,15 @@ Character lifecycle management with web-first applications and player anonymity.
   hosts the shared `_send_email`/`_get_staff_emails` primitives; `RosterEmailService`
   extends it unchanged. `world.character_creation.email_service.CGEmailService`
   extends the same base — see Character Creation above.
+- **Letters web surface (#2160, ADR-0116):** `PlayerMailViewSet` gained two actions —
+  `POST /api/roster/mail/{id}/mark-read/` (idempotent, recipient-scoped via the queryset) and
+  `GET /api/roster/mail/unread-count/` (unread + unarchived, across the requester's tenures).
+  Sending mail fires `notify_mail_arrived` via `transaction.on_commit` (the
+  `notify_battle_state_changed` pattern), pushing a new `WebsocketMessageType.MAIL_ARRIVED`
+  (`src/web/webclient/message_types.py`) payload — `mail_id`/`sender_display`/`subject` only, no
+  account identifiers. Frontend: in-scene quick-compose (`SendLetterDialog` pre-filling
+  `ComposeMailForm`) from the character card, an `UnreadMailBadge` in the header, and a
+  mark-read-on-open flow in `ReceivedMailList`. No telnet mail command exists or is planned.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
@@ -3222,7 +3251,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   unset = legacy find-all-on-scene behavior, unchanged), `CombatParticipant`, `CombatOpponent`,
   `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR; plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
-  `fury_commitment` / `fury_anchor`, #1454),
+  `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
+  `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
+  target/pair for position-consuming techniques, #2206, see "Cast-position targeting" below),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `ComboSlot`, `ComboLearning` (use_count tracks repeat
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
@@ -3280,6 +3311,53 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     True when the target has an active `ConditionInstance` whose
     `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
     filter sites to honour the intangibility gate.
+- **Cast-position targeting (#2206):** runtime destination selection for the
+  position-consuming effect-palette techniques (Barricade/obstacle, Phase Jump/teleport,
+  Force Grip/telekinesis — previously placeholder `destination_position_id=0` at seed
+  time, see `docs/systems/magic.md`), wired end-to-end for combat declaration:
+  - `resolve_cast_position_params(participant, technique, position_params)`
+    (`world/combat/services.py`) — validates a declared `destination_position_id` (single)
+    or `position_a_id`/`position_b_id` (pair) against the encounter's own room and the
+    technique's `reach`/`reach_hops`; raises `ActionDispatchError` (`UNKNOWN_ACTION_REF`) on
+    a foreign-room position or a half-supplied pair, `TARGET_OUT_OF_REACH` when the caster
+    is placed and the destination exceeds reach.
+  - `CastTechniqueAction.round_declaration` (`actions/definitions/cast.py`) forwards a
+    `position_params` kwarg into the round-declaration kwargs; `CombatRoundContext
+    ._resolve_cast_positions` (`world/combat/round_context.py`) calls
+    `resolve_cast_position_params` and persists the resolved FKs onto the
+    `CombatRoundAction` at declaration time (`declare_action`, `world/combat/services.py`).
+  - `CombatTechniqueResolver._apply_conditions` (`world/combat/services.py`) reads the three
+    FKs back off the declared action and forwards them as `position_params` to
+    `apply_technique_conditions` (`world/magic/services/condition_application.py`), the same
+    shared seam the non-combat cast path already used.
+  - **Root-cause fix in the shared conditions layer:** position ids now thread through
+    `BulkConditionApplication.cast_destination_id` / `cast_position_a_id` /
+    `cast_position_b_id` (`world/conditions/types.py`) and are stamped onto the resulting
+    `ConditionInstance` by `_stamp_cast_positions` (`world/conditions/services.py`) **before**
+    `CONDITION_APPLIED` fires — same-event reactive handlers
+    (`create_obstacle_on_condition` and siblings, #2019) read the position fields off
+    `payload.instance` synchronously. This replaces the old post-hoc
+    `_apply_position_params_to_instances` helper (removed) and also fixes the previously-broken
+    non-combat live path, which suffered the same race.
+  - `position_target_shape(technique) -> "pair" | "single" | "none"`
+    (`world/magic/services/targeting.py`, batched `Prefetch` over condition→trigger→flow
+    steps) classifies which position input shape a technique's effects consume; exposed on
+    available actions via `PlayerAction.position_target_shape`
+    (`actions/player_interface.py`) → `RoundActionSerializer.position_target_shape`
+    (`actions/serializers.py`) so the frontend can render the right picker (single point vs.
+    endpoint pair) without hardcoding technique names.
+  - `RoundActionSerializer` (`world/combat/serializers.py`) exposes the three FKs; note
+    drf-spectacular does not introspect them (pre-existing generator gap) — generated
+    frontend types were not regenerated for this field, a known/documented degradation.
+  - **Frontend:** a Positions picker in `ActionDeclarationCard` (single/pair, reach-greyed),
+    shape-aware `position_params` dispatch kwargs, state lifted to `CombatScenePage`, and
+    map-click picking via `TacticalMap.onPickPosition` (`frontend/src/areas/components/`).
+  - **Telnet needed zero changes** — #2019's `position=`/`position_a=,position_b=` command
+    grammar (`commands/combat.py`) already produced a `position_params` kwarg; #2206 is what
+    makes that kwarg actually reach validation and persistence in the combat round.
+  - Proven at the round seam by `world/combat/tests/test_cast_position_declaration.py`
+    (foreign-room rejection + a full declare→resolve→condition→sealed-edge journey for
+    Barricade); non-combat web casting still has no position picker (telnet-only there).
 - **Event:** `EventName.COMBAT_ROUND_STARTING` (`flows/constants.py`) — emitted at the
   start of each round by `begin_round_of_combat`; `drain_reactive_upkeep` subscribes to it.
 - **Condition fields added for effect palette (#1584):**

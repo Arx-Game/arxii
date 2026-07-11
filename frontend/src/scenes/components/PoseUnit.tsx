@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
@@ -117,7 +118,12 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
   const queryClient = useQueryClient();
   const reactionMutation = useMutation({
     mutationFn: (emoji: string) => postInteractionReaction(interaction.id, emoji),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      if (data?.bump_message) {
+        toast.success(data.bump_message);
+      }
+    },
   });
   // Staff-editable catalog (#1699); valenced entries also nudge the author's regard.
   const { data: catalog } = useQuery({

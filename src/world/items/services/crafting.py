@@ -14,14 +14,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from world.items.crafting.constants import CraftingRecipeKind
-from world.items.types import FacetCraftResult, StyleCraftResult
+from world.items.types import FacetCraftResult, ItemCreateResult, StyleCraftResult
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from world.checks.types import CheckResult
-    from world.items.models import ItemFacet, ItemInstance, ItemStyle, Style
+    from world.items.models import ItemFacet, ItemInstance, ItemStyle, ItemTemplate, Style
     from world.magic.models import Facet
 
 
@@ -127,6 +127,61 @@ def craft_attach_style(
         attached=result.attached,
         outcome=result.outcome,
         item_style=cast("ItemStyle | None", result.row),
+        quality_tier=result.quality_tier,
+        consumed=result.consumed,
+        consequence_label=result.consequence_label,
+    )
+
+
+def craft_create_item(
+    *,
+    crafter_account: AccountDB,
+    crafter_character: ObjectDB,
+    output_template: ItemTemplate,
+    custom_name: str = "",
+    custom_description: str = "",
+) -> ItemCreateResult:
+    """Run the ITEM_CREATE recipe and map the result onto ``ItemCreateResult``.
+
+    Delegates to ``run_crafting_recipe`` (which pre-validates the template,
+    gates on station + affordability, rolls the check, consumes cost per the
+    selected consequence, and creates the ItemInstance on success).
+
+    Args:
+        crafter_account: The AccountDB performing the craft (provenance).
+        crafter_character: The ObjectDB whose traits roll the check + hold AP/Anima.
+        output_template: The ItemTemplate to create an instance of.
+        custom_name: Player-authored name override (empty = use template default).
+        custom_description: Player-authored description override.
+
+    Returns:
+        ItemCreateResult with created=True and item_instance set on success,
+        or created=False with item_instance=None on failure.
+
+    Raises:
+        CraftingNotConfigured: No recipe/CheckType is wired for this template.
+        CraftingCostUnaffordable: The crafter cannot afford the recipe cost.
+        CraftingStationRequired: No station installed.
+        CraftingStationBroken: Station at 0 durability.
+    """
+    from world.items.crafting.services import run_crafting_recipe  # noqa: PLC0415
+
+    result = run_crafting_recipe(
+        kind=CraftingRecipeKind.ITEM_CREATE,
+        crafter_account=crafter_account,
+        crafter_character=crafter_character,
+        item_instance=None,
+        target=None,
+        output_overrides={
+            "output_template": output_template,
+            "custom_name": custom_name,
+            "custom_description": custom_description,
+        },
+    )
+    return ItemCreateResult(
+        created=result.attached,
+        outcome=result.outcome,
+        item_instance=cast("ItemInstance | None", result.row),
         quality_tier=result.quality_tier,
         consumed=result.consumed,
         consequence_label=result.consequence_label,

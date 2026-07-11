@@ -12,6 +12,7 @@ import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { useEncounterForScene } from '@/combat/queries';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { StoryTray } from '@/missions/components/StoryTray';
+import { JournalTab } from '@/journals/components/JournalTab';
 import { StatusPanel } from '@/status/components/StatusPanel';
 import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
@@ -397,6 +398,7 @@ export function GamePage() {
                 <InventorySidebarPanel characterId={activeCharacterId} />
               ) : undefined
             }
+            journalPanel={<JournalTab />}
           />
         }
       />

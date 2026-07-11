@@ -19,7 +19,6 @@ from world.conditions.services import (
 )
 from world.conditions.types import (
     AppliedConditionResult,
-    ApplyConditionResult,
     BulkConditionApplication,
     RemovedConditionResult,
 )
@@ -86,6 +85,15 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
     if not rows:
         return []
 
+    # #2019/#2206: cast-time position FKs, stamped onto each BulkConditionApplication
+    # so bulk_apply_conditions can set them on the created ConditionInstance BEFORE
+    # emitting CONDITION_APPLIED — same-event reactive handlers (create_obstacle_on_
+    # condition and siblings) read these off payload.instance synchronously, so
+    # patching them on AFTER bulk_apply_conditions returns would be too late.
+    dest_id = (position_params or {}).get("destination_position_id")
+    pos_a_id = (position_params or {}).get("position_a_id")
+    pos_b_id = (position_params or {}).get("position_b_id")
+
     bulk_applications: list[BulkConditionApplication] = []
     for row in rows:
         if success_level < row.minimum_success_level:
@@ -107,6 +115,9 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
                     severity=severity,
                     duration_rounds=duration,
                     stack_count=row.stack_count,
+                    cast_destination_id=dest_id,
+                    cast_position_a_id=pos_a_id,
+                    cast_position_b_id=pos_b_id,
                 )
             )
 
@@ -130,41 +141,7 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
             )
         )
 
-    # #2019: Set cast-time position FKs on the created ConditionInstances.
-    if position_params:
-        _apply_position_params_to_instances(bulk_results, position_params)
-
     return out
-
-
-def _apply_position_params_to_instances(
-    bulk_results: list[ApplyConditionResult],
-    position_params: dict[str, int],
-) -> None:
-    """Set cast-time position FKs on created ConditionInstances (#2019).
-
-    The handlers (move_position_on_condition, create_obstacle_on_condition,
-    force_move_target_on_condition, create_zone_hazard_on_condition) read
-    these from payload.instance instead of the static step-param placeholders.
-    """
-    dest_id = position_params.get("destination_position_id")
-    pos_a_id = position_params.get("position_a_id")
-    pos_b_id = position_params.get("position_b_id")
-    for result in bulk_results:
-        if result.instance is None:
-            continue
-        update_fields: list[str] = []
-        if dest_id:
-            result.instance.cast_destination_id = dest_id
-            update_fields.append("cast_destination_id")
-        if pos_a_id:
-            result.instance.cast_position_a_id = pos_a_id
-            update_fields.append("cast_position_a_id")
-        if pos_b_id:
-            result.instance.cast_position_b_id = pos_b_id
-            update_fields.append("cast_position_b_id")
-        if update_fields:
-            result.instance.save(update_fields=update_fields)
 
 
 def remove_technique_conditions(
