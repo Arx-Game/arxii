@@ -39,7 +39,6 @@ class CraftingRecipe(SharedMemoryModel):
     kind = models.CharField(
         max_length=40,
         choices=CraftingRecipeKind.choices,
-        unique=True,
         help_text="Determines which crafting flow this recipe drives.",
     )
     check_type = models.ForeignKey(
@@ -92,10 +91,27 @@ class CraftingRecipe(SharedMemoryModel):
             "opt out without a schema change."
         ),
     )
+    output_item_template = models.ForeignKey(
+        "items.ItemTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "For ITEM_CREATE: the template this recipe produces. Null for attach "
+            "kinds (FACET_ATTACH / STYLE_ATTACH)."
+        ),
+    )
 
     class Meta:
         app_label = "items"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["kind", "output_item_template"],
+                name="items_craftingrecipe_kind_output_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name  # noqa: STRING_LITERAL — model display, not an identifier

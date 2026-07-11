@@ -24,6 +24,7 @@ from world.checks.consequence_resolution import (
 )
 from world.checks.services import perform_check
 from world.checks.types import ResolutionContext
+from world.items.crafting.constants import CraftingRecipeKind
 from world.items.crafting.cost import consume_cost, stage_and_assert_affordable
 from world.items.crafting.models import CraftedItemRecipe, CraftingRecipe, CraftingSkillCap
 from world.items.crafting.quality import resolve_capped_tier
@@ -42,7 +43,6 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.items.crafting.constants import CraftingRecipeKind
     from world.items.crafting.models import CraftedItemRecipe, LabStationDetails
     from world.items.models import QualityTier
     from world.traits.models import CheckOutcome
@@ -173,7 +173,8 @@ def build_crafting_quote(
     kind: CraftingRecipeKind,
     crafter_character: ObjectDB,
     crafter_character_sheet: CharacterSheet,
-    target: object,  # noqa: ARG001  # kept for API symmetry with run_crafting_recipe
+    target: object = None,  # noqa: ARG001  # kept for API symmetry with run_crafting_recipe
+    output_template: object = None,
 ) -> CraftingQuote:
     """Return a read-only cost+quality snapshot for a potential crafting attempt.
 
@@ -194,6 +195,7 @@ def build_crafting_quote(
         crafter_character: The ObjectDB whose AP pool, Anima, and traits are read.
         crafter_character_sheet: The CharacterSheet whose inventory is checked.
         target: Unused at quote time (kept for API symmetry with run_crafting_recipe).
+        output_template: For ITEM_CREATE, the ItemTemplate being crafted.
 
     Returns:
         A ``CraftingQuote`` dataclass (frozen, read-only).
@@ -206,7 +208,10 @@ def build_crafting_quote(
 
     # 1. Resolve recipe ---
     try:
-        recipe = CraftingRecipe.objects.get(kind=kind)
+        if kind == CraftingRecipeKind.ITEM_CREATE and output_template is not None:
+            recipe = CraftingRecipe.objects.get(kind=kind, output_item_template=output_template)
+        else:
+            recipe = CraftingRecipe.objects.get(kind=kind)
     except CraftingRecipe.DoesNotExist as exc:
         raise CraftingNotConfigured from exc
     if recipe.check_type is None:
@@ -302,21 +307,23 @@ def build_crafting_quote(
 
 
 @transaction.atomic
-def run_crafting_recipe(
+def run_crafting_recipe(  # noqa: C901, PLR0912, PLR0913, PLR0915
     *,
     kind: CraftingRecipeKind,
     crafter_account: AccountDB,
     crafter_character: ObjectDB,
-    item_instance: ItemInstance,
-    target: object,
+    item_instance: ItemInstance | None = None,
+    target: object | None = None,
+    output_overrides: dict | None = None,
 ) -> CraftRunResult:
     """Run a crafting attempt end-to-end for ``kind`` against ``target``.
 
     Pipeline (all inside one transaction):
 
     1. Resolve the recipe for ``kind``; raise ``CraftingNotConfigured`` if it is
-       missing or has no ``check_type``.
-    2. Pre-validate attachability via the kind's handler — BEFORE rolling, so a
+       missing or has no ``check_type``. For ITEM_CREATE, resolve by
+       ``(kind, output_item_template)`` from ``output_overrides``.
+    2. Pre-validate via the kind's handler — BEFORE rolling, so a
        full/duplicate item never wastes a roll.
     3. Station gate (#1234) — if ``recipe.requires_station``, resolve the active
        Lab station in the crafter's room; raise ``CraftingStationRequired`` if
@@ -331,14 +338,16 @@ def run_crafting_recipe(
        recipe default when the tier has no authored consequence).
     9. Apply the consequence's effects.
     10. On sufficient success level, resolve the skill-capped quality tier and
-        apply the attachment via the handler.
+        apply via the handler (attach for FACET/STYLE, create for ITEM_CREATE).
 
     Args:
         kind: Which recipe drives this attempt.
-        crafter_account: The account performing the attachment (provenance).
+        crafter_account: The account performing the craft (provenance).
         crafter_character: The ObjectDB whose traits roll the check + hold AP/Anima.
-        item_instance: The item receiving the attachment.
-        target: The Facet or Style to attach.
+        item_instance: The item receiving the attachment (None for ITEM_CREATE).
+        target: The Facet or Style to attach (None for ITEM_CREATE).
+        output_overrides: Dict for ITEM_CREATE carrying output_template,
+            custom_name, custom_description. None for attach kinds.
 
     Returns:
         A ``CraftRunResult`` describing the outcome.
@@ -353,7 +362,11 @@ def run_crafting_recipe(
     """
     # --- 1. Resolve the recipe ---
     try:
-        recipe = CraftingRecipe.objects.get(kind=kind)
+        if kind == CraftingRecipeKind.ITEM_CREATE:
+            output_template = (output_overrides or {}).get("output_template")
+            recipe = CraftingRecipe.objects.get(kind=kind, output_item_template=output_template)
+        else:
+            recipe = CraftingRecipe.objects.get(kind=kind)
     except CraftingRecipe.DoesNotExist as exc:
         raise CraftingNotConfigured from exc
     if recipe.check_type is None:
@@ -361,7 +374,9 @@ def run_crafting_recipe(
 
     # --- 2. Pre-validate (never waste a roll) ---
     handler = get_handler(kind)
-    handler.pre_validate(item_instance=item_instance, target=target)
+    handler.pre_validate(
+        item_instance=item_instance, target=target, output_overrides=output_overrides
+    )
 
     # --- 3. Station gate (#1234) — before affordability-staging ---
     station = None
@@ -373,10 +388,16 @@ def run_crafting_recipe(
             raise CraftingStationBroken
 
     # --- 4. Stage + assert affordability (before rolling) ---
+    if item_instance is not None:
+        crafter_sheet = item_instance.holder_character_sheet
+    else:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        crafter_sheet = CharacterSheet.objects.get(character=crafter_character)
     staged = stage_and_assert_affordable(
         recipe=recipe,
         crafter_character=crafter_character,
-        crafter_character_sheet=item_instance.holder_character_sheet,
+        crafter_character_sheet=crafter_sheet,
     )
 
     # --- 5. Roll ---
@@ -420,18 +441,23 @@ def run_crafting_recipe(
     # --- 9. Apply the consequence's effects ---
     apply_resolution(pending, ResolutionContext(character=crafter_character))
 
-    # --- 10. Resolve quality + apply the attachment on sufficient success ---
+    # --- 10. Resolve quality + apply via the handler on sufficient success ---
     if check_result.success_level >= recipe.min_success_level:
         tier = resolve_capped_tier(
             recipe=recipe,
             crafter_character=crafter_character,
             check_result=check_result,
         )
+        # Thread the crafter_character into output_overrides so ItemCreateHandler
+        # can resolve the CharacterSheet for provenance stamping.
+        if output_overrides is not None:
+            output_overrides["crafter_character"] = crafter_character
         row = handler.apply(
             crafter_account=crafter_account,
             item_instance=item_instance,
             target=target,
             quality_tier=tier,
+            output_overrides=output_overrides,
         )
         attached = True
     else:
@@ -442,14 +468,18 @@ def run_crafting_recipe(
     # --- 10b. Record the recipe on the item (#1567) ---
     crafted_recipe = None
     if attached:
+        # For ITEM_CREATE, `row` is the newly created ItemInstance; for attach
+        # kinds, `row` is the attachment (ItemFacet/ItemStyle) and
+        # `item_instance` is the item it was attached to.
+        target_item = item_instance if item_instance is not None else row
         crafted_recipe, _ = CraftedItemRecipe.objects.update_or_create(
-            item_instance=item_instance,
+            item_instance=target_item,
             recipe=recipe,
             defaults={"quality_tier": tier},
         )
         # Invalidate the wearer's equipped_items handler cache if the item is
         # currently equipped — same pattern as attach_facet_to_item.
-        for equipped in EquippedItem.objects.filter(item_instance=item_instance):
+        for equipped in EquippedItem.objects.filter(item_instance=target_item):
             equipped.character.equipped_items.invalidate()
 
     return CraftRunResult(

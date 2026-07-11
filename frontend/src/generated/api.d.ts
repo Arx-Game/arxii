@@ -7806,6 +7806,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/crafting/create/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Roll the crafting check and (on success) mint a new ItemInstance. */
+    post: operations['items_crafting_create_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/equipped-items/': {
     parameters: {
       query?: never;
@@ -44244,6 +44261,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['InteractionList'];
         };
+      };
+    };
+  };
+  items_crafting_create_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

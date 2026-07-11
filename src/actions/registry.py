@@ -75,6 +75,7 @@ from actions.definitions.covenants import (
 from actions.definitions.crafting import (
     AttachFacetAction,
     AttachStyleAction,
+    CreateItemAction,
     DetachFacetAction,
 )
 from actions.definitions.crossing import resolve_crossing_offer
@@ -391,6 +392,7 @@ _ALL_ACTIONS: list[Action] = [
     AttachFacetAction(),
     DetachFacetAction(),
     AttachStyleAction(),
+    CreateItemAction(),
     ApplyOutfitAction(),
     UndressAction(),
     # #1866 — outfit CRUD telnet coverage.
