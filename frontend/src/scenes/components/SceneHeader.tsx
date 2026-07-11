@@ -22,7 +22,7 @@ interface Props {
  * Grant GM control (#2113) — the web face of `scene gm <name>`.
  *
  * Dispatches the `grant_scene_gm` registry action through the same generic
- * available-actions seam `set_the_stage` uses (RoomPositionsPanel). Rendered
+ * available-actions seam `set_the_stage` uses (SceneTacticalMap). Rendered
  * only for scene owners on an active scene; the backend Action re-checks
  * `actor_can_administer_scene` and the target's GMProfile, so this control is
  * a convenience, never the gate.

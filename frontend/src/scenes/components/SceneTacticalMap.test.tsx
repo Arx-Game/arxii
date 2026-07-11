@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent } from '@testing-library/react';
 import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -53,7 +53,7 @@ vi.mock('@/combat/queries', () => ({
 import { fetchScene } from '../queries';
 import { fetchAvailableActions } from '../actionQueries';
 import { useDispatchPlayerAction } from '@/combat/queries';
-import { RoomPositionsPanel } from './RoomPositionsPanel';
+import { SceneTacticalMap } from './SceneTacticalMap';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -96,9 +96,40 @@ const MOCK_SCENE = {
     { id: 1, name: 'Alice Persona' },
     { id: 2, name: 'Bob Persona' },
   ],
+  position_nodes: [
+    {
+      id: 101,
+      name: 'North Wall',
+      kind: 'feature',
+      elevation_anchor_id: null,
+      layout_x: null,
+      layout_y: null,
+    },
+    {
+      id: 102,
+      name: 'Center',
+      kind: 'primary',
+      elevation_anchor_id: null,
+      layout_x: null,
+      layout_y: null,
+    },
+  ],
+  position_edges: [
+    {
+      position_a_id: 101,
+      position_b_id: 102,
+      is_passable: true,
+      blocks_flight: false,
+      gating_challenge_name: null,
+    },
+  ],
 };
 
-function makeMoveAction(positionId: number, displayName: string): PlayerAction {
+function makeMoveAction(
+  registryKey: 'move_to_position' | 'take_position',
+  positionId: number,
+  displayName: string
+): PlayerAction {
   return {
     backend: 'registry',
     display_name: displayName,
@@ -113,31 +144,8 @@ function makeMoveAction(positionId: number, displayName: string): PlayerAction {
       challenge_instance_id: null,
       approach_id: null,
       technique_id: null,
-      registry_key: 'move_to_position',
+      registry_key: registryKey,
       position_id: positionId,
-    },
-    target_spec: null,
-    enhancements: [],
-    strain: null,
-  };
-}
-
-function makeSetTheStageAction(): PlayerAction {
-  return {
-    backend: 'registry',
-    display_name: 'Set the Stage',
-    description: '',
-    difficulty: null,
-    prerequisite_met: true,
-    prerequisite_reasons: [],
-    check_type: { id: 1, name: 'Standard' },
-    action_template: null,
-    ref: {
-      backend: 'registry',
-      challenge_instance_id: null,
-      approach_id: null,
-      technique_id: null,
-      registry_key: 'set_the_stage',
     },
     target_spec: null,
     enhancements: [],
@@ -149,7 +157,7 @@ function makeSetTheStageAction(): PlayerAction {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('RoomPositionsPanel', () => {
+describe('SceneTacticalMap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE);
@@ -165,108 +173,55 @@ describe('RoomPositionsPanel', () => {
     } as unknown as ReturnType<typeof useDispatchPlayerAction>);
   });
 
-  it('renders positions from mocked scene-detail payload', async () => {
-    render(<RoomPositionsPanel sceneId="10" />, { wrapper: createWrapper() });
-
-    expect(await screen.findByText('North Wall')).toBeInTheDocument();
-    expect(screen.getByText('Center')).toBeInTheDocument();
-  });
-
   it('renders nothing when the scene has no positions', async () => {
-    vi.mocked(fetchScene).mockResolvedValue({ ...MOCK_SCENE, positions: [] });
+    vi.mocked(fetchScene).mockResolvedValue({
+      ...MOCK_SCENE,
+      position_nodes: [],
+      position_edges: [],
+    });
 
-    const { container } = render(<RoomPositionsPanel sceneId="10" />, {
+    const { container } = render(<SceneTacticalMap sceneId="10" />, {
       wrapper: createWrapper(),
     });
 
-    // Wait for scene to load and assert no position content
-    // Give react-query a tick to resolve
     await vi.waitFor(() => {
-      expect(container.querySelector('[data-testid="room-positions-panel"]')).toBeNull();
+      expect(container.querySelector('[data-testid="scene-tactical-map"]')).toBeNull();
     });
+    expect(screen.queryByTestId('tactical-map')).toBeNull();
   });
 
-  it('shows persona placement for personas that have a position', async () => {
-    render(<RoomPositionsPanel sceneId="10" />, { wrapper: createWrapper() });
+  it('renders the tactical map when the scene has positions', async () => {
+    render(<SceneTacticalMap sceneId="10" />, { wrapper: createWrapper() });
 
-    await screen.findByText('North Wall');
-    // Persona 1 is at North Wall; their name should appear
-    expect(screen.getByText('Alice Persona')).toBeInTheDocument();
+    expect(await screen.findByTestId('tactical-map')).toBeInTheDocument();
+    expect(screen.getByTestId('tactical-map-node-101')).toBeInTheDocument();
+    expect(screen.getByTestId('tactical-map-node-102')).toBeInTheDocument();
   });
 
-  it('renders a move button per move_to_position action', async () => {
+  it('passes move_to_position/take_position PlayerActions through as moveActions', async () => {
+    const mockMutateAsync = vi.fn(() => Promise.resolve());
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const moveAction = makeMoveAction('move_to_position', 102, 'Move to Center');
+    const takeAction = makeMoveAction('take_position', 101, 'Take North Wall');
     vi.mocked(fetchAvailableActions).mockResolvedValue({
       count: 2,
       next: null,
       previous: null,
-      results: [makeMoveAction(101, 'Move to North Wall'), makeMoveAction(102, 'Move to Center')],
+      results: [moveAction, takeAction],
     });
 
-    render(<RoomPositionsPanel sceneId="10" />, { wrapper: createWrapper() });
+    render(<SceneTacticalMap sceneId="10" />, { wrapper: createWrapper() });
 
-    expect(await screen.findByTestId('move-btn-101')).toBeInTheDocument();
-    expect(screen.getByTestId('move-btn-102')).toBeInTheDocument();
-  });
-
-  it('renders the set-the-stage button when a set_the_stage action is present', async () => {
-    vi.mocked(fetchAvailableActions).mockResolvedValue({
-      count: 1,
-      next: null,
-      previous: null,
-      results: [makeSetTheStageAction()],
-    });
-
-    render(<RoomPositionsPanel sceneId="10" />, { wrapper: createWrapper() });
-
-    expect(await screen.findByTestId('set-the-stage-btn')).toBeInTheDocument();
-    expect(screen.getByText('Set the Stage')).toBeInTheDocument();
-  });
-
-  it('dispatches the move action via useDispatchPlayerAction when a move button is clicked', async () => {
-    const mockMutateAsync = vi.fn(() => Promise.resolve());
-    vi.mocked(useDispatchPlayerAction).mockReturnValue({
-      mutateAsync: mockMutateAsync,
-      isPending: false,
-    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
-
-    const moveAction = makeMoveAction(101, 'Move to North Wall');
-    vi.mocked(fetchAvailableActions).mockResolvedValue({
-      count: 1,
-      next: null,
-      previous: null,
-      results: [moveAction],
-    });
-
-    const user = userEvent.setup();
-    render(<RoomPositionsPanel sceneId="10" />, { wrapper: createWrapper() });
-
-    const moveBtn = await screen.findByTestId('move-btn-101');
-    await user.click(moveBtn);
-
+    const centerNode = await screen.findByTestId('tactical-map-node-102');
+    fireEvent.click(centerNode);
     expect(mockMutateAsync).toHaveBeenCalledWith({ ref: moveAction.ref, kwargs: {} });
-  });
 
-  it('dispatches set_the_stage action when its button is clicked', async () => {
-    const mockMutateAsync = vi.fn(() => Promise.resolve());
-    vi.mocked(useDispatchPlayerAction).mockReturnValue({
-      mutateAsync: mockMutateAsync,
-      isPending: false,
-    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
-
-    const stageAction = makeSetTheStageAction();
-    vi.mocked(fetchAvailableActions).mockResolvedValue({
-      count: 1,
-      next: null,
-      previous: null,
-      results: [stageAction],
-    });
-
-    const user = userEvent.setup();
-    render(<RoomPositionsPanel sceneId="10" />, { wrapper: createWrapper() });
-
-    const stageBtn = await screen.findByTestId('set-the-stage-btn');
-    await user.click(stageBtn);
-
-    expect(mockMutateAsync).toHaveBeenCalledWith({ ref: stageAction.ref, kwargs: {} });
+    const northWallNode = screen.getByTestId('tactical-map-node-101');
+    fireEvent.click(northWallNode);
+    expect(mockMutateAsync).toHaveBeenCalledWith({ ref: takeAction.ref, kwargs: {} });
   });
 });

@@ -7,7 +7,7 @@ import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
 import { PlaceBar } from '../components/PlaceBar';
-import { RoomPositionsPanel } from '../components/RoomPositionsPanel';
+import { SceneTacticalMap } from '../components/SceneTacticalMap';
 import { HighlightReel } from '../components/HighlightReel';
 import { ConsentPrompt } from '../components/ConsentPrompt';
 import { SceneLinesAndVeilsCard } from '@/boundaries/components/SceneLinesAndVeilsCard';
@@ -162,7 +162,7 @@ export function SceneDetailPage() {
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
         {scene && <SceneLinesAndVeilsCard sceneId={id} />}
         {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
-        <RoomPositionsPanel sceneId={id} />
+        <SceneTacticalMap sceneId={id} />
         <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
       </div>
 
