@@ -55,7 +55,8 @@ export function useUnreadMailCount() {
     queryKey: mailKeys.unreadCount(),
     queryFn: fetchUnreadMailCount,
     enabled: !!account,
-    throwOnError: true,
+    // No throwOnError: a nav badge must fail silent (0 → hidden), never
+    // detonate the Header tree. Mirrors UnreadNarrativeBadge.
   });
   return data ?? 0;
 }
