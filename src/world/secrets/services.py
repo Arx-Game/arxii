@@ -17,7 +17,7 @@ from world.secrets.constants import (
     SecretLevel,
     SecretProvenance,
 )
-from world.secrets.models import Secret, SecretKnowledge
+from world.secrets.models import Leverage, Secret, SecretKnowledge
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -453,3 +453,71 @@ def secrets_explaining(
         .select_related("secret", "secret__category", "secret__subject_sheet__character")
         .order_by("-found_at")
     )
+
+
+def mint_leverage(
+    *,
+    holder_sheet: CharacterSheet,
+    subject_sheet: CharacterSheet,
+    founded_on: Secret,
+) -> Leverage:
+    """Record standing leverage ``holder_sheet`` holds over ``subject_sheet`` (#1680).
+
+    Called when a blackmail action succeeds. Idempotent — one row per
+    ``(holder, subject, secret)`` (the unique constraint) — so re-pressing the same
+    secret doesn't stack. A standing marker; the per-time throttle on spending it as a
+    favor is the consumer's ``OfferCooldown``, not consumption here.
+    """
+    leverage, _ = Leverage.objects.get_or_create(
+        holder_sheet=holder_sheet,
+        subject_sheet=subject_sheet,
+        founded_on=founded_on,
+    )
+    return leverage
+
+
+def has_leverage(*, holder_sheet: CharacterSheet, subject_sheet: CharacterSheet) -> bool:
+    """True if ``holder_sheet`` holds any standing leverage over ``subject_sheet`` (#1680).
+
+    The read behind the ``has_leverage_over`` predicate leaf and the ``FAVOR`` offer gate.
+    """
+    return Leverage.objects.filter(holder_sheet=holder_sheet, subject_sheet=subject_sheet).exists()
+
+
+def reveal_leveraged_secret(*, revealer_sheet: CharacterSheet, secret: Secret) -> bool:
+    """Play the blackmail card: expose ``secret`` and spend the leverage founded on it (#1680).
+
+    Guarded to a holder — you can only reveal a secret you actually hold leverage from.
+    Fires the exposure→renown bridge (``expose_secret``) against the **subject's own
+    societies** (their circles judge the archetypes by their principles; victim-org hits
+    fire regardless via the relational channel). Once public it is no longer *secret*
+    leverage, so every ``Leverage`` founded on it clears — a one-time card. Already-coerced
+    ``NPCAsset`` relationships persist (they're a separate, standing consequence).
+
+    Returns True if the reveal fired; False if the revealer holds no leverage on the secret.
+    """
+    from world.societies.models import OrganizationMembership, Society  # noqa: PLC0415
+
+    if not Leverage.objects.filter(holder_sheet=revealer_sheet, founded_on=secret).exists():
+        return False
+    society_ids = OrganizationMembership.objects.filter(
+        persona__character_sheet=secret.subject_sheet
+    ).values_list("organization__society_id", flat=True)
+    societies = Society.objects.filter(pk__in=set(society_ids))
+    expose_secret(secret, societies=societies)
+    # The secret is out — leverage founded on it is spent (coerced assets stay).
+    Leverage.objects.filter(founded_on=secret).delete()
+    return True
+
+
+def character_knows_secret(*, knower_sheet: CharacterSheet, secret: Secret) -> bool:
+    """True if the character (by current tenure) holds knowledge of ``secret`` (#1680).
+
+    The ammo gate behind ``BlackmailAmmoPrerequisite`` — you can only press a secret you
+    actually know. ``SecretKnowledge`` is roster-scoped, so this resolves the sheet to its
+    current ``RosterEntry`` first (a sheet with no current tenure knows nothing).
+    """
+    roster_entry = _current_roster_entry_for(knower_sheet)
+    if roster_entry is None:
+        return False
+    return SecretKnowledge.objects.filter(roster_entry=roster_entry, secret=secret).exists()

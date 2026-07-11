@@ -1,1 +1,1 @@
-0031_support_moves
+0032_add_area_location_mode

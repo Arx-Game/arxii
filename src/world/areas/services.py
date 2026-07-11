@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from django.db import connection
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import RoomProfile
@@ -164,6 +165,31 @@ def get_rooms_in_area(area: Area) -> list[RoomProfile]:
     return list(
         RoomProfile.objects.filter(area_id__in=all_area_pks).select_related("objectdb", "area")
     )
+
+
+def area_subtree_pks(area: Area) -> list[int]:
+    """Return pks of ``area`` and all its descendants.
+
+    Uses the AreaClosure materialized view on Postgres. On SQLite (test
+    cache) the view does not exist, so we walk the ``Area.parent`` hierarchy
+    directly. Area trees are shallow, so the Python walk is cheap.
+    """
+    if connection.vendor == "postgresql":  # noqa: STRING_LITERAL
+        return list(
+            AreaClosure.objects.filter(ancestor_id=area.pk).values_list("descendant_id", flat=True)
+        )
+
+    # SQLite fallback: breadth-first walk of Area.parent.
+    subtree: set[int] = {area.pk}
+    frontier = [area.pk]
+    while frontier:
+        parent_ids = frontier
+        frontier = []
+        for child in Area.objects.filter(parent_id__in=parent_ids).only("pk", "parent_id"):
+            if child.pk not in subtree:
+                subtree.add(child.pk)
+                frontier.append(child.pk)
+    return list(subtree)
 
 
 def reparent_area(area: Area, new_parent: Area | None) -> None:

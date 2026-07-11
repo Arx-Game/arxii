@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models import ActionTemplate
+    from actions.prerequisites import Prerequisite
     from actions.types import ActionContext, ActionResult, PendingActionResolution
     from flows.scene_data_manager import SceneDataManager
 
@@ -176,6 +177,45 @@ class SeduceAction(_SocialTemplateAction):
 
 
 @dataclass
+class BlackmailAction(_SocialTemplateAction):
+    key: str = "blackmail"
+    name: str = "Blackmail"
+    icon: str = "lock"
+    template_name: str = "Blackmail"
+    description: str = "Press a secret you hold over them — comply, or see it exposed."
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        from actions.prerequisites import BlackmailAmmoPrerequisite  # noqa: PLC0415
+
+        return [*super().get_prerequisites(), BlackmailAmmoPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        _template, result = self._resolve_template(actor, context, **kwargs)
+        # On a SUCCESSFUL press, mint standing Leverage founded on the pressed secret. The
+        # ammo prereq already validated (secret known + about the target) before execute, so
+        # the resolves here can't fail; the guard is belt-and-suspenders.
+        if result.success:
+            from actions.prerequisites import resolve_actor_sheet  # noqa: PLC0415
+            from world.secrets.models import Secret  # noqa: PLC0415
+            from world.secrets.services import mint_leverage  # noqa: PLC0415
+
+            secret = Secret.objects.filter(pk=kwargs.get("secret_id")).first()
+            target = kwargs.get("target")
+            actor_sheet = resolve_actor_sheet(actor)
+            target_sheet = resolve_actor_sheet(target) if target is not None else None
+            if secret is not None and actor_sheet is not None and target_sheet is not None:
+                mint_leverage(
+                    holder_sheet=actor_sheet, subject_sheet=target_sheet, founded_on=secret
+                )
+        return result
+
+
+@dataclass
 class PerformAction(_SocialTemplateAction):
     key: str = "perform"
     name: str = "Perform"
@@ -318,6 +358,7 @@ persuade = PersuadeAction()
 deceive = DeceiveAction()
 flirt = FlirtAction()
 seduce = SeduceAction()
+blackmail = BlackmailAction()
 perform = PerformAction()
 entrance = EntranceAction()
 restore_sense = RestoreSenseAction()

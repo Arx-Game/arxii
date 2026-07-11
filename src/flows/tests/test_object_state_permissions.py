@@ -1,7 +1,8 @@
 from django.test import TestCase
 
+from evennia_extensions.constants import ExitKind
 from evennia_extensions.factories import ObjectDBFactory
-from evennia_extensions.models import RoomProfile
+from evennia_extensions.models import ExitProfile, RoomProfile
 from flows.factories import SceneDataManagerFactory
 from flows.object_states.character_state import CharacterState
 from flows.object_states.exit_state import ExitState
@@ -146,4 +147,37 @@ class ObjectStatePermissionTests(TestCase):
         # self.item is a plain ObjectDB with no attached CharacterSheet.
         actor_state = self.context.get_state_by_pk(self.item.pk)
         exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        assert not exit_state.can_traverse(actor_state)
+
+    def test_closed_window_blocks_traversal(self):
+        """A closed window blocks traversal (#2175)."""
+        profile = ExitProfile.get_or_create_for_exit(self.exit)
+        profile.exit_kind = ExitKind.WINDOW
+        profile.save()
+
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        actor_state = self.context.get_state_by_pk(self.char.pk)
+        assert not exit_state.can_traverse(actor_state)
+
+    def test_open_window_allows_traversal(self):
+        """An open window allows traversal (#2175)."""
+        profile = ExitProfile.get_or_create_for_exit(self.exit)
+        profile.exit_kind = ExitKind.WINDOW
+        profile.is_open = True
+        profile.save()
+
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        actor_state = self.context.get_state_by_pk(self.char.pk)
+        assert exit_state.can_traverse(actor_state)
+
+    def test_open_window_respects_lock(self):
+        """An open window still respects db.locked for non-owner/non-tenant (#2175)."""
+        self.exit.db.locked = True
+        profile = ExitProfile.get_or_create_for_exit(self.exit)
+        profile.exit_kind = ExitKind.WINDOW
+        profile.is_open = True
+        profile.save()
+
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        actor_state = self.context.get_state_by_pk(self.char.pk)
         assert not exit_state.can_traverse(actor_state)

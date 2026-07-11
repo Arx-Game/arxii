@@ -226,6 +226,9 @@ class ActionRegistryTests(TestCase):
             "deceive",
             "flirt",
             "seduce",
+            "blackmail",
+            "coerce",
+            "reveal_secret",
             "perform",
             "entrance",
             "challenge",
@@ -379,6 +382,8 @@ class ActionRegistryTests(TestCase):
             "order_companion",
             "lock_exit",
             "unlock_exit",
+            "open_window",
+            "close_window",
             # #2116 — gift/technique/thread-weaving acquisition surface.
             "purchase_gift_unlock",
             "accept_technique_offer",

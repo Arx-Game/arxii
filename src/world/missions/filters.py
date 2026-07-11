@@ -82,15 +82,17 @@ class MissionTemplateFilterSet(django_filters.FilterSet):
 
 
 class MissionNodeFilterSet(django_filters.FilterSet):
-    """Filter MissionNode rows by template + entry-flag + flavor-flag.
+    """Filter MissionNode rows by template + entry-flag + flavor-flag + area.
 
     ``needs_rewrite`` is the per-author "flavor inherited from a copy still
     needs editing" flag; the E6 needs-rewrite queue uses it.
+    ``target_area`` supports filtering the node list to area-bound nodes.
     """
 
     template = django_filters.NumberFilter(field_name="template_id")
     is_entry = django_filters.BooleanFilter(field_name="is_entry")
     needs_rewrite = django_filters.BooleanFilter(field_name="flavor_text_needs_rewrite")
+    target_area = django_filters.NumberFilter(field_name="target_area_id")
 
     class Meta:
         model = MissionNode

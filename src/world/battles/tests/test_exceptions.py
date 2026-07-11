@@ -9,6 +9,8 @@ from world.battles.exceptions import (
     FortificationAlreadyBreachedError,
     FortificationOwnershipMismatchError,
     FortificationTargetRequiredError,
+    InvalidMoveScopeError,
+    MoveOrderRequiresTargetUnitError,
     PlaceScopeRequiredError,
     TechniqueNotBattleReadyError,
 )
@@ -48,3 +50,13 @@ class FortificationExceptionTests(SimpleTestCase):
     def test_fortification_already_breached_error_message(self) -> None:
         exc = FortificationAlreadyBreachedError()
         self.assertIn("already been breached", exc.user_message)
+
+
+class MoveExceptionTests(SimpleTestCase):
+    def test_invalid_move_scope_error_default_message(self) -> None:
+        exc = InvalidMoveScopeError()
+        self.assertIn("MOVE", exc.user_message)
+
+    def test_move_order_requires_target_unit_error_default_message(self) -> None:
+        exc = MoveOrderRequiresTargetUnitError()
+        self.assertIn("unit", exc.user_message.lower())
