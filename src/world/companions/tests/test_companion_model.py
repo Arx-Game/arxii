@@ -27,3 +27,21 @@ class CompanionModelTests(TestCase):
         companion = CompanionFactory(name="Fang", archetype__name="Wolf")
 
         self.assertEqual(str(companion), "Fang (Wolf)")
+
+
+class CompanionArchetypeIsMountTests(TestCase):
+    """Tests for the is_mount field on CompanionArchetype (#1863)."""
+
+    def test_is_mount_defaults_to_false(self) -> None:
+        """New archetypes default to non-mount."""
+        from world.companions.factories import CompanionArchetypeFactory
+
+        archetype = CompanionArchetypeFactory()
+        self.assertFalse(archetype.is_mount)
+
+    def test_is_mount_can_be_set_true(self) -> None:
+        """An archetype can be flagged as a mount."""
+        from world.companions.factories import CompanionArchetypeFactory
+
+        archetype = CompanionArchetypeFactory(is_mount=True)
+        self.assertTrue(archetype.is_mount)

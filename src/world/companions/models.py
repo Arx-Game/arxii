@@ -61,6 +61,13 @@ class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
         default=5,
         help_text="Unit strength when bridged into a BattleVehicle.",
     )
+    is_mount = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether this archetype is a ridable mount. Descriptive tag "
+            "for now — mount-riding mechanics are deferred (#1863)."
+        ),
+    )
 
     class Meta:
         ordering = ["domain", "name"]
