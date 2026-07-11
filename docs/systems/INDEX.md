@@ -708,7 +708,7 @@ consequence effects for graph mutation and flight).
 
 - **Models:** `Position` (`PositionKind` discriminator; `elevation_anchor` self-FK —
   the ground node an AERIAL or CHASM node is anchored to; `layout_x`/`layout_y`
-  nullable-float cosmetic tactical-map coordinates, #2006), `PositionEdge` (optional
+  nullable-small-integer cosmetic tactical-map coordinates, #2006), `PositionEdge` (optional
   `gating_challenge` FK + `is_passable` + `blocks_flight`), `ObjectPosition` (OneToOne
   occupancy); **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live
   and blueprint layers; **blueprint models** `PositionBlueprint` (reusable GM-authored

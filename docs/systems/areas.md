@@ -141,7 +141,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 
 | Model | Purpose | Key Fields / Constraints |
 |-------|---------|--------------------------|
-| `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name; `elevation_anchor` (self-referential FK → `Position`, null=floor/top-level) — the ground `Position` this AERIAL or CHASM node is anchored to (**omitted from `MODEL_MAP.md`** — the auto-generation tool skips self-referential FKs); `layout_x`/`layout_y` (nullable floats) — cosmetic tactical-map coordinates (#2006); `null` on both means "let the frontend auto-layout" (`computeTacticalLayout`'s BFS-ring placement) rather than "place at the origin" |
+| `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name; `elevation_anchor` (self-referential FK → `Position`, null=floor/top-level) — the ground `Position` this AERIAL or CHASM node is anchored to (**omitted from `MODEL_MAP.md`** — the auto-generation tool skips self-referential FKs); `layout_x`/`layout_y` (nullable small integers) — cosmetic tactical-map coordinates (#2006); `null` on both means "let the frontend auto-layout" (`computeTacticalLayout`'s BFS-ring placement) rather than "place at the origin" |
 | `PositionEdge` | Traversable adjacency between two `Position` nodes | `position_a` / `position_b` FK (canonical pk order); `is_passable`; `blocks_flight` — obstructs AERIAL-layer traversal; `gating_challenge` FK → `mechanics.ChallengeInstance` (nullable) |
 | `ObjectPosition` | One-to-one occupancy record | `objectdb` OneToOne PK; `position` FK — mirrors `db_location` |
 
@@ -150,7 +150,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 | Model | Purpose | Key Fields / Constraints |
 |-------|---------|--------------------------|
 | `PositionBlueprint` | GM-authored reusable terrain layout | `name` (unique), `description` |
-| `BlueprintPosition` | Position node template inside a blueprint | `blueprint` FK; name unique per blueprint; `layout_x`/`layout_y` (nullable floats, #2006) |
+| `BlueprintPosition` | Position node template inside a blueprint | `blueprint` FK; name unique per blueprint; `layout_x`/`layout_y` (nullable small integers, #2006) |
 | `BlueprintEdge` | Edge template inside a blueprint | `blueprint` FK; `position_a` / `position_b` FK → `BlueprintPosition` (canonical pk order); `is_passable`; `gating_challenge_template` FK → `mechanics.ChallengeTemplate` (nullable, `on_delete=PROTECT`) |
 
 **Room profile link** (in `evennia_extensions.RoomProfile`):
