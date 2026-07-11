@@ -1423,6 +1423,30 @@ on `SanctumDetails` was removed (cross-table partial-unique limitation); one-per
 is enforced in the service layer, excluding dissolved rows. Re-sanctifying the same room after
 dissolution is a deferred follow-up.
 
+### Portal Travel (#2222, ADR-0121)
+
+A character who knows a travel-mode `Technique` (`travel_anchor_kind` FK set) and stands in a
+room carrying a matching active `PortalAnchor` can travel instantly to any other room whose
+matching anchor is open-or-standing — `TravelAction.execute()`
+(`actions/definitions/movement.py`) tries this branch FIRST, falling through to #2163's
+walking pathfinder unchanged when ineligible. `PortalAnchorKind` (staff-authored medium
+catalog — arrival/departure verbs) and `PortalAnchor` (stackable per-room install,
+soft-deleted via `dissolved_at`, one active per `(room_profile, kind)`) live in
+`models/portals.py`; deliberately NOT a `RoomFeatureInstance` (one-feature-per-room
+cardinality) or a `RoomDecoration` (wrong domain — see ADR-0121). Services
+(`services/portal_travel.py`): `travel_anchor_kinds_for` / `portal_destinations` /
+`portal_route` / `perform_portal_travel` / `install_portal_anchor` /
+`dissolve_portal_anchor` — never consults `RoomProfile.is_public`. Install costs a flat
+`settings.PORTAL_ANCHOR_INSTALL_COST` (default 5000 copper); actions
+`portal_anchor_install`/`portal_anchor_dissolve` (`actions/definitions/portals.py`), telnet
+`CmdPortalAnchor` (`portal/install <kind>=<name>` / `portal/dissolve [<kind>]`). Discovery
+API lives in `world.locations` (not this app) alongside `ComfortViewSet`: `GET
+/api/locations/portal-destinations/?character_id=<id>`. Seed:
+`ensure_portal_travel_content()` (`world/seeds/game_content/magic.py`) — "Mirror" anchor
+kind, "Mirrorwalking" Minor Gift + "Mirrorwalk" Technique, starter anchors in the seeded
+magic-story cascade rooms. Full eligibility chain + API/frontend detail:
+`docs/systems/magic.md`'s "Portal travel" section.
+
 ## Removed Models (deprecated)
 
 The following models have been removed and replaced:

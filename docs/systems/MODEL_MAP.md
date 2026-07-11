@@ -378,6 +378,7 @@
   - residents <- character_sheets.CharacterSheet
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
+  - portal_anchors <- magic.PortalAnchor
   - fame_reaction_lines <- societies.FameReactionLine
   - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - hidden_clues <- clues.RoomClue
@@ -1452,6 +1453,7 @@
 ### Service Functions
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None) -> world.checks.types.ModifierBreakdown — Aggregate all modifier contributions for a check into a ModifierBreakdown.`
+- `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0) -> int — Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
 - `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str) -> int — Compute how much a defender's active resistance raises difficulty.`
 - `get_rollmod(character: 'ObjectDB') -> int — Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
@@ -1782,6 +1784,7 @@
   - interaction -> scenes.Interaction [FK] (nullable)
 **Pointed to by:**
   - extra_targets <- combat.CombatRoundActionTarget
+  - npc_regard_events <- npc_services.NpcRegardEvent
 
 ### CombatRoundActionTarget
 **Foreign Keys:**
@@ -1794,6 +1797,8 @@
   - threat_entry -> combat.ThreatPoolEntry [FK]
   - targets -> combat.CombatParticipant [M2M]
   - opponent_targets -> combat.CombatOpponent [M2M]
+**Pointed to by:**
+  - npc_regard_events <- npc_services.NpcRegardEvent
 
 ### CombatPull
 **Foreign Keys:**
@@ -1956,7 +1961,7 @@
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' — Idempotently record that a character acknowledged the encounter's risk (#777).`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Create a CombatParticipant linking a PC to an encounter.`
-- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
+- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' — Reduce ``damage`` by role-gated equipped-armor soak (#1174).`
 - `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' — Add fatigue to the pool.`
@@ -1976,14 +1981,14 @@
 - `declare_cover(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a covering maneuver for an ally -- passives-only, auto-ready.`
 - `declare_demoralize(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a demoralizing maneuver — break an opponent's nerve, auto-ready (#2015).`
 - `declare_flee(participant: 'CombatParticipant') -> 'CombatRoundAction' — Declare intent to flee -- passives-only maneuver, auto-ready.`
-- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None') -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
+- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None) -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
 - `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
 - `declare_taunt(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).`
 - `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' — Declare using a held on-use item as this round's action (#2023, #2120).`
 - `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' — Scan declared actions to find combos whose slots are all satisfied.`
-- `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0) -> 'ChallengeResolutionResult | None' — Resolve *interposer*'s interpose attempt and apply the graded outcome.`
+- `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0, select_best_check_rating: 'bool' = False) -> 'ChallengeResolutionResult | None' — Resolve *interposer*'s interpose attempt and apply the graded outcome.`
 - `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', extra_modifiers: 'int' = 0) -> 'float' — Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
 - `drain_reactive_upkeep(encounter: 'CombatEncounter') -> 'None' — Debit per-round upkeep from each active participant's sustained conditions.`
 - `effective_soak_from_armor(character: 'Character') -> 'int' — Sum effective armor soak across the character's equipped armor pieces.`
@@ -3221,6 +3226,7 @@
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK] (nullable)
   - skill_trait -> traits.Trait [FK] (nullable)
+  - output_item_template -> items.ItemTemplate [FK] (nullable)
 **Pointed to by:**
   - material_requirements <- items.CraftingMaterialRequirement
   - skill_caps <- items.CraftingSkillCap
@@ -3567,6 +3573,7 @@
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - action_template -> actions.ActionTemplate [FK] (nullable)
   - target_weather_type -> weather.WeatherType [FK] (nullable)
+  - travel_anchor_kind -> magic.PortalAnchorKind [FK] (nullable)
   - restrictions -> magic.Restriction [M2M]
   - applied_conditions -> conditions.ConditionTemplate [M2M]
   - properties -> mechanics.Property [M2M]
@@ -3939,6 +3946,17 @@
 **Foreign Keys:**
   - motif_resonance -> magic.MotifResonance [FK]
   - style -> items.Style [FK]
+
+### PortalAnchorKind
+**Pointed to by:**
+  - travel_techniques <- magic.Technique
+  - anchors <- magic.PortalAnchor
+
+### PortalAnchor
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - kind -> magic.PortalAnchorKind [FK]
+  - installed_by -> scenes.Persona [FK] (nullable)
 
 ### LevelPowerConfig
 
@@ -6518,6 +6536,7 @@
   - holdings <- societies.DomainHolding
   - improvement_details <- societies.DomainImprovementDetails
   - crises <- societies.DomainCrisis
+  - food_stockpile <- agriculture.FoodStockpile
 
 ### HoldingKind
 **Pointed to by:**

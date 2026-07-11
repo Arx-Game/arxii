@@ -559,7 +559,20 @@ actions, backends, and service functions.
   same-Area, publicly-listed rooms. Overrides `func()` directly (like `CmdPosition`)
   rather than the base `ArxCommand._execute()` single-action recipe, since resolving
   the destination argument needs custom logic before dispatch. No business logic in
-  the command.
+  the command. `TravelAction` itself gained a portal-travel branch (#2222) tried before
+  the walking pathfinder — see `src/actions/CLAUDE.md` and `world/magic/CLAUDE.md`
+  "Portal travel"; no command-layer change was needed since `CmdTravel` already
+  dispatches the same `travel_to` action.
+- **`portals.py`**: `CmdPortalAnchor` (`portal`, `cmd:all()`, #2222) — install/dissolve a
+  portal anchor in the caller's current room. `portal/install <kind>=<name>` resolves
+  the `PortalAnchorKind` by name (case-insensitive exact) and dispatches
+  `InstallPortalAnchorAction` (key `portal_anchor_install`,
+  `actions/definitions/portals.py`); `portal/dissolve [<kind>]` resolves the room's sole
+  active anchor (or, given a kind, that kind's anchor) and dispatches
+  `DissolvePortalAnchorAction` (key `portal_anchor_dissolve`). Switch-routed (mirrors
+  `CmdRoom`'s manual switch dispatch, `locations.py`); no business logic in the command
+  — kind/anchor resolution from text is the only work done here, all gating (standing,
+  funds, duplicate-kind) lives in the actions/services.
 - **`who.py`**: `CmdWho` (`who`, #1463) — the online roster. Thin read over
   `world.scenes.presence.who_listing`: online characters by **active** persona with a **coarse**
   idle marker (active / idle / away — never exact, so identical idle times can't out an account's

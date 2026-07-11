@@ -460,6 +460,28 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     pending entry-flourish offer inbox (#1140)
   - `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`; resolves
     offer via `resolve_entry_flourish_offer` and fires the self-grant (#1140)
+- **Portal travel (#2222, ADR-0121):** `PortalAnchorKind` (staff-authored anchor medium
+  catalog — arrival/departure verbs) + `PortalAnchor` (stackable per-room install, FK
+  `room_profile`, PROTECT FK `kind`, soft-deleted via `dissolved_at`, partial-unique per
+  `(room_profile, kind)` while active) + `Technique.travel_anchor_kind` (nullable FK — marks
+  a technique as portal-travel through that medium). Services
+  (`world/magic/services/portal_travel.py`): `travel_anchor_kinds_for` /
+  `portal_destinations` / `portal_route` / `perform_portal_travel` /
+  `install_portal_anchor` / `dissolve_portal_anchor`. Eligibility never consults
+  `RoomProfile.is_public` — reachability is the anchor's own `is_network_open` flag OR
+  owner/tenant standing at the destination. `TravelAction`'s portal branch
+  (`actions/definitions/movement.py`, key `travel_to`) tries this FIRST, falling back to
+  #2163's walking pathfinder unchanged when ineligible. Install costs a flat
+  `settings.PORTAL_ANCHOR_INSTALL_COST` (default 5000 copper) via `InstallPortalAnchorAction`
+  (key `portal_anchor_install`)/`DissolvePortalAnchorAction` (key `portal_anchor_dissolve`,
+  owner-gated, no refund); telnet `CmdPortalAnchor` (`portal/install <kind>=<name>` /
+  `portal/dissolve [<kind>]`). API: `GET
+  /api/locations/portal-destinations/?character_id=<id>` (`world.locations.views
+  .PortalDestinationsViewSet` — lives in `world.locations`, not `world.magic`, alongside the
+  sibling `ComfortViewSet`; see Locations section). Frontend: `PortalsBlock`
+  (room-panel). Seed: `ensure_portal_travel_content()` — "Mirror" anchor kind, MINOR Gift
+  "Mirrorwalking" + "Mirrorwalk" Technique, starter anchors in the seeded magic-story cascade
+  rooms. See magic.md "Portal travel" for the full eligibility chain + exception table.
 - **Offer registry** (`commands/offer_registry.py`): generic pending-offer dispatch; `SurgeOfferHandler` and `CrossingOfferHandler` in `world/magic/offer_handlers.py`. Telnet: `accept <keyword>` / `decline <keyword>`.
 - **Technique authoring action:** `AuthorTechniqueAction` (key `"author_technique"`, category
   `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
@@ -675,6 +697,9 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   public-rooms-only, capped at `settings.TRAVEL_MAX_HOPS`. `TravelAction`/`StopTravelAction`
   (`registry_key`s `travel_to`/`stop_travel`) auto-walk a computed route one hop at a time;
   shared by telnet `CmdTravel` and "Go there" buttons on the scene browser + presence panel.
+  `TravelAction.execute()` tries a portal-travel branch FIRST (#2222 — instant relocation via
+  a known travel-mode `Technique` + matching anchors at both ends), falling back to this
+  walking pathfinder unchanged when ineligible; see the Magic section's "Portal travel" entry.
   See [areas.md](areas.md) "Presence & Travel" section.
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
@@ -725,7 +750,10 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
   `IsRoomTenantPrerequisite` (widened #2036 to owner-OR-tenant standing, not a direct tenancy row
   only — same widened gate now used by `SetPrimaryHomeAction` itself).
 - **API:** `GET /api/locations/comfort/?character_id=<id>` (`ComfortViewSet`) — personal comfort
-  readout, tenure-gated
+  readout, tenure-gated; `GET /api/locations/portal-destinations/?character_id=<id>`
+  (`PortalDestinationsViewSet`, #2222) — every portal-network anchor that character could
+  travel to right now (list-only discovery; travel itself dispatches `travel_to` — see the
+  Magic section's "Portal travel" entry)
 - **Frontend:** `ComfortWidget` (`frontend/src/comfort/`) — silent unless something is biting
 - **Integrates with:** areas (`AreaClosure` cascade walk), magic (resonance axis feeds Sanctum
   income, `world/magic/CLAUDE.md`), conditions (`DamageType` FK for the hazard-shelter axis),
