@@ -39,6 +39,25 @@ interface PendingWhisper {
   techniqueId?: number;
 }
 
+// Unmet prerequisite: shown disabled with its reason instead of omitted
+// (mirrors ActionPanel.tsx's disabled-button pattern, #2158). No delivery
+// submenu — the action can't be fired regardless. Shared by both the direct-
+// execute list and the "Attach to Pose" list below.
+function disabledActionItem(action: PlayerAction, key: string) {
+  return (
+    <button
+      key={key}
+      type="button"
+      disabled
+      title={action.prerequisite_reasons.join('; ')}
+      className="flex w-full cursor-not-allowed select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm opacity-50 outline-none"
+    >
+      <Zap className="mr-2 h-4 w-4" />
+      {action.display_name}
+    </button>
+  );
+}
+
 interface Props {
   personaId: number;
   personaName: string;
@@ -206,21 +225,7 @@ export function PersonaContextMenu({
           {targetedActions.map((action) => {
             const stableKey = `${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`;
             if (!action.prerequisite_met) {
-              // Unmet prerequisite: shown disabled with its reason instead of
-              // omitted (mirrors ActionPanel.tsx's disabled-button pattern, #2158).
-              // No delivery submenu — the action can't be fired regardless.
-              return (
-                <button
-                  key={stableKey}
-                  type="button"
-                  disabled
-                  title={action.prerequisite_reasons.join('; ')}
-                  className="flex w-full cursor-not-allowed select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm opacity-50 outline-none"
-                >
-                  <Zap className="mr-2 h-4 w-4" />
-                  {action.display_name}
-                </button>
-              );
+              return disabledActionItem(action, stableKey);
             }
             const techniqueId = action.ref.technique_id ?? undefined;
             const actionKey =
@@ -281,20 +286,7 @@ export function PersonaContextMenu({
               {targetedActions.map((action) => {
                 const stableKey = `attach-${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`;
                 if (!action.prerequisite_met) {
-                  // Unmet prerequisite: shown disabled with its reason instead of
-                  // omitted (mirrors ActionPanel.tsx's disabled-button pattern, #2158).
-                  return (
-                    <button
-                      key={stableKey}
-                      type="button"
-                      disabled
-                      title={action.prerequisite_reasons.join('; ')}
-                      className="flex w-full cursor-not-allowed select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm opacity-50 outline-none"
-                    >
-                      <Zap className="mr-2 h-4 w-4" />
-                      {action.display_name}
-                    </button>
-                  );
+                  return disabledActionItem(action, stableKey);
                 }
                 const techniqueId = action.ref.technique_id ?? undefined;
                 const actionKey =
