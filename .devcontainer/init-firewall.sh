@@ -10,7 +10,7 @@
 #   https://raw.githubusercontent.com/anthropics/claude-code/main/.devcontainer/init-firewall.sh
 # Structure preserved; allowlist replaced; IP-range gathering uses the same
 # "fetch published ranges before lockdown" philosophy as the upstream reference,
-# extended to cover all four logical destination groups.
+# extended to cover all five logical destination groups.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -97,7 +97,17 @@ iptables -A OUTPUT -d 172.16.0.0/12 -j ACCEPT
 #   d) Cloudflare published ranges — covers registry.npmjs.org, which sits
 #      behind Cloudflare and rotates IPs aggressively.
 #
-# Sources b–d use -exist so duplicate CIDRs across ranges don't error.
+#   e) Azure Storage published ranges (Microsoft's global "Storage" service
+#      tag) — covers GitHub Actions log downloads. `gh run view --log` /
+#      `gh api .../actions/jobs/<id>/logs` redirect to
+#      productionresultssaN.blob.core.windows.net; N has no known upper bound
+#      (0-15+ all observed live) and each shard resolves via Azure Traffic
+#      Manager to a different Azure region's IPs. Unlike (a)'s small/stable
+#      hosts, there's no fixed hostname/IP set to pin, so we allow Microsoft's
+#      published Storage-service IP ranges instead — scoped to the Storage tag,
+#      not all of Azure.
+#
+# Sources b–e use -exist so duplicate CIDRs across ranges don't error.
 # ---------------------------------------------------------------------------
 ipset create allowed-domains hash:net
 
@@ -208,6 +218,36 @@ if [ "$CF_COUNT" -lt 5 ]; then
 fi
 echo "  Added ${CF_COUNT} Cloudflare CIDRs."
 
+# ---- e) Azure Storage published ranges (GitHub Actions log downloads) ----
+# Microsoft's download page only exposes the current dated JSON via a link on
+# an HTML confirmation page (no stable direct URL), so we scrape it the same
+# way widely-used DevOps scripts do.
+echo "Fetching Azure Storage service tag IP ranges..."
+AZURE_JSON_URL=$(curl -sfL --connect-timeout 15 --max-time 30 \
+    "https://www.microsoft.com/en-us/download/confirmation.aspx?id=56519" \
+    | grep -oE 'https://download\.microsoft\.com/download/[^"]+\.json' | head -1)
+if [ -z "$AZURE_JSON_URL" ]; then
+    echo "ERROR: Failed to find the Azure ServiceTags_Public JSON URL on the Microsoft download page" >&2
+    exit 1
+fi
+AZURE_JSON=$(curl -sfL --connect-timeout 15 --max-time 30 "$AZURE_JSON_URL")
+if [ -z "$AZURE_JSON" ]; then
+    echo "ERROR: Failed to fetch ${AZURE_JSON_URL}" >&2
+    exit 1
+fi
+AZURE_COUNT=0
+while read -r cidr; do
+    if is_valid_ipv4_cidr "$cidr"; then
+        ipset add allowed-domains "$cidr" -exist
+        AZURE_COUNT=$((AZURE_COUNT + 1))
+    fi
+done < <(echo "$AZURE_JSON" | jq -r '.values[] | select(.name == "Storage") | .properties.addressPrefixes[]')
+if [ "$AZURE_COUNT" -lt 50 ]; then
+    echo "ERROR: Azure Storage service tag returned only ${AZURE_COUNT} IPv4 CIDRs (minimum 50); aborting" >&2
+    exit 1
+fi
+echo "  Added ${AZURE_COUNT} Azure Storage CIDRs."
+
 # ---------------------------------------------------------------------------
 # 4. Default-deny policies and final ACCEPT/REJECT rules.
 #
@@ -253,7 +293,7 @@ echo "Verifying firewall rules..."
 # (a) Blocked host must be unreachable. Use www.google.com — Google's own
 # IPs (142.250.0.0/15, 142.251.0.0/16) are not in any of our allowlist
 # sources (Anthropic, Sentry, Statsig, PyPI, GitHub meta, Fastly,
-# Cloudflare), so reachability here means a firewall miss. Avoid
+# Cloudflare, Azure Storage), so reachability here means a firewall miss. Avoid
 # example.com / example.org as test targets: both now resolve to
 # Cloudflare IPs (104.20.x.x, 172.66.x.x) that are legitimately in our
 # allowlist because Cloudflare fronts the npm registry.
