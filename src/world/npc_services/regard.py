@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from world.distinctions.models import CharacterDistinction
     from world.npc_services.models import NpcRegard, NpcRegardEvent, RegardEventConfig
     from world.scenes.models import Persona
     from world.societies.models import Organization, Society
@@ -138,3 +139,31 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
         mirror_npc_regard_event_to_track(event)
 
     return event
+
+
+def reconcile_distinction_regard_seeds(character_distinction: CharacterDistinction) -> None:
+    """Materialize a CharacterDistinction's DistinctionRegardSeed rows into real state (#2039).
+
+    Mirrors reconcile_distinction_resonance_grants's shape (magic/services/
+    distinction_resonance.py): a lookup-table walk reconciled onto real
+    per-character state at chargen. One NpcRegardEvent (reason=DISTINCTION_SEED,
+    no citation) per matching seed row.
+    """
+    from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
+    from world.npc_services.models import DistinctionRegardSeed  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    sheet = character_distinction.character.sheet_data
+    try:
+        primary_persona = sheet.primary_persona
+    except Persona.DoesNotExist:
+        return
+
+    seeds = DistinctionRegardSeed.objects.filter(distinction=character_distinction.distinction)
+    for seed in seeds:
+        record_npc_regard_event(
+            holder_persona=seed.npc_persona,
+            target=primary_persona,
+            amount=seed.starting_value,
+            reason=NpcRegardEventReason.DISTINCTION_SEED,
+        )
