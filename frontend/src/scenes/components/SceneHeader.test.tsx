@@ -20,6 +20,7 @@ const SCENE = {
   is_active: true,
   is_owner: false,
   participants: [],
+  active_round: null,
 } as unknown as SceneDetail;
 
 function renderWrapped(scene: SceneDetail = SCENE) {
