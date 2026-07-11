@@ -678,6 +678,8 @@ export interface DraftData {
   motif_description?: string;
   // The Glimpse story
   glimpse_story?: string;
+  // Magic fields - Gift resonance (anchors the latent GIFT thread at CG finalization, #1620)
+  selected_gift_resonance_id?: number | null;
   magic_complete?: boolean;
   // Tarot card selection for familyless characters
   tarot_card_name?: string;
