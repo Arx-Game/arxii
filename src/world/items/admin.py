@@ -13,6 +13,7 @@ from world.items.models import (
     ItemInstance,
     ItemStyle,
     ItemTemplate,
+    ItemTemplateAppearanceEffect,
     OwnershipEvent,
     QualityTier,
     Style,
@@ -48,6 +49,14 @@ class TemplateSlotInline(admin.TabularInline):
 class TemplateInteractionInline(admin.TabularInline):
     model = TemplateInteraction
     extra = 1
+
+
+class ItemTemplateAppearanceEffectInline(admin.TabularInline):
+    model = ItemTemplateAppearanceEffect
+    extra = 1
+    autocomplete_fields = ["trait", "target_option"]
+    verbose_name = "Appearance Effect"
+    verbose_name_plural = "Appearance Effects"
 
 
 class GarmentMitigationInline(admin.TabularInline):
@@ -139,7 +148,12 @@ class ItemTemplateAdmin(admin.ModelAdmin):
             },
         ),
     ]
-    inlines = [TemplateSlotInline, TemplateInteractionInline, GarmentMitigationInline]
+    inlines = [
+        TemplateSlotInline,
+        TemplateInteractionInline,
+        GarmentMitigationInline,
+        ItemTemplateAppearanceEffectInline,
+    ]
 
 
 class ItemStyleInline(admin.TabularInline):
