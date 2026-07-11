@@ -838,6 +838,7 @@
 - `maybe_pause_battle_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live Battle on disconnect, unless it's large-scale`
 - `notify_battle_state_changed(battle: 'Battle') -> 'None' — Slim BATTLE_STATE ping -> connected participants; clients refetch the REST aggregate.`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
+- `open_place_encounter(*, battle_place: 'BattlePlace') -> 'CombatEncounter' — Bind *battle_place* to a new general party-scale combat encounter (#2008).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' — Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' — Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
 - `resolve_battle_beats(battle: 'Battle') -> 'None' — Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.`
@@ -2364,8 +2365,11 @@
   - tenure -> roster.RosterTenure [FK]
 
 ### SocialConsentCategory
+**Foreign Keys:**
+  - parent -> consent.SocialConsentCategory [FK] (nullable)
 **Pointed to by:**
   - action_templates <- actions.ActionTemplate
+  - children <- consent.SocialConsentCategory
   - rules <- consent.SocialConsentCategoryRule
   - whitelist_entries <- consent.SocialConsentWhitelist
   - blacklist_entries <- consent.SocialConsentBlacklist
@@ -2396,8 +2400,9 @@
 ### Service Functions
 - `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
-- `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909).`
+- `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909/#2170).`
 - `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool', is_rival: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
+- `effective_consent_mode(pref: 'SocialConsentPreference | None', category: 'SocialConsentCategory') -> 'str' — The ConsentMode governing *(pref, category)* after tree inheritance (#2170).`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
@@ -4930,6 +4935,8 @@
   - target_persona -> scenes.Persona [FK] (nullable)
   - target_organization -> societies.Organization [FK] (nullable)
   - target_society -> societies.Society [FK] (nullable)
+**Pointed to by:**
+  - events <- npc_services.NpcRegardEvent
 
 ### CourtGrantOfferDetails
 **Foreign Keys:**
@@ -4941,6 +4948,21 @@
   - offer -> npc_services.NPCServiceOffer [FK]
   - target_persona -> scenes.Persona [FK]
   - created_by -> gm.GMProfile [FK] (nullable)
+
+### RegardEventConfig
+
+### NpcRegardEvent
+**Foreign Keys:**
+  - regard -> npc_services.NpcRegard [FK]
+  - source_pc_combat_action -> combat.CombatRoundAction [FK] (nullable)
+  - source_npc_combat_action -> combat.CombatOpponentAction [FK] (nullable)
+  - source_scene -> scenes.Scene [FK] (nullable)
+  - source_stake_resolution -> stories.StakeResolution [FK] (nullable)
+
+### DistinctionRegardSeed
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - npc_persona -> scenes.Persona [FK]
 
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
@@ -5456,6 +5478,7 @@
 - `get_bond_combat_config() -> 'BondCombatConfig' — Get-or-create the BondCombatConfig singleton (pk=1).`
 - `give_writeup_kudos(*, giver_account: 'AccountDB', writeup) -> 'WriteupKudos' — Award a non-revocable commendation to the writeup author on behalf of the subject.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
+- `mirror_npc_regard_event_to_track(event: 'NpcRegardEvent') -> 'RelationshipTrackProgress | None' — Mirror one NpcRegardEvent onto the PC's Regard/Friction system track (#2039).`
 - `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' — Move developed points from one track to another. No new value is added.`
 - `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '', visibility: 'UpdateVisibility' = UpdateVisibility.PRIVATE) -> 'RelationshipCapstone' — Register a wronged character's one-sided grievance against whoever harmed them (#1429).`
 - `relationship_gated_contributions(*, perceiver: 'CharacterSheet', perceived: 'CharacterSheet') -> 'list[ModifierContribution]' — Modifier contributions the perceiver's regard for the perceived injects into a check (#1696).`
@@ -5683,6 +5706,7 @@
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - combat_encounters <- combat.CombatEncounter
   - battle <- battles.Battle
+  - npc_regard_events <- npc_services.NpcRegardEvent
 
 ### SceneParticipation
 **Foreign Keys:**
@@ -5782,6 +5806,7 @@
   - regards_held <- npc_services.NpcRegard
   - regards_as_target <- npc_services.NpcRegard
   - summonses_received <- npc_services.OfferSummons
+  - regard_seeds_from_distinctions <- npc_services.DistinctionRegardSeed
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - materials_contributed <- buildings.BuildingMaterial
@@ -6067,6 +6092,7 @@
   - founded_on -> secrets.Secret [FK]
 
 ### Service Functions
+- `accusation_permitted(*, framer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet') -> 'bool' — Target-side consent gate for a frame-job (#1825) — may *framer* accuse *target*?`
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' — Author a Level-1 player-flavor secret (the only tier a player may free-write).`
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `character_knows_secret(*, knower_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' — True if the character (by current tenure) holds knowledge of ``secret`` (#1680).`
@@ -6074,6 +6100,7 @@
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' — Record that a character knows a secret, unlocking the given layers (idempotent).`
 - `has_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet') -> 'bool' — True if ``holder_sheet`` holds any standing leverage over ``subject_sheet`` (#1680).`
 - `known_secrets_for(roster_entry: 'RosterEntry', *, subject_sheet: 'CharacterSheet | None' = None, sort: 'str' = 'recent') -> 'QuerySet[SecretKnowledge]' — The secrets a character has **learned about others** — held records (#1334).`
+- `mint_accusation(*, accuser_persona: 'Persona', subject_sheet: 'CharacterSheet', content: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, category: 'SecretCategory | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' — Mint a player-authored ACCUSATION — a false scandal about *someone else* (#1825).`
 - `mint_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet', founded_on: 'Secret') -> 'Leverage' — Record standing leverage ``holder_sheet`` holds over ``subject_sheet`` (#1680).`
 - `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '') -> 'RelationshipCapstone' — A secret's victim registers a grievance against its subject (#1429).`
 - `reveal_leveraged_secret(*, revealer_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' — Play the blackmail card: expose ``secret`` and spend the leverage founded on it (#1680).`
@@ -6892,6 +6919,7 @@
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
   - reward_lines <- stories.StakeRewardLine
+  - npc_regard_events <- npc_services.NpcRegardEvent
 
 ### StakeRewardLine
 **Foreign Keys:**
