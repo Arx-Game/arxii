@@ -230,6 +230,80 @@ def _shift_affection(
     )
 
 
+def _shift_npc_regard(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Shift the notable-NPC recipient's NpcRegard for the actor (#2039).
+
+    Structured-consequence-authored twin of _shift_affection: content authors
+    pre-declare npc_regard_amount on an effect row; GMs never freehand the
+    amount (mechanics/CLAUDE.md: "structured consequences only"). Cites the
+    resolution's Scene, since ResolutionContext doesn't carry the originating
+    SceneActionRequest.
+    """
+    from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
+    from world.npc_services.regard import record_npc_regard_event  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    actor = context.character
+    recipient = _resolve_target(effect, context)
+    amount = effect.npc_regard_amount or 0
+    if context.scene is None:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_NPC_REGARD,
+            description="No scene on the resolution context; regard shift skipped.",
+            applied=False,
+            skip_reason="no_scene",
+        )
+    if amount == 0:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_NPC_REGARD,
+            description="No regard amount configured; skipped.",
+            applied=False,
+            skip_reason="zero_amount",
+        )
+    try:
+        actor_sheet = actor.sheet_data
+        recipient_sheet = recipient.sheet_data
+    except ObjectDoesNotExist:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_NPC_REGARD,
+            description="Actor or target has no character sheet; skipped.",
+            applied=False,
+            skip_reason="missing_sheet",
+        )
+    if recipient_sheet.pk == actor_sheet.pk:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_NPC_REGARD,
+            description="Actor and target are the same character; skipped.",
+            applied=False,
+            skip_reason="self_target",
+        )
+    try:
+        holder_persona = recipient_sheet.primary_persona
+        actor_persona = actor_sheet.primary_persona
+    except Persona.DoesNotExist:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_NPC_REGARD,
+            description="Actor or recipient has no primary persona; skipped.",
+            applied=False,
+            skip_reason="missing_persona",
+        )
+    record_npc_regard_event(
+        holder_persona=holder_persona,
+        target=actor_persona,
+        amount=amount,
+        reason=NpcRegardEventReason.SOCIAL_ACTION_RESOLVED,
+        source_scene=context.scene,
+    )
+    return AppliedEffect(
+        effect_type=EffectType.SHIFT_NPC_REGARD,
+        description=f"{recipient.db_key}'s regard for {actor.db_key} shifts {amount:+d}",
+        applied=True,
+    )
+
+
 def _add_property(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -1137,6 +1211,7 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.REMOVE_CONDITION: _remove_condition,
     EffectType.SET_RELATIONSHIP_CONDITION: _set_relationship_condition,
     EffectType.SHIFT_AFFECTION: _shift_affection,
+    EffectType.SHIFT_NPC_REGARD: _shift_npc_regard,
     EffectType.ADD_PROPERTY: _add_property,
     EffectType.REMOVE_PROPERTY: _remove_property,
     EffectType.GRANT_DISTINCTION: _grant_distinction,
