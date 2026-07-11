@@ -2,6 +2,7 @@ import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
 import { GamePage } from './GamePage';
+import { saveThreadTabs } from './threadTabsStorage';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
@@ -232,6 +233,9 @@ function seedActiveSceneWithRoom() {
 describe('GamePage', () => {
   beforeEach(() => {
     store.dispatch(setAccount(null));
+    // #2165: the save effect now writes real localStorage during render, so
+    // clear between tests to keep them isolated from each other.
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -1038,6 +1042,31 @@ describe('GamePage', () => {
       expect(await screen.findByRole('button', { name: 'Pose' })).toBeInTheDocument();
       expect(screen.getByText('Pose → The Grand Ballroom')).toBeInTheDocument();
       expect(screen.queryByText(`Whisper → ${ACTIVE_NAME}`)).not.toBeInTheDocument();
+    });
+
+    it('restores a persisted tab layout on mount (#2165 localStorage persistence)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      // Pre-seed localStorage for the fixture character+scene BEFORE the
+      // scene/session exists in Redux — the hydration effect reads this on
+      // first render once `active`+`sceneId` are both set.
+      saveThreadTabs(ACTIVE_NAME, '100', {
+        openThreadTabs: ['whisper:9'],
+        activeThreadTab: 'whisper:9',
+      });
+
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      // The restored tab is active on mount, narrowing the feed to the
+      // (currently empty) whisper thread — the room pose is NOT visible.
+      // No interaction has arrived for this thread yet, so the strip falls
+      // back to the generic 'Whisper' label until real messages backfill it.
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      const whisperTab = within(tablist)
+        .getByText('Whisper')
+        .closest('[role="tab"]') as HTMLElement;
+      expect(whisperTab).toHaveAttribute('aria-selected', 'true');
     });
   });
 });

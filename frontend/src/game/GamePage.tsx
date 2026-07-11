@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
@@ -26,7 +26,9 @@ import {
   openThreadTab,
   closeThreadTab,
   setActiveThreadTab,
+  hydrateThreadTabs,
 } from '@/store/gameSlice';
+import { loadThreadTabs, saveThreadTabs } from './threadTabsStorage';
 import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
 import { useThreading, getThreadKey } from '@/scenes/hooks/useThreading';
 import { threadToComposerMode, tabKeyToComposerMode } from '@/scenes/hooks/threadToComposerMode';
@@ -113,6 +115,31 @@ export function GamePage() {
     activeThreadTabRaw !== null && openThreadTabs.includes(activeThreadTabRaw)
       ? activeThreadTabRaw
       : null;
+
+  // #2165 tab-layout persistence (spec decision 5a). Hydrate once per
+  // character+scene, BEFORE the save effect below may write — the ref
+  // handshake prevents a fresh mount's empty state from clobbering a stored
+  // layout it hasn't restored yet.
+  const tabsHydratedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!active || !sceneId) return;
+    const hydrationKey = `${active}:${sceneId}`;
+    if (tabsHydratedForRef.current === hydrationKey) return;
+    tabsHydratedForRef.current = hydrationKey;
+    const stored = loadThreadTabs(active, sceneId);
+    if (stored && stored.openThreadTabs.length > 0) {
+      dispatch(hydrateThreadTabs({ character: active, ...stored }));
+    }
+  }, [active, sceneId, dispatch]);
+
+  useEffect(() => {
+    if (!active || !sceneId) return;
+    if (tabsHydratedForRef.current !== `${active}:${sceneId}`) return;
+    saveThreadTabs(active, sceneId, {
+      openThreadTabs,
+      activeThreadTab: activeThreadTabRaw,
+    });
+  }, [active, sceneId, openThreadTabs, activeThreadTabRaw]);
 
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
 
