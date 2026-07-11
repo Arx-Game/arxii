@@ -16,9 +16,13 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
+from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import ParticipantStatus
+from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.services import drain_reactive_upkeep
 from world.conditions.constants import FORCE_FIELD_CONDITION_NAME
 from world.conditions.factories import ConditionInstanceFactory
-from world.conditions.models import ConditionTemplate
+from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.magic.effect_palette_content import ensure_force_field_content
 from world.magic.factories import CharacterAnimaFactory
 from world.magic.models.anima import CharacterAnima
@@ -81,3 +85,43 @@ class AllyWardReactiveCostTests(TestCase):
         # Sanity: without the fix, CharacterAnima.objects.filter(character=instance.target)
         # would have found the ally's row instead and debited it.
         self.assertEqual(CharacterAnima.objects.get(character=ally).current, 10)
+
+    def test_ally_ward_lapses_on_caster_poverty_not_ally(self) -> None:
+        """drain_reactive_upkeep: caster too poor to sustain -> instance deleted, ally untouched."""
+        ensure_force_field_content()
+        template = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
+
+        caster = CharacterFactory()
+        ally = CharacterFactory()
+        CharacterAnimaFactory(character=caster, current=0, maximum=10)
+        ally_anima = CharacterAnimaFactory(character=ally, current=10, maximum=10)
+
+        ally_sheet = CharacterSheetFactory(character=ally)
+        encounter = CombatEncounterFactory()
+        CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=ally_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+        instance = ConditionInstanceFactory(
+            condition=template,
+            target=ally,
+            source_character=caster,
+        )
+
+        drain_reactive_upkeep(encounter)
+
+        # Caster couldn't afford the upkeep -> the ward lapses (deleted).
+        self.assertFalse(
+            ConditionInstance.objects.filter(pk=instance.pk).exists(),
+            "ward should lapse when the CASTER can't afford upkeep, not the ally",
+        )
+
+        # Ally never paid for a ward they didn't cast -> untouched.
+        ally_anima.refresh_from_db()
+        self.assertEqual(
+            ally_anima.current,
+            10,
+            "the ally bearing the ward should NOT be debited for a caster-sourced condition",
+        )
