@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,9 +8,10 @@ vi.mock('@/scenes/queries', () => ({
   sceneKeys: { detail: (id: number | string) => ['scene', String(id)] },
 }));
 
-// Stub HighlightReel: this test only cares that the section starts collapsed
-// and threads sceneId/canGm through once opened — HighlightReel's own
-// behavior is covered by its own test suite.
+// Stub HighlightReel: this test only cares that it's mounted directly (no
+// wrapping Accordion — HighlightReel already self-collapses) with the right
+// sceneId/canGm props. HighlightReel's own collapse behavior is covered by
+// its own test suite.
 vi.mock('@/scenes/components/HighlightReel', () => ({
   HighlightReel: ({ sceneId, canGm }: { sceneId: string; canGm?: boolean }) => (
     <div data-testid="highlight-reel">
@@ -38,16 +38,14 @@ describe('SceneHighlightsPanel', () => {
     vi.clearAllMocks();
   });
 
-  it('is collapsed by default and does not mount HighlightReel until opened', async () => {
+  it('mounts HighlightReel directly with sceneId/canGm — no wrapping accordion', async () => {
     mockFetchScene.mockResolvedValue({ viewer_can_gm: true });
     renderPanel();
 
-    const trigger = await screen.findByRole('button', { name: /Highlights/ });
-    expect(screen.queryByTestId('highlight-reel')).not.toBeInTheDocument();
-
-    await userEvent.click(trigger);
-
     expect(await screen.findByTestId('highlight-reel')).toHaveTextContent('reel 5 gm:true');
     expect(mockFetchScene).toHaveBeenCalledWith('5');
+
+    // No extra "Highlights" accordion trigger/chevron on top of HighlightReel's own.
+    expect(screen.queryByRole('button', { name: /Highlights/ })).not.toBeInTheDocument();
   });
 });
