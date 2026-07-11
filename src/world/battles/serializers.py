@@ -71,6 +71,7 @@ class BattlePlaceSerializer(serializers.ModelSerializer):
     footprint_radius = serializers.FloatField()
     controlled_by_id = serializers.IntegerField(read_only=True, allow_null=True)
     encounter_scene_id = serializers.SerializerMethodField()
+    encounter_roster = serializers.SerializerMethodField()
     vehicle = serializers.SerializerMethodField()
     # Sourced from the "cached_fortifications" to_attr the view's Prefetch
     # populates (world/battles/views.py) — never the bare "fortifications"
@@ -91,6 +92,7 @@ class BattlePlaceSerializer(serializers.ModelSerializer):
             "footprint_radius",
             "controlled_by_id",
             "encounter_scene_id",
+            "encounter_roster",
             "vehicle",
             "fortifications",
         ]
@@ -98,6 +100,32 @@ class BattlePlaceSerializer(serializers.ModelSerializer):
     def get_encounter_scene_id(self, obj: BattlePlace) -> int | None:
         """The scene backing this front's bridged CombatEncounter, if any (#1236)."""
         return obj.combat_encounter.scene_id if obj.combat_encounter_id else None
+
+    def get_encounter_roster(self, obj: BattlePlace) -> dict | None:
+        """Compact front-fight roster: status/outcome/participants/opponents (#2008).
+
+        None when no CombatEncounter is bound. One query each for participants
+        and opponents per bound place — battles carry a small, bounded number of
+        fronts, so this is not an unbounded-loop N+1.
+        """
+        if not obj.combat_encounter_id:
+            return None
+        encounter = obj.combat_encounter
+        return {
+            "status": encounter.get_status_display(),
+            "outcome": encounter.get_outcome_display() if encounter.outcome else None,
+            "participants": [
+                {
+                    "character_name": p.character_sheet.character.db_key,
+                    "status": p.get_status_display(),
+                }
+                for p in encounter.participants.select_related("character_sheet__character")
+            ],
+            "opponents": [
+                {"name": o.name, "status": o.get_status_display()}
+                for o in encounter.opponents.all()
+            ],
+        }
 
     def get_vehicle(self, obj: BattlePlace) -> dict | None:
         """Read the embedded vehicle, if any, through the battle's state cache.
