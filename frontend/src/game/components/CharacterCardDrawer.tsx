@@ -5,9 +5,28 @@ import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { BackgroundSection, StatsSection, CharacterLink } from '@/components/character';
 import { FriendButton } from '@/friends/components/FriendButton';
 import { useRosterEntryByNameQuery, useRosterEntryQuery } from '@/roster/queries';
+import { useMyRelationshipToTarget } from '@/relationships/queries';
+import { RelationshipWriteupDialog } from '@/relationships/components/RelationshipWriteupDialog';
+import type { RelationshipWriteupMode } from '@/relationships/components/RelationshipWriteupDialog';
+import type { CharacterRelationshipList } from '@/relationships/api';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import { JournalComposerDialog } from '@/journals/components/JournalComposerDialog';
 import { SendLetterDialog } from './SendLetterDialog';
+
+/**
+ * Decide whether the "Record an impression" quick action opens the
+ * writeup dialog in development mode (a relationship the caller authored
+ * already exists toward this target) or impression mode (none yet, or the
+ * lookup couldn't run — e.g. a disguise with no public roster match, per
+ * this file's own privacy docstring). `undefined` (query not yet resolved
+ * or disabled) is treated the same as "none" — impression is always the
+ * safe default first move. Exported for testing.
+ */
+export function resolveWriteupMode(
+  relationships: CharacterRelationshipList[] | undefined
+): RelationshipWriteupMode {
+  return relationships && relationships.length > 0 ? 'development' : 'impression';
+}
 
 export interface CharacterCardDrawerProps {
   /** The clicked bubble's persona identity; `null` means the drawer is closed. */
@@ -35,12 +54,14 @@ export interface CharacterCardDrawerProps {
  * roster." and no sheet data, no FriendButton. Never resolve through
  * `receiver_persona_ids`, scene participation, or any other non-public linkage.
  *
- * Quick actions (#2160): "Write a journal" opens `JournalComposerDialog`
- * pre-tagged with the resolved character's name once `entry` resolves.
- * "Send a letter" opens `SendLetterDialog` pre-addressed to the character's
- * live tenure (`entry.tenures.find(t => t.end_date === null)`) — hidden when
- * there's no live tenure, since a vacant character has no one to address
- * (same gating philosophy as the FriendButton viewer-required gate below).
+ * Quick actions: "Record an impression" (#2159) opens `RelationshipWriteupDialog`
+ * in impression or development mode per `resolveWriteupMode` above. "Write a
+ * journal" (#2160) opens `JournalComposerDialog` pre-tagged with the resolved
+ * character's name once `entry` resolves. "Send a letter" (#2160) opens
+ * `SendLetterDialog` pre-addressed to the character's live tenure
+ * (`entry.tenures.find(t => t.end_date === null)`) — hidden when there's no
+ * live tenure, since a vacant character has no one to address (same gating
+ * philosophy as the FriendButton viewer-required gate below).
  *
  * Radix note: `SheetContent`'s `hideOverlay` only removes the dimming backdrop —
  * the underlying Dialog is still `modal` (focus-trapped, outside pointer events
@@ -65,6 +86,16 @@ export function CharacterCardDrawer({
 
   const [journalOpen, setJournalOpen] = useState(false);
   const [letterOpen, setLetterOpen] = useState(false);
+
+  // Undefined for a disguise/temporary persona with no public roster match —
+  // `useMyRelationshipToTarget` stays disabled and `resolveWriteupMode` falls
+  // back to impression mode (the only mode that makes sense with nothing to
+  // develop). See this file's own privacy docstring.
+  const targetCharacterSheetId = entry?.character.id;
+  const { data: myRelationship } = useMyRelationshipToTarget(targetCharacterSheetId);
+  const writeupMode = resolveWriteupMode(myRelationship);
+
+  const [writeupOpen, setWriteupOpen] = useState(false);
 
   const handleWhisper = () => {
     if (!persona) return;
@@ -102,6 +133,14 @@ export function CharacterCardDrawer({
               )}
               <Button type="button" variant="outline" size="sm" onClick={handleWhisper}>
                 Whisper
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setWriteupOpen(true)}
+              >
+                Record an impression
               </Button>
               {entry && (
                 <Button
@@ -166,6 +205,14 @@ export function CharacterCardDrawer({
                 This face isn't on the public roster.
               </p>
             )}
+
+            <RelationshipWriteupDialog
+              open={writeupOpen}
+              onOpenChange={setWriteupOpen}
+              mode={writeupMode}
+              targetPersonaId={persona.id}
+              targetName={persona.name}
+            />
           </>
         )}
       </SheetContent>

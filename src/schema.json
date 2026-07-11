@@ -23524,6 +23524,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/RedistributeWrite'
           description: ''
+  /api/relationships/relationship-updates/timeline/:
+    get:
+      operationId: relationships_relationship_updates_timeline_list
+      description: |-
+        Merged Update/Development/Capstone writeup history (#2159).
+
+        Exactly one of `about_character` or `relationship` must be provided (400
+        otherwise); see ``_timeline_about_character_queryset`` /
+        ``_timeline_relationship_queryset`` for each mode's visibility rule. Results
+        are type-tagged (``kind``), ordered ``-created_at``, and paginated per this
+        viewset's ``pagination_class``.
+      parameters:
+      - in: query
+        name: about_character
+        schema:
+          type: integer
+        description: CharacterSheet pk. Every non-PRIVATE writeup about this character
+          from any author, plus PRIVATE writeups where the caller is the author or
+          the subject. Mutually exclusive with `relationship`.
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: relationship
+        schema:
+          type: integer
+        description: CharacterRelationship pk. Full history (incl. PRIVATE) of one
+          relationship; caller must be its tenure-owned source. Mutually exclusive
+          with `about_character`.
+      tags:
+      - relationships
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRelationshipTimelineEntryList'
+          description: ''
   /api/relationships/relationships/:
     get:
       operationId: relationships_relationships_list
@@ -41311,6 +41354,16 @@ components:
       - summary
       - tale
       - template_name
+    Kind4adEnum:
+      enum:
+      - update
+      - development
+      - capstone
+      type: string
+      description: |-
+        * `update` - update
+        * `development` - development
+        * `capstone` - capstone
     Kind989Enum:
       enum:
       - wall
@@ -47380,6 +47433,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RelationshipCapstone'
+    PaginatedRelationshipTimelineEntryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationshipTimelineEntry'
     PaginatedRelationshipUpdateList:
       type: object
       required:
@@ -50696,6 +50772,10 @@ components:
         target_id:
           type: integer
           writeOnly: true
+        target_persona_id:
+          type: integer
+          writeOnly: true
+          nullable: true
         character_sheet_id:
           type: integer
           writeOnly: true
@@ -53501,6 +53581,52 @@ components:
       - name
       - point_threshold
       - tier_number
+    RelationshipTimelineEntry:
+      type: object
+      description: |-
+        One row of the merged Update/Development/Capstone writeup timeline (#2159).
+
+        Serializes a plain dict row (not a model instance) — projected by
+        ``RelationshipUpdateViewSet.timeline``'s ``_timeline_rows``/``.union()`` query,
+        which gives ``RelationshipUpdate``/``RelationshipDevelopment``/
+        ``RelationshipCapstone`` rows the same shared column shape regardless of which
+        of the three writeup models a given row came from.
+      properties:
+        kind:
+          $ref: '#/components/schemas/Kind4adEnum'
+        id:
+          type: integer
+        relationship:
+          type: integer
+        author:
+          type: integer
+        author_name:
+          type: string
+        track:
+          type: integer
+        track_name:
+          type: string
+        title:
+          type: string
+        writeup:
+          type: string
+        visibility:
+          $ref: '#/components/schemas/VisibilityFdaEnum'
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - author
+      - author_name
+      - created_at
+      - id
+      - kind
+      - relationship
+      - title
+      - track
+      - track_name
+      - visibility
+      - writeup
     RelationshipTrack:
       type: object
       description: Serializer for RelationshipTrack with nested tiers.
@@ -59541,6 +59667,10 @@ components:
         target_id:
           type: integer
           writeOnly: true
+        target_persona_id:
+          type: integer
+          writeOnly: true
+          nullable: true
         character_sheet_id:
           type: integer
           writeOnly: true

@@ -281,24 +281,16 @@ class ThreadViewSetTests(APITestCase):
     # RELATIONSHIP_TRACK ownership tests (#2033)
     # ------------------------------------------------------------------
 
-    def test_create_relationship_track_thread_rejects_foreign_ownership(self) -> None:
-        """The web path must reject weaving a RELATIONSHIP_TRACK thread on a
-        track-progress row belonging to SOMEONE ELSE's relationship, even
-        though the requesting sheet holds a matching RELATIONSHIP_TRACK
-        ThreadWeavingUnlock — ``ThreadSerializer`` previously let this through
-        since only the unlock gate (not ownership) was checked (#2033).
+    def test_create_relationship_track_thread_succeeds_for_own_row(self) -> None:
+        """Weaving the CALLER's own track-progress row toward a named partner works.
 
-        Closing the oracle means a foreign row must be *indistinguishable* from
-        a nonexistent one: ``ThreadSerializer._resolve_target`` now scopes its
-        lookup to ``relationship__source=<requesting sheet>``, so a foreign pk
-        simply doesn't match the query and 400s with the same "does not exist"
-        message a bogus pk would produce — never the ownership-specific
-        ``RelationshipBondNotOwned`` message, which would leak that the row
-        exists and belongs to someone else. Proven here by requesting the SAME
-        pk twice — once while it's a real foreign row, once after it's deleted
-        (genuinely nonexistent) — and asserting the two 400 bodies are
-        byte-identical. That equality *is* the security property under test,
-        not an incidental assertion.
+        ``target_id`` is the ``RelationshipTrack`` **catalog** id (#2159) — no API
+        exposes a ``RelationshipTrackProgress`` pk (``RelationshipTrackProgressSerializer``
+        has no id field), so the old contract of addressing the progress row directly by
+        pk was structurally unreachable from the web. The fix adds ``target_persona_id``
+        (same convention as ``RelationshipUpdateViewSet``) to name the partner, then
+        resolves via ``(relationship__source=<caller>, relationship__target=<partner>,
+        track_id=<catalog id>)`` — mirroring telnet's ``CmdWeaveThread._resolve_track_anchor``.
         """
         from world.relationships.factories import (
             CharacterRelationshipFactory,
@@ -314,48 +306,36 @@ class ThreadViewSetTests(APITestCase):
         )
         CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
 
-        foreign_relationship = CharacterRelationshipFactory(
-            source=self.other_sheet, target=CharacterSheetFactory()
+        partner_sheet = CharacterSheetFactory()
+        own_relationship = CharacterRelationshipFactory(source=self.sheet, target=partner_sheet)
+        own_progress = RelationshipTrackProgressFactory(
+            relationship=own_relationship, track=track, developed_points=10
         )
-        foreign_progress = RelationshipTrackProgressFactory(
-            relationship=foreign_relationship, track=track, developed_points=10
-        )
-        foreign_progress_pk = foreign_progress.pk
 
         self.client.force_authenticate(user=self.account)
-        post_kwargs = {
-            "resonance": self.resonance.pk,
-            "target_kind": TargetKind.RELATIONSHIP_TRACK,
-            "target_id": foreign_progress_pk,
-            "character_sheet_id": self.sheet.pk,
-        }
-        foreign_response = self.client.post(
-            reverse("magic:thread-list"), post_kwargs, format="json"
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.RELATIONSHIP_TRACK,
+                "target_id": track.pk,
+                "target_persona_id": partner_sheet.primary_persona.pk,
+                "character_sheet_id": self.sheet.pk,
+                "name": "Bound to Marcus",
+            },
+            format="json",
         )
-        self.assertEqual(foreign_response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(
-            Thread.objects.filter(
-                owner=self.sheet, target_relationship_track_id=foreign_progress_pk
-            ).exists()
-        )
-        # The ownership-specific message must never reach the API caller — it
-        # would confirm the row exists and belongs to someone else.
-        self.assertNotIn("isn't your own relationship bond", str(foreign_response.data))
-        self.assertIn(
-            f"RELATIONSHIP_TRACK target with id={foreign_progress_pk} does not exist.",
-            str(foreign_response.data),
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(
+            Thread.objects.filter(owner=self.sheet, target_relationship_track=own_progress).exists()
         )
 
-        # Same pk, now genuinely nonexistent — must produce the SAME 400 body.
-        foreign_progress.delete()
-        nonexistent_response = self.client.post(
-            reverse("magic:thread-list"), post_kwargs, format="json"
-        )
-        self.assertEqual(nonexistent_response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(foreign_response.data, nonexistent_response.data)
+    def test_create_relationship_track_thread_selects_right_partner_row(self) -> None:
+        """Two partners sharing the same track: the named partner's row is woven, not either.
 
-    def test_create_relationship_track_thread_succeeds_for_own_row(self) -> None:
-        """Sanity check: weaving the CALLER's own track-progress row still works."""
+        Both partner relationships develop the SAME catalog track; the resolver must key
+        off ``target_persona_id`` to pick the correct ``RelationshipTrackProgress`` row.
+        """
         from world.relationships.factories import (
             CharacterRelationshipFactory,
             RelationshipTrackFactory,
@@ -370,11 +350,15 @@ class ThreadViewSetTests(APITestCase):
         )
         CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
 
-        own_relationship = CharacterRelationshipFactory(
-            source=self.sheet, target=CharacterSheetFactory()
+        partner_a_sheet = CharacterSheetFactory()
+        partner_b_sheet = CharacterSheetFactory()
+        relationship_a = CharacterRelationshipFactory(source=self.sheet, target=partner_a_sheet)
+        relationship_b = CharacterRelationshipFactory(source=self.sheet, target=partner_b_sheet)
+        RelationshipTrackProgressFactory(
+            relationship=relationship_a, track=track, developed_points=5
         )
-        own_progress = RelationshipTrackProgressFactory(
-            relationship=own_relationship, track=track, developed_points=10
+        progress_b = RelationshipTrackProgressFactory(
+            relationship=relationship_b, track=track, developed_points=10
         )
 
         self.client.force_authenticate(user=self.account)
@@ -383,16 +367,127 @@ class ThreadViewSetTests(APITestCase):
             {
                 "resonance": self.resonance.pk,
                 "target_kind": TargetKind.RELATIONSHIP_TRACK,
-                "target_id": own_progress.pk,
+                "target_id": track.pk,
+                "target_persona_id": partner_b_sheet.primary_persona.pk,
                 "character_sheet_id": self.sheet.pk,
-                "name": "Bound to Marcus",
+                "name": "Bound to Partner B",
             },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertTrue(
-            Thread.objects.filter(owner=self.sheet, target_relationship_track=own_progress).exists()
+            Thread.objects.filter(owner=self.sheet, target_relationship_track=progress_b).exists()
         )
+
+    def test_create_relationship_track_thread_missing_partner_returns_400(self) -> None:
+        """Omitting ``target_persona_id`` for RELATIONSHIP_TRACK is a validation error."""
+        from world.relationships.factories import RelationshipTrackFactory
+
+        track = RelationshipTrackFactory()
+        unlock = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            unlock_trait=None,
+            unlock_track=track,
+        )
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.RELATIONSHIP_TRACK,
+                "target_id": track.pk,
+                "character_sheet_id": self.sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("target_persona_id is required", str(response.data))
+
+    def test_create_relationship_track_thread_absent_progress_returns_friendly_message(
+        self,
+    ) -> None:
+        """No developed history with the named partner on that track → a friendly message.
+
+        Never a raw model DoesNotExist / oracle-style "does not exist" for a row shape the
+        caller can't otherwise address — mirrors telnet's
+        ``CmdWeaveThread._resolve_track_anchor`` wording.
+        """
+        from world.relationships.factories import RelationshipTrackFactory
+
+        track = RelationshipTrackFactory(name="Trust")
+        unlock = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            unlock_trait=None,
+            unlock_track=track,
+        )
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
+
+        # A partner sheet with no CharacterRelationship (let alone track progress)
+        # toward self.sheet at all.
+        partner_sheet = CharacterSheetFactory()
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.RELATIONSHIP_TRACK,
+                "target_id": track.pk,
+                "target_persona_id": partner_sheet.primary_persona.pk,
+                "character_sheet_id": self.sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("You have no developed 'Trust' track with", str(response.data))
+        self.assertNotIn("does not exist", str(response.data))
+
+    def test_create_capstone_thread_unaffected_by_track_persona_change(self) -> None:
+        """RELATIONSHIP_CAPSTONE keeps resolving by its own real pk (#2159 scope check).
+
+        Only RELATIONSHIP_TRACK gained the ``target_persona_id`` requirement; a capstone
+        anchor is still addressed directly by id, scoped to the caller's own relationship
+        as before (#2033), with no partner kwarg needed.
+        """
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipCapstoneFactory,
+            RelationshipTrackFactory,
+        )
+
+        # ThreadWeavingUnlock has no CAPSTONE kind (DB constraint) — a RELATIONSHIP_TRACK
+        # unlock for the capstone's own track satisfies weave_thread's unlock check for
+        # RELATIONSHIP_CAPSTONE anchors (mirrors test_soul_tether_services
+        # ._grant_relationship_track_unlock).
+        track = RelationshipTrackFactory()
+        unlock = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            unlock_trait=None,
+            unlock_track=track,
+        )
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
+
+        own_relationship = CharacterRelationshipFactory(
+            source=self.sheet, target=CharacterSheetFactory()
+        )
+        capstone = RelationshipCapstoneFactory(relationship=own_relationship, track=track)
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.RELATIONSHIP_CAPSTONE,
+                "target_id": capstone.pk,
+                "character_sheet_id": self.sheet.pk,
+                "name": "Sworn Bond",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(Thread.objects.filter(owner=self.sheet, target_capstone=capstone).exists())
 
     # ------------------------------------------------------------------
     # COVENANT_ROLE thread creation tests

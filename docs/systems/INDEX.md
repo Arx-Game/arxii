@@ -3868,7 +3868,35 @@ writeup kudos/complaint feedback.
   one owned sheet. Frontend: the commend button on the "Writeups" subsection of
   `RelationshipsSection` (`frontend/src/components/character/RelationshipsSection.tsx`, own-
   sheet gated), fed by `frontend/src/relationships/` (`api.ts`/`queries.ts`), POSTs
-  `{writeup_type: "update", writeup_id}` to `.../kudos/`.
+  `{writeup_type: "update", writeup_id}` to `.../kudos/`. A "Report" button beside Commend
+  opens `WriteupComplaintDialog` (#2159, `frontend/src/relationships/components/`), which
+  POSTs `{writeup_type, writeup_id, reason}` to `.../complaint/` — zero follow-up read
+  surface, matching `WriteupComplaint`'s staff-only visibility.
+- **Writeup timeline action (#2159):** `GET .../relationship-updates/timeline/` merges
+  Update/Development/Capstone history into one type-tagged (`kind`), `-created_at`-ordered,
+  paginated feed. Exactly one of two mutually exclusive params (both/neither → 400):
+  `?about_character=<CharacterSheet pk>` — non-PRIVATE writeups about that character from
+  any author, plus PRIVATE ones where the caller is the author or the subject (the
+  queryset-level generalization of `services._can_view_writeup`, entirely DB-side, no
+  Python row filtering); `?relationship=<CharacterRelationship pk>` — one relationship's
+  full history incl. PRIVATE, source-owner-only (tenure join; 404 missing, 403 non-source).
+  Implementation: each writeup model's queryset is projected to a shared column shape and
+  combined via `.union()` (per-branch `.order_by()` clears `Meta.ordering` — SQLite
+  rejects `ORDER BY` inside a union branch).
+- **RelationshipPanel (#2159):** the "Ties" subsection of `RelationshipsSection`, replacing
+  the old free-text `CharacterData.relationships` Notes list. Branches on `isMyCharacter`
+  (`frontend/src/relationships/components/RelationshipPanel.tsx`), mirroring
+  `CharacterRelationshipViewSet`'s author-private scoping (ADR-0117): own sheet renders
+  `OwnRelationshipsList` — `GET .../relationships/?source=<sheet pk>` (list serializer, no
+  `track_progress`) for target/affection rows, each expandable (Radix `Accordion`, lazy —
+  no N+1 up front) into `GET .../relationships/<id>/` (detail serializer, for
+  `track_progress` points/tiers) plus the `?relationship=` timeline arm for full history,
+  and buttons opening `RelationshipWriteupDialog` in development/capstone/redistribute
+  modes (`target_persona_id` resolved via `GET /api/personas/?character_sheet=`, since the
+  list/detail relationship serializers only carry the target's CharacterSheet pk, not a
+  Persona pk). Foreign sheet renders `ForeignRelationshipTimeline` — the `?about_character=`
+  arm only, type-tagged, deliberately no numeric fields (`RelationshipTimelineEntry` itself
+  carries none).
 - **Automatic affection shifts (#1697):** `AffectionShift` model +
   `apply_affection_shift(*, source, target, scene, effect, amount)` — the generic
   valence-signed success consequence (`EffectType.SHIFT_AFFECTION`, handler in

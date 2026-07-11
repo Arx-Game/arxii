@@ -35,6 +35,56 @@ class DraftSessionTests(TestCase):
         invitee_p = session.participants.get(character_sheet=invitee)
         self.assertEqual(invitee_p.state, ParticipantState.INVITED)
 
+    def test_draft_captures_initiators_active_scene_server_side(self):
+        """scene is server-derived from the initiator's active scene at draft time (#2159)."""
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.services.sessions import draft_session
+        from world.scenes.factories import SceneFactory
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+
+        # Draft while in an active scene: scene is captured.
+        in_scene_initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        room = ObjectDBFactory(
+            db_key="Draft Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        in_scene_initiator.character.location = room
+        active_scene = SceneFactory(location=room, is_active=True)
+
+        in_scene_session = draft_session(
+            ritual=ritual,
+            initiator=in_scene_initiator,
+            proposed_terms="",
+            session_kwargs={},
+            invitee_sheets=[invitee],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        self.assertEqual(in_scene_session.scene, active_scene)
+
+        # Draft with no active scene (no location at all): scene stays null.
+        outside_initiator = CharacterSheetFactory()
+        outside_invitee = CharacterSheetFactory()
+        outside_session = draft_session(
+            ritual=ritual,
+            initiator=outside_initiator,
+            proposed_terms="",
+            session_kwargs={},
+            invitee_sheets=[outside_invitee],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        self.assertIsNone(outside_session.scene)
+
     def test_draft_attaches_session_references(self):
         from world.character_sheets.factories import CharacterSheetFactory
         from world.covenants.factories import CovenantFactory
