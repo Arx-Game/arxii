@@ -173,7 +173,18 @@ export interface SubmitPoseBody {
   target_names?: string[];
 }
 
-export async function submitPose(body: SubmitPoseBody): Promise<void> {
+/**
+ * The submit-pose response body (`InteractionListSerializer` output), or
+ * `{ ephemeral: true }` for ephemeral scenes that never persist an Interaction
+ * row (#2156). `id` is what callers need to link a follow-up action request
+ * (e.g. the technique-driven entrance's `entry_interaction_id`, #2183).
+ */
+export interface SubmitPoseResult {
+  id?: number;
+  ephemeral?: boolean;
+}
+
+export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult> {
   const res = await apiFetch('/api/interactions/submit-pose/', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -182,6 +193,7 @@ export async function submitPose(body: SubmitPoseBody): Promise<void> {
     const data = (await res.json().catch(() => null)) as { detail?: string } | null;
     throw new Error(data?.detail || 'Failed to submit pose');
   }
+  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +226,46 @@ export async function postDramaticMomentTag(body: {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error('Failed to tag dramatic moment');
+}
+
+// ---------------------------------------------------------------------------
+// Dramatic-moment GM suggestion inbox — confirm/dismiss (#2183)
+// ---------------------------------------------------------------------------
+
+export async function confirmDramaticMomentSuggestion(suggestionId: number): Promise<void> {
+  const res = await apiFetch(`/api/magic/dramatic-moment-suggestions/${suggestionId}/confirm/`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(data?.detail || 'Failed to confirm dramatic moment');
+  }
+}
+
+export async function dismissDramaticMomentSuggestion(suggestionId: number): Promise<void> {
+  const res = await apiFetch(`/api/magic/dramatic-moment-suggestions/${suggestionId}/dismiss/`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(data?.detail || 'Failed to dismiss dramatic moment');
+  }
+}
+
+export function useConfirmDramaticMomentSuggestion(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: confirmDramaticMomentSuggestion,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+  });
+}
+
+export function useDismissDramaticMomentSuggestion(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: dismissDramaticMomentSuggestion,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+  });
 }
 
 export async function reactToWindow(

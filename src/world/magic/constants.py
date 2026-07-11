@@ -81,6 +81,14 @@ ALTERATION_TIER_CAPS: dict[int, dict[str, int | bool]] = {
 MIN_ALTERATION_DESCRIPTION_LENGTH = 40
 
 
+class SuggestionStatus(models.TextChoices):
+    """Lifecycle status of a DramaticMomentSuggestion (#2183)."""
+
+    PENDING = "pending", "Pending"
+    CONFIRMED = "confirmed", "Confirmed"
+    DISMISSED = "dismissed", "Dismissed"
+
+
 class TargetKind(models.TextChoices):
     TRAIT = "TRAIT", "Trait"
     TECHNIQUE = "TECHNIQUE", "Technique"

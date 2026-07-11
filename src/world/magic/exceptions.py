@@ -406,6 +406,12 @@ class DramaticMomentCapExceeded(Exception):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({user_message})
 
 
+class DramaticMomentSuggestionAlreadyResolved(MagicError):
+    """Raised when resolving a DramaticMomentSuggestion that is no longer PENDING (#2183)."""
+
+    user_message = "That suggestion has already been resolved."
+
+
 # =============================================================================
 # Technique Builder exceptions (#537)
 # =============================================================================

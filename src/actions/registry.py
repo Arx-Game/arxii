@@ -84,6 +84,10 @@ from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, Wi
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.distinctions import GMAwardDistinctionAction
 from actions.definitions.doors import LockAction, UnlockAction
+from actions.definitions.dramatic_moments import (
+    ConfirmDramaticMomentSuggestionAction,
+    DismissDramaticMomentSuggestionAction,
+)
 from actions.definitions.duels import (
     AcceptChallengeAction,
     AcknowledgeRiskAction,
@@ -391,6 +395,9 @@ _ALL_ACTIONS: list[Action] = [
     UseItemAction(),
     GrantItemAction(),
     GMAwardDistinctionAction(),
+    # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
+    ConfirmDramaticMomentSuggestionAction(),
+    DismissDramaticMomentSuggestionAction(),
     # #1866 — crafting telnet coverage.
     AttachFacetAction(),
     DetachFacetAction(),

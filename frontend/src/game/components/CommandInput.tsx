@@ -5,9 +5,15 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
 import { ActionAttachment } from '@/scenes/components/ActionAttachment';
+import {
+  EntranceTechniqueAttachment,
+  type EntranceTechniqueSelection,
+} from '@/scenes/components/EntranceTechniqueAttachment';
+import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppSelector } from '@/store/hooks';
 import type { MyRosterEntry } from '@/roster/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
+import { createActionRequest } from '@/scenes/actionQueries';
 import { submitPose, fetchScene, sceneKeys } from '@/scenes/queries';
 import type { SceneDetail } from '@/scenes/queries';
 
@@ -89,6 +95,10 @@ export function CommandInput({
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   // #904 — next pose is a Make-an-Entrance (pose_kind=entry, REST path only).
   const [isEntrance, setIsEntrance] = useState(false);
+  // #2183 — optional technique+target attached to the next entrance pose.
+  const [entranceTechnique, setEntranceTechnique] = useState<EntranceTechniqueSelection | null>(
+    null
+  );
   const submittingRef = useRef(false);
   const { send } = useGameSocket();
 
@@ -155,12 +165,29 @@ export function CommandInput({
             }
           : {}),
       })
-        .then(() => {
+        .then((response) => {
           onPoseSubmitted?.();
           setHistory((prev) => [...prev, trimmed]);
           setHistoryIndex(-1);
           setCommand('');
           setIsEntrance(false);
+          // #2183 — an entrance technique was attached: dispatch it now that
+          // the entry pose exists, so EntranceAction can anchor to it. Plain
+          // entrances (no technique attached) send nothing further — byte
+          // identical to pre-#2183 behavior.
+          if (isEntrance && entranceTechnique && sceneId !== undefined) {
+            createActionRequest(sceneId, {
+              action_key: 'entrance',
+              technique_id: entranceTechnique.techniqueId,
+              target_persona_id: entranceTechnique.targetPersonaId,
+              entry_interaction_id: typeof response?.id === 'number' ? response.id : undefined,
+            }).catch((error: unknown) => {
+              const message =
+                error instanceof Error ? error.message : 'Failed to dispatch entrance technique.';
+              toast.error(message);
+            });
+          }
+          setEntranceTechnique(null);
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to submit pose.';
@@ -195,6 +222,7 @@ export function CommandInput({
     detachedActionIds,
     onPoseSubmitted,
     isEntrance,
+    entranceTechnique,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -207,6 +235,16 @@ export function CommandInput({
       }
     }
   };
+
+  const handleToggleEntrance = useCallback(() => {
+    const next = !isEntrance;
+    setIsEntrance(next);
+    if (!next) {
+      // Turning the toggle off drops any attached entrance technique too —
+      // it's meaningless without an entrance pose to anchor it to.
+      setEntranceTechnique(null);
+    }
+  }, [isEntrance]);
 
   const handleModeChange = useCallback(
     (mode: string) => {
@@ -245,6 +283,12 @@ export function CommandInput({
     }
     return text;
   }, [composerMode, actionAttachment, isEntrance]);
+
+  // #2183 — entrance-technique target candidates: the scene's participants.
+  const entranceCandidates = useMemo<TargetCandidate[]>(
+    () => (sceneDetail?.participants ?? []).map((p) => ({ id: p.id, name: p.name })),
+    [sceneDetail?.participants]
+  );
 
   const autocompleteItems = useMemo(() => {
     if (sceneId && sceneDetail?.participants) {
@@ -291,13 +335,21 @@ export function CommandInput({
                   aria-label="Make an entrance"
                   title="Make an entrance — your next pose announces your arrival and others can acclaim it"
                   aria-pressed={isEntrance}
-                  onClick={() => setIsEntrance((v) => !v)}
+                  onClick={handleToggleEntrance}
                   className={`rounded px-1 text-sm transition-colors ${
                     isEntrance ? 'bg-amber-500/20 text-amber-500' : 'text-muted-foreground'
                   }`}
                 >
                   ✨
                 </button>
+              )}
+              {isEntrance && personaId != null && (
+                <EntranceTechniqueAttachment
+                  personaId={personaId}
+                  candidates={entranceCandidates}
+                  value={entranceTechnique}
+                  onChange={setEntranceTechnique}
+                />
               )}
               <ActionAttachment
                 sceneId={sceneId}

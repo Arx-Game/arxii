@@ -23,6 +23,7 @@ from actions.types import TargetType
 from world.conditions.constants import TARGET_EFFECT_ALTERATION, TARGET_EFFECT_CONDITION
 from world.magic.exceptions import MagicError
 from world.magic.types.pull import CastPullDeclaration
+from world.magic.views_actor import PuppetActorMixin
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_filters import SceneActionRequestFilter, SceneActionTargetFilter
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
@@ -52,6 +53,9 @@ _INITIATOR_NOT_FOUND_DETAIL = "Initiator persona not found for your account."
 # Action key for the treat-condition consent flow (matches TreatConditionAction.key).
 TREAT_CONDITION_KEY = "treat_condition"
 
+# Action key for the technique-driven combat entrance path (matches EntranceAction.key, #2183).
+ENTRANCE_ACTION_KEY = "entrance"
+
 
 def _build_pull_from_validated(validated_data: dict) -> CastPullDeclaration | None:
     """Build a CastPullDeclaration from validated serializer data (#1919).
@@ -74,7 +78,7 @@ class SceneActionRequestPagination(PageNumberPagination):
     page_size = 20
 
 
-class SceneActionRequestViewSet(viewsets.ModelViewSet):
+class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
     """ViewSet for scene action requests with consent flow."""
 
     serializer_class = SceneActionRequestSerializer
@@ -269,10 +273,21 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
     @extend_schema(
         request=SceneActionRequestCreateSerializer, responses=SceneActionRequestSerializer
     )
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: PLR0911
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        action_key = serializer.validated_data["action_key"]
+        technique_id = serializer.validated_data.get("technique_id")
+
+        # Technique-driven combat entrance (#2183): a technique cast IS the
+        # entrance check (EntranceAction._execute_technique_entrance) — a
+        # completely different mechanism from the technique-as-ActionEnhancement
+        # path the rest of this method implements. Branch BEFORE any of that
+        # path's persona/scene resolution runs.
+        if action_key == ENTRANCE_ACTION_KEY and technique_id is not None:
+            return self._create_technique_entrance(request, serializer)
 
         persona_ids = get_account_personas(request)
         if not persona_ids:
@@ -282,8 +297,12 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             )
 
         scene_id = serializer.validated_data["scene"]
-        initiator_persona_id = serializer.validated_data["initiator_persona"]
-        action_key = serializer.validated_data["action_key"]
+        initiator_persona_id = serializer.validated_data.get("initiator_persona")
+        if initiator_persona_id is None:
+            return Response(
+                {"detail": "initiator_persona is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         target_ids: list[int] = serializer.validated_data["target_ids"]
         effort_level: str = serializer.validated_data["effort_level"]
 
@@ -313,7 +332,6 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         additional = [get_object_or_404(Persona, pk=pk) for pk in target_ids[1:]]
 
         technique = None
-        technique_id = serializer.validated_data.get("technique_id")
         if technique_id is not None:
             from world.magic.models import Technique  # noqa: PLC0415
 
@@ -372,6 +390,50 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         return Response(
             SceneActionRequestSerializer(action_request).data,
             status=status.HTTP_201_CREATED,
+        )
+
+    def _create_technique_entrance(
+        self, request: Request, serializer: SceneActionRequestCreateSerializer
+    ) -> Response:
+        """Technique-driven combat entrance (#2183): dispatch straight through ``EntranceAction``.
+
+        ``action_key == "entrance"`` combined with a ``technique_id`` selects a
+        completely different mechanism from the rest of ``create()``: the technique
+        cast itself IS the entrance check
+        (``EntranceAction._execute_technique_entrance`` → ``request_technique_cast``),
+        not a technique-as-``ActionEnhancement`` booster riding a generic social
+        roll. This mirrors telnet ``CmdEnter``, whose ``action.run()`` call is the
+        one place this path was previously reachable — per
+        ``commands/CLAUDE.md``, "the web frontend bypasses commands entirely and
+        calls `action.run()`/`dispatch_player_action()` directly", so this branch
+        is that seam for the web REST caller instead of routing through
+        ``create_action_request``'s consent pipeline (which has no
+        ``ActionEnhancement`` row for "entrance" and would always 400).
+
+        The actor is the caller's own puppet (``PuppetActorMixin._resolve_actor``),
+        not a client-supplied ``initiator_persona`` — mirrors telnet, which acts as
+        ``self.caller`` and never asks which persona initiates.
+        """
+        from actions.definitions.social import EntranceAction  # noqa: PLC0415
+
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response(
+                {"detail": "No puppeted character to act as."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        vd = serializer.validated_data
+        result = EntranceAction().run(
+            actor,
+            technique_id=vd["technique_id"],
+            target_persona_id=vd.get("target_persona"),
+            entry_interaction_id=vd.get("entry_interaction_id"),
+        )
+        response_status = status.HTTP_201_CREATED if result.success else status.HTTP_400_BAD_REQUEST
+        return Response(
+            {"detail": result.message, "success": result.success},
+            status=response_status,
         )
 
     @extend_schema(request=ConsentResponseSerializer)

@@ -10,6 +10,7 @@ from django.db import models, transaction
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.areas.services import area_for_scene
 from world.classes.models import PathStage
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
@@ -466,11 +467,7 @@ def _mint_crossing_deed(crossing: AudereMajoraCrossing) -> None:
         return
 
     scene = crossing.scene
-    origin_area = (
-        scene.location.area
-        if scene and hasattr(scene, "location") and scene.location is not None
-        else None
-    )
+    origin_area = area_for_scene(scene)
     threshold = crossing.threshold
     title = _crossing_deed_title(threshold, persona, crossing.chosen_path)
 

@@ -852,6 +852,26 @@ actions, backends, and service functions.
   regional heat), `gossip suppress <#>` (lower heat). Gated on Gossip ≥ 1 + standing in an
   `is_social_hub` room (the services enforce both; the command surfaces the skill gate). The reserved
   `gossip` verb the tidings note above set aside.
+- **`entrance_flourish.py`** (#1140/#2183): `CmdEnter` (`enter [<technique>[=<target>]]`) — a
+  thin `ArxCommand` (`action = EntranceAction()`) that dispatches through `action.run()`.
+  Bare `enter` runs the pre-existing ActionTemplate social-check path unchanged; with a
+  `<technique>` argument (resolved among the caller's own known techniques by name), it
+  resolves an optional `<target>` persona in the room's active scene and dispatches the
+  **technique-driven entrance** path (`_execute_technique_entrance` — see
+  `src/actions/CLAUDE.md` and `world/magic/CLAUDE.md` "Technique Entrance") instead — the
+  technique cast IS the entrance's check. `CmdFlourish` (`flourish <resonance>`) — thin
+  wrapper resolving a pending entry-flourish offer via `ResolveFlourishOfferAction`.
+
+### Magic-Adjacent Commands (`commands/`)
+- **`dramatic_moments.py`** (#2183): `CmdMoment` (`moment`) — the GM-facing
+  Dramatic Moment Suggestion inbox surfaced by technique entrances. `moment suggestions`
+  lists PENDING suggestions for the active scene here; `moment confirm <id>` / `moment
+  dismiss <id>` resolve one. Account-authorized (mirrors `CmdEvent`'s host-lifecycle
+  dispatch: `actor=None, account=self.caller.account`) via
+  `ConfirmDramaticMomentSuggestionAction` / `DismissDramaticMomentSuggestionAction`
+  (`actions/definitions/dramatic_moments.py`) — the same seam the web
+  `DramaticMomentSuggestionViewSet` uses. GM-gated (scene GM, owner, or staff) entirely in
+  the Actions; no business logic in the command.
 
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)

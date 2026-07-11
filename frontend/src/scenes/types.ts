@@ -200,6 +200,22 @@ export interface DramaticMomentTagSummary {
   character_sheet_id: number | null;
 }
 
+/**
+ * GM-only PENDING dramatic-moment suggestion embedded in interaction payloads (#2183).
+ * Mirrors `world.scenes.interaction_serializers.InteractionSerializer
+ * .get_dramatic_moment_suggestions` — keep in sync. Empty for non-GM viewers
+ * (the backend gates it server-side); the frontend still gates its render on
+ * `canGm` as defense in depth, mirroring the `dramatic_moment_tags` tag button.
+ */
+export interface DramaticMomentSuggestionSummary {
+  id: number;
+  moment_type_id: number;
+  moment_type_label: string;
+  character_sheet_id: number | null;
+  success_level: number;
+  status: string;
+}
+
 export interface Interaction {
   id: number;
   persona: InteractionPersona;
@@ -222,6 +238,11 @@ export interface Interaction {
   action_links?: ActionLink[];
   /** Dramatic-moment tags on this interaction (#1139); absent/empty for untagged rows. */
   dramatic_moment_tags?: DramaticMomentTagSummary[];
+  /**
+   * GM-only PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+   * Empty/absent for non-GM viewers and for rows with no pending suggestion.
+   */
+  dramatic_moment_suggestions?: DramaticMomentSuggestionSummary[];
   /** Classifies the pose for entry-endorsement filtering. Matches PoseKind TextChoices (lowercase wire format). */
   pose_kind: 'standard' | 'entry' | 'departure';
   endorsee_sheet_id: number | null;

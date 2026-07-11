@@ -20,6 +20,7 @@ from django.db import transaction
 from world.combat.beat_wiring import activate_stakes_for_scene
 from world.combat.constants import (
     RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT,
+    CombatAllegiance,
     EncounterType,
     OpponentStatus,
     OpponentTier,
@@ -157,13 +158,53 @@ def _caster_participant(
 
 
 @transaction.atomic
-def seed_or_feed_encounter_from_cast(
+def seed_or_feed_encounter_from_benign_intervention(
+    *,
+    caster_sheet: CharacterSheet,
+    target_sheet: CharacterSheet,
+    scene: Scene,
+) -> CombatParticipant | None:
+    """Seat a non-participant whose protective entrance cast landed on an embattled ally.
+
+    The benign sibling of ``seed_or_feed_encounter_from_cast`` (#2183): no opponent row,
+    no stakes lock, no FOCUSED declaration — the protective cast already resolved
+    standalone; this only seats the intervener in the fight.
+
+    Returns None when there is no feedable encounter, or the target is not
+    embattled in it — a benign cast at a non-fighter is NOT combat.
+    """
+    encounter = _feedable_encounter(scene)
+    if encounter is None:
+        return None
+    target_embattled = (
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            character_sheet=target_sheet,
+            status=ParticipantStatus.ACTIVE,
+        ).exists()
+        or CombatOpponent.objects.filter(
+            encounter=encounter,
+            objectdb=target_sheet.character,
+            allegiance=CombatAllegiance.ALLY,
+            status=OpponentStatus.ACTIVE,
+        ).exists()
+    )
+    if not target_embattled:
+        return None
+    participant = _caster_participant(encounter, caster_sheet)
+    acknowledge_encounter_risk(encounter, caster_sheet)
+    return participant
+
+
+@transaction.atomic
+def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance marker flag
     *,
     caster_sheet: CharacterSheet,
     target_sheet: CharacterSheet,
     technique: Technique,
     scene: Scene,
     room: ObjectDB,  # noqa: OBJECTDB_PARAM
+    from_entrance: bool = False,
 ) -> CombatEncounter:
     """Seed a new combat encounter from a hostile cast, or feed an active one.
 
@@ -176,6 +217,9 @@ def seed_or_feed_encounter_from_cast(
         technique: The hostile (damage) technique driving the cast.
         scene: The Scene the cast happens in; the encounter binds to it.
         room: The room ObjectDB the encounter takes place in.
+        from_entrance: True when this hostile cast originated as a dramatic
+            technique entrance (#2183) — stamped onto the caster's declared
+            round action so a later task can fire recognition on resolution.
 
     Returns:
         The seeded or fed CombatEncounter, in DECLARING status with the caster's
@@ -223,13 +267,16 @@ def seed_or_feed_encounter_from_cast(
         begin_declaration_phase(encounter)
         encounter.refresh_from_db()
 
-    declare_action(
+    action = declare_action(
         caster_participant,
         focused_action=technique,
         focused_category=technique.action_category,
         effort_level=EffortLevel.MEDIUM,
         focused_opponent_target=opponent,
     )
+    if from_entrance and not action.from_entrance:
+        action.from_entrance = True
+        action.save(update_fields=["from_entrance"])
 
     encounter.refresh_from_db()
     return encounter

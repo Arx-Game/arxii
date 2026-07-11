@@ -66,12 +66,17 @@ from django.db import transaction
 
 if TYPE_CHECKING:
     from world.items.models import Style
-    from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
+    from world.magic.models.dramatic_moment import (
+        DramaticMomentSuggestion,
+        DramaticMomentTag,
+        DramaticMomentType,
+    )
     from world.magic.models.endorsement import EntryFlourishRecord, StylePresentationEndorsement
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import RoomProfile
+from world.areas.services import area_for_scene
 from world.character_sheets.models import CharacterSheet
 from world.locations.constants import RESONANCE_DEFAULT_MAGNITUDE, KeyType, LocationParentType
 from world.locations.models import LocationValueModifier
@@ -859,15 +864,110 @@ def create_dramatic_moment_tag(
             risk=moment_type.risk,
             reach=moment_type.reach or None,
             archetypes=list(moment_type.archetypes.all()),
-            origin_area=(
-                scene.location.area
-                if scene and hasattr(scene, "location") and scene.location
-                else None
-            ),
+            origin_area=area_for_scene(scene),
             title=moment_type.label,
         )
 
     return tag
+
+
+def maybe_suggest_dramatic_moments(
+    *,
+    character_sheet: CharacterSheet,
+    scene: Scene | None,
+    success_level: int,
+    interaction: Interaction | None = None,
+) -> list[DramaticMomentSuggestion]:
+    """Create PENDING GM suggestions for a high-success technique entrance (#2183).
+
+    Bridges the technique-entrance deferral markers (Tasks 1-2) to the existing
+    DramaticMomentTag machinery without auto-tagging: for every flagged
+    DramaticMomentType whose threshold the success level clears, whose resonance the
+    character has claimed, and whose per-scene cap isn't already spent on real tags,
+    creates (idempotently) a PENDING DramaticMomentSuggestion for a GM to later
+    confirm or dismiss via ``resolve_dramatic_moment_suggestion``.
+
+    No-ops (returns []) when scene is None — a suggestion is scoped to a scene, same
+    as the DramaticMomentTag per-scene cap it mirrors.
+    """
+    from world.magic.constants import SuggestionStatus  # noqa: PLC0415
+    from world.magic.models.dramatic_moment import (  # noqa: PLC0415
+        DramaticMomentSuggestion,
+        DramaticMomentTag,
+        DramaticMomentType,
+    )
+
+    if scene is None:
+        return []
+
+    created: list[DramaticMomentSuggestion] = []
+    flagged = DramaticMomentType.objects.filter(
+        suggest_on_technique_entrance=True,
+        suggestion_min_success_level__lte=success_level,
+    )
+    for moment_type in flagged:
+        if not CharacterResonance.objects.filter(
+            character_sheet=character_sheet, resonance=moment_type.resonance
+        ).exists():
+            continue
+        if (
+            DramaticMomentTag.objects.filter(
+                moment_type=moment_type, character_sheet=character_sheet, scene=scene
+            ).count()
+            >= moment_type.per_scene_cap
+        ):
+            continue
+        suggestion, was_created = DramaticMomentSuggestion.objects.get_or_create(
+            moment_type=moment_type,
+            character_sheet=character_sheet,
+            scene=scene,
+            status=SuggestionStatus.PENDING,
+            defaults={
+                "success_level": success_level,
+                "interaction": interaction,
+                "interaction_timestamp": interaction.timestamp if interaction else None,
+            },
+        )
+        if was_created:
+            created.append(suggestion)
+    return created
+
+
+def resolve_dramatic_moment_suggestion(
+    suggestion: DramaticMomentSuggestion, *, resolver: AccountDB, confirm: bool
+) -> DramaticMomentSuggestion:
+    """Confirm or dismiss a PENDING DramaticMomentSuggestion (#2183).
+
+    Confirming mints a real DramaticMomentTag via ``create_dramatic_moment_tag``
+    (which fires the resonance grant + renown award); its EndorsementValidationError
+    / DramaticMomentCapExceeded propagate uncaught to the caller (API layer maps
+    them to safe 400 responses). Dismissing just closes out the suggestion.
+
+    Raises:
+        DramaticMomentSuggestionAlreadyResolved: If the suggestion isn't PENDING.
+    """
+    from world.magic.constants import SuggestionStatus  # noqa: PLC0415
+    from world.magic.exceptions import DramaticMomentSuggestionAlreadyResolved  # noqa: PLC0415
+
+    if suggestion.status != SuggestionStatus.PENDING:
+        raise DramaticMomentSuggestionAlreadyResolved
+
+    with transaction.atomic():
+        if confirm:
+            tag = create_dramatic_moment_tag(
+                character_sheet=suggestion.character_sheet,
+                moment_type=suggestion.moment_type,
+                tagged_by=resolver,
+                scene=suggestion.scene,
+                interaction=suggestion.interaction,
+            )
+            suggestion.confirmed_tag = tag
+            suggestion.status = SuggestionStatus.CONFIRMED
+        else:
+            suggestion.status = SuggestionStatus.DISMISSED
+        suggestion.resolved_by = resolver
+        suggestion.save()
+    return suggestion
 
 
 def residence_trickle_tick() -> ResonanceDailyTickSummary:

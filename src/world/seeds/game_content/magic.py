@@ -2461,6 +2461,10 @@ class MagicDevSeedResult:
     Renew the Oath, Organization Induction) + the MentorBondConfig singleton
     seeded by wire_covenant_lifecycle_rituals() (#2114) — without this, the
     fully-built covenant session machinery is unreachable in a live game.
+    ``dramatic_entrance_content`` is the "Grand Entrance" DramaticMomentType
+    seeded by ensure_dramatic_entrance_content() (#2183) — flagged
+    (suggest_on_technique_entrance=True) so the technique-entrance suggestion
+    bridge has real authored content in a live game, not only test factories.
     """
 
     config: MagicConfigResult
@@ -2476,6 +2480,7 @@ class MagicDevSeedResult:
     relationship_track_thread_unlock: RelationshipTrackThreadUnlockResult
     soul_tether_content: object
     covenant_lifecycle_content: object
+    dramatic_entrance_content: object
 
 
 def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
@@ -2609,6 +2614,9 @@ def seed_magic_dev() -> MagicDevSeedResult:
         Renew the Oath, Organization Induction) + the MentorBondConfig singleton
         (#2114). Previously created only in tests/factories — the fully-built
         covenant session machinery was unreachable in a live game.
+    14. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
+        flagged ``suggest_on_technique_entrance=True`` (#2183). Without this, the
+        technique-entrance suggestion bridge has nothing authored to surface.
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved
@@ -2620,6 +2628,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     """
     from world.magic.factories import (  # noqa: PLC0415
         author_reference_corruption_content,
+        ensure_dramatic_entrance_content,
         wire_covenant_lifecycle_rituals,
         wire_soul_tether_content,
     )
@@ -2651,6 +2660,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     ensure_technique_catalog_content()
     soul_tether_content = wire_soul_tether_content()
     covenant_lifecycle_content = wire_covenant_lifecycle_rituals()
+    dramatic_entrance_content = ensure_dramatic_entrance_content()
     ensure_relationship_pull_content()
     from world.seeds.game_content.combos import seed_combo_palette  # noqa: PLC0415
 
@@ -2676,4 +2686,5 @@ def seed_magic_dev() -> MagicDevSeedResult:
         relationship_track_thread_unlock=relationship_track_thread_unlock,
         soul_tether_content=soul_tether_content,
         covenant_lifecycle_content=covenant_lifecycle_content,
+        dramatic_entrance_content=dramatic_entrance_content,
     )

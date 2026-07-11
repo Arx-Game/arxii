@@ -1070,6 +1070,12 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         default=False,
         help_text="Player accepted the soulfray risk for this declared cast.",
     )
+    from_entrance = models.BooleanField(
+        default=False,
+        help_text="True when this declared action originated as a dramatic technique "
+        "entrance cast (#2183), stamped by seed_or_feed_encounter_from_cast so a later "
+        "task can fire recognition when the declared cast resolves.",
+    )
     participant = models.ForeignKey(
         CombatParticipant,
         on_delete=models.CASCADE,
