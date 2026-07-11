@@ -70,11 +70,12 @@ class AvailableCharacterSerializer(serializers.Serializer):
 class PendingApplicationSerializer(serializers.ModelSerializer):
     """Pending RosterApplication entry for the account payload."""
 
+    character_id = serializers.IntegerField(source="character.id", read_only=True)
     character_name = serializers.CharField(source="character.key", read_only=True)
 
     class Meta:
         model = RosterApplication
-        fields = ["id", "character_name", "status", "applied_date"]
+        fields = ["id", "character_id", "character_name", "status", "applied_date"]
 
 
 class AccountPlayerSerializer(serializers.ModelSerializer):

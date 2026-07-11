@@ -158,10 +158,13 @@ class RosterApplication(SharedMemoryModel):
         )
 
     class Meta:
-        unique_together: ClassVar[list[str]] = [
-            "player_data",
-            "character",
-        ]  # One app per player per char
+        constraints: ClassVar[list[models.BaseConstraint]] = [
+            models.UniqueConstraint(
+                fields=["player_data", "character"],
+                condition=models.Q(status=ApplicationStatus.PENDING),
+                name="unique_pending_application_per_player_character",
+            ),
+        ]
         ordering: ClassVar[list[str]] = ["-applied_date"]
         verbose_name = "Roster Application"
         verbose_name_plural = "Roster Applications"

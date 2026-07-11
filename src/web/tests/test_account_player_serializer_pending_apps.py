@@ -19,6 +19,7 @@ class PendingApplicationSerializerTests(TestCase):
         )
         data = PendingApplicationSerializer(app).data
         assert data["id"] == app.id
+        assert data["character_id"] == character.id
         assert data["character_name"] == "Lyra"
         assert data["status"] == "pending"
         assert data["applied_date"] is not None

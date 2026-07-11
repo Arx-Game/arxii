@@ -54,7 +54,7 @@ class AccountPlayerSerializerFullPayloadTests(TestCase):
 
     def test_payload_pending_applications(self) -> None:
         target = CharacterFactory(db_key="Lyra")
-        RosterApplication.objects.create(
+        pending_application = RosterApplication.objects.create(
             player_data=self.account.player_data,
             character=target,
             application_text="please",
@@ -74,6 +74,8 @@ class AccountPlayerSerializerFullPayloadTests(TestCase):
         ).data
         app_names = [a["character_name"] for a in data["pending_applications"]]
         assert app_names == ["Lyra"]
+        app_character_ids = [a["character_id"] for a in data["pending_applications"]]
+        assert app_character_ids == [pending_application.character.id]
 
     def test_payload_no_characters(self) -> None:
         data = AccountPlayerSerializer(
