@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("checks", "0022_consequenceeffect_distinction_and_more"),
-        ("items", "0029_crafted_recipe_modifiers"),
+        ("items", "0030_itemtemplateappearanceeffect"),
         ("traits", "0001_initial"),
     ]
 
