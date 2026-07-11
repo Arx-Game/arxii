@@ -206,6 +206,7 @@ class ActionRegistryTests(TestCase):
             "craft_attach_facet",
             "craft_detach_facet",
             "craft_attach_style",
+            "craft_create_item",
             "move_to_position",
             "take_position",
             "gm_place_in_position",
