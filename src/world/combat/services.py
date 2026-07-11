@@ -1564,6 +1564,67 @@ def declare_use_item(
     return action
 
 
+def resolve_cast_position_params(
+    participant: CombatParticipant,
+    technique: Technique,
+    position_params: dict[str, int],
+) -> dict[str, Position | None]:
+    """Validate declared cast positions against the encounter's room + technique reach.
+
+    ``position_params`` is the raw dispatch payload — either a single
+    ``destination_position_id`` (single-position techniques such as Phase Jump /
+    Force Grip / zone hazards) or a ``position_a_id``/``position_b_id`` pair
+    (Barricade-style two-endpoint techniques). Both shapes are optional and
+    mutually independent; an empty/absent ``position_params`` resolves to all-None.
+
+    Raises ``ActionDispatchError`` (mirroring the existing ally-target /
+    positional-reach error path used elsewhere in this module):
+
+    - ``UNKNOWN_ACTION_REF`` — a supplied position id does not resolve to a
+      ``Position`` in the encounter's own room, or the a/b pair is only
+      half-supplied.
+    - ``TARGET_OUT_OF_REACH`` — the declared destination is beyond
+      ``technique.reach`` from the caster's current position. Skipped when the
+      caster is unplaced (no current_position) — lenient, same rationale as
+      ``_validate_technique_reach``.
+    """
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+    from world.areas.positioning.services import position_reachable  # noqa: PLC0415
+
+    room = participant.encounter.room
+    resolved: dict[str, Position | None] = {
+        "cast_destination": None,
+        "cast_position_a": None,
+        "cast_position_b": None,
+    }
+
+    def _get(pk: int) -> Position:
+        pos = Position.objects.filter(pk=pk, room=room).first()
+        if pos is None:
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+        return pos
+
+    dest_id = position_params.get("destination_position_id")
+    if dest_id:
+        dest = _get(dest_id)
+        origin = participant.current_position
+        if origin is not None and not position_reachable(
+            origin, dest, technique.reach, reach_hops=technique.reach_hops
+        ):
+            raise ActionDispatchError(ActionDispatchError.TARGET_OUT_OF_REACH)
+        resolved["cast_destination"] = dest
+
+    a_id = position_params.get("position_a_id")
+    b_id = position_params.get("position_b_id")
+    if bool(a_id) != bool(b_id):
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+    if a_id and b_id:
+        resolved["cast_position_a"] = _get(a_id)
+        resolved["cast_position_b"] = _get(b_id)
+
+    return resolved
+
+
 def declare_interpose(
     participant: CombatParticipant,
     ally: CombatParticipant | None,
@@ -2679,6 +2740,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     confirm_soulfray_risk: bool = False,
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
+    cast_destination: Position | None = None,
+    cast_position_a: Position | None = None,
+    cast_position_b: Position | None = None,
 ) -> CombatRoundAction:
     """Declare a PC's action for the current round.
 
@@ -2691,6 +2755,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     - focused_opponent_target and focused_ally_target are mutually exclusive.
     - focused_action's condition_applications target_kinds must match the supplied target.
     - A pure-damage technique (base_power, no condition rows) requires focused_opponent_target.
+
+    ``cast_destination``/``cast_position_a``/``cast_position_b`` are pre-validated
+    (see ``resolve_cast_position_params``, #2206) — this function only persists them.
 
     Raises ValueError with clear messages for validation failures.
     """
@@ -2788,6 +2855,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "confirm_soulfray_risk": confirm_soulfray_risk,
             "fury_commitment": fury_commitment,
             "fury_anchor": fury_anchor,
+            "cast_destination": cast_destination,
+            "cast_position_a": cast_position_a,
+            "cast_position_b": cast_position_b,
         },
     )
     return action
