@@ -996,6 +996,24 @@ separate model — content authors differentiate one via the #1794 `properties`/
 unit distinction is now authored, rather than a dedicated composition/kind field.
 This function only opens the discrete-combat bridge for a skirmish over one.
 
+`open_place_encounter` (`world.battles.services`, #2008) binds a `BattlePlace` to a
+general, multi-participant `CombatEncounter` (`encounter_type=PARTY_COMBAT`, the
+third caller of the `combat_encounter` bridge alongside the two duel-shaped
+creators above) — a GM running a party-scale fight at one front, not a 1v1 duel.
+Unlike `open_champion_duel`/`open_siege_engine_encounter`, it seeds no initial
+participant or opponent; the GM populates it via the existing, unmodified GM
+encounter-lifecycle actions (`actions/definitions/gm_combat.py`), and PCs join via
+the stationing-gated `JoinPlaceEncounterAction` (only a PC whose
+`BattleParticipant.place` matches the bound front may join — enforced at the
+battles layer, since `world.combat.services.join_encounter` must not import
+`world.battles`, ADR-0010). Outcome wiring lives in
+`world.battles.place_encounter_wiring`, generalizing `world.battles.duel_wiring`'s
+Trigger pattern from a single challenger to the majority `BattleSide` among the
+encounter's joiners: VICTORY awards that side a flat VP bonus and routs the other
+side's units at that place; DEFEAT routs the joiners' own side's units instead;
+FLED/ABANDONED have no automatic mechanical effect. `BattlePlace.controlled_by` is
+never touched by this wiring — front capture stays a deliberate HOLD declaration.
+
 A `Fortification`'s starting `max_integrity` can draw on a persistent, player-built
 investment: `world.buildings.Building.fortification_level` (raised by a
 `FORTIFICATION_UPGRADE` Project — see `world.buildings.fortification_services`,
