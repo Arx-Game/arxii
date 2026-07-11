@@ -30306,6 +30306,17 @@ components:
           description: The scene backing this front's bridged CombatEncounter, if
             any (#1236).
           readOnly: true
+        encounter_roster:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Compact front-fight roster: status/outcome/participants/opponents (#2008).
+
+            None when no CombatEncounter is bound. One query each for participants
+            and opponents per bound place — battles carry a small, bounded number of
+            fronts, so this is not an unbounded-loop N+1.
+          readOnly: true
         vehicle:
           type: object
           additionalProperties: {}
@@ -30323,6 +30334,7 @@ components:
           readOnly: true
       required:
       - controlled_by_id
+      - encounter_roster
       - encounter_scene_id
       - footprint_radius
       - fortifications

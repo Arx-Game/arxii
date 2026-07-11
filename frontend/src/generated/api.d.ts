@@ -18070,6 +18070,16 @@ export interface components {
       /** @description The scene backing this front's bridged CombatEncounter, if any (#1236). */
       readonly encounter_scene_id: number | null;
       /**
+       * @description Compact front-fight roster: status/outcome/participants/opponents (#2008).
+       *
+       *     None when no CombatEncounter is bound. One query each for participants
+       *     and opponents per bound place — battles carry a small, bounded number of
+       *     fronts, so this is not an unbounded-loop N+1.
+       */
+      readonly encounter_roster: {
+        [key: string]: unknown;
+      } | null;
+      /**
        * @description Read the embedded vehicle, if any, through the battle's state cache.
        *
        *     Never a fresh query — ``BattleStateCache.vehicle_at_place`` is the
