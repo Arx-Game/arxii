@@ -17,11 +17,22 @@ class ItemCreationCraftTests(TestCase):
         from evennia_extensions.factories import AccountFactory, RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.items.factories import install_full_lab_station, wire_enchanting_crafting
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
 
         self.recipe = wire_enchanting_crafting(base_difficulty=0)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         self.character = self.sheet.character
+        # Link account → character via roster chain so get_account_for_character works.
+        roster_entry = RosterEntryFactory(character_sheet=self.sheet)
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=PlayerDataFactory(account=self.account),
+        )
         room_profile = RoomProfileFactory()
         self.character.location = room_profile.objectdb
         self.character.save()
