@@ -3,13 +3,20 @@
  * Phase 9, Task 9.2.
  */
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { store } from '@/store/store';
 import { PoseUnit } from './PoseUnit';
 import type { Interaction } from '../types';
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 // Mock @/combat/queries — used by PoseUnitDetailPanel; prevents real fetches.
 // PoseUnit also renders PersonaContextMenu, which reads useDispatchPlayerAction
@@ -41,6 +48,9 @@ vi.mock('../queries', async (importOriginal) => {
       .mockResolvedValue([{ emoji: '\u{1F44D}', valence: 0, sort_order: 0 }]),
   };
 });
+
+import { postInteractionReaction } from '../queries';
+import { toast } from 'sonner';
 
 // Stub EndorsementControl so PoseUnit mount tests can assert presence/absence
 // without pulling in endorsement hook machinery. The stub renders data-* attributes
@@ -637,5 +647,36 @@ describe('PoseUnit endorsement control mounting', () => {
 
     const control = screen.getByTestId('endorsement-control-pose');
     expect(control).toHaveAttribute('data-visibility', 'very_private');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regard-bump confirmation toast (#2158)
+// ---------------------------------------------------------------------------
+
+describe('PoseUnit reaction regard-bump toast', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('toasts the bump message on a successful regard bump (#2158)', async () => {
+    vi.mocked(postInteractionReaction).mockResolvedValue({
+      bump_applied: true,
+      bump_message: 'Your regard for Elena warms.',
+    });
+    const interaction = makeInteraction({ mode: 'pose' });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    const emojiButton = await screen.findByText('\u{1F44D}');
+    fireEvent.click(emojiButton);
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Your regard for Elena warms.');
+    });
   });
 });

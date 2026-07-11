@@ -32,7 +32,9 @@ class ValencedReactionBumpTests(TestCase):
         RelationshipTrackFactory(
             name="Friction", sign=TrackSign.NEGATIVE, system_key=TrackSystemKey.FRICTION
         )
-        ReactionEmoji.objects.create(emoji="❤️", valence=ReactionValence.POSITIVE, sort_order=1)
+        self.warm_emoji = ReactionEmoji.objects.create(
+            emoji="❤️", valence=ReactionValence.POSITIVE, sort_order=1
+        )
         ReactionEmoji.objects.create(
             emoji="\U0001f44d", valence=ReactionValence.NEUTRAL, sort_order=0
         )
@@ -100,6 +102,13 @@ class ValencedReactionBumpTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertFalse(response.data["bump_applied"])
         self.assertEqual(RelationshipBump.objects.count(), 0)
+
+    def test_bump_message_reaches_response(self) -> None:
+        """A successful valenced-emoji bump's response includes bump_message."""
+        response = self._post_reaction(emoji=self.warm_emoji.emoji)
+        self.assertTrue(response.data["bump_applied"])
+        self.assertIsNotNone(response.data["bump_message"])
+        self.assertIn("warms", response.data["bump_message"])
 
 
 class ReactionEmojiCatalogTests(TestCase):

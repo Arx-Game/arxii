@@ -109,7 +109,15 @@ export async function fetchHighlightReel(sceneId: string): Promise<HighlightReel
   return res.json();
 }
 
-export async function postInteractionReaction(interactionId: number, emoji: string) {
+export interface InteractionReactionResponse {
+  bump_applied: boolean;
+  bump_message: string | null;
+}
+
+export async function postInteractionReaction(
+  interactionId: number,
+  emoji: string
+): Promise<InteractionReactionResponse | null> {
   const res = await apiFetch('/api/interaction-reactions/', {
     method: 'POST',
     body: JSON.stringify({ interaction: interactionId, emoji }),

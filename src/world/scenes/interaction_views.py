@@ -475,25 +475,31 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
         )
         if not created:
             return Response(status=status.HTTP_204_NO_CONTENT)
-        bump_applied = self._maybe_apply_bump(request, interaction, emoji)
+        bump_applied, bump_message = self._maybe_apply_bump(request, interaction, emoji)
         return Response(
-            {**InteractionReactionSerializer(reaction).data, "bump_applied": bump_applied},
+            {
+                **InteractionReactionSerializer(reaction).data,
+                "bump_applied": bump_applied,
+                "bump_message": bump_message,
+            },
             status=status.HTTP_201_CREATED,
         )
 
-    def _maybe_apply_bump(self, request: Request, interaction: Any, emoji: str) -> bool:
+    def _maybe_apply_bump(
+        self, request: Request, interaction: Any, emoji: str
+    ) -> tuple[bool, str | None]:
         """Fire the relationship bump for a valenced catalog emoji; never raise."""
         from actions.definitions.relationships import RelationshipBumpAction  # noqa: PLC0415
 
         catalog_entry = ReactionEmoji.objects.filter(emoji=emoji, is_active=True).first()
         if catalog_entry is None or catalog_entry.valence == 0:
-            return False
+            return False, None
         actor = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
         if actor is None:
-            return False
+            return False, None
         author_persona = interaction.persona
         if author_persona is None or author_persona.character_sheet is None:
-            return False
+            return False, None
         result = RelationshipBumpAction().run(
             actor=actor,
             target_sheet=author_persona.character_sheet,
@@ -501,7 +507,7 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
             interaction=interaction,
             source_emoji=catalog_entry,
         )
-        return result.success
+        return result.success, (result.message if result.success else None)
 
 
 class ReactionEmojiViewSet(viewsets.ReadOnlyModelViewSet):
