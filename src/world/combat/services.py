@@ -3505,6 +3505,59 @@ def _emit_opponent_pre_apply(
     return pre_payload.amount, pre_payload.amount <= 0
 
 
+def _try_guardian_shield_opponent(
+    opponent: CombatOpponent,
+    raw_damage: int,
+    damage_type: DamageType | None,
+    source_sheet: CharacterSheet | None,
+) -> tuple[int, bool]:
+    """Guardian-shields-a-summon (#2207): run ANY-ALLY Interpose for an
+    ALLY-allegiance ``CombatOpponent`` ward. Return ``(amount, dropped)``,
+    mirroring :func:`_emit_opponent_pre_apply`'s contract — ``dropped=True``
+    means the guardian fully blocked the hit and the caller should return a
+    zero damage result.
+
+    No-op passthrough (amount unchanged, never dropped) when *opponent* is not
+    ``allegiance=ALLY`` (an ENEMY opponent is never a ward) or has no
+    ``objectdb`` (nothing to bind the interpose challenge/ward target to).
+    """
+    if opponent.allegiance != CombatAllegiance.ALLY or opponent.objectdb is None:
+        return raw_damage, False
+
+    interpose_source = classify_source(source_sheet.character if source_sheet is not None else None)
+    interpose_payload = DamagePreApplyPayload(
+        target=opponent.objectdb,
+        amount=raw_damage,
+        damage_type=damage_type,
+        source=interpose_source,
+    )
+    _try_interpose_for_opponent(opponent, interpose_payload)
+    amount = int(interpose_payload.amount)
+    return amount, amount <= 0
+
+
+def _resolve_opponent_pre_apply(
+    opponent: CombatOpponent,
+    raw_damage: int,
+    damage_type: DamageType | None,
+    source_sheet: CharacterSheet | None,
+) -> tuple[int, bool]:
+    """Run DAMAGE_PRE_APPLY, then guardian-shields-a-summon (#2207), for an opponent.
+
+    Combines :func:`_emit_opponent_pre_apply` and
+    :func:`_try_guardian_shield_opponent` into a single ``(amount, dropped)``
+    step for :func:`apply_damage_to_opponent` — the guardian check only runs
+    when the reactive DAMAGE_PRE_APPLY step didn't already drop the hit, so a
+    cancelled/zeroed hit never charges the guardian's interpose fatigue for
+    blocking a hit that no longer exists (mirrors
+    :func:`apply_damage_to_participant`'s ordering).
+    """
+    raw_damage, dropped = _emit_opponent_pre_apply(opponent, raw_damage, damage_type, source_sheet)
+    if dropped:
+        return raw_damage, True
+    return _try_guardian_shield_opponent(opponent, raw_damage, damage_type, source_sheet)
+
+
 def _resolve_opponent_defeat(opponent: CombatOpponent, source_sheet: CharacterSheet | None) -> bool:
     """Resolve whether an opponent at 0 HP is actually defeated.
 
@@ -3610,7 +3663,9 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # emit + mutation; the bounced-reflect path uses this to terminate re-emission
     # (loop guard).
     if not bypass_pre_apply:
-        raw_damage, dropped = _emit_opponent_pre_apply(
+        # DAMAGE_PRE_APPLY, then guardian-shields-a-summon (#2207) for
+        # ALLY-allegiance opponents — see _resolve_opponent_pre_apply.
+        raw_damage, dropped = _resolve_opponent_pre_apply(
             opponent, raw_damage, damage_type, source_sheet
         )
         if dropped:
@@ -6678,8 +6733,69 @@ def _try_interpose(
     if action.participant_id == participant.pk:
         return
 
-    interposer = action.participant.character_sheet.character
     protected = participant.character_sheet.character
+    _dispatch_interpose_action(action, protected, pre_payload)
+
+
+def _try_interpose_for_opponent(
+    opponent: CombatOpponent,
+    pre_payload: DamagePreApplyPayload,
+) -> None:
+    """Guardian-shields-a-summon variant of :func:`_try_interpose` (#2207).
+
+    Extends interpose protection to ALLY-allegiance ``CombatOpponent`` wards —
+    player summons/companion NPCs fighting on the party's side — so a declared
+    guardian can shield them the same way they can shield a PC. No-op when
+    *opponent* is not ``allegiance=ALLY`` (an ENEMY opponent is never a ward)
+    or when the encounter is not ``RESOLVING`` (mirrors :func:`_try_interpose`).
+
+    **ANY-ALLY only:** ``CombatRoundAction.focused_ally_target`` FKs
+    ``CombatParticipant``, so a ``CombatOpponent`` can never be named as a
+    *specific* ward — only an armed ``focused_ally_target IS NULL`` (any-ally)
+    declaration can pick it up. Named-ally guarding of a summon is a follow-up
+    once ``focused_ally_target`` (or a sibling field) can point at an opponent.
+    There is no self-interpose check here (unlike :func:`_try_interpose`): the
+    interposer is always a ``CombatParticipant`` and the ward is always a
+    ``CombatOpponent``, so the two can never be the same row.
+    """
+    if opponent.allegiance != CombatAllegiance.ALLY:
+        return
+
+    encounter = opponent.encounter
+    if encounter.status != RoundStatus.RESOLVING:
+        return
+
+    action = (
+        CombatRoundAction.objects.filter(
+            participant__encounter=encounter,
+            round_number=encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            focused_ally_target__isnull=True,
+            participant__status=ParticipantStatus.ACTIVE,
+        )
+        .select_related("participant__character_sheet__character")
+        .first()
+    )
+    if action is None:
+        return
+
+    _dispatch_interpose_action(action, pre_payload.target, pre_payload)
+
+
+def _dispatch_interpose_action(
+    action: CombatRoundAction,
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    pre_payload: DamagePreApplyPayload,
+) -> None:
+    """Resolve an armed INTERPOSE action against *protected* and mutate pre_payload.
+
+    Shared tail for both ward types (#2207): a ``CombatParticipant`` ward
+    (:func:`_try_interpose`) and an ALLY-allegiance ``CombatOpponent``/summon
+    ward (:func:`_try_interpose_for_opponent`). Handles the technique-vs-mundane
+    branch, bond bonus, and interposer fatigue charge identically for both —
+    extracted so the two callers don't duplicate this body (#2207).
+    """
+    interposer = action.participant.character_sheet.character
 
     # Bond combat bonus (#2021): relationship-scaled protection.
     from world.relationships.services import bond_bonus  # noqa: PLC0415
@@ -6924,8 +7040,18 @@ def _bind_interpose_challenges_any_ally(
     room: object,
     interposer_participant_id: int,
     active_participants_by_id: dict[int, CombatParticipant],
+    active_ally_opponent_objectdbs: list[ObjectDB],
 ) -> None:
-    """Bind a ChallengeInstance to every active participant except the interposer."""
+    """Bind a ChallengeInstance to every active participant and ALLY opponent.
+
+    Every active participant except the interposer, plus every ALLY-allegiance
+    ``CombatOpponent``'s objectdb (player summons/companion NPCs, #2207) — so a
+    mundane guardian's :func:`dispatch_capability_reaction` finds a bound
+    challenge instance when shielding a summon via the ANY-ALLY path. Note: this
+    is the ONLY path that can bind a summon-ward — ``focused_ally_target`` FKs
+    ``CombatParticipant``, so a summon can never be named as a *specific* ward
+    (named-ally guarding of a summon is a follow-up).
+    """
     from world.mechanics.models import ChallengeInstance  # noqa: PLC0415
 
     for part_id, part in active_participants_by_id.items():
@@ -6935,6 +7061,14 @@ def _bind_interpose_challenges_any_ally(
         ChallengeInstance.objects.get_or_create(
             template=template,
             target_object=ally_char,
+            is_active=True,
+            defaults={"location": room, "is_revealed": True},
+        )
+
+    for ally_objectdb in active_ally_opponent_objectdbs:
+        ChallengeInstance.objects.get_or_create(
+            template=template,
+            target_object=ally_objectdb,
             is_active=True,
             defaults={"location": room, "is_revealed": True},
         )
@@ -6954,7 +7088,10 @@ def _ensure_interpose_challenges(
 
     - Specific-ally path (``focused_ally_target`` set): binds to that ally's character.
     - Any-ally path (``focused_ally_target=None``): binds to every ACTIVE participant
-      in this encounter except the interposer.
+      in this encounter except the interposer, plus every ACTIVE ALLY-allegiance
+      ``CombatOpponent``'s objectdb (a summon/companion NPC, #2207) — the only path
+      that can bind a summon-ward, since ``focused_ally_target`` FKs
+      ``CombatParticipant`` and so cannot name a specific opponent.
 
     Idempotent: ``get_or_create`` on (template, target_object, is_active=True) ensures
     no duplicates when called multiple times in the same round.
@@ -6987,6 +7124,9 @@ def _ensure_interpose_challenges(
     # Fetch all active allies once (needed for the any-ally path).
     # select_related prevents N+1 when accessing .character_sheet.character below.
     active_participants_by_id: dict[int, CombatParticipant] | None = None
+    # Fetch active ALLY-allegiance opponents (summons/companion NPCs) once too,
+    # for the same any-ally path (#2207).
+    active_ally_opponent_objectdbs: list[ObjectDB] | None = None
 
     for action in interpose_actions:
         interposer_participant_id = action.participant_id
@@ -7001,7 +7141,8 @@ def _ensure_interpose_challenges(
                 defaults={"location": room, "is_revealed": True},
             )
         else:
-            # Any-ally path: bind to every active participant except the interposer.
+            # Any-ally path: bind to every active participant except the interposer,
+            # plus every active ALLY-allegiance opponent (summon/companion NPC, #2207).
             if active_participants_by_id is None:
                 active_participants_by_id = {
                     p.pk: p
@@ -7010,8 +7151,22 @@ def _ensure_interpose_challenges(
                         status=ParticipantStatus.ACTIVE,
                     ).select_related("character_sheet__character")
                 }
+            if active_ally_opponent_objectdbs is None:
+                active_ally_opponent_objectdbs = [
+                    opp.objectdb
+                    for opp in CombatOpponent.objects.filter(
+                        encounter=encounter,
+                        status=OpponentStatus.ACTIVE,
+                        allegiance=CombatAllegiance.ALLY,
+                    ).select_related("objectdb")
+                    if opp.objectdb is not None
+                ]
             _bind_interpose_challenges_any_ally(
-                template, room, interposer_participant_id, active_participants_by_id
+                template,
+                room,
+                interposer_participant_id,
+                active_participants_by_id,
+                active_ally_opponent_objectdbs,
             )
 
 
