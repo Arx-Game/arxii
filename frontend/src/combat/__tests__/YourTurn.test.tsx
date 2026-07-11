@@ -1538,3 +1538,82 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 });
+
+// ---------------------------------------------------------------------------
+// YourTurn — first-timer wayfinding tooltips (#2157)
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — first-timer wayfinding tooltips (#2157)', () => {
+  it('labels the Focused Action section for a first-timer', () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    expect(screen.getByText('Focused Action')).toHaveAttribute(
+      'title',
+      "Your primary declared action this round — the technique or maneuver you're committing to."
+    );
+  });
+
+  it('labels the Clash Contributions section for a first-timer', () => {
+    setupMocks();
+    const clashAction = makePlayerAction(42, 'The Great Clash');
+
+    render(<YourTurn {...defaultProps({ availableActions: [clashAction] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText('Clash Contributions')).toHaveAttribute(
+      'title',
+      'Add strain to an ongoing team Clash instead of acting alone this round.'
+    );
+  });
+
+  it('labels the Passive Actions section for a first-timer', () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    expect(screen.getByText('Passive Actions')).toHaveAttribute(
+      'title',
+      "Secondary declarations in categories your Focused Action doesn't use — they resolve alongside it."
+    );
+  });
+
+  it('labels the Combo Upgrades section for a first-timer', () => {
+    setupMocks({
+      combos: [{ combo_id: 1, combo_name: 'Tidewall', known_by_participant: true, slot_count: 2 }],
+    });
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    expect(screen.getByText('Combo Upgrades')).toHaveAttribute(
+      'title',
+      'Upgrade your Focused Action into a known multi-slot combo, if you qualify this round.'
+    );
+  });
+
+  it('labels the Thread Pull row for a first-timer', () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    expect(screen.getByText('✦ Thread Pull')).toHaveAttribute(
+      'title',
+      "Draw on a bonded Thread to empower this round's action."
+    );
+  });
+
+  it('labels the Maneuvers section for a first-timer', () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps({ encounter: makeEncounter() })} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText('Maneuvers')).toHaveAttribute(
+      'title',
+      'Flee the encounter, or Cover an ally, instead of declaring an offensive or defensive action.'
+    );
+  });
+});
