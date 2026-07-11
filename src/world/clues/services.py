@@ -137,24 +137,17 @@ def _grant_persona_link_target(clue: Clue, roster_entry: RosterEntry) -> None:
     """Grant the discoverer a pierced masked-identity pair (#2120). No-op if untargeted.
 
     Records a ``PersonaDiscovery`` linking ``target_persona``/``target_persona_linked``
-    for ``roster_entry``'s character sheet — the only in-game producer of
-    ``PersonaDiscovery`` rows (previously only test factories / django admin created
-    them). Piercing is GM-authored: the clue must exist and be planted (ADR-0033) —
-    there is no direct "study persona" roll against an arbitrary masked character.
-    Normalizes the pair to ``persona``=lower pk / ``linked_to``=higher pk, matching
-    ``PersonaDiscovery``'s own ``persona_discovery_normalized_order`` check constraint.
+    for ``roster_entry``'s character sheet via ``world.scenes.services.record_persona_discovery``
+    — the single writer of ``PersonaDiscovery`` rows, shared with the rolled-check path
+    (``world.forms.services.identification.attempt_identification``, #1107 slice 5) so the
+    pair-normalization logic lives in one place. Piercing here is GM-authored: the clue must
+    exist and be planted (ADR-0033) — there is no direct "study persona" roll against an
+    arbitrary masked character.
     """
-    persona = clue.target_persona
-    linked = clue.target_persona_linked
-    if persona is None or linked is None or persona.pk == linked.pk:
-        return
-    from world.scenes.models import PersonaDiscovery  # noqa: PLC0415
+    from world.scenes.services import record_persona_discovery  # noqa: PLC0415
 
-    lower, higher = (persona, linked) if persona.pk < linked.pk else (linked, persona)
-    PersonaDiscovery.objects.get_or_create(
-        persona=lower,
-        linked_to=higher,
-        discovered_by=roster_entry.character_sheet,
+    record_persona_discovery(
+        clue.target_persona, clue.target_persona_linked, roster_entry.character_sheet
     )
 
 

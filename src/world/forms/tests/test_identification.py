@@ -10,16 +10,22 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.models import CheckType, CheckTypeTrait
+from world.checks.test_helpers import force_check_outcome
 from world.forms.constants import IDENTIFICATION_CHECK_TYPE_NAME
 from world.forms.factories import CharacterFormFactory
 from world.forms.models import ConcealmentLevel, DisguiseKind, FormType
 from world.forms.services import apply_disguise
 from world.forms.services.identification import (
     AUTO_FAIL_GAP,
+    attempt_identification,
     identification_difficulty,
 )
+from world.forms.types import IdentificationOutcome
+from world.npc_services.factories import FunctionaryFactory, NPCRoleFactory
+from world.npc_services.models import Functionary
 from world.relationships.factories import CharacterRelationshipFactory
 from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
+from world.scenes.models import PersonaDiscovery
 from world.scenes.services import create_mask
 from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.investigation_checks import (
@@ -28,6 +34,7 @@ from world.seeds.investigation_checks import (
 )
 from world.skills.models import Skill
 from world.societies.constants import FameTier
+from world.traits.factories import CheckOutcomeFactory
 from world.traits.models import Trait, TraitType
 
 
@@ -56,7 +63,13 @@ class IdentificationCheckSeedTests(TestCase):
             CheckTypeTrait.objects.filter(check_type=search).values_list("trait__name", flat=True)
         )
         self.assertIn("perception", search_stats)
-        self.assertNotIn("perception", {"intellect", "Investigation"})
+        identification = CheckType.objects.get(name=IDENTIFICATION_CHECK_TYPE_NAME)
+        identification_stats = set(
+            CheckTypeTrait.objects.filter(check_type=identification).values_list(
+                "trait__name", flat=True
+            )
+        )
+        self.assertNotIn("perception", identification_stats)
 
     def test_shares_investigation_skill_row_with_search(self):
         skill = Skill.objects.get(trait__name="Investigation")
@@ -218,3 +231,143 @@ class IdentificationDifficultyTests(TestCase):
         self._apply_overlay(kind=DisguiseKind.MUNDANE, concealment_level=ConcealmentLevel.NONE)
         odds = identification_difficulty(self.viewer_sheet, self.target_character)
         self.assertFalse(odds.auto_fail)
+
+
+class AttemptIdentificationTests(TestCase):
+    """``attempt_identification`` — the roll + ``PersonaDiscovery``-write orchestrator (Task 2).
+
+    ``target_character`` wears a mask (a TEMPORARY fake-name persona) in ``setUpTestData`` so
+    every test has a distinct presented/true persona pair to link — the same fixture shape
+    ``IdentificationDifficultyTests._apply_mask`` uses. Rolls are forced deterministic via
+    ``force_check_outcome`` rather than depending on trait values / dice.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_check_resolution_tables()
+        seed_investigation_check_content()
+        cls.viewer_character = CharacterFactory()
+        cls.viewer_sheet = CharacterSheetFactory(character=cls.viewer_character)
+        cls.target_character = CharacterFactory()
+        cls.target_sheet = CharacterSheetFactory(character=cls.target_character)
+        cls.mask = create_mask(cls.target_sheet, name="Nobody in Particular")
+
+    def _magical_full_target(self):
+        """A fresh, unrelated target wearing a magical FULL disguise — the auto-fail band
+        against a total stranger (mirrors ``IdentificationDifficultyTests``'s equivalent)."""
+        target = CharacterFactory()
+        CharacterSheetFactory(character=target)
+        disguise = CharacterFormFactory(character=target, form_type=FormType.DISGUISE)
+        apply_disguise(
+            target, disguise, kind=DisguiseKind.MAGICAL, concealment_level=ConcealmentLevel.FULL
+        )
+        return target
+
+    # --- nothing to identify -> FAILURE (defensive fallback; Task 3 gates this normally) --------
+
+    def test_no_disguise_no_mask_is_failure(self):
+        stranger = CharacterFactory()
+        CharacterSheetFactory(character=stranger)
+        result = attempt_identification(self.viewer_character, stranger)
+        self.assertEqual(result.outcome, IdentificationOutcome.FAILURE)
+        self.assertFalse(PersonaDiscovery.objects.exists())
+
+    # --- AUTO_FAIL short-circuits before rolling -------------------------------------------------
+
+    def test_auto_fail_short_circuits(self):
+        magical_target = self._magical_full_target()
+        result = attempt_identification(self.viewer_character, magical_target)
+        self.assertEqual(result.outcome, IdentificationOutcome.AUTO_FAIL)
+        self.assertFalse(PersonaDiscovery.objects.exists())
+
+    # --- SUCCESS writes PersonaDiscovery; a second attempt is ALREADY_KNOWN, not a duplicate -----
+
+    def test_success_writes_persona_discovery_idempotently(self):
+        success = CheckOutcomeFactory(name="Identification Test Success", success_level=2)
+        with force_check_outcome(success):
+            result = attempt_identification(self.viewer_character, self.target_character)
+        self.assertEqual(result.outcome, IdentificationOutcome.SUCCESS)
+        self.assertEqual(result.revealed_name, self.target_sheet.primary_persona.name)
+        self.assertIsNotNone(result.persona_discovery)
+        self.assertEqual(PersonaDiscovery.objects.count(), 1)
+
+        with force_check_outcome(success):
+            result_again = attempt_identification(self.viewer_character, self.target_character)
+        self.assertEqual(result_again.outcome, IdentificationOutcome.ALREADY_KNOWN)
+        self.assertEqual(result_again.revealed_name, self.target_sheet.primary_persona.name)
+        self.assertEqual(PersonaDiscovery.objects.count(), 1)
+
+    # --- plain FAILURE persists nothing ----------------------------------------------------------
+
+    def test_plain_failure_persists_nothing(self):
+        failure = CheckOutcomeFactory(name="Identification Test Failure", success_level=-1)
+        with force_check_outcome(failure):
+            result = attempt_identification(self.viewer_character, self.target_character)
+        self.assertEqual(result.outcome, IdentificationOutcome.FAILURE)
+        self.assertFalse(PersonaDiscovery.objects.exists())
+
+    # --- BOTCH fake-IDs a seeded Functionary, never a PC ------------------------------------------
+
+    def test_botch_fake_ids_a_seeded_functionary_never_a_pc(self):
+        role = NPCRoleFactory(name="Gate Clerk")
+        functionary = FunctionaryFactory(role=role, name_override="Old Marta")
+        botch = CheckOutcomeFactory(name="Identification Test Botch", success_level=-2)
+        with force_check_outcome(botch):
+            result = attempt_identification(self.viewer_character, self.target_character)
+        self.assertEqual(result.outcome, IdentificationOutcome.BOTCH_FAKE_ID)
+        self.assertEqual(result.revealed_name, functionary.display_name)
+        pc_names = {
+            self.viewer_sheet.primary_persona.name,
+            self.target_sheet.primary_persona.name,
+            self.mask.name,
+        }
+        self.assertNotIn(result.revealed_name, pc_names)
+        self.assertFalse(PersonaDiscovery.objects.exists())
+
+    def test_botch_degrades_to_failure_when_no_functionary_exists(self):
+        self.assertFalse(Functionary.objects.exists())
+        botch = CheckOutcomeFactory(name="Identification Test Botch No NPC", success_level=-3)
+        with force_check_outcome(botch):
+            result = attempt_identification(self.viewer_character, self.target_character)
+        self.assertEqual(result.outcome, IdentificationOutcome.FAILURE)
+        self.assertFalse(PersonaDiscovery.objects.exists())
+
+    # --- oracle rule: FAILURE and AUTO_FAIL are player-indistinguishable -------------------------
+
+    def test_failure_and_auto_fail_share_identical_player_message(self):
+        magical_target = self._magical_full_target()
+        auto_fail_result = attempt_identification(self.viewer_character, magical_target)
+
+        failure = CheckOutcomeFactory(name="Identification Test Failure Msg", success_level=-1)
+        with force_check_outcome(failure):
+            failure_result = attempt_identification(self.viewer_character, self.target_character)
+
+        self.assertEqual(auto_fail_result.outcome, IdentificationOutcome.AUTO_FAIL)
+        self.assertEqual(failure_result.outcome, IdentificationOutcome.FAILURE)
+        self.assertEqual(auto_fail_result.player_message, failure_result.player_message)
+        self.assertTrue(auto_fail_result.player_message)
+
+    # --- guess ease: a correct guess eases the roll (proven via a botch surviving to success) ----
+
+    def test_correct_guess_eases_the_roll(self):
+        # A correct guess subtracts guess_ease from target_difficulty (Decision 3); an incorrect
+        # guess doesn't. Forced to a plain FAILURE (not SUCCESS/BOTCH) so neither call writes a
+        # PersonaDiscovery — an ALREADY_KNOWN short-circuit on the second call would never reach
+        # perform_check, leaving nothing to assert on. Asserted via the captured target_difficulty
+        # perform_check actually saw.
+        odds = identification_difficulty(self.viewer_sheet, self.target_character)
+        failure = CheckOutcomeFactory(name="Identification Test Guess Failure", success_level=-1)
+
+        with force_check_outcome(failure) as capture:
+            attempt_identification(
+                self.viewer_character,
+                self.target_character,
+                guess_name=self.target_sheet.primary_persona.name,
+            )
+        self.assertEqual(capture.target_difficulty, max(0, odds.difficulty - odds.guess_ease))
+
+        with force_check_outcome(failure) as capture_wrong:
+            attempt_identification(
+                self.viewer_character, self.target_character, guess_name="Definitely Not Them"
+            )
+        self.assertEqual(capture_wrong.target_difficulty, odds.difficulty)

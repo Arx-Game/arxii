@@ -1,4 +1,11 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world.scenes.models import PersonaDiscovery
 
 
 @dataclass(frozen=True)
@@ -44,3 +51,39 @@ class IdentificationOdds:
     baseline: int
     familiarity_ease: int
     guess_ease: int
+
+
+class IdentificationOutcome(Enum):
+    """How an ``attempt_identification`` call resolved (#1107 slice 5 Task 2).
+
+    Plain runtime enum (not ``TextChoices``) — this never backs a model field, it's a return-value
+    discriminator, matching the ``ReputationTier`` precedent (``world.societies.types``).
+    """
+
+    SUCCESS = "success"
+    FAILURE = "failure"
+    BOTCH_FAKE_ID = "botch_fake_id"
+    ALREADY_KNOWN = "already_known"
+    AUTO_FAIL = "auto_fail"
+
+
+@dataclass(frozen=True)
+class IdentificationResult:
+    """The outcome of one ``attempt_identification`` call (#1107 slice 5 Task 2).
+
+    - ``revealed_name`` is the target's TRUE (PRIMARY) persona name on ``SUCCESS``/
+      ``ALREADY_KNOWN``, the fake-IDed ``Functionary.display_name`` on ``BOTCH_FAKE_ID``
+      (never a PC name — the spec's oracle rule), and empty on ``FAILURE``/``AUTO_FAIL``.
+    - ``persona_discovery`` is the written/pre-existing row on ``SUCCESS``/``ALREADY_KNOWN``
+      (``None`` when the presented/true persona pair was degenerate — nothing to link — or on
+      any other outcome).
+    - ``player_message`` is the safe, player-facing line. **``FAILURE`` and ``AUTO_FAIL`` always
+      share the identical string** — the oracle rule (a player must not be able to distinguish
+      "you rolled and missed" from "this was never rollable") — verified by a dedicated test
+      rather than left to eyeballing call sites.
+    """
+
+    outcome: IdentificationOutcome
+    revealed_name: str = ""
+    persona_discovery: PersonaDiscovery | None = None
+    player_message: str = ""

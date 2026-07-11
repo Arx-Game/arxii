@@ -12,6 +12,7 @@ from world.npc_services.functionaries import (
     functionary_in_location,
     functionary_in_room,
     place_functionary,
+    random_active_functionary,
     remove_functionary,
 )
 from world.npc_services.models import Functionary
@@ -127,6 +128,32 @@ class RoomLookFunctionaryTests(django.test.TestCase):
         )
         text = room.return_appearance(looker=looker, mode="look")
         self.assertIn("Old Marta", text)
+
+
+class RandomActiveFunctionaryTests(django.test.TestCase):
+    """``random_active_functionary`` — the Identification-botch NPC picker (#1107 slice 5)."""
+
+    def test_none_when_no_functionaries_exist(self) -> None:
+        self.assertIsNone(random_active_functionary())
+
+    def test_excludes_inactive_placement(self) -> None:
+        FunctionaryFactory(role=NPCRoleFactory(name="Retired Clerk"), is_active=False)
+        self.assertIsNone(random_active_functionary())
+
+    def test_excludes_inactive_role(self) -> None:
+        FunctionaryFactory(role=NPCRoleFactory(name="Defunct Guild", is_active=False))
+        self.assertIsNone(random_active_functionary())
+
+    def test_returns_an_active_functionary(self) -> None:
+        active = FunctionaryFactory(role=NPCRoleFactory(name="Gate Clerk"))
+        self.assertEqual(random_active_functionary(), active)
+
+    def test_picks_among_multiple_active(self) -> None:
+        first = FunctionaryFactory(role=NPCRoleFactory(name="Gate Clerk"))
+        second = FunctionaryFactory(role=NPCRoleFactory(name="Dock Warden"))
+        for _ in range(10):
+            picked = random_active_functionary()
+            self.assertIn(picked, {first, second})
 
 
 class FunctionaryLocationTests(django.test.TestCase):
