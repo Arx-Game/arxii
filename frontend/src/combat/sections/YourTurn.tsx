@@ -694,7 +694,10 @@ export function YourTurn({
 
       {/* Focused slot */}
       <div>
-        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <p
+          className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          title="Your primary declared action this round — the technique or maneuver you're committing to."
+        >
           Focused Action
         </p>
         <ActionDeclarationCard
@@ -737,7 +740,10 @@ export function YourTurn({
       {/* Clash contribution subsection — shown when clash actions are available */}
       {clashActions.length > 0 && (
         <div className="space-y-2" data-testid="clash-contributions-section">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <p
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            title="Add strain to an ongoing team Clash instead of acting alone this round."
+          >
             Clash Contributions
           </p>
           {clashActions.map((action) => {
@@ -775,7 +781,10 @@ export function YourTurn({
       {/* Passive slots — only non-focused-category slots */}
       {visiblePassiveSlots.length > 0 && (
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <p
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            title="Secondary declarations in categories your Focused Action doesn't use — they resolve alongside it."
+          >
             Passive Actions
           </p>
           {visiblePassiveSlots.map((slot) => (
@@ -797,7 +806,10 @@ export function YourTurn({
       {/* Combo upgrade row — shown when combos are available */}
       {availableCombos !== undefined && availableCombos.length > 0 && (
         <div className="space-y-2" data-testid="combo-upgrade-section">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <p
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            title="Upgrade your Focused Action into a known multi-slot combo, if you qualify this round."
+          >
             Combo Upgrades
           </p>
           {availableCombos.map((combo) => (
@@ -817,7 +829,12 @@ export function YourTurn({
         data-testid="thread-pull-row"
       >
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-primary/80">✦ Thread Pull</span>
+          <span
+            className="text-xs font-semibold text-primary/80"
+            title="Draw on a bonded Thread to empower this round's action."
+          >
+            ✦ Thread Pull
+          </span>
           <div className="flex gap-2">
             {selectedPull !== null && (
               <button
@@ -862,7 +879,10 @@ export function YourTurn({
       {/* Flee / Cover declaration cluster — always rendered when encounter is non-null; controls disabled outside the declaring phase */}
       {encounter != null && (
         <div className="space-y-2" data-testid="maneuver-declaration-section">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <p
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            title="Flee the encounter, or Cover an ally, instead of declaring an offensive or defensive action."
+          >
             Maneuvers
           </p>
 

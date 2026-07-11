@@ -12,6 +12,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { SubmitButton } from '@/components/SubmitButton';
 import { RoundSettingsDialog } from './RoundSettingsDialog';
+import { Link } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
+import { useEncounterForScene } from '@/combat/queries';
 
 interface Props {
   scene?: SceneDetail;
@@ -94,6 +97,7 @@ export function SceneHeader({ scene, onRefresh }: Props) {
   useEffect(() => {
     reset({ name: scene?.name ?? '', description: scene?.description ?? '' });
   }, [scene, reset]);
+  const { data: activeEncounter } = useEncounterForScene(scene?.id ?? 0);
   const save = useMutation({
     mutationFn: (values: { name: string; description: string }) =>
       updateScene(String(scene?.id), values),
@@ -142,6 +146,13 @@ export function SceneHeader({ scene, onRefresh }: Props) {
   return (
     <div>
       <h1 className="mb-2 text-xl font-bold">{scene.name}</h1>
+      {activeEncounter != null && (
+        <Link to={`/scenes/${scene.id}/combat`} className="mb-2 inline-block">
+          <Badge variant="destructive" className="text-xs" data-testid="scene-header-combat-badge">
+            In Combat
+          </Badge>
+        </Link>
+      )}
       <p className="mb-4">{scene.description}</p>
       {(scene.is_owner || scene.is_active) && (
         <div className="mb-2 flex gap-2">

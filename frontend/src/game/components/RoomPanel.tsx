@@ -40,6 +40,10 @@ interface RoomPanelProps {
   room: RoomData | null;
   scene: SceneSummary | null;
   onCharacterClick?: (character: RoomStateObject) => void;
+  /** True when the scene's room has an active CombatEncounter (#2157). */
+  hasActiveEncounter?: boolean;
+  /** True when the scene's room has an active Battle (#2157). */
+  hasActiveBattle?: boolean;
 }
 
 export function RoomPanel({
@@ -48,6 +52,8 @@ export function RoomPanel({
   room,
   scene,
   onCharacterClick,
+  hasActiveEncounter = false,
+  hasActiveBattle = false,
 }: RoomPanelProps) {
   const { send } = useGameSocket();
   const dispatch = useAppDispatch();
@@ -119,6 +125,8 @@ export function RoomPanel({
         isEndPending={end.isPending}
         canEdit={Boolean(room.is_owner) && characterId != null}
         onEditRoom={() => setEditOpen(true)}
+        hasActiveEncounter={hasActiveEncounter}
+        hasActiveBattle={hasActiveBattle}
       />
 
       {room.is_owner && characterId != null && (

@@ -23,6 +23,8 @@ import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import { useCastPullSelection } from '../hooks/useCastPullSelection';
 import { extractErrorMessage } from '@/lib/errors';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import type {
   PlayerAction,
   AvailableEnhancement,
@@ -61,6 +63,7 @@ const DEFAULT_EFFORT = 'medium';
  * and target picker — all sourced from inline fields on the action.
  */
 export function ActionPanel({ sceneId }: Props) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
   const [pendingWarning, setPendingWarning] = useState<PendingWarning | null>(null);
@@ -139,6 +142,14 @@ export function ActionPanel({ sceneId }: Props) {
       setCastTargetPersonaIds([]);
       setCastPickingTarget(false);
       pull.reset();
+      if (data.encounter) {
+        toast.success('Combat has begun', {
+          action: {
+            label: 'Join Combat',
+            onClick: () => navigate(`/scenes/${sceneId}/combat`),
+          },
+        });
+      }
       if (data.result?.power_ledger) {
         // Immediate cast: keep the panel open showing the ledger (#859).
         setCastLedgerResult(data);

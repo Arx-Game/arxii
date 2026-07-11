@@ -37,9 +37,20 @@ interface FocusPanelProps {
   roomCharacter: string | null;
   roomData: RoomData | null;
   sceneData: SceneSummary | null;
+  /** True when the scene's room has an active CombatEncounter (#2157). */
+  hasActiveEncounter?: boolean;
+  /** True when the scene's room has an active Battle (#2157). */
+  hasActiveBattle?: boolean;
 }
 
-export function FocusPanel({ focus, roomCharacter, roomData, sceneData }: FocusPanelProps) {
+export function FocusPanel({
+  focus,
+  roomCharacter,
+  roomData,
+  sceneData,
+  hasActiveEncounter = false,
+  hasActiveBattle = false,
+}: FocusPanelProps) {
   // Resolve the active puppet name to a numeric character id. The
   // visible-worn endpoints require an ``observer`` query parameter, and
   // the room-state ``active`` key is just the character's name. The
@@ -108,6 +119,8 @@ export function FocusPanel({ focus, roomCharacter, roomData, sceneData }: FocusP
           room={roomData}
           scene={sceneData}
           onCharacterClick={onCharacterClickFromRoom}
+          hasActiveEncounter={hasActiveEncounter}
+          hasActiveBattle={hasActiveBattle}
         />
       );
       break;

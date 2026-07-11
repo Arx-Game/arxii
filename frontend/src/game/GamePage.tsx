@@ -9,12 +9,13 @@ import { FocusPanel } from './components/FocusPanel';
 import { SidebarTabPanel } from './components/SidebarTabPanel';
 import { PresencePanel } from './components/PresencePanel';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
+import { useEncounterForScene } from '@/combat/queries';
+import { useBattleForSceneQuery } from '@/battles/queries';
 import { StoryTray } from '@/missions/components/StoryTray';
 import { StatusPanel } from '@/status/components/StatusPanel';
 import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
-import { Toaster } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -70,6 +71,14 @@ export function GamePage() {
   const sceneData = activeSession?.scene ?? null;
   const sceneId = sceneData ? String(sceneData.id) : undefined;
   const roomName = sceneData?.name ?? roomData?.name ?? 'Room';
+
+  // RoomHeader combat/battle badges (#2157) — GamePage is the composition root,
+  // so it calls both hooks once here and threads the derived booleans down
+  // through FocusPanel -> RoomPanel -> RoomHeader.
+  const { data: activeEncounter } = useEncounterForScene(sceneData?.id ?? 0);
+  const { data: activeBattle } = useBattleForSceneQuery(sceneData?.id ?? null);
+  const hasActiveEncounter = activeEncounter != null;
+  const hasActiveBattle = activeBattle != null && activeBattle.outcome === 'unresolved';
 
   // GamePage is the composition root (#2156): it calls the scene-feed +
   // threading hooks once for the active session's scene and feeds both the
@@ -371,6 +380,8 @@ export function GamePage() {
                 roomCharacter={active}
                 roomData={roomData}
                 sceneData={sceneData}
+                hasActiveEncounter={hasActiveEncounter}
+                hasActiveBattle={hasActiveBattle}
               />
             }
             storiesPanel={<StoryTray roomKey={roomData?.name ?? 'nowhere'} />}
@@ -395,7 +406,6 @@ export function GamePage() {
         viewerEntryId={viewerEntryId}
         onWhisper={handleWhisper}
       />
-      <Toaster />
     </>
   );
 }

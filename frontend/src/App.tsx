@@ -93,6 +93,8 @@ import { StaffAccountHistoryPage } from './staff/pages/StaffAccountHistoryPage';
 import { StaffGMApplicationsPage } from './staff/pages/StaffGMApplicationsPage';
 import { StaffGMApplicationDetailPage } from './staff/pages/StaffGMApplicationDetailPage';
 import { RouletteModal } from './components/roulette/RouletteModal';
+import { Toaster } from './components/ui/sonner';
+import { DuelChallengeNotifier } from './combat/DuelChallengeNotifier';
 
 // ---------------------------------------------------------------------------
 // Lazy-loaded stories pages (React.lazy for route-level code splitting)
@@ -951,6 +953,8 @@ function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <RouletteModal />
+      <Toaster />
+      <DuelChallengeNotifier />
     </Layout>
   );
 }
