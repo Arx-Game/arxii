@@ -83,10 +83,6 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        for persona in (cls.caster, cls.target):
-            character = persona.character_sheet.character
-            character.db_location = cls.scene.location
-            character.save()
 
         ActionTemplateFactory(name="Entrance", grants_entry_flourish=True)
 
@@ -95,6 +91,18 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
             character_sheet=cls.caster.character_sheet,
             resonance=moment_type.resonance,
         )
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Set db_location in setUp (not setUpTestData) because Evennia
+        # SharedMemoryModel objects carry DbHolder attributes that are
+        # un-deepcopyable. setUpTestData class attrs get deep-copied per
+        # test method by Django's TestCase descriptor, which blows up on
+        # the Room/Character objects in the graph.
+        for persona in (self.caster, self.target):
+            character = persona.character_sheet.character
+            character.db_location = self.scene.location
+            character.save()
 
     def _actor(self):
         return self.caster.character_sheet.character
