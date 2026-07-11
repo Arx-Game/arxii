@@ -34,7 +34,7 @@ import { useDispatchPlayerAction } from '@/combat/queries';
 // Dispatch helper — registry-backend action with no extra kwargs
 // ---------------------------------------------------------------------------
 
-function registryRef(key: string, kwargs: Record<string, unknown> = {}) {
+export function registryRef(key: string, kwargs: Record<string, unknown> = {}) {
   return {
     ref: {
       backend: 'registry' as const,
