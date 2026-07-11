@@ -148,6 +148,29 @@ from world.character_creation.services import (
 
 ---
 
+## Email Notifications (#2162)
+
+`world.character_creation.email_service.CGEmailService` sends plain-text notifications at every
+review-state transition, called (best-effort, exceptions logged not raised) from the corresponding
+service function:
+
+- `handle_submission` — confirmation to the applicant + notification to staff; called from
+  `submit_draft_for_review`
+- `send_application_approved` — called from `approve_application`
+- `send_revisions_requested` — called from `request_revisions`
+- `send_application_denied` — called from `deny_application`
+
+`CGEmailService` extends `world.roster.email_service.EmailServiceBase` (not `RosterEmailService`
+itself) — `EmailServiceBase` was split out of `RosterEmailService` in the same change so sibling
+domain services can reuse `_send_email`/`_get_staff_emails` without subclassing a service whose
+`send_application_approved`/`send_application_denied` take a roster-specific `tenure` arg CG
+applications don't have (subclassing would have meant a narrower override, an LSP violation caught
+by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApplication.player_account`
+(survives draft deletion); `_character_name` falls back to the draft's staged first name before
+`character_name` is populated at approval.
+
+---
+
 ## API Endpoints
 
 ### Lookup Data

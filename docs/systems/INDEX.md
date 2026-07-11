@@ -1191,6 +1191,13 @@ Multi-stage character creation flow with draft system.
   `maybe_default_residence()` — closes the "Academy auto-residence" story with zero manual player
   step, making the daily residence-trickle gate reachable straight out of CG.
 - **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stat Traits/Rosters/Path so `finalize_character` runs on a fresh DB, plus (#2162) every `CGExplanation` stage heading/intro/desc row (`CG_EXPLANATION_COPY`, 28 keys, `update_or_create`d so repo copy fixes keep reaching seeded deploys) so a fresh DB never ships blank CG stage copy. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
+- **Email notifications (#2162):** `world.character_creation.email_service.CGEmailService` —
+  submission/approved/revisions-requested/denied notices, called (best-effort) from
+  `submit_draft_for_review`/`approve_application`/`request_revisions`/`deny_application`.
+  Extends `world.roster.email_service.EmailServiceBase` (split out of `RosterEmailService` in
+  the same change so a sibling domain service can reuse `_send_email`/`_get_staff_emails`
+  without subclassing `RosterEmailService` itself, whose approve/deny methods take a
+  roster-specific `tenure` arg). See [character_creation.md](character_creation.md#email-notifications-2162).
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
@@ -1216,6 +1223,18 @@ provenance ("Crafted by X, Designed by Y").
 Character lifecycle management with web-first applications and player anonymity.
 
 - **Models:** `Roster`, `RosterEntry`, `RosterTenure`, `RosterApplication`, `PlayerMail`
+- **`RosterApplication` uniqueness (#2162):** a PENDING-only `UniqueConstraint` on
+  `(player_data, character)` (was a status-blind `unique_together`, which blocked
+  re-applying for a character after denial/withdrawal, not duplicate submissions —
+  those were always serializer-blocked). The create serializer catches the two-tab
+  race `IntegrityError` and returns the existing `DUPLICATE_PENDING_APPLICATION`
+  error code. `web.api.serializers.PendingApplicationSerializer` gained
+  `character_id` (alongside `character_name`) so the frontend can match a pending
+  application against `available_characters`.
+- **Email service split (#2162):** `world.roster.email_service.EmailServiceBase` now
+  hosts the shared `_send_email`/`_get_staff_emails` primitives; `RosterEmailService`
+  extends it unchanged. `world.character_creation.email_service.CGEmailService`
+  extends the same base — see Character Creation above.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)

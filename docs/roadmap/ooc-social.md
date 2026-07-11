@@ -103,6 +103,48 @@ gate. Three small, additive polish items (part of the #2112 launch-content-boots
 Details: `docs/systems/roster.md`'s "Telnet Surface (#2122)" section, `docs/systems
 /progression.md`'s Telnet Commands section, `commands/CLAUDE.md`.
 
+## Built — Web Registration → Application Funnel (#2162)
+
+The registration→application→first-login funnel was the least-polished surface in the
+product per the 2026-07-10 webclient RP UX audit (§8) — placeholder homepage copy, dead
+`/how-to-start` links, generic post-submit registration errors, an over-restrictive
+`RosterApplication` uniqueness constraint that blocked re-applying after denial, no
+approval-email on the CG path, no "My Applications" view, and zero-character accounts
+landing in full game chrome with an empty switcher. Closed end-to-end:
+
+- **Homepage + copy.** Branded homepage hero replaces Evennia boilerplate; `NewPlayerSection`
+  carries real new-player copy; a built `/how-to-start` route replaces the two dead links;
+  stale `/lore*` links now point at `/codex`.
+- **Registration.** `RegisterPage` surfaces real field-level validation errors (not generic
+  post-submit text) plus inline password hints, via a `<Toaster />` (`@/components/ui/sonner`)
+  now mounted once at the `App.tsx` root instead of per-page.
+- **Roster re-application (#2162).** `RosterApplication`'s `unique_together` (status-blind —
+  blocked re-applying after denial/withdrawal, contrary to the audit's original "allows
+  duplicate submissions" read) is now a PENDING-only conditional `UniqueConstraint`; the
+  create serializer catches the residual two-tab race as `DUPLICATE_PENDING_APPLICATION`.
+  `PendingApplicationSerializer` gained `character_id` so the frontend can cross-reference
+  pending applications against `available_characters`.
+- **CG email parity.** `world.character_creation.email_service.CGEmailService` (extends a new
+  `world.roster.email_service.EmailServiceBase`, shared with `RosterEmailService`) sends
+  submission/approved/revisions-requested/denied notifications — CG applicants now get the
+  same email coverage roster applicants always had.
+- **CG seeded copy.** `CG_EXPLANATION_COPY` (28 keys) seeds every CG stage heading/intro/desc
+  row via the `character_creation` cluster seeder, so a fresh deploy never ships blank stage
+  copy.
+- **Visible pending state + "My Applications."** Roster's `ApplicationSlot` shows a success
+  toast and a visible pending badge instead of silently clearing the form; the home-page
+  `WelcomePanel` (`frontend/src/components/WelcomePanel.tsx`) lists pending applications and
+  links to an in-progress CG draft.
+- **First-login moment.** `WelcomePanel` greets a first-login account (enter-the-game CTA /
+  pending applications / draft-in-progress link / roster+create choice); `GameTopBar` shows a
+  "No characters yet" message with roster/create links instead of a bare empty switcher when
+  `characters.length === 0`. The orphaned all-TODO `roster/pages/CharacterCreatePage.tsx`
+  (unrouted dead code) was deleted.
+
+Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" section,
+`docs/systems/INDEX.md`'s Roster/Character Creation entries,
+`docs/audits/2026-07-10-webclient-rp-ux-audit.md` §8 (annotated with `[FIXED #2162]` markers).
+
 ## What's Needed for MVP
 - ~~Friend list system~~ — SHIPPED (#1727): `FriendsTab`/`FriendButton` over
   `world/scenes/friend_views.py`
@@ -120,7 +162,8 @@ Details: `docs/systems/roster.md`'s "Telnet Surface (#2122)" section, `docs/syst
   telnet, over the ordinary mission engine — no dedicated tutorial UI or engine. Still open:
   the chain's prose is placeholder-quality in-world copy (content polish, explicitly deferred
   inside #1035's scope), no dedicated web-side "you're new here" surfacing beyond the standard
-  `JournalPage`/`BeatCard`, and the web registration→application funnel polish is #2162.
+  `JournalPage`/`BeatCard`. The web registration→application funnel polish — ✅ **shipped
+  (#2162)**, see "Built — Web Registration → Application Funnel" above.
 - Anti-harassment tools — blocking, muting, reporting
 - Scene discovery — finding active public scenes to join; the discovery→presence bridge
   is #2163
