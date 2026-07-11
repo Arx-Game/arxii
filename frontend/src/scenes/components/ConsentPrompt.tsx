@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert, Check, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -194,7 +195,10 @@ export function ConsentPrompt({ sceneId }: Props) {
       blacklist_actor?: boolean;
     }) =>
       respondToRequest(sceneId, requestId, { accept, difficulty, resist_effort, blacklist_actor }),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.result?.disposition_message) {
+        toast.success(data.result.disposition_message);
+      }
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
     },
@@ -229,7 +233,10 @@ export function ConsentPrompt({ sceneId }: Props) {
         blacklist_actor,
         target_persona_id: targetPersonaId,
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.result?.disposition_message) {
+        toast.success(data.result.disposition_message);
+      }
       queryClient.invalidateQueries({ queryKey: ['pending-targets', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
     },
