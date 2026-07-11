@@ -248,6 +248,8 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 | `cast_requires_consent(technique) -> bool` | True iff `technique_alters_behavior` — **behavior only**, not blanket benign |
 | `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
 | `resolve_targets(*, technique, initiator_persona, scene, supplied_personas) -> list[Persona]` | Expands target_type to concrete personas: SELF→caster; SINGLE→one; AREA→all eligible in scene; FILTERED_GROUP→supplied ∩ eligible |
+| `protective_condition_and_flavor(technique) -> tuple[ConditionTemplate, str] \| None` (#2207) | Classifies a technique's reactive-trigger handler into `barrier`/`blink`/`redirect` by walking `condition_applications → condition.reactive_triggers → flow_definition.steps` (one batched Prefetch query); returns the matched `ConditionTemplate` too, since combat's guardian resolution needs its `reactive_anima_cost`. No new authored field — derives from the existing effect-palette data. |
+| `protective_flavor(technique) -> str \| None` (#2207) | Thin wrapper over `protective_condition_and_flavor` returning only the flavor string; used by `declare_interpose`'s declaration-time gate (combat, `world/combat/services.py`) |
 
 **Consent routing** (in `world/scenes/cast_services.py:request_technique_cast`):
 - Hostile → `seed_or_feed_encounter_from_cast` (combat).

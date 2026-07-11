@@ -1640,14 +1640,29 @@ def resolve_cast_position_params(
 
 def declare_interpose(
     participant: CombatParticipant,
-    ally: CombatParticipant | None,
+    ally: CombatParticipant | None = None,
+    technique: Technique | None = None,
 ) -> CombatRoundAction:
     """Declare an interposing maneuver — passives-only, auto-ready.
 
     ``ally=None`` means the participant will guard any ally hit this round;
     when a specific ally is given they must be active and in the same encounter.
-    Interpose resolves in a later task; this function only records the declaration.
+
+    ``technique=None`` (default) declares a plain interpose exactly as before
+    #2207 — passives only, ``focused_action`` zeroed. Supplying a *technique*
+    carries a protective reactive-trigger technique into the declaration: the
+    participant must know it (``CharacterTechnique``) and it must classify to a
+    protective flavor via ``protective_flavor`` (barrier/blink/redirect,
+    `world/magic/services/targeting.py`). The ``redirect`` flavor (Mirror
+    Ward-style reflection) is rejected here — sub 5 lifts this restriction. A
+    valid technique is written to ``focused_action`` instead of the usual
+    zeroing; passives are still zeroed either way.
     """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+    from world.magic.services.targeting import (  # noqa: PLC0415
+        PROTECTIVE_FLAVOR_REDIRECT,
+        protective_flavor,
+    )
     from world.vitals.services import is_dead  # noqa: PLC0415
 
     encounter = participant.encounter
@@ -1674,11 +1689,24 @@ def declare_interpose(
             msg = "Interpose target must be an active participant in this encounter."
             raise ValueError(msg)
 
+    if technique is not None:
+        knows_technique = CharacterTechnique.objects.filter(
+            character=participant.character_sheet,
+            technique=technique,
+        ).exists()
+        if not knows_technique:
+            msg = "Cannot interpose: character does not know that technique."
+            raise ValueError(msg)
+        flavor = protective_flavor(technique)
+        if flavor is None or flavor == PROTECTIVE_FLAVOR_REDIRECT:
+            msg = "Cannot interpose: that technique cannot guard yet."
+            raise ValueError(msg)
+
     action, _ = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,
         defaults={
-            "focused_action": None,
+            "focused_action": technique,
             "focused_category": None,
             "effort_level": EffortLevel.VERY_LOW,
             "focused_opponent_target": None,
@@ -3560,6 +3588,69 @@ def _emit_opponent_pre_apply(
     return pre_payload.amount, pre_payload.amount <= 0
 
 
+def _try_guardian_shield_opponent(
+    opponent: CombatOpponent,
+    raw_damage: int,
+    damage_type: DamageType | None,
+    source_sheet: CharacterSheet | None,
+) -> tuple[int, bool]:
+    """Guardian-shields-a-summon (#2207): run ANY-ALLY Interpose for an
+    ALLY-allegiance ``CombatOpponent`` ward. Return ``(amount, dropped)``,
+    mirroring :func:`_emit_opponent_pre_apply`'s contract — ``dropped=True``
+    means the guardian fully blocked the hit and the caller should return a
+    zero damage result.
+
+    No-op passthrough (amount unchanged, never dropped) when *opponent* is not
+    ``allegiance=ALLY`` (an ENEMY opponent is never a ward) or has no
+    ``objectdb`` (nothing to bind the interpose challenge/ward target to).
+    """
+    if opponent.allegiance != CombatAllegiance.ALLY or opponent.objectdb is None:
+        return raw_damage, False
+
+    interpose_source = classify_source(source_sheet.character if source_sheet is not None else None)
+    interpose_payload = DamagePreApplyPayload(
+        target=opponent.objectdb,
+        amount=raw_damage,
+        damage_type=damage_type,
+        source=interpose_source,
+    )
+    _try_interpose_for_opponent(opponent, interpose_payload)
+    amount = int(interpose_payload.amount)
+    return amount, amount <= 0
+
+
+def _resolve_opponent_pre_apply(
+    opponent: CombatOpponent,
+    raw_damage: int,
+    damage_type: DamageType | None,
+    source_sheet: CharacterSheet | None,
+    *,
+    skip_guardian_shield: bool = False,
+) -> tuple[int, bool]:
+    """Run DAMAGE_PRE_APPLY, then guardian-shields-a-summon (#2207), for an opponent.
+
+    Combines :func:`_emit_opponent_pre_apply` and
+    :func:`_try_guardian_shield_opponent` into a single ``(amount, dropped)``
+    step for :func:`apply_damage_to_opponent` — the guardian check only runs
+    when the reactive DAMAGE_PRE_APPLY step didn't already drop the hit, so a
+    cancelled/zeroed hit never charges the guardian's interpose fatigue for
+    blocking a hit that no longer exists (mirrors
+    :func:`apply_damage_to_participant`'s ordering).
+
+    ``skip_guardian_shield=True`` skips ONLY :func:`_try_guardian_shield_opponent`
+    — :func:`_emit_opponent_pre_apply` (the opponent's own DAMAGE_PRE_APPLY
+    trigger band) still runs. Used by :func:`_try_companion_defend`'s redirect
+    to avoid double-charging a guardian that already had a chance to interpose
+    earlier in the same blow.
+    """
+    raw_damage, dropped = _emit_opponent_pre_apply(opponent, raw_damage, damage_type, source_sheet)
+    if dropped:
+        return raw_damage, True
+    if skip_guardian_shield:
+        return raw_damage, False
+    return _try_guardian_shield_opponent(opponent, raw_damage, damage_type, source_sheet)
+
+
 def _resolve_opponent_defeat(opponent: CombatOpponent, source_sheet: CharacterSheet | None) -> bool:
     """Resolve whether an opponent at 0 HP is actually defeated.
 
@@ -3645,6 +3736,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     bypass_pre_apply: bool = False,
     damage_type: DamageType | None = None,
     source_sheet: CharacterSheet | None = None,
+    skip_guardian_shield: bool = False,
 ) -> OpponentDamageResult:
     """Apply damage to an NPC opponent, accounting for soak, probing,
     and damage-type resistance.
@@ -3655,6 +3747,10 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     When ``source_sheet`` is provided, increments the source's achievement
     counters: ``damage_dealt`` (by post-soak damage), and on defeat
     ``opponents_defeated``.
+
+    ``skip_guardian_shield=True`` skips ONLY the guardian-shields-a-summon
+    (#2207) hook — the opponent's own DAMAGE_PRE_APPLY trigger band still
+    runs. See :func:`_resolve_opponent_pre_apply`.
     """
     # Swarm: no HP, no soak, no probing -- a landing attack clears bodies.
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
@@ -3665,8 +3761,14 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # emit + mutation; the bounced-reflect path uses this to terminate re-emission
     # (loop guard).
     if not bypass_pre_apply:
-        raw_damage, dropped = _emit_opponent_pre_apply(
-            opponent, raw_damage, damage_type, source_sheet
+        # DAMAGE_PRE_APPLY, then guardian-shields-a-summon (#2207) for
+        # ALLY-allegiance opponents — see _resolve_opponent_pre_apply.
+        raw_damage, dropped = _resolve_opponent_pre_apply(
+            opponent,
+            raw_damage,
+            damage_type,
+            source_sheet,
+            skip_guardian_shield=skip_guardian_shield,
         )
         if dropped:
             return _zero_opponent_damage_result(opponent)
@@ -6727,11 +6829,23 @@ def _try_interpose(
     the interposer's capability challenge via :func:`dispatch_interpose`, and
     mutates *pre_payload.amount* in place.
 
+    Passes ``select_best_check_rating=True`` (no explicit *approach*) so the
+    interposer's better-rated reaction action — Reflexes or the Melee-Defense
+    twin, whichever the guardian is actually built for — is picked deterministically
+    (#2207; see :func:`~world.mechanics.reactions._select_best_rated_action`).
+
     **Guard:** no-op when the encounter is not ``RESOLVING`` so that
     non-combat callers of :func:`apply_damage_to_participant` are unaffected.
 
     Only the *first* eligible interposer is exercised in v1; multiple interposers
     covering the same target is a follow-up.
+
+    **Technique-guardian branch (#2207):** when the declaration carries a
+    validated protective technique (``action.focused_action_id`` set — see
+    :func:`declare_interpose`), dispatch replaces the mundane capability-reaction
+    challenge with :func:`_try_technique_interpose` (the guardian's own cast
+    check, anima cost instead of fatigue). The mundane path below is otherwise
+    unchanged.
     """
     encounter = participant.encounter
     if encounter.status != RoundStatus.RESOLVING:
@@ -6755,18 +6869,92 @@ def _try_interpose(
     if action.participant_id == participant.pk:
         return
 
-    interposer = action.participant.character_sheet.character
     protected = participant.character_sheet.character
+    _dispatch_interpose_action(action, protected, pre_payload)
+
+
+def _try_interpose_for_opponent(
+    opponent: CombatOpponent,
+    pre_payload: DamagePreApplyPayload,
+) -> None:
+    """Guardian-shields-a-summon variant of :func:`_try_interpose` (#2207).
+
+    Extends interpose protection to ALLY-allegiance ``CombatOpponent`` wards —
+    player summons/companion NPCs fighting on the party's side — so a declared
+    guardian can shield them the same way they can shield a PC. No-op when
+    *opponent* is not ``allegiance=ALLY`` (an ENEMY opponent is never a ward)
+    or when the encounter is not ``RESOLVING`` (mirrors :func:`_try_interpose`).
+
+    **ANY-ALLY only:** ``CombatRoundAction.focused_ally_target`` FKs
+    ``CombatParticipant``, so a ``CombatOpponent`` can never be named as a
+    *specific* ward — only an armed ``focused_ally_target IS NULL`` (any-ally)
+    declaration can pick it up. Named-ally guarding of a summon is a follow-up
+    once ``focused_ally_target`` (or a sibling field) can point at an opponent.
+    There is no self-interpose check here (unlike :func:`_try_interpose`): the
+    interposer is always a ``CombatParticipant`` and the ward is always a
+    ``CombatOpponent``, so the two can never be the same row.
+    """
+    if opponent.allegiance != CombatAllegiance.ALLY:
+        return
+
+    encounter = opponent.encounter
+    if encounter.status != RoundStatus.RESOLVING:
+        return
+
+    action = (
+        CombatRoundAction.objects.filter(
+            participant__encounter=encounter,
+            round_number=encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            focused_ally_target__isnull=True,
+            participant__status=ParticipantStatus.ACTIVE,
+        )
+        .select_related("participant__character_sheet__character")
+        .first()
+    )
+    if action is None:
+        return
+
+    _dispatch_interpose_action(action, pre_payload.target, pre_payload)
+
+
+def _dispatch_interpose_action(
+    action: CombatRoundAction,
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    pre_payload: DamagePreApplyPayload,
+) -> None:
+    """Resolve an armed INTERPOSE action against *protected* and mutate pre_payload.
+
+    Shared tail for both ward types (#2207): a ``CombatParticipant`` ward
+    (:func:`_try_interpose`) and an ALLY-allegiance ``CombatOpponent``/summon
+    ward (:func:`_try_interpose_for_opponent`). Handles the technique-vs-mundane
+    branch, bond bonus, and interposer fatigue charge identically for both —
+    extracted so the two callers don't duplicate this body (#2207).
+    """
+    interposer = action.participant.character_sheet.character
 
     # Bond combat bonus (#2021): relationship-scaled protection.
     from world.relationships.services import bond_bonus  # noqa: PLC0415
+
+    modifiers = bond_bonus(interposer, protected)
+
+    if action.focused_action_id is not None:
+        _try_technique_interpose(
+            action,
+            interposer,
+            protected,
+            pre_payload,
+            extra_modifiers=modifiers,
+        )
+        return
 
     result = dispatch_interpose(
         interposer,
         protected,
         pre_payload,
         approach=None,
-        extra_modifiers=bond_bonus(interposer, protected),
+        extra_modifiers=modifiers,
+        select_best_check_rating=True,
     )
     if result is not None:
         # Charge fatigue to the interposer ONLY on fire (readiness is free).
@@ -6778,6 +6966,124 @@ def _try_interpose(
             INTERPOSE_BASE_FATIGUE_COST,
             action.effort_level,
         )
+
+
+def _try_technique_interpose(
+    action: CombatRoundAction,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    pre_payload: DamagePreApplyPayload,
+    *,
+    extra_modifiers: int = 0,
+) -> None:
+    """Resolve a technique-guardian's protective reactive-trigger technique (#2207).
+
+    Runs when ``action.focused_action_id`` is set — the guardian declared a
+    known protective technique (``declare_interpose(technique=...)``) instead of
+    a plain mundane interpose. Diverges from :func:`dispatch_interpose` in three
+    ways:
+
+    1. **Affordability first.** Cost is the matched protective
+       ``ConditionTemplate.reactive_anima_cost`` (resolved via
+       :func:`~world.magic.services.targeting.protective_condition_and_flavor` —
+       the same traversal :func:`~world.magic.services.targeting.protective_flavor`
+       walks at declaration time, first protective-flavored template wins). Can't
+       pay -> the reaction fizzles silently: NO roll, NO fatigue, NO anima
+       charged, and damage proceeds unchanged to ``_try_companion_defend`` as
+       today.
+    2. **The roll is the guardian's own cast check**
+       (:func:`~world.magic.services.anima.resolve_cast_check_type`), rolled
+       against the same authored difficulty as the mundane Interpose challenge
+       (:data:`~world.combat.interpose_content.INTERPOSE_CHALLENGE_NAME`'s
+       ``ChallengeTemplate.severity``) — a technique guardian's protection is
+       spellcasting, not martial reflex, so it never touches
+       :func:`dispatch_capability_reaction`.
+    3. **Cost is anima, not fatigue.** On fire (any non-fizzle resolution) the
+       guardian's anima is debited directly (mirrors
+       :func:`~world.magic.services.effect_handlers._try_spend_reactive`'s debit
+       pattern, minus the ``ConditionInstance`` machinery — the guardian is
+       casting live, not carrying a passive buff). No
+       ``INTERPOSE_BASE_FATIGUE_COST`` is charged on this path.
+
+    Grading reuses :func:`_grade_interpose_damage` — the SAME clean/partial/fail
+    banding (including SHIELD divisor widening) the mundane path uses via
+    :func:`apply_interpose_outcome`, so a technique guardian and a mundane
+    guardian resolve identically once the check lands.
+
+    **BLINK flavor, clean success only:** relocates *protected* (the ward) to
+    *interposer*'s own current position — "you're with me now," out of harm's
+    way — via :func:`~world.areas.positioning.services.force_move_to_position`
+    (the same unchecked-move primitive
+    :func:`~world.magic.services.effect_handlers.blink_dodge` uses). Destination
+    is the guardian's own position because this branch predates #2206: once
+    ``CombatRoundAction.cast_destination`` lands, queue-time reconciliation
+    should prefer that declared destination over the guardian's own position.
+    No-op (damage still zeroed) if the guardian isn't currently placed anywhere.
+    """
+    from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+    from world.magic.services.targeting import (  # noqa: PLC0415
+        PROTECTIVE_FLAVOR_BLINK,
+        protective_condition_and_flavor,
+    )
+    from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
+
+    technique = action.focused_action
+
+    resolved = protective_condition_and_flavor(technique)
+    if resolved is None:
+        # declare_interpose already validated this at declaration time; fail
+        # safe (damage proceeds unchanged) rather than crash if authored
+        # content changed mid-encounter.
+        return
+    condition_template, flavor = resolved
+
+    # Affordability first (mirrors _try_spend_reactive's cost<=0 free-fire rule,
+    # world/magic/services/effect_handlers.py): a free-cost protective technique
+    # never needs a CharacterAnima row to fire.
+    cost = condition_template.reactive_anima_cost
+    anima = None
+    if cost > 0:
+        anima = CharacterAnima.objects.filter(character=interposer).first()
+        if anima is None or anima.current < cost:
+            return  # Fizzle: unaffordable — no roll, no cost, damage proceeds.
+
+    severity_template = ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).first()
+    if severity_template is None:
+        # Unseeded content (mirrors _ensure_interpose_challenges' warn-and-skip
+        # for the mundane path): fail safe like the resolved-is-None branch
+        # above — no roll, no cost, damage proceeds unchanged.
+        return
+    severity = severity_template.severity
+    check_type = resolve_cast_check_type(interposer, technique.action_template)
+    if check_type is None:
+        # Unprovisioned caster + template-less technique (clash.py guards the
+        # same pairing) — fail safe like the resolved-is-None branch above:
+        # no roll, no cost, damage proceeds to the next protection layer.
+        return
+    check_result = perform_check(
+        interposer,
+        check_type,
+        target_difficulty=severity,
+        extra_modifiers=extra_modifiers,
+    )
+
+    # Debit on fire (any non-fizzle resolution) — anima, not fatigue.
+    if cost > 0:
+        anima.current -= cost
+        anima.save(update_fields=["current"])
+
+    is_clean_block = _grade_interpose_damage(
+        pre_payload, check_result.success_level, interposer=interposer
+    )
+
+    if is_clean_block and flavor == PROTECTIVE_FLAVOR_BLINK:
+        from world.areas.positioning.services import force_move_to_position  # noqa: PLC0415
+
+        dest = action.participant.current_position
+        if dest is not None:
+            force_move_to_position(protected, dest)
 
 
 def _try_companion_defend(
@@ -6823,11 +7129,18 @@ def _try_companion_defend(
     if companion_opponent is None:
         return
 
-    # Redirect damage to the companion
+    # Redirect damage to the companion. skip_guardian_shield=True: the
+    # guardian already had a chance to interpose for `participant` above via
+    # _try_interpose (same blow) — without this, the redirect re-enters
+    # _resolve_opponent_pre_apply -> _try_guardian_shield_opponent and would
+    # charge that guardian's interpose fatigue/anima a second time for one
+    # hit (#2207 review finding I1). The companion's own DAMAGE_PRE_APPLY
+    # trigger band still runs.
     apply_damage_to_opponent(
         companion_opponent,
         pre_payload.amount,
         damage_type=pre_payload.damage_type,
+        skip_guardian_shield=True,
     )
 
     # If companion survived, zero out the damage to the ally
@@ -6876,8 +7189,18 @@ def _bind_interpose_challenges_any_ally(
     room: object,
     interposer_participant_id: int,
     active_participants_by_id: dict[int, CombatParticipant],
+    active_ally_opponent_objectdbs: list[ObjectDB],
 ) -> None:
-    """Bind a ChallengeInstance to every active participant except the interposer."""
+    """Bind a ChallengeInstance to every active participant and ALLY opponent.
+
+    Every active participant except the interposer, plus every ALLY-allegiance
+    ``CombatOpponent``'s objectdb (player summons/companion NPCs, #2207) — so a
+    mundane guardian's :func:`dispatch_capability_reaction` finds a bound
+    challenge instance when shielding a summon via the ANY-ALLY path. Note: this
+    is the ONLY path that can bind a summon-ward — ``focused_ally_target`` FKs
+    ``CombatParticipant``, so a summon can never be named as a *specific* ward
+    (named-ally guarding of a summon is a follow-up).
+    """
     from world.mechanics.models import ChallengeInstance  # noqa: PLC0415
 
     for part_id, part in active_participants_by_id.items():
@@ -6887,6 +7210,14 @@ def _bind_interpose_challenges_any_ally(
         ChallengeInstance.objects.get_or_create(
             template=template,
             target_object=ally_char,
+            is_active=True,
+            defaults={"location": room, "is_revealed": True},
+        )
+
+    for ally_objectdb in active_ally_opponent_objectdbs:
+        ChallengeInstance.objects.get_or_create(
+            template=template,
+            target_object=ally_objectdb,
             is_active=True,
             defaults={"location": room, "is_revealed": True},
         )
@@ -6906,7 +7237,10 @@ def _ensure_interpose_challenges(
 
     - Specific-ally path (``focused_ally_target`` set): binds to that ally's character.
     - Any-ally path (``focused_ally_target=None``): binds to every ACTIVE participant
-      in this encounter except the interposer.
+      in this encounter except the interposer, plus every ACTIVE ALLY-allegiance
+      ``CombatOpponent``'s objectdb (a summon/companion NPC, #2207) — the only path
+      that can bind a summon-ward, since ``focused_ally_target`` FKs
+      ``CombatParticipant`` and so cannot name a specific opponent.
 
     Idempotent: ``get_or_create`` on (template, target_object, is_active=True) ensures
     no duplicates when called multiple times in the same round.
@@ -6939,6 +7273,9 @@ def _ensure_interpose_challenges(
     # Fetch all active allies once (needed for the any-ally path).
     # select_related prevents N+1 when accessing .character_sheet.character below.
     active_participants_by_id: dict[int, CombatParticipant] | None = None
+    # Fetch active ALLY-allegiance opponents (summons/companion NPCs) once too,
+    # for the same any-ally path (#2207).
+    active_ally_opponent_objectdbs: list[ObjectDB] | None = None
 
     for action in interpose_actions:
         interposer_participant_id = action.participant_id
@@ -6953,7 +7290,8 @@ def _ensure_interpose_challenges(
                 defaults={"location": room, "is_revealed": True},
             )
         else:
-            # Any-ally path: bind to every active participant except the interposer.
+            # Any-ally path: bind to every active participant except the interposer,
+            # plus every active ALLY-allegiance opponent (summon/companion NPC, #2207).
             if active_participants_by_id is None:
                 active_participants_by_id = {
                     p.pk: p
@@ -6962,39 +7300,60 @@ def _ensure_interpose_challenges(
                         status=ParticipantStatus.ACTIVE,
                     ).select_related("character_sheet__character")
                 }
+            if active_ally_opponent_objectdbs is None:
+                active_ally_opponent_objectdbs = [
+                    opp.objectdb
+                    for opp in CombatOpponent.objects.filter(
+                        encounter=encounter,
+                        status=OpponentStatus.ACTIVE,
+                        allegiance=CombatAllegiance.ALLY,
+                    ).select_related("objectdb")
+                    if opp.objectdb is not None
+                ]
             _bind_interpose_challenges_any_ally(
-                template, room, interposer_participant_id, active_participants_by_id
+                template,
+                room,
+                interposer_participant_id,
+                active_participants_by_id,
+                active_ally_opponent_objectdbs,
             )
 
 
-def apply_interpose_outcome(
+def _grade_interpose_damage(
     pre_payload: DamagePreApplyPayload,
-    result: ChallengeResolutionResult,
+    success_level: int,
     *,
     interposer: object | None = None,
-) -> None:
-    """Map a graded interpose resolution onto *pre_payload*.
+    force_clean: bool = False,
+) -> bool:
+    """Shared clean/partial/fail damage banding for BOTH interpose paths (#2207).
 
-    Mirrors :func:`~world.areas.positioning.plummet.resolve_catch`'s graded
-    branches but acts on the incoming damage amount rather than plummet state:
+    Extracted from :func:`apply_interpose_outcome` (the mundane
+    capability-reaction path) so :func:`_try_technique_interpose` (a technique
+    guardian's own cast-check resolution) grades identically without
+    duplicating the SHIELD-scaling partial-block math:
 
-    - **clean block** (``resolution_type == DESTROY`` or ``success_level > 0``):
-      the blow is fully turned aside — ``pre_payload.amount = 0``.
-    - **partial** (``success_level == 0``, not DESTROY): the interposer softens
-      but does not stop the blow — ``pre_payload.amount //= 2``. A SHIELD-role
-      interposer scales this reduction by their COVENANT_ROLE thread level (#2022):
-      the deeper the vow, the more damage the partial block absorbs.
+    - **clean block** (``force_clean`` or ``success_level > 0``): the blow is
+      fully turned aside — ``pre_payload.amount = 0``.
+    - **partial** (``success_level == 0``, not forced-clean): the interposer
+      softens but does not stop the blow — ``pre_payload.amount //= 2``. A
+      SHIELD-role interposer scales this reduction by their COVENANT_ROLE
+      thread level (#2022): the deeper the vow, the more damage the partial
+      block absorbs.
     - **failure** (``success_level < 0``): the interpose fails — no change.
-    """
-    from world.mechanics.constants import ResolutionType  # noqa: PLC0415
 
-    check_result = result.check_result
-    success_level = check_result.success_level if check_result is not None else 0
-    is_clean_block = result.resolution_type == ResolutionType.DESTROY or success_level > 0
+    ``force_clean`` lets a caller fold in a resolution-type override (the
+    mundane path's ``ChallengeResolutionResult.resolution_type == DESTROY``)
+    without leaking that concept into this shared helper's contract.
+
+    Returns ``True`` when this graded as a clean block — the technique path
+    uses this to gate BLINK ward relocation (clean success only).
+    """
+    is_clean_block = force_clean or success_level > 0
 
     if is_clean_block:
         pre_payload.amount = 0
-        return
+        return True
 
     if success_level == 0:
         # #2022: SHIELD archetype scaling — a deeper vow blocks more damage
@@ -7012,18 +7371,48 @@ def apply_interpose_outcome(
                 # blocking 67% instead of 50%.
                 divisor = int(2 + bonus)
         pre_payload.amount //= divisor
-        return
+        return False
 
     # Failure (success_level < 0) — the blow continues at full damage.
+    return False
 
 
-def dispatch_interpose(
+def apply_interpose_outcome(
+    pre_payload: DamagePreApplyPayload,
+    result: ChallengeResolutionResult,
+    *,
+    interposer: object | None = None,
+) -> None:
+    """Map a graded interpose resolution onto *pre_payload*.
+
+    Mirrors :func:`~world.areas.positioning.plummet.resolve_catch`'s graded
+    branches but acts on the incoming damage amount rather than plummet state.
+    Delegates the clean/partial/fail banding to :func:`_grade_interpose_damage`
+    (shared with the technique-guardian path, #2207) — this wrapper's only job
+    is converting a ``ChallengeResolutionResult`` into the ``(success_level,
+    force_clean)`` pair that helper expects: ``resolution_type == DESTROY``
+    forces a clean block even at ``success_level <= 0`` (a capability-authored
+    instant stop).
+    """
+    from world.mechanics.constants import ResolutionType  # noqa: PLC0415
+
+    check_result = result.check_result
+    success_level = check_result.success_level if check_result is not None else 0
+    force_clean = result.resolution_type == ResolutionType.DESTROY
+
+    _grade_interpose_damage(
+        pre_payload, success_level, interposer=interposer, force_clean=force_clean
+    )
+
+
+def dispatch_interpose(  # noqa: PLR0913 - select_best_check_rating extends existing signature
     interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
     pre_payload: DamagePreApplyPayload,
     *,
     approach: str | None,
     extra_modifiers: int = 0,
+    select_best_check_rating: bool = False,
 ) -> ChallengeResolutionResult | None:
     """Resolve *interposer*'s interpose attempt and apply the graded outcome.
 
@@ -7031,6 +7420,12 @@ def dispatch_interpose(
     looks up the active Interpose :class:`~world.mechanics.models.ChallengeInstance`
     bound to *protected*, resolves it through *interposer*'s capabilities, and
     calls :func:`apply_interpose_outcome` to mutate *pre_payload* in place.
+
+    *select_best_check_rating* (#2207) opts into the best-of-check reaction-action
+    selection (Reflexes vs. the Melee-Defense twin) when *approach* is ``None`` —
+    passed ``True`` by :func:`_try_interpose` (the combat damage path). Default
+    ``False`` preserves the plain first-match behavior for the scene-cover caller
+    (``world.scenes.sudden_harm``), which passes ``approach=None`` unchanged.
 
     Returns the :class:`~world.mechanics.types.ChallengeResolutionResult`, or
     ``None`` when no active Interpose challenge is bound to *protected* or
@@ -7051,6 +7446,7 @@ def dispatch_interpose(
             f"for protected target {protected!r}."
         ),
         outcome_fn=functools.partial(apply_interpose_outcome, pre_payload, interposer=interposer),
+        select_best_check_rating=select_best_check_rating,
         extra_modifiers=extra_modifiers,
     )
 

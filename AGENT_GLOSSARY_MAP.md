@@ -251,6 +251,14 @@ reflect (`reflect_damage`, priority 20), or blink (`blink_dodge`, priority 30). 
 The seeded set of nine castable combat effects (`ensure_effect_palette_content()` in
 `world/magic/effect_palette_content.py`). See the magic per-app glossary for the full entry.
 
+**Guardian reaction** (#2207):
+The declared protect-with-technique reaction armed via `declare_interpose(technique=...)`.
+Interpose (a plain `declare_interpose(technique=None)`) is its mundane case, rolling
+best-of Reflexes/Melee Defense; supplying a known technique that classifies to a
+non-`redirect` protective flavor (`world.magic.services.targeting.protective_flavor`)
+instead rolls the guardian's own cast check and pays anima, not fatigue (ADR-0118). The
+combat per-app glossary has the full entry. _Avoid_: guardian ward, protect action.
+
 **Technique Entrance** (#2183):
 An Entrance whose check IS a technique cast — the cast's success level substitutes for the
 entrance's social roll entirely (ADR-0113). Distinct from Entry Flourish (the resonance

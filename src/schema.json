@@ -52194,6 +52194,10 @@ components:
           type: string
           readOnly: true
           nullable: true
+        protective_flavor:
+          type: string
+          readOnly: true
+          nullable: true
         position_target_shape:
           type: string
           readOnly: true
@@ -52226,6 +52230,7 @@ components:
       - position_target_shape
       - prerequisite_met
       - prerequisite_reasons
+      - protective_flavor
       - reach
       - ref
       - soulfray_warning

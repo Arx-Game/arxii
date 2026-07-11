@@ -124,6 +124,13 @@ export interface PlayerAction {
    */
   reach?: string | null;
   /**
+   * Guardian-declaration flavor for combat-cast techniques (#2207). Values:
+   * "barrier" | "blink" | "redirect" | null. null → the technique carries no
+   * protective reactive-trigger handler, so it can't be offered as a Guard
+   * declaration's protective technique.
+   */
+  protective_flavor?: string | null;
+  /**
    * Cast-time position-targeting shape for this technique (#2206). Hand-typed
    * mirror of the backend `position_target_shape` field (generated api.d.ts
    * was not regenerated for this feature — see Task 5 brief). "none" → no
