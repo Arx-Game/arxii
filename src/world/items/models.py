@@ -426,8 +426,13 @@ class ItemTemplate(SharedMemoryModel):
 
         Canonical 'usable' predicate; consumables are the charge-spending subset.
         A template with appearance effects but no pool is usable (cosmetic-only items).
+
+        Note: the appearance_effects check is deferred to use_item itself to avoid
+        N+1 queries in list serializers. This property returns True when the template
+        has an on_use_pool; callers that need cosmetic-only usability should check
+        appearance_effects separately.
         """
-        return self.on_use_pool_id is not None or self.appearance_effects.exists()
+        return self.on_use_pool_id is not None
 
     @cached_property
     def cached_slots(self) -> list[TemplateSlot]:

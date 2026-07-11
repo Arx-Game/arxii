@@ -513,8 +513,8 @@ def _is_visible_to(actor, target) -> bool:
 
 @dataclass
 class ItemUsablePrerequisite(Prerequisite):
-    """The item's template must have an on-use pool (usable); consumables must
-    have charges remaining. Mirrors use_item's preconditions / #1026 is_usable."""
+    """The item's template must have an on-use pool or appearance effects (usable);
+    consumables must have charges remaining. Mirrors use_item's preconditions / #1026 is_usable."""
 
     def is_met(
         self,
@@ -529,7 +529,7 @@ class ItemUsablePrerequisite(Prerequisite):
         if instance is None:
             return False, CANNOT_BE_USED_MESSAGE
         template = instance.template
-        if not template.is_usable:
+        if not template.is_usable and not template.appearance_effects.exists():
             return False, CANNOT_BE_USED_MESSAGE
         if template.is_consumable and instance.charges <= 0:
             return False, "There are no uses left."
