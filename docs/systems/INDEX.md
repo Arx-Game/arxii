@@ -3334,17 +3334,18 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Action Keys:** `begin_battle_round` / `resolve_battle_round` / `conclude_battle` (GM,
   `target_type=AREA`) · `declare_battle_action` (player, `target_type=SELF`, requires
   `technique_id`; forwards `action_kind`/`target_unit`/`target_ally`/`scope`/
-  `target_place`/`target_side`/`target_fortification` — all 11 `BattleActionKind` values,
+  `target_place`/`target_side`/`target_fortification` — all 12 `BattleActionKind` values,
   including BREACH/FORTIFY, are reachable through this Action, see
   [battles.md](battles.md#sieges-1713)) ·
   `challenge_champion_duel` (player, `target_type=AREA`, #1710)
-- **Telnet:** `battle [declare strike|support|rescue|rout|rally|repel|hold|breach|fortify
-  ... with <technique>|duel <front> vs <boss name>|round|resolve|conclude]` —
-  `strike`/`rout`/`rally` also accept `side` or `place <name>` scope tokens (#1710/#1712);
-  `breach`/`fortify` require `place <name> fortification <kind>` (#1713).
+- **Telnet:** `battle [declare strike|support|rescue|rout|rally|repel|hold|breach|fortify|
+  set_environment|move|reposition ... with <technique>|duel <front> vs <boss name>|round|
+  resolve|conclude]` — `strike`/`rout`/`rally` also accept `side` or `place <name>` scope
+  tokens (#1710/#1712); `breach`/`fortify` require `place <name> fortification <kind>`
+  (#1713).
 - **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
-  `BattleActionKind` (11 values, #1713 adds BREACH/FORTIFY, #1714 adds REPOSITION,
-  #1715 adds SET_ENVIRONMENT),
+  `BattleActionKind` (12 values, #1713 adds BREACH/FORTIFY, #1714 adds REPOSITION,
+  #1715 adds SET_ENVIRONMENT, #2007 adds MOVE),
   `BattleActionScope` (#1710),
   `BattleOutcome`, `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711),
   `FortificationKind` (WALL/GATE/BATTLEMENT, #1713; HULL added for vehicle hulls, #1714),
