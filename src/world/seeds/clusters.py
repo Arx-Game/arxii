@@ -187,6 +187,16 @@ def _seed_building_condition() -> None:
     ensure_preparation_contribution_method()
 
 
+def _seed_agriculture() -> None:
+    from world.agriculture.seeds import (  # noqa: PLC0415
+        ensure_field_granary_kinds,
+        ensure_starter_crop_types,
+    )
+
+    ensure_field_granary_kinds()
+    ensure_starter_crop_types()
+
+
 def _seed_market() -> None:
     from world.seeds.market import seed_market_demo  # noqa: PLC0415
 
@@ -331,6 +341,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Building condition: the Grand Preparation AP-check contribution method
     # (#1930). After "governance" (rides its Household Command CheckType).
     "building_condition": _seed_building_condition,
+    "agriculture": _seed_agriculture,
     # Kudos: the KudosSourceCategory rows the pose_kudos / spread_assist / social_engagement
     # reaction-kind + weekly-grant paths need, plus the "relationship_writeup" category and the
     # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
