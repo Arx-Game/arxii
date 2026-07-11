@@ -9,9 +9,20 @@ interface ConversationSidebarProps {
   threading?: ThreadingState;
   /** Fired with a thread's key when it's clicked — GamePage owns the composer-mode translation. */
   onThreadClick: (key: string) => void;
+  /**
+   * Fired when the "All" button is clicked. Defaults to `threading.showAll`
+   * (the filter/mute reset); GamePage overrides it (#2165 review fix) to ALSO
+   * re-anchor the active conversation tab back to the room, since `showAll`
+   * alone doesn't touch tab state.
+   */
+  onShowAll?: () => void;
 }
 
-export function ConversationSidebar({ threading, onThreadClick }: ConversationSidebarProps) {
+export function ConversationSidebar({
+  threading,
+  onThreadClick,
+  onShowAll,
+}: ConversationSidebarProps) {
   const [filterThreadKey, setFilterThreadKey] = useState<string | null>(null);
 
   if (!threading) {
@@ -45,7 +56,7 @@ export function ConversationSidebar({ threading, onThreadClick }: ConversationSi
         enabledThreadKeys={threading.enabledThreadKeys}
         isUnfiltered={threading.enabledThreadKeys.size === 0}
         onThreadClick={onThreadClick}
-        onShowAll={threading.showAll}
+        onShowAll={onShowAll ?? threading.showAll}
         onOpenFilter={setFilterThreadKey}
       />
 

@@ -145,8 +145,21 @@ export function GamePage() {
         };
       }),
       activeKey: activeThreadTab,
-      onSelect: (key: string | null) =>
-        dispatch(setActiveThreadTab({ character: active, threadKey: key })),
+      onSelect: (key: string | null) => {
+        dispatch(setActiveThreadTab({ character: active, threadKey: key }));
+        // #2165 review fix: the strip's room-anchor tab must reset the
+        // composer the same way the sidebar's room row does (handleThreadClick
+        // below) — otherwise a stale locked mode (e.g. a whisper) survives the
+        // switch back to the room anchor.
+        if (key === null) {
+          const roomThread = threading.threads.find((t) => t.key === 'room');
+          setComposerMode(
+            roomThread
+              ? threadToComposerMode(roomThread, roomName)
+              : { command: 'pose', targets: [], label: `Pose → ${roomName}` }
+          );
+        }
+      },
       onClose: (key: string) => dispatch(closeThreadTab({ character: active, threadKey: key })),
     };
   }, [sceneId, active, openThreadTabs, threading.threads, roomName, activeThreadTab, dispatch]);
@@ -255,6 +268,17 @@ export function GamePage() {
     }
     dispatch(openThreadTab({ character: active, threadKey: key }));
   };
+
+  // #2165 review fix: the sidebar's "All" button must restore the room feed,
+  // not just reset the filter/mute state. `threading.showAll` alone clears
+  // `enabledThreadKeys`/`hiddenPersonaIds` but leaves an active conversation
+  // TAB in place — without also re-anchoring the tab, the tab strip keeps a
+  // whisper tab selected and the "All" click appears to do nothing.
+  const threadingShowAll = threading.showAll;
+  const handleShowAll = useCallback(() => {
+    threadingShowAll();
+    if (active) dispatch(setActiveThreadTab({ character: active, threadKey: null }));
+  }, [threadingShowAll, active, dispatch]);
 
   // Scene toolset (#2156 Task 6) — GamePage is the composition root, so it
   // owns the same handler state SceneDetailPage.tsx:120-178 owns, mirrored
@@ -380,6 +404,7 @@ export function GamePage() {
           <ConversationSidebar
             threading={sceneId ? threading : undefined}
             onThreadClick={handleThreadClick}
+            onShowAll={handleShowAll}
           />
         }
         center={
