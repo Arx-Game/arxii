@@ -20,7 +20,7 @@ from world.areas.constants import AreaLevel
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Area` (SharedMemoryModel) | A spatial hierarchy node at a specific level | `name`, `level` (AreaLevel), `parent` (self-FK), `realm` (FK to `realms.Realm`), `description` |
+| `Area` (SharedMemoryModel) | A spatial hierarchy node at a specific level | `name`, `level` (AreaLevel), `parent` (self-FK), `realm` (FK to `realms.Realm`), `description`, `grid_x`/`grid_y` (nullable, parent-local rendering coordinates, #2223) |
 | `AreaClosure` | Read-only materialized view for transitive closure | `ancestor` (FK), `descendant` (FK), `depth` |
 
 ---
@@ -50,7 +50,25 @@ from world.areas.services import (
     get_rooms_in_area,       # All RoomProfiles in area and descendants
     reparent_area,           # Move area under a new parent (auto-refreshes closure)
     get_room_profile,        # Get or create RoomProfile for a room ObjectDB
+    area_grid_path,          # Root->area chain of parent-local (grid_x, grid_y) pairs
 )
+```
+
+### Coordinates (`grid_x`/`grid_y`, #2223)
+
+`Area.grid_x`/`grid_y` are nullable integers giving an area's position within its
+**own parent's** local grid — rendering/hint data only, mirroring `RoomProfile.grid_x`/
+`grid_y`'s convention one level up the hierarchy. They are never consulted for routing
+(see `find_route()` below and ADR-0120): connectivity is exits, full stop.
+
+```python
+from world.areas.services import area_grid_path
+
+# Root -> area chain of parent-local (grid_x, grid_y) pairs, one entry per
+# ancestor (via get_ancestry); unset coordinates come back as (None, None).
+path = area_grid_path(market_area)
+# Composing this into a single global position is a future renderer's job,
+# not this helper's — each entry is only meaningful among its own siblings.
 ```
 
 ### Ancestry Queries (via AreaClosure materialized view)
@@ -146,13 +164,15 @@ Frontier-batched BFS: each level fetches every outbound exit for the *entire*
 current frontier in one query (mirroring `area_subtree_pks`'s
 `parent_id__in=[...]` batching over the Area tree above), rather than one room
 at a time — the fix for the per-room-query blowup that breaks naive BFS at
-scale. Scoped to same-Area travel only — cross-Area routing needs
-Area-to-Area connectivity data this codebase doesn't have yet — and to
+scale. Crosses Area boundaries freely (#2223, ADR-0120): the exit graph IS the
+connectivity — any room-level `Exit` is a valid hop whatever Area it lands in,
+with no separate Area-to-Area adjacency model to consult. Still scoped to
 publicly-listed rooms only (`room_is_publicly_listed`), matching the `where`
 privacy invariant (#1287): a route never passes through, or reveals, a private
-room. Capped at `settings.TRAVEL_MAX_HOPS` (default 50). Returns `None` when
-unreachable, off-Area, the destination isn't public, or the route would exceed
-the hop cap; returns `[]` when already at the destination.
+room. Capped at `settings.TRAVEL_MAX_HOPS` (default 50), hop-counted across
+Area boundaries the same as within one. Returns `None` when unreachable, the
+destination isn't public, or the route would exceed the hop cap; returns `[]`
+when already at the destination.
 
 ### `TravelAction` / `StopTravelAction` (`src/actions/definitions/movement.py`, #2163)
 
