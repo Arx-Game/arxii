@@ -7,6 +7,7 @@ import { useDispatchPlayerAction } from '@/combat/queries';
 import { SceneDetail, updateScene, finishScene } from '../queries';
 import { fetchAvailableActions } from '../actionQueries';
 import type { PlayerAction } from '../actionTypes';
+import type { SceneRoundState } from '../types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -85,6 +86,22 @@ function GrantSceneGMControl() {
       </div>
       {feedback && <p className="mt-1 text-xs text-muted-foreground">{feedback}</p>}
     </div>
+  );
+}
+
+/**
+ * Round-state badge (#2158) — read-only round number and status, visible to
+ * every scene participant, not just the GM. Mirrors the round state
+ * `RoundSettingsDialog` lets the GM edit, but is rendered unconditionally.
+ */
+function RoundStateBadge({ activeRound }: { activeRound: SceneRoundState | null }) {
+  if (activeRound === null) {
+    return null;
+  }
+  return (
+    <span className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
+      Round {activeRound.round_number} · {activeRound.status}
+    </span>
   );
 }
 
@@ -179,6 +196,7 @@ export function SceneHeader({ scene, onRefresh }: Props) {
               Refresh
             </Button>
           )}
+          <RoundStateBadge activeRound={scene.active_round} />
           <RoundSettingsDialog scene={scene} />
         </div>
       )}
