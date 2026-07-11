@@ -326,6 +326,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `summon_ally`, `move_position`, `create_obstacle`; adapters: `summon_ally_on_condition`,
     `move_position_on_condition`, `create_obstacle_on_condition`, `init_absorb_buffer`.
     See magic.md §"Effect Palette" for the full handler/adapter table.
+  - Ally + party ward variants (#2208, ADR-0118): Aegis Ward/Communion, Mirror Vigil/Communion,
+    Phase Guard/Communion — ALLY SINGLE/FILTERED_GROUP Technique variants of the three reactive
+    wards above (no new ConditionTemplates); reactive fire (`_try_spend_reactive`) and upkeep
+    (`drain_reactive_upkeep`) both debit `ConditionInstance.source_character`, falling back to
+    the bearer, so an ally ward strains its caster. See magic.md §"Ally + party ward variants".
   - Technique authoring draft workbench (#1496):
     `get_or_start_draft(character) -> TechniqueDraft`,
     `discard_draft(character)`,

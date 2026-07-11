@@ -1172,6 +1172,35 @@ grammar is what #2206 made actually reach validation/persistence in combat.
   A `CANCEL_EVENT` child fires unconditionally — even on the fizzle path — so an
   unaffordable defense would still cancel the attack. That bug was caught and fixed
   by the reactive E2E tests (#1584 Task 16).
+- **Payer rule (#2208, ADR-0118):** both cost paths debit
+  `ConditionInstance.source_character`, falling back to the bearer (`target`) when
+  unset. `_try_spend_reactive` (fire cost) and `drain_reactive_upkeep` (round upkeep,
+  per-participant) both resolve the payer this way — an ally ward strains its caster,
+  never the ally wearing it; an upkeep payer who can't afford the round cost causes
+  the ward to lapse (row deleted, `Trigger` rows cascade). Self-cast wards are
+  unchanged: `source_character` already equals the bearer.
+
+**Ally + party ward variants (#2208):** each of the three reactive-defense
+`ensure_*_content()` builders above (Aegis Field / Mirror Ward / Phase Step) also
+seeds an ALLY-single and an ALLY-`FILTERED_GROUP` (party) Technique variant, reusing
+the exact same `ConditionTemplate`/triggers/flow as the self variant — no new
+ConditionTemplates, triggers, or flows.
+
+| Technique | Variant of | `target_kind` / `target_type` | Castable | `anima_cost` |
+|-----------|------------|-------------------------------|----------|---------------|
+| Aegis Ward | Aegis Field | ALLY / SINGLE | in or out of combat (existing ally-target seam) | 2 |
+| Aegis Communion | Aegis Field | ALLY / FILTERED_GROUP | out-of-combat party preparation | 4 |
+| Mirror Vigil | Mirror Ward | ALLY / SINGLE | in or out of combat | 2 |
+| Mirror Communion | Mirror Ward | ALLY / FILTERED_GROUP | out-of-combat party preparation | 4 |
+| Phase Guard | Phase Step | ALLY / SINGLE | in or out of combat | 2 |
+| Phase Communion | Phase Step | ALLY / FILTERED_GROUP | out-of-combat party preparation | 4 |
+
+Party (`Communion`) variants pay 2x the single variant's `anima_cost`. The
+`FILTERED_GROUP` party route is deliberately **out-of-combat only** — casting a
+party ward mid-encounter (in-combat party AoE) was not built; the reserved slot on
+the technique-target join table remains unused for that case. `FILTERED_GROUP`
+targeting is the benign, consent-free route per ADR-0045 (non-hostile group casts
+don't need per-target consent the way hostile multi-target casts do).
 
 ### Resonance Gain Surfaces (Resonance Pivot Spec C)
 

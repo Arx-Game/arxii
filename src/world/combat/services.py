@@ -7189,15 +7189,25 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
 
     For each ACTIVE participant, for each active (not suppressed, not resolved)
     condition with ``upkeep_anima_per_round > 0``: spend that anima from the
-    participant's ``CharacterAnima`` pool. If the participant cannot pay in
+    condition's payer's ``CharacterAnima`` pool. If the payer cannot pay in
     full, the condition lapses — its ``ConditionInstance`` row is deleted and
     any ``Trigger`` rows on it cascade.
 
-    Participants without a ``CharacterAnima`` row are skipped (defensive; they
-    cannot sustain reactive conditions without an anima pool).
+    Payer rule (#2208): ``source_character`` pays when set — an ally ward
+    strains its caster, never its bearer. Self-cast wards are unchanged
+    (source == bearer). Only looking up a separate ``CharacterAnima`` when
+    ``source_character_id`` differs from the bearer's keeps the common
+    self-ward path on the single-query-per-participant code path below.
+
+    Participants without a ``CharacterAnima`` row are skipped entirely — including
+    any caster-paid wards they bear (ADR-0118 edge: an anima-less bearer's ally
+    ward gets free upkeep; acceptable because player characters always have an
+    anima row).
 
     Anima is written at most once per participant (after the inner loop) so that
-    a round with N sustained conditions produces a single UPDATE rather than N.
+    a round with N self-sustained conditions produces a single UPDATE rather
+    than N; ally-sourced conditions debit their payer's pool immediately since
+    that payer is not necessarily among the participants being iterated.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
@@ -7218,6 +7228,14 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
         remaining = anima.current
         for inst in instances:
             cost = inst.condition.upkeep_anima_per_round
+            if inst.source_character_id and inst.source_character_id != char.id:
+                payer_anima = _get_anima(inst.source_character)
+                if payer_anima is None or payer_anima.current < cost:
+                    inst.delete()  # lapse — Trigger rows cascade via source_condition FK
+                else:
+                    payer_anima.current -= cost
+                    payer_anima.save(update_fields=["current"])
+                continue
             if remaining >= cost:
                 remaining -= cost
             else:

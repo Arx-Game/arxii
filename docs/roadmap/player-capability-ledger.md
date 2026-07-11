@@ -142,7 +142,12 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
   `CONDITION_APPLIED` fires (`_stamp_cast_positions`, `world/conditions/services.py` — this also
   fixed the previously-broken non-combat live path). Wired declaration → resolver → condition
   handlers, journey-tested at the round seam. Web non-combat casting still has no position picker
-  (telnet-only there via #2019's `position=` grammar).
+  (telnet-only there via #2019's `position=` grammar). **Ward-your-allies — SHIPPED #2208**
+  (ADR-0118): each of the three reactive wards (Aegis Field/Mirror Ward/Phase Step) gained an
+  ALLY-single and an ALLY-`FILTERED_GROUP` (party, out-of-combat only, 2x anima_cost) Technique
+  variant reusing the same `ConditionTemplate`; both reactive-fire and round-upkeep anima costs now
+  debit the applier (`ConditionInstance.source_character`), falling back to the bearer for
+  self-wards, so ally wards strain the caster. No in-combat party AoE (deliberately deferred).
 - **Combat systems:** war/battle system; mounts & flying (P2, no-improv-flagged); ranged/archery enforcement.
 
 ### Prove-it (WIRED-UNPROVEN — write the journey E2E, fix what it exposes)

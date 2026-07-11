@@ -1,7 +1,8 @@
 # Combat — Status
 
-**Status:** core party and duel combat ship end-to-end; the frontier is the authored effect palette,
-embodied combat (companions, mounts, war), and *proving* the WIRED-UNPROVEN paths — not the round engine.
+**Status:** core party and duel combat ship end-to-end; the authored effect palette shipped (#1584,
+combat-wired for battlefield shaping by #2206); the frontier is embodied combat (companions, mounts,
+war) and *proving* the WIRED-UNPROVEN paths — not the round engine.
 
 This is the combat **status map**. Per-capability tiers, the MVP bar, and sequencing live in the
 [`player-capability-ledger.md`](player-capability-ledger.md) (the spine — read it first). The
@@ -24,6 +25,16 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).
+- **Ward your allies (#2208, ADR-0118).** Aegis Field / Mirror Ward / Phase Step each gained
+  an ALLY-single (Aegis Ward, Mirror Vigil, Phase Guard — castable in or out of combat) and an
+  ALLY-`FILTERED_GROUP` party-preparation variant (Aegis Communion, Mirror Communion, Phase
+  Communion — out-of-combat only, consent-free per ADR-0045; party `anima_cost` is 2x the
+  single variant's), reusing the existing three `ConditionTemplate` rows with no new
+  ConditionTemplates/triggers/flows. Both reactive-cost paths (fire and round upkeep) now
+  debit the caster (`ConditionInstance.source_character`), falling back to the bearer for
+  self-cast wards, so an ally ward strains its caster rather than a free ride for the ally;
+  an upkeep payer who can't afford the round cost lapses the ward. No in-combat party AoE —
+  deliberately not built.
 - **On-use items as a round action (#2023/#2120).** `combat use <item> [on <target>]`
   (telnet) and `POST /api/combat/{pk}/use_item/` (web) both declare a USE_ITEM
   `CombatRoundAction` through the shared `combat_use` REGISTRY action; round resolution
@@ -93,11 +104,11 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 
-- **Effect palette** — summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field.
-  All 9 effects shipped (#1584); the three position-consuming ones (telekinesis/teleport/
-  obstacle → Force Grip/Phase Jump/Barricade) now have real runtime destination selection
-  for combat (#2206, see "What's PROVEN" above) — the non-combat web cast path still lacks
-  a position picker.
+- **Effect palette** — SHIPPED (#1584: summon, reflect, incorporeal, sink, telekinesis, teleport,
+  obstacle, force-field; combat position-targeting #2206; ally/party ward variants #2208). The
+  three position-consuming effects (telekinesis/teleport/obstacle → Force Grip/Phase Jump/Barricade)
+  have real runtime destination selection for combat (#2206) — the non-combat web cast path still
+  lacks a position picker. Remaining per-effect follow-ups live in the capability ledger, not here.
 - **Charm / switch-sides** an enemy NPC; **negotiate / parley** an NPC down (built in this PR,
   #1590/#1591, ADR-0058); **dispel** a condition.
 - **Companions / pets / summons** with breath weapons & ordered abilities.
