@@ -4,7 +4,7 @@
  * Covers:
  * 1. Renders the "Relationships" heading and both sub-sections.
  * 2. Free-text relationships render as list items in the Notes sub-section.
- * 3. When no free-text relationships exist, "TBD" placeholder renders.
+ * 3. When no free-text relationships exist, the empty-state placeholder renders.
  * 4. SoulTetherStatusPanel is rendered with bond data from useMyTetherBonds.
  * 5. characterSheetId is forwarded to SoulTetherStatusPanel (via callerSheetId).
  * 6. Bond relationship IDs and bonded names are passed to SoulTetherStatusPanel.
@@ -151,16 +151,16 @@ describe('RelationshipsSection', () => {
     expect(screen.getByText('Rival of House Ashveil')).toBeInTheDocument();
   });
 
-  it('renders TBD placeholder when no free-text relationships are provided', () => {
+  it('renders empty-state placeholder when no free-text relationships are provided', () => {
     render(<RelationshipsSection relationships={[]} />, { wrapper: createWrapper() });
 
-    expect(screen.getByText('TBD')).toBeInTheDocument();
+    expect(screen.getByText('No relationship notes yet.')).toBeInTheDocument();
   });
 
-  it('renders TBD placeholder when relationships prop is omitted', () => {
+  it('renders empty-state placeholder when relationships prop is omitted', () => {
     render(<RelationshipsSection />, { wrapper: createWrapper() });
 
-    expect(screen.getByText('TBD')).toBeInTheDocument();
+    expect(screen.getByText('No relationship notes yet.')).toBeInTheDocument();
   });
 
   it('renders both free-text notes and the soul tether panel together', () => {

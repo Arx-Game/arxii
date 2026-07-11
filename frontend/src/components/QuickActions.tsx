@@ -5,7 +5,7 @@ const actions = [
   { to: '/game', label: 'Play' },
   { to: '/roster', label: 'Roster' },
   { to: '/scenes', label: 'Scenes' },
-  { to: '/lore', label: 'Lore' },
+  { to: '/codex', label: 'Codex' },
 ];
 
 export function QuickActions() {

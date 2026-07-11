@@ -54,6 +54,88 @@ DEFAULT_STAT_NAMES: tuple[str, ...] = (
     "willpower",
 )
 
+# Explanatory copy for every character-creation stage's heading/intro (#2162), keyed
+# to match the frontend's `copy?.<key>` lookups in
+# frontend/src/character-creation/components/*Stage.tsx. Staff can edit any row
+# in the admin afterward without a migration; this dict only supplies the
+# fresh-deploy default so a new DB never ships blank stages.
+CG_EXPLANATION_COPY: dict[str, str] = {
+    "origin_heading": "Choose Your Origin",
+    "origin_intro": (
+        "Where does your story begin? Your starting realm shapes who your character "
+        "already knows, what they take for granted, and which conflicts will find "
+        "them first."
+    ),
+    "heritage_heading": "Your Heritage",
+    "heritage_intro": (
+        "Beginnings, species, and gender decide what your character is — and what "
+        "the world assumes about them before they say a word."
+    ),
+    "heritage_beginnings_heading": "Your Beginnings",
+    "heritage_beginnings_desc": (
+        "Your beginnings set the household and circumstances your character was "
+        "raised in, and which species and families are open to you."
+    ),
+    "heritage_species_heading": "Choose Your Species",
+    "heritage_species_desc": (
+        "Species carries its own stat leanings and how other characters read your "
+        "character on sight — pick the one whose instincts suit your concept."
+    ),
+    "heritage_gender_heading": "Gender & Pronouns",
+    "lineage_heading": "Family & Lineage",
+    "lineage_intro": (
+        "Claim a family within your starting area, go an orphan, or step forward as "
+        "someone whose origins are still unknown — family ties bring kin, "
+        "obligations, and a name people already have opinions about."
+    ),
+    "distinctions_heading": "Your Distinctions",
+    "distinctions_intro": (
+        "Distinctions are the advantages and disadvantages that make your character "
+        "specific — a sharp mind, a bad leg, a secret debt. Spend your points "
+        "deliberately; disadvantages give points back but shape play."
+    ),
+    "attributes_heading": "Attribute Scores",
+    "attributes_intro": (
+        "Allocate your twelve core statistics across the physical, social, mental, "
+        "and meta categories. These numbers back every roll your character makes, "
+        "so weight them toward how you want to play."
+    ),
+    "path_heading": "Choose Your Path",
+    "path_intro": (
+        "Your path is the road your character walks toward greatness — a "
+        "narrative class shaping the skills, techniques, and story beats "
+        "available as they grow."
+    ),
+    "path_skills_heading": "Starting Skills",
+    "path_skills_desc": (
+        "Spend your skill points across the specializations your path opens up; "
+        "these are the trained competencies your character can already call on."
+    ),
+    "magic_heading": "Magic & Cantrips",
+    "identity_heading": "Name & Identity",
+    "identity_intro": (
+        "Give your character a name, a guiding concept, and the words and history "
+        "that make them feel real before anyone else meets them."
+    ),
+    "appearance_heading": "Appearance & Build",
+    "appearance_intro": (
+        "Set your character's age, build, and physical traits, then write the "
+        "description other players will see when they look at your character."
+    ),
+    "finaltouches_heading": "Goals & Motivations",
+    "finaltouches_intro": (
+        "Choose the goals and motivations that drive your character forward — "
+        "checks that align with a goal earn a bonus, so pick what your character "
+        "actually wants."
+    ),
+    "review_heading": "Review & Submit",
+    "review_intro": (
+        "Look over the whole character before you submit. Once it's in for "
+        "review, staff will read it and either welcome your character to Arx or "
+        "ask for revisions."
+    ),
+}
+
 
 def ensure_canonical_fallback_room() -> ObjectDB:
     """Get-or-create the canonical fallback starting Room (#2121).
@@ -170,3 +252,18 @@ def seed_character_creation_dev() -> None:
             "is_active": True,
         },
     )
+    _seed_cg_explanations()
+
+
+def _seed_cg_explanations() -> None:
+    """Upsert every ``CGExplanation`` row from ``CG_EXPLANATION_COPY`` (#2162).
+
+    Unlike the rest of this seeder's create-if-missing rows, explanation copy is
+    re-synced on every run via ``update_or_create`` so prose fixes made here in
+    the repo keep reaching already-seeded deploys instead of being stuck behind
+    whatever text happened to land first.
+    """
+    from world.character_creation.models import CGExplanation  # noqa: PLC0415
+
+    for key, text in CG_EXPLANATION_COPY.items():
+        CGExplanation.objects.update_or_create(key=key, defaults={"text": text})

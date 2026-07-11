@@ -85,6 +85,29 @@ describe('RegisterPage', () => {
     });
   });
 
+  it('shows the real server error message on a failed registration', async () => {
+    vi.mocked(api.checkUsername).mockResolvedValue(true);
+    vi.mocked(api.checkEmail).mockResolvedValue(true);
+    vi.mocked(api.postRegister).mockRejectedValue(
+      new Error('This password is too short. It must contain at least 8 characters.')
+    );
+    renderWithProviders(<RegisterPage />);
+
+    await userEvent.type(screen.getByLabelText('Username'), 'tester');
+    await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Email'), 'test@test.com');
+    await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Password'), 'short');
+    await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Confirm Password'), 'short');
+    await userEvent.tab();
+    await userEvent.click(screen.getByRole('button', { name: /register/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/this password is too short/i)).toBeInTheDocument();
+    });
+  });
+
   it('disables submit while registering', async () => {
     vi.mocked(api.checkUsername).mockResolvedValue(true);
     vi.mocked(api.checkEmail).mockResolvedValue(true);

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { WelcomePanel } from '@/components/WelcomePanel';
 import { SITE_NAME } from '@/config';
 import { StatusBlock } from './StatusBlock';
 import { NewPlayerSection } from './NewPlayerSection';
@@ -22,14 +23,17 @@ export function HomePage() {
         className="container mx-auto flex flex-col items-center gap-8 py-12 text-center"
       >
         <div className="flex flex-col items-center gap-2">
-          <h1 className="text-4xl font-bold tracking-tight">Welcome to {SITE_NAME}!</h1>
-          <p className="text-lg text-muted-foreground">The Python MUD/MU* creation system.</p>
+          <h1 className="text-4xl font-bold tracking-tight">Welcome to {SITE_NAME}</h1>
+          <p className="text-lg text-muted-foreground">
+            A living world of intrigue and magic, played with others in your browser.
+          </p>
         </div>
         <Button asChild size="lg">
           <Link to="/game">Play in the browser</Link>
         </Button>
         <StatusBlock />
       </section>
+      <WelcomePanel />
       <div className="container mx-auto grid gap-4 py-8 md:grid-cols-3">
         <StatsCard
           stats={

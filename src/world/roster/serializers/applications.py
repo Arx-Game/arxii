@@ -4,6 +4,7 @@ Application-related serializers for the roster system.
 
 from typing import ClassVar
 
+from django.db import IntegrityError
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
@@ -123,11 +124,19 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         # Remove extra fields before creating
         policy_issues = validated_data.pop("policy_issues", [])
 
-        application = RosterApplication.objects.create(
-            player_data=validated_data["player_data"],
-            character=validated_data["character"],
-            application_text=validated_data["application_text"],
-        )
+        try:
+            application = RosterApplication.objects.create(
+                player_data=validated_data["player_data"],
+                character=validated_data["character"],
+                application_text=validated_data["application_text"],
+            )
+        except IntegrityError as exc:
+            raise serializers.ValidationError(
+                {
+                    "code": ValidationErrorCodes.DUPLICATE_PENDING_APPLICATION,
+                    "message": ValidationMessages.DUPLICATE_PENDING_APPLICATION,
+                },
+            ) from exc
 
         # Store policy issues for response
         application.policy_issues = policy_issues

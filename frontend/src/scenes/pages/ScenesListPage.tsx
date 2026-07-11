@@ -31,6 +31,13 @@ export function ScenesListPage() {
           </tr>
         </thead>
         <tbody>
+          {data?.results?.length === 0 && (
+            <tr>
+              <td colSpan={5} className="border p-4 text-center text-muted-foreground">
+                No scenes here yet.
+              </td>
+            </tr>
+          )}
           {data?.results?.map((scene) => (
             <tr key={scene.id}>
               <td className="border p-2">

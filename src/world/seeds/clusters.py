@@ -405,7 +405,11 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     """
     from actions.models import ActionTemplate  # noqa: PLC0415
     from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
-    from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
+    from world.character_creation.models import (  # noqa: PLC0415
+        Beginnings,
+        CGExplanation,
+        StartingArea,
+    )
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
@@ -475,7 +479,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # rows (#2010).
         "battles": [BattleMapBlueprint, BattleUnitTemplate],
         "consent": [SocialConsentCategory],
-        "character_creation": [StartingArea, Beginnings, Species],
+        "character_creation": [StartingArea, Beginnings, Species, CGExplanation],
         # Missions: the starter notice board (#2121) — 1 BOARD MissionGiver +
         # 3 OPEN MissionTemplate rows so `mission opportunities` isn't
         # dead-on-arrival.

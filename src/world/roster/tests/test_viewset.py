@@ -20,7 +20,12 @@ from world.roster.factories import (
     TenureGalleryFactory,
     TenureMediaFactory,
 )
-from world.roster.models import RosterApplication, TenureGallery, TenureMedia
+from world.roster.models import (
+    ApplicationStatus,
+    RosterApplication,
+    TenureGallery,
+    TenureMedia,
+)
 
 
 class TestRosterViewSet(TestCase):
@@ -375,4 +380,49 @@ class TestRosterEntryApply(TestCase):
                 character=self.entry.character_sheet.character,
             ).count()
             == 1
+        )
+
+    def test_apply_allows_reapplication_after_denial(self):
+        """A denied application must not block a fresh application (PENDING-only constraint)."""
+        url = f"/api/roster/entries/{self.entry.id}/apply/"
+        message = "I really want to play this character for many compelling reasons."
+        self.client.post(url, {"message": message}, format="json")
+        application = RosterApplication.objects.get(
+            player_data=self.player,
+            character=self.entry.character_sheet.character,
+        )
+        application.status = ApplicationStatus.DENIED
+        application.save()
+
+        response = self.client.post(url, {"message": message}, format="json")
+
+        assert response.status_code == 204
+        assert (
+            RosterApplication.objects.filter(
+                player_data=self.player,
+                character=self.entry.character_sheet.character,
+            ).count()
+            == 2
+        )
+
+    def test_apply_allows_reapplication_after_withdrawal(self):
+        """A withdrawn application must not block a fresh application."""
+        url = f"/api/roster/entries/{self.entry.id}/apply/"
+        message = "I really want to play this character for many compelling reasons."
+        self.client.post(url, {"message": message}, format="json")
+        application = RosterApplication.objects.get(
+            player_data=self.player,
+            character=self.entry.character_sheet.character,
+        )
+        application.withdraw()
+
+        response = self.client.post(url, {"message": message}, format="json")
+
+        assert response.status_code == 204
+        assert (
+            RosterApplication.objects.filter(
+                player_data=self.player,
+                character=self.entry.character_sheet.character,
+            ).count()
+            == 2
         )

@@ -148,6 +148,29 @@ from world.character_creation.services import (
 
 ---
 
+## Email Notifications (#2162)
+
+`world.character_creation.email_service.CGEmailService` sends plain-text notifications at every
+review-state transition, called (best-effort, exceptions logged not raised) from the corresponding
+service function:
+
+- `handle_submission` — confirmation to the applicant + notification to staff; called from
+  `submit_draft_for_review`
+- `send_application_approved` — called from `approve_application`
+- `send_revisions_requested` — called from `request_revisions`
+- `send_application_denied` — called from `deny_application`
+
+`CGEmailService` extends `world.roster.email_service.EmailServiceBase` (not `RosterEmailService`
+itself) — `EmailServiceBase` was split out of `RosterEmailService` in the same change so sibling
+domain services can reuse `_send_email`/`_get_staff_emails` without subclassing a service whose
+`send_application_approved`/`send_application_denied` take a roster-specific `tenure` arg CG
+applications don't have (subclassing would have meant a narrower override, an LSP violation caught
+by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApplication.player_account`
+(survives draft deletion); `_character_name` falls back to the draft's staged first name before
+`character_name` is populated at approval.
+
+---
+
 ## API Endpoints
 
 ### Lookup Data
@@ -213,6 +236,6 @@ from world.seeds.character_creation import seed_character_creation_dev
 seed_character_creation_dev()  # idempotent: get_or_create, never overwrites edits
 ```
 
-It seeds: `Realm` "Arx"; `StartingArea` "Arx City" (access_level=ALL); `Beginnings` "Commoner" (+ allowed_species M2M); `Species` "Human"; `Gender` key `unspecified`; `TarotCard` "The Fool" (MAJOR, rank 0); `HeightBand` `average_band` + `Build` `average_build`; the 12 stat `Trait` rows; the two `Roster` rows ("Available"/"Active Characters"); a `Path` "The Wanderer" (PROSPECT). Registered last in `CLUSTER_SEEDERS` (after `magic`, which provides the cantrip/resonance `finalize_character` picks). Verified by `test_playable_slice.py::TestSeededCharacterCreation` (finalize runs on a seeded-only DB) and `test_idempotency.py::test_edited_cg_row_survives_reseed`.
+It seeds: `Realm` "Arx"; `StartingArea` "Arx City" (access_level=ALL); `Beginnings` "Commoner" (+ allowed_species M2M); `Species` "Human"; `Gender` key `unspecified`; `TarotCard` "The Fool" (MAJOR, rank 0); `HeightBand` `average_band` + `Build` `average_build`; the 12 stat `Trait` rows; the two `Roster` rows ("Available"/"Active Characters"); a `Path` "The Wanderer" (PROSPECT); and, via `_seed_cg_explanations()` (#2162), every `CGExplanation` heading/intro/desc row (`CG_EXPLANATION_COPY`, 28 keys — one per `copy?.<key>` lookup across the 11 stage components) so a fresh deploy never ships blank CG stage copy. Unlike the rest of this seeder, `CGExplanation` rows are `update_or_create`d on every run (in-repo prose fixes keep reaching already-seeded deploys); every other row stays `get_or_create` (never overwrites a staff edit). Registered last in `CLUSTER_SEEDERS` (after `magic`, which provides the cantrip/resonance `finalize_character` picks). Verified by `test_playable_slice.py::TestSeededCharacterCreation` (finalize runs on a seeded-only DB), `test_idempotency.py::test_edited_cg_row_survives_reseed`, and `test_clusters.py::test_cg_explanations_seeded_and_nonempty`.
 
 The admin **Game Setup** hub (`admin_game_setup` view, `_game_setup/` URL) is a superuser-only landing page for clone hosts: the clone→seed→tweak→export flow, a per-cluster content inventory (via `seeded_models_by_cluster()`) with live row counts, and links to the Big Button, Export/Import, and the World authoring apps. See `src/web/admin/CLAUDE.md`.

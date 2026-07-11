@@ -1,4 +1,5 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   fetchRosterEntry,
   fetchMyRosterEntries,
@@ -92,8 +93,19 @@ export function useRosterEntryByNameQuery(name: string | undefined) {
 }
 
 export function useSendRosterApplication(id: RosterEntryData['id']) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (message: string) => postRosterApplication(id, message),
+    onSuccess: () => {
+      toast.success('Application sent! Staff will review it — you will get an email.');
+      queryClient.invalidateQueries({ queryKey: ['roster-entry', id] });
+      // ['account'] is the query key useAccountQuery() (mounted globally via
+      // AuthProvider) reads and mirrors into Redux — invalidating it here
+      // refetches /api/user/ so the new pending_applications entry shows up
+      // without a full page reload.
+      queryClient.invalidateQueries({ queryKey: ['account'] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to send.'),
   });
 }
 

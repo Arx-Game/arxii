@@ -40,6 +40,9 @@ Character-specific UI components:
 - **`QuickActions.tsx`**: Quick action menu
 - **`SearchSelect.tsx`**: Searchable select component
 - **`TenureSearch.tsx`**, **`TenureMultiSearch.tsx`**: Character search components
+- **`WelcomePanel.tsx`**: First-login home-page card for an authenticated account — "Enter the
+  game" CTA, pending-application status, draft-in-progress link, or the roster/create-character
+  choice for a zero-character account (#2162)
 
 ### Utility Components
 

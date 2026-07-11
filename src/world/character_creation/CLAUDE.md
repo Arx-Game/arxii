@@ -39,7 +39,13 @@ Character creation is a multi-stage process that guides players through creating
 - All frontend CG copy reads from this model via `useCGExplanations()` hook
 - API returns a flat dict: `{key: text, ...}` — frontend type is `Record<string, string>`
 - Staff can add new keys directly in admin without migrations
-- Seeded via fixture: `arx manage loaddata cg_explanations` (fixture is gitignored)
+- Seeded via `CG_EXPLANATION_COPY` + `_seed_cg_explanations()` in
+  `world/seeds/character_creation.py` (#2162), called from
+  `seed_character_creation_dev()` as part of the `character_creation` cluster on
+  the Big Button. Each row is upserted with `update_or_create`, so re-running the
+  seeder (e.g. after a prose fix in this repo) propagates updated copy to
+  already-seeded deploys without clobbering unrelated fields — and staff can still
+  hand-edit any row in admin between seeder runs.
 
 ### CharacterDraft
 - Stores in-progress character creation state

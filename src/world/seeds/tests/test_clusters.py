@@ -74,3 +74,19 @@ class TestClusterRegistry(TestCase):
         # the flat-list contract is independent and unchanged
         flat = seeded_models()
         self.assertTrue(all(issubclass(m, Model) for m in flat))
+
+    def test_cg_explanations_seeded_and_nonempty(self) -> None:
+        from world.character_creation.models import CGExplanation
+        from world.seeds.character_creation import (
+            CG_EXPLANATION_COPY,
+            seed_character_creation_dev,
+        )
+
+        seed_character_creation_dev()
+        for key in CG_EXPLANATION_COPY:
+            row = CGExplanation.objects.get(key=key)
+            self.assertTrue(row.text.strip(), f"blank copy for {key}")
+        # idempotent + updates edited copy
+        CGExplanation.objects.filter(key="origin_heading").update(text="stale")
+        seed_character_creation_dev()
+        self.assertNotEqual(CGExplanation.objects.get(key="origin_heading").text, "stale")

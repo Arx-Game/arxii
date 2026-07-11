@@ -169,10 +169,11 @@ export function useFamilies(areaId: number | undefined) {
   });
 }
 
-export function useDraft() {
+export function useDraft(enabled = true) {
   return useQuery({
     queryKey: characterCreationKeys.draft(),
     queryFn: getDraft,
+    enabled,
   });
 }
 

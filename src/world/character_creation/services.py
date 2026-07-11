@@ -1254,6 +1254,14 @@ def submit_draft_for_review(
         text="Application submitted for review.",
         comment_type=CommentType.STATUS_CHANGE,
     )
+
+    from world.character_creation.email_service import CGEmailService  # noqa: PLC0415
+
+    try:
+        CGEmailService.handle_submission(application)
+    except Exception:
+        logger.exception("Failed to send CG submission emails for application %s", application.pk)
+
     return application
 
 
@@ -1466,6 +1474,13 @@ def approve_application(
         approved_by=reviewer_data,
     )
 
+    from world.character_creation.email_service import CGEmailService  # noqa: PLC0415
+
+    try:
+        CGEmailService.send_application_approved(application)
+    except Exception:
+        logger.exception("Failed to send CG approval email for application %s", application.pk)
+
 
 def request_revisions(
     application: DraftApplication, *, reviewer: AbstractBaseUser | AnonymousUser, comment: str
@@ -1511,6 +1526,15 @@ def request_revisions(
         text=f"Revisions requested by {reviewer.username}.",
         comment_type=CommentType.STATUS_CHANGE,
     )
+
+    from world.character_creation.email_service import CGEmailService  # noqa: PLC0415
+
+    try:
+        CGEmailService.send_revisions_requested(application)
+    except Exception:
+        logger.exception(
+            "Failed to send CG revisions-requested email for application %s", application.pk
+        )
 
 
 def deny_application(
@@ -1562,6 +1586,13 @@ def deny_application(
         text=f"Application denied by {reviewer.username}.",
         comment_type=CommentType.STATUS_CHANGE,
     )
+
+    from world.character_creation.email_service import CGEmailService  # noqa: PLC0415
+
+    try:
+        CGEmailService.send_application_denied(application)
+    except Exception:
+        logger.exception("Failed to send CG denial email for application %s", application.pk)
 
 
 def add_application_comment(

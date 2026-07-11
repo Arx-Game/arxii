@@ -158,17 +158,41 @@ Resolving this split is **#2156**, the structural core of the slate.
 
 ### 8. Registration and character application (#2162)
 
-- Homepage hero is Evennia boilerplate; `NewPlayerSection` is placeholder copy with two dead
-  links to a nonexistent `/how-to-start` route (404).
-- Registration: server-side password rules surface only as generic post-submit errors.
-- Two unreconciled character paths: roster apply (silent success — form just clears; allows
-  duplicate submissions; staff review in raw Django admin; emails every state change) vs
-  11-stage CG (polished staff review app; **no notification on approval**). No "My
-  Applications" view despite `pending_applications` shipping unread on `/api/user/`.
-- CG stages ship blank on fresh deploys (`CGExplanation` unseeded; all copy falls back to
-  `''`). Seed content must ride the standard cluster-seeder path.
-- No first-login moment; zero-character accounts get full game chrome with an empty
-  switcher. Orphaned all-TODO `roster/pages/CharacterCreatePage.tsx` is unrouted dead code.
+- [FIXED #2162] Homepage hero is Evennia boilerplate; `NewPlayerSection` is placeholder copy
+  with two dead links to a nonexistent `/how-to-start` route (404). Branded homepage +
+  real new-player copy + a built `/how-to-start` route now ship; the `/lore*` dead links were
+  also fixed to point at `/codex`.
+- [FIXED #2162] Registration: server-side password rules surface only as generic post-submit
+  errors. `RegisterPage` now surfaces the real field-level validation errors plus inline
+  password hints, via an app-level toast host.
+- Two unreconciled character paths: roster apply (staff review in raw Django admin) vs
+  11-stage CG (polished staff review app). **Correction to the 2026-07-10 draft of this
+  claim:** roster apply never "allowed duplicate submissions" — the pre-#2162
+  `RosterApplication` `unique_together` was status-blind, so it was already
+  serializer/DB-blocked. The actual bug it caused was the opposite: a player who was
+  **denied or withdrew** could never apply for that character again (the same
+  `(player_data, character)` pair stayed unique forever). [FIXED #2162]: the constraint is
+  now a PENDING-only conditional `UniqueConstraint`, so re-application after denial/withdrawal
+  works, and the two-tab double-submit race still returns the existing
+  `DUPLICATE_PENDING_APPLICATION` error via the serializer's `IntegrityError` catch. [FIXED
+  #2162] CG's **no notification on approval** gap is closed — `CGEmailService` now fires
+  submission/approved/revisions-requested/denied emails, mirroring roster's
+  `RosterEmailService` (both now share `EmailServiceBase`). [FIXED #2162] No "My
+  Applications" view despite `pending_applications` shipping unread on `/api/user/` — the
+  home-page `WelcomePanel` now lists pending applications (with `character_id` added to
+  `PendingApplicationSerializer` so the frontend can cross-reference available characters),
+  and `ApplicationSlot` shows a success toast + visible pending state on the roster apply
+  flow itself.
+- [FIXED #2162] CG stages ship blank on fresh deploys (`CGExplanation` unseeded; all copy
+  falls back to `''`). `CG_EXPLANATION_COPY` now seeds every stage heading/intro/desc row via
+  the standard `character_creation` cluster seeder (`update_or_create`d so in-repo copy fixes
+  keep reaching already-seeded deploys).
+- [FIXED #2162] No first-login moment; zero-character accounts get full game chrome with an
+  empty switcher. A `WelcomePanel` now greets a first-login account on the home page
+  (enter-the-game CTA / pending applications / draft-in-progress link / roster+create choice),
+  and `GameTopBar` shows a "No characters yet" message with roster/create links instead of a
+  bare empty switcher when `characters.length === 0`. The orphaned all-TODO
+  `roster/pages/CharacterCreatePage.tsx` (unrouted dead code) was deleted.
 - The 2026-06-25 audit's "roster `apply` returns 204 without saving" bug is **fixed** — the
   endpoint now creates the application and triggers emails.
 
@@ -192,7 +216,8 @@ Resolving this split is **#2156**, the structural core of the slate.
 2. WS pose path resolves scene by the character's room, not the viewed page's `sceneId`
    (`CommandInput.tsx:149-153`) — folded into #2156.
 3. Markdown unrendered in `/game` feed (`EvenniaMessage.tsx`) — folded into #2156.
-4. Dead `/how-to-start` links (`NewPlayerSection.tsx:30,49`) — folded into #2162.
+4. [FIXED #2162] Dead `/how-to-start` links (`NewPlayerSection.tsx:30,49`) — folded into
+   #2162; the route now exists and the links resolve.
 5. `PersonaContextMenu` empty-until-cache-populated — folded into #2158.
 6. Discarded `CastResponse.encounter` — folded into #2157.
 

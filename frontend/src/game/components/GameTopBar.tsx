@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession, startSession } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
@@ -51,6 +53,20 @@ export function GameTopBar({ characters }: GameTopBarProps) {
       <span className="text-sm font-bold tracking-wide text-foreground">ARX II</span>
 
       <div className="mx-2 h-6 w-px bg-border" />
+
+      {characters.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No characters yet —{' '}
+          <Link to="/roster" className="text-primary underline">
+            browse the roster
+          </Link>{' '}
+          or{' '}
+          <Link to="/characters/create" className="text-primary underline">
+            create one
+          </Link>
+          .
+        </p>
+      )}
 
       {active && activeCharacter ? (
         <div className="flex items-center gap-3">

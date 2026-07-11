@@ -20,6 +20,7 @@ export interface AvailableCharacter {
 
 export interface PendingApplication {
   id: number;
+  character_id: number;
   character_name: string;
   status: 'pending';
   applied_date: string;
