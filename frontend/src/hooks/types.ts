@@ -29,6 +29,8 @@ export const WS_MESSAGE_TYPE = {
   ACTION_RESULT: 'action_result',
   /** Outbound: invoke a registered action by name with kwargs. */
   EXECUTE_ACTION: 'execute_action',
+  /** Inbound: someone applauded your content; anonymous. */
+  KUDOS_RECEIVED: 'kudos_received',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
@@ -141,6 +143,18 @@ export interface ScenePayload {
 export interface CommandErrorPayload {
   command: string;
   error: string;
+}
+
+/**
+ * Payload for `kudos_received` messages — anonymous by design (ADR-0033).
+ * Carries no giver identity: `description` is the audited, already-anonymized
+ * text from the KudosTransaction; `source_category` is the applause axis
+ * (pose chip, writeup commend, weekly engagement, spread-assist).
+ */
+export interface KudosReceivedPayload {
+  amount: number;
+  source_category: string;
+  description: string;
 }
 
 export interface InteractionWsPayload {
