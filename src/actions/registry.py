@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from actions.base import Action
+from actions.definitions.accusations import mint_accusation
 from actions.definitions.alterations import ResolveAlterationAction
 from actions.definitions.battles import (
     BeginBattleRoundAction,
@@ -525,6 +526,7 @@ _ALL_ACTIONS: list[Action] = [
     blackmail,
     coerce,
     reveal_secret,
+    mint_accusation,
     perform,
     entrance,
     restore_sense,

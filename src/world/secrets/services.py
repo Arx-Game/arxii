@@ -181,6 +181,35 @@ def mint_accusation(  # noqa: PLR0913 — keyword-only; each arg is a distinct s
     )
 
 
+def accusation_permitted(*, framer_sheet: CharacterSheet, target_sheet: CharacterSheet) -> bool:
+    """Target-side consent gate for a frame-job (#1825) — may *framer* accuse *target*?
+
+    Mirrors the theft gate (``steal_permitted``): a tenure-less subject (NPC/org) is always
+    frameable; a played target must have opted into being antagonised via their ``hostile``
+    consent category — resolved through the antagonism-consent tree (#2170), which defaults
+    Friends+whitelist. Returns True when minting is allowed. The mint action re-checks this.
+    """
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    def _active_tenure(sheet: CharacterSheet) -> RosterTenure | None:
+        return RosterTenure.objects.filter(
+            roster_entry__character_sheet=sheet, end_date__isnull=True
+        ).first()
+
+    target_tenure = _active_tenure(target_sheet)
+    if target_tenure is None:
+        return True  # NPC/tenure-less subject — antagonism-allowed by default (mirrors theft)
+    try:
+        hostile = SocialConsentCategory.objects.get_by_natural_key("hostile")
+    except SocialConsentCategory.DoesNotExist:
+        return True  # category not seeded (bare test DB) — no gate to apply
+    return not consent_blocks_targeting(
+        owner_tenure=target_tenure, category=hostile, actor_tenure=_active_tenure(framer_sheet)
+    )
+
+
 def grant_secret_knowledge(
     *,
     roster_entry: RosterEntry,

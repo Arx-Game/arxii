@@ -9,14 +9,21 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.consent.constants import ConsentMode
+from world.consent.factories import (
+    SocialConsentCategoryFactory,
+    SocialConsentCategoryRuleFactory,
+    SocialConsentPreferenceFactory,
+)
 from world.missions.factories import MissionDeedRecordFactory
-from world.roster.factories import RosterEntryFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory
 from world.secrets.constants import ACCUSATION_MAX_LEVEL, SecretLevel, SecretProvenance
 from world.secrets.factories import SecretCategoryFactory, SecretFactory
 from world.secrets.models import Secret, SecretKnowledge
 from world.secrets.services import (
     SecretError,
+    accusation_permitted,
     author_player_flavor_secret,
     author_secret,
     grant_secret_knowledge,
@@ -155,6 +162,39 @@ class MintAccusationServiceTests(TestCase):
                 content="the gravest of crimes, no evidence",
                 level=SecretLevel.DANGEROUS,
             )
+
+
+class AccusationPermittedTests(TestCase):
+    """The frame-job consent gate (#1825) — the target's ``hostile`` category decides."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.framer_tenure = RosterTenureFactory()
+        cls.framer_sheet = cls.framer_tenure.roster_entry.character_sheet
+        cls.target_tenure = RosterTenureFactory()
+        cls.target_sheet = cls.target_tenure.roster_entry.character_sheet
+        cls.hostile = SocialConsentCategoryFactory(key="hostile", default_mode=ConsentMode.EVERYONE)
+
+    def test_npc_target_is_always_frameable(self) -> None:
+        npc_sheet = CharacterSheetFactory()  # no active RosterTenure
+        assert accusation_permitted(framer_sheet=self.framer_sheet, target_sheet=npc_sheet) is True
+
+    def test_open_hostile_category_permits(self) -> None:
+        # hostile defaults EVERYONE here → a stranger may frame the target.
+        assert (
+            accusation_permitted(framer_sheet=self.framer_sheet, target_sheet=self.target_sheet)
+            is True
+        )
+
+    def test_locked_down_target_blocks_the_frame(self) -> None:
+        pref = SocialConsentPreferenceFactory(tenure=self.target_tenure)
+        SocialConsentCategoryRuleFactory(
+            preference=pref, category=self.hostile, mode=ConsentMode.ALLOWLIST
+        )
+        assert (
+            accusation_permitted(framer_sheet=self.framer_sheet, target_sheet=self.target_sheet)
+            is False
+        )
 
 
 class SecretKnowledgeServiceTests(TestCase):
