@@ -3791,6 +3791,17 @@ writeup kudos/complaint feedback.
   `RelationshipsSection` (`frontend/src/components/character/RelationshipsSection.tsx`, own-
   sheet gated), fed by `frontend/src/relationships/` (`api.ts`/`queries.ts`), POSTs
   `{writeup_type: "update", writeup_id}` to `.../kudos/`.
+- **Writeup timeline action (#2159):** `GET .../relationship-updates/timeline/` merges
+  Update/Development/Capstone history into one type-tagged (`kind`), `-created_at`-ordered,
+  paginated feed. Exactly one of two mutually exclusive params (both/neither → 400):
+  `?about_character=<CharacterSheet pk>` — non-PRIVATE writeups about that character from
+  any author, plus PRIVATE ones where the caller is the author or the subject (the
+  queryset-level generalization of `services._can_view_writeup`, entirely DB-side, no
+  Python row filtering); `?relationship=<CharacterRelationship pk>` — one relationship's
+  full history incl. PRIVATE, source-owner-only (tenure join; 404 missing, 403 non-source).
+  Implementation: each writeup model's queryset is projected to a shared column shape and
+  combined via `.union()` (per-branch `.order_by()` clears `Meta.ordering` — SQLite
+  rejects `ORDER BY` inside a union branch).
 - **Automatic affection shifts (#1697):** `AffectionShift` model +
   `apply_affection_shift(*, source, target, scene, effect, amount)` — the generic
   valence-signed success consequence (`EffectType.SHIFT_AFFECTION`, handler in

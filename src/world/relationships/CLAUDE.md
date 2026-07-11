@@ -166,6 +166,20 @@ The positive relationship-building loop is reachable from both web and telnet:
   a sibling character's writeups as the viewed character's. Read serializers expose
   `kudos_count` and `viewer_has_kudosed` on every writeup row (annotated via
   `Count`/`Exists` to avoid N+1). Complaints never appear in any player-facing serializer.
+  The same viewset also exposes a `GET timeline` action (#2159) — a merged, type-tagged
+  (`kind`: update/development/capstone) feed across all three writeup models, ordered
+  `-created_at`. Two mutually exclusive query modes (both or neither → 400):
+  `?about_character=<CharacterSheet pk>` returns every non-PRIVATE writeup about that
+  character from any author, plus PRIVATE writeups where the caller's account is the
+  author's or the subject's — the queryset-level generalization of
+  `services._can_view_writeup` (all scoping happens in the DB query, never Python-side
+  row filtering); `?relationship=<CharacterRelationship pk>` returns one relationship's
+  full history including PRIVATE, restricted to callers who are its tenure-owned source
+  (404 if the relationship doesn't exist, 403 if the caller isn't its source). The three
+  per-model querysets are projected to a shared column shape and combined with
+  `.union()` (each branch's default `Meta.ordering` cleared via a bare `.order_by()` —
+  SQLite rejects `ORDER BY` inside a union branch), then paginated via the viewset's own
+  `pagination_class`.
 - **Telnet** — `CmdRelationship` (`relationship <subverb>`) runs the same Actions; it adds
   telnet-only `relationship list` and `relationship show <name|#>` read surfaces (the web provides
   these implicitly).

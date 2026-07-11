@@ -1,8 +1,9 @@
 """API views for the relationships system."""
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Count, Exists, OuterRef, Prefetch, Q
+from django.db.models import CharField, Count, Exists, F, OuterRef, Prefetch, Q, Value
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.mixins import ListModelMixin
@@ -20,6 +21,7 @@ from world.relationships.models import (
     HybridRequirement,
     RelationshipCapstone,
     RelationshipCondition,
+    RelationshipDevelopment,
     RelationshipTier,
     RelationshipTrack,
     RelationshipTrackProgress,
@@ -36,6 +38,7 @@ from world.relationships.serializers import (
     RedistributeWriteSerializer,
     RelationshipCapstoneSerializer,
     RelationshipConditionSerializer,
+    RelationshipTimelineEntrySerializer,
     RelationshipTrackSerializer,
     RelationshipUpdateSerializer,
     WriteupComplaintWriteSerializer,
@@ -43,6 +46,47 @@ from world.relationships.serializers import (
 )
 
 NO_ACTIVE_CHARACTER_MESSAGE = "No active character."
+
+# Shared column shape projected by ``_timeline_rows`` for every writeup model so the
+# three per-model querysets can be combined with ``.union()`` into one ordered feed.
+_TIMELINE_VALUES = (
+    "id",
+    "kind",
+    "relationship",
+    "author",
+    "author_name",
+    "track",
+    "track_name",
+    "title",
+    "writeup",
+    "visibility",
+    "created_at",
+)
+
+
+def _timeline_rows(model, kind: str, filter_q: Q):
+    """Return one writeup model's contribution to the merged timeline, tagged with ``kind``.
+
+    Projects the shared ``_TIMELINE_VALUES`` column shape (via ``.annotate()`` +
+    ``.values()``) so ``RelationshipUpdate``/``RelationshipDevelopment``/
+    ``RelationshipCapstone`` querysets — which don't share a common base model —
+    can still be combined with ``.union()``. All visibility scoping happens in
+    ``filter_q`` at the database level (never Python-side row filtering).
+
+    Clears each model's default ``Meta.ordering = ["-created_at"]`` with a bare
+    ``.order_by()``: the DB backend (SQLite, at least) rejects an ``ORDER BY`` in
+    a ``.union()`` branch subquery — the caller orders the combined result instead.
+    """
+    return (
+        model.objects.filter(filter_q)
+        .annotate(
+            kind=Value(kind, output_field=CharField()),
+            author_name=F("author__character__db_key"),
+            track_name=F("track__name"),
+        )
+        .values(*_TIMELINE_VALUES)
+        .order_by()
+    )
 
 
 class RelationshipConditionViewSet(ReadOnlyModelViewSet):
@@ -229,6 +273,7 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
             "redistribute": RedistributeWriteSerializer,
             "kudos": WriteupKudosWriteSerializer,
             "complaint": WriteupComplaintWriteSerializer,
+            "timeline": RelationshipTimelineEntrySerializer,
         }
         return mapping.get(self.action, FirstImpressionWriteSerializer)
 
@@ -271,6 +316,146 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
             )
             .order_by("-created_at")
         )
+
+    def _timeline_visibility_q(self, user) -> Q:
+        """Queryset-level generalization of ``services._can_view_writeup``.
+
+        Non-PRIVATE rows (SHARED/GOSSIP/PUBLIC) are visible to anyone. PRIVATE rows
+        are visible only when the requester's account is the writeup's author or the
+        parent relationship's subject (``target``) — resolved via the tenure join
+        (mirrors ``get_account_for_character`` rather than Evennia's live-puppet
+        ``db_account`` field, same as ``CharacterRelationshipViewSet.get_queryset``),
+        so a viewer browsing while not currently puppeting the character still sees
+        their own writeups.
+        """
+        return (
+            ~Q(visibility=UpdateVisibility.PRIVATE)
+            | Q(
+                visibility=UpdateVisibility.PRIVATE,
+                author__roster_entry__tenures__player_data__account=user,
+                author__roster_entry__tenures__end_date__isnull=True,
+            )
+            | Q(
+                visibility=UpdateVisibility.PRIVATE,
+                relationship__target__roster_entry__tenures__player_data__account=user,
+                relationship__target__roster_entry__tenures__end_date__isnull=True,
+            )
+        )
+
+    def _timeline_about_character_queryset(self, about_character_id: int):
+        """Merge non-PRIVATE (+ own-visible PRIVATE) writeups about one character.
+
+        ``.distinct()`` per branch guards against the tenure join fanning a row out
+        more than once (should not happen — a character has at most one current
+        tenure — but isn't DB-enforced); ``.union()`` itself only dedupes *across*
+        the three combined querysets, not within one.
+        """
+        user = self.request.user
+        scope_q = Q(relationship__target_id=about_character_id) & self._timeline_visibility_q(user)
+        updates = _timeline_rows(RelationshipUpdate, "update", scope_q).distinct()
+        developments = _timeline_rows(RelationshipDevelopment, "development", scope_q).distinct()
+        capstones = _timeline_rows(RelationshipCapstone, "capstone", scope_q).distinct()
+        return updates.union(developments, capstones).order_by("-created_at")
+
+    def _timeline_relationship_queryset(self, relationship_id: int, user):
+        """Full (incl. PRIVATE) history of one relationship, source-owner-only.
+
+        Returns ``(queryset, None)`` on success or ``(None, error_response)`` when
+        the relationship doesn't exist (404) or the caller isn't its tenure-owned
+        source (403).
+        """
+        if not CharacterRelationship.objects.filter(pk=relationship_id).exists():
+            return None, Response(
+                {"success": False, "message": "Relationship not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        is_source_owner = CharacterRelationship.objects.filter(
+            pk=relationship_id,
+            source__roster_entry__tenures__player_data__account=user,
+            source__roster_entry__tenures__end_date__isnull=True,
+        ).exists()
+        if not is_source_owner:
+            return None, Response(
+                {"success": False, "message": "You are not this relationship's source."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        scope_q = Q(relationship_id=relationship_id)
+        updates = _timeline_rows(RelationshipUpdate, "update", scope_q)
+        developments = _timeline_rows(RelationshipDevelopment, "development", scope_q)
+        capstones = _timeline_rows(RelationshipCapstone, "capstone", scope_q)
+        return updates.union(developments, capstones).order_by("-created_at"), None
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="about_character",
+                type=int,
+                required=False,
+                description=(
+                    "CharacterSheet pk. Every non-PRIVATE writeup about this character "
+                    "from any author, plus PRIVATE writeups where the caller is the "
+                    "author or the subject. Mutually exclusive with `relationship`."
+                ),
+            ),
+            OpenApiParameter(
+                name="relationship",
+                type=int,
+                required=False,
+                description=(
+                    "CharacterRelationship pk. Full history (incl. PRIVATE) of one "
+                    "relationship; caller must be its tenure-owned source. Mutually "
+                    "exclusive with `about_character`."
+                ),
+            ),
+        ],
+        responses=RelationshipTimelineEntrySerializer(many=True),
+    )
+    @action(detail=False, methods=["get"])
+    def timeline(self, request):
+        """Merged Update/Development/Capstone writeup history (#2159).
+
+        Exactly one of `about_character` or `relationship` must be provided (400
+        otherwise); see ``_timeline_about_character_queryset`` /
+        ``_timeline_relationship_queryset`` for each mode's visibility rule. Results
+        are type-tagged (``kind``), ordered ``-created_at``, and paginated per this
+        viewset's ``pagination_class``.
+        """
+        about_raw = request.query_params.get("about_character")  # noqa: USE_FILTERSET
+        relationship_raw = request.query_params.get("relationship")  # noqa: USE_FILTERSET
+        if bool(about_raw) == bool(relationship_raw):
+            return Response(
+                {
+                    "success": False,
+                    "message": "Provide exactly one of about_character or relationship.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if about_raw is not None:
+            if not about_raw.isdigit():
+                return Response(
+                    {"success": False, "message": "about_character must be a positive integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = self._timeline_about_character_queryset(int(about_raw))
+        else:
+            if not relationship_raw.isdigit():
+                return Response(
+                    {"success": False, "message": "relationship must be a positive integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset, error = self._timeline_relationship_queryset(
+                int(relationship_raw), request.user
+            )
+            if error is not None:
+                return error
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     def _resolve_target_sheet(self, target_persona_id: int):
         """Resolve a target persona ID to its CharacterSheet."""

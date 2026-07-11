@@ -282,6 +282,29 @@ class RelationshipChangeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class RelationshipTimelineEntrySerializer(serializers.Serializer):
+    """One row of the merged Update/Development/Capstone writeup timeline (#2159).
+
+    Serializes a plain dict row (not a model instance) — projected by
+    ``RelationshipUpdateViewSet.timeline``'s ``_timeline_rows``/``.union()`` query,
+    which gives ``RelationshipUpdate``/``RelationshipDevelopment``/
+    ``RelationshipCapstone`` rows the same shared column shape regardless of which
+    of the three writeup models a given row came from.
+    """
+
+    kind = serializers.ChoiceField(choices=WRITEUP_TYPE_CHOICES)
+    id = serializers.IntegerField()
+    relationship = serializers.IntegerField()
+    author = serializers.IntegerField()
+    author_name = serializers.CharField()
+    track = serializers.IntegerField()
+    track_name = serializers.CharField()
+    title = serializers.CharField()
+    writeup = serializers.CharField()
+    visibility = serializers.ChoiceField(choices=UpdateVisibility.choices)
+    created_at = serializers.DateTimeField()
+
+
 class CharacterRelationshipSerializer(serializers.ModelSerializer):
     """Full serializer for CharacterRelationship detail view."""
 
