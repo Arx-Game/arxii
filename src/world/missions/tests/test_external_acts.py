@@ -602,7 +602,13 @@ class UseTechniqueExternalActWiringTests(TestCase):
 
 
 class ExternalActFailureIsolationTests(TestCase):
-    """A raising ``satisfy_external_act`` never aborts the host act (#1035, ADR-0112)."""
+    """A raising ``satisfy_external_act`` never aborts the host act (#1035, ADR-0112).
+
+    ``notify_external_act``'s guard (``has_waiting_external_act``) only opens the
+    savepoint and calls ``satisfy_external_act`` when a waiting mission exists, so
+    this test must build one THREAD_WOVEN-waiting instance for the guard to pass —
+    otherwise the patched ``satisfy_external_act`` would simply never be called.
+    """
 
     def test_weave_thread_still_succeeds_and_logs_when_satisfy_external_act_raises(
         self,
@@ -623,12 +629,30 @@ class ExternalActFailureIsolationTests(TestCase):
         unlock = ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=trait)
         CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock, xp_spent=100)
 
+        template = MissionTemplateFactory(name="failure-isolation-tmpl")
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        target_node = MissionNodeFactory(template=template, key="target")
+        instance = MissionInstanceFactory(template=template, current_node=entry)
+        MissionParticipantFactory(
+            instance=instance,
+            character=sheet.character,
+            is_contract_holder=True,
+        )
+        MissionOptionFactory(
+            node=entry,
+            order=0,
+            option_kind=OptionKind.EXTERNAL_ACT,
+            source_kind=OptionSource.AUTHORED,
+            required_act=ExternalAct.THREAD_WOVEN,
+            branch_target=target_node,
+        )
+
         with (
             patch(
                 "world.missions.services.external_acts.satisfy_external_act",
                 side_effect=RuntimeError("boom"),
             ),
-            self.assertLogs("world.magic.services.threads", level="ERROR") as logs,
+            self.assertLogs("world.missions.services.external_acts", level="ERROR") as logs,
         ):
             thread = weave_thread(sheet, TargetKind.TRAIT, trait, resonance, name="Still Woven")
 
@@ -637,3 +661,47 @@ class ExternalActFailureIsolationTests(TestCase):
         self.assertTrue(
             any("external-act satisfaction failed" in message for message in logs.output)
         )
+
+
+class NotifyExternalActGuardTests(TestCase):
+    """``notify_external_act``'s cheap EXISTS guard skips ``satisfy_external_act``
+    entirely when nothing is waiting (#1035 CI query-scaling fix) — the combat cast
+    path must pay exactly one indexed query per declaration, not the full
+    savepoint + MissionParticipant walk, when the caster has no tutorial mission."""
+
+    def test_no_waiting_mission_never_calls_satisfy_external_act(self) -> None:
+        from world.missions.services.external_acts import notify_external_act
+
+        sheet = CharacterSheetFactory()
+
+        with patch("world.missions.services.external_acts.satisfy_external_act") as mock_satisfy:
+            notify_external_act(sheet, ExternalAct.TECHNIQUE_CAST)
+
+        mock_satisfy.assert_not_called()
+
+    def test_waiting_mission_calls_satisfy_external_act(self) -> None:
+        from world.missions.services.external_acts import notify_external_act
+
+        sheet = CharacterSheetFactory()
+        template = MissionTemplateFactory(name="notify-guard-tmpl")
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        target = MissionNodeFactory(template=template, key="target")
+        instance = MissionInstanceFactory(template=template, current_node=entry)
+        MissionParticipantFactory(
+            instance=instance,
+            character=sheet.character,
+            is_contract_holder=True,
+        )
+        MissionOptionFactory(
+            node=entry,
+            order=0,
+            option_kind=OptionKind.EXTERNAL_ACT,
+            source_kind=OptionSource.AUTHORED,
+            required_act=ExternalAct.TECHNIQUE_CAST,
+            branch_target=target,
+        )
+
+        with patch("world.missions.services.external_acts.satisfy_external_act") as mock_satisfy:
+            notify_external_act(sheet, ExternalAct.TECHNIQUE_CAST)
+
+        mock_satisfy.assert_called_once_with(sheet, ExternalAct.TECHNIQUE_CAST)

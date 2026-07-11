@@ -1,9 +1,15 @@
 """External-act beats: mission options satisfied by real non-mission acts (#1035).
 
 Direct service calls (ADR-0009, ADR-0112) — weave_thread / create_covenant /
-induct_member_via_session / use_technique call satisfy_external_act after their own
-success. Failure isolation is the CALLER's job (log-and-continue); this module may
-assume it runs post-commit of the host act.
+induct_member_via_session / use_technique call ``notify_external_act`` after their own
+success. ``notify_external_act`` is the single entry point host services call: it runs
+a cheap ``has_waiting_external_act`` EXISTS guard BEFORE opening any savepoint, and only
+pays the full ``satisfy_external_act`` cost (savepoint + MissionParticipant walk) when a
+waiting mission actually exists. This keeps the combat cast path (``use_technique``) at
+exactly one indexed query per declaration when the caster has no tutorial mission
+waiting — see CI query-scaling guards in ``world.battles.tests.test_query_scaling``.
+Failure isolation lives in ``notify_external_act`` itself (log-and-continue); this
+module may assume it runs post-commit of the host act.
 
 Leak rule (approved spec): resolution feedback goes ONLY to the acting participant —
 mirrors ``play.py::resolve_beat_option``'s actor-only STORY message. No room emit.
@@ -12,6 +18,8 @@ mirrors ``play.py::resolve_beat_option``'s actor-only STORY message. No room emi
 from __future__ import annotations
 
 import logging
+
+from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
 from world.missions.constants import ExternalAct, MissionStatus, OptionKind
@@ -103,6 +111,41 @@ def satisfy_external_act(character_sheet: CharacterSheet, act: str) -> list[Miss
         deeds.append(deed)
         _send_actor_story(character_sheet, instance, option, deed)
     return deeds
+
+
+def has_waiting_external_act(character_sheet: CharacterSheet, act: str) -> bool:
+    """One indexed EXISTS: does any ACTIVE instance of this character wait on *act*?
+
+    Cheap pre-check run BEFORE any savepoint is opened (ADR-0112) — the combat cast
+    path (``use_technique``) pays this single query on every declaration regardless
+    of whether the caster has a tutorial mission at all; ``notify_external_act`` only
+    pays the full ``satisfy_external_act`` cost when this returns True.
+    """
+    return MissionParticipant.objects.filter(
+        character=character_sheet.character,
+        instance__status=MissionStatus.ACTIVE,
+        instance__current_node__options__option_kind=OptionKind.EXTERNAL_ACT,
+        instance__current_node__options__required_act=act,
+    ).exists()
+
+
+def notify_external_act(character_sheet: CharacterSheet, act: str) -> None:
+    """Cheap-guarded, failure-isolated entry point for host services (ADR-0112).
+
+    The single seam ``weave_thread``/``create_covenant``/``induct_member_via_session``/
+    ``use_technique`` call after their own success. Checks ``has_waiting_external_act``
+    first (one indexed EXISTS, no savepoint) and returns immediately when nothing is
+    waiting — the common case on every combat declaration. Only when a waiting mission
+    exists does it open the savepoint and call ``satisfy_external_act``, isolated so a
+    DB error inside it can never poison the caller's own enclosing atomic block.
+    """
+    try:
+        if not has_waiting_external_act(character_sheet, act):
+            return
+        with transaction.atomic():
+            satisfy_external_act(character_sheet, act)
+    except Exception:  # log-and-continue by design (ADR-0112)
+        logger.exception("external-act satisfaction failed for act=%s", act)
 
 
 def fast_forward_external_acts(instance: MissionInstance, node: MissionNode) -> None:

@@ -238,18 +238,14 @@ def create_covenant(  # noqa: PLR0913, C901, PLR0912
     # invalidate for consistency in case the handler was accessed during this flow.
     cov.member_roster.invalidate()
 
-    # #1035 external-act beat: never abort the host act on tutorial failure. Each
-    # call is wrapped in its own savepoint (nested atomic) so a DB error inside
-    # satisfy_external_act can't poison create_covenant's own @transaction.atomic block.
+    # #1035 external-act beat: cheap-guarded, failure-isolated via notify_external_act
+    # (ADR-0112) — isolation from create_covenant's own @transaction.atomic block now
+    # lives in that shared wrapper.
     from world.missions.constants import ExternalAct  # noqa: PLC0415
-    from world.missions.services.external_acts import satisfy_external_act  # noqa: PLC0415
+    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
 
     for founder in founders:
-        try:
-            with transaction.atomic():
-                satisfy_external_act(founder.character_sheet, ExternalAct.COVENANT_SWORN)
-        except Exception:  # log-and-continue by design (ADR-0112)
-            logger.exception("external-act satisfaction failed after create_covenant")
+        notify_external_act(founder.character_sheet, ExternalAct.COVENANT_SWORN)
 
     return cov
 
@@ -1766,18 +1762,13 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
         )
         _emit_court_fealty_message(target_covenant, servant_sheet)
 
-    # #1035 external-act beat: never abort the host act on tutorial failure. The
-    # call is wrapped in its own savepoint (nested atomic) so a DB error inside
-    # satisfy_external_act can't poison induct_member_via_session's own
-    # @transaction.atomic block.
+    # #1035 external-act beat: cheap-guarded, failure-isolated via notify_external_act
+    # (ADR-0112) — isolation from induct_member_via_session's own @transaction.atomic
+    # block now lives in that shared wrapper.
     from world.missions.constants import ExternalAct  # noqa: PLC0415
-    from world.missions.services.external_acts import satisfy_external_act  # noqa: PLC0415
+    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
 
-    try:
-        with transaction.atomic():
-            satisfy_external_act(candidate_participant.character_sheet, ExternalAct.COVENANT_SWORN)
-    except Exception:  # log-and-continue by design (ADR-0112)
-        logger.exception("external-act satisfaction failed after induct_member_via_session")
+    notify_external_act(candidate_participant.character_sheet, ExternalAct.COVENANT_SWORN)
 
     return membership
 

@@ -463,20 +463,15 @@ def _weave_gift_thread(
 def _satisfy_thread_woven(character_sheet: CharacterSheet) -> None:
     """Fire the THREAD_WOVEN external-act beat for ``weave_thread`` (#1035).
 
-    Never abort the host act on tutorial failure. The call is wrapped in its
-    own savepoint (nested atomic) so a DB error inside satisfy_external_act
-    can't poison the caller's own ``@transaction.atomic`` block. Shared by
-    both ``weave_thread`` exit points (the GIFT early-return and the general
+    Cheap-guarded, failure-isolated via ``notify_external_act`` (ADR-0112) — isolation
+    from the caller's own ``@transaction.atomic`` block now lives in that shared wrapper.
+    Shared by both ``weave_thread`` exit points (the GIFT early-return and the general
     tail) so a successful GIFT weave fires the beat too.
     """
     from world.missions.constants import ExternalAct  # noqa: PLC0415
-    from world.missions.services.external_acts import satisfy_external_act  # noqa: PLC0415
+    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
 
-    try:
-        with transaction.atomic():
-            satisfy_external_act(character_sheet, ExternalAct.THREAD_WOVEN)
-    except Exception:  # log-and-continue by design (ADR-0112)
-        logger.exception("external-act satisfaction failed after weave_thread")
+    notify_external_act(character_sheet, ExternalAct.THREAD_WOVEN)
 
 
 @transaction.atomic
