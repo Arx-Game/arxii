@@ -272,7 +272,20 @@ They do not use the command system, dispatchers, or handlers.
   commands in `src/commands/currency.py`: `CmdDeposit` (`deposit <item>`),
   `CmdSteal` (`steal <item>` / `steal <item> from <container>`, mirrors
   `CmdGet`'s two grammars but always dispatches `StealAction`), `CmdSecure`
-  (`secure <container>=<open|friends|owner_only>`).)
+  (`secure <container>=<open|friends|owner_only>`).
+  `movement.py` (#2163) — alongside the existing `GetAction`/`DropAction`/`GiveAction`/
+  `TraverseExitAction`/`HomeAction`, the "go there" auto-walk pair: `TravelAction`
+  (key `"travel_to"`, `target_type=SINGLE`) computes a route via
+  `world.areas.positioning.travel.find_route()` (same-Area, public-rooms-only
+  frontier-batched BFS) and paces one hop per `hop_delay_seconds` via
+  `evennia.utils.delay()`, reusing `check_exit_traversal`/`traverse_exit` per hop
+  so room-state broadcasts match a manual walk; a per-caller
+  `.ndb.active_travel_token` makes re-dispatch/cancellation safe — a stale
+  scheduled callback no-ops instead of moving the player unexpectedly.
+  `StopTravelAction` (`"stop_travel"`, `target_type=SELF`) cancels the pending
+  `.ndb.active_travel_task` and clears the token. Shared by telnet `CmdTravel`
+  (`travel <name>` / `travel stop`, `src/commands/travel.py`) and the web "Go
+  there" buttons on the scene browser + presence panel.)
 
   **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
   (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager

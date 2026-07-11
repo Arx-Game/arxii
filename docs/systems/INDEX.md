@@ -641,6 +641,14 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Models:** `Area`, `AreaClosure` (unmanaged, materialized view)
 - **Enums:** `AreaLevel` (Region, District, Neighborhood)
 - **Key Functions:** `get_ancestry()`, `get_descendant_areas()`, `get_rooms_in_area()`, `reparent_area()`
+- **Presence & Travel (#1463 + #2163):** `where_listing()` — public presence directory,
+  returns `WhereEntry(persona_name, room_path, room_id)` per online character in a
+  publicly-listed room; `find_route(origin_room, destination_room) -> list[ObjectDB] | None`
+  (`world.areas.positioning.travel`) — frontier-batched BFS pathfinder, same-Area +
+  public-rooms-only, capped at `settings.TRAVEL_MAX_HOPS`. `TravelAction`/`StopTravelAction`
+  (`registry_key`s `travel_to`/`stop_travel`) auto-walk a computed route one hop at a time;
+  shared by telnet `CmdTravel` and "Go there" buttons on the scene browser + presence panel.
+  See [areas.md](areas.md) "Presence & Travel" section.
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
 - **Source:** `src/world/areas/`
