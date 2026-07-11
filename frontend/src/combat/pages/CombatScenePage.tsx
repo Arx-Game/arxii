@@ -45,6 +45,7 @@ import { CombatTacticalMap } from '@/combat/components/CombatTacticalMap';
 import { DeepLinkModalHost } from '@/combat/modals/DeepLinkModalHost';
 import { DuelChallengeControls } from '@/combat/duels/DuelChallengeControls';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { CastPosition, PositionTargetShape } from '@/actions/types';
 
 // ---------------------------------------------------------------------------
 // CombatScenePage
@@ -98,6 +99,45 @@ export function CombatScenePage() {
   // Right-rail tab — "Your Turn" (CombatTurnPanel) vs "Map" (CombatTacticalMap, #2006).
   // Defaults to 'turn' so existing behavior is unchanged for anyone not opting into the map.
   const [rightRailTab, setRightRailTab] = useState<'turn' | 'map'>('turn');
+
+  // Cast-time position selection + the selected technique's position shape
+  // (#2206) — lifted here (above the tab switch) so both CombatTurnPanel's
+  // YourTurn section and the CombatTacticalMap tab share the same state; each
+  // rail tab's TabsContent unmounts when inactive, so this can't live inside
+  // either tab's own component. YourTurn reports `focusedPositionShape` via
+  // onPositionShapeChange whenever the focused technique/its shape changes;
+  // castPosition is the shared single-destination / pair A-B selection.
+  const [castPosition, setCastPosition] = useState<CastPosition>({});
+  const [focusedPositionShape, setFocusedPositionShape] = useState<PositionTargetShape>('none');
+
+  // Map-click handler for the tactical-map tab (#2206) — mirrors the
+  // PositionPicker's shape-aware fill logic (ActionDeclarationCard): single
+  // shape sets/clears the one destination; pair shape fills A then B, and
+  // clicking an already-set slot clears just that slot. Returns false
+  // (consumes nothing) unless a position-shaped technique is selected, so
+  // TacticalMap's move-dispatch logic runs unchanged otherwise.
+  const handlePickPosition = useCallback(
+    (positionId: number): boolean => {
+      if (focusedPositionShape === 'none') return false;
+      if (focusedPositionShape === 'single') {
+        setCastPosition((prev) =>
+          prev.destinationId === positionId
+            ? { ...prev, destinationId: undefined }
+            : { ...prev, destinationId: positionId }
+        );
+        return true;
+      }
+      // pair
+      setCastPosition((prev) => {
+        if (prev.pairA === positionId) return { ...prev, pairA: undefined };
+        if (prev.pairB === positionId) return { ...prev, pairB: undefined };
+        if (prev.pairA === undefined) return { ...prev, pairA: positionId };
+        return { ...prev, pairB: positionId };
+      });
+      return true;
+    },
+    [focusedPositionShape]
+  );
 
   const handleDetach = useCallback((actionId: number) => {
     setDetachedActionIds((prev) => (prev.includes(actionId) ? prev : [...prev, actionId]));
@@ -269,10 +309,18 @@ export function CombatScenePage() {
                   encounterId={encounterId}
                   characterId={characterId}
                   characterSheetId={characterSheetId}
+                  castPosition={castPosition}
+                  onCastPositionChange={setCastPosition}
+                  onPositionShapeChange={setFocusedPositionShape}
                 />
               </TabsContent>
               <TabsContent value="map" className="mt-2 min-h-0 flex-1 overflow-y-auto">
-                <CombatTacticalMap encounterId={encounterId} characterId={characterId} />
+                <CombatTacticalMap
+                  encounterId={encounterId}
+                  characterId={characterId}
+                  positionShape={focusedPositionShape}
+                  onPickPosition={handlePickPosition}
+                />
               </TabsContent>
             </Tabs>
           ) : (

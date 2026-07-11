@@ -69,6 +69,16 @@ export interface TacticalMapProps {
   occupantsByPosition: Map<number, OccupantSummary[]>;
   moveActions: PlayerAction[];
   onDispatchMove: (action: PlayerAction) => void;
+  /**
+   * Cast-time position-picking hook (#2206) — consumed first in the click
+   * handler. A `true` return means the click was consumed (a position-shaped
+   * technique picked this node) and move-dispatch logic is skipped. Leave
+   * undefined for today's move-only behavior, byte-for-byte — this also
+   * drives whether pickable nodes get the eligible-move highlight (reusing
+   * `canMoveHere` styling): highlighted whenever this prop is defined, since
+   * the map has no reach pre-filter for position-picking.
+   */
+  onPickPosition?: (positionId: number) => boolean;
 }
 
 function edgeStyle(edge: PositionEdgeLike): { style: React.CSSProperties; label?: string } {
@@ -90,6 +100,7 @@ export function TacticalMap({
   occupantsByPosition,
   moveActions,
   onDispatchMove,
+  onPickPosition,
 }: TacticalMapProps) {
   const moveActionByPositionId = useMemo(() => {
     const map = new Map<number, PlayerAction>();
@@ -102,6 +113,11 @@ export function TacticalMap({
   }, [moveActions]);
 
   const handleClick = (positionId: number) => {
+    // Position-picking (#2206) takes priority — a true return consumes the
+    // click and skips move-dispatch logic entirely.
+    if (onPickPosition?.(positionId)) {
+      return;
+    }
     const action = moveActionByPositionId.get(positionId);
     if (action) {
       onDispatchMove(action);
@@ -129,13 +145,16 @@ export function TacticalMap({
             name: position.name,
             kind: position.kind,
             occupants: occupantsByPosition.get(position.id) ?? [],
-            canMoveHere: moveActionByPositionId.has(position.id),
+            // Reuses the eligible-move ring highlight for position-picking
+            // (#2206) — every node is pickable (no reach pre-filter on the
+            // map), so the highlight is on whenever picking is active at all.
+            canMoveHere: moveActionByPositionId.has(position.id) || onPickPosition !== undefined,
             onClick: handleClick,
           },
         })
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [nodes, layout, occupantsByPosition, moveActionByPositionId]
+    [nodes, layout, occupantsByPosition, moveActionByPositionId, onPickPosition]
   );
 
   const flowEdges: Edge[] = useMemo(

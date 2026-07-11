@@ -73,6 +73,22 @@ export interface YourTurnProps {
    * don't have encounter data yet can still render the slot composition.
    */
   encounter?: EncounterDetail | null;
+  /**
+   * Cast-time position selection, controlled by the caller (#2206). CombatTurnPanel/
+   * CombatScenePage lift this above the rail tabs so the tactical-map tab can share
+   * it with this panel. Optional and falls back to local state when the caller
+   * doesn't provide it (e.g. tests rendering YourTurn standalone) — same
+   * controlled/uncontrolled pattern as ActionDeclarationCard's castPosition prop.
+   */
+  castPosition?: CastPosition;
+  onCastPositionChange?: (next: CastPosition) => void;
+  /**
+   * Reports the currently-selected focused technique's position-targeting shape
+   * to the caller (#2206) — lets a sibling tab (the tactical map) know whether
+   * map-click position-picking should be active, even after this panel unmounts
+   * (rail tabs unmount their inactive TabsContent).
+   */
+  onPositionShapeChange?: (shape: PositionTargetShape) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -419,6 +435,9 @@ export function YourTurn({
   readOnly = false,
   availableStrain,
   encounter = null,
+  castPosition: castPositionProp,
+  onCastPositionChange: onCastPositionChangeProp,
+  onPositionShapeChange,
 }: YourTurnProps) {
   const strainMax = availableStrain ?? 10;
   // ---------------------------------------------------------------------------
@@ -465,10 +484,13 @@ export function YourTurn({
   const [coverAllyId, setCoverAllyId] = useState<string>('');
   const [maneuverError, setManeuverError] = useState<string | null>(null);
 
-  // Cast-time position selection for the focused technique (#2206) — lifted
-  // here so both the position-requirement gate (submit button) and the
-  // dispatch kwargs merge (buildFocusedJob) can read it.
-  const [castPosition, setCastPosition] = useState<CastPosition>({});
+  // Cast-time position selection for the focused technique (#2206). Controlled
+  // by the caller when castPositionProp/onCastPositionChangeProp are supplied
+  // (CombatScenePage lifts this above the rail tabs so the tactical-map tab
+  // shares it); falls back to local state otherwise (e.g. standalone tests).
+  const [localCastPosition, setLocalCastPosition] = useState<CastPosition>({});
+  const castPosition = castPositionProp ?? localCastPosition;
+  const setCastPosition = onCastPositionChangeProp ?? setLocalCastPosition;
 
   // Reset submitted, pull selection, and pull dialog when round advances.
   useEffect(() => {
@@ -481,6 +503,10 @@ export function YourTurn({
     setCoverAllyId('');
     setManeuverError(null);
     setCastPosition({});
+    // setCastPosition is either the raw useState setter or the caller's
+    // onCastPositionChange (CombatScenePage's raw useState setter, in
+    // practice) — both stable across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundNumber]);
 
   // Reset cast-time position selection when the focused technique changes —
@@ -489,6 +515,7 @@ export function YourTurn({
   // `position_params` (#2206 review finding).
   useEffect(() => {
     setCastPosition({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedContext.techniqueId]);
 
   // ---------------------------------------------------------------------------
@@ -612,6 +639,14 @@ export function YourTurn({
     return selected?.position_target_shape ?? 'none';
   })();
   const focusedPositions: PositionNode[] = encounter?.position_nodes ?? [];
+
+  // Report the current shape to the caller (#2206) — lets the tactical-map tab
+  // know whether map-click position-picking should be active, and keeps
+  // knowing even after this panel unmounts on tab switch (CombatScenePage's
+  // state persists across its children's mount/unmount).
+  useEffect(() => {
+    onPositionShapeChange?.(focusedTechniquePositionShape);
+  }, [focusedTechniquePositionShape, onPositionShapeChange]);
 
   // Blocks Ready/submit while a required position slot is empty (#2206,
   // mirrors the fury/soulfray required-declaration gating below).
