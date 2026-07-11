@@ -489,6 +489,7 @@ def _combat_actions(
     )
     from world.magic.services.fury import provocation_cap  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
+    from world.magic.services.targeting import position_target_shape  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     grants = list(grants)
@@ -542,6 +543,7 @@ def _combat_actions(
                 action_template=template,
                 action_category=technique.action_category,
                 reach=technique.reach,
+                position_target_shape=position_target_shape(technique),
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
                 eligible_fury_anchors=eligible_fury_anchors,

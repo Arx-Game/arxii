@@ -24,6 +24,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `related_name="technique_draft"`; no JSON; all proper columns),
     `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` /
     `TechniqueDraftAppliedCondition` (draft payload children — inherit abstract bases)
+  - **Cast-position targeting (#2206):** `position_target_shape(technique)`
+    (`services/targeting.py`) classifies a technique's declared-position input shape
+    (pair/single/none); combat's declaration→resolver→condition-handler wiring for the
+    three placeholder-destination effect-palette techniques (Barricade/Phase Jump/Force
+    Grip) lives in `docs/systems/INDEX.md`'s Combat section ("Cast-position targeting");
+    see `docs/systems/magic.md`'s Effect Palette section for the updated per-effect status.
   - **Motif style binding (#2030):** `MotifResonanceStyle` (`motif_resonance` FK,
     `style` FK to `items.Style`; cap 3/resonance) is now player-authorable, not
     admin-only. Service (`services/motif_style.py`): `bind_motif_style` /
@@ -3245,7 +3251,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   unset = legacy find-all-on-scene behavior, unchanged), `CombatParticipant`, `CombatOpponent`,
   `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR; plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
-  `fury_commitment` / `fury_anchor`, #1454),
+  `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
+  `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
+  target/pair for position-consuming techniques, #2206, see "Cast-position targeting" below),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `ComboSlot`, `ComboLearning` (use_count tracks repeat
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
@@ -3303,6 +3311,53 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     True when the target has an active `ConditionInstance` whose
     `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
     filter sites to honour the intangibility gate.
+- **Cast-position targeting (#2206):** runtime destination selection for the
+  position-consuming effect-palette techniques (Barricade/obstacle, Phase Jump/teleport,
+  Force Grip/telekinesis — previously placeholder `destination_position_id=0` at seed
+  time, see `docs/systems/magic.md`), wired end-to-end for combat declaration:
+  - `resolve_cast_position_params(participant, technique, position_params)`
+    (`world/combat/services.py`) — validates a declared `destination_position_id` (single)
+    or `position_a_id`/`position_b_id` (pair) against the encounter's own room and the
+    technique's `reach`/`reach_hops`; raises `ActionDispatchError` (`UNKNOWN_ACTION_REF`) on
+    a foreign-room position or a half-supplied pair, `TARGET_OUT_OF_REACH` when the caster
+    is placed and the destination exceeds reach.
+  - `CastTechniqueAction.round_declaration` (`actions/definitions/cast.py`) forwards a
+    `position_params` kwarg into the round-declaration kwargs; `CombatRoundContext
+    ._resolve_cast_positions` (`world/combat/round_context.py`) calls
+    `resolve_cast_position_params` and persists the resolved FKs onto the
+    `CombatRoundAction` at declaration time (`declare_action`, `world/combat/services.py`).
+  - `CombatTechniqueResolver._apply_conditions` (`world/combat/services.py`) reads the three
+    FKs back off the declared action and forwards them as `position_params` to
+    `apply_technique_conditions` (`world/magic/services/condition_application.py`), the same
+    shared seam the non-combat cast path already used.
+  - **Root-cause fix in the shared conditions layer:** position ids now thread through
+    `BulkConditionApplication.cast_destination_id` / `cast_position_a_id` /
+    `cast_position_b_id` (`world/conditions/types.py`) and are stamped onto the resulting
+    `ConditionInstance` by `_stamp_cast_positions` (`world/conditions/services.py`) **before**
+    `CONDITION_APPLIED` fires — same-event reactive handlers
+    (`create_obstacle_on_condition` and siblings, #2019) read the position fields off
+    `payload.instance` synchronously. This replaces the old post-hoc
+    `_apply_position_params_to_instances` helper (removed) and also fixes the previously-broken
+    non-combat live path, which suffered the same race.
+  - `position_target_shape(technique) -> "pair" | "single" | "none"`
+    (`world/magic/services/targeting.py`, batched `Prefetch` over condition→trigger→flow
+    steps) classifies which position input shape a technique's effects consume; exposed on
+    available actions via `PlayerAction.position_target_shape`
+    (`actions/player_interface.py`) → `RoundActionSerializer.position_target_shape`
+    (`actions/serializers.py`) so the frontend can render the right picker (single point vs.
+    endpoint pair) without hardcoding technique names.
+  - `RoundActionSerializer` (`world/combat/serializers.py`) exposes the three FKs; note
+    drf-spectacular does not introspect them (pre-existing generator gap) — generated
+    frontend types were not regenerated for this field, a known/documented degradation.
+  - **Frontend:** a Positions picker in `ActionDeclarationCard` (single/pair, reach-greyed),
+    shape-aware `position_params` dispatch kwargs, state lifted to `CombatScenePage`, and
+    map-click picking via `TacticalMap.onPickPosition` (`frontend/src/areas/components/`).
+  - **Telnet needed zero changes** — #2019's `position=`/`position_a=,position_b=` command
+    grammar (`commands/combat.py`) already produced a `position_params` kwarg; #2206 is what
+    makes that kwarg actually reach validation and persistence in the combat round.
+  - Proven at the round seam by `world/combat/tests/test_cast_position_declaration.py`
+    (foreign-room rejection + a full declare→resolve→condition→sealed-edge journey for
+    Barricade); non-combat web casting still has no position picker (telnet-only there).
 - **Event:** `EventName.COMBAT_ROUND_STARTING` (`flows/constants.py`) — emitted at the
   start of each round by `begin_round_of_combat`; `drain_reactive_upkeep` subscribes to it.
 - **Condition fields added for effect palette (#1584):**
