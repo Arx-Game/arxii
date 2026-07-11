@@ -200,6 +200,8 @@ from actions.definitions.movement import (
     GetAction,
     GiveAction,
     HomeAction,
+    StopTravelAction,
+    TravelAction,
     TraverseExitAction,
 )
 from actions.definitions.npc_services import (
@@ -405,6 +407,8 @@ _ALL_ACTIONS: list[Action] = [
     SceneEntryEndorseAction(),
     StylePresentationEndorseAction(),
     TraverseExitAction(),
+    TravelAction(),
+    StopTravelAction(),
     HomeAction(),
     MoveToPositionAction(),
     TakePositionAction(),
