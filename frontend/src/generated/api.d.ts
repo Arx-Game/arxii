@@ -18055,6 +18055,10 @@ export interface components {
       readonly level: components['schemas']['AreaListLevelEnum'];
       readonly level_display: string;
       readonly children_count: number;
+      /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
+      readonly grid_x: number | null;
+      /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
+      readonly grid_y: number | null;
     };
     /**
      * @description * `10` - Building

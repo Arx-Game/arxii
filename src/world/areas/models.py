@@ -76,6 +76,22 @@ class Area(SharedMemoryModel):
         related_name="allowed_in_wards",
         blank=True,
     )
+    grid_x = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Position within the PARENT area's local grid (rendering/hint data only — "
+            "never routing); units are parent-local cells, meaningful only among siblings."
+        ),
+    )
+    grid_y = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Position within the PARENT area's local grid (rendering/hint data only — "
+            "never routing); units are parent-local cells, meaningful only among siblings."
+        ),
+    )
 
     class Meta:
         verbose_name = "Area"

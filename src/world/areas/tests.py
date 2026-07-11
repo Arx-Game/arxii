@@ -30,8 +30,9 @@ from world.areas.positioning.services import (
     reachable_positions,
     remove_position,
 )
-from world.areas.serializers import AreaBreadcrumbSerializer
+from world.areas.serializers import AreaBreadcrumbSerializer, AreaListSerializer
 from world.areas.services import (
+    area_grid_path,
     get_ancestor_at_level,
     get_ancestry,
     get_descendant_areas,
@@ -120,6 +121,71 @@ class AreaValidationTests(TestCase):
         city = AreaFactory(name="City", level=AreaLevel.CITY)
         with self.assertRaises(ValidationError):
             AreaFactory(name="Bad", level=AreaLevel.CONTINENT, parent=city)
+
+
+class AreaGridCoordinateTests(TestCase):
+    """Model round-trip + area_grid_path for the parent-local rendering coordinates (#2223)."""
+
+    def test_grid_coordinates_default_to_null(self):
+        area = AreaFactory(name="Unplaced Ward", level=AreaLevel.WARD)
+        assert area.grid_x is None
+        assert area.grid_y is None
+
+    def test_grid_coordinates_round_trip(self):
+        area = AreaFactory(name="Placed Ward", level=AreaLevel.WARD, grid_x=3, grid_y=-5)
+        area.refresh_from_db()
+        assert area.grid_x == 3
+        assert area.grid_y == -5
+
+    def test_grid_coordinates_can_be_cleared_back_to_null(self):
+        area = AreaFactory(name="Cleared Ward", level=AreaLevel.WARD, grid_x=1, grid_y=2)
+        area.grid_x = None
+        area.grid_y = None
+        area.save()
+        area.refresh_from_db()
+        assert area.grid_x is None
+        assert area.grid_y is None
+
+    def test_area_grid_path_root_only(self):
+        root = AreaFactory(name="Root Plane", level=AreaLevel.PLANE, grid_x=1, grid_y=2)
+        assert area_grid_path(root) == [(1, 2)]
+
+    def test_area_grid_path_three_level_mixed_set_unset(self):
+        """Root has coordinates set, middle is unset, leaf is set again."""
+        root = AreaFactory(name="Root Region", level=AreaLevel.REGION, grid_x=10, grid_y=20)
+        middle = AreaFactory(
+            name="Middle City", level=AreaLevel.CITY, parent=root, grid_x=None, grid_y=None
+        )
+        leaf = AreaFactory(
+            name="Leaf Ward", level=AreaLevel.WARD, parent=middle, grid_x=4, grid_y=7
+        )
+
+        assert area_grid_path(leaf) == [(10, 20), (None, None), (4, 7)]
+
+    def test_area_grid_path_all_unset(self):
+        root = AreaFactory(name="Unset Root", level=AreaLevel.REGION)
+        middle = AreaFactory(name="Unset Middle", level=AreaLevel.CITY, parent=root)
+        leaf = AreaFactory(name="Unset Leaf", level=AreaLevel.WARD, parent=middle)
+
+        assert area_grid_path(leaf) == [(None, None), (None, None), (None, None)]
+
+
+class AreaSerializerGridCoordinateTests(TestCase):
+    """AreaListSerializer exposes the grid coordinates (#2223)."""
+
+    def test_serializer_includes_set_coordinates(self):
+        area = AreaFactory(name="Serialized Ward", level=AreaLevel.WARD, grid_x=6, grid_y=-2)
+        area.children_count = 0
+        data = AreaListSerializer(area).data
+        assert data["grid_x"] == 6
+        assert data["grid_y"] == -2
+
+    def test_serializer_includes_null_coordinates(self):
+        area = AreaFactory(name="Unplaced Serialized Ward", level=AreaLevel.WARD)
+        area.children_count = 0
+        data = AreaListSerializer(area).data
+        assert data["grid_x"] is None
+        assert data["grid_y"] is None
 
 
 class AreaQueryHelperTests(TestCase):

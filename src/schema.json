@@ -30088,8 +30088,24 @@ components:
         children_count:
           type: integer
           readOnly: true
+        grid_x:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Position within the PARENT area's local grid (rendering/hint
+            data only — never routing); units are parent-local cells, meaningful only
+            among siblings.
+        grid_y:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Position within the PARENT area's local grid (rendering/hint
+            data only — never routing); units are parent-local cells, meaningful only
+            among siblings.
       required:
       - children_count
+      - grid_x
+      - grid_y
       - id
       - level
       - level_display
