@@ -55,18 +55,35 @@ class Plan3SeedsTests(TestCase):
         self.assertTrue(ItemTemplate.objects.filter(name=BUILDING_PERMIT_TEMPLATE_NAME).exists())
         self.assertTrue(BuildingKind.objects.filter(name=HOUSE_KIND_NAME).exists())
 
-    def test_wires_clerk_offers_to_house_when_present(self) -> None:
+    def test_defaults_unwired_permit_offers_to_house(self) -> None:
         from world.npc_services.constants import OfferKind
-        from world.npc_services.models import NPCServiceOffer
+        from world.npc_services.factories import NPCRoleFactory
+        from world.npc_services.models import NPCServiceOffer, PermitOfferDetails
         from world.npc_services.seeds import ensure_builders_guild_clerk_role
 
-        # First seed npc_services (creates offers with no kind)
+        # Seed the clerk role (offers are explicitly wired to urban kinds)
         ensure_builders_guild_clerk_role()
-        # Then run Plan 3 seeds — should patch the clerk's PERMIT offers
+        # Then run Plan 3 seeds — ensure_default_kind_on_permit_offers
+        # should NOT overwrite the clerk's explicitly-wired kinds, but
+        # SHOULD default any unknown PERMIT offers to House.
         ensure_plan_3_seeds()
-        for offer in NPCServiceOffer.objects.filter(kind=OfferKind.PERMIT):
-            self.assertIsNotNone(offer.permit_offer_details.building_kind_id)
-            self.assertEqual(offer.permit_offer_details.building_kind.name, HOUSE_KIND_NAME)
+        # The clerk's Cottage offer should still point at Cottage
+        cottage_offer = NPCServiceOffer.objects.get(label="Apply for a Cottage permit")
+        self.assertEqual(cottage_offer.permit_offer_details.building_kind.name, "Cottage")
+        # An unwired offer (simulating a future role) gets defaulted to House
+        unwired_role = NPCRoleFactory(name="Future Role")
+        unwired_offer = NPCServiceOffer.objects.create(
+            role=unwired_role,
+            label="Some future permit",
+            kind=OfferKind.PERMIT,
+        )
+        PermitOfferDetails.objects.create(offer=unwired_offer)
+        ensure_plan_3_seeds()
+        unwired_offer.refresh_from_db()
+        self.assertEqual(
+            unwired_offer.permit_offer_details.building_kind.name,
+            HOUSE_KIND_NAME,
+        )
 
 
 class UrbanBuildingKindsSeedTests(TestCase):
