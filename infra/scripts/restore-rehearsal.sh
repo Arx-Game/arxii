@@ -20,8 +20,8 @@
 # listen_addresses=localhost only (roles/postgres), so a restore attempted
 # over the network from off-box could never have worked in the first place.
 #
-# Required: REHEARSAL_CONFIRM=1, STAGE-scoped creds (TF_VAR_linode_token =
-# stage token), RUN_ID, the STAGE_TF_STATE_* backend/state creds (#2236
+# Required: REHEARSAL_CONFIRM=1, STAGE_LINODE_TOKEN (stage-scoped token),
+# ARXII_AUTHORIZED_KEYS, RUN_ID, the STAGE_TF_STATE_* backend/state creds (#2236
 # review — same contract rehearse.sh uses for this root's own remote
 # state), and the RESTORE_* read envs (see restore.sh) for BOTH the linode
 # and r2 sources (this script rehearses both in one run).
@@ -50,6 +50,12 @@ fail() { printf '[rehearsal] REFUSING: %s\n' "$*" >&2; exit 1; }
 
 [[ "${REHEARSAL_CONFIRM:-}" == "1" ]] || fail "set REHEARSAL_CONFIRM=1 (spins up + destroys an ephemeral stage box)"
 : "${RUN_ID:?set RUN_ID (unique per-run suffix)}"
+# Root-module variables (#2236 review): ephemeral-stage declares
+# linode_token/run_id/authorized_keys with NO defaults, so apply AND destroy
+# both fail under -input=false unless every one is passed explicitly. Same
+# STAGE_LINODE_TOKEN / ARXII_AUTHORIZED_KEYS contract as rehearse.sh.
+: "${STAGE_LINODE_TOKEN:?set STAGE_LINODE_TOKEN (stage-scoped Linode token)}"
+: "${ARXII_AUTHORIZED_KEYS:?set ARXII_AUTHORIZED_KEYS (JSON list of admin pubkeys)}"
 [[ "$(basename "${STAGE_DIR}")" == "ephemeral-stage" ]] \
   || fail "guard: this only ever runs against the ephemeral-stage root"
 
@@ -96,6 +102,9 @@ teardown() {
   # never unsets STAGE_TF_STATE_S3_*, so they're still valid here.
   AWS_ACCESS_KEY_ID="${STAGE_TF_STATE_S3_ACCESS_KEY}" \
   AWS_SECRET_ACCESS_KEY="${STAGE_TF_STATE_S3_SECRET_KEY}" \
+  TF_VAR_linode_token="${STAGE_LINODE_TOKEN}" \
+  TF_VAR_run_id="${RUN_ID}" \
+  TF_VAR_authorized_keys="${ARXII_AUTHORIZED_KEYS}" \
   tofu -chdir="${STAGE_DIR}" destroy -auto-approve -input=false || \
     printf '[rehearsal] WARNING: stage teardown failed — destroy manually!\n' >&2
 }
@@ -122,6 +131,9 @@ tofu -chdir="${STAGE_DIR}" init -input=false \
 
 AWS_ACCESS_KEY_ID="${STAGE_TF_STATE_S3_ACCESS_KEY}" \
 AWS_SECRET_ACCESS_KEY="${STAGE_TF_STATE_S3_SECRET_KEY}" \
+TF_VAR_linode_token="${STAGE_LINODE_TOKEN}" \
+TF_VAR_run_id="${RUN_ID}" \
+TF_VAR_authorized_keys="${ARXII_AUTHORIZED_KEYS}" \
 tofu -chdir="${STAGE_DIR}" apply -auto-approve -input=false
 
 # Defense-in-depth: confirm what we provisioned is tagged ephemeral-stage
