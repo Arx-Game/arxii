@@ -32,7 +32,7 @@ from flows.service_functions.inventory import (
 )
 from world.gm.constants import GMLevel
 from world.items.constants import ContainerAccessPolicy
-from world.items.exceptions import InventoryError, ItemError
+from world.items.exceptions import InventoryError, ItemError, NotReachable
 from world.items.services.usage import use_item
 
 
@@ -225,6 +225,18 @@ class TakeOutAction(Action):
 
         try:
             take_out(actor_state, item_state)
+        except NotReachable:
+            from world.npc_services.servant_fetch import (  # noqa: PLC0415
+                can_servant_fetch,
+                servant_fetch_item,
+            )
+
+            if can_servant_fetch(actor=actor, item_instance=item_instance):
+                servant_fetch_item(actor=actor, item_instance=item_instance)
+                return ActionResult(
+                    success=True, message="A servant bows and departs to fetch that."
+                )
+            return ActionResult(success=False, message=NotReachable.user_message)
         except InventoryError as exc:
             return ActionResult(success=False, message=exc.user_message)
 

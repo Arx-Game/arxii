@@ -21,7 +21,7 @@ from flows.service_functions.communication import message_location, send_room_st
 from flows.service_functions.inventory import drop, give, pick_up
 from flows.service_functions.movement import check_exit_traversal, move_object, traverse_exit
 from world.areas.positioning.travel import find_route
-from world.items.exceptions import InventoryError
+from world.items.exceptions import InventoryError, NotReachable
 from world.mechanics.constants import ChallengeType
 from world.mechanics.models import ChallengeInstance
 
@@ -62,6 +62,18 @@ class GetAction(Action):
 
         try:
             pick_up(actor_state, item_state)
+        except NotReachable:
+            from world.npc_services.servant_fetch import (  # noqa: PLC0415
+                can_servant_fetch,
+                servant_fetch_item,
+            )
+
+            if can_servant_fetch(actor=actor, item_instance=item_instance):
+                servant_fetch_item(actor=actor, item_instance=item_instance)
+                return ActionResult(
+                    success=True, message="A servant bows and departs to fetch that."
+                )
+            return ActionResult(success=False, message=NotReachable.user_message)
         except InventoryError as exc:
             return ActionResult(success=False, message=exc.user_message)
 

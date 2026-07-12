@@ -435,6 +435,18 @@ class Character(ObjectParent, DefaultCharacter):
                 actor=self,
             )
 
+            # Cancel any in-progress servant fetch (#2276) — the servant
+            # can't deliver to an empty room.
+            from world.npc_services.servant_fetch import (
+                cancel_servant_fetch,
+            )
+
+            run_safely(
+                "cancel_servant_fetch_on_move",
+                lambda: cancel_servant_fetch(self),
+                actor=self,
+            )
+
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.
 

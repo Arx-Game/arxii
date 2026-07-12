@@ -21,7 +21,7 @@ from flows.service_functions.outfits import (
     save_outfit as save_outfit_service,
     undress as undress_service,
 )
-from world.items.exceptions import InventoryError, ItemError
+from world.items.exceptions import InventoryError, ItemError, NotReachable
 from world.items.models import Outfit
 
 if TYPE_CHECKING:
@@ -64,6 +64,20 @@ class ApplyOutfitAction(Action):
 
         try:
             apply_outfit_service(actor_state, outfit_state)
+        except NotReachable:
+            from world.npc_services.servant_fetch import (  # noqa: PLC0415
+                can_servant_fetch,
+                servant_fetch_outfit,
+            )
+
+            # The wardrobe is the unreachable item — check eligibility with it.
+            if can_servant_fetch(actor=actor, item_instance=outfit.wardrobe):
+                servant_fetch_outfit(actor=actor, outfit=outfit)
+                return ActionResult(
+                    success=True,
+                    message="A servant bows and departs to fetch your outfit.",
+                )
+            return ActionResult(success=False, message=NotReachable.user_message)
         except InventoryError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
