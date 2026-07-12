@@ -1,16 +1,53 @@
 ---
-# NOTE (implementation-verify, not faked): the distro `caddy` package has no
-# plugins. DNS-01 needs caddy-dns/cloudflare → a custom build (xcaddy or
-# Caddy's "download with plugins"). This task installs the base package as a
-# placeholder; the plugin-enabled binary swap is a flagged build step
-# confirmed in CI/runbook before this is trusted.
-- name: Install Caddy (base; plugin-enabled binary is a flagged build step)
+# The distro `caddy` package has no plugins built in. DNS-01 (the Caddyfile's
+# `acme_dns cloudflare` directive) needs the caddy-dns/cloudflare module, so
+# `caddy validate`/`caddy adapt` on the stock binary fails. Rather than a
+# custom xcaddy build (which forfeits the apt package's systemd unit/user/
+# upgrade scaffolding), install stock apt caddy, then swap the binary in
+# place for the SAME Caddy version WITH the plugin via `caddy add-package`
+# (Caddy's official build service). Idempotent — guarded by `caddy
+# list-modules`.
+- name: Install Caddy (base apt package; DNS-01 plugin added below)
   ansible.builtin.apt:
     name: caddy
     state: present
     update_cache: true
     cache_valid_time: 3600
     lock_timeout: 600
+
+- name: Check installed Caddy modules
+  ansible.builtin.command: caddy list-modules
+  changed_when: false
+  register: caddy_modules_before
+
+- name: Add the caddy-dns/cloudflare plugin (needs outbound HTTPS)
+  ansible.builtin.command: caddy add-package github.com/caddy-dns/cloudflare
+  when: "'dns.providers.cloudflare' not in caddy_modules_before.stdout"
+  # TRAP: a later plain `apt upgrade` of the `caddy` package replaces this
+  # binary with the plugin-less stock one, silently dropping DNS-01 — the
+  # next converge re-runs this task (guarded by the `when` above) and
+  # re-adds it. unattended-upgrades (roles/unattended_upgrades) only
+  # auto-installs the security pocket, and caddy isn't normally served from
+  # there, so this is an edge case in practice, not a routine occurrence.
+  # Until the next converge, the offbox heartbeat's cert-issuer check
+  # (roles/tls_telnet_cert) catches the fallout — DNS-01 renewal failing
+  # means Caddy falls back to a self-signed/expired cert, which that check
+  # flags.
+
+- name: Re-check installed Caddy modules (verify plugin state after add-package)
+  ansible.builtin.command: caddy list-modules
+  changed_when: false
+  register: caddy_modules_after
+
+- name: Fail if the cloudflare DNS plugin is still missing
+  ansible.builtin.assert:
+    that: "'dns.providers.cloudflare' in caddy_modules_after.stdout"
+    fail_msg: >-
+      caddy-dns/cloudflare module missing after `caddy add-package` — the
+      Caddyfile's `acme_dns cloudflare` directive (DNS-01) will fail to
+      validate/adapt. Check outbound HTTPS to Caddy's build service
+      (caddyserver.com) from this host and re-run the converge.
+    quiet: true
 
 - name: Deploy Caddyfile (validated before reload)
   ansible.builtin.template:

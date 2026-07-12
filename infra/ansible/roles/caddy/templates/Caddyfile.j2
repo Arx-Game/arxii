@@ -17,9 +17,43 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		-Server
 	}
-	reverse_proxy {{ caddy_backend }} {
-		# Trust only Cloudflare (the X-Forwarded-* chain) — Django's
-		# SECURE_PROXY_SSL_HEADER is set accordingly in django_hardening.
-		header_up X-Real-IP {remote_host}
+
+	@ws path /ws/*
+
+	# handle blocks are mutually exclusive and evaluated in the order
+	# written (unlike bare directives, which Caddy re-orders automatically —
+	# unsafe once a block mixes multiple reverse_proxy/file_server targets).
+	handle @ws {
+		# Evennia portal websocket, localhost-bound. The port is hardcoded
+		# rather than templated from a variable because CI's validate.yml
+		# stubs every Jinja substitution with a hostname placeholder before
+		# running `caddy adapt` — templating the port here would render an
+		# unparseable "host:placeholder-hostname" address. Keep this in sync
+		# with roles/caddy/defaults/main.yml's caddy_ws_backend_port
+		# (informational only). Caddy handles the Upgrade handshake
+		# automatically; no extra config needed for the WS proxy.
+		reverse_proxy 127.0.0.1:4002 {
+			# Trust only Cloudflare (the firewall only admits Cloudflare to
+			# 80/443) — {remote_host} would always be the CF edge IP, never
+			# the player's; CF-Connecting-IP carries the real client IP.
+			# Django's SECURE_PROXY_SSL_HEADER is set accordingly in
+			# django_hardening.
+			header_up X-Real-IP {header.CF-Connecting-IP}
+		}
+	}
+
+	# STATIC_ROOT doesn't itself contain a "static/" subdirectory (collect
+	# static populates it flat), so handle_path strips the /static prefix
+	# before file_server resolves it against caddy_static_root.
+	handle_path /static/* {
+		root * {{ caddy_static_root }}
+		file_server
+	}
+
+	handle {
+		reverse_proxy {{ caddy_backend }} {
+			# See the @ws block above — same Cloudflare-only trust rationale.
+			header_up X-Real-IP {header.CF-Connecting-IP}
+		}
 	}
 }
