@@ -519,6 +519,37 @@ describe('CommandInput', () => {
     expect(createActionRequestMock).not.toHaveBeenCalled();
   });
 
+  // ---------------------------------------------------------------------------
+  // Speaking-as identity chip (#2166)
+  // ---------------------------------------------------------------------------
+
+  it('renders the speaking-as chip with name and avatar when provided', () => {
+    render(
+      <CommandInput
+        character="Alice"
+        speakingAs={{ name: 'Alice', thumbnailUrl: 'https://example.com/alice.png' }}
+      />
+    );
+
+    const chip = screen.getByTestId('speaking-as-chip');
+    expect(chip).toHaveTextContent('Alice');
+    const img = chip.querySelector('img');
+    expect(img).toHaveAttribute('src', 'https://example.com/alice.png');
+  });
+
+  it('renders the speaking-as chip with initial-letter avatar when thumbnailUrl is null', () => {
+    render(<CommandInput character="Alice" speakingAs={{ name: 'Bianca', thumbnailUrl: null }} />);
+
+    const chip = screen.getByTestId('speaking-as-chip');
+    expect(chip).toHaveTextContent('Bianca');
+    expect(chip.querySelector('img')).toBeNull();
+  });
+
+  it('does not render the speaking-as chip when the prop is omitted (legacy callers)', () => {
+    render(<CommandInput character="Alice" />);
+    expect(screen.queryByTestId('speaking-as-chip')).toBeNull();
+  });
+
   it('a plain (non-entrance) pose sends no action request — byte-identical regression', async () => {
     submitPoseMock.mockImplementation(() => Promise.resolve({ id: 789 }));
 

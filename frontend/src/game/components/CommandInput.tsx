@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
+import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
 import { ActionAttachment } from '@/scenes/components/ActionAttachment';
 import {
@@ -73,6 +74,15 @@ interface CommandInputProps {
    * fetch. Defaults to `false` when omitted.
    */
   isAtPlace?: boolean;
+  /**
+   * The "speaking as" identity chip (#2166 Decision 3) — the character whose
+   * voice this composer speaks in. Rendered at the START of `leftSlot`,
+   * before `ModeSelector`, whenever provided; absent for legacy callers that
+   * haven't been threaded yet. Mis-attributed poses are the multi-character
+   * equivalent of the wrong-scene-pose bug, so this is always-on (not gated
+   * behind having more than one character) once the caller supplies it.
+   */
+  speakingAs?: { name: string; thumbnailUrl: string | null };
 }
 
 export function CommandInput({
@@ -91,6 +101,7 @@ export function CommandInput({
   detachedActionIds,
   onPoseSubmitted,
   isAtPlace,
+  speakingAs,
 }: CommandInputProps) {
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -321,12 +332,27 @@ export function CommandInput({
         onKeyDown={handleKeyDown}
         rows={2}
         leftSlot={
-          <ModeSelector
-            currentMode={composerMode?.command ?? 'pose'}
-            onModeChange={handleModeChange}
-            isAtPlace={isAtPlace ?? false}
-            locked={composerMode?.locked ?? false}
-          />
+          <div className="flex items-center gap-1">
+            {speakingAs && (
+              <span
+                className="flex items-center gap-1 rounded-full bg-accent/50 py-0.5 pl-0.5 pr-2 text-xs font-medium"
+                title={`Speaking as ${speakingAs.name}`}
+                data-testid="speaking-as-chip"
+              >
+                <PersonaAvatar
+                  source={{ name: speakingAs.name, thumbnailUrl: speakingAs.thumbnailUrl }}
+                  size="sm"
+                />
+                <span>{speakingAs.name}</span>
+              </span>
+            )}
+            <ModeSelector
+              currentMode={composerMode?.command ?? 'pose'}
+              onModeChange={handleModeChange}
+              isAtPlace={isAtPlace ?? false}
+              locked={composerMode?.locked ?? false}
+            />
+          </div>
         }
         rightSlot={
           sceneId ? (

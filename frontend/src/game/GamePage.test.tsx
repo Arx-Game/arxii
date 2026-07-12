@@ -698,6 +698,21 @@ describe('GamePage', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Speaking-as identity chip (#2166) — the composer always shows the active
+  // character's identity, so a pose can never be mis-attributed.
+  // ---------------------------------------------------------------------------
+
+  it('shows the active character on the speaking-as composer chip', async () => {
+    store.dispatch(setAccount(mockAccount));
+    seedActiveSceneWithPose();
+
+    renderWithProviders(<GamePage />);
+
+    await screen.findByText('stretches languidly.');
+    expect(screen.getByTestId('speaking-as-chip')).toHaveTextContent(ACTIVE_NAME);
+  });
+
+  // ---------------------------------------------------------------------------
   // Puppet session tab bar attention badge (#2166) — GameWindow's multi-puppet
   // tab strip (rendered when 2+ sessions are open) badges the SAME two-tier
   // `sessionAttention` result as GameTopBar's alt-character avatars.

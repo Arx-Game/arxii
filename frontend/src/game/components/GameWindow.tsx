@@ -81,6 +81,8 @@ interface GameWindowProps {
   pendingAttachments?: ReactNode;
   /** Open conversation tabs (#2165); absent = no strip, plain feed. */
   conversationTabs?: ConversationTabStripProps;
+  /** "Speaking as" identity chip (#2166 Decision 3) — threaded straight to `CommandInput`. */
+  speakingAs?: { name: string; thumbnailUrl: string | null };
 }
 
 export function GameWindow({
@@ -105,6 +107,7 @@ export function GameWindow({
   placeBar,
   pendingAttachments,
   conversationTabs,
+  speakingAs,
 }: GameWindowProps) {
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
@@ -255,6 +258,7 @@ export function GameWindow({
         detachedActionIds={detachedActionIds}
         onPoseSubmitted={onPoseSubmitted}
         isAtPlace={isAtPlace}
+        speakingAs={speakingAs}
       />
     </div>
   );
