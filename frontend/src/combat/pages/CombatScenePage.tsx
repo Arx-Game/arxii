@@ -265,6 +265,11 @@ export function CombatScenePage() {
               />
               <CommandInput
                 character={activeCharacter}
+                speakingAs={
+                  activeEntry
+                    ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
+                    : undefined
+                }
                 composerMode={composerMode}
                 onModeChange={handleComposerModeChange}
                 targetToAppend={targetToAppend}
