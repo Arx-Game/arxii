@@ -6,7 +6,7 @@ from django.db.models import F, Q
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.areas.positioning.constants import PositionKind
+from world.areas.positioning.constants import PositionKind, RampartCrackState, RampartSignature
 
 
 class PositionNodeBase(SharedMemoryModel):
@@ -407,4 +407,137 @@ class BlueprintPositionShelter(SharedMemoryModel):
         return (
             f"BlueprintShelter {self.damage_type_id}={self.value}"
             f" @ bp_pos:{self.blueprint_position_id}"
+        )
+
+
+class RampartElementProfile(SharedMemoryModel):
+    """A reusable element (Stone/Wind/Fire/Thorn/...) a Rampart is raised from (#2209).
+
+    Authored content: one row per element, shared across every Rampart cast from
+    it. ``signature_behavior`` selects which of the four authored behaviors
+    (see ``RampartSignature``) this element grants; ``signature_value`` and the
+    optional damage-type/condition FKs parameterize that behavior (e.g. Fire's
+    retaliation damage, Wind's missile-ward adjustment, Thorn's grasping
+    condition). Per-damage-type resist/vulnerability lives on the related
+    ``RampartElementResistance`` rows.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    signature_behavior = models.CharField(
+        max_length=20,
+        choices=RampartSignature.choices,
+        help_text="The one authored behavior this element grants its Ramparts.",
+    )
+    signature_value = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Magnitude for signature_behavior: missile/area resist adjustment "
+            "(MISSILE_WARD) or retaliation damage (MELEE_RETALIATION)."
+        ),
+    )
+    signature_damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rampart_signature_profiles",
+        help_text="Retaliation damage type (MELEE_RETALIATION). Unused by other behaviors.",
+    )
+    signature_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rampart_signature_profiles",
+        help_text="Condition applied to a grasped opponent (GRASPING). Unused by other behaviors.",
+    )
+
+    class Meta:
+        app_label = "areas"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class RampartElementResistance(SharedMemoryModel):
+    """A per-damage-type resist/vulnerability row for a RampartElementProfile (#2209).
+
+    ``value`` is signed: positive resists (shrinks incoming chip damage),
+    negative is a vulnerability (grows it). Absent damage types resist 0.
+    """
+
+    profile = models.ForeignKey(
+        RampartElementProfile, on_delete=models.CASCADE, related_name="resistances"
+    )
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        related_name="rampart_resistances",
+    )
+    value = models.SmallIntegerField(
+        help_text="Signed: positive resists, negative is a vulnerability."
+    )
+
+    class Meta:
+        app_label = "areas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "damage_type"], name="unique_rampart_resistance_per_type"
+            ),
+        ]
+        ordering = ["profile", "damage_type"]
+
+    def __str__(self) -> str:
+        return f"{self.profile_id}:{self.damage_type_id}={self.value}"
+
+
+class Rampart(SharedMemoryModel):
+    """A living barrier raised on a Position — a conjured, damageable wall (#2209).
+
+    One rampart per position (unique FK). Re-casting on an occupied position
+    replaces the existing row (see ``raise_rampart``). ``integrity`` chips down
+    as strikes are intercepted (``damage_rampart``); it collapses (row deleted)
+    at 0.
+    """
+
+    position = models.ForeignKey(
+        Position, on_delete=models.CASCADE, related_name="ramparts", unique=True
+    )
+    element_profile = models.ForeignKey(RampartElementProfile, on_delete=models.PROTECT)
+    integrity = models.PositiveSmallIntegerField()
+    max_integrity = models.PositiveSmallIntegerField()
+    created_by_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ramparts",
+        help_text="Provenance: the caster who raised this rampart. Null for staff-authored.",
+    )
+    duration_rounds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Rounds until expiry. Null = until collapse or scene end.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "areas"
+        ordering = ["position"]
+
+    @property
+    def crack_state(self) -> str:
+        """Coarse integrity band: INTACT > 2/3 max, CRACKED > 1/3, else CRUMBLING."""
+        if self.integrity * 3 > self.max_integrity * 2:
+            return RampartCrackState.INTACT
+        if self.integrity * 3 > self.max_integrity:
+            return RampartCrackState.CRACKED
+        return RampartCrackState.CRUMBLING
+
+    def __str__(self) -> str:
+        return (
+            f"Rampart({self.element_profile_id}) "
+            f"{self.integrity}/{self.max_integrity} @ {self.position_id}"
         )
