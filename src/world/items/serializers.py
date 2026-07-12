@@ -258,6 +258,14 @@ class CraftingQuoteSerializer(serializers.Serializer):
     station_status = StationStatusSerializer(allow_null=True)
 
 
+class CraftableTemplateSerializer(serializers.ModelSerializer):
+    """A template a character can mint via item-creation crafting (#2240)."""
+
+    class Meta:
+        model = ItemTemplate
+        fields = ["id", "name", "description"]
+
+
 class EquippedItemReadSerializer(serializers.ModelSerializer):
     """Read serializer for EquippedItem (GET list/detail)."""
 
