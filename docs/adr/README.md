@@ -152,6 +152,7 @@ treat those names as hints to confirm, not gospel.
 - [0119 — The accusation→heat bridge lives justice-side, and its tier is emergent from the real deed underneath](0119-accusation-heat-bridge-tier-is-emergent-from-the-deed.md) (extends ADR-0114/0010)
 - [0120 — Cross-Area travel rides the exit graph; Area coordinates are parent-local rendering data](0120-cross-area-travel-rides-the-exit-graph.md) (extends ADR-0081/0085)
 - [0121 — Portal anchors are a stackable magic-app model, not a RoomFeatureKind](0121-portal-anchors-are-a-stackable-magic-model.md) (related ADR-0010)
+- [0122 — Battle-earned Legend is win-gated at authored tier values, with a standout exception for both sides](0122-battle-legend-is-win-gated-with-standout-exceptions.md) (related ADR-0010)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
