@@ -42,6 +42,10 @@ interface Session {
    * stay zeroed. `null` before the baseline effect has run for this scene.
    */
   sceneBaselineId: number | null;
+  /** Ordered thread keys with an open conversation tab (#2165). Never contains 'room'. */
+  openThreadTabs: string[];
+  /** Active conversation tab's thread key; null = the room anchor tab (#2165). */
+  activeThreadTab: string | null;
 }
 
 interface GameState {
@@ -71,6 +75,8 @@ export const gameSlice = createSlice({
           sceneInteractions: [],
           threadLastSeen: {},
           sceneBaselineId: null,
+          openThreadTabs: [],
+          activeThreadTab: null,
         };
       }
       state.active = name;
@@ -146,6 +152,10 @@ export const gameSlice = createSlice({
         const nextId = scene?.id ?? null;
         if (previousId !== nextId) {
           session.sceneBaselineId = null;
+          // Tabs are scene-contextual (#2165): a stale tab pointing at last
+          // scene's table/whisper set is a mis-send vector.
+          session.openThreadTabs = [];
+          session.activeThreadTab = null;
         }
         session.scene = scene;
       }
@@ -215,6 +225,61 @@ export const gameSlice = createSlice({
         }
       }
     },
+    openThreadTab: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; threadKey: string }>
+    ) => {
+      const { character, threadKey } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        if (threadKey !== 'room' && !session.openThreadTabs.includes(threadKey)) {
+          session.openThreadTabs.push(threadKey);
+        }
+        session.activeThreadTab = threadKey === 'room' ? null : threadKey;
+      }
+    },
+    closeThreadTab: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; threadKey: string }>
+    ) => {
+      const { character, threadKey } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        session.openThreadTabs = session.openThreadTabs.filter((k) => k !== threadKey);
+        if (session.activeThreadTab === threadKey) {
+          session.activeThreadTab = null;
+        }
+      }
+    },
+    setActiveThreadTab: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; threadKey: string | null }>
+    ) => {
+      const { character, threadKey } = action.payload;
+      const session = state.sessions[character];
+      if (session && (threadKey === null || session.openThreadTabs.includes(threadKey))) {
+        session.activeThreadTab = threadKey;
+      }
+    },
+    // localStorage restore (#2165): only seeds a session that hasn't opened
+    // tabs yet — a live session's state always wins over a stale snapshot.
+    hydrateThreadTabs: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        openThreadTabs: string[];
+        activeThreadTab: string | null;
+      }>
+    ) => {
+      const { character, openThreadTabs, activeThreadTab } = action.payload;
+      const session = state.sessions[character];
+      if (session && session.openThreadTabs.length === 0) {
+        const open = openThreadTabs.filter((k) => k !== 'room');
+        session.openThreadTabs = open;
+        session.activeThreadTab =
+          activeThreadTab !== null && open.includes(activeThreadTab) ? activeThreadTab : null;
+      }
+    },
     resetGame: () => initialState,
   },
 });
@@ -232,5 +297,9 @@ export const {
   clearSceneInteractions,
   markThreadSeen,
   setSceneBaseline,
+  openThreadTab,
+  closeThreadTab,
+  setActiveThreadTab,
+  hydrateThreadTabs,
   resetGame,
 } = gameSlice.actions;
