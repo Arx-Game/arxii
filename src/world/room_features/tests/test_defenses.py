@@ -375,6 +375,39 @@ class ReactToUnauthorizedEntryTests(TestCase):
         delivery = NarrativeMessageDelivery.objects.get(recipient_character_sheet=owner_sheet)
         assert intruder.db_key not in delivery.message.body
 
+    def test_alarm_notifies_tenant_when_no_ownership_row(self):
+        """A tenant-only room (no LocationOwnership row anywhere in the cascade --
+        the shape of a StartingArea.grants_residence_tenancy home) still delivers
+        the alarm notification to the tenant persona (#2177 whole-branch review,
+        Important #1).
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.locations.services import grant_tenancy
+        from world.narrative.models import NarrativeMessageDelivery
+        from world.room_features.models import RoomAlarmDetails
+        from world.room_features.services import react_to_unauthorized_entry
+        from world.scenes.factories import PersonaFactory
+
+        room = ObjectDBFactory(db_key="AlarmTenantRoom", db_typeclass_path="typeclasses.rooms.Room")
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        tenant_sheet = CharacterSheetFactory()
+        tenant_persona = PersonaFactory(character_sheet=tenant_sheet)
+        grant_tenancy(room_profile=room_profile, tenant_persona=tenant_persona)
+        RoomAlarmDetails.objects.create(room_profile=room_profile)
+
+        intruder = ObjectDBFactory(
+            db_key="TenantAlarmMallory", db_typeclass_path="typeclasses.characters.Character"
+        )
+        intruder.location = room
+        intruder.save()
+        intruder_sheet = CharacterSheetFactory(character=intruder)
+        PersonaFactory(character_sheet=intruder_sheet)
+
+        react_to_unauthorized_entry(intruder, room)
+        assert NarrativeMessageDelivery.objects.filter(
+            recipient_character_sheet=tenant_sheet
+        ).exists()
+
     def test_alarm_org_holder_does_not_crash_or_notify(self):
         """``_trigger_alarm`` no-ops (does not crash) when the room's owner is an
         Organization -- only a Persona holder gets notified (#2177 Task 8 fix).

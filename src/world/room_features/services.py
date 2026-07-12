@@ -605,21 +605,45 @@ def _trigger_alarm(actor, room, room_profile: RoomProfile) -> None:
     message_location(actor_state, "An alarm flares to life -- someone has entered uninvited!")
 
     from world.locations.constants import HolderType  # noqa: PLC0415
-    from world.locations.services import effective_owner  # noqa: PLC0415
+    from world.locations.services import current_tenants, effective_owner  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
+    # Notify every genuine standing-holder able to have installed this alarm in
+    # the first place -- can_modify_room_features gates install on
+    # is_owner(persona, room) OR is_tenant(persona, room), so notification must
+    # reach both an owner-persona (if any) AND active tenant-personas (if any),
+    # not just whichever resolves first (#2177 whole-branch review, Important #1:
+    # a tenant-only room -- e.g. a StartingArea.grants_residence_tenancy home,
+    # with no LocationOwnership row anywhere in the cascade -- was silently
+    # dropping this half of the reaction). Org-held ownership/tenancy is a
+    # narrower, separately-tested no-op (test_alarm_org_holder_does_not_crash_or_notify)
+    # -- fanning out to org membership is a deliberate non-goal here.
+    recipient_sheets: dict[int, object] = {}
+
     ownership = effective_owner(room)
-    if ownership is None:
-        return
     # LocationOwnership.get_active_target() (inherited from DiscriminatorMixin)
     # resolves the PARENT discriminator (area/room_profile), not the holder --
     # the holder is a second, independent discriminator on this model
     # (holder_type/holder_persona/holder_organization). Read it directly.
-    if ownership.holder_type != HolderType.PERSONA or ownership.holder_persona is None:
+    if (
+        ownership is not None
+        and ownership.holder_type == HolderType.PERSONA
+        and ownership.holder_persona is not None
+    ):
+        sheet = ownership.holder_persona.character_sheet
+        recipient_sheets[sheet.pk] = sheet
+
+    for tenancy in current_tenants(room):
+        if tenancy.tenant_type != HolderType.PERSONA or tenancy.tenant_persona is None:
+            continue
+        sheet = tenancy.tenant_persona.character_sheet
+        recipient_sheets[sheet.pk] = sheet
+
+    if not recipient_sheets:
         return
     send_narrative_message(
-        recipients=[ownership.holder_persona.character_sheet],
+        recipients=list(recipient_sheets.values()),
         body=f"Your alarm at {room.db_key} was triggered.",
         category=NarrativeCategory.SYSTEM,
     )
