@@ -213,7 +213,7 @@ class BreakExitActionTests(TestCase):
         from world.buildings.constants import ConditionTier
         from world.buildings.factories import BuildingFactory
 
-        actor, exit_obj, _room = self._actor_and_locked_exit()
+        actor, exit_obj, room = self._actor_and_locked_exit()
         area = AreaFactory(level=10)
         profile = RoomProfile.objects.filter(objectdb=room).first()
         if profile is None:
@@ -233,7 +233,7 @@ class BreakExitActionTests(TestCase):
         from world.buildings.constants import ConditionTier
         from world.buildings.factories import BuildingFactory
 
-        actor, exit_obj, _room = self._actor_and_locked_exit()
+        actor, exit_obj, room = self._actor_and_locked_exit()
         area = AreaFactory(level=10)
         profile = RoomProfile.objects.filter(objectdb=room).first()
         if profile is None:
