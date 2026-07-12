@@ -7,11 +7,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  craftCreateItem,
-  getCreateItemQuote,
-  listCraftableRecipes,
-} from '../api';
+import { craftCreateItem, getCreateItemQuote, listCraftableRecipes } from '../api';
 
 export const itemCreationKeys = {
   recipes: ['craftable-recipes'] as const,
