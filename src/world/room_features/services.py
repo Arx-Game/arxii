@@ -442,3 +442,90 @@ def handle_social_hub_progression(
         room_profile.is_social_hub = True
         room_profile.save(update_fields=["is_social_hub"])
     sync_social_hub_traffic(room_profile)
+
+
+# ---------------------------------------------------------------------------
+# ROOM_DEFENSE_INSTALLATION Project handler -- wired in apps.py (#2177)
+# ---------------------------------------------------------------------------
+
+
+def complete_defense_installation(
+    project: Project,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """Handle resolution of a ROOM_DEFENSE_INSTALLATION project (#2177).
+
+    Plain three-way branch on defense_kind -- no dict registry, unlike
+    ROOM_FEATURE_STRATEGIES, since all three kinds ship in this app and are
+    fixed mechanics, not a catalog other apps plug into (Decision 2).
+    """
+    from world.room_features.constants import DefenseKind  # noqa: PLC0415
+    from world.room_features.models import DefenseProgressionDetails  # noqa: PLC0415
+
+    details = (
+        DefenseProgressionDetails.objects.select_related(
+            "target_exit_profile", "target_room_profile", "resonance"
+        )
+        .filter(project=project)
+        .first()
+    )
+    if details is None:
+        msg = (
+            f"Project {project.pk} resolved as ROOM_DEFENSE_INSTALLATION but has "
+            "no DefenseProgressionDetails row."
+        )
+        raise RuntimeError(msg)
+
+    if details.defense_kind == DefenseKind.EXIT_BARS:
+        _install_or_level_bars(details.target_exit_profile, details.target_level)
+    elif details.defense_kind == DefenseKind.ROOM_WARD:
+        _install_or_level_ward(details.target_room_profile, details.target_level, details.resonance)
+    else:
+        _install_or_level_alarm(details.target_room_profile, details.target_level)
+
+
+def _install_or_level_bars(exit_profile, target_level: int) -> None:
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.room_features.models import ExitBarsDetails  # noqa: PLC0415
+
+    details = ExitBarsDetails.objects.filter(exit_profile=exit_profile).active().first()
+    if details is None:
+        ExitBarsDetails.objects.create(exit_profile=exit_profile, level=max(1, target_level))
+        return
+    if target_level > details.level:
+        details.level = target_level
+        details.last_upgraded_at = _tz.now()
+        details.save(update_fields=["level", "last_upgraded_at"])
+
+
+def _install_or_level_ward(room_profile: RoomProfile, target_level: int, resonance) -> None:
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.room_features.models import RoomWardDetails  # noqa: PLC0415
+
+    details = RoomWardDetails.objects.filter(room_profile=room_profile).active().first()
+    if details is None:
+        RoomWardDetails.objects.create(
+            room_profile=room_profile, level=max(1, target_level), resonance=resonance
+        )
+        return
+    if target_level > details.level:
+        details.level = target_level
+        details.last_upgraded_at = _tz.now()
+        details.save(update_fields=["level", "last_upgraded_at"])
+
+
+def _install_or_level_alarm(room_profile: RoomProfile, target_level: int) -> None:
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.room_features.models import RoomAlarmDetails  # noqa: PLC0415
+
+    details = RoomAlarmDetails.objects.filter(room_profile=room_profile).active().first()
+    if details is None:
+        RoomAlarmDetails.objects.create(room_profile=room_profile, level=max(1, target_level))
+        return
+    if target_level > details.level:
+        details.level = target_level
+        details.last_upgraded_at = _tz.now()
+        details.save(update_fields=["level", "last_upgraded_at"])
