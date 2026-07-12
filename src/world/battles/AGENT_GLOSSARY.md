@@ -52,10 +52,27 @@ flying/aquatic/metal-clad, #1794) driving type-matchups and terrain effects, and
 per-unit magnitude — two units can hold the same capability at very different values,
 #1794). Also carries a `UnitQuality` tier (militia through elite, #1711) — a flat
 check-difficulty modifier ladder, not a strength multiplier — and an `individual_count`
-(nullable population data point mirroring `CombatOpponent.swarm_count`, #1794; no
-swarm-math wired against it yet). Replaces the spine's single-select `UnitComposition`
-enum (#1711), which could only ever tag a unit with one composition.
+(nullable population data point mirroring `CombatOpponent.swarm_count`, #1794; see
+**Swarm-style unit** below for what it drives, #1841). Replaces the spine's
+single-select `UnitComposition` enum (#1711), which could only ever tag a unit with
+one composition.
 _Avoid_: squad, regiment, mob; composition (superseded term — use properties/capabilities).
+
+**Swarm-style unit**:
+A `BattleUnit` with `individual_count` set (not `None`) — a horde/pack/flock counted
+in bodies rather than resolved as a single formation. Drives two derived-math effects
+(#1841): a banded flat STRIKE bonus (`swarm_strike_bonus`, `SWARM_STRIKE_BONUS_BANDS`
+in `constants.py` — bigger swarm, easier to land a hit) folded into the same modifier
+stack as terrain/weather/quality, and proportional body loss off `individual_count`
+whenever the unit takes STRIKE attrition or ROUT morale damage (`_apply_swarm_losses`
+in `resolution.py` — `ceil(individual_count * attrition / 100)`, since `strength`/
+`morale` are both 0-100 scales). A unit with `individual_count=None` is never
+swarm-style — neither effect applies, and it's excluded from
+`BattleRoundResult.unit_losses`. Distinct from capital vessels (naval/aerial, #1714),
+which stay on the separate per-hull `Fortification` integrity track rather than a
+body count — see [ADR-0122](../../../docs/adr/0122-swarm-math-is-derived-losses-not-a-second-health-pool.md).
+_Avoid_: swarm count (use `individual_count`, the actual field name); horde health
+(this is not a second health pool — see the ADR).
 
 **Morale**:
 A `BattleUnit`'s second numeric resource (#1712), alongside `strength`. Unlike

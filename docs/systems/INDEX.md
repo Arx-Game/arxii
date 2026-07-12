@@ -3693,8 +3693,9 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   #1711; `properties` (M2M → `mechanics.Property`, presence-only tags) and `capabilities`
   (M2M → `conditions.CapabilityType` through `BattleUnitCapability`, authored per-unit
   magnitude) replace #1711's single-select `composition`/`UnitComposition`, #1794;
-  `individual_count` (nullable, data-only, mirrors `CombatOpponent.swarm_count`'s naming,
-  #1794); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
+  `individual_count` (nullable, mirrors `CombatOpponent.swarm_count`'s naming, #1794;
+  drives a banded STRIKE bonus + proportional STRIKE/ROUT body loss via
+  `swarm_strike_bonus`/`_apply_swarm_losses`, #1841); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
   → `character_sheets.CharacterSheet`, #1711; `strength` attrited by STRIKE; `morale` — a
   second resource, starts well below its ceiling, damaged by ROUT / restored by RALLY,
   #1712; `status` always DERIVED jointly from `strength` + `morale` via
@@ -3768,14 +3769,18 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
   `BattleRoundResult` — casts each declaration's `technique` via `resolve_battle_technique`
   (routes through the real `use_technique` magic envelope, not a generic shared check),
-  folding in the five-source modifier stack (Property affinity, terrain, unit quality,
-  commander bonus, posture — #1711/#1794); REPEL resolves before every other kind so its defense
+  folding in the full modifier stack (Property affinity, terrain, weather property/
+  capability, unit quality, swarm-count band bonus, commander bonus, posture, move cost —
+  #1711/#1794/#1715/#2007/#1841); REPEL resolves before every other kind so its defense
   bonus is live for STRIKE in the same round (#1712). STRIKE/ROUT attrite
   strength/morale + award VP; SUPPORT/REPEL/HOLD award flat VP; RALLY restores morale;
   RESCUE clears Surrounded; BREACH attrites a `Fortification`'s `integrity` (setting
   `breached=True` at 0) + awards VP; FORTIFY restores it (capped at `max_integrity`) +
-  awards flat VP (#1713); failure debits PC health + `process_damage_consequences`.
-  Returns `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties)`.
+  awards flat VP (#1713); failure debits PC health + `process_damage_consequences`. A
+  swarm-style target (`individual_count` not None) also loses bodies proportional to
+  STRIKE's net attrition / ROUT's actual morale loss via `_apply_swarm_losses` (#1841).
+  Returns `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties,
+  unit_losses)`.
   `BattleTechniqueResolver` is the `resolve_fn` passed to `use_technique`.
 - **Round context (`world.battles.round_context`):** `BattleRoundContext(RoundContext)` —
   wired into `get_active_round_context` (after combat branch); `resolve_battle_round_context`

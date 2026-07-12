@@ -111,7 +111,7 @@ An abstract typed force (enemy or friendly) stationed at a front.
 | `descriptor` | CharField(80), blank | Optional flavor tag (e.g. "zombies-on-nightmares"); narrative only — `properties`/`capabilities`/`quality` below drive mechanics. Renamed from the spine's `unit_type` (#1711). |
 | `properties` | M2M → `mechanics.Property` (blank, `related_name="battle_units"`) | Descriptive tags this unit carries (flying, aquatic, metal-clad, etc.) — the same catalog characters use (#1794). Presence-only, no per-unit magnitude. Drives type-matchup and terrain-effect lookups (summed across every matching row, replacing #1711's single-select `composition`). |
 | `capabilities` | M2M → `conditions.CapabilityType` through `BattleUnitCapability` (blank, `related_name="battle_units"`) | What this unit can DO, at an authored per-unit magnitude (#1794) — e.g. two units can both hold FLYING at very different values. |
-| `individual_count` | PositiveIntegerField (null) | Population data point mirroring `CombatOpponent.swarm_count`'s naming/shape (#1794); `None` means "not a swarm-style unit". Data only — no swarm-math resolution wired against it yet. |
+| `individual_count` | PositiveIntegerField (null) | Population data point mirroring `CombatOpponent.swarm_count`'s naming/shape (#1794); `None` means "not a swarm-style unit". Drives a banded STRIKE bonus + proportional STRIKE/ROUT body loss (#1841) — see [Swarm math](#swarm-math-1841). |
 | `quality` | CharField | `UnitQuality` — MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711); default TRAINED. Flat attacker-facing STRIKE-check modifier ladder, not a strength multiplier. |
 | `commander` | FK → `character_sheets.CharacterSheet` (null, `related_name="commanded_battle_units"`) | Optional commander (#1711); their Battle Command modifier-walk bonus applies to participants fighting alongside this unit's side/place. |
 | `summoned_by` | FK → `character_sheets.CharacterSheet` (null, `related_name="summoned_battle_units"`) | Set when this unit was created via a military-grade summon (#1711, see `_summon_military_unit`). |
@@ -391,7 +391,7 @@ ejection) — that explicit, known mutation calls `move_unit_place()`/
 ## Modifier Stack (#1711)
 
 `BattleTechniqueResolver._battle_modifier_stack()` (`src/world/battles/resolution.py`)
-sums five modifier sources into the `extra_modifiers` folded into the STRIKE check
+sums every modifier source into the `extra_modifiers` folded into the STRIKE check
 rolled by `perform_check` inside `__call__`. Each source is independently 0 when it
 doesn't apply — an unauthored technique/terrain combo, an unassigned commander, or a
 BALANCED posture all contribute nothing:
@@ -400,15 +400,19 @@ BALANCED posture all contribute nothing:
 |---|---|---|
 | Property affinity | `_property_affinity_modifier(technique, unit)` | Sums every `TechniquePropertyAffinity` row matching one of `unit`'s `properties` (#1794), read from `ArxSharedMemoryManager.cached_all()` (#1846) — the whole table loads once per process, not once per declaration; 0 if none match |
 | Terrain effect | `_terrain_property_modifier(unit.place, unit)` | Sums every `TerrainPropertyEffect` row matching one of `unit`'s `properties` for `unit.place.terrain_type` (#1794), read from `cached_all()` (#1846); 0 if the unit has no place or no row matches |
+| Weather property effect | `_weather_property_modifier(unit.place, unit)` | Sums every `WeatherTypePropertyEffect` row matching one of `unit`'s `properties` for the effective weather at `unit.place` (#1715), read from `cached_all()`; 0 if no effective weather or no row matches |
+| Weather capability challenge | `_weather_capability_modifier(unit.place, unit)` | Sums every `WeatherTypeCapabilityChallenge` row where `unit`'s capability magnitude is strictly below the authored threshold, for the effective weather at `unit.place` (#1715), read from `cached_all()`; 0 if no effective weather or no row applies |
 | Unit quality | `_quality_modifier(unit.quality)` | `UNIT_QUALITY_STRIKE_MODIFIER` dict in `constants.py` — a flat ladder from MILITIA (+10, easier to hit) to ELITE (−20, harder to hit) |
+| Swarm-count band bonus | `swarm_strike_bonus(unit.individual_count)` | `SWARM_STRIKE_BONUS_BANDS` dict in `constants.py` (#1841) — a flat ladder keyed off `unit.individual_count`: <10 or `None` (not a swarm-style unit) → 0, 10-49 → +5, 50-199 → +10, 200+ → +15 |
 | Commander bonus | `commander_bonus_for_side_at_place(side, place)` | Max (not sum) `get_modifier_total` walk against the `"battle_command"` `ModifierTarget` (`ensure_battle_command_modifier_target`, seeded by `factories.py`) across every ACTIVE unit's `commander` on that side/place, read from `battle.state_cache` (#1846); 0 if none commanded |
 | Posture | `BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture)` | `constants.py` dict — AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10 |
+| Move cost | inline in `_battle_modifier_stack()` | `-target_place.movement_cost * MOVE_COST_DIFFICULTY_PER_POINT` (#2007) — only for `action_kind=MOVE` with a `target_place` set; 0 otherwise |
 
-`cached_all()` coverage extends beyond the two catalogs above: `CapabilityType`
+`cached_all()` coverage extends beyond the catalogs above: `CapabilityType`
 (mobility/reposition, `_has_unimpaired_mobility`/`_resolve_reposition_success`) and
 `ConsequencePool`/`ConditionStage` (the Surrounded entry roll,
 `_maybe_apply_surrounded`) also read through `cached_all()` (#1871), so none of
-the five per-declaration catalog lookups in `resolution.py` — STRIKE or
+the per-declaration catalog lookups in `resolution.py` — STRIKE or
 non-STRIKE — re-query their table per declaration. The Surrounded *terminal* pool
 lookup (`select_surrounded_terminal_pool`, reached once per terminal-stage
 Surrounded participant per round rather than per declaration) was folded into the
@@ -420,14 +424,39 @@ escalation/Surrounded-entry paths (`_resolve_rescue_success`,
 `_advance_surrounded_participants`, `_maybe_apply_surrounded`) all call it that
 way.
 
-The first three sources only apply to STRIKE declarations (they read `declaration.target_unit`,
-which is `None` for SUPPORT/RESCUE); commander and posture apply to every declaration kind.
+Every source that reads `unit` (`declaration.target_unit`) is `None` for
+declarations with no target unit (SUPPORT/RESCUE) and contributes 0; commander,
+posture, and move cost apply to every declaration kind regardless of target unit.
 Posture also independently scales VP gain (`BATTLE_POSTURE_VP_MULTIPLIER`, applied in
 `_resolve_strike_success`/`_resolve_support_success`) and failure damage
 (`BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER`, applied in `_resolve_failure`) — those two scalings
 are outside `_battle_modifier_stack()` (they don't affect the check roll itself) but are the
 same posture-driven trade-off: AGGRESSIVE trades a −5 check penalty and +4 failure damage for
 1.4× VP; DEFENSIVE trades +10 check ease and −4 failure damage for 0.7× VP.
+
+### Swarm math (#1841)
+
+`BattleUnit.individual_count` (nullable population data point, #1794) drives two
+pieces of derived math once set — a unit with `individual_count=None` is "not
+swarm-style" and neither applies:
+
+- **STRIKE bonus** — `swarm_strike_bonus(unit.individual_count)` (`constants.py`)
+  folds a flat, banded bonus into the modifier stack above (see the Swarm-count
+  band bonus row) — a bigger formation is easier to land a hit on, mirroring
+  `UNIT_QUALITY_STRIKE_MODIFIER`'s ladder shape rather than a multiplier.
+- **Proportional body loss** — `_apply_swarm_losses(unit, attrition)`
+  (`resolution.py`) costs `ceil(individual_count * attrition / 100)` bodies,
+  floored at 0 (strength/morale are both 0-100 scales, so `attrition` reads
+  directly as a percentage). Called from `_resolve_strike_success` with the net
+  STRIKE attrition (after any REPEL defense-bonus reduction) and from
+  `_resolve_rout_success` with the *actual* morale lost this round (after its own
+  floor-at-0). Losses surface on `BattleRoundResult.unit_losses` (`unit.pk ->
+  bodies lost`), which only ever contains swarm-style units that actually lost a
+  body this round.
+
+Capital vessels (naval/aerial, #1714) stay on the separate per-hull
+`Fortification` integrity track — see [ADR-0122](../adr/0122-swarm-math-is-derived-losses-not-a-second-health-pool.md)
+for why `individual_count` isn't a second per-unit health pool.
 
 ## Peril / Rescue (#1733)
 
@@ -757,6 +786,9 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
 - `SURROUNDED_ENTRY_ISOLATED_MODIFIER = -15` — entry-roll signal (#1733), isolated at a place
 - `SURROUNDED_ENTRY_MOBILITY_MODIFIER = 40` — entry-roll signal (#1733), unimpaired MOVEMENT capability
 - `UNIT_QUALITY_STRIKE_MODIFIER` — dict (#1711), flat attacker-facing STRIKE modifier per `UnitQuality`: MILITIA +10 … ELITE −20
+- `SWARM_STRIKE_BONUS_BANDS` — dict (#1841), inclusive `individual_count` threshold →
+  flat STRIKE bonus: 10 → +5, 50 → +10, 200 → +15 (below 10, or `None`, → 0). Read via
+  the `swarm_strike_bonus()` helper — see [Swarm math (#1841)](#swarm-math-1841) above.
 - `BATTLE_POSTURE_VP_MULTIPLIER` — dict (#1711), percent VP-gain scaling per `BattlePosture`: AGGRESSIVE 1.4, BALANCED 1.0, DEFENSIVE 0.7
 - `BATTLE_POSTURE_CHECK_MODIFIER` — dict (#1711), flat STRIKE-check modifier per `BattlePosture`: AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10
 - `BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER` — dict (#1711), flat failure-damage modifier per `BattlePosture`: AGGRESSIVE +4, BALANCED 0, DEFENSIVE −4
@@ -1262,6 +1294,11 @@ payload data is applied directly; invalidation alone triggers the refetch.
   #1794), `QualityModifierTests`, `CommanderBonusForSideAtPlaceTests`,
   `BattleTechniqueResolverModifierStackTests` (the full five-source stack), and
   `PostureVpScalingTests` (VP-gain and failure-damage posture scaling) (#1711)
+- `src/world/battles/tests/test_swarm_math.py` (#1841) — `swarm_strike_bonus` folded
+  into the modifier stack for a swarm-count unit vs. a null-count unit
+  (`SwarmStrikeBonusModifierStackTests`); proportional body loss through
+  `resolve_battle_round` for STRIKE net attrition and ROUT's actual morale loss, plus
+  the non-swarm-unit no-op case (`SwarmMathRoundResolutionTests`)
 - `src/world/battles/tests/test_conclusion.py` — `check_victory` grading and
   `conclude_battle` (confirms `complete_story` is NOT called)
 - `src/world/battles/tests/test_actions.py` — each action's `run()` path; GM-gate rejection
