@@ -7846,6 +7846,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/crafting/create/quote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return a read-only cost+quality quote for minting a template (no mutation). */
+    get: operations['items_crafting_create_quote_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/crafting/create/recipes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List the item-creation recipes available to craft (#2240).
+     *
+     *     Recipe *knowledge* gating is a later slice (#2242); today this returns
+     *     every active ITEM_CREATE recipe's output template.
+     */
+    get: operations['items_crafting_create_recipes_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/equipped-items/': {
     parameters: {
       query?: never;
@@ -20332,6 +20371,13 @@ export interface components {
      * @enum {string}
      */
     CovenantTypeEnum: 'durance' | 'battle' | 'court';
+    /** @description A template a character can mint via item-creation crafting (#2240). */
+    CraftableTemplate: {
+      readonly id: number;
+      name: string;
+      /** @description Default full description when examined. Instances can override. */
+      description?: string;
+    };
     /** @description Read-only quote: costs, affordability, max quality tier, failure risks. */
     CraftingQuote: {
       costs: components['schemas']['CraftingQuoteCost'];
@@ -44659,6 +44705,44 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  items_crafting_create_quote_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CraftingQuote'];
+        };
+      };
+    };
+  };
+  items_crafting_create_recipes_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CraftableTemplate'][];
+        };
       };
     };
   };

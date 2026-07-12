@@ -33,7 +33,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { Plus, Shirt } from 'lucide-react';
+import { Hammer, Plus, Shirt } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -50,6 +50,7 @@ import { PutInDialog } from '../components/PutInDialog';
 import { OutfitCard } from '../components/OutfitCard';
 import { PaperDoll, type EquippedItemDisplay } from '../components/PaperDoll';
 import { SaveOutfitDialog } from '../components/SaveOutfitDialog';
+import { CreateItemDialog } from '../components/CreateItemDialog';
 import { EditOutfitDialog } from '../components/EditOutfitDialog';
 import { DeleteOutfitDialog } from '../components/DeleteOutfitDialog';
 import { UndressButton } from '../components/UndressButton';
@@ -79,6 +80,7 @@ export function WardrobePage() {
   const queryClient = useQueryClient();
 
   const [saveOpen, setSaveOpen] = useState(false);
+  const [craftOpen, setCraftOpen] = useState(false);
   const [editingOutfit, setEditingOutfit] = useState<Outfit | null>(null);
   const [deletingOutfit, setDeletingOutfit] = useState<Outfit | null>(null);
   const [detailItem, setDetailItem] = useState<ItemInstance | null>(null);
@@ -300,10 +302,16 @@ export function WardrobePage() {
     <div className="container mx-auto space-y-8 px-4 py-8">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-3xl font-bold tracking-tight">Wardrobe</h1>
-        <Button onClick={() => setSaveOpen(true)} disabled={reachableWardrobes.length === 0}>
-          <Plus className="mr-2 h-4 w-4" />
-          Save look
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setCraftOpen(true)}>
+            <Hammer className="mr-2 h-4 w-4" />
+            Craft item
+          </Button>
+          <Button onClick={() => setSaveOpen(true)} disabled={reachableWardrobes.length === 0}>
+            <Plus className="mr-2 h-4 w-4" />
+            Save look
+          </Button>
+        </div>
       </header>
 
       <section aria-labelledby="outfits-heading" className="space-y-4">
@@ -415,6 +423,8 @@ export function WardrobePage() {
         characterSheetId={characterSheetId}
         reachableWardrobes={reachableWardrobes}
       />
+
+      <CreateItemDialog open={craftOpen} onOpenChange={setCraftOpen} />
 
       {editingOutfit && (
         <EditOutfitDialog
