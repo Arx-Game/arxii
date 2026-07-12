@@ -21,6 +21,17 @@ const KIND_STYLES: Record<string, string> = {
   barrier_side: 'border-border bg-card',
 };
 
+// Rampart element -> ring border color (#2209). Keyed lowercase;
+// unrecognized elements fall back to a neutral ring so a new element never
+// renders invisibly.
+const RAMPART_ELEMENT_RING: Record<string, string> = {
+  stone: 'border-slate-400',
+  wind: 'border-sky-400',
+  fire: 'border-orange-400',
+  thorn: 'border-green-400',
+};
+const RAMPART_ELEMENT_RING_FALLBACK = 'border-zinc-400';
+
 export interface PositionMapNodeData extends Record<string, unknown> {
   positionId: number;
   name: string;
@@ -28,17 +39,51 @@ export interface PositionMapNodeData extends Record<string, unknown> {
   occupants: OccupantSummary[];
   canMoveHere: boolean;
   onClick: (positionId: number) => void;
+  rampartElement: string | null;
+  rampartIntegrity: number | null;
+  rampartMaxIntegrity: number | null;
+  rampartCrackState: string | null;
+}
+
+/**
+ * Tailwind classes + a11y title for a covered position's rampart ring
+ * (#2209). Solid ring when intact, dashed when cracked, faint/pulsing
+ * dashed when crumbling. Returns null when the position carries no rampart.
+ */
+function rampartRingProps(data: PositionMapNodeData): { className: string; title: string } | null {
+  if (data.rampartElement == null) return null;
+
+  const colorClass =
+    RAMPART_ELEMENT_RING[data.rampartElement.toLowerCase()] ?? RAMPART_ELEMENT_RING_FALLBACK;
+
+  let stateClass: string;
+  switch (data.rampartCrackState) {
+    case 'cracked':
+      stateClass = 'border-2 border-dashed';
+      break;
+    case 'crumbling':
+      stateClass = 'border border-dashed opacity-50 animate-pulse';
+      break;
+    default:
+      stateClass = 'border-2 border-solid';
+  }
+
+  return {
+    className: `pointer-events-none absolute -inset-1 rounded-lg ${colorClass} ${stateClass}`,
+    title: `${data.rampartElement} Rampart ${data.rampartIntegrity ?? '?'}/${data.rampartMaxIntegrity ?? '?'}`,
+  };
 }
 
 export type PositionMapNodeType = Node<PositionMapNodeData>;
 
 function PositionMapNodeComponent({ data }: NodeProps<PositionMapNodeType>) {
   const kindClass = KIND_STYLES[data.kind] ?? KIND_STYLES.feature;
+  const rampartRing = rampartRingProps(data);
   return (
     <div
       role="button"
       tabIndex={0}
-      className={`w-[140px] cursor-pointer rounded-md border p-2 shadow-sm transition-colors hover:border-primary/60 ${kindClass} ${
+      className={`relative w-[140px] cursor-pointer rounded-md border p-2 shadow-sm transition-colors hover:border-primary/60 ${kindClass} ${
         data.canMoveHere ? 'ring-2 ring-amber-400/50' : ''
       }`}
       onClick={() => data.onClick(data.positionId)}
@@ -57,7 +102,12 @@ function PositionMapNodeComponent({ data }: NodeProps<PositionMapNodeType>) {
       data-testid={`tactical-map-node-${data.positionId}`}
       data-position-id={data.positionId}
       data-position-kind={data.kind}
+      data-rampart-crack-state={data.rampartCrackState ?? undefined}
+      title={rampartRing?.title}
     >
+      {rampartRing && (
+        <div className={rampartRing.className} data-testid="rampart-ring" aria-hidden="true" />
+      )}
       <Handle type="target" position={FlowPosition.Top} className="!opacity-0" />
       <p className="truncate text-xs font-semibold text-foreground">{data.name}</p>
       {data.occupants.length > 0 && (
