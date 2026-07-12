@@ -136,6 +136,21 @@ done
 chk "every secrets_vault secrets_map key (less the tofu-post-apply BACKUP_WRITER pair) has a standup.sh preflight guard" \
   "[[ -z '${secrets_map_missing}' ]]"
 
+# (a2) #2236 Phase 5: ARXII_SENTRY_DSN must be exempted from the coverage
+# check above STRUCTURALLY (living in secrets_map_optional, a dict the sed
+# scan above never reaches) rather than via a third hardcoded name in the
+# BACKUP_WRITER case-statement exemption above. Verifies both halves: the
+# entry exists in secrets_map_optional, AND it is genuinely absent from the
+# secrets_map block the coverage check actually scans, AND it is absent
+# from standup.sh's REQUIRED_ARXII (it is genuinely optional, not just
+# undocumented).
+chk "ARXII_SENTRY_DSN lives in secrets_map_optional (optional-in-prod), not secrets_map (fail-closed-required)" \
+  "grep -q 'ARXII_SENTRY_DSN: SENTRY_DSN' infra/ansible/roles/secrets_vault/defaults/main.yml"
+chkno "ARXII_SENTRY_DSN never appears inside the fail-closed secrets_map block" \
+  "sed -n '/^secrets_map:/,/^[^ ]/p' infra/ansible/roles/secrets_vault/defaults/main.yml | grep -q ARXII_SENTRY_DSN"
+chkno "ARXII_SENTRY_DSN is not in standup.sh's REQUIRED_ARXII (optional secret)" \
+  "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_SENTRY_DSN"
+
 # (b) standup.sh must unset the provisioning tokens BEFORE invoking
 # ansible-playbook (order-sensitive — defense-in-depth so LINODE_TOKEN /
 # CLOUDFLARE_API_TOKEN can never reach the box even by accident).
@@ -234,6 +249,166 @@ chk   "settings.py guards the prod secret_settings overlay import" \
 chk   "secrets_vault's EnvironmentFile renders SECRET_KEY and DATABASE_URL (settings.py's actual env-read contract)" \
   "grep -q 'ARXII_DJANGO_SECRET_KEY: SECRET_KEY' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q '^DATABASE_URL=' infra/ansible/roles/secrets_vault/templates/arxii.env.j2"
 
+echo "== #2236 Phase 3 P1 (dress rehearsal) =="
+# (a) rehearse.sh must NEVER touch the prod terraform root — grep its own
+# STAGE_DIR wiring rather than trusting a comment.
+chk   "rehearse.sh's STAGE_DIR resolves under terraform/ephemeral-stage" \
+  "grep -q 'terraform/ephemeral-stage' infra/scripts/rehearse.sh"
+chkno "rehearse.sh never references terraform/prod in real code (comments-only mentions are fine)" \
+  "nc infra/scripts/rehearse.sh | grep -n 'terraform/prod'"
+chkno "rehearse.sh never runs tofu against a bare/unscoped -chdir (only \${STAGE_DIR})" \
+  "nc infra/scripts/rehearse.sh | grep -E 'tofu -chdir=\"\\\$\\{(TF_DIR|INFRA_DIR)\\}' "
+
+# (b) secrets_vault: vault_allow_empty is a fail-closed escape hatch, refused
+# outside rehearsal_mode — the exact pairing that keeps prod's posture
+# unweakenable by a stray/copy-pasted group_var.
+chk   "secrets_vault refuses vault_allow_empty unless rehearsal_mode" \
+  "grep -q 'vault_allow_empty | length == 0) or rehearsal_mode' infra/ansible/roles/secrets_vault/tasks/main.yml"
+chk   "secrets_vault's vault_allow_empty/rehearsal_mode both default false/empty (prod-safe out of the box)" \
+  "grep -q '^rehearsal_mode: false' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q '^vault_allow_empty: \\[\\]' infra/ansible/roles/secrets_vault/defaults/main.yml"
+
+# (c) validate.yml's caddy job must loop ALL Caddyfile* templates, not just
+# the first match (the #2236 review's actual finding: Caddyfile.rehearsal.j2
+# would otherwise silently never be checked).
+chkno "validate.yml's caddy job no longer uses '-print -quit' (first-match-only)" \
+  "grep -n \"iname 'Caddyfile\\*' -print -quit\" .github/workflows/validate.yml"
+chk   "validate.yml's caddy job iterates over all found Caddyfile* templates" \
+  "grep -q 'for cf in \"\${cfs\[@\]}\"' .github/workflows/validate.yml"
+chkno "validate.yml's caddy job no longer dispatches stock-vs-plugin by filename ('*rehearsal*' substring — same bug-class as -print -quit above)" \
+  "grep -n '\\*rehearsal\\*)' .github/workflows/validate.yml"
+chk   "validate.yml's caddy job dispatches stock-vs-plugin by template CONTENT (the acme_dns directive), not filename" \
+  "nc .github/workflows/validate.yml | grep -q \"grep -q 'acme_dns'\""
+
+# (d) both Caddyfile templates must carry the same site shape (ws + static
+# routes) — the "EDIT BOTH" contract enforced by grep, not just a comment.
+for cf in infra/ansible/roles/caddy/templates/Caddyfile.j2 \
+          infra/ansible/roles/caddy/templates/Caddyfile.rehearsal.j2; do
+  chk "${cf} carries the @ws websocket route"     "grep -q '@ws path /ws/\\*' ${cf}"
+  chk "${cf} carries the /static/* handle_path route" "grep -q 'handle_path /static/\\*' ${cf}"
+  chk "${cf} references caddy_backend/caddy_ws_backend/caddy_static_root" \
+    "grep -q 'caddy_backend' ${cf} && grep -q 'caddy_ws_backend' ${cf} && grep -q 'caddy_static_root' ${cf}"
+done
+chk   "Caddyfile.rehearsal.j2 uses local_certs (no DNS-01, no Cloudflare cred)" \
+  "grep -q 'local_certs' infra/ansible/roles/caddy/templates/Caddyfile.rehearsal.j2"
+chkno "Caddyfile.rehearsal.j2 never uses acme_dns (would need a credential rehearsal doesn't have)" \
+  "grep -n 'acme_dns' infra/ansible/roles/caddy/templates/Caddyfile.rehearsal.j2"
+
+# (e) caddy role: rehearsal must skip the DNS-01 plugin install (a
+# guaranteed failure without a Cloudflare credential) and select the
+# rehearsal template by caddy_rehearsal_mode.
+chk   "caddy role skips the add-package plugin steps when caddy_rehearsal_mode" \
+  "grep -q 'not caddy_rehearsal_mode' infra/ansible/roles/caddy/tasks/main.yml"
+chk   "caddy role selects Caddyfile.rehearsal.j2 via caddy_rehearsal_mode" \
+  "grep -q \"Caddyfile.rehearsal.j2' if caddy_rehearsal_mode\" infra/ansible/roles/caddy/tasks/main.yml"
+
+# (f) offsite_replication must be skippable (R2 is prod-adjacent; the
+# isolated ephemeral-stage root has no such credential).
+chk   "site.yml gates offsite_replication on offsite_enabled" \
+  "grep -q 'role: offsite_replication, when: offsite_enabled' infra/ansible/site.yml"
+chk   "offsite_replication defaults to enabled (prod: standup.sh never sets offsite_enabled)" \
+  "grep -q '^offsite_enabled: true' infra/ansible/roles/offsite_replication/defaults/main.yml"
+
+# (g) ephemeral terraform modules must NEVER carry prevent_destroy — the
+# whole reason they exist separately from the prod modules (verified
+# empirically during #2236 Phase 3 P1: prevent_destroy blocks `tofu destroy`
+# regardless of which root/state calls the module, not just "prod usage").
+for m in infra/terraform/modules/compute_ephemeral/main.tf \
+         infra/terraform/modules/object_storage_ephemeral/main.tf; do
+  chkno "${m} carries no real prevent_destroy (comments-only mentions are fine)" \
+    "nc ${m} | grep -n 'prevent_destroy'"
+done
+chk   "ephemeral-stage/main.tf uses compute_ephemeral, not the prod compute module" \
+  "grep -q 'source              = \"../modules/compute_ephemeral\"' infra/terraform/ephemeral-stage/main.tf"
+chkno "ephemeral-stage/main.tf never sources the prod compute module" \
+  "grep -n 'source *= *\"../modules/compute\"' infra/terraform/ephemeral-stage/main.tf"
+
+# (h) rehearse.sh must ALWAYS attempt teardown via a trap (not a
+# best-effort tail call that a mid-script `exit` could skip).
+chk   "rehearse.sh registers the teardown trap before provisioning" \
+  "grep -q 'trap teardown EXIT' infra/scripts/rehearse.sh"
+assert_before "rehearse.sh's teardown trap is registered BEFORE the first tofu apply" \
+  'trap teardown EXIT' 'tofu -chdir=.*STAGE_DIR.*apply' infra/scripts/rehearse.sh
+
+# (i) rehearse.sh must generate its OWN throwaway secrets, never accept an
+# operator-supplied one (the entire point of an unattended rehearsal box).
+chk   "rehearse.sh generates PG/Django/superuser secrets via openssl rand (never operator env)" \
+  "grep -q 'pg_password=\"\$(openssl rand -hex' infra/scripts/rehearse.sh && grep -q 'django_secret_key=\"\$(openssl rand -hex' infra/scripts/rehearse.sh && grep -q 'superuser_password=\"\$(openssl rand -hex' infra/scripts/rehearse.sh"
+
+# (i2) #2236 review: rehearse.sh single-sources the TLS-telnet port into its
+# generated group_vars (hostfw_tls_telnet_port/dh_tls_telnet_port) rather
+# than relying on the role defaults happening to still match rehearse.sh's
+# own TLS_TELNET_PORT constant. Extract the numeric default from all three
+# sources and assert they agree — silent drift here would mean smoke.sh's
+# TLS-telnet check probes a port host_firewall never actually opened.
+hostfw_default_port="$(grep -oE '^hostfw_tls_telnet_port: [0-9]+' infra/ansible/roles/host_firewall/defaults/main.yml | grep -oE '[0-9]+')"
+dh_default_port="$(grep -oE '^dh_tls_telnet_port: [0-9]+' infra/ansible/roles/django_hardening/defaults/main.yml | grep -oE '[0-9]+')"
+rehearse_const_port="$(grep -oE 'readonly TLS_TELNET_PORT=[0-9]+' infra/scripts/rehearse.sh | grep -oE '[0-9]+')"
+chk "hostfw_tls_telnet_port default, dh_tls_telnet_port default, and rehearse.sh's TLS_TELNET_PORT constant all agree" \
+  "[[ -n '${hostfw_default_port}' && '${hostfw_default_port}' == '${dh_default_port}' && '${dh_default_port}' == '${rehearse_const_port}' ]]"
+chk "rehearse.sh emits hostfw_tls_telnet_port into its generated group_vars (single-sourcing the port, not just trusting role defaults to match)" \
+  "grep -q 'hostfw_tls_telnet_port: \${TLS_TELNET_PORT}' infra/scripts/rehearse.sh"
+chk "rehearse.sh emits dh_tls_telnet_port into its generated group_vars" \
+  "grep -q 'dh_tls_telnet_port: \${TLS_TELNET_PORT}' infra/scripts/rehearse.sh"
+
+# (j) rehearse.yml workflow shape (mirrors standup.yml's CI button checks).
+chk   "rehearse.yml is workflow_dispatch"      "grep -q 'workflow_dispatch' .github/workflows/rehearse.yml"
+chk   "rehearse.yml uses the gated stage env"  "grep -q 'environment: stage' .github/workflows/rehearse.yml"
+chk   "rehearse.yml invokes the shared script" "grep -q 'infra/scripts/rehearse.sh' .github/workflows/rehearse.yml"
+chk   "rehearse.yml sets a concurrency group"  "grep -q 'group: arxii-rehearse' .github/workflows/rehearse.yml"
+
+echo "== #2236 Phase 4 (pull-prod + media mirror) =="
+# (a) pull_prod_db.sh: read-only dev tool, hard confirmation gate, and
+# EXACTLY one 's3 cp' call whose direction is s3:// -> local tmp (a download)
+# — never an upload/write path back to the bucket (the dev_reader key is
+# read-only anyway, but the script itself must never even attempt a write).
+chk   "pull_prod_db.sh refuses without --i-understand-this-overwrites-local" \
+  "grep -q -- '--i-understand-this-overwrites-local' infra/scripts/pull_prod_db.sh"
+chk   "pull_prod_db.sh's only 's3 cp' downloads (source s3://, dest local tmp)" \
+  "grep -q 's3 cp \"s3://\${BACKUPS_BUCKET}/db/\${latest}\" \"\${tmp}/dump.sql.gz\"' infra/scripts/pull_prod_db.sh"
+chk   "pull_prod_db.sh has exactly one 's3 cp' call (no upload path)" \
+  "[[ \$(grep -c 's3 cp' infra/scripts/pull_prod_db.sh) -eq 1 ]]"
+chkno "pull_prod_db.sh never calls a delete/rm S3 operation" \
+  "grep -inE 's3 rm|delete-object' infra/scripts/pull_prod_db.sh"
+
+# (b) justfile's pull-prod recipe gates on confirm=yes and passes the real
+# flag through — a bare `just pull-prod` must not silently overwrite.
+chk   "justfile's pull-prod recipe defaults confirm to \"no\"" \
+  "grep -q 'pull-prod confirm=\"no\"' justfile"
+chk   "justfile's pull-prod recipe passes --i-understand-this-overwrites-local only on confirm=yes" \
+  "grep -q -- '--i-understand-this-overwrites-local' justfile"
+
+# (c) the media mirror is a BACKUP, never a sync: no delete/rm S3 call
+# anywhere in the script, by construction (this is the whole point — a
+# Cloudinary-side delete must never propagate to the R2 copy).
+chkno "arxii-media-mirror.py.j2 never calls a delete/rm S3 operation" \
+  "grep -inE 's3 rm|delete-object|delete_resources|s3api delete' infra/ansible/roles/offsite_replication/templates/arxii-media-mirror.py.j2"
+
+# (d) the weekly timer + service exist in offsite_replication (same role/
+# bucket/credential as the DB offsite job — see meta/main.yml + defaults).
+chk   "offsite_replication installs arxii-media-mirror.service" \
+  "grep -q 'arxii-media-mirror.service' infra/ansible/roles/offsite_replication/tasks/main.yml"
+chk   "offsite_replication installs + enables arxii-media-mirror.timer" \
+  "grep -q 'arxii-media-mirror.timer' infra/ansible/roles/offsite_replication/tasks/main.yml && grep -q 'name: arxii-media-mirror.timer' infra/ansible/roles/offsite_replication/tasks/main.yml"
+chk   "arxii-media-mirror.service carries OnFailure= alerting (same convention as backup/offsite)" \
+  "awk '/dest: \\/etc\\/systemd\\/system\\/arxii-media-mirror.service/,/notify: Reload systemd/' infra/ansible/roles/offsite_replication/tasks/main.yml | grep -q 'OnFailure=arxii-alert-failure@%n.service'"
+
+# (e) the heartbeat watch list picks up the new unit — a failed media-mirror
+# run must surface the same way a failed backup/offsite run does.
+chk   "offbox_alerting heartbeat watches arxii-media-mirror.service" \
+  "grep -q 'arxii-media-mirror.service' infra/ansible/roles/offbox_alerting/templates/arxii-heartbeat.sh.j2"
+
+echo "== #2236 Phase 5 (real Sentry wiring) =="
+# The dependency declaration and the guarded init call are paired — either
+# half missing without the other is a real bug (a declared-but-never-
+# initialized dep, or an init call that would ImportError with no
+# dependency declared).
+chk   "pyproject.toml declares sentry-sdk" \
+  "grep -q 'sentry-sdk' pyproject.toml"
+chk   "settings.py guards sentry_sdk.init() behind a non-empty SENTRY_DSN" \
+  "grep -q 'if SENTRY_DSN:' src/server/conf/settings.py && grep -q 'sentry_sdk.init(' src/server/conf/settings.py"
+chk   "settings.py disables Sentry PII capture (send_default_pii=False)" \
+  "grep -q 'send_default_pii=False' src/server/conf/settings.py"
+
 echo
 if [[ "${fails}" -gt 0 ]]; then
   echo "ACCEPTANCE: ${fails} FAILED"; exit 1
@@ -249,4 +424,12 @@ ACCOUNT-TIME checklist (run once real creds exist — cannot be static):
   [ ] external port scan: only SSH/80/443/TLS-telnet; NO plaintext telnet
   [ ] restore-rehearsal.sh passes from BOTH linode + r2 copies
   [ ] CI validate.yml (tofu/ansible-lint/caddy/gitleaks) green
+  [ ] rehearse.sh (#2236 Phase 3 P1) passes end-to-end: full site.yml
+      converge, smoke.sh all-PASS, backup object lands in the stage bucket,
+      restore rehearsal verifies — run this BEFORE the first real
+      standup.sh/"Stand up infra" button press
+  [ ] `just pull-prod confirm=yes` (#2236 Phase 4) pulls a real dev_reader-
+      keyed dump and restores it into a scratch local DB
+  [ ] arxii-media-mirror.service (#2236 Phase 4) completes with 0 failed on
+      a real box and lands objects under media/ in the real R2 bucket
 EOF

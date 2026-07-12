@@ -2,6 +2,11 @@
 inventory/hosts.yml
 # Same for the generated group_vars — do not commit it.
 inventory/group_vars/arxii_prod.yml
+# #2236 Phase 3 P1: rehearse.sh's generated inventory + group_vars (separate
+# filenames from standup.sh's, deliberately — never share a file with the
+# real prod-targeting generated config).
+inventory/hosts.rehearsal.yml
+inventory/group_vars/arxii_rehearsal.yml
 # This is a PUBLIC repo: NO secret material is committed, encrypted or not.
 # Secrets live only in the gated GitHub Environment and reach the host as
 # env -> the secrets_vault 0600 EnvironmentFile. There is no committed vault

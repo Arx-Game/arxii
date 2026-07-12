@@ -31,8 +31,55 @@ secrets_map:
   ARXII_CADDY_CF_DNS_TOKEN: CADDY_CF_DNS_TOKEN
   ARXII_DJANGO_SUPERUSER_PASSWORD: DJANGO_SUPERUSER_PASSWORD
 
+# #2236 Phase 5 (Sentry). Structurally separate from secrets_map above —
+# entries here are OPTIONAL in prod itself (not just rehearsal): the
+# fail-closed collect/assert tasks in tasks/main.yml only loop over
+# secrets_map, never this dict, so a missing/empty value here converges
+# cleanly (Sentry off) instead of refusing. This is deliberately NOT the
+# same mechanism as vault_allow_empty (that escape hatch is rehearsal-only
+# and asserted so — see the refusal assert in tasks/main.yml); Sentry is
+# genuinely optional everywhere, including a real prod converge with no
+# Sentry account yet. acceptance.sh's secrets_map-coverage check (which
+# requires every secrets_map key to have a standup.sh preflight guard)
+# naturally excludes this dict — it only sed-scans the `secrets_map:`
+# block — and carries an explicit assertion that ARXII_SENTRY_DSN lives
+# here, not in secrets_map, so the exemption is structural, not a name
+# left off a list by hand.
+secrets_map_optional:
+  ARXII_SENTRY_DSN: SENTRY_DSN
+
 # Operator/CI-only — these belong to the tofu step's env, NEVER the box.
 # Refuse if they leaked into the ansible step's env (defense-in-depth).
 secrets_forbidden_env:
   - LINODE_TOKEN
   - CLOUDFLARE_API_TOKEN
+
+# #2236 Phase 3 P1 (dress rehearsal). rehearsal_mode is the global gate the
+# assert below checks; rehearse.sh's generated group_vars is the only place
+# that ever sets it true. standup.sh never sets it, so prod always keeps the
+# full fail-closed behaviour below.
+rehearsal_mode: false
+
+# NAMES ARE secrets_map KEYS (the ARXII_* src names, not the on-box dest
+# names) that are ALLOWED to be empty/unset without tripping the fail-closed
+# assert — ONLY when rehearsal_mode is true (see the refusal assert in
+# tasks/main.yml). rehearse.sh sets this to the not-applicable-in-rehearsal
+# set: ARXII_RESEND_API_KEY (settings.py's own
+# `if env("RESEND_API_KEY", default=""):` block falls back to the console
+# email backend — verified against src/server/conf/settings.py, this is
+# correct, not a workaround), the Cloudinary trio, the R2 keys, and
+# ARXII_OFFBOX_ALERT_TOKEN (all prod-adjacent: real Cloudinary account, real
+# R2 bucket, real external dead-man's-switch — none of which the isolated
+# ephemeral-stage root can or should hold). ARXII_BACKUP_WRITER_* stays OFF
+# this list even in rehearsal — rehearse.sh supplies real stage-bucket writer
+# keys (see terraform/ephemeral-stage's object_storage_ephemeral module) so
+# the backup+restore rehearsal is honest, not stubbed. Prod NEVER sets this
+# var — see the refusal assert.
+vault_allow_empty: []
+
+# #2236 Phase 5 (Sentry). SENTRY_ENVIRONMENT tag sent with every event.
+# Prod converges with this default untouched; rehearse.sh's generated
+# group_vars overrides it to "rehearsal" so stage-box events (if a DSN is
+# ever set there) are never mistaken for real prod traffic in the Sentry
+# project.
+vault_sentry_environment: production

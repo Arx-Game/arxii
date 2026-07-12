@@ -21,9 +21,12 @@ base="${OFFBOX_ALERT_TOKEN}"   # full base ping URL incl. the check id
 # Persistent=true timer used to race Caddy's first ACME issuance, guaranteeing
 # a spurious failed unit with nothing to clear it) — this is now the ONLY
 # detector for a real cert-sync failure, alongside the self-signed check
-# below.
+# below. arxii-media-mirror.service (#2236 Phase 4) joins the same list —
+# skipped entirely in rehearsal (role-level `when: offsite_enabled`), so
+# `is-failed` on a nonexistent unit there just returns false, same as the
+# other two in that mode.
 failed_units=()
-for u in arxii-backup.service arxii-offsite.service arxii-telnet-cert.service; do
+for u in arxii-backup.service arxii-offsite.service arxii-telnet-cert.service arxii-media-mirror.service; do
   if systemctl is-failed --quiet "${u}"; then
     failed_units+=("${u}")
   fi
