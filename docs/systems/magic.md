@@ -230,6 +230,24 @@ choice (or `None`) into the `ActionTemplate` the Technique's `action_template` F
 to; every catalog `ActionTemplate` shares the base template's `check_type`/`pipeline`/
 `target_type`, so only the consequence pool actually varies.
 
+**Combat offense catalog (#1995) [BUILT & WIRED]** — the PHYSICAL sibling of the catalog
+above. `world.combat.seeds_offense` mirrors the same base-pool + curated-catalog shape for
+the combat "Melee Attack" `ActionTemplate` (seeded by
+`world.combat.factories.wire_melee_attack_action_template`, which now wires
+`consequence_pool` onto the base "Combat: Melee Offense" pool instead of leaving it `None`):
+`ensure_melee_offense_pool()` seeds the 3 canonical tiers; `ensure_combat_offense_catalog_content()`
+seeds the curated flavors ("Brutal", "Precise") as children ActionTemplates ("Melee Attack:
+Brutal" / "Melee Attack: Precise"). `resolve_cast_action_template(consequence_pool_id,
+action_category=...)` now branches by category: PHYSICAL validates the chosen pool against
+`get_combat_offense_catalog()`; every other category still validates against
+`get_technique_cast_catalog()` — a magic flavor chosen for a PHYSICAL technique (or vice
+versa) raises `InvalidConsequencePoolChoice`. The catalog listing endpoint
+(`GET /api/magic/consequence-pool-catalog/`) returns both catalogs' entries in one flat list
+(the picker doesn't filter by `action_category` client-side, so the listing doesn't either).
+**This catalog applies to standalone casts only** — combat ROUND resolution never reads
+`ActionTemplate.consequence_pool` (see "Combat" doc's note on `wire_melee_attack_action_template`
+and ADR-0128).
+
 ### Targeting Model (#1321) [BUILT & WIRED]
 
 Standalone casts now validate targets, resolve AoE expansion, apply conditions, and route

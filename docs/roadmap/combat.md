@@ -160,6 +160,11 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   for why that's now PROVEN, not the reverse "onto the boss" direction). Scenario
   composed by `BossFightScenarioFactory` (`world/combat/factories.py`); journey test:
   `src/integration_tests/test_boss_fight_journey.py`.
+- **Combat offense standalone-cast flavor catalog (#1995).** A PHYSICAL technique's
+  standalone cast (not a combat round) can pick a curated consequence-pool flavor
+  ("Brutal"/"Precise") off the "Melee Attack" `ActionTemplate`, mirroring magic's
+  #1320 catalog — see `docs/systems/magic.md`. Deliberately **not** wired into combat
+  ROUND resolution, which never reads `ActionTemplate.consequence_pool` (ADR-0128).
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
