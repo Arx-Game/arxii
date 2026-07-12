@@ -1519,6 +1519,7 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
     http_method_names = ["get", "post", "head", "options"]
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=CraftableTemplateSerializer(many=True))
     @action(detail=False, methods=[HTTPMethod.GET], url_path="recipes")
     def recipes(self, request: Request) -> Response:
         """List the item-creation recipes available to craft (#2240).
@@ -1541,6 +1542,7 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
         templates = [r.output_item_template for r in recipes]
         return Response(CraftableTemplateSerializer(templates, many=True).data)
 
+    @extend_schema(responses=CraftingQuoteSerializer)
     @action(detail=False, methods=[HTTPMethod.GET], url_path="quote")
     def quote(self, request: Request) -> Response:
         """Return a read-only cost+quality quote for minting a template (no mutation)."""
