@@ -1537,7 +1537,7 @@ action consent flow, and a three-mode non-combat round framework.
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
 - **Key Functions:**
-  - `create_action_request(scene, initiator_persona, target_persona, action_key, ..., effort_level)` — dispatches a request; NPC additional targets auto-accept immediately.
+  - `create_action_request(scene, initiator_persona, target_persona, action_key, ..., effort_level)` — dispatches a request; NPC targets (primary or additional) auto-accept immediately (#2214), guarded so an unresolvable request stays PENDING instead of raising.
   - `respond_to_action_request(action_request, decision, difficulty=None, resist_effort="")` — primary-target consent + resolution; defender supplies plausibility band + optional active resistance.
   - `respond_to_action_target(action_target, decision, difficulty=None, resist_effort="")` — per-additional-target consent + resolution (never touches siblings).
   - `broadcast_scene_message(scene, action)` — pushes scene state to participants via WebSocket.
@@ -2922,7 +2922,10 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 services, and equipment-modifier integration. Spec D PR2 (#1031) added the generic
-crafting framework and check-driven facet/style attachment.
+crafting framework and check-driven facet/style attachment. #2211 added the ITEM_CREATE
+mint pipeline; #2240 made it playable web-first: `ItemCreateCraftViewSet` serves
+`GET .../crafting/create/recipes/` (browse) + `.../quote/` (cost/quality) alongside the
+`POST` mint, and the React `CreateItemDialog` (Wardrobe "Craft item") drives them.
 
 - **Models:**
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,
@@ -2967,7 +2970,8 @@ crafting framework and check-driven facet/style attachment.
   accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
   `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
   provenance used by the lore-critical predicate); `CraftingRecipeKind` (FACET_ATTACH,
-  STYLE_ATTACH); `CostConsumption` (NONE, PARTIAL, FULL); `ContainerAccessPolicy` (#1909 —
+  STYLE_ATTACH, ITEM_CREATE — the mint pipeline, #2211); `CostConsumption` (NONE, PARTIAL,
+  FULL); `ContainerAccessPolicy` (#1909 —
   `OPEN` / `FRIENDS` / `OWNER_ONLY`, who may take contents out of a container; steal
   bypasses it with consequences); `StyleAudacity` (#2029 — UNDERSTATED/EXPRESSIVE/BOLD/
   OUTRAGEOUS ordinal tier on `Style`)
@@ -3400,10 +3404,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (the entrance's own recognition hooks fired flourish-only at declaration time — the
   suggestion was deferred). `world.combat.cast_seed
   .seed_or_feed_encounter_from_benign_intervention(*, caster_sheet, target_sheet, scene)`
-  is the benign sibling: seats a non-combatant whose protective (non-hostile) entrance
-  cast landed on an already-embattled ally into the fight — no opponent row, no stakes
+  is the benign sibling: seats a non-combatant whose protective (non-hostile) cast
+  landed on an already-embattled ally into the fight — no opponent row, no stakes
   lock, no FOCUSED declaration (the cast already resolved standalone); no-ops when there
-  is no feedable encounter or the target isn't embattled in it.
+  is no feedable encounter or the target isn't embattled in it. #2226 (ADR-0119)
+  generalized this to **all** benign casts via the `seat_caster_for_benign_intervention`
+  wrapper (`cast_seed.py`), called post-resolution from `_route_immediate_cast` and
+  `resolve_accepted_cast`; the entrance path's own seating calls were removed (the
+  generalized calls supersede them).
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
     side-field; ALLY opponents fight *for* the party (summons, and future charm/
@@ -3730,8 +3738,9 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   #1711; `properties` (M2M → `mechanics.Property`, presence-only tags) and `capabilities`
   (M2M → `conditions.CapabilityType` through `BattleUnitCapability`, authored per-unit
   magnitude) replace #1711's single-select `composition`/`UnitComposition`, #1794;
-  `individual_count` (nullable, data-only, mirrors `CombatOpponent.swarm_count`'s naming,
-  #1794); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
+  `individual_count` (nullable, mirrors `CombatOpponent.swarm_count`'s naming, #1794;
+  drives a banded STRIKE bonus + proportional STRIKE/ROUT body loss via
+  `swarm_strike_modifier`/`_apply_swarm_losses`, #1841); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
   → `character_sheets.CharacterSheet`, #1711; `strength` attrited by STRIKE; `morale` — a
   second resource, starts well below its ceiling, damaged by ROUT / restored by RALLY,
   #1712; `status` always DERIVED jointly from `strength` + `morale` via
@@ -3816,14 +3825,18 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
   `BattleRoundResult` — casts each declaration's `technique` via `resolve_battle_technique`
   (routes through the real `use_technique` magic envelope, not a generic shared check),
-  folding in the five-source modifier stack (Property affinity, terrain, unit quality,
-  commander bonus, posture — #1711/#1794); REPEL resolves before every other kind so its defense
+  folding in the full modifier stack (Property affinity, terrain, weather property/
+  capability, unit quality, swarm-count band bonus, commander bonus, posture, move cost —
+  #1711/#1794/#1715/#2007/#1841); REPEL resolves before every other kind so its defense
   bonus is live for STRIKE in the same round (#1712). STRIKE/ROUT attrite
   strength/morale + award VP; SUPPORT/REPEL/HOLD award flat VP; RALLY restores morale;
   RESCUE clears Surrounded; BREACH attrites a `Fortification`'s `integrity` (setting
   `breached=True` at 0) + awards VP; FORTIFY restores it (capped at `max_integrity`) +
-  awards flat VP (#1713); failure debits PC health + `process_damage_consequences`.
-  Returns `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties)`.
+  awards flat VP (#1713); failure debits PC health + `process_damage_consequences`. A
+  swarm-style target (`individual_count` not None) also loses bodies proportional to
+  STRIKE's net attrition / ROUT's actual morale loss via `_apply_swarm_losses` (#1841).
+  Returns `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties,
+  unit_losses)`.
   `BattleTechniqueResolver` is the `resolve_fn` passed to `use_technique`.
 - **Round context (`world.battles.round_context`):** `BattleRoundContext(RoundContext)` —
   wired into `get_active_round_context` (after combat branch); `resolve_battle_round_context`

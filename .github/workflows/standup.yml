@@ -30,6 +30,7 @@ jobs:
   standup:
     runs-on: ubuntu-latest
     environment: prod        # gated: required-reviewer approval before run
+    timeout-minutes: 45      # provisioning + converge; refuse to hang forever
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2.0.1
@@ -39,7 +40,8 @@ jobs:
       - name: Install Ansible + collections
         run: |
           set -euo pipefail
-          pip install --quiet ansible
+          # Pin major.minor; bump deliberately (not a floating latest).
+          pip install --quiet "ansible-core==2.18.*"
           ansible-galaxy collection install -r infra/ansible/requirements.yml
 
       - name: SSH key (from gated Environment; 0600, never logged)
@@ -79,10 +81,20 @@ jobs:
           TF_VAR_state_bucket_label: ${{ vars.ARXII_BACKUPS_BUCKET }}
           TF_VAR_r2_bucket_name: ${{ vars.ARXII_R2_BUCKET }}
           TF_VAR_dmarc_rua: ${{ vars.ARXII_DMARC_RUA }}
+          # SSH admin CIDR allowlist — conscious operator decision (JSON
+          # list), enforced non-empty by standup.sh's preflight.
+          TF_VAR_ssh_admin_cidrs: ${{ vars.ARXII_SSH_ADMIN_CIDRS }}
+          # Optional; standup.sh defaults to admin@<domain> if unset.
+          ARXII_ACME_EMAIL: ${{ vars.ARXII_ACME_EMAIL }}
           # Runtime app secrets (ansible step -> 0600 EnvironmentFile only):
           ARXII_PG_PASSWORD: ${{ secrets.ARXII_PG_PASSWORD }}
           ARXII_DJANGO_SECRET_KEY: ${{ secrets.ARXII_DJANGO_SECRET_KEY }}
-          ARXII_CLOUDINARY_URL: ${{ secrets.ARXII_CLOUDINARY_URL }}
+          # Three discrete secrets, not one CLOUDINARY_URL — settings.py
+          # reads CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET individually
+          # (see secrets_vault/defaults/main.yml's secrets_map comment).
+          ARXII_CLOUDINARY_CLOUD_NAME: ${{ secrets.ARXII_CLOUDINARY_CLOUD_NAME }}
+          ARXII_CLOUDINARY_API_KEY: ${{ secrets.ARXII_CLOUDINARY_API_KEY }}
+          ARXII_CLOUDINARY_API_SECRET: ${{ secrets.ARXII_CLOUDINARY_API_SECRET }}
           ARXII_RESEND_API_KEY: ${{ secrets.ARXII_RESEND_API_KEY }}
           ARXII_R2_ACCESS_KEY_ID: ${{ secrets.ARXII_R2_ACCESS_KEY_ID }}
           ARXII_R2_SECRET_ACCESS_KEY: ${{ secrets.ARXII_R2_SECRET_ACCESS_KEY }}

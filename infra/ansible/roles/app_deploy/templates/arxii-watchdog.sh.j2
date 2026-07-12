@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Managed by Ansible (app_deploy). Portal-crash watchdog.
+#
+# Type=forking + PIDFile=server.pid (arxii.service.j2) only supervises the
+# Server daemon. Evennia runs Server + Portal as two SEPARATE processes
+# (server.pid + portal.pid — see src/server/README.md); a Portal-only crash
+# leaves the unit "active" from systemd's point of view (Server is fine)
+# while players cannot connect. This timer-driven script checks BOTH
+# pidfiles every run and restarts the unit (+ fires an off-box alert) when
+# the unit claims active but a daemon is dead.
+#
+# Failure modes this deliberately guards against becoming false positives —
+# a watchdog that flaps (restarts on every transient blip) is worse than no
+# watchdog at all:
+#   - Mid-deploy reload/restart: `evennia reload`/`start` transiently leaves
+#     a pidfile stale or briefly regenerates it. We skip entirely while the
+#     unit's own sub-state shows a start/reload/restart in flight.
+#   - Fresh start: right after (re)start, Evennia daemonizes and (re)writes
+#     both pidfiles — that write is not instantaneous. A GRACE_PERIOD_S
+#     window after the unit's ActiveEnterTimestamp tolerates a missing
+#     pidfile without restarting (which would just race the fresh start).
+#
+# DELIBERATE TRADEOFF (documented, not an oversight): the root cause this
+# whole script works around is that Evennia's `evennia start` CLI manages
+# BOTH daemons under ONE process tree with no per-daemon systemd unit of its
+# own — systemd can only supervise what it launched (the Server side, via
+# Type=forking/PIDFile). Splitting Server and Portal into two separate
+# systemd units (each independently supervised, each restartable on its
+# own) is the actual fix; it's nontrivial because Evennia doesn't expose a
+# "start only the Portal" / "start only the Server" CLI entrypoint. Until
+# that's built, this 1-minute poll-and-restart-the-whole-unit script is the
+# accepted interim. The SubState string match in the case statement below
+# is similarly best-effort — it's not an exhaustive enumeration of every
+# systemd sub-state that could mean "something is happening right now",
+# just the ones observed in practice; a sub-state this doesn't recognize as
+# "in flight" could still produce a false-positive restart.
+set -euo pipefail
+set +x
+
+SERVICE="{{ app_service }}.service"
+SERVER_PID="{{ app_pidfile }}"
+PORTAL_PID="{{ app_portal_pidfile }}"
+GRACE_PERIOD_S=120
+
+log() { printf '[watchdog] %s\n' "$*"; }
+
+# Not active at all (stopped/failed) — not our concern; systemd's own
+# Restart=on-failure handles a fully-dead unit. We only catch the "unit
+# says active but one daemon silently died" case.
+active_state="$(systemctl is-active "${SERVICE}" 2>/dev/null || true)"
+if [ "${active_state}" != "active" ]; then
+  log "unit not active (${active_state}) — nothing to do"
+  exit 0
+fi
+
+# Mid-deploy guard: ActiveState can read "active" straight through a
+# reload; the low-level sub-state is what actually distinguishes "steady
+# state" from "something is happening right now".
+sub_state="$(systemctl show -p SubState --value "${SERVICE}" 2>/dev/null || true)"
+case "${sub_state}" in
+  reload|activating|auto-restart|start*)
+    log "unit sub-state is '${sub_state}' — deploy/restart in flight, skipping this run"
+    exit 0
+    ;;
+esac
+
+# Grace period since the unit last became active — the two pidfiles are
+# written by the forked daemons, not instantaneously at unit-active time.
+active_enter="$(systemctl show -p ActiveEnterTimestamp --value "${SERVICE}" 2>/dev/null || true)"
+now_s="$(date +%s)"
+if [ -n "${active_enter}" ] && [ "${active_enter}" != "n/a" ]; then
+  active_enter_s="$(date -d "${active_enter}" +%s 2>/dev/null || echo 0)"
+  age_s=$(( now_s - active_enter_s ))
+else
+  age_s=999999   # unknown timestamp — treat as long-running, no grace
+fi
+
+pid_alive() {
+  local pidfile="$1" pid
+  [ -f "${pidfile}" ] || return 1
+  pid="$(cat "${pidfile}" 2>/dev/null || true)"
+  [ -n "${pid}" ] || return 1
+  kill -0 "${pid}" 2>/dev/null
+}
+
+dead=0
+for pf in "${SERVER_PID}" "${PORTAL_PID}"; do
+  if ! pid_alive "${pf}"; then
+    if [ "${age_s}" -lt "${GRACE_PERIOD_S}" ]; then
+      log "pidfile ${pf} missing/dead but unit started ${age_s}s ago" \
+        "(< ${GRACE_PERIOD_S}s grace) — skipping"
+      exit 0
+    fi
+    log "pidfile ${pf} missing or its process is not running"
+    dead=1
+  fi
+done
+
+if [ "${dead}" -ne 1 ]; then
+  log "both server.pid and portal.pid processes alive — OK"
+  exit 0
+fi
+
+log "restarting ${SERVICE} (an Evennia daemon is dead while the unit reports active)"
+systemctl restart "${SERVICE}"
+
+# Off-box alert via offbox_alerting's shared arxii-alert helper. The restart
+# above always happens regardless; only the alert is skipped here. Guarded
+# (not just `|| true`'d) because site.yml runs offbox_alerting AFTER
+# app_deploy — on a brand-new box's FIRST converge, this watchdog's own
+# timer (installed by app_deploy, checks every minute) could fire before
+# offbox_alerting has installed /usr/local/sbin/arxii-alert at all, and a
+# bare call to a not-yet-existing script would itself be a spurious
+# "watchdog is broken" failure, unrelated to the actual Evennia-daemon-dead
+# condition this script is trying to report.
+if [ -x /usr/local/sbin/arxii-alert ]; then
+  /usr/local/sbin/arxii-alert "watchdog restarted ${SERVICE}: a dead Evennia daemon was detected"
+else
+  log "arxii-alert helper not installed yet (offbox_alerting hasn't converged this run) — skipping off-box alert"
+fi

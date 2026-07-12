@@ -8,6 +8,13 @@ ts="$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "{{ backups_staging }}"
 dump="{{ backups_staging }}/arxii-${ts}.sql.gz"
 
+# pg_hba.conf requires scram on 127.0.0.1 TCP (see roles/postgres/templates/
+# pg_hba.conf.j2 — no `trust` anywhere); libpq only honors a password via
+# PGPASSWORD (or ~/.pgpass), so without this every backup silently failed at
+# auth. POSTGRES_PASSWORD comes from the unit's EnvironmentFile (secrets_vault
+# maps ARXII_PG_PASSWORD -> POSTGRES_PASSWORD).
+export PGPASSWORD="${POSTGRES_PASSWORD}"
+
 pg_dump -U "{{ backups_db_user }}" -h 127.0.0.1 "{{ backups_db }}" | gzip -9 > "$dump"
 
 AWS_ACCESS_KEY_ID="${BACKUP_WRITER_ACCESS_KEY}" \
@@ -16,6 +23,9 @@ aws --endpoint-url "{{ backups_s3_endpoint }}" --region "{{ backups_region }}" \
     s3 cp "$dump" "s3://{{ backups_bucket }}/db/arxii-${ts}.sql.gz"
 
 # Keep only the newest local copy (the offsite job consumes it). Server-side
-# retention/immutability is Object Lock on the bucket, not this client.
+# retention/immutability was meant to be Object Lock on the bucket, not this
+# client — but Object Lock is a KNOWN GAP (#2236, see infra/README.md
+# "Known gap: Object Lock"); nothing here prunes the bucket, only the local
+# staging copy.
 ls -1t "{{ backups_staging }}"/arxii-*.sql.gz | tail -n +2 | xargs -r rm -f
 ln -sf "$dump" "{{ backups_staging }}/latest.sql.gz"

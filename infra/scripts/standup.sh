@@ -14,6 +14,10 @@
 #   - Secrets: reach the host ONLY as env -> the secrets_vault role's 0600
 #     EnvironmentFile. NEVER --extra-vars (process table). No secret echoed;
 #     `set +x` around anything secret-adjacent. No secret in the (public) repo.
+#   - Provisioning tokens (LINODE_TOKEN, CLOUDFLARE_API_TOKEN, TF_STATE_S3_*)
+#     are unset from this process's env before ansible-playbook runs —
+#     defense-in-depth so they can never leak onto the box even by accident;
+#     secrets_vault asserts their absence from the controller env.
 set -euo pipefail
 set +x
 
@@ -21,17 +25,31 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; readonly SCRIPT_DIR
 INFRA_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"; readonly INFRA_DIR
 readonly TF_DIR="${INFRA_DIR}/terraform/prod"
 readonly ANSIBLE_DIR="${INFRA_DIR}/ansible"
-readonly INVENTORY="${ANSIBLE_DIR}/inventory/hosts.yml"   # generated, gitignored
+readonly INVENTORY_DIR="${ANSIBLE_DIR}/inventory"
+readonly INVENTORY="${INVENTORY_DIR}/hosts.yml"                       # generated, gitignored
+readonly GROUP_VARS_FILE="${INVENTORY_DIR}/group_vars/arxii_prod.yml" # generated, gitignored
+
+readonly SSH_WAIT_TIMEOUT_S=300
+readonly SSH_WAIT_INTERVAL_S=5
 
 DRY_RUN=0
+
+log()  { printf '[standup] %s\n' "$*"; }
+fail() { printf '[standup] REFUSING: %s\n' "$*" >&2; exit 1; }
+
+# shellcheck source=infra/scripts/lib.sh
+# wait_for_tcp() below; depends on log()/fail() above being defined first.
+. "${SCRIPT_DIR}/lib.sh"
 
 # Runtime app secrets that MUST be pre-supplied (operator env / gated GitHub
 # Environment). Mirrors the secrets_vault map. The backup-writer keys are NOT
 # here — they are produced by tofu and exported post-apply.
 readonly REQUIRED_ARXII=(
-  ARXII_PG_PASSWORD ARXII_DJANGO_SECRET_KEY ARXII_CLOUDINARY_URL
+  ARXII_PG_PASSWORD ARXII_DJANGO_SECRET_KEY
+  ARXII_CLOUDINARY_CLOUD_NAME ARXII_CLOUDINARY_API_KEY ARXII_CLOUDINARY_API_SECRET
   ARXII_RESEND_API_KEY ARXII_R2_ACCESS_KEY_ID ARXII_R2_SECRET_ACCESS_KEY
   ARXII_OFFBOX_ALERT_TOKEN ARXII_CADDY_CF_DNS_TOKEN
+  ARXII_DJANGO_SUPERUSER_PASSWORD
 )
 # S3 backend config for the prod remote state (bootstrap output + the
 # manually-created scoped state key). Operator/CI-only.
@@ -49,13 +67,11 @@ Required (missing any => refuse, change nothing):
   LINODE_TOKEN, CLOUDFLARE_API_TOKEN          provisioning (never on the box)
   TF_STATE_BOOTSTRAPPED=1                      one-time bootstrap done
   TF_STATE_*                                   prod S3 backend config
+  TF_VAR_ssh_admin_cidrs                       JSON list, operator decision
   ARXII_*                                      runtime app secrets (env-only)
 See infra/README.md for the full gated-Environment contract.
 EOF
 }
-
-log()  { printf '[standup] %s\n' "$*"; }
-fail() { printf '[standup] REFUSING: %s\n' "$*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -67,26 +83,85 @@ done
 
 # Presence checks only — never print values; do not add `set -x` here.
 preflight() {
+  # jq parses the single `tofu output -json` read below (replacing ~15
+  # individual `tofu output` invocations — #2236 review); python3 validates
+  # the generated group_vars YAML further down. Both are local-toolchain
+  # prerequisites now, not just tofu/ansible/ssh (see infra/README.md).
+  command -v jq      >/dev/null 2>&1 || fail "jq not found (required to parse 'tofu output -json')"
+  command -v python3 >/dev/null 2>&1 || fail "python3 not found (required to validate the generated group_vars YAML)"
   [[ -n "${LINODE_TOKEN:-}" ]]         || fail "LINODE_TOKEN not set (operator/CI-only; never on the box)"
   [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || fail "CLOUDFLARE_API_TOKEN not set"
   [[ "${TF_STATE_BOOTSTRAPPED:-}" == "1" ]] \
       || fail "remote-state bootstrap not done (run terraform/bootstrap once; export TF_STATE_BOOTSTRAPPED=1)"
+  # SSH admin CIDR allowlist is a conscious operator decision, not a silent
+  # default — see infra/README.md "DECISION — SSH admin source CIDR
+  # allowlist". An empty/unset value refuses rather than falling back to the
+  # Terraform variable's open (0.0.0.0/0, ::/0) default.
+  [[ -n "${TF_VAR_ssh_admin_cidrs:-}" && "${TF_VAR_ssh_admin_cidrs}" != "[]" ]] \
+      || fail "TF_VAR_ssh_admin_cidrs not set — must be a JSON list of operator" \
+              "CIDRs (e.g. '[\"203.0.113.10/32\"]'); a conscious decision, see README.md"
   local v
   for v in "${REQUIRED_BACKEND[@]}" "${REQUIRED_ARXII[@]}"; do
     [[ -n "${!v:-}" ]] || fail "required env '${v}' is missing/empty"
   done
 }
 
+# TF_OUTPUT_JSON: the FULL `tofu output -json` object, read ONCE by main()
+# below and cached here — jqr/jqc query it via jq instead of each output
+# name triggering its own separate `tofu output <name>` process (~15
+# individual tofu invocations before this — #2236 review; tofu's own
+# state-read/refresh overhead was paid once per name instead of once, total).
+TF_OUTPUT_JSON=""
+# jqr <name>: raw scalar string for output <name>.
+jqr() { jq -r ".${1}.value" <<<"${TF_OUTPUT_JSON}"; }
+# jqc <name>: compact JSON for output <name> — already a valid YAML flow
+# sequence/object, embedded directly into the generated group_vars file
+# below (same contract the old tf_out_json had).
+jqc() { jq -c ".${1}.value" <<<"${TF_OUTPUT_JSON}"; }
+
+# First run: Linode injects the admin keypair into ROOT (cloud-init has no
+# arxadmin user yet — the base role creates it). Later runs: the base role
+# has already created arxadmin+key and ssh_hardening has disabled root
+# login, so root no longer answers. Probe non-destructively and pick
+# whichever answers; site.yml's base role is idempotent either way.
+select_ssh_user() {
+  local ip="$1"
+  local -a key_args=()
+  # Not fatal: CI always sets this (standup.yml exports
+  # ANSIBLE_PRIVATE_KEY_FILE before invoking this script); a local operator
+  # run may instead rely on ssh-agent already holding the key, which this
+  # probe (and ansible-playbook itself) will happily use with no -i flag.
+  # Just a nudge in case that assumption is wrong.
+  [[ -n "${ANSIBLE_PRIVATE_KEY_FILE:-}" ]] || \
+    log "ANSIBLE_PRIVATE_KEY_FILE not set — relying on ssh-agent for the admin key (CI always sets this; set it locally if the probe below fails to authenticate)."
+  [[ -n "${ANSIBLE_PRIVATE_KEY_FILE:-}" ]] && key_args=(-i "${ANSIBLE_PRIVATE_KEY_FILE}")
+  if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
+      "${key_args[@]}" "arxadmin@${ip}" true 2>/dev/null; then
+    echo "arxadmin"
+  else
+    echo "root"
+  fi
+}
+
 main() {
   preflight
 
+  # Brand-new host every run by design (no prior known_hosts entry can
+  # exist) — CI already sets this; this makes the local fallback path
+  # equivalent instead of hanging on a host-key prompt.
+  export ANSIBLE_HOST_KEY_CHECKING="${ANSIBLE_HOST_KEY_CHECKING:-False}"
+
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "DRY RUN — would run, in order (NO destroy, NO restore):"
-    log "  1. tofu -chdir='${TF_DIR}' init  (S3 backend from TF_STATE_*)"
+    log "  1. tofu -chdir='${TF_DIR}' init  (S3 backend from TF_STATE_*, Linode-compatible flags)"
     log "  2. tofu -chdir='${TF_DIR}' apply -auto-approve   (APPLY-ONLY)"
-    log "  3. generate ${INVENTORY} (0600) from tofu output instance_ipv4"
-    log "  4. export tofu-produced backup-writer keys -> ARXII_BACKUP_WRITER_*"
-    log "  5. ansible-playbook -i '${INVENTORY}' '${ANSIBLE_DIR}/site.yml'"
+    log "  3. one 'tofu output -json' read; jq-parse ip/fqdns/buckets/endpoints/ports/keys into shell vars"
+    log "  4. wait for SSH (port 22) on the new host, up to ${SSH_WAIT_TIMEOUT_S}s"
+    log "  5. probe ssh as arxadmin, else root -> resolved ansible_user"
+    log "  6. generate ${INVENTORY} (0600)"
+    log "  7. generate ${GROUP_VARS_FILE} (0600) from tofu output + env; validate it parses as YAML"
+    log "  8. unset LINODE_TOKEN CLOUDFLARE_API_TOKEN TF_STATE_S3_ACCESS_KEY TF_STATE_S3_SECRET_KEY"
+    log "  9. ansible-playbook -i '${INVENTORY}' '${ANSIBLE_DIR}/site.yml' (writer keys inline env)"
     log "No changes made."
     exit 0
   fi
@@ -94,7 +169,10 @@ main() {
   log "Provisioning (apply-only)…"
   # S3-backend creds via AWS_* env (NOT -backend-config args) so the secret
   # key never appears in any process argv. Non-secret backend config stays
-  # as -backend-config.
+  # as -backend-config. skip_requesting_account_id/skip_s3_checksum/
+  # skip_metadata_api_check: this is a non-AWS S3-compatible store (Linode
+  # Object Storage); the AWS SDK's account-id lookup and default checksum
+  # headers aren't supported there and break the backend without these.
   AWS_ACCESS_KEY_ID="${TF_STATE_S3_ACCESS_KEY}" \
   AWS_SECRET_ACCESS_KEY="${TF_STATE_S3_SECRET_KEY}" \
   TF_VAR_linode_token="${LINODE_TOKEN}" \
@@ -106,30 +184,131 @@ main() {
     -backend-config="endpoint=${TF_STATE_ENDPOINT}" \
     -backend-config="skip_credentials_validation=true" \
     -backend-config="skip_region_validation=true" \
-    -backend-config="use_path_style=true"
+    -backend-config="use_path_style=true" \
+    -backend-config="skip_requesting_account_id=true" \
+    -backend-config="skip_s3_checksum=true" \
+    -backend-config="skip_metadata_api_check=true"
 
   TF_VAR_linode_token="${LINODE_TOKEN}" \
   TF_VAR_cloudflare_api_token="${CLOUDFLARE_API_TOKEN}" \
   tofu -chdir="${TF_DIR}" apply -auto-approve -input=false   # APPLY-ONLY; no destroy path exists
 
-  log "Generating inventory from tofu output…"
-  local ip
-  ip="$(tofu -chdir="${TF_DIR}" output -raw instance_ipv4)"
-  install -d -m 0750 "${ANSIBLE_DIR}/inventory"
+  log "Reading tofu outputs (single 'tofu output -json' read)…"
+  # ONE `tofu output -json` call, cached in TF_OUTPUT_JSON — jqr/jqc (defined
+  # above) query it per-name below instead of each name spawning its own
+  # `tofu output <name>` process (~15 separate tofu invocations before this
+  # — #2236 review). Not `local`: main() is the only caller of jqr/jqc, but
+  # they're defined outside main(), so the var needs to reach them.
+  TF_OUTPUT_JSON="$(tofu -chdir="${TF_DIR}" output -json)"
+
+  # Non-sensitive scalars.
+  local ip web_fqdn telnet_fqdn backups_bucket backups_s3_endpoint backups_region
+  local r2_offsite_bucket r2_s3_endpoint tls_telnet_port
+  ip="$(jqr instance_ipv4)"
+  web_fqdn="$(jqr web_fqdn)"
+  telnet_fqdn="$(jqr telnet_fqdn)"
+  backups_bucket="$(jqr backups_bucket)"
+  backups_s3_endpoint="$(jqr backups_s3_endpoint)"
+  backups_region="$(jqr region)"
+  r2_offsite_bucket="$(jqr r2_offsite_bucket)"
+  r2_s3_endpoint="$(jqr r2_s3_endpoint)"
+  tls_telnet_port="$(jqr tls_telnet_port)"
+  # Non-sensitive lists — already valid YAML flow sequences.
+  local cf_ipv4_cidrs_json cf_ipv6_cidrs_json ssh_admin_cidrs_json authorized_keys_json
+  cf_ipv4_cidrs_json="$(jqc cloudflare_ipv4_cidrs)"
+  cf_ipv6_cidrs_json="$(jqc cloudflare_ipv6_cidrs)"
+  ssh_admin_cidrs_json="$(jqc ssh_admin_cidrs)"
+  authorized_keys_json="$(jqc authorized_keys)"
+  # Sensitive — produced by tofu, handed to ansible via env in-memory only.
+  local backup_writer_access_key backup_writer_secret_key
+  backup_writer_access_key="$(jqr backup_writer_access_key)"
+  backup_writer_secret_key="$(jqr backup_writer_secret_key)"
+  # Only scalars/lists reached local shell vars above (never echoed); the
+  # cached JSON blob itself also carries the same sensitive values — drop it
+  # now rather than let it linger in memory for the rest of the run.
+  TF_OUTPUT_JSON=""
+
+  wait_for_tcp "${ip}" 22 "${SSH_WAIT_TIMEOUT_S}" "${SSH_WAIT_INTERVAL_S}"
+
+  local ssh_user
+  ssh_user="$(select_ssh_user "${ip}")"
+  log "Connecting as '${ssh_user}'."
+
+  log "Generating inventory + group_vars from tofu output…"
+  install -d -m 0750 "${INVENTORY_DIR}" "${INVENTORY_DIR}/group_vars"
   umask 077
+
+  # ansible_user: resolved by select_ssh_user above. First converge ever:
+  # Linode injected the admin key into root (no arxadmin exists yet), so we
+  # connect as root; the base role then creates arxadmin+key and
+  # ssh_hardening disables root login, so every later run connects as
+  # arxadmin instead.
   cat > "${INVENTORY}" <<EOF
 arxii_prod:
   hosts:
     prod:
       ansible_host: ${ip}
-      ansible_user: arxii
+      ansible_user: ${ssh_user}
 EOF
 
+  # dh_allowed_hosts includes both fqdns per django_hardening's own
+  # defaults/main.yml contract ("= [web_fqdn, telnet_fqdn]").
+  cat > "${GROUP_VARS_FILE}" <<EOF
+---
+# GENERATED by standup.sh from tofu output + env — gitignored, do not hand-
+# edit; re-run the button to regenerate.
+
+# host_firewall (roles/host_firewall/defaults/main.yml)
+hostfw_ssh_admin_cidrs: ${ssh_admin_cidrs_json}
+hostfw_cloudflare_ipv4_cidrs: ${cf_ipv4_cidrs_json}
+hostfw_cloudflare_ipv6_cidrs: ${cf_ipv6_cidrs_json}
+hostfw_tls_telnet_port: ${tls_telnet_port}
+
+# caddy (roles/caddy/defaults/main.yml)
+caddy_web_fqdn: "${web_fqdn}"
+caddy_acme_email: "${ARXII_ACME_EMAIL:-admin@${TF_VAR_domain}}"
+
+# tls_telnet_cert (roles/tls_telnet_cert/defaults/main.yml)
+ttc_web_fqdn: "${web_fqdn}"
+
+# django_hardening (roles/django_hardening/defaults/main.yml)
+dh_allowed_hosts: ["${web_fqdn}", "${telnet_fqdn}"]
+dh_web_fqdn: "${web_fqdn}"
+dh_tls_telnet_port: ${tls_telnet_port}
+dh_default_from_email: "noreply@${TF_VAR_domain}"
+
+# backups (roles/backups/defaults/main.yml)
+backups_bucket: "${backups_bucket}"
+backups_s3_endpoint: "${backups_s3_endpoint}"
+backups_region: "${backups_region}"
+
+# offsite_replication (roles/offsite_replication/defaults/main.yml)
+offsite_r2_bucket: "${r2_offsite_bucket}"
+offsite_r2_endpoint: "${r2_s3_endpoint}"
+
+# base — NEW var; authorized_keys are public, not sensitive. Consumed by a
+# base-role task (Task B) that provisions the arxadmin login user.
+admin_authorized_keys: ${authorized_keys_json}
+EOF
+
+  # A malformed heredoc substitution (an unescaped quote/bracket inside a
+  # tofu output value, say) would otherwise surface only much later as an
+  # opaque ansible-playbook parse error against a file the operator never
+  # looks at directly. Fail loudly here instead, against the actual file.
+  python3 -c "import yaml, sys; yaml.safe_load(open(sys.argv[1]))" "${GROUP_VARS_FILE}" \
+    || fail "generated ${GROUP_VARS_FILE} is not valid YAML — this is a bug in standup.sh's heredoc, not an operator error"
+
+  # Defense-in-depth: secrets_vault asserts these are absent from the
+  # controller env. Captured into shell vars above (they need backend/
+  # provisioning creds via `tofu output`); nothing after this point may call
+  # `tofu output` again.
+  unset LINODE_TOKEN CLOUDFLARE_API_TOKEN TF_STATE_S3_ACCESS_KEY TF_STATE_S3_SECRET_KEY
+
   log "Converging host (idempotent)…"
-  # Backup-writer keys are produced by tofu (sensitive outputs) and handed to
-  # ansible via env in-memory — never written to disk/log, never --extra-vars.
-  ARXII_BACKUP_WRITER_ACCESS_KEY="$(tofu -chdir="${TF_DIR}" output -raw backup_writer_access_key)" \
-  ARXII_BACKUP_WRITER_SECRET_KEY="$(tofu -chdir="${TF_DIR}" output -raw backup_writer_secret_key)" \
+  # Backup-writer keys are handed to ansible via env in-memory — never
+  # written to disk/log, never --extra-vars.
+  ARXII_BACKUP_WRITER_ACCESS_KEY="${backup_writer_access_key}" \
+  ARXII_BACKUP_WRITER_SECRET_KEY="${backup_writer_secret_key}" \
   ansible-playbook -i "${INVENTORY}" "${ANSIBLE_DIR}/site.yml"
 
   log "Stand-up complete. (Reminder: revoke the provisioning tokens at the provider — see README.)"

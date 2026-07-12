@@ -321,3 +321,34 @@ class CraftingQuoteSerializerStationStatusTests(TestCase):
         )
         data = CraftingQuoteSerializer(quote).data
         self.assertIsNone(data["station_status"])
+
+
+class ItemCreateBrowseAndQuoteTests(CraftingApiTestCase):
+    """GET /api/items/crafting/create/recipes/ + /quote/ (#2240)."""
+
+    def _craftable_template(self):
+        from world.items.models import ItemTemplate
+
+        return ItemTemplate.objects.get(name="Craftable Dagger")
+
+    def test_recipes_lists_the_craftable_templates(self):
+        response = self.client.get("/api/items/crafting/create/recipes/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [row["name"] for row in response.data]
+        self.assertIn("Craftable Dagger", names)
+
+    def test_quote_returns_costs_and_capped_quality(self):
+        template = self._craftable_template()
+        response = self.client.get("/api/items/crafting/create/quote/", {"template": template.pk})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("costs", response.data)
+        self.assertIn("max_quality_tier", response.data)
+        self.assertIn("affordable", response.data)
+
+    def test_quote_without_template_is_400(self):
+        response = self.client.get("/api/items/crafting/create/quote/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_quote_unknown_template_is_404(self):
+        response = self.client.get("/api/items/crafting/create/quote/", {"template": 999999})
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

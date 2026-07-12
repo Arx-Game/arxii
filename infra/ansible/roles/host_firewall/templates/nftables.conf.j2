@@ -2,7 +2,11 @@
 # Managed by Ansible (host_firewall). Default-deny inbound; mirrors the
 # Linode edge firewall. The PLAINTEXT telnet port is intentionally ABSENT
 # (closed here AND TELNET_ENABLED=False in Evennia).
-flush ruleset
+#
+# Scoped to OUR table only — never `flush ruleset` (that wipes fail2ban's
+# own nftables table too, silently no-opping every ban on reload).
+add table inet filter
+flush table inet filter
 
 table inet filter {
     set cf4 { type ipv4_addr; flags interval;
@@ -13,6 +17,14 @@ table inet filter {
 {% endif %}    }
     set sshadmin { type ipv4_addr; flags interval;
 {% if hostfw_ssh_admin_cidrs %}        elements = { {{ hostfw_ssh_admin_cidrs | select('search', '\\.') | join(', ') }} }
+{% endif %}    }
+    # IPv6 admin CIDRs (mirrors terraform's linode_firewall module, which
+    # splits the same hostfw_ssh_admin_cidrs list on colon-presence via
+    # strcontains(c, ":") — an IPv6-only operator CIDR used to pass the edge
+    # firewall and then get silently dropped here, since only the v4 set was
+    # ever matched below).
+    set sshadmin6 { type ipv6_addr; flags interval;
+{% if hostfw_ssh_admin_cidrs %}        elements = { {{ hostfw_ssh_admin_cidrs | select('search', ':') | join(', ') }} }
 {% endif %}    }
 
     chain input {
@@ -25,7 +37,8 @@ table inet filter {
         ip6 nexthdr icmpv6 accept
 
         # SSH — admin allowlist (open by default at the edge; operator decision)
-        tcp dport {{ "%d" | format(22) }} ip saddr @sshadmin accept
+        tcp dport {{ hostfw_ssh_port }} ip saddr @sshadmin accept
+        tcp dport {{ hostfw_ssh_port }} ip6 saddr @sshadmin6 accept
 
         # Web — Cloudflare ranges only (origin not web-reachable directly)
         tcp dport { 80, 443 } ip saddr @cf4 accept

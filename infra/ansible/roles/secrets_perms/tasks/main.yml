@@ -1,7 +1,10 @@
 ---
 # Assertion role — verifies the on-box secret posture. Object Lock on the
-# backup buckets (not key perms) remains the authoritative backstop against
-# an on-box backup-key compromise; this just guards local hygiene.
+# backup buckets was meant to be the authoritative backstop against an
+# on-box backup-key compromise, but it's a KNOWN GAP (#2236 — see
+# infra/README.md "Known gap: Object Lock"); until it lands, bucket-scoped
+# writer keys + the independent R2 copy are the actual backstop, and this
+# role's local-hygiene checks matter more than they otherwise would.
 
 - name: Stat the EnvironmentFile
   ansible.builtin.stat:

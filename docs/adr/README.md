@@ -153,6 +153,7 @@ treat those names as hints to confirm, not gospel.
 - [0120 — Cross-Area travel rides the exit graph; Area coordinates are parent-local rendering data](0120-cross-area-travel-rides-the-exit-graph.md) (extends ADR-0081/0085)
 - [0121 — Portal anchors are a stackable magic-app model, not a RoomFeatureKind](0121-portal-anchors-are-a-stackable-magic-model.md) (related ADR-0010)
 - [0122 — Battle-earned Legend is win-gated at authored tier values, with a standout exception for both sides](0122-battle-legend-is-win-gated-with-standout-exceptions.md) (related ADR-0010)
+- [0123 — Swarm math is derived proportional losses, not a second health pool](0123-swarm-math-is-derived-losses-not-a-second-health-pool.md) (related #1712/#1713/#1714)
 - [0124 — Redirect destination is declared, not improvised](0124-redirect-destination-is-declared-not-improvised.md) (extends ADR-0032/0060; related ADR-0023)
 
 ### Gift & resonance economy

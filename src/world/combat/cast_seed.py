@@ -196,6 +196,36 @@ def seed_or_feed_encounter_from_benign_intervention(
     return participant
 
 
+def seat_caster_for_benign_intervention(
+    *,
+    caster_sheet: CharacterSheet,
+    target_sheets: list[CharacterSheet],
+    scene: Scene,
+) -> CombatParticipant | None:
+    """Seat the caster in the first encounter found among embattled targets.
+
+    Iterates target sheets, calling ``seed_or_feed_encounter_from_benign_intervention``
+    for each until one returns non-None (caster seated). Returns None when no
+    target is embattled in any feedable encounter.
+
+    Excludes the caster's own sheet from the target list — a self-cast is not
+    an intervention at another PC, and ``seed_or_feed_encounter_from_benign_intervention``
+    has no self-cast guard (it checks only whether the target is embattled, not
+    whether the target is the caster).
+    """
+    for target_sheet in target_sheets:
+        if target_sheet.pk == caster_sheet.pk:
+            continue
+        participant = seed_or_feed_encounter_from_benign_intervention(
+            caster_sheet=caster_sheet,
+            target_sheet=target_sheet,
+            scene=scene,
+        )
+        if participant is not None:
+            return participant
+    return None
+
+
 @transaction.atomic
 def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance marker flag
     *,

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Managed by Ansible (offbox_alerting). Shared off-box dead-man's-switch
+# "/fail" alert POST — extracted from arxii-heartbeat.sh.j2,
+# arxii-alert-failure.sh.j2, and app_deploy's arxii-watchdog.sh.j2 (five
+# byte-identical `curl -fsS -m 10 "${base}/fail" -d "..." >/dev/null || true`
+# call sites — #2236 review). Owned here, not by any of its callers, because
+# this role already owns the OFFBOX_ALERT_TOKEN / base-ping-URL / "/fail"
+# convention (see arxii-heartbeat.sh.j2's header comment).
+#
+# Usage: arxii-alert <message>
+#
+# OFFBOX_ALERT_TOKEN (the base ping URL, including the check id) must
+# already be in the environment — every caller sources the secrets_vault
+# EnvironmentFile via its own systemd unit's EnvironmentFile= line, so this
+# script itself never touches the EnvironmentFile directly.
+set -euo pipefail
+set +x
+
+msg="${1:?usage: arxii-alert <message>}"
+base="${OFFBOX_ALERT_TOKEN:?OFFBOX_ALERT_TOKEN not set}"
+
+curl -fsS -m 10 "${base}/fail" -d "${msg}" >/dev/null || true

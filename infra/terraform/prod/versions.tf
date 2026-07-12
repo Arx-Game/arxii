@@ -25,6 +25,9 @@ terraform {
 
 provider "linode" {
   token = var.linode_token # TF_VAR_linode_token; operator/CI-only, never on box
+  # Bucket versioning/ACL ops need S3 (not Linode API) creds; temp keys are
+  # generated per-operation and never persisted to state or disk.
+  obj_use_temp_keys = true
 }
 
 provider "cloudflare" {

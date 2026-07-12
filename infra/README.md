@@ -14,14 +14,44 @@ Environment secrets and invokes the exact same script below (one source of truth
 
 **Equivalent fallback (local):**
 `scripts/standup.sh` = validate prerequisites → `tofu apply` (apply-only) → `ansible-playbook site.yml`.
+Local toolchain: `tofu`, `ansible-playbook` (+ collections), `ssh`, **`jq`** (parses the single
+`tofu output -json` read into the generated inventory/group_vars — preinstalled on GitHub-hosted
+`ubuntu-latest` runners, so the CI button needs no extra install step; a local fallback run may
+need `apt install jq`/equivalent), and `python3` with PyYAML (validates the generated group_vars
+file parses as YAML before handing it to Ansible — already a transitive dependency of
+`ansible-core`, so nothing extra to install if `ansible-playbook` is already set up locally).
 
 - **Apply-only and safe to re-run.** It never runs `tofu destroy`, never restores data, never
   re-initialises an existing database. Pressing it twice is a no-op, not a reset.
+- **SSH identity.** The very first converge (brand-new host) connects as `root` — Linode injects
+  the operator's key there via cloud-init before `arxadmin` exists. That first run's `base` role
+  creates a dedicated `arxadmin` sudo user and installs the admin key(s) there; `ssh_hardening`
+  then disables root login. Every later run connects as `arxadmin` instead — `standup.sh` probes
+  both (non-destructively, `select_ssh_user()`) and picks whichever answers, so the operator never
+  hand-edits the inventory user. The `arxii` service account stays a non-login (nologin) user.
 - **Restore is deliberately separate.** Disaster recovery is `scripts/restore.sh`, a distinct,
   human-gated tool that refuses to run without an explicit `--i-understand-this-overwrites` flag.
-  It is *not* reachable from the button.
+  It is *not* reachable from the button. It terminates existing connections and drops/recreates the
+  target database before restoring (a half-applied plain-SQL restore can otherwise pass a naive
+  "has tables" check), then verifies both `django_migrations` row-count and a floor of public
+  tables. When restoring into the box's own local Postgres (the default, `RESTORE_TARGET_HOST=
+  127.0.0.1`), it stops `arxii.service` first and restarts it afterward — even on failure, via a
+  trap.
+- **Rehearsal proves restore works, without ever touching prod or your machine.**
+  `scripts/restore-rehearsal.sh` spins up an ephemeral stage box (separate Terraform state and
+  credentials), installs Postgres on it, then runs `restore.sh` *on that box over SSH* — restoring
+  into the stage box's own loopback Postgres, never the operator's local machine (the original bug
+  this rework fixed: `RESTORE_TARGET_HOST` defaulting to `127.0.0.1` used to mean "whoever invoked
+  the script"). It rehearses both the Linode and R2 copies in one run, then always tears the stage
+  down (trap, even on failure).
 - **Telnet:** TLS-only. A TLS-capable MUD client (Mudlet, TinTin++, etc.) is required; the bare
   `telnet` command-line binary is intentionally unsupported. Plaintext telnet is closed.
+- **Single entry point — state has no locking.** The S3-compatible backend (Linode Object
+  Storage) does not support Terraform state locking. Never run the local `standup.sh` fallback
+  while the CI button may be running (or vice versa) — a concurrent `tofu apply` against the
+  same state can corrupt it. Treat the GitHub Actions button as the one true entry point; use
+  the local fallback only when you know the button isn't running (its `concurrency` group
+  serializes runs of itself, but cannot see a local run).
 
 ## Human prerequisites checklist (do these once, before pressing the button)
 
@@ -54,7 +84,8 @@ Environment secrets and invokes the exact same script below (one source of truth
       high-stakes; this removes the "powerful standing token sitting in GitHub forever"
       risk.
 - [ ] The **runtime app secrets stay** (`ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`,
-      `ARXII_RESEND_API_KEY`, the R2 credential, the SSH admin private key, etc.).
+      the Cloudinary trio, `ARXII_RESEND_API_KEY`, the R2 credential, the SSH admin
+      private key, etc.).
       Unlike the provisioning tokens above, these are long-lived: the running game needs
       them every day. Rotate only on suspicion of compromise. Do **not** pass them as
       workflow inputs (dispatch inputs are unmasked — they belong in Environment Secrets,
@@ -79,8 +110,24 @@ NEVER reach the box; revoke at the provider after each successful run):**
 **Pre-stored by the operator — runtime app secrets (ansible step → exported
 as `ARXII_*` on that step ONLY; rendered to the 0600 on-box EnvironmentFile;
 long-lived, rotate on suspicion):**
-- `ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`, `ARXII_CLOUDINARY_URL`,
+- `ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`,
+  `ARXII_CLOUDINARY_CLOUD_NAME`, `ARXII_CLOUDINARY_API_KEY`,
+  `ARXII_CLOUDINARY_API_SECRET` (three discrete secrets — settings.py's
+  `cloudinary.config()` reads each individually via `env()`, so a single
+  combined `CLOUDINARY_URL` would be silently ignored, not an error),
   `ARXII_RESEND_API_KEY`, `ARXII_OFFBOX_ALERT_TOKEN`
+- `ARXII_PG_PASSWORD` also feeds a *derived*, non-secret-named env var:
+  `secrets_vault` renders `DATABASE_URL=postgres://arxii:<urlencoded
+  password>@127.0.0.1:5432/arxii` on-box (django-environ's `env.db()` reads
+  `DATABASE_URL` directly — settings.py has no discrete-`PG*`-vars path).
+  The password is passed through Ansible's `urlencode` filter so special
+  characters (`@`, `:`, `/`, etc.) in a generated password survive URL
+  parsing intact — if you ever hand-set `ARXII_PG_PASSWORD` yourself rather
+  than letting a generator produce it, any of those characters is safe to
+  use; the encoding step handles it. `POSTGRES_PASSWORD` (the discrete var)
+  is *also* still rendered — the postgres role's own tasks, the backup
+  script, and psql's `PGPASSWORD` all read that key directly, never
+  `DATABASE_URL`.
 - `ARXII_CADDY_CF_DNS_TOKEN` — Cloudflare **DNS-edit-scoped** token used by
   Caddy for ACME DNS-01 (distinct from the provisioning Cloudflare token;
   needed because Cloudflare proxies the web hostname so HTTP-01 won't work)
@@ -111,26 +158,51 @@ repo/Environment **Variables**, not Secrets. The superuser username/email
 default to `arxii_admin` / `admin@example.invalid` if you leave the
 Variables unset — fine for a private playtest box, override for prod.
 
+- `ARXII_SSH_ADMIN_CIDRS` — **required**, maps to `TF_VAR_ssh_admin_cidrs`. A
+  JSON array of operator CIDRs, e.g. `["203.0.113.10/32"]`. `standup.sh`'s
+  preflight refuses to run at all if this is unset/empty — the SSH admin
+  allowlist is a conscious decision (see the checklist above), not a
+  default to leave unmade.
+- `ARXII_ACME_EMAIL` — optional; Caddy's ACME account email. Defaults to
+  `admin@<domain>` if unset.
+
 ## What the button actually does to game state (first run vs. re-run)
+
+Before touching the box, `standup.sh` reads `tofu output` and writes a gitignored
+`ansible/inventory/group_vars/arxii_prod.yml` (0600) — firewall allow-lists, FQDNs,
+bucket/endpoint config, the admin's public keys — so none of that needs hand-editing or
+living in the repo; every ansible role's fail-closed asserts (host_firewall,
+django_hardening, ...) exist because a role must never silently converge against an empty,
+ungenerated config.
 
 The deploy is idempotent: re-runs are safe and mostly no-ops. Per release,
 after the box itself is provisioned, the app_deploy role runs (in order):
 
 1. **Git checkout** the release ref into `/opt/arxii/releases/<ref>`.
-2. **Atomic symlink** `/opt/arxii/current → /opt/arxii/releases/<ref>`.
-3. **`uv sync --frozen --no-dev`** — rebuild the project venv from the
+2. **`uv sync --frozen --no-dev`** — rebuild the project venv from the
    locked `uv.lock` (no implicit resolution drift). Idempotent: a no-op
    if nothing changed.
+3. **Frontend build, on-box.** Installs Node.js 20.x (NodeSource, signed apt
+   keyring) and pnpm (corepack) if not already present, then
+   `pnpm install --frozen-lockfile && pnpm build` for the release's frontend
+   bundle. Node/pnpm installation only happens once; the frontend rebuild
+   recurs every release. **The first deploy takes noticeably longer** than
+   subsequent ones as a result.
 4. **`evennia migrate --noinput`** — apply Django/Evennia migrations.
    Idempotent: a no-op once everything is applied.
 5. **`evennia collectstatic --noinput`** — gather admin/Evennia static
    files for Caddy. Idempotent.
-6. **Superuser check + create**. If any superuser already exists in the DB
+6. **Atomic symlink** `/opt/arxii/current → /opt/arxii/releases/<ref>` — done
+   **last** among the release-prep steps, only after the venv, frontend
+   build, migrations, and static collection all succeed against the new
+   release directory. A failure at any earlier step leaves `current`
+   pointing at the last-good release instead of a half-prepared one.
+7. **Superuser check + create**. If any superuser already exists in the DB
    (the *common* case after the first run), the create step is **skipped
    entirely** — your existing superuser is untouched, password unchanged.
    Only on a truly first run (or after a manual delete) does it create
    one from the `DJANGO_SUPERUSER_*` env vars.
-7. **systemd** brings the service up (`evennia start` under the gated
+8. **systemd** brings the service up (`evennia start` under the gated
    service user, in the `arxii.slice` cgroup with the memory cap from
    `base_game_memory_max`). On subsequent deploys it `reloads` instead
    of restarting, so the Portal keeps connected players online across
@@ -143,6 +215,30 @@ What the button **does not** do (deliberately, by-design):
 - It does not run `tofu destroy`, drop the database, reset the
   superuser, or restore from backup. Disaster recovery is the separate,
   `--i-understand-this-overwrites`-gated `scripts/restore.sh`.
+
+## Ongoing safety nets (after stand-up)
+
+Installed once by the converge, then running unattended on the box:
+
+- **Portal/Server watchdog** (`arxii-watchdog.timer`, every minute). Evennia runs Server +
+  Portal as two separate processes; if the unit's supervised process (Server) stays up but
+  the Portal alone dies, systemd sees the unit as "active" and does nothing while players
+  can no longer connect. The watchdog checks both pidfiles, restarts the unit, and fires an
+  off-box alert when either is dead but the unit claims active.
+- **Backup-failure alerting.** `arxii-backup.service` and `arxii-offsite.service` both carry
+  `OnFailure=` units that fire an immediate off-box alert on failure; the daily heartbeat
+  independently re-flags any backup/offsite unit still in a failed state, in case the
+  `OnFailure=` alert itself didn't land.
+- **Telnet cert renewal** (`arxii-telnet-cert.timer`, daily). Caddy's ACME cert is the
+  source of truth; Evennia's SSL-telnet paths are hardcoded and don't reload on `evennia
+  reload`, so this timer syncs the cert in and reboots Evennia **only when the cert
+  actually changed** (no needless player disconnects). Synced to `GAME_DIR/server/ssl.cert`
+  and `ssl.key`, where `GAME_DIR` is `/opt/arxii/current/src` — the `src/` dir nested inside
+  the `current` symlink, NOT `current` itself (the same distinction the release-flip step
+  above draws for `app_gamedir`; `roles/tls_telnet_cert`'s `ttc_game_dir` and
+  `roles/django_hardening`'s `dh_game_dir` both had this off-by-one until #2236 review).
+  The heartbeat's cert-expiry and self-signed-issuer checks catch the case where this sync
+  has silently stopped working.
 
 ## Generating the SSH admin key (one-time)
 
@@ -193,6 +289,26 @@ Two things that catch people out:
   the runner can't reach the host for any reason, that file is your only
   emergency way back in short of re-provisioning the box from a fresh
   Terraform apply.
+
+## Known gap: Object Lock
+
+Both backup copies (the Linode primary bucket and the Cloudflare R2 offsite bucket) have
+**versioning enabled but not Object Lock (immutability).** This is a known gap, not an oversight:
+
+- The Linode provider (pinned `~> 2.20`) exposes no Object Lock argument on
+  `linode_object_storage_bucket` at all — there is nothing to wire without fabricating a resource
+  the provider doesn't support.
+- Cloudflare's R2 lock resource (`cloudflare_r2_bucket_lock`) needs provider `>= 5.4`; this repo
+  pins `~> 4.40`.
+
+**Compensating posture in the meantime:** the on-box Linode writer key is bucket-scoped
+(read/write only to the primary backups bucket, cannot reach any other bucket or account) and
+the R2 offsite copy is a genuinely independent second copy — separate provider, separate
+account, separate out-of-band credential — so a compromise of one copy's credential cannot
+reach or delete the other. Neither backstop is immutability against a compromised credential
+with delete rights on *its own* bucket, which is the residual risk Object Lock would close.
+Tracked in #2236; revisit when either provider pin is deliberately bumped past the versions
+above.
 
 ## Layout
 

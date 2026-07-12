@@ -3,6 +3,16 @@
 # HARDCODED SSL-telnet paths. `evennia reload` does NOT reload the Portal SSL
 # context — only a full `evennia reboot` does (drops TLS-telnet players), so
 # we reboot ONLY when the cert actually changed (no needless disconnects).
+#
+# Always soft-exits 0 when Caddy has no cert yet — including when invoked by
+# the daily timer/service (no --require-cert flag; #2236 review removed it).
+# The timer's Persistent=true means it fires immediately on a fresh
+# stand-up, before Caddy's first ACME issuance has necessarily completed —
+# a --require-cert-style hard failure there would be a guaranteed spurious
+# failed unit on every first converge. The heartbeat (roles/offbox_alerting)
+# is the real detector for "cert never synced": it watches this unit's
+# systemctl is-failed state (now always healthy on its own) AND separately
+# flags a self-signed Caddy cert (a synced cert is never self-signed).
 set -euo pipefail
 
 SRC_CRT="$(ls {{ ttc_caddy_cert_glob }} 2>/dev/null | head -1 || true)"

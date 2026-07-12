@@ -147,7 +147,9 @@ class TestAcceptedEntranceCastHooks(CastScenarioMixin):
         )
 
     def test_accepted_non_entrance_cast_no_hooks(self) -> None:
-        """Regression pin: a non-entrance accepted cast fires none of the #2183 hooks."""
+        """A non-entrance accepted cast fires none of the #2183 entrance hooks (flourish,
+        suggestion), but DOES seat the caster in combat per #2226's generalized
+        benign-intervention seating."""
         self._make_embattled_encounter()
 
         technique = make_benign_castable_technique()
@@ -165,6 +167,7 @@ class TestAcceptedEntranceCastHooks(CastScenarioMixin):
         with patch("actions.services.perform_check", return_value=_make_check_mock(3)):
             resolve_accepted_cast(cast.request)
 
+        # Entrance-only hooks: flourish and suggestion do NOT fire for non-entrance casts.
         self.assertFalse(
             PendingEntryFlourishOffer.objects.filter(
                 character_sheet=self.caster.character_sheet
@@ -175,7 +178,9 @@ class TestAcceptedEntranceCastHooks(CastScenarioMixin):
                 character_sheet=self.caster.character_sheet
             ).exists()
         )
-        self.assertFalse(
+        # #2226: combat seating IS generalized — a non-entrance benign accepted cast
+        # at an embattled ally seats the caster.
+        self.assertTrue(
             CombatParticipant.objects.filter(
                 character_sheet=self.caster.character_sheet,
             ).exists()

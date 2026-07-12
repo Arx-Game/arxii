@@ -1,8 +1,16 @@
 ---
-dh_game_dir: /opt/arxii/current
+# Evennia GAME_DIR is the src/ dir nested inside app_current (see
+# roles/app_deploy/defaults/main.yml app_gamedir: /opt/arxii/current/src —
+# "server/conf/settings.py is at app_gamedir/server/conf/settings.py"), NOT
+# app_current itself — same off-by-one this role used to share with
+# tls_telnet_cert's ttc_game_dir (#2236 review). Get this wrong and the
+# overlay deploys to a path settings.py's sibling import never reaches.
+dh_game_dir: /opt/arxii/current/src
 dh_settings_path: "{{ dh_game_dir }}/server/conf/secret_settings.py"
 dh_service_user: arxii
 dh_service_group: arxii
 dh_allowed_hosts: []                 # = [web_fqdn, telnet_fqdn] (tofu outputs)
+dh_web_fqdn: "play.example"          # = tofu output web_fqdn; feeds WEBSOCKET_CLIENT_URL
+dh_tls_telnet_port: 4003             # = tofu output tls_telnet_port; feeds SSL_PORTS
 dh_default_from_email: "Arx II <noreply@example>"
 dh_forbidden_mta_packages: [postfix, sendmail, exim4, exim4-base]

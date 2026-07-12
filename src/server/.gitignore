@@ -1,1 +1,7 @@
 server.db
+# Rendered by Ansible (roles/django_hardening) on the prod box only — see
+# settings.py's guarded overlay import. The root .gitignore's
+# "server/conf/secret_settings.py" entry is anchored at the repo root (any
+# slash in the middle of a pattern anchors it, per gitignore(5)), so it does
+# NOT match this file's actual path under src/ — this entry is the real one.
+conf/secret_settings.py

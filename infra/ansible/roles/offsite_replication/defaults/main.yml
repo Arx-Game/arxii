@@ -5,5 +5,9 @@ offsite_r2_endpoint: "https://REPLACE.r2.cloudflarestorage.com"  # = tofu output
 offsite_window: "03:50"   # shortly AFTER backups_window so the dump exists
 # Uses ONLY the SEPARATE R2 credential (R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY
 # from the EnvironmentFile) — distinct from Linode, which is what makes the
-# 3-2-1 genuinely independent. R2 Object Lock is the backstop; this client
-# never deletes remote objects.
+# 3-2-1 genuinely independent. R2 Object Lock would be the immutability
+# backstop but is a KNOWN GAP (#2236, this repo pins the Cloudflare provider
+# below the version `cloudflare_r2_bucket_lock` needs — see infra/README.md
+# "Known gap: Object Lock"); this client never deletes remote objects
+# regardless, and the R2 credential's independence from Linode's is the
+# actual backstop today.

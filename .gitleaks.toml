@@ -32,4 +32,10 @@ paths = [
   '''(^|/)tests?/''',
   '''(^|/)test_[^/]*\.py$''',
   '''\.test\.[jt]sx?$''',
+  # Django migrations: generated schema code whose `dependencies` tuples
+  # (("secrets", "0010_alter_secret_provenance")) match the broad rule's
+  # key-ish-identifier-with-long-value shape. No hand-written values live in
+  # migrations (schema-only pre-production, ADR-0013); every other rule
+  # still scans them.
+  '''(^|/)migrations/[^/]*\.py$''',
 ]
