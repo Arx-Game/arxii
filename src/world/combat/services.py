@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
+    from world.mechanics.models import ObjectProperty
     from world.scenes.models import Interaction, Persona
     from world.stories.models import Story
 
@@ -1638,10 +1639,46 @@ def resolve_cast_position_params(
     return resolved
 
 
+def _validate_redirect_declaration(
+    encounter: CombatEncounter,
+    redirect_opponent_target: CombatOpponent | None,
+    redirect_object_target: ObjectDB | None,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Validate a redirect declaration's destination kwargs (#2210).
+
+    Extracted from :func:`declare_interpose` to keep its complexity in check.
+    Mutually exclusive; each populated kwarg is validated against the
+    encounter it's being declared into. Both ``None`` ("away") needs no
+    validation.
+    """
+    from world.mechanics.services import volatile_object_property  # noqa: PLC0415
+
+    if redirect_opponent_target is not None and redirect_object_target is not None:
+        msg = "Cannot interpose: choose at most one redirect destination."
+        raise ValueError(msg)
+
+    if redirect_opponent_target is not None and (
+        redirect_opponent_target.encounter_id != encounter.pk
+        or redirect_opponent_target.status != OpponentStatus.ACTIVE
+    ):
+        msg = "Redirect target must be an active opponent in this encounter."
+        raise ValueError(msg)
+
+    if redirect_object_target is not None:
+        if redirect_object_target.db_location_id != encounter.room_id:
+            msg = "Redirect target must be an object in the encounter room."
+            raise ValueError(msg)
+        if volatile_object_property(redirect_object_target) is None:
+            msg = "Redirect target is not volatile."
+            raise ValueError(msg)
+
+
 def declare_interpose(
     participant: CombatParticipant,
     ally: CombatParticipant | None = None,
     technique: Technique | None = None,
+    redirect_opponent_target: CombatOpponent | None = None,
+    redirect_object_target: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
 ) -> CombatRoundAction:
     """Declare an interposing maneuver — passives-only, auto-ready.
 
@@ -1653,16 +1690,23 @@ def declare_interpose(
     carries a protective reactive-trigger technique into the declaration: the
     participant must know it (``CharacterTechnique``) and it must classify to a
     protective flavor via ``protective_flavor`` (barrier/blink/redirect,
-    `world/magic/services/targeting.py`). The ``redirect`` flavor (Mirror
-    Ward-style reflection) is rejected here — sub 5 lifts this restriction. A
-    valid technique is written to ``focused_action`` instead of the usual
-    zeroing; passives are still zeroed either way.
+    `world/magic/services/targeting.py`).
+
+    ``redirect_opponent_target``/``redirect_object_target`` (#2210) declare the
+    destination for saved damage when the guardian's technique resolves as a
+    REDIRECT flavor (Mirror Ward-style reflection) — declaration-time choice
+    per ADR-0032. Mutually exclusive; both ``None`` means "away," the universal
+    fallback destination. ``redirect_opponent_target`` must be an active
+    (not-defeated) opponent in this same encounter. ``redirect_object_target``
+    must be an ObjectDB located in the encounter's room AND "volatile" — it
+    carries an ``ObjectProperty`` whose ``Property`` has a ``PropertyDetonation``
+    row (see ``world.mechanics.services.volatile_object_property``). These
+    kwargs are accepted regardless of the declared technique's flavor (harmless
+    no-ops for non-REDIRECT declarations); resolution
+    (``_try_technique_interpose``) only reads them on the REDIRECT branch.
     """
     from world.magic.models import CharacterTechnique  # noqa: PLC0415
-    from world.magic.services.targeting import (  # noqa: PLC0415
-        PROTECTIVE_FLAVOR_REDIRECT,
-        protective_flavor,
-    )
+    from world.magic.services.targeting import protective_flavor  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
     encounter = participant.encounter
@@ -1698,9 +1742,11 @@ def declare_interpose(
             msg = "Cannot interpose: character does not know that technique."
             raise ValueError(msg)
         flavor = protective_flavor(technique)
-        if flavor is None or flavor == PROTECTIVE_FLAVOR_REDIRECT:
+        if flavor is None:
             msg = "Cannot interpose: that technique cannot guard yet."
             raise ValueError(msg)
+
+    _validate_redirect_declaration(encounter, redirect_opponent_target, redirect_object_target)
 
     action, _ = CombatRoundAction.objects.update_or_create(
         participant=participant,
@@ -1717,6 +1763,8 @@ def declare_interpose(
             "mental_passive": None,
             "combo_upgrade": None,
             "is_ready": True,
+            "redirect_opponent_target": redirect_opponent_target,
+            "redirect_object_target": redirect_object_target,
         },
     )
     return action
@@ -7019,12 +7067,19 @@ def _try_technique_interpose(
     ``CombatRoundAction.cast_destination`` lands, queue-time reconciliation
     should prefer that declared destination over the guardian's own position.
     No-op (damage still zeroed) if the guardian isn't currently placed anywhere.
+
+    **REDIRECT flavor (#2210):** after grading, ``saved = amount_before -
+    pre_payload.amount`` (whatever the block prevented — full on a clean
+    block, half on a partial, zero on a failure) is sent to the declaration's
+    destination (``CombatRoundAction.redirect_opponent_target`` /
+    ``redirect_object_target`` — see :func:`_resolve_technique_redirect`).
     """
     from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
     from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
     from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
     from world.magic.services.targeting import (  # noqa: PLC0415
         PROTECTIVE_FLAVOR_BLINK,
+        PROTECTIVE_FLAVOR_REDIRECT,
         protective_condition_and_flavor,
     )
     from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
@@ -7074,6 +7129,7 @@ def _try_technique_interpose(
         anima.current -= cost
         anima.save(update_fields=["current"])
 
+    amount_before = pre_payload.amount
     is_clean_block = _grade_interpose_damage(
         pre_payload, check_result.success_level, interposer=interposer
     )
@@ -7084,6 +7140,144 @@ def _try_technique_interpose(
         dest = action.participant.current_position
         if dest is not None:
             force_move_to_position(protected, dest)
+
+    if flavor == PROTECTIVE_FLAVOR_REDIRECT:
+        saved = amount_before - pre_payload.amount
+        _resolve_technique_redirect(action, interposer, saved, damage_type=pre_payload.damage_type)
+
+
+def _resolve_technique_redirect(
+    action: CombatRoundAction,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    saved: int,
+    *,
+    damage_type: DamageType | None,
+) -> None:
+    """Resolve a REDIRECT-flavor guardian's saved damage into its destination (#2210).
+
+    ``saved`` is whatever :func:`_grade_interpose_damage` prevented from landing on
+    the ward — full amount on a clean block, half on a partial, zero on a failure.
+    ``saved <= 0`` means nothing redirects (a failed block has nothing to send
+    anywhere). Otherwise dispatches per the declaration
+    (``CombatRoundAction.redirect_opponent_target`` / ``redirect_object_target``,
+    set by :func:`declare_interpose`); both null (or a destination that's no
+    longer valid at resolution time — the target defeated, the object moved or
+    already consumed) degrades to "away," the universal fallback.
+    """
+    if saved <= 0:
+        return
+
+    encounter = action.participant.encounter
+    opponent = action.redirect_opponent_target
+    obj = action.redirect_object_target
+
+    if opponent is not None:
+        if opponent.status == OpponentStatus.ACTIVE:
+            _redirect_to_opponent(encounter, interposer, opponent, saved, damage_type=damage_type)
+        else:
+            _redirect_away(encounter, interposer)
+        return
+
+    if obj is not None:
+        from world.mechanics.services import volatile_object_property  # noqa: PLC0415
+
+        obj_property = volatile_object_property(obj)
+        if obj.db_location_id == encounter.room_id and obj_property is not None:
+            _redirect_to_object(encounter, interposer, obj, obj_property)
+        else:
+            _redirect_away(encounter, interposer)
+        return
+
+    _redirect_away(encounter, interposer)
+
+
+def _redirect_away(
+    encounter: CombatEncounter,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Broadcast the "away" redirect outcome — a silent deflection, no target hit."""
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    narration = f"{interposer.db_key} turns the blow aside — it goes wide, harming no one."
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
+def _redirect_to_opponent(
+    encounter: CombatEncounter,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    opponent: CombatOpponent,
+    saved: int,
+    *,
+    damage_type: DamageType | None,
+) -> None:
+    """Apply the saved damage to the declared chosen-enemy opponent and broadcast it."""
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    apply_damage_to_opponent(opponent, saved, bypass_pre_apply=True, damage_type=damage_type)
+    narration = f"{interposer.db_key} hurls the blow back — it slams into {opponent.name}!"
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
+def _redirect_to_object(
+    encounter: CombatEncounter,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    obj: ObjectDB,  # noqa: OBJECTDB_PARAM
+    obj_property: ObjectProperty,
+) -> None:
+    """Detonate the declared volatile object: fire its pool, consume it, broadcast it.
+
+    Position-anchored only — an object with no ``Position`` (shouldn't happen for
+    a volatile object placed in a room with staged positions, but a defensive
+    guard) degrades to "away" rather than firing at "everyone in the room."
+    """
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+    from world.room_features.trap_services import fire_pool_at_characters  # noqa: PLC0415
+
+    position = position_of(obj)
+    if position is None:
+        _redirect_away(encounter, interposer)
+        return
+
+    characters = _combatants_at_position(encounter, position)
+    fire_pool_at_characters(
+        obj_property.property.detonation.consequence_pool,
+        characters,
+        source_character=interposer,
+    )
+    obj_property.delete()
+
+    narration = f"{interposer.db_key} hurls the blow into {obj.db_key} — it detonates!"
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
+def _combatants_at_position(
+    encounter: CombatEncounter,
+    position: Position,
+) -> list[ObjectDB]:  # noqa: OBJECTDB_PARAM
+    """Every ACTIVE participant's character + ACTIVE opponent's objectdb at *position*.
+
+    Single query against ``position.occupants`` (the ``ObjectPosition`` reverse
+    relation) rather than calling ``current_position`` per combatant, to avoid a
+    query-in-a-loop over the encounter's roster.
+    """
+    occupant_ids = set(position.occupants.values_list("objectdb_id", flat=True))
+
+    characters: list[ObjectDB] = [
+        p.character_sheet.character
+        for p in CombatParticipant.objects.filter(
+            encounter=encounter, status=ParticipantStatus.ACTIVE
+        ).select_related("character_sheet__character")
+        if p.character_sheet.character_id in occupant_ids
+    ]
+    characters.extend(
+        opp.objectdb
+        for opp in CombatOpponent.objects.filter(
+            encounter=encounter, status=OpponentStatus.ACTIVE
+        ).select_related("objectdb")
+        if opp.objectdb_id is not None and opp.objectdb_id in occupant_ids
+    )
+    return characters
 
 
 def _try_companion_defend(

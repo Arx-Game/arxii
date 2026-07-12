@@ -23,12 +23,14 @@ the entrant's landing Position) or were knocked there
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 from world.checks.consequence_resolution import (
+    apply_pool_deterministically,
     apply_resolution,
     resolve_pool_consequences,
     select_consequence,
@@ -38,6 +40,7 @@ from world.checks.types import ResolutionContext
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.models.consequence_pools import ConsequencePool
     from typeclasses.characters import Character
     from world.areas.positioning.models import Position
     from world.checks.models import CheckType
@@ -130,6 +133,33 @@ def _resolve_trap_pool(
     context = ResolutionContext(character=character, target=character)
     apply_resolution(pending, context)
     return pending
+
+
+def fire_pool_at_characters(
+    pool: ConsequencePool,
+    characters: Iterable[ObjectDB],
+    *,
+    source_character: ObjectDB | None = None,
+) -> None:
+    """Fire *pool* deterministically (no roll) against every character in *characters*.
+
+    Unlike ``_resolve_trap_pool`` (rolls a detection check, then applies ONE
+    selected consequence), this fires every authored consequence in the pool
+    unconditionally — extracted so callers who already know the pool must go
+    off (no detection roll makes sense) reuse the same
+    ``apply_pool_deterministically`` plumbing rather than duplicating it.
+    Used by redirect-detonation resolution (#2210) to fire a volatile object's
+    ``PropertyDetonation.consequence_pool`` at every combatant positioned there.
+
+    Typed ``ObjectDB`` (not the narrower ``Character``) to match
+    ``ResolutionContext.character``'s own typing — callers pass whichever
+    ObjectDB-typed actors/targets they already have on hand (participants'
+    characters, opponents' objectdbs); this module isn't in the
+    ``objectdb-param`` lint's current scope.
+    """
+    for character in characters:
+        context = ResolutionContext(character=source_character or character, target=character)
+        apply_pool_deterministically(pool=pool, context=context)
 
 
 # ---------------------------------------------------------------------------
