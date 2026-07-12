@@ -10,10 +10,11 @@ import type { HighlightReel, Interaction, ReactionEmojiEntry, SceneRoundModeValu
  * Query key factory for scene queries.
  *
  * detail(id) produces ['scene', String(id)], which matches the legacy raw-array
- * shape used in SceneDetailPage (`queryKey: ['scene', id]`). This means both
- * CombatScenePage (using this factory) and SceneDetailPage share the same cache
- * entry and avoid a double fetch. SceneDetailPage uses the legacy shape for now;
- * refactor it to use this factory in a separate PR.
+ * shape used in SceneDetailPage (`queryKey: ['scene', id]`). This factory was
+ * introduced so the now-deleted CombatScenePage (#2197 folded its rail into
+ * SceneDetailPage) shared the same cache entry as SceneDetailPage's own scene
+ * query and avoided a double fetch. SceneDetailPage still uses the legacy
+ * shape directly; refactor it to use this factory in a separate PR.
  */
 export const sceneKeys = {
   all: ['scene'] as const,

@@ -47,7 +47,7 @@ export interface CombatTurnPanelProps {
   characterId: number;
   characterSheetId: number;
   /**
-   * Cast-time position selection, lifted to CombatScenePage (#2206) so this
+   * Cast-time position selection, lifted to CombatRail (#2206) so this
    * panel's YourTurn section and the sibling tactical-map tab share it.
    * Optional — forwarded to YourTurn, which falls back to local state when
    * the caller (e.g. tests rendering CombatTurnPanel standalone) omits it.
@@ -161,7 +161,7 @@ export function CombatTurnPanel({
             Encounter Concluded — Round {encounter.round_number ?? 0}
           </h2>
         </div>
-        <EncounterOutcomeBanner outcome={outcome} sceneId={encounter.scene} />
+        <EncounterOutcomeBanner outcome={outcome} />
       </div>
     );
   }
