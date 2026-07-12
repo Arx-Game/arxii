@@ -99,3 +99,14 @@ class RoomFeaturesConfig(AppConfig):
             RoomFeatureServiceStrategy.VAULT,
             handle_vault_progression,
         )
+
+        # Installable exit/room defenses (#2177) -- independent of
+        # RoomFeatureKind/RoomFeatureInstance (Decision 1); its own Project kind.
+        from world.room_features.services import (  # noqa: PLC0415
+            complete_defense_installation,
+        )
+
+        register_kind_handler(
+            ProjectKind.ROOM_DEFENSE_INSTALLATION,
+            complete_defense_installation,
+        )

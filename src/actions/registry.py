@@ -215,6 +215,11 @@ from actions.definitions.movement import (
     TravelAction,
     TraverseExitAction,
 )
+from actions.definitions.npc_assignments import (
+    AssignGuardAction,
+    ListGuardAssignmentsAction,
+    UnassignGuardAction,
+)
 from actions.definitions.npc_services import (
     end_npc_interaction,
     resolve_npc_offer,
@@ -275,7 +280,12 @@ from actions.definitions.relationships import (
     RelationshipBumpAction,
 )
 from actions.definitions.ritual import PerformRitualAction
-from actions.definitions.room_features import RepairLabStationAction, StartRoomFeatureProjectAction
+from actions.definitions.room_features import (
+    FundRoomWardAction,
+    RepairLabStationAction,
+    StartDefenseInstallationAction,
+    StartRoomFeatureProjectAction,
+)
 from actions.definitions.rounds import (
     EndRoundAction,
     ForceResolveRoundAction,
@@ -301,7 +311,12 @@ from actions.definitions.scene_reactions import (
     ToggleFavoriteAction,
     ToggleReactionAction,
 )
-from actions.definitions.scenes import FinishSceneAction, GrantSceneGMAction, StartSceneAction
+from actions.definitions.scenes import (
+    FinishSceneAction,
+    GrantSceneGMAction,
+    MarkDecisiveCheckAction,
+    StartSceneAction,
+)
 from actions.definitions.ships import (
     CommissionShipAction,
     RepairShipAction,
@@ -479,6 +494,7 @@ _ALL_ACTIONS: list[Action] = [
     StartSceneAction(),
     FinishSceneAction(),
     GrantSceneGMAction(),
+    MarkDecisiveCheckAction(),
     BeginEncounterRoundAction(),
     ResolveEncounterRoundAction(),
     AddOpponentAction(),
@@ -584,6 +600,8 @@ _ALL_ACTIONS: list[Action] = [
     ListMotifStylesAction(),
     StartRoomFeatureProjectAction(),
     RepairLabStationAction(),
+    StartDefenseInstallationAction(),
+    FundRoomWardAction(),
     BuyStockAction(),
     BuyWareAction(),
     ListWareAction(),
@@ -634,6 +652,10 @@ _ALL_ACTIONS: list[Action] = [
     VaultAccessAddAction(),
     VaultAccessRemoveAction(),
     VaultAccessListAction(),
+    # #2178 — NPC guard assignment.
+    AssignGuardAction(),
+    UnassignGuardAction(),
+    ListGuardAssignmentsAction(),
 ]
 
 # Lookup by key

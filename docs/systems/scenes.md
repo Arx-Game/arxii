@@ -629,13 +629,25 @@ scene start [name]                        — StartSceneAction (name optional)
 scene finish                              — FinishSceneAction
 scene round [open|pose_order|strict]      — SetRoundModeAction; any knobs optional
          [quorum=<pct>] [cap=<n>] [lock=on/off]
+scene decisive <beat-id>                  — MarkDecisiveCheckAction (#1748)
+scene decisive cancel                     — cancel the pending decisive marker
+scene decisive status                     — show pending decisive marker
 ```
 
 Example: `scene round strict quorum=70 cap=2 lock=on`
 
-No business logic lives in `CmdScene` — all routing is delegated to the three Actions above.
+No business logic lives in `CmdScene` — all routing is delegated to the Actions above.
 Mode tokens (`open` / `pose_order` / `strict`) are mapped to `SceneRoundMode` values by
 `_parse_round_args`. Lock values: `on` / `true` / `yes` / `1` → True; anything else → False.
+
+#### Decisive checks (#1748)
+
+A GM may mark the next graded social check in a scene as **decisive** for a
+linked `Beat` (predicate type `OUTCOME_TIER`). When that check resolves, its
+`CheckOutcome` propagates to `record_outcome_tier_completion` — the same seam
+combat encounters and mission completions use. Marker creation also activates
+stakes contracts on the scene's staked beats (the freeform-scene equivalent of
+encounter creation). See ADR-0128.
 
 ### Web endpoint
 

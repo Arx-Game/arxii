@@ -1105,3 +1105,112 @@ class DistinctionRegardSeed(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.distinction} seeds regard with {self.npc_persona}"
+
+
+class AssignmentRole(models.TextChoices):
+    """The role an NPC serves when assigned to a room.
+
+    GUARD is the first implemented behavior (post-arrival detection).
+    DOORMAN is reserved for pre-traversal announcement (needs-design).
+    SERVANT is reserved for the follow-up servant-fetch issue.
+    """
+
+    GUARD = "guard", "Guard"
+    DOORMAN = "doorman", "Doorman"
+    SERVANT = "servant", "Servant"
+
+
+class NPCSourceType(models.TextChoices):
+    """Discriminator: which kind of NPC is assigned."""
+
+    FUNCTIONARY = "functionary", "Functionary"
+    NPC_ASSET = "npc_asset", "NPC Asset"
+
+
+class NPCAssignment(SharedMemoryModel, DiscriminatorMixin):
+    """An NPC posted to a room in a specific role by an owner persona (#2178).
+
+    A join model with a discriminator FK to either a Functionary (class-1
+    placement) or an NPCAsset (promoted/owned NPC). One active GUARD per room
+    (partial unique constraint); retired assignments stay as audit history.
+
+    Guard detection reads ``NPCAssignment.objects.filter(room=profile,
+    assignment_role=GUARD, is_active=True)`` — a single query regardless of
+    NPC class.
+    """
+
+    source_type = models.CharField(
+        max_length=20,
+        choices=NPCSourceType.choices,
+        help_text="Discriminator: which kind of NPC is assigned.",
+    )
+    functionary = models.ForeignKey(
+        Functionary,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="assignments",
+        help_text="The class-1 Functionary placement (set when source_type=FUNCTIONARY).",
+    )
+    npc_asset = models.ForeignKey(
+        "assets.NPCAsset",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="assignments",
+        help_text="The promoted NPCAsset (set when source_type=NPC_ASSET).",
+    )
+    room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="npc_assignments",
+        help_text="The room this NPC is posted to.",
+    )
+    assignment_role = models.CharField(
+        max_length=20,
+        choices=AssignmentRole.choices,
+        help_text="What role the NPC serves: GUARD, DOORMAN, SERVANT.",
+    )
+    assigned_by = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.PROTECT,
+        related_name="npc_assignments_made",
+        help_text="The persona who made the assignment (audit trail, not a permission gate).",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this assignment is currently active. False = retired.",
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this assignment was retired. Null while active.",
+    )
+
+    DISCRIMINATOR_FIELD = "source_type"
+    DISCRIMINATOR_MAP = {
+        NPCSourceType.FUNCTIONARY: "functionary",
+        NPCSourceType.NPC_ASSET: "npc_asset",
+    }
+
+    def clean(self) -> None:
+        """Validate the source_type discriminator (exactly one FK set)."""
+        super().clean()
+        errors = self._validate_discriminator(self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP)
+        if errors:
+            raise ValidationError(errors)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room", "assignment_role"],
+                condition=models.Q(is_active=True),
+                name="unique_active_npc_assignment_per_room_role",
+            ),
+        ]
+        ordering = ["-assigned_at"]
+
+    def __str__(self) -> str:
+        target = self.get_active_target_name()
+        return f"{target} as {self.assignment_role} @ room {self.room_id}"

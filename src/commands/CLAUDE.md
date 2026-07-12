@@ -643,6 +643,22 @@ actions, backends, and service functions.
   `actions/definitions/room_features.py`. Bare `station` shows a status hub (level,
   durability, broken flag) for the Lab station in the caller's current room, if any.
   Mirrors `CmdSanctum`'s subverb-routing shape. No business logic in the command.
+- **`defenses.py`**: `CmdDefense` (`defense`, #2177) — the exit/room defense
+  (bars/ward/alarm) namespace. One `DispatchCommand` routes a leading subverb
+  (`defense install <bars|ward|alarm> [level=<n>]` / `defense upgrade
+  <bars|ward|alarm> level=<n>` / `defense fund amount=<n>`) to a REGISTRY
+  `ActionRef` and dispatches through `dispatch_player_action` — the same seam the
+  web `DefenseInstallViewSet` uses — reaching `StartDefenseInstallationAction` /
+  `FundRoomWardAction` in `actions/definitions/room_features.py`. `install` and
+  `upgrade` share one Action (distinguished by whether an active defense already
+  exists at a lower level, mirrors `CmdLabStation`'s install/upgrade split);
+  `bars` additionally requires `exit=<name>` (resolved via `search_or_raise` in
+  the caller's location), `ward` requires `resonance=<name>`. Bare `defense`
+  shows a status hub (ward/alarm level, resonance reserve, lapsed flag) for the
+  caller's current room, if any. Read access mirrors through
+  `ExitBarsViewSet`/`RoomWardViewSet`/`RoomAlarmViewSet`
+  (`world/room_features/views_defense.py`). Mirrors `CmdLabStation`'s
+  subverb-routing shape. No business logic in the command.
 - **`hire.py`**: `CmdHire` (`hire`, #1493) — telnet face of the three NPC-service lifecycle
   Actions (`npc_start`, `npc_resolve`, `npc_end`). Parses `hire <role> [as <persona>]`,
   `hire offer <id>`, `hire end`, and bare `hire` status hub. Stores the ephemeral
