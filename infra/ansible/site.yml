@@ -21,7 +21,11 @@
     - django_hardening
     - app_deploy
     - backups
-    - offsite_replication
+    # #2236 Phase 3 P1: skipped entirely in rehearsal (offsite_enabled: false
+    # — the R2 credential is prod-adjacent; see roles/offsite_replication's
+    # defaults for why). standup.sh never sets offsite_enabled, so prod
+    # always runs this role.
+    - { role: offsite_replication, when: offsite_enabled }
     - secrets_perms
     - offbox_alerting
     - observability

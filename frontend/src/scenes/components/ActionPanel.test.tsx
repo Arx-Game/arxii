@@ -5,16 +5,22 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { PlayerActionsResponse } from '../actionTypes';
 
-vi.mock('../actionQueries', () => ({
-  fetchAvailableActions: vi.fn(),
-  createActionRequest: vi.fn(),
-  castTechnique: vi.fn(),
-  fetchCastableTechniques: vi.fn(),
-  useCastableTechniques: vi.fn(() => ({
-    data: [],
-    isLoading: false,
-  })),
-}));
+vi.mock('../actionQueries', async (importOriginal) => {
+  // Keep the real toastDispositionMessage (it only depends on 'sonner', mocked
+  // below) so this test exercises the shared helper's actual wiring/logic.
+  const actual = await importOriginal<typeof import('../actionQueries')>();
+  return {
+    ...actual,
+    fetchAvailableActions: vi.fn(),
+    createActionRequest: vi.fn(),
+    castTechnique: vi.fn(),
+    fetchCastableTechniques: vi.fn(),
+    useCastableTechniques: vi.fn(() => ({
+      data: [],
+      isLoading: false,
+    })),
+  };
+});
 
 vi.mock('../queries', async () => {
   const actual = await vi.importActual<typeof import('../queries')>('../queries');
@@ -330,6 +336,40 @@ describe('ActionPanel', () => {
           action_key: 'perform',
         })
       );
+    });
+  });
+
+  it('toasts the disposition message when createActionRequest resolves an NPC target', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    vi.mocked(createActionRequest).mockResolvedValue({
+      status: 'resolved',
+      result: {
+        interaction_id: 1,
+        action_key: 'intimidate',
+        action_resolution: { current_phase: 'complete', main_result: null, gate_results: [] },
+        technique_result: null,
+        technique_name: null,
+        check_result: null,
+        selected_consequence: null,
+        applied_effects: [],
+        disposition_message: "Mara's regard for you cools.",
+      },
+    });
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Perform')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Perform'));
+
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith("Mara's regard for you cools.");
     });
   });
 
@@ -682,11 +722,12 @@ describe('ActionPanel', () => {
       );
     });
 
-    // Clicking the toast action navigates to the combat route for this scene.
+    // Clicking the toast action navigates to the scene — combat renders
+    // in-scene now, #2197.
     const call = toastSuccessMock.mock.calls[0];
     const options = call[1] as { action: { onClick: () => void } };
     options.action.onClick();
-    expect(mockNavigate).toHaveBeenCalledWith('/scenes/42/combat');
+    expect(mockNavigate).toHaveBeenCalledWith('/scenes/42');
   });
 
   it('does not fire a combat-start toast when the cast has no encounter', async () => {

@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from world.areas.positioning.constants import PositionKind
-from world.areas.positioning.factories import PositionEdgeFactory, PositionFactory
+from world.areas.positioning.constants import PositionKind, RampartCrackState
+from world.areas.positioning.factories import (
+    PositionEdgeFactory,
+    PositionFactory,
+    RampartElementProfileFactory,
+    RampartFactory,
+)
 from world.areas.positioning.services import position_graph
 from world.mechanics.factories import ChallengeInstanceFactory, ChallengeTemplateFactory
 
@@ -63,3 +68,26 @@ class PositionGraphTests(TestCase):
         edge = PositionEdgeFactory()
         graph = position_graph(edge.position_a.room)
         self.assertEqual(len(graph.edges), 1)
+
+    def test_uncovered_position_has_null_rampart_fields(self):
+        position = PositionFactory()
+        graph = position_graph(position.room)
+        node = graph.nodes[0]
+        self.assertIsNone(node.rampart_element)
+        self.assertIsNone(node.rampart_integrity)
+        self.assertIsNone(node.rampart_max_integrity)
+        self.assertIsNone(node.rampart_crack_state)
+
+    def test_covered_position_carries_rampart_fields(self):
+        """#2209: a position with a Rampart surfaces element/integrity/crack_state."""
+        profile = RampartElementProfileFactory(name="Stone")
+        position = PositionFactory()
+        RampartFactory(position=position, element_profile=profile, integrity=20, max_integrity=24)
+
+        graph = position_graph(position.room)
+        node = graph.nodes[0]
+
+        self.assertEqual(node.rampart_element, "Stone")
+        self.assertEqual(node.rampart_integrity, 20)
+        self.assertEqual(node.rampart_max_integrity, 24)
+        self.assertEqual(node.rampart_crack_state, RampartCrackState.INTACT)

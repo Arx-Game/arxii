@@ -1697,6 +1697,21 @@ def property_damage_bonus(target: ObjectDB, damage_type: DamageType | None) -> i
     return sum(m.modifier_value for m in modifiers)
 
 
+def volatile_object_property(target: ObjectDB) -> ObjectProperty | None:
+    """Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.
+
+    An object is volatile when it carries an ``ObjectProperty`` whose ``property``
+    has a ``PropertyDetonation`` row (#2210 — combat redirect resolution). Returns
+    the first matching row (an object is expected to carry at most one detonatable
+    property in practice; no ordering guarantee beyond pk if more than one exists).
+    """
+    return (
+        ObjectProperty.objects.filter(object=target, property__detonation__isnull=False)
+        .select_related("property__detonation__consequence_pool")
+        .first()
+    )
+
+
 def prerequisites_met(prereqs: Iterable[Prerequisite], caster: ObjectDB, target: ObjectDB) -> bool:
     """True if target satisfies every one of prereqs (all() semantics; empty = True).
 

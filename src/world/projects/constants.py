@@ -25,6 +25,7 @@ class ProjectKind(models.TextChoices):
     FORTIFICATION_UPGRADE = "FORTIFICATION_UPGRADE", "Fortification Upgrade"
     INTERIOR_DESIGN = "INTERIOR_DESIGN", "Interior Design"
     ROOM_FEATURE_PROGRESSION = "ROOM_FEATURE_PROGRESSION", "Room Feature Progression"
+    ROOM_DEFENSE_INSTALLATION = "ROOM_DEFENSE_INSTALLATION", "Room Defense Installation"
     RESEARCH = "RESEARCH", "Research"
     RANSOM = "RANSOM", "Ransom"
     SHIP_CONSTRUCTION = "SHIP_CONSTRUCTION", "Ship Construction"

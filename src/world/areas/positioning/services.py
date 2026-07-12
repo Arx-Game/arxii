@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
-from world.areas.positioning.constants import AERIAL_PROPERTY_NAME, PositionKind
+from world.areas.positioning.constants import AERIAL_PROPERTY_NAME, PositionKind, RampartSignature
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
 from world.areas.positioning.models import (
     BlueprintEdge,
@@ -23,6 +23,8 @@ from world.areas.positioning.models import (
     PositionBlueprint,
     PositionEdge,
     PositionShelter,
+    Rampart,
+    RampartElementProfile,
 )
 from world.mechanics.models import ChallengeInstance
 
@@ -193,6 +195,95 @@ def expire_obstacle_rounds(room: ObjectDB) -> None:
             )
         else:
             edge.save(update_fields=["duration_rounds"])
+
+
+# ---------------------------------------------------------------------------
+# Ramparts (#2209)
+# ---------------------------------------------------------------------------
+
+
+def raise_rampart(  # noqa: PLR0913
+    position: Position,
+    *,
+    caster_sheet: CharacterSheet | None,
+    element_profile: RampartElementProfile,
+    integrity: int,
+    duration_rounds: int | None = None,
+    gating_challenge: ChallengeInstance | None = None,
+) -> Rampart:
+    """Raise a living barrier on position, replacing any existing one there.
+
+    update_or_create keyed on position: re-casting on an already-warded position
+    replaces it (last-writer-wins, mirrors create_conjured_obstacle) and resets
+    max_integrity to the fresh cast's integrity. When element_profile's
+    signature_behavior is SEAL_EDGES, also seals every PositionEdge touching this
+    position via create_conjured_obstacle, sharing the same caster/duration/
+    gating_challenge — Stone is a wall, not just a ward.
+    """
+    rampart, _created = Rampart.objects.update_or_create(
+        position=position,
+        defaults={
+            "element_profile": element_profile,
+            "integrity": integrity,
+            "max_integrity": integrity,
+            "created_by_sheet": caster_sheet,
+            "duration_rounds": duration_rounds,
+        },
+    )
+    if element_profile.signature_behavior == RampartSignature.SEAL_EDGES:
+        touching_edges = PositionEdge.objects.filter(
+            Q(position_a=position) | Q(position_b=position)
+        )
+        for edge in touching_edges:
+            create_conjured_obstacle(
+                edge.position_a,
+                edge.position_b,
+                caster_sheet=caster_sheet,
+                duration_rounds=duration_rounds,
+                gating_challenge=gating_challenge,
+            )
+    return rampart
+
+
+def rampart_at(position: Position) -> Rampart | None:
+    """Return the Rampart raised on position, or None."""
+    return Rampart.objects.filter(position=position).first()
+
+
+def damage_rampart(rampart: Rampart, chip: int) -> bool:
+    """Chip rampart.integrity down by chip. Returns True if it collapsed.
+
+    The single mutation seam for rampart integrity — both clash-progress sync
+    and combat interception funnel through here so the two never drift apart.
+    Deletes the row at 0 (collapse); otherwise saves the reduced integrity.
+    """
+    new_integrity = rampart.integrity - chip
+    if new_integrity <= 0:
+        rampart.delete()
+        return True
+    rampart.integrity = new_integrity
+    rampart.save(update_fields=["integrity"])
+    return False
+
+
+def expire_rampart_rounds(room: ObjectDB) -> None:
+    """Decrement duration_rounds on ramparts in the room; delete at 0.
+
+    Staff-authored ramparts (null duration_rounds) are never decremented.
+    Mirrors expire_obstacle_rounds.
+    """
+    expiring = Rampart.objects.filter(duration_rounds__isnull=False, position__room=room)
+    for rampart in expiring:
+        rampart.duration_rounds -= 1
+        if rampart.duration_rounds <= 0:
+            rampart.delete()
+        else:
+            rampart.save(update_fields=["duration_rounds"])
+
+
+def teardown_ramparts(room: ObjectDB) -> None:
+    """Delete every Rampart in the room (scene end). Mirrors teardown_conjured_obstacles."""
+    Rampart.objects.filter(position__room=room).delete()
 
 
 # ---------------------------------------------------------------------------
@@ -528,7 +619,11 @@ def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
 
 @dataclass(frozen=True)
 class PositionNode:
-    """One node in the tactical-map graph (#2006) — kind, elevation, and layout."""
+    """One node in the tactical-map graph (#2006) — kind, elevation, and layout.
+
+    ``rampart_*`` fields (#2209) are populated from the position's covering
+    ``Rampart`` (one-to-one) when present, else all four are ``None``.
+    """
 
     id: int
     name: str
@@ -536,6 +631,10 @@ class PositionNode:
     elevation_anchor_id: int | None
     layout_x: int | None
     layout_y: int | None
+    rampart_element: str | None
+    rampart_integrity: int | None
+    rampart_max_integrity: int | None
+    rampart_crack_state: str | None
 
 
 @dataclass(frozen=True)
@@ -561,7 +660,7 @@ class PositionGraph:
     edges: list[PositionEdgeInfo] = field(default_factory=list)
 
 
-def _position_node(position: Position) -> PositionNode:
+def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
     return PositionNode(
         id=position.pk,
         name=position.name,
@@ -569,6 +668,10 @@ def _position_node(position: Position) -> PositionNode:
         elevation_anchor_id=position.elevation_anchor_id,
         layout_x=position.layout_x,
         layout_y=position.layout_y,
+        rampart_element=rampart.element_profile.name if rampart else None,
+        rampart_integrity=rampart.integrity if rampart else None,
+        rampart_max_integrity=rampart.max_integrity if rampart else None,
+        rampart_crack_state=rampart.crack_state if rampart else None,
     )
 
 
@@ -593,8 +696,10 @@ def position_graph(room: ObjectDB) -> PositionGraph:
 
     When called via a viewset whose queryset prefetches ``room.positions_cached``
     with each position's full edge set onto ``all_edges_as_a`` (a
-    ``Prefetch(to_attr=...)``), this function builds the graph in-memory with
-    zero extra queries. Falls back to 2 queries otherwise (positions + edges).
+    ``Prefetch(to_attr=...)``) and each position's ``rampart`` (#2209, via
+    ``select_related("rampart__element_profile")`` on that same Prefetch's
+    queryset), this function builds the graph in-memory with zero extra
+    queries. Falls back to 3 queries otherwise (positions + edges + ramparts).
 
     Because edges are stored canonically (position_a.pk < position_b.pk),
     collecting only each position's edges_as_a across the whole room's
@@ -603,7 +708,10 @@ def position_graph(room: ObjectDB) -> PositionGraph:
     positions_cached = getattr(room, "positions_cached", None)  # noqa: GETATTR_LITERAL
     if positions_cached is not None:
         positions = sorted(positions_cached, key=lambda p: p.pk)
-        nodes = [_position_node(p) for p in positions]
+        nodes = [
+            _position_node(p, getattr(p, "rampart", None))  # noqa: GETATTR_LITERAL
+            for p in positions
+        ]
         edges = [
             _position_edge_info(edge)
             for p in positions
@@ -612,12 +720,19 @@ def position_graph(room: ObjectDB) -> PositionGraph:
         return PositionGraph(nodes=nodes, edges=edges)
 
     positions = list(Position.objects.filter(room=room).order_by("pk"))
-    nodes = [_position_node(p) for p in positions]
+    ramparts_by_position = _ramparts_by_position_id(room)
+    nodes = [_position_node(p, ramparts_by_position.get(p.pk)) for p in positions]
     raw_edges = PositionEdge.objects.filter(position_a__room=room).select_related(
         "gating_challenge__template"
     )
     edges = [_position_edge_info(edge) for edge in raw_edges]
     return PositionGraph(nodes=nodes, edges=edges)
+
+
+def _ramparts_by_position_id(room: ObjectDB) -> dict[int, Rampart]:
+    """One query: every Rampart covering a position in *room*, keyed by position_id."""
+    ramparts = Rampart.objects.filter(position__room=room).select_related("element_profile")
+    return {rampart.position_id: rampart for rampart in ramparts}
 
 
 def adjacent_open_positions(position: Position) -> list[PositionEdge]:

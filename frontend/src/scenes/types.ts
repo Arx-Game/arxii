@@ -61,7 +61,10 @@ export interface PositionAdjacencyItem {
   adjacent_position_ids: number[];
 }
 
-/** A position-graph node — kind, elevation-anchor, and cosmetic layout coords (#2006). */
+/**
+ * A position-graph node — kind, elevation-anchor, cosmetic layout coords
+ * (#2006), and covering-rampart state (#2209, null when uncovered).
+ */
 export interface PositionNode {
   id: number;
   name: string;
@@ -69,6 +72,10 @@ export interface PositionNode {
   elevation_anchor_id: number | null;
   layout_x: number | null;
   layout_y: number | null;
+  rampart_element: string | null;
+  rampart_integrity: number | null;
+  rampart_max_integrity: number | null;
+  rampart_crack_state: string | null;
 }
 
 /** A position-graph edge — passability/gating state for obstacle visibility (#2006). */

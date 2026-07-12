@@ -259,6 +259,8 @@ class ActionRegistryTests(TestCase):
             "combat_cover",
             "combat_interpose",
             "combat_succor",
+            "combat_charge",
+            "combat_joust",
             "combat_use",
             "combat_engage",
             "combat_disengage",
@@ -274,6 +276,7 @@ class ActionRegistryTests(TestCase):
             "start_scene",
             "finish_scene",
             "grant_scene_gm",
+            "mark_decisive_check",
             "add_encounter_participant",
             "add_opponent",
             "begin_encounter_round",
@@ -375,6 +378,8 @@ class ActionRegistryTests(TestCase):
             "list_motif_styles",
             "start_room_feature_project",
             "repair_lab_station",
+            "start_defense_installation",
+            "fund_room_ward",
             "market_buy_stock",
             "market_buy_ware",
             "market_list_ware",
@@ -390,8 +395,12 @@ class ActionRegistryTests(TestCase):
             "deploy_companion",
             "release_companion",
             "order_companion",
+            "mount_companion",
+            "dismount_companion",
             "lock_exit",
             "unlock_exit",
+            "pick_lock",
+            "break_exit",
             "open_window",
             "close_window",
             # #2116 — gift/technique/thread-weaving acquisition surface.
@@ -424,6 +433,10 @@ class ActionRegistryTests(TestCase):
             # #2222 — portal anchor install/dissolve.
             "portal_anchor_install",
             "portal_anchor_dissolve",
+            # #2178 — NPC guard assignment.
+            "assign_guard",
+            "unassign_guard",
+            "list_guard_assignments",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -3,12 +3,15 @@
  *
  * Rendered by CombatTurnPanel in place of the live rail sections once the
  * encounter status is "completed" (#876). The Narrator OUTCOME line in the
- * pose log carries the prose; this banner is the at-a-glance verdict, plus
- * an explicit way back to the scene (#2157) — combat stays a separate page,
- * so without this link a player is stranded on the combat URL.
+ * pose log carries the prose; this banner is the at-a-glance verdict.
+ *
+ * Previously carried a "Return to Scene" link (#2157) back to the scene the
+ * encounter belonged to — combat lived on its own /scenes/:id/combat route,
+ * so without it a player was stranded there. #2197 folded CombatRail (and
+ * this banner) into the scene page itself, so that link would now point at
+ * the very page it renders on; removed as dead/self-referential.
  */
 
-import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
 const OUTCOME_STYLES: Record<string, { label: string; className: string }> = {
@@ -26,11 +29,9 @@ const OUTCOME_STYLES: Record<string, { label: string; className: string }> = {
 
 export interface EncounterOutcomeBannerProps {
   outcome: string;
-  /** The encounter's backing scene id (`EncounterDetail.scene`) — the return-CTA target. */
-  sceneId: number;
 }
 
-export function EncounterOutcomeBanner({ outcome, sceneId }: EncounterOutcomeBannerProps) {
+export function EncounterOutcomeBanner({ outcome }: EncounterOutcomeBannerProps) {
   const style = OUTCOME_STYLES[outcome] ?? OUTCOME_STYLES.abandoned;
   return (
     <div className="flex flex-col items-center gap-3">
@@ -43,12 +44,6 @@ export function EncounterOutcomeBanner({ outcome, sceneId }: EncounterOutcomeBan
       >
         {style.label}
       </div>
-      <Link
-        to={`/scenes/${sceneId}`}
-        className="rounded-md border border-primary/40 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"
-      >
-        Return to Scene
-      </Link>
     </div>
   );
 }

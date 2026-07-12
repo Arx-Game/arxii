@@ -34,6 +34,9 @@ _USAGE = (
     "  scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]\n"
     "  scene succor <ally>               — shelter an ally from a hazard this round\n"
     "  scene interpose <ally>            — guard an ally from sudden non-combat harm this round\n"
+    "  scene decisive <beat-id>          — mark the next check as decisive for a beat\n"
+    "  scene decisive cancel             — cancel the pending decisive marker\n"
+    "  scene decisive status             — show pending decisive marker\n"
     "  scene / scene status              — show active scene + round status"
 )
 
@@ -111,6 +114,8 @@ class CmdScene(ArxCommand):
             self._handle_succor(rest)
         elif first == "interpose":  # noqa: STRING_LITERAL
             self._handle_interpose(rest)
+        elif first == "decisive":  # noqa: STRING_LITERAL
+            self._handle_decisive(rest)
         else:
             self.msg(_USAGE)
 
@@ -211,3 +216,37 @@ class CmdScene(ArxCommand):
             self.msg(f"Scene: {scene.name or '(unnamed)'}. No active round.")
         else:
             self.msg(f"Scene: {scene.name or '(unnamed)'}. Round {rnd.round_number} ({rnd.mode}).")
+
+    def _handle_decisive(self, rest: str) -> None:
+        """Dispatch MarkDecisiveCheckAction for the decisive subverb (#1748)."""
+        from actions.definitions.scenes import MarkDecisiveCheckAction  # noqa: PLC0415
+        from world.scenes.decisive_check_services import get_pending_marker  # noqa: PLC0415
+        from world.scenes.models import Scene  # noqa: PLC0415
+
+        rest = rest.strip()
+        if not rest or rest == "status":  # noqa: STRING_LITERAL
+            scene = Scene.objects.active_for_room(self.caller.location).first()
+            if scene is None:
+                self.msg("There is no active scene here.")
+                return
+            marker = get_pending_marker(scene)
+            if marker is None:
+                self.msg("No pending decisive-check marker on this scene.")
+                return
+            beat = marker.beat
+            risk_label = beat.get_risk_display() if hasattr(beat, "get_risk_display") else beat.risk
+            self.msg(
+                f"Pending decisive marker: beat #{beat.pk} (risk: {risk_label}). "
+                f"The next graded check will resolve it."
+            )
+            return
+
+        if rest == "cancel":  # noqa: STRING_LITERAL
+            result = MarkDecisiveCheckAction().run(actor=self.caller, cancel=True)
+            if result.message:
+                self.msg(result.message)
+            return
+
+        result = MarkDecisiveCheckAction().run(actor=self.caller, beat_id=rest)
+        if result.message:
+            self.msg(result.message)

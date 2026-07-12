@@ -28,6 +28,25 @@ _Avoid_: trait, flag, tag (generic), attribute
 A runtime attachment of a `Property` to a specific game object — the instance binding that gives an individual object its descriptive tags.
 _Avoid_: object flag, object tag, attribute row
 
+**PropertyDetonation** (#2210):
+A `Property`'s one-shot detonation sidecar (OneToOne) carrying a `consequence_pool` to
+fire against everyone positioned at the object's `Position` when it goes off. Marks the
+`Property` — not an individual object — as "the kind of thing that can detonate";
+whether a *specific* object actually can is a separate question (see **Volatile**,
+below). Mirrors how `room_features.Trap.consequence_pool` is declared.
+_Avoid_: detonation profile, blast config, explosion template
+
+**Volatile** (#2210):
+Said of a game object carrying an `ObjectProperty` whose `Property` has a
+`PropertyDetonation` row (`world.mechanics.services.volatile_object_property`).
+Redirecting a guardian's saved damage into a volatile object (`world/combat/
+AGENT_GLOSSARY.md`'s **Redirect**) fires its `PropertyDetonation.consequence_pool`
+against every combatant at the object's `Position`, then deletes the triggering
+`ObjectProperty` — the volatility is spent, not reusable. An object with no `Position`
+is never volatile in practice for redirect purposes (position-anchored only, no
+room-wide fallback).
+_Avoid_: explosive, detonatable (prefer "volatile" as the canonical adjective), primed
+
 **Approach**:
 A way to resolve a challenge (`ChallengeApproach`), connecting what a character can do (an `Application`) with how it is rolled (a `CheckType`) for a specific challenge template, optionally gated by a required effect property.
 _Avoid_: method, tactic, option, resolution path

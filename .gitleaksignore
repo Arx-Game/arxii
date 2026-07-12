@@ -1,0 +1,11 @@
+# Fingerprints of confirmed false positives in immutable git HISTORY (the
+# secrets-scan is full-history, so fixing a file forward cannot unflag the
+# commit that introduced the line). Format: <commit>:<file>:<rule>:<line>.
+# Only add entries you have personally verified are not secrets; prefer
+# .gitleaks.toml allowlists for whole false-positive CLASSES.
+
+# RFC 6455 websocket handshake nonce in the smoke test ("smoke-test-key",
+# base64) — a public protocol header, not a credential. The line now
+# generates the nonce randomly at runtime; this entry covers the original
+# commit. Verified 2026-07-12 (#2236 Phase 3 review).
+9fbc438f24d5028311c770b26e110b557a31ceb2:infra/scripts/smoke.sh:generic-api-key:136

@@ -116,18 +116,24 @@ class TreatConditionActionViewTests(TestCase):
         "world.mechanics.engagement.CharacterEngagement.objects.filter",
         return_value=MagicMock(exists=MagicMock(return_value=False)),
     )
+    @patch("world.conditions.services.perform_treatment")
     def test_create_treatment_request_sets_fks(
         self,
+        mock_perform_treatment: MagicMock,
         mock_engagement_filter: MagicMock,
         mock_scene_participant: MagicMock,
     ) -> None:
-        """POST a valid candidate -> 201 with treatment FKs set, status PENDING."""
+        """POST a valid candidate -> 201, auto-resolves (NPC target, #2214), FKs set."""
+        outcome = MagicMock()
+        outcome.target_resolved = False
+        mock_perform_treatment.return_value = outcome
+
         response = self.client.post(self.url, self._treat_payload(), format="json")
         assert response.status_code == status.HTTP_201_CREATED, response.data
 
         request = SceneActionRequest.objects.get(pk=response.data["id"])
         assert request.action_key == "treat_condition"
-        assert request.status == ActionRequestStatus.PENDING
+        assert request.status == ActionRequestStatus.RESOLVED
         assert request.treatment_id == self.treatment.pk
         assert request.target_condition_instance_id == self.instance.pk
         assert request.target_pending_alteration_id is None
@@ -264,8 +270,10 @@ class TreatConditionActionViewTests(TestCase):
         "world.mechanics.engagement.CharacterEngagement.objects.filter",
         return_value=MagicMock(exists=MagicMock(return_value=False)),
     )
+    @patch("world.conditions.services.perform_treatment")
     def test_thread_used_from_matched_candidate_not_client_bond(
         self,
+        mock_perform_treatment: MagicMock,
         mock_engagement_filter: MagicMock,
         mock_thread_anchors: MagicMock,
         mock_scene_participant: MagicMock,
@@ -279,6 +287,10 @@ class TreatConditionActionViewTests(TestCase):
         client-supplied id MUST be ignored; the request uses the candidate's
         thread, proving provenance cannot be forged.
         """
+        outcome = MagicMock()
+        outcome.target_resolved = False
+        mock_perform_treatment.return_value = outcome
+
         bond_treatment = TreatmentTemplateFactory(
             target_condition=self.condition,
             target_kind=TreatmentTargetKind.PRIMARY,
@@ -308,8 +320,10 @@ class TreatConditionActionViewTests(TestCase):
         "world.mechanics.engagement.CharacterEngagement.objects.filter",
         return_value=MagicMock(exists=MagicMock(return_value=False)),
     )
+    @patch("world.conditions.services.perform_treatment")
     def test_treat_targets_pending_alteration_branch(
         self,
+        mock_perform_treatment: MagicMock,
         mock_engagement_filter: MagicMock,
         mock_scene_participant: MagicMock,
     ) -> None:
@@ -322,6 +336,10 @@ class TreatConditionActionViewTests(TestCase):
         not on target_condition); the created request carries the alteration FK
         and leaves target_condition_instance None.
         """
+        outcome = MagicMock()
+        outcome.target_resolved = False
+        mock_perform_treatment.return_value = outcome
+
         alteration = PendingAlterationFactory(character=self.target_sheet)
         alteration_treatment = TreatmentTemplateFactory(
             target_kind=TreatmentTargetKind.PENDING_ALTERATION,

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
 import type {
@@ -125,6 +126,16 @@ export async function createActionRequest(
   });
   if (!res.ok) await readErrorDetail(res, 'Failed to perform action');
   return res.json();
+}
+
+/**
+ * Shared by createActionRequest's and respondToRequest's onSuccess handlers — an NPC
+ * disposition shift (#2158) may follow either an auto-resolved create or a PC's accept.
+ */
+export function toastDispositionMessage(data: ActionRequestResponse) {
+  if (data.result?.disposition_message) {
+    toast.success(data.result.disposition_message);
+  }
 }
 
 export async function fetchPendingRequests(sceneId: string): Promise<{ results: ActionRequest[] }> {

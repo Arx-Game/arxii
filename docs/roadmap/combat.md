@@ -36,6 +36,27 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   of fatigue, ally damage zeroed) is journey-proven (`TechniqueGuardianBarrierResolutionTest`,
   SQLite tier). See ADR-0118 for why the technique-guardian roll happens outside
   `use_technique`.
+- **Redirects — away / chosen-enemy / volatile-object detonation (#2210, ADR-0124),
+  SQLite tier.** A guardian's REDIRECT-flavor technique (Mirror Ward-style reflection —
+  previously rejected at declaration, now the third resolved flavor alongside BARRIER
+  and BLINK) declares its saved-damage destination at `declare_interpose` time:
+  `redirect_opponent_target` (a `CombatOpponent`, structurally never a PC — ADR-0023) or
+  `redirect_object_target` (an ObjectDB that must be "volatile" — carries an
+  `ObjectProperty` whose `Property` has a `PropertyDetonation` sidecar,
+  `world.mechanics.services.volatile_object_property`). At resolution,
+  `saved = amount_before - payload.amount` after the shared tri-level grade routes to
+  the destination — clean-enemy full amount, partial-enemy half, defeated-enemy or
+  consumed/moved/position-less object degrades to "away" (the universal fallback).
+  Volatile-object detonation fires `PropertyDetonation.consequence_pool` at every
+  combatant positioned there (new `world.room_features.trap_services.
+  fire_pool_at_characters`) then deletes the triggering `ObjectProperty` — one-shot.
+  Journey-proven end-to-end (`world/combat/tests/test_redirect_resolution.py`,
+  `actions/tests/test_combat_maneuvers.py::InterposeRedirectDispatchSeamTest` —
+  the last one drives the real `InterposeAction.run()` seam, not just the service
+  call). Telnet: `combat interpose [ally] [with <technique>] [into <destination>]`.
+  Web: the Guard panel's technique picker no longer excludes `redirect`; picking one
+  reveals a destination select sourced from `EncounterDetailSerializer.
+  volatile_objects` + `encounter.opponents`.
 - Escalation → Audere offer → accept → real power change.
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
@@ -50,6 +71,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   self-cast wards, so an ally ward strains its caster rather than a free ride for the ally;
   an upkeep payer who can't afford the round cost lapses the ward. No in-combat party AoE —
   deliberately not built.
+- **Rampart living barriers (#2209, epic #2040 decision 3, ADR-0125).** A position-anchored
+  `Rampart` entity (`world.areas.positioning`) with a shared `integrity`/`max_integrity` pool
+  covers everyone at its `Position`, faction-blind like ADR-0109's obstacles. Interception
+  (`apply_rampart_interception`) chips it at the top of both damage-application seams, before
+  `DAMAGE_PRE_APPLY` and ahead of personal reactives/Guardian reactions; a sustained barrage
+  instead opens a WARD `Clash` bound to the Rampart (`Clash.rampart`), whose progress syncs
+  the same integrity pool. Four authored elemental profiles (Stone/seal-edges, Wind/missile-
+  ward, Fire/melee-retaliation, Thorn/grasping) ship via the effect palette
+  (`ensure_rampart_content`), each with its own "Raise Rampart" technique. Crack-state
+  (INTACT/CRACKED/CRUMBLING) renders on the tactical map as a colored ring
+  (`PositionMapNode`, #2209).
 - **On-use items as a round action (#2023/#2120).** `combat use <item> [on <target>]`
   (telnet) and `POST /api/combat/{pk}/use_item/` (web) both declare a USE_ITEM
   `CombatRoundAction` through the shared `combat_use` REGISTRY action; round resolution
@@ -87,7 +119,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   passability/gating, and click-to-move via the existing `move_to_position`/
   `take_position` actions. `SceneTacticalMap` replaced the old `RoomPositionsPanel`
   text-list UI on the scene page; `CombatTacticalMap` mounts as a "Map" tab in
-  `CombatScenePage`'s right rail (default tab stays "Your Turn"). Both `SceneDetail`
+  `CombatRail`'s right rail (default tab stays "Your Turn") — `CombatRail` renders
+  in-scene on `/scenes/:id` (#2197; the dedicated `CombatScenePage` route is gone).
+  Both `SceneDetail`
   and `EncounterDetail` now serve the full node+edge graph (`position_nodes`/
   `position_edges`, via the new `position_graph(room)` service) — unlike the
   ADJACENT-reach-only `position_adjacency`, this keeps impassable/gated edges so
@@ -112,10 +146,39 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   still has no position picker (telnet-only there). See
   [magic.md](../systems/magic.md) (Effect Palette) and [INDEX.md](../systems/INDEX.md)
   (Combat § "Cast-position targeting") for the full wiring.
+- **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
+  One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
+  in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips
+  the break bar to 0 and opens a vulnerability window (soak bypassed) → crossing a
+  phase's health trigger while still in that window transitions the boss and spawns its
+  authored reinforcements → a later phase transition stamps an enraged
+  `damage_multiplier` (proven via a real before/after NPC-damage comparison, not just a
+  field read) → the break bar re-breaks in the final phase, opening a second window →
+  the party finishes the boss off with `vulnerability_rounds_remaining > 0` still true at
+  the kill. Also proves enemy-NPC condition application (`ThreatPoolEntry
+  .conditions_applied` landing on the attacked PC — see the WIRED-UNPROVEN entry below
+  for why that's now PROVEN, not the reverse "onto the boss" direction). Scenario
+  composed by `BossFightScenarioFactory` (`world/combat/factories.py`); journey test:
+  `src/integration_tests/test_boss_fight_journey.py`.
+- **Wind-as-mechanic combat consumer (#1555, ADR-0129).** The WIND exposure axis
+  (`world.locations.services.felt_exposure`, `StatKey.WIND`, provider #1522) gets its combat
+  reader: `wind_penalty(felt) -> int` (`world/combat/constants.py`) bands felt WIND —
+  CALM (<15) → 0, BREEZY (15-39) → -5, WINDY (40-69) → -10, GALE (70+) → -20 — into a
+  SCENE-sourced "Wind" `ModifierContribution`. Missile-classified attacks only: PC offense
+  (`CombatTechniqueResolver._roll_check`) applies the penalty when the attacker's strongest
+  equipped weapon is RANGED/THROWN (the same `_select_equipped_weapon` pick the damage path
+  uses); melee/lance skip the `felt_exposure` lookup entirely. Symmetric NPC side
+  (`resolve_npc_attack`) adds the same-magnitude positive bonus to the PC's defense roll when
+  the attacking `ThreatPoolEntry.delivery` is MISSILE; flat `base_damage` entries with no
+  defense roll are untouched. See `docs/systems/INDEX.md`'s "Combat" section for the full
+  wiring.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
-- Enemy-NPC condition application · thread-pull final outcome. (Combo full journey proven in #2017.)
+- Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC
+  condition application — the other half of this bullet's old wording — is now proven
+  by the #2095 boss-fight journey above: `ThreatPoolEntry.conditions_applied` lands the
+  condition on the attacked PC, never on the attacking NPC/boss itself.)
 - **Guardian-reaction surfaces beyond the two #2207 journey tests above.** Wired but
   not journey-proven: the technique-guardian BLINK flavor's clean-success ward
   relocation (`force_move_to_position` to the guardian's own position —
@@ -131,7 +194,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 
 - **Effect palette** — SHIPPED (#1584: summon, reflect, incorporeal, sink, telekinesis, teleport,
-  obstacle, force-field; combat position-targeting #2206; ally/party ward variants #2208). The
+  obstacle, force-field; combat position-targeting #2206; ally/party ward variants #2208; Rampart
+  living barriers #2209). The
   three position-consuming effects (telekinesis/teleport/obstacle → Force Grip/Phase Jump/Barricade)
   have real runtime destination selection for combat (#2206) — the non-combat web cast path still
   lacks a position picker. Remaining per-effect follow-ups live in the capability ledger, not here.
@@ -199,7 +263,15 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   see [battles.md](../systems/battles.md#swarm-math-1841) and ADR-0123. Capital
   ships (#1714/#1832) stay on their own per-hull Fortification track — swarm math
   is for hordes/packs/flocks, not vessels.
-- Mounts / charging / flying (P2, no-improv-flagged). Ranged / archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
+- Mounts / charging shipped at personal scale (#1843): mount/dismount riding
+  companions (`world.companions.services.mount_companion`/`dismount_companion`,
+  a seeded verb-gating "Mounted" condition, no passive bonuses), `CombatManeuver
+  .CHARGE` (force-move onto a distant opponent then attack, with flat
+  check/damage bonuses doubled for a `GearArchetype.LANCE`), and `CombatManeuver
+  .JOUST` (2-participant DUEL-only mounted lance pass, graded by opposed
+  success_level margin into unhorse/lesser-hit/tie bands). Flying, and any
+  battle-scale (war) mounted/cavalry mechanics, remain P2/unscoped. Ranged /
+  archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
 
 ## Reserved term: "clash"
 

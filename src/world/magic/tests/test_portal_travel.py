@@ -304,6 +304,44 @@ class PerformPortalTravelTests(TestCase):
         self.assertEqual(anima.current, 10 - route.technique.anima_cost)
 
 
+class PerformPortalTravelWardAlarmReactionTests(TestCase):
+    """#2177 whole-branch review, Important #2: portal travel must trigger the
+    same ward/alarm reaction exit-traversal does -- a room's defenses must not
+    be silently disabled just because the intruder arrived through an open
+    portal anchor instead of an exit.
+    """
+
+    def test_alarm_notifies_owner_on_portal_arrival(self) -> None:
+        from world.locations.services import transfer_ownership
+        from world.narrative.models import NarrativeMessageDelivery
+        from world.room_features.models import RoomAlarmDetails
+        from world.scenes.factories import PersonaFactory
+
+        kind = PortalAnchorKindFactory(name="Mirror")
+        origin, origin_rp = _make_room("Origin Room")
+        _dest, dest_rp = _make_room("Warded Room")
+        origin_anchor = PortalAnchorFactory(room_profile=origin_rp, kind=kind)
+        dest_anchor = PortalAnchorFactory(room_profile=dest_rp, kind=kind, is_network_open=True)
+        technique = TechniqueFactory(travel_anchor_kind=kind, anima_cost=0)
+        traveler, _sheet = _make_traveler(origin, technique=technique, anima=10)
+
+        owner_sheet = CharacterSheetFactory()
+        owner_persona = PersonaFactory(character_sheet=owner_sheet)
+        transfer_ownership(room_profile=dest_rp, to_persona=owner_persona)
+        RoomAlarmDetails.objects.create(room_profile=dest_rp)
+
+        route = PortalRoute(
+            technique=technique, origin_anchor=origin_anchor, destination_anchor=dest_anchor
+        )
+
+        with patch.object(traveler, "msg"):
+            _perform_portal_travel(traveler, route)
+
+        self.assertTrue(
+            NarrativeMessageDelivery.objects.filter(recipient_character_sheet=owner_sheet).exists()
+        )
+
+
 class InstallPortalAnchorTests(TestCase):
     def test_no_standing_raises(self) -> None:
         room, _room_profile = _make_room("Locked Room")

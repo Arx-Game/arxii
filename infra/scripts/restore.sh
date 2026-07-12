@@ -141,7 +141,11 @@ gunzip -c "${tmp}/dump.sql.gz" \
 # least a sane floor of tables. This app has HUNDREDS of tables (Evennia +
 # every game app); 50 is comfortably below the real count but high enough
 # that a near-empty/partial restore fails loudly instead of reporting a
-# false PASSED.
+# false PASSED. This exact check is DUPLICATED, not shared via lib.sh's
+# verify_restored_db() (used by pull_prod_db.sh, the other caller) —
+# restore.sh deploys standalone to the prod box over SSH, where lib.sh is
+# never shipped, so it cannot source it. Three total call sites for this
+# shape: here, lib.sh's verify_restored_db(), and (via that) pull_prod_db.sh.
 MIN_PUBLIC_TABLES=50
 
 log "verifying restore…"

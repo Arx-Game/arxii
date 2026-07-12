@@ -261,6 +261,19 @@ def perform_portal_travel(character: ObjectDB, route: PortalRoute) -> None:
     )
     send_room_state(actor_state)
 
+    # #2177 whole-branch review, Important #2: portal travel bypassed the
+    # ward/alarm reaction entirely -- react_to_unauthorized_entry was only
+    # wired into flows.service_functions.movement.traverse_exit, so a room
+    # with both a network-open portal anchor and an installed ward/alarm had
+    # those defenses silently disabled for portal arrivals (exactly the
+    # non-owner/non-tenant population this module's own docstring says can
+    # travel to an open anchor). Guard on genuine arrival, mirroring
+    # traverse_exit's own discipline.
+    if character.location == destination_room:
+        from world.room_features.services import react_to_unauthorized_entry  # noqa: PLC0415
+
+        react_to_unauthorized_entry(character, destination_room)
+
 
 @transaction.atomic
 def install_portal_anchor(

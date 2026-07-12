@@ -33,7 +33,7 @@ from actions.constants import ResolutionPhase
 from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from commands.consent import CmdAccept, CmdIntimidate
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_models import SceneActionRequest
@@ -121,6 +121,11 @@ class ConsentTelnetE2ETests(TestCase):
         self.target_char = _make_character_in_room(self.room)
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
         self.target_persona = self.target_sheet.primary_persona
+        # Wire a real controlling account so _persona_is_npc reads this as a PC
+        # (#2214) — this test's two-step create-then-accept flow requires the
+        # request to stay PENDING until CmdAccept runs, not auto-resolve at create.
+        self.target_char.db_account = AccountFactory()
+        self.target_char.save(update_fields=["db_account"])
 
     @patch("world.scenes.action_services.start_action_resolution")
     def test_intimidate_then_accept_resolves(self, mock_resolve: MagicMock) -> None:

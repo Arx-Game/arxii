@@ -241,39 +241,10 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             )
         return treatment, target_effect, target_effect_type, matched_candidate
 
-    @staticmethod
-    def _apply_treatment_fks(
-        action_request: SceneActionRequest,
-        *,
-        treatment: Any,
-        target_effect: Any,
-        target_effect_type: str | None,
-        matched_candidate: dict[str, Any],
-    ) -> None:
-        """Mirror the telnet treat command's FK-setting on a freshly created request (#1486).
-
-        Sets treatment, the matching target effect, and the matched candidate's bond_thread (NOT a
-        client-supplied id — the discovery query already selected the valid anchored thread).
-        """
-        action_request.treatment = treatment
-        if target_effect_type == TARGET_EFFECT_CONDITION:
-            action_request.target_condition_instance = target_effect
-        else:
-            action_request.target_pending_alteration = target_effect
-        action_request.thread_used = matched_candidate["bond_thread"]
-        action_request.save(
-            update_fields=[
-                "treatment",
-                "target_condition_instance",
-                "target_pending_alteration",
-                "thread_used",
-            ]
-        )
-
     @extend_schema(
         request=SceneActionRequestCreateSerializer, responses=SceneActionRequestSerializer
     )
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: PLR0911
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: C901, PLR0911
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -356,6 +327,17 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             scene=scene,
         )
 
+        treat_condition_kwargs: dict[str, Any] = {}
+        if action_key == TREAT_CONDITION_KEY and matched_candidate is not None:
+            treat_condition_kwargs = {
+                "treatment": treatment,
+                "thread_used": matched_candidate["bond_thread"],
+            }
+            if target_effect_type == TARGET_EFFECT_CONDITION:
+                treat_condition_kwargs["target_condition_instance"] = target_effect
+            else:
+                treat_condition_kwargs["target_pending_alteration"] = target_effect
+
         try:
             action_request = create_action_request(
                 scene=scene,
@@ -369,6 +351,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 delivery_receivers=delivery_receivers,
                 additional_target_personas=additional,
                 pull=_build_pull_from_validated(serializer.validated_data),
+                **treat_condition_kwargs,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to create action."]
@@ -377,20 +360,14 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Mirror the telnet treat command's FK-setting (commands/conditions.py).
-        if action_key == TREAT_CONDITION_KEY and matched_candidate is not None:
-            self._apply_treatment_fks(
-                action_request,
-                treatment=treatment,
-                target_effect=target_effect,
-                target_effect_type=target_effect_type,
-                matched_candidate=matched_candidate,
-            )
-
-        return Response(
-            SceneActionRequestSerializer(action_request).data,
-            status=status.HTTP_201_CREATED,
-        )
+        response_data = SceneActionRequestSerializer(action_request).data
+        auto_resolve_result = action_request._auto_resolve_result  # noqa: SLF001
+        if auto_resolve_result is not None:
+            response_data["result"] = EnhancedSceneActionResultSerializer(
+                auto_resolve_result,
+                context={"request": request, "action_request": action_request},
+            ).data
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
     def _create_technique_entrance(
         self, request: Request, serializer: SceneActionRequestCreateSerializer
@@ -668,6 +645,9 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
 
         if cast_result.outcome_interaction is not None:
             response_data["outcome_interaction"] = cast_result.outcome_interaction.pk
+
+        if cast_result.combat_seated:
+            response_data["combat_seated"] = True
 
         return Response(response_data, status=status.HTTP_201_CREATED)
 

@@ -80,7 +80,7 @@ in-fiction trigger is plausible.
 | **Companions / pets / summons** w/ breath weapons & ordered abilities | ✅ PROVEN (basic) | ALLY `CombatOpponent` via `allegiance`/`summoned_by`; opponent-vs-opponent damage; advanced ordered abilities are a follow-up | done (ADR-0059; #672 folds in) |
 | **Roles grant techniques** (resonance-spec at lvl 3) | ✅ PROVEN | **ADR-0055** (the specialization engine); `CovenantRole` inherits `AbstractSpecializedVariant` + `fire_variant_discoveries` generalizes the discovery beat across `target_kind`; proven by `covenants/tests/integration/test_resonance_subrole_flow.py` (covenant) + `magic/tests/integration/test_gift_specialization_e2e.py` (gift) | done |
 | **War / battle system** | ✅ PROVEN (spine) | **#1592** — spine landed: `Battle` (1:1 Scene extension), `BattleSide` / `BattlePlace` / `BattleUnit` / `BattleRound` / `BattleParticipant` / `BattleActionDeclaration`; `BattleRoundContext` wired into `get_active_round_context`; services + REGISTRY actions + `CmdBattle` (`battle declare\|round\|resolve\|conclude`); E2E `test_battle_telnet_e2e.py` proves stage → declare → resolve → conclude. Deferred: peril/rescue (#1710), AFK knobs (#1711), battle page (#1712), Audere weighting (#1713), rich type-matchups (#1714), naval/siege (#1715), campaign-stakes propagation + win-gated Legend (#1716). | soon |
-| Mounts / charging · flying mounts / dragons | ❌ ABSENT | planned-systems (aerial positioning exists, no mount) | P2 |
+| Mounts / charging (personal scale) | ✅ PROVEN (basic) | #1843 — mount/dismount riding companions (seeded verb-gating "Mounted" condition, no passive bonus); `CombatManeuver.CHARGE`/`.JOUST` on the existing move/duel seams; `GearArchetype.LANCE`. `world/combat/tests/test_mounted_combat.py`, `world/companions/tests/test_mount_state.py`. Flying mounts / dragons / battle-scale cavalry still absent. | done |
 | Ranged / archery mechanics | 🟡 SUBSTRATE | range bands + RANGED class exist | soon |
 
 ---
@@ -148,7 +148,7 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
   variant reusing the same `ConditionTemplate`; both reactive-fire and round-upkeep anima costs now
   debit the applier (`ConditionInstance.source_character`), falling back to the bearer for
   self-wards, so ally wards strain the caster. No in-combat party AoE (deliberately deferred).
-- **Combat systems:** war/battle system; mounts & flying (P2, no-improv-flagged); ranged/archery enforcement.
+- **Combat systems:** war/battle system; flying mounts / battle-scale cavalry (P2, no-improv-flagged); ranged/archery enforcement. Personal-scale mounts/charging shipped (#1843, see the ledger row above).
 
 ### Prove-it (WIRED-UNPROVEN — write the journey E2E, fix what it exposes)
 - Enemy-NPC condition application · combo full journey · thread-pull final outcome.

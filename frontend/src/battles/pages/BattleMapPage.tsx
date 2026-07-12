@@ -3,10 +3,11 @@
  *
  * Route: /scenes/:id/battle
  *
- * Layout mirrors `combat/pages/CombatScenePage.tsx`'s C-frame shell: a header
- * (battle name/round/per-side victory points) over a `grid-cols-[1fr_360px]`
- * grid — the React Flow canvas on the left, the selected place's detail panel
- * on the right.
+ * Layout mirrors the `grid-cols-[1fr_360px]` C-frame shell CombatRail uses
+ * on /scenes/:id (#2197; formerly the now-deleted CombatScenePage's own
+ * route): a header (battle name/round/per-side victory points) over the
+ * grid — the React Flow canvas on the left, the selected place's detail
+ * panel on the right.
  *
  * A Scene has at most one Battle (useBattleForSceneQuery, Task 3's 1:1
  * lookup); once resolved, useBattleDetailQuery fetches the full aggregate

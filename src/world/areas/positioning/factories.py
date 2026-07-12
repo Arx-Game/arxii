@@ -8,7 +8,7 @@ from __future__ import annotations
 import factory
 import factory.django
 
-from world.areas.positioning.constants import FALL_TRIGGER_NAME, PositionKind
+from world.areas.positioning.constants import FALL_TRIGGER_NAME, PositionKind, RampartSignature
 from world.areas.positioning.models import (
     BlueprintEdge,
     BlueprintPosition,
@@ -16,6 +16,9 @@ from world.areas.positioning.models import (
     Position,
     PositionBlueprint,
     PositionEdge,
+    Rampart,
+    RampartElementProfile,
+    RampartElementResistance,
 )
 
 
@@ -203,6 +206,51 @@ class BlueprintEdgeFactory(factory.django.DjangoModelFactory):
         if kwargs.get("position_a") is not None:
             kwargs["blueprint"] = kwargs["position_a"].blueprint
         return super()._create(model_class, *args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Ramparts (#2209)
+# ---------------------------------------------------------------------------
+
+
+class RampartElementProfileFactory(factory.django.DjangoModelFactory):
+    """Factory for RampartElementProfile. Defaults to a SEAL_EDGES (Stone-like) profile."""
+
+    class Meta:
+        model = RampartElementProfile
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"rampart_element_{n}")
+    description = ""
+    signature_behavior = RampartSignature.SEAL_EDGES
+    signature_value = 0
+    signature_damage_type = None
+    signature_condition = None
+
+
+class RampartElementResistanceFactory(factory.django.DjangoModelFactory):
+    """Factory for RampartElementResistance."""
+
+    class Meta:
+        model = RampartElementResistance
+
+    profile = factory.SubFactory(RampartElementProfileFactory)
+    damage_type = factory.SubFactory("world.conditions.factories.DamageTypeFactory")
+    value = 2
+
+
+class RampartFactory(factory.django.DjangoModelFactory):
+    """Factory for Rampart."""
+
+    class Meta:
+        model = Rampart
+
+    position = factory.SubFactory(PositionFactory)
+    element_profile = factory.SubFactory(RampartElementProfileFactory)
+    integrity = 24
+    max_integrity = 24
+    created_by_sheet = None
+    duration_rounds = None
 
 
 # ---------------------------------------------------------------------------
