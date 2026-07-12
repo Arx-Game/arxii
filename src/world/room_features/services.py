@@ -623,3 +623,32 @@ def _trigger_alarm(actor, room, room_profile: RoomProfile) -> None:
         body=f"Your alarm at {room.db_key} was triggered.",
         category=NarrativeCategory.SYSTEM,
     )
+
+
+#: Resonance drained per ward level per daily tick (#2177). Built from day
+#: one per the "ship upkeep/penalties immediately, never retrofit" ruling.
+_WARD_UPKEEP_PER_LEVEL = 5
+
+
+def room_ward_upkeep_tick() -> None:
+    """Drain each active ward's resonance_reserve; lapse it if depleted (#2177).
+
+    Registered as a daily task in world.game_clock.tasks, mirroring
+    sanctum.resonance_generation_tick's registration shape. Idempotent for an
+    already-lapsed ward (draining further past 0 is a no-op on the field, but
+    lapsed_at is only (re-)set, never cleared, here -- clearing happens only
+    via FundRoomWardAction).
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.room_features.models import RoomWardDetails  # noqa: PLC0415
+
+    for ward in RoomWardDetails.objects.filter(dissolved_at__isnull=True):
+        cost = ward.level * _WARD_UPKEEP_PER_LEVEL
+        if ward.resonance_reserve >= cost:
+            ward.resonance_reserve -= cost
+            ward.save(update_fields=["resonance_reserve"])
+        elif ward.lapsed_at is None:
+            ward.resonance_reserve = 0
+            ward.lapsed_at = timezone.now()
+            ward.save(update_fields=["resonance_reserve", "lapsed_at"])

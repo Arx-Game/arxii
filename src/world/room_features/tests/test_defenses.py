@@ -404,3 +404,45 @@ class ReactToUnauthorizedEntryTests(TestCase):
         react_to_unauthorized_entry(intruder, room)  # must not raise
 
         assert not NarrativeMessageDelivery.objects.exists()
+
+
+class RoomWardUpkeepTickTests(TestCase):
+    def _ward(self, *, level=1, reserve=0):
+        from world.magic.factories import ResonanceFactory
+        from world.room_features.models import RoomWardDetails
+
+        room_profile = RoomProfileFactory()
+        resonance = ResonanceFactory()
+        return RoomWardDetails.objects.create(
+            room_profile=room_profile, resonance=resonance, level=level, resonance_reserve=reserve
+        )
+
+    def test_tick_drains_reserve_by_level_scaled_amount(self):
+        from world.room_features.services import room_ward_upkeep_tick
+
+        ward = self._ward(level=2, reserve=100)
+        room_ward_upkeep_tick()
+        ward.refresh_from_db()
+        assert ward.resonance_reserve == 90  # 2 * 5 drained
+        assert ward.lapsed_at is None
+
+    def test_tick_lapses_ward_when_reserve_depleted(self):
+        from world.room_features.services import room_ward_upkeep_tick
+
+        ward = self._ward(level=1, reserve=2)
+        room_ward_upkeep_tick()
+        ward.refresh_from_db()
+        assert ward.resonance_reserve == 0
+        assert ward.lapsed_at is not None
+
+    def test_tick_skips_dissolved_wards(self):
+        from django.utils import timezone
+
+        from world.room_features.services import room_ward_upkeep_tick
+
+        ward = self._ward(level=1, reserve=100)
+        ward.dissolved_at = timezone.now()
+        ward.save(update_fields=["dissolved_at"])
+        room_ward_upkeep_tick()
+        ward.refresh_from_db()
+        assert ward.resonance_reserve == 100  # untouched
