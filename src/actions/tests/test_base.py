@@ -425,6 +425,10 @@ class ActionRegistryTests(TestCase):
             # #2222 — portal anchor install/dissolve.
             "portal_anchor_install",
             "portal_anchor_dissolve",
+            # #2179 — vault access-list management.
+            "vault_access_add",
+            "vault_access_remove",
+            "vault_access_list",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
