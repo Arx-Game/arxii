@@ -108,7 +108,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   passability/gating, and click-to-move via the existing `move_to_position`/
   `take_position` actions. `SceneTacticalMap` replaced the old `RoomPositionsPanel`
   text-list UI on the scene page; `CombatTacticalMap` mounts as a "Map" tab in
-  `CombatScenePage`'s right rail (default tab stays "Your Turn"). Both `SceneDetail`
+  `CombatRail`'s right rail (default tab stays "Your Turn") — `CombatRail` renders
+  in-scene on `/scenes/:id` (#2197; the dedicated `CombatScenePage` route is gone).
+  Both `SceneDetail`
   and `EncounterDetail` now serve the full node+edge graph (`position_nodes`/
   `position_edges`, via the new `position_graph(room)` service) — unlike the
   ADJACENT-reach-only `position_adjacency`, this keeps impassable/gated edges so
@@ -133,10 +135,27 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   still has no position picker (telnet-only there). See
   [magic.md](../systems/magic.md) (Effect Palette) and [INDEX.md](../systems/INDEX.md)
   (Combat § "Cast-position targeting") for the full wiring.
+- **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
+  One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
+  in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips
+  the break bar to 0 and opens a vulnerability window (soak bypassed) → crossing a
+  phase's health trigger while still in that window transitions the boss and spawns its
+  authored reinforcements → a later phase transition stamps an enraged
+  `damage_multiplier` (proven via a real before/after NPC-damage comparison, not just a
+  field read) → the break bar re-breaks in the final phase, opening a second window →
+  the party finishes the boss off with `vulnerability_rounds_remaining > 0` still true at
+  the kill. Also proves enemy-NPC condition application (`ThreatPoolEntry
+  .conditions_applied` landing on the attacked PC — see the WIRED-UNPROVEN entry below
+  for why that's now PROVEN, not the reverse "onto the boss" direction). Scenario
+  composed by `BossFightScenarioFactory` (`world/combat/factories.py`); journey test:
+  `src/integration_tests/test_boss_fight_journey.py`.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
-- Enemy-NPC condition application · thread-pull final outcome. (Combo full journey proven in #2017.)
+- Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC
+  condition application — the other half of this bullet's old wording — is now proven
+  by the #2095 boss-fight journey above: `ThreatPoolEntry.conditions_applied` lands the
+  condition on the attacked PC, never on the attacking NPC/boss itself.)
 - **Guardian-reaction surfaces beyond the two #2207 journey tests above.** Wired but
   not journey-proven: the technique-guardian BLINK flavor's clean-success ward
   relocation (`force_move_to_position` to the guardian's own position —
@@ -220,7 +239,15 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   see [battles.md](../systems/battles.md#swarm-math-1841) and ADR-0123. Capital
   ships (#1714/#1832) stay on their own per-hull Fortification track — swarm math
   is for hordes/packs/flocks, not vessels.
-- Mounts / charging / flying (P2, no-improv-flagged). Ranged / archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
+- Mounts / charging shipped at personal scale (#1843): mount/dismount riding
+  companions (`world.companions.services.mount_companion`/`dismount_companion`,
+  a seeded verb-gating "Mounted" condition, no passive bonuses), `CombatManeuver
+  .CHARGE` (force-move onto a distant opponent then attack, with flat
+  check/damage bonuses doubled for a `GearArchetype.LANCE`), and `CombatManeuver
+  .JOUST` (2-participant DUEL-only mounted lance pass, graded by opposed
+  success_level margin into unhorse/lesser-hit/tie bands). Flying, and any
+  battle-scale (war) mounted/cavalry mechanics, remain P2/unscoped. Ranged /
+  archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
 
 ## Reserved term: "clash"
 

@@ -22338,6 +22338,7 @@ export interface components {
      *     * `ranged` - Ranged
      *     * `thrown` - Thrown
      *     * `shield` - Shield
+     *     * `lance` - Lance
      *     * `jewelry` - Jewelry
      *     * `clothing` - Clothing
      *     * `other` - Other
@@ -22353,6 +22354,7 @@ export interface components {
       | 'ranged'
       | 'thrown'
       | 'shield'
+      | 'lance'
       | 'jewelry'
       | 'clothing'
       | 'other';
@@ -40593,6 +40595,7 @@ export interface operations {
          *     * `ranged` - Ranged
          *     * `thrown` - Thrown
          *     * `shield` - Shield
+         *     * `lance` - Lance
          *     * `jewelry` - Jewelry
          *     * `clothing` - Clothing
          *     * `other` - Other
@@ -40601,6 +40604,7 @@ export interface operations {
           | 'clothing'
           | 'heavy_armor'
           | 'jewelry'
+          | 'lance'
           | 'light_armor'
           | 'medium_armor'
           | 'melee_one_hand'

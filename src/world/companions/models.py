@@ -210,6 +210,19 @@ class Companion(SharedMemoryModel):
     )
     bonded_at = models.DateTimeField(auto_now_add=True)
     released_at = models.DateTimeField(null=True, blank=True)
+    ridden_by = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        unique=True,
+        related_name="ridden_companion",
+        help_text=(
+            "The rider currently mounted on this companion (#1843). Unique — a "
+            "CharacterSheet can ride at most one companion at a time. Requires "
+            "archetype.is_mount; set/cleared by mount_companion/dismount_companion."
+        ),
+    )
 
     class Meta:
         ordering = ["-bonded_at"]

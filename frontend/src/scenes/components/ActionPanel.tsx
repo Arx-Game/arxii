@@ -159,7 +159,10 @@ export function ActionPanel({ sceneId }: Props) {
         toast.success('Combat has begun', {
           action: {
             label: 'Join Combat',
-            onClick: () => navigate(`/scenes/${sceneId}/combat`),
+            // #2197: combat renders in-scene now, so this navigates to the
+            // scene itself (a no-op when already there — this toast can also
+            // fire from GamePage, where it's a real cross-page jump).
+            onClick: () => navigate(`/scenes/${sceneId}`),
           },
         });
       }

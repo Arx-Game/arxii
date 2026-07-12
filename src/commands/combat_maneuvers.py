@@ -40,6 +40,8 @@ _SUBVERBS: dict[str, str] = {
     "demoralize": "combat_demoralize",
     "taunt": "combat_taunt",
     "parley": "combat_parley",
+    "charge": "combat_charge",
+    "joust": "combat_joust",
 }
 
 # subverbs that take a single name argument.
@@ -78,6 +80,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat demoralize <opp>     — break an opponent's nerve (morale damage)
         combat taunt <opp>          — draw an NPC's aggro toward you
         combat parley <opp>          — talk a wavering foe down mid-fight
+        combat charge <opp> with <technique> — mounted charge: close distance, then attack
+        combat joust with <technique> — mounted, lance-armed opposed pass (duels only)
         combat join                 — join the fight in your room
         combat leave                — leave an open encounter between rounds
         combat ready                — toggle your declared action as ready
@@ -129,6 +133,13 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return {"combo_id": self._resolve_combo_pk(self._require_rest("a combo name"))}
         if self._subverb == "use":  # noqa: STRING_LITERAL
             return self._resolve_use_item_args(self._require_rest("an item"))
+        if self._subverb == "charge":  # noqa: STRING_LITERAL
+            return self._resolve_charge_args(self._require_rest("an opponent with <technique>"))
+        if self._subverb == "joust":  # noqa: STRING_LITERAL
+            technique_text = self._require_rest("a technique")
+            # Accept both "joust with <technique>" and bare "joust <technique>".
+            technique_text = technique_text.removeprefix("with ").strip()
+            return {"technique_id": self._find_technique_id(technique_text)}
         return {}
 
     # -- helpers ---------------------------------------------------------------
@@ -227,6 +238,26 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             msg = f"No enemy or object named '{name}' to redirect into."
             raise CommandError(msg)
         return {"redirect_object_target_id": obj.pk}
+
+    def _resolve_charge_args(self, text: str) -> dict[str, Any]:
+        """Parse ``<opponent> with <technique>`` for the charge subverb (#1843).
+
+        Unlike interpose's optional trailer, both clauses are required — a
+        charge always names its target and the technique carrying the attack.
+        """
+        with_index = text.lower().find(_WITH_SEPARATOR)
+        if with_index == -1:
+            msg = "Usage: combat charge <opponent> with <technique>."
+            raise CommandError(msg)
+        opponent_text = text[:with_index].strip()
+        technique_text = text[with_index + len(_WITH_SEPARATOR) :].strip()
+        if not opponent_text or not technique_text:
+            msg = "Usage: combat charge <opponent> with <technique>."
+            raise CommandError(msg)
+        return {
+            "opponent_id": self._resolve_opponent_pk(opponent_text),
+            "technique_id": self._find_technique_id(technique_text),
+        }
 
     def _resolve_ally_pk(self, name: str) -> int:
         """Return the pk of the active ally named *name* in the caller's encounter."""
@@ -428,7 +459,9 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             "flee, cover <ally>, interpose [ally] [with <technique>] [into <dest>], "
             "succor <ally>, "
             "use <item> [on <target>], "
-            "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, join, leave, ready, "
+            "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, "
+            "charge <opp> with <technique>, joust with <technique>, "
+            "join, leave, ready, "
             "combo <name>, revert, yield"
         ]
         participant = self._combat_participant_or_none()

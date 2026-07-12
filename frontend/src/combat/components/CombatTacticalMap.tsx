@@ -1,6 +1,7 @@
 /**
  * CombatTacticalMap — spatial rendering of the encounter's Position graph
- * (#2006), mounted as a rail tab in CombatScenePage alongside CombatTurnPanel.
+ * (#2006), mounted as a rail tab in CombatRail alongside CombatTurnPanel
+ * (CombatRail renders in-scene on /scenes/:id — #2197).
  *
  * Occupants are built from participants'/opponents' current_position (not
  * persona_positions — combat encounters track position on the participant/
@@ -22,7 +23,7 @@ export interface CombatTacticalMapProps {
   characterId: number;
   /**
    * Cast-time position-targeting shape for the currently selected focused
-   * technique (#2206), lifted to CombatScenePage so this map tab can
+   * technique (#2206), lifted to CombatRail so this map tab can
    * highlight pickable nodes and consume clicks while a position-shaped
    * technique is selected in the sibling "Your Turn" tab. Defaults to 'none'
    * (today's move-only behavior) when the caller omits it.

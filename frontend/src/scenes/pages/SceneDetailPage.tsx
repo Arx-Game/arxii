@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { cn } from '@/lib/utils';
 import { fetchScene, SceneDetail } from '../queries';
 import { createActionRequest, fetchPlaces } from '../actionQueries';
 import { SceneHeader } from '../components/SceneHeader';
@@ -25,6 +26,8 @@ import { PendingActionAttachments } from '../components/PendingActionAttachments
 import { usePendingUnlinkedActions } from '../hooks/usePendingUnlinkedActions';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { RitualProposedChip } from '@/rituals/components/RitualProposedChip';
+import { useEncounterForScene } from '@/combat/queries';
+import { CombatRail } from '@/combat/components/CombatRail';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -37,6 +40,27 @@ export function SceneDetailPage() {
   const isActive = scene?.is_active ?? false;
   const roomName = scene?.name ?? 'Room';
   const activeCharacter = useAppSelector((state) => state.game.active);
+
+  // Combat rail fold-in (#2197): combat now renders inline on the scene page
+  // instead of a separate /scenes/:id/combat route — the fight never leaves
+  // the room it's happening in. Two-column layout (matching the former
+  // CombatScenePage's C-frame grid) only while an active encounter exists;
+  // single column otherwise.
+  const sceneIdNum = id ? Number(id) : 0;
+  const { data: encounterListItem, isLoading: encounterLoading } = useEncounterForScene(sceneIdNum);
+  const hasActiveEncounter = !encounterLoading && encounterListItem != null;
+  const encounterId = encounterListItem?.id ?? 0;
+
+  // Scroll the rail into view the moment an encounter first appears
+  // (none -> active transition) so a player mid-pose notices combat starting.
+  const railRef = useRef<HTMLDivElement>(null);
+  const wasActiveRef = useRef(false);
+  useEffect(() => {
+    if (hasActiveEncounter && !wasActiveRef.current) {
+      railRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    wasActiveRef.current = hasActiveEncounter;
+  }, [hasActiveEncounter]);
   const { data: battle } = useBattleForSceneQuery(id ? Number(id) : null);
 
   // Resolve the active character's primary persona id for submit_pose REST calls.
@@ -183,56 +207,78 @@ export function SceneDetailPage() {
         <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
       </div>
 
-      {/* Main interaction area with threading */}
-      <SceneInteractionPanel
-        sceneId={id}
-        roomName={roomName}
-        onComposerModeChange={handleComposerModeChange}
-        onAddTarget={setPendingTarget}
-        onAttachAction={handleActionAttach}
-        canGm={scene?.viewer_can_gm}
-        onAvatarClick={setCardPersona}
-      />
+      {/* Combat rail fold-in (#2197): a two-column C-frame grid (mirroring the
+          former CombatScenePage) while an active encounter exists; a plain
+          single column otherwise. */}
+      <div
+        className={cn(
+          'min-h-0 flex-1',
+          hasActiveEncounter ? 'grid grid-cols-[1fr_360px] gap-4 px-4 pb-4' : 'flex flex-col'
+        )}
+      >
+        <div className="flex min-h-0 flex-1 flex-col" data-testid="scene-detail-left">
+          {/* Main interaction area with threading */}
+          <SceneInteractionPanel
+            sceneId={id}
+            roomName={roomName}
+            onComposerModeChange={handleComposerModeChange}
+            onAddTarget={setPendingTarget}
+            onAttachAction={handleActionAttach}
+            canGm={scene?.viewer_can_gm}
+            onAvatarClick={setCardPersona}
+          />
 
-      {/* Composer + Action Panel */}
-      {isActive && (
-        <div className="shrink-0">
-          {activeCharacter && (
-            <>
-              <PendingActionAttachments
-                sceneId={id}
-                personaId={personaId}
-                detachedIds={detachedActionIds}
-                onDetach={handleDetach}
-                onUndoDetach={handleUndoDetach}
-              />
-              <CommandInput
-                character={activeCharacter}
-                composerMode={composerMode}
-                onModeChange={handleComposerModeChange}
-                targetToAppend={targetToAppend}
-                onTargetConsumed={handleTargetConsumed}
-                sceneId={id}
-                actionAttachment={actionAttachment}
-                onActionAttach={handleActionAttach}
-                onActionDetach={handleActionDetach}
-                onSubmitAction={handleSubmitAction}
-                personaId={personaId}
-                pendingActionIds={pendingActionIds}
-                detachedActionIds={detachedActionIds}
-                onPoseSubmitted={handlePoseSubmitted}
-                isAtPlace={isAtPlace}
-                speakingAs={
-                  activeEntry
-                    ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
-                    : undefined
-                }
-              />
-            </>
+          {/* Composer + Action Panel */}
+          {isActive && (
+            <div className="shrink-0">
+              {activeCharacter && (
+                <>
+                  <PendingActionAttachments
+                    sceneId={id}
+                    personaId={personaId}
+                    detachedIds={detachedActionIds}
+                    onDetach={handleDetach}
+                    onUndoDetach={handleUndoDetach}
+                  />
+                  <CommandInput
+                    character={activeCharacter}
+                    composerMode={composerMode}
+                    onModeChange={handleComposerModeChange}
+                    targetToAppend={targetToAppend}
+                    onTargetConsumed={handleTargetConsumed}
+                    sceneId={id}
+                    actionAttachment={actionAttachment}
+                    onActionAttach={handleActionAttach}
+                    onActionDetach={handleActionDetach}
+                    onSubmitAction={handleSubmitAction}
+                    personaId={personaId}
+                    pendingActionIds={pendingActionIds}
+                    detachedActionIds={detachedActionIds}
+                    onPoseSubmitted={handlePoseSubmitted}
+                    isAtPlace={isAtPlace}
+                    speakingAs={
+                      activeEntry
+                        ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
+                        : undefined
+                    }
+                  />
+                </>
+              )}
+              <ActionPanel sceneId={id} />
+            </div>
           )}
-          <ActionPanel sceneId={id} />
         </div>
-      )}
+
+        {hasActiveEncounter && (
+          <div
+            ref={railRef}
+            className="min-h-0 overflow-y-auto"
+            data-testid="scene-detail-combat-rail"
+          >
+            <CombatRail sceneId={sceneIdNum} encounterId={encounterId} />
+          </div>
+        )}
+      </div>
       <CharacterCardDrawer
         persona={cardPersona}
         onClose={() => setCardPersona(null)}

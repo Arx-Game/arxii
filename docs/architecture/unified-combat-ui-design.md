@@ -632,6 +632,19 @@ This spec covers the **combat UI** and the **shared substrate**
 auto-linking, applicable-pull API). The substrate is authored as reusable from
 day one.
 
+**Route consolidation (#2197, 2026-07-12):** the right rail described in §2
+(tab strip, `CombatTurnPanel`, `CombatTacticalMap`, encounter outcome/forced-
+escape banners) was extracted into `CombatRail` (`frontend/src/combat/
+components/CombatRail.tsx`) and folded directly into `SceneDetailPage` on
+`/scenes/:id` — a two-column grid renders `CombatRail` as the right column
+whenever the scene has an active encounter (`useEncounterForScene`), single
+column otherwise. The old `CombatScenePage` and its dedicated `/scenes/:id/
+combat` route are gone; that path now redirects to `/scenes/:id`. This closes
+the "combat leaves its room" gap the one-conversation north star flags — a
+fight is part of the same scene, not a side trip. This does **not** change the
+scope boundary below: `ScenePull`-gated, non-combat `<ActionDeclarationCard>`
+adoption on the scene page is still deferred, unrelated backend work.
+
 What it does **not** cover:
 
 - Scene-side action submission for non-combat thread pulls. There is no

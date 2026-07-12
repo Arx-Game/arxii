@@ -722,11 +722,12 @@ describe('ActionPanel', () => {
       );
     });
 
-    // Clicking the toast action navigates to the combat route for this scene.
+    // Clicking the toast action navigates to the scene — combat renders
+    // in-scene now, #2197.
     const call = toastSuccessMock.mock.calls[0];
     const options = call[1] as { action: { onClick: () => void } };
     options.action.onClick();
-    expect(mockNavigate).toHaveBeenCalledWith('/scenes/42/combat');
+    expect(mockNavigate).toHaveBeenCalledWith('/scenes/42');
   });
 
   it('does not fire a combat-start toast when the cast has no encounter', async () => {

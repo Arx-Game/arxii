@@ -76,7 +76,7 @@ export interface YourTurnProps {
   encounter?: EncounterDetail | null;
   /**
    * Cast-time position selection, controlled by the caller (#2206). CombatTurnPanel/
-   * CombatScenePage lift this above the rail tabs so the tactical-map tab can share
+   * CombatRail lift this above the rail tabs so the tactical-map tab can share
    * it with this panel. Optional and falls back to local `useState` when the caller
    * doesn't provide it (e.g. tests rendering YourTurn standalone) — unlike
    * ActionDeclarationCard's castPosition prop, which has no such local-state
@@ -519,7 +519,7 @@ export function YourTurn({
 
   // Cast-time position selection for the focused technique (#2206). Controlled
   // by the caller when castPositionProp/onCastPositionChangeProp are supplied
-  // (CombatScenePage lifts this above the rail tabs so the tactical-map tab
+  // (CombatRail lifts this above the rail tabs so the tactical-map tab
   // shares it); falls back to local state otherwise (e.g. standalone tests).
   const [localCastPosition, setLocalCastPosition] = useState<CastPosition>({});
   const castPosition = castPositionProp ?? localCastPosition;
@@ -696,7 +696,7 @@ export function YourTurn({
 
   // Report the current shape to the caller (#2206) — lets the tactical-map tab
   // know whether map-click position-picking should be active, and keeps
-  // knowing even after this panel unmounts on tab switch (CombatScenePage's
+  // knowing even after this panel unmounts on tab switch (CombatRail's
   // state persists across its children's mount/unmount).
   useEffect(() => {
     onPositionShapeChange?.(focusedTechniquePositionShape);

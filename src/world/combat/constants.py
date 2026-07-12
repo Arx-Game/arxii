@@ -110,6 +110,32 @@ class CombatManeuver(models.TextChoices):
     TAUNT = "taunt", "Taunt"
     PARLEY = "parley", "Parley"
     USE_ITEM = "use_item", "Use Item"
+    CHARGE = "charge", "Charge"
+    JOUST = "joust", "Joust"
+
+
+# ---------------------------------------------------------------------------
+# Mounted combat (#1843) — CHARGE/JOUST flat bonuses + JOUST margin bands.
+# ---------------------------------------------------------------------------
+
+# Flat check/damage bonuses for a CHARGE maneuver (doubled when the attacker's
+# equipped weapon is GearArchetype.LANCE).
+CHARGE_CHECK_BONUS: int = 10
+CHARGE_DAMAGE_BONUS: int = 5
+
+# Flat check penalty for attacking with a LANCE-archetype weapon while not
+# Mounted — applies to any attack, not just CHARGE/JOUST.
+LANCE_UNMOUNTED_PENALTY: int = -10
+
+# Max hops a CHARGE may cover — generous but bounded (mirrors technique
+# REACH_N's reach_hops parameter).
+CHARGE_MAX_HOPS: int = 5
+
+# success_level gap bands for a JOUST's opposed pass. A gap >= DECISIVE is a
+# clean unhorsing; a gap >= NARROW (but < DECISIVE) lands a lesser hit; a gap
+# of 0 is a tie (both jarred, no damage).
+JOUST_DECISIVE_MARGIN: int = 2
+JOUST_NARROW_MARGIN: int = 1
 
 
 class EngagementLockStatus(models.TextChoices):

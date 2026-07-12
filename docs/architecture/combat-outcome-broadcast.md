@@ -24,8 +24,8 @@ the combat UI already renders it:
 - `push_interaction` → `obj.msg(interaction=...)` to the room (`scenes/interaction_services.py:232-299`).
 - Frontend: `useGameSocket` → `handleInteractionPayload` → Redux → `useSceneInteractions` →
   `SceneInteractionPanel`, rendered by `PoseUnit`. `CombatEncounter.scene` FK +
-  `CombatScenePage` rendering `SceneInteractionPanel` mean free RP poses during combat are
-  already realtime.
+  `SceneDetailPage` rendering `SceneInteractionPanel` alongside `CombatRail` in-scene (#2197)
+  mean free RP poses during combat are already realtime.
 
 Gaps: (a) combat **ACTION** interactions are created (`create_action_interaction`,
 `combat/interaction_services.py:28-81`) but never pushed; (b) there is **no OUTCOME

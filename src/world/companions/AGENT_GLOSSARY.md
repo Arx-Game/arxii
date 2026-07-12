@@ -33,5 +33,19 @@ are beast-domain Companions with `CompanionArchetype.is_mount=True`.
 **Mount**:
 A beast-domain Companion whose archetype has `is_mount=True` (#1863). No separate
 model — a mount uses the existing Companion substrate (bind, capacity, combat).
-Mount-riding/travel/cavalry mechanics are deferred; `is_mount` is a descriptive
-tag for now.
+
+**Mounted** (#1843):
+The rider state: `Companion.ridden_by` points at the rider's `CharacterSheet`
+(nullable, unique — one rider per mount), and the rider holds the seeded
+"Mounted" `ConditionTemplate` (`world.companions.mount_content`). Set/cleared
+by `mount_companion`/`dismount_companion`. Carries **no passive check
+bonus** — it exists purely to gate the CHARGE/JOUST combat maneuvers (see
+`world/combat/AGENT_GLOSSARY.md`) and the unmounted-Lance penalty. Three
+dismount triggers: voluntary, encounter exit, and companion defeat.
+_Avoid_: riding (as the state name — "Mounted" is the condition), saddled
+
+**Lance** (#1843):
+The `GearArchetype.LANCE` weapon archetype — a `WEAPON_ARCHETYPES` member
+required to declare JOUST and to double CHARGE's bonuses. Wielding a Lance
+while not Mounted incurs `LANCE_UNMOUNTED_PENALTY` on any attack.
+_Avoid_: spear, pike (distinct gear concepts, not this archetype)

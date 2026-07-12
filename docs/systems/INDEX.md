@@ -834,7 +834,8 @@ consequence effects for graph mutation and flight).
   `frontend/src/areas/components/`) + `SceneTacticalMap` (scene wrapper, replaces the old
   `RoomPositionsPanel`, `frontend/src/scenes/components/`) + `CombatTacticalMap` (combat
   wrapper — occupants from `current_position` not `persona_positions` — mounted as a "Map"
-  tab in `CombatScenePage`'s right rail alongside "Your Turn"/`CombatTurnPanel`,
+  tab in `CombatRail`'s right rail alongside "Your Turn"/`CombatTurnPanel` (#2197: `CombatRail`
+  renders in-scene on `SceneDetailPage`'s `/scenes/:id`, not a dedicated route,
   `frontend/src/combat/components/`) + `MovementActions` (shared adjacent-position button
   list, `frontend/src/combat/components/`)
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
@@ -3382,7 +3383,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   UNSATISFIED `OUTCOME_TIER` beat linked to the scene; fixes multiple beats
   sharing a scene all getting stamped with the same encounter's outcome;
   unset = legacy find-all-on-scene behavior, unchanged), `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR; plus the
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
+  JOUST (#1843, see "Mounted combat" below); plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
   `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
@@ -3428,6 +3430,39 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
+- **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
+  typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
+  `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →
+  `CharacterSheet`) and apply/remove the seeded "Mounted" `ConditionTemplate`
+  (`world.companions.mount_content`, no `ConditionCheckModifier` rows — mounting alone
+  grants no passive bonus). Dismount fires on three triggers: voluntary (`dismount
+  companion`), encounter exit (`LeaveEncounterAction`), and companion defeat
+  (`resolve_companion_defeat`'s die outcome, via `release_companion`).
+  `CombatManeuver.CHARGE`: `declare_charge(participant, technique, opponent)` requires the
+  Mounted condition and a target >= 1 hop away and reachable within `CHARGE_MAX_HOPS`;
+  resolution (`_resolve_charge_movement`, dispatched from `_resolve_pc_action`) force-moves
+  the rider onto the opponent's position then falls through to the normal weapon-attack
+  pipeline — `CombatTechniqueResolver` folds `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS`
+  (doubled for an equipped `GearArchetype.LANCE`) into the same
+  `collect_check_modifiers`/damage-budget seams every other check contribution uses; never
+  `bypass_pre_apply` — defenses/guardians/ramparts fire unchanged.
+  `CombatManeuver.JOUST`: `declare_joust(participant, technique)` only in a 2-participant
+  DUEL where both duelists hold Mounted and have a LANCE equipped; resolution
+  (`_resolve_joust_pass`) rolls one opposed weapon-attack check per side via the same
+  resolver seam and grades the `success_level` gap into `JOUST_DECISIVE_MARGIN`/
+  `JOUST_NARROW_MARGIN` bands — decisive unhorses the loser (2x lance damage + the seeded
+  "Unhorsed" condition + a force-dismount), narrow deals 1x lance damage, a tie jars both
+  with no damage; damage applies to the loser's mirror `CombatOpponent` via the existing
+  non-bypassing `apply_damage_to_opponent` path (ADR-0023 non-lethal PvP capping
+  unchanged). `LANCE_UNMOUNTED_PENALTY` applies at the same check-modifier seam to any
+  attack made with an equipped LANCE while not Mounted, regardless of maneuver.
+  `GearArchetype.LANCE` (`world.items.constants`) joins `WEAPON_ARCHETYPES`; a starter
+  "Lance" `ItemTemplate` seeds via `world.seeds.game_content.items.seed_lance_item`. Telnet:
+  `companion mount <name|id>` / `companion dismount` (`CmdCompanion`), `combat charge <opp>
+  with <technique>` / `combat joust [with] <technique>` (`CmdCombat`) — no web/frontend
+  surface (matches the several existing maneuvers that ship telnet-only since the web
+  "available actions" endpoint excludes REGISTRY maneuvers without `ActionTemplate`
+  backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
   trigger_kind, subject_sheet=None)` (`world/combat/escalation.py`) — the one write path for
   every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row; `SurgeTriggerKind`:
@@ -3506,7 +3541,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     drf-spectacular does not introspect them (pre-existing generator gap) — generated
     frontend types were not regenerated for this field, a known/documented degradation.
   - **Frontend:** a Positions picker in `ActionDeclarationCard` (single/pair, reach-greyed),
-    shape-aware `position_params` dispatch kwargs, state lifted to `CombatScenePage`, and
+    shape-aware `position_params` dispatch kwargs, state lifted to `CombatRail` (#2197: renders
+    in-scene on `/scenes/:id`, formerly the now-deleted `CombatScenePage`'s own route), and
     map-click picking via `TacticalMap.onPickPosition` (`frontend/src/areas/components/`).
   - **Telnet needed zero changes** — #2019's `position=`/`position_a=,position_b=` command
     grammar (`commands/combat.py`) already produced a `position_params` kwarg; #2206 is what
@@ -3711,6 +3747,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   action for DEFEND; reactive-defense handlers in `world/magic/services/effect_handlers.py`),
   covenants (speed_rank resolution order, `apply_equipped_armor_soak`),
   magic (technique use pipeline, `CombatPull`, effect palette — summon/reactive handlers)
+- **Test composition helper:** `BossFightScenarioFactory` (`world/combat/factories.py`,
+  #2095) composes a full 3-PC-vs-boss encounter (distinct-EffectType techniques, a
+  learned PC1/PC2 combo, a BOSS opponent with 3 authored `BossPhase` rows — break bar +
+  phase-2 reinforcement + phase-3 enrage — and a threat pool carrying both a flat-damage
+  entry and a `conditions_applied` entry) in one call, mirroring
+  `PlayableCombatScenarioFactory`'s style; use it instead of hand-rolling boss-fight
+  fixtures. Driven end-to-end by `src/integration_tests/test_boss_fight_journey.py`.
 - **Source:** `src/world/combat/`
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,

@@ -13,8 +13,20 @@ An NPC entity in a `CombatEncounter`, defined by its `OpponentTier`, health/soak
 _Avoid_: enemy, monster, mob, NPC participant
 
 **Maneuver**:
-A special non-technique declaration a PC can make for a round (`CombatManeuver`: FLEE, COVER, YIELD, INTERPOSE, SUCCOR, RALLY, DEMORALIZE, TAUNT, PARLEY) — a verb that is neither a technique cast nor a clash commit. Each is a real Action on the shared dispatch seam.
+A special non-technique declaration a PC can make for a round (`CombatManeuver`: FLEE, COVER, YIELD, INTERPOSE, SUCCOR, RALLY, DEMORALIZE, TAUNT, PARLEY, CHARGE, JOUST) — a verb that is neither a technique cast nor a clash commit. Each is a real Action on the shared dispatch seam.
 _Avoid_: special move, stance, command
+
+**Charge** (#1843):
+The CHARGE maneuver — a mounted PC (see `world/companions/AGENT_GLOSSARY.md`'s Mounted entry) closes distance to a declared opponent >= 1 hop away, then attacks. Resolution force-moves the rider onto the opponent's position and falls through to the normal weapon-attack pipeline; `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS` (doubled for an equipped Lance) fold into the existing check-modifier/damage-budget seams — never a bespoke bonus path. Requires Mounted; declaring it unmounted or against an already-in-reach target is rejected.
+_Avoid_: rush, gap-close, sprint attack
+
+**Joust** (#1843):
+The JOUST maneuver — a mounted, Lance-armed opposed pass between exactly two Mounted+Lance-equipped duelists in a DUEL encounter. One opposed check per side, graded by the `success_level` gap: a decisive gap unhorses the loser (double Lance damage + Unhorsed + a forced dismount), a narrow gap deals single Lance damage without unhorsing, a tie jars both with no damage. Not declarable outside a 2-participant DUEL, and not declarable unless both sides already hold Mounted + a Lance.
+_Avoid_: tilt (period term, not used in code/UI), lance charge (that's Charge, above)
+
+**Unhorsed** (#1843):
+The seeded `ConditionTemplate` applied to a JOUST's decisive-margin loser, which force-dismounts them (`world.companions.services.dismount_companion`, called directly by the resolver — no reactive trigger needed).
+_Avoid_: dismounted (that's the state after Unhorsed resolves, not the condition's own name), thrown
 
 **Morale**:
 A first-class depletable resolve pool on `CombatOpponent` (#2015), mirroring war-scale `BattleUnit.morale`. The derived state (STEADY/FALTER/BREAK) is read via `morale_state_for` — never stored. Falter weakens NPC output in `select_npc_actions`; Break sets `OpponentStatus.FLED`. Mindless opponents (`OpponentTierTemplate.has_morale=False`) resist morale checks with a flat difficulty modifier — not an immunity; a powerful enough roll breaks through (Arx's "power can do the impossible" tenet).

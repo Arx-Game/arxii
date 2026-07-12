@@ -744,6 +744,244 @@ class PlayableCombatScenarioFactory:
         )
 
 
+# =============================================================================
+# Boss fight scenario — composition helper, not a DjangoModelFactory (#2095).
+# =============================================================================
+
+
+@dataclass
+class BossFightScenario:
+    """A fully-composed 3-PC-vs-boss encounter for the break-bar / vulnerability-
+    window / phase-transition / enrage journey test.
+
+    Built by ``BossFightScenarioFactory.create()``. The boss carries 3
+    ``BossPhase`` rows, each with its own break bar (phase 1's config is also
+    stamped directly onto the ``opponent``, mirroring what a real
+    ``add_opponent``-driven spawn does for phase 1): phase 2 authors
+    ``reinforcement_template``/``reinforcement_count`` (adds spawn on 1→2), and
+    phase 3 authors an enraged ``damage_multiplier`` (stamped on 2→3). PCs 1-2
+    share a learned combo (``ComboLearning`` already exists — the combo is
+    known going in) whose ``bonus_damage`` both chips the break bar
+    (``assess_break_bar``) and, bypassing soak, deals real HP damage. The
+    threat pool's ``flat_entry`` carries a ``defense_check_type`` (required for
+    ``opponent.damage_multiplier`` to apply — see ``resolve_npc_attack``) so
+    the enrage delta is provable via a direct before/after damage comparison;
+    ``condition_entry`` carries ``conditions_applied`` so an enemy-NPC attack
+    landing a condition on a PC is provable via the resolution path.
+    """
+
+    scene: object
+    encounter: CombatEncounter
+    participants: list[CombatParticipant]
+    techniques: list[object]
+    opponent: CombatOpponent
+    phases: list[BossPhase]
+    combo: ComboDefinition
+    threat_pool: ThreatPool
+    flat_entry: ThreatPoolEntry
+    condition_entry: ThreatPoolEntry
+    condition_template: object
+    reinforcement_template: CreatureTemplate
+    defense_check_type: object
+
+
+class BossFightScenarioFactory:
+    """Compose a full 3-PC-vs-boss scenario in one call (#2095).
+
+    Wires a Scene + CombatEncounter (DECLARING status) + ``num_pcs`` PC
+    ``CombatParticipant``s (character sheet, vitals, anima, fatigue,
+    engagement, one technique each of a distinct ``EffectType``) + a
+    BOSS-tier ``CombatOpponent`` with 3 authored ``BossPhase`` rows (break
+    bar / reinforcement / enrage) + a learned 2-PC combo + a threat pool
+    carrying both a flat-damage entry and a condition-applying entry.
+
+    Used by the boss-fight journey test (``test_boss_fight_journey.py``) as
+    its scenario builder — mirrors ``PlayableCombatScenarioFactory``'s
+    composition style.
+
+    Authored numbers are deterministic by design (not tuned by trial and
+    error) — see the journey test's module docstring for the full derivation.
+    """
+
+    @classmethod
+    def create(cls, *, num_pcs: int = 3) -> BossFightScenario:
+        from actions.factories import ActionTemplateFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.checks.factories import CheckTypeFactory
+        from world.combat.constants import ComboLearningMethod
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.fatigue.models import FatiguePool
+        from world.magic.factories import (
+            CharacterAnimaFactory,
+            CharacterTechniqueFactory,
+            EffectTypeFactory,
+            GiftFactory,
+            TechniqueFactory,
+        )
+        from world.mechanics.factories import CharacterEngagementFactory
+        from world.scenes.constants import RoundStatus
+        from world.scenes.factories import SceneFactory
+        from world.vitals.models import CharacterVitals
+
+        scene = SceneFactory()
+        encounter = CombatEncounterFactory(
+            scene=scene,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+        )
+
+        # --- Threat pool: a flat-damage entry (defense_check_type set so the
+        # enrage damage_multiplier applies — see resolve_npc_attack) and a
+        # conditions_applied entry (enemy-NPC condition application). ---
+        threat_pool = ThreatPoolFactory(name="Boss Threat Pool")
+        defense_check_type = CheckTypeFactory(name="Boss Attack Defense")
+        # Long duration so the condition survives the multi-round journey rather
+        # than decaying away (default ConditionTemplate duration is 3 rounds)
+        # before the journey test gets to assert it landed.
+        condition_template = ConditionTemplateFactory(
+            name="Scorched (Boss Fight)", default_duration_value=50
+        )
+        flat_entry = ThreatPoolEntryFactory(
+            pool=threat_pool,
+            name="Claw Swipe",
+            base_damage=12,
+            defense_check_type=defense_check_type,
+        )
+        condition_entry = ThreatPoolEntryFactory(
+            pool=threat_pool,
+            name="Venom Bite",
+            base_damage=8,
+            defense_check_type=defense_check_type,
+        )
+        condition_entry.conditions_applied.add(condition_template)
+
+        # --- Boss opponent: phase 1's break bar stamped directly (mirrors what
+        # a real spawn does for phase 1 — see _stamp_phase_break_bar_config). ---
+        opponent = BossOpponentFactory(
+            encounter=encounter,
+            name="Factory Boss",
+            health=100,
+            max_health=100,
+            soak_value=15,
+            threat_pool=threat_pool,
+            current_phase=1,
+            break_bar_threshold=6,
+            break_bar_current=6,
+            vulnerability_rounds=2,
+            vulnerability_intensity_bonus=2,
+        )
+
+        pool_p2 = ThreatPoolFactory(name="Boss Threat Pool — Phase 2+")
+        add_template = CreatureTemplate.objects.create(
+            name="Boss Fight Add",
+            tier=OpponentTier.MOOK,
+            threat_pool=pool_p2,
+        )
+        phase1 = BossPhaseFactory(
+            opponent=opponent,
+            phase_number=1,
+            threat_pool=threat_pool,
+            soak_value=15,
+            break_bar_threshold=6,
+            vulnerability_rounds=2,
+            vulnerability_intensity_bonus=2,
+            damage_multiplier=Decimal("1.0"),
+        )
+        phase2 = BossPhaseFactory(
+            opponent=opponent,
+            phase_number=2,
+            threat_pool=pool_p2,
+            soak_value=20,
+            health_trigger_percentage=0.70,
+            break_bar_threshold=1,
+            vulnerability_rounds=2,
+            vulnerability_intensity_bonus=2,
+            damage_multiplier=Decimal("1.0"),
+            reinforcement_template=add_template,
+            reinforcement_count=2,
+        )
+        phase3 = BossPhaseFactory(
+            opponent=opponent,
+            phase_number=3,
+            threat_pool=pool_p2,
+            soak_value=10,
+            health_trigger_percentage=0.30,
+            break_bar_threshold=1,
+            vulnerability_rounds=2,
+            vulnerability_intensity_bonus=2,
+            damage_multiplier=Decimal("2.50"),
+        )
+
+        # --- PCs: one technique each of a distinct EffectType. ---
+        gift = GiftFactory()
+        participants: list[CombatParticipant] = []
+        techniques: list[object] = []
+        for i in range(num_pcs):
+            sheet = CharacterSheetFactory()
+            CharacterVitals.objects.create(
+                character_sheet=sheet,
+                health=100,
+                max_health=100,
+                base_max_health=100,
+            )
+            CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+            FatiguePool.objects.create(character_sheet=sheet)
+            CharacterEngagementFactory(character=sheet.character)
+            effect_type = EffectTypeFactory(name=f"Boss Fight Effect {i}", base_power=10)
+            technique = TechniqueFactory(
+                gift=gift,
+                effect_type=effect_type,
+                action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+            )
+            CharacterTechniqueFactory(character=sheet, technique=technique)
+            participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+            participants.append(participant)
+            techniques.append(technique)
+
+        # --- Learned combo between PCs 1-2 (already known — no discovery needed). ---
+        combo = ComboDefinitionFactory(
+            name="Boss Fight Combo",
+            bonus_damage=10,
+            bypass_soak=True,
+        )
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=1,
+            required_action_type=techniques[0].effect_type,
+        )
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=2,
+            required_action_type=techniques[1].effect_type,
+        )
+        ComboLearningFactory(
+            combo=combo,
+            character_sheet=participants[0].character_sheet,
+            learned_via=ComboLearningMethod.TRAINING,
+        )
+        ComboLearningFactory(
+            combo=combo,
+            character_sheet=participants[1].character_sheet,
+            learned_via=ComboLearningMethod.TRAINING,
+        )
+
+        return BossFightScenario(
+            scene=scene,
+            encounter=encounter,
+            participants=participants,
+            techniques=techniques,
+            opponent=opponent,
+            phases=[phase1, phase2, phase3],
+            combo=combo,
+            threat_pool=threat_pool,
+            flat_entry=flat_entry,
+            condition_entry=condition_entry,
+            condition_template=condition_template,
+            reinforcement_template=add_template,
+            defense_check_type=defense_check_type,
+        )
+
+
 def wire_penetration_check_type():
     """Seed the 'penetration' CheckType for the ward contest (#639, #767, #1706).
 
