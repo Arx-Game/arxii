@@ -669,6 +669,9 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         if cast_result.outcome_interaction is not None:
             response_data["outcome_interaction"] = cast_result.outcome_interaction.pk
 
+        if cast_result.combat_seated:
+            response_data["combat_seated"] = True
+
         return Response(response_data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
