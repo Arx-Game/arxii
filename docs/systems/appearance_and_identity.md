@@ -293,7 +293,7 @@ path copies a descriptor from a sibling persona.
 | Surface | Verdict | Evidence |
 |---|---|---|
 | `Persona` + `active_persona` resolution | **BUILT & WIRED** | `world/scenes/models.py`; `active_persona_for_sheet` (#1044); set-active wired via `SetActivePersonaAction` (web + telnet, #1347) |
-| `PersonaDiscovery` | **BUILT & WIRED** | `world/scenes`; in-game producer: `PERSONA_LINK` clue kind (`world/clues`, #2120) |
+| `PersonaDiscovery` | **BUILT & WIRED — two producers** | `world/scenes`; GM-authored producer: `PERSONA_LINK` clue kind (`world/clues`, #2120); player-rolled producer: `attempt_identification` (`world/forms/services/identification.py`, #1107 slice 5) — same writer (`world.scenes.services.record_persona_discovery`), so pair-normalization isn't duplicated |
 | `CharacterForm` / `FormType` (TRUE/ALTERNATE/DISGUISE) / `CharacterFormState` / `switch_form` / `get_apparent_form` | **BUILT, partly wired** | `world/forms/models.py:202-302`, `services.py:18-64`; wired to a forms API endpoint, **not** to character-appearance rendering (`_build_appearance` reads the TRUE form) |
 | `DurationType` + `TemporaryFormChange` | **BUILT** | `world/forms/models.py:215-318` — covers shapeshift/overlay durations |
 | Legacy `Characteristic` skin/eye/hair | **BUILT & WIRED (to retire)** | `character_sheets/factories.py:280-393`; read by telnet `item_data` — **duplicates** the FormTrait definitions |
@@ -316,8 +316,15 @@ so `FormTrait` is the single home (kills the telnet-vs-web duplication).
   `revert_gate`, in-control flag).
 - **Magic / combat / conditions / scars (senior dev's domain):** illusion casting &
   dispel, shapeshift spells & triggers, the **berserker-rage condition + calm-down
-  contest**, perception-vs-disguise contests, scars/aging, and the **combat profiles**
-  of forms. The substrate exposes slots; those systems fill them.
+  contest**, the **illusion-piercing contest** (perception vs. a MAGICAL overlay —
+  "can this fake even be seen through at all," still future work), scars/aging, and
+  the **combat profiles** of forms. The substrate exposes slots; those systems fill
+  them.
+- **PC-to-PC identification (ours, built — slice 5, #1107):** a separate question
+  from illusion-piercing above — not "can this disguise be seen through" but "*who*
+  is really underneath, once you're looking." An Identification check (intellect +
+  Investigation) staged by familiarity, rolled against the target's presentation
+  baseline. See "Identification loop (slice 5)" below.
 
 ## Decomposition (slices)
 
@@ -339,6 +346,116 @@ so `FormTrait` is the single home (kills the telnet-vs-web duplication).
 4. **Slice 4 — shapeshift (mostly senior dev).** Voluntary alternate forms first (Lily
    controlled, near-free from `ALTERNATE`); then involuntary/rage as a
    conditions-driven state; durations; combat profiles.
+5. **Slice 5 — PC-to-PC identification loop (ours, built, #1107).** "Who's really
+   under this mask" gets its missing other half: a viewer-rolled Identification
+   check, staged by familiarity, that pierces a mask/disguise for that viewer via
+   `PersonaDiscovery`. Distinct from the illusion-piercing contest above (still
+   deferred to the senior dev). See "Identification loop (slice 5)" below.
+
+## Identification loop (slice 5)
+
+**Status:** built, #1107 (Apostate's 2026-07-03 ruling on the epic comment). A player
+who suspects the masked stranger at the bar can *try to find out* — wearing a mask is
+now a bet, not a lock.
+
+**Check composition.** A dedicated **Identification** `CheckType` — **intellect +
+Investigation** — seeded idempotently in `world/seeds/investigation_checks.py`
+(`ensure_identification_check`). Deliberately *not* the existing `Search` CheckType
+(perception + Investigation): recognizing a face is an intellect act, not a perception
+act, per the ruling. The baseline difficulty comes from what the target is actively
+presenting, checked in order (`world/forms/services/identification.py`,
+`identification_difficulty`): an active fake overlay (`DisguiseKind` ×
+`ConcealmentLevel`, MAGICAL/FULL deliberately sits *above* the hardest authored tier —
+unbeatable by this check alone without heavy familiarity ease, matching the
+illusion-piercing boundary above); failing that, a name-only TEMPORARY mask persona
+with no overlay at all (the flat "mask floor" — a familiar glance can still catch a
+bare fake name); failing both, `IdentificationOdds(applicable=False, ...)` — nothing to
+identify.
+
+**Familiarity staging.** Two eases apply against the baseline: an active
+`CharacterRelationship` the viewer holds toward the sheet under the mask ("I know this
+person," a large flat ease), and the `fame_tier` of the target's TRUE persona (a
+famous face is recognized regardless of which persona is currently worn). **Both
+eases stack additively.** This combine rule is a **PLACEHOLDER**, not a spec mandate —
+an implementer choice pending playtest tuning. It is called out because it cuts
+against a nearby precedent: `world/scenes/social_difficulty.py::_exploitable_easing`
+deliberately takes `max()` across its easing sources ("two exploitable conditions
+never stack"). Additive stacking here means "I personally know the famous person under
+the mask" eases *more* than either fact alone — plausible, but unreviewed; revisit
+alongside the module's other PLACEHOLDER magnitudes.
+
+**Guess semantics.** `identify <target>[=<guess>]` accepts an optional named guess
+(Decision 3). A guess that case-insensitively names the target's TRUE persona eases
+the target difficulty (`_target_difficulty` in `identification.py`); a wrong guess is
+just a failure, same as no guess at all. Critically, **a correct guess only eases a
+still-rollable check — it never rescues the auto-fail band** (ratified this run):
+`identification_difficulty` computes `auto_fail` from familiarity alone, *before* any
+guess is known, and `attempt_identification` checks `odds.auto_fail` before ever
+computing the guess-eased difficulty. A player cannot out-guess an unrollable illusion.
+
+**No-PC red herrings.** A botch (`success_level <= -2`, the repo's shared
+critical-failure threshold) never fingers a real PC. It fake-IDs a random active
+`Functionary` NPC instead, via the new `random_active_functionary()` picker
+(`world/npc_services/functionaries.py`) — `order_by("?")` over active functionaries,
+acceptable at this scale. A botch with no Functionary in the world degrades to a plain
+FAILURE (same message — see the oracle rule below) rather than crash or reach for a
+PC.
+
+**`PersonaDiscovery` as the sink.** Success writes a `PersonaDiscovery` row via the
+same `world.scenes.services.record_persona_discovery` writer the GM-authored
+`PERSONA_LINK` clue kind uses (#2120) — `attempt_identification` is the second
+in-game producer, not a parallel write path. The row is per-viewer: the viewer now
+sees through that mask everywhere, not just in this scene. A repeat `identify` against
+an already-linked pair short-circuits to `ALREADY_KNOWN` before rolling.
+
+**Oracle rules.** Three structural guarantees keep this check from leaking more than
+the fiction allows: (1) **roller-only** — `IdentifyAction.execute` returns
+`result.player_message` to the actor alone; the attempt itself lands as a generic,
+outcome-blind scene `Interaction` (`_log_identify_attempt`) so *that* someone made an
+attempt is visible (containing "silent stalking") without narrating *at what* or *with
+what result*. (2) **`FAILURE` == `AUTO_FAIL`** — both share the literal same
+player-facing string (`_FAILURE_MESSAGE`), so a player can never distinguish "you
+rolled and missed" from "this was never rollable," which would otherwise oracle "there
+IS someone/something identifiable here, you just aren't strong enough" vs. "there's
+truly nothing to find." (3) **the prerequisite reveals nothing new** —
+`IdentifiableTargetPrerequisite` (gating whether `identify` is even offered) only
+confirms the target is co-located and presenting a fake-name persona; per the "named
+faces are public; concealment is opt-in" tenet, an anonymous/masked persona already
+renders visibly as such via sdesc (it's the *identity*, not the *fact of concealment*,
+that's hidden) — so the prerequisite adds no oracle beyond what the sdesc render
+already shows.
+
+**The mask-vs-overlay boundary.** Identification targets a **fake-name persona** —
+either a TEMPORARY mask on its own, or a fake overlay (`active_fake_overlay`) layered
+under one. An **overlay-only** disguise that never swaps the active persona (i.e.
+`apply_disguise` was called without ever minting/wearing a fake-name persona, so
+`active_persona_for_sheet` still resolves to the TRUE persona) has nothing to
+*identify* in the persona sense — there's no fake name to unmask, only an illusion to
+pierce, which is the still-deferred illusion-piercing contest above. Guarded twice,
+defense-in-depth: `IdentifiableTargetPrerequisite` gates it at the action seam (Task 3
+ruling 1a), and `attempt_identification` degrades the degenerate presented==true pair
+to a plain `FAILURE` if a caller ever reaches the service directly (Task 3 review
+ruling 1b) — checked *after* the `AUTO_FAIL` check so an overlay-only target that's
+*also* past the auto-fail band still reports indistinguishable `AUTO_FAIL`, not a
+reclassified `FAILURE`.
+
+**Deferred: crafted disguise kits.** Apostate's ruling explicitly marks kit-crafting
+"(not yet in scope)" — the baseline above derives purely from the existing overlay
+data (`DisguiseKind` + `ConcealmentLevel`); kit *quality* as a pierce-resistance
+modifier is a later slot-in, not built here. Draft child-issue body:
+`.superpowers/sdd/disguise-kit-issue-draft.md`.
+
+**Built surfaces:** `world/forms/services/identification.py` (`identification_difficulty`,
+`attempt_identification`); `world/forms/types.py` (`IdentificationOdds`,
+`IdentificationResult`, `IdentificationOutcome`); `world/npc_services/functionaries.py`
+(`random_active_functionary`); `actions/definitions/identification.py` (`IdentifyAction`,
+registry key `identify`); `commands/identification.py` (`CmdIdentify`, telnet
+`identify <target>[=<guess>]`); web reachability via a dedicated "Identify" item on
+`PersonaContextMenu.tsx` dispatching REGISTRY REST directly (`useDispatchPlayerAction`)
+— deliberately **not** surfaced through `get_player_actions`/`ActionPanel.tsx`'s
+consent (`createActionRequest`) pipeline, since identify is a no-consent private
+perception roll (ADR-0024) with no `ActionTemplate` to resolve a consent accept
+against.
 
 ## Open decisions (resolve at spec time)
 

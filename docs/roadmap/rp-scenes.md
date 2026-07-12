@@ -219,6 +219,45 @@ called `set_active_persona` directly (bypassing `action.run()`); telnet had no w
 
 **Details:** [appearance_and_identity.md](../systems/appearance_and_identity.md) §"Layer 1 — Persona"
 
+### PC-to-PC Identification Loop — DONE (#1107 slice 5, Apostate's 2026-07-03 ruling)
+
+The mask fiction's missing other half: a viewer can now *try to find out* who's
+really under a masked/disguised character, instead of a mask being an unbreakable
+lock.
+
+- **Seed:** a dedicated **Identification** `CheckType` (intellect + Investigation) —
+  `ensure_identification_check` in `world/seeds/investigation_checks.py`, distinct
+  from `Search` (perception + Investigation).
+- **Service (`world/forms/services/identification.py`):**
+  `identification_difficulty(viewer_sheet, target_character)` — baseline from the
+  target's active fake overlay (`DisguiseKind` × `ConcealmentLevel`) or the bare
+  "mask floor" for a name-only fake persona with no overlay, eased by an active
+  `CharacterRelationship` and the target's true-persona `fame_tier` (both stack —
+  PLACEHOLDER additive combine rule, contrast `social_difficulty.py`'s `max()`
+  precedent). `attempt_identification(viewer, target, guess_name=None)` rolls
+  `perform_check` against that difficulty (a correct named guess eases it, but never
+  rescues the auto-fail band), writes a `PersonaDiscovery` row on success via the
+  same writer the GM `PERSONA_LINK` clue uses (#2120 — second in-game producer), and
+  fake-IDs a random active `Functionary` (new `random_active_functionary()` picker,
+  `world/npc_services/functionaries.py`) on a botch — **never a real PC**. Failure
+  and auto-fail share the identical player-facing message (the oracle rule).
+- **Action + telnet + web:** `IdentifyAction` (registry key `identify`,
+  `actions/definitions/identification.py`) — a plain registry action (not
+  `ActionTemplate`-backed, unlike Deceive/Persuade), since identify's bespoke
+  check pipeline and roller-only messaging don't fit the consequence-pool template
+  shape. Telnet `CmdIdentify` (`identify <target>[=<guess>]`,
+  `commands/identification.py`). Web reachability is a dedicated "Identify" item on
+  `PersonaContextMenu.tsx` dispatching REGISTRY REST directly
+  (`useDispatchPlayerAction`) — deliberately **not** listed by
+  `get_player_actions`/`ActionPanel.tsx`, since every generic-panel consumer
+  dispatches through the CONSENT pipeline (`createActionRequest`), which a
+  no-consent private perception roll (ADR-0024) must never enter.
+- **Follow-up:** crafted disguise kits (kit quality as a pierce-resistance modifier
+  on the baseline) are DEFERRED per the ruling — draft child-issue body at
+  `.superpowers/sdd/disguise-kit-issue-draft.md` (not yet filed).
+
+**Details:** [appearance_and_identity.md](../systems/appearance_and_identity.md) §"Identification loop (slice 5)"
+
 ### Positioning in Scenes — DONE (#1017, spatial map #2006)
 - **Scene API extension:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`, `persona_positions`, and (#2006) `position_nodes`/`position_edges` — the full tactical-map graph — for the scene's room.
 - **Frontend:** `SceneTacticalMap` component (`frontend/src/scenes/components/`) renders the position graph as a spatial `@xyflow/react` map — occupant avatars per node, edges styled by passability/gating, click-to-move, and a staff "Set the stage" control — replacing the earlier `RoomPositionsPanel` text-list UI (#2006). `MovementActions` extracted as a shared component (`frontend/src/combat/components/`).
