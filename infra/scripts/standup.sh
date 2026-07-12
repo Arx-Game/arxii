@@ -51,6 +51,10 @@ readonly REQUIRED_ARXII=(
   ARXII_OFFBOX_ALERT_TOKEN ARXII_CADDY_CF_DNS_TOKEN
   ARXII_DJANGO_SUPERUSER_PASSWORD
 )
+# ARXII_SENTRY_DSN (#2236 Phase 5) is deliberately NOT in REQUIRED_ARXII —
+# it lives in secrets_vault's secrets_map_optional, not secrets_map, so it
+# is optional in prod itself (missing => Sentry off, not a refused
+# converge), unlike everything above which is fail-closed-required.
 # S3 backend config for the prod remote state (bootstrap output + the
 # manually-created scoped state key). Operator/CI-only.
 readonly REQUIRED_BACKEND=(

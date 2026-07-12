@@ -99,6 +99,10 @@ jobs:
           ARXII_R2_ACCESS_KEY_ID: ${{ secrets.ARXII_R2_ACCESS_KEY_ID }}
           ARXII_R2_SECRET_ACCESS_KEY: ${{ secrets.ARXII_R2_SECRET_ACCESS_KEY }}
           ARXII_OFFBOX_ALERT_TOKEN: ${{ secrets.ARXII_OFFBOX_ALERT_TOKEN }}
+          # Optional (#2236 Phase 5) — an empty/unset value disables Sentry
+          # entirely (settings.py only calls sentry_sdk.init() when
+          # SENTRY_DSN is non-empty); not in standup.sh's REQUIRED_ARXII.
+          ARXII_SENTRY_DSN: ${{ secrets.ARXII_SENTRY_DSN }}
           ARXII_CADDY_CF_DNS_TOKEN: ${{ secrets.ARXII_CADDY_CF_DNS_TOKEN }}
           # First-run Django superuser: password is a Secret (long-lived,
           # rotate on suspicion); username + email are Variables (non-secret

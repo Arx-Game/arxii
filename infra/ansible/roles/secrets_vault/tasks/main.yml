@@ -20,6 +20,12 @@
 # names which var(s) are missing instead of "result was suppressed".
 # vault_allow_empty-listed names are skipped — ONLY reachable when
 # rehearsal_mode is true (asserted above).
+#
+# secrets_map_optional (e.g. ARXII_SENTRY_DSN) is intentionally NEVER looped
+# here — those entries are optional in prod itself, not just rehearsal; the
+# template renders them directly via lookup('env', ...), empty or not, with
+# no presence assertion. See secrets_map_optional's own comment in
+# defaults/main.yml.
 - name: Collect names of missing required secret env vars (values never logged)
   ansible.builtin.set_fact:
     secrets_vault_missing_env: >-

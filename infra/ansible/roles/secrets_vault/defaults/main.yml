@@ -31,6 +31,23 @@ secrets_map:
   ARXII_CADDY_CF_DNS_TOKEN: CADDY_CF_DNS_TOKEN
   ARXII_DJANGO_SUPERUSER_PASSWORD: DJANGO_SUPERUSER_PASSWORD
 
+# #2236 Phase 5 (Sentry). Structurally separate from secrets_map above —
+# entries here are OPTIONAL in prod itself (not just rehearsal): the
+# fail-closed collect/assert tasks in tasks/main.yml only loop over
+# secrets_map, never this dict, so a missing/empty value here converges
+# cleanly (Sentry off) instead of refusing. This is deliberately NOT the
+# same mechanism as vault_allow_empty (that escape hatch is rehearsal-only
+# and asserted so — see the refusal assert in tasks/main.yml); Sentry is
+# genuinely optional everywhere, including a real prod converge with no
+# Sentry account yet. acceptance.sh's secrets_map-coverage check (which
+# requires every secrets_map key to have a standup.sh preflight guard)
+# naturally excludes this dict — it only sed-scans the `secrets_map:`
+# block — and carries an explicit assertion that ARXII_SENTRY_DSN lives
+# here, not in secrets_map, so the exemption is structural, not a name
+# left off a list by hand.
+secrets_map_optional:
+  ARXII_SENTRY_DSN: SENTRY_DSN
+
 # Operator/CI-only — these belong to the tofu step's env, NEVER the box.
 # Refuse if they leaked into the ansible step's env (defense-in-depth).
 secrets_forbidden_env:
@@ -59,3 +76,10 @@ rehearsal_mode: false
 # the backup+restore rehearsal is honest, not stubbed. Prod NEVER sets this
 # var — see the refusal assert.
 vault_allow_empty: []
+
+# #2236 Phase 5 (Sentry). SENTRY_ENVIRONMENT tag sent with every event.
+# Prod converges with this default untouched; rehearse.sh's generated
+# group_vars overrides it to "rehearsal" so stage-box events (if a DSN is
+# ever set there) are never mistaken for real prod traffic in the Sentry
+# project.
+vault_sentry_environment: production

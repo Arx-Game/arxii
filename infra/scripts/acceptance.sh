@@ -136,6 +136,21 @@ done
 chk "every secrets_vault secrets_map key (less the tofu-post-apply BACKUP_WRITER pair) has a standup.sh preflight guard" \
   "[[ -z '${secrets_map_missing}' ]]"
 
+# (a2) #2236 Phase 5: ARXII_SENTRY_DSN must be exempted from the coverage
+# check above STRUCTURALLY (living in secrets_map_optional, a dict the sed
+# scan above never reaches) rather than via a third hardcoded name in the
+# BACKUP_WRITER case-statement exemption above. Verifies both halves: the
+# entry exists in secrets_map_optional, AND it is genuinely absent from the
+# secrets_map block the coverage check actually scans, AND it is absent
+# from standup.sh's REQUIRED_ARXII (it is genuinely optional, not just
+# undocumented).
+chk "ARXII_SENTRY_DSN lives in secrets_map_optional (optional-in-prod), not secrets_map (fail-closed-required)" \
+  "grep -q 'ARXII_SENTRY_DSN: SENTRY_DSN' infra/ansible/roles/secrets_vault/defaults/main.yml"
+chkno "ARXII_SENTRY_DSN never appears inside the fail-closed secrets_map block" \
+  "sed -n '/^secrets_map:/,/^[^ ]/p' infra/ansible/roles/secrets_vault/defaults/main.yml | grep -q ARXII_SENTRY_DSN"
+chkno "ARXII_SENTRY_DSN is not in standup.sh's REQUIRED_ARXII (optional secret)" \
+  "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_SENTRY_DSN"
+
 # (b) standup.sh must unset the provisioning tokens BEFORE invoking
 # ansible-playbook (order-sensitive — defense-in-depth so LINODE_TOKEN /
 # CLOUDFLARE_API_TOKEN can never reach the box even by accident).
@@ -361,6 +376,18 @@ chk   "arxii-media-mirror.service carries OnFailure= alerting (same convention a
 # run must surface the same way a failed backup/offsite run does.
 chk   "offbox_alerting heartbeat watches arxii-media-mirror.service" \
   "grep -q 'arxii-media-mirror.service' infra/ansible/roles/offbox_alerting/templates/arxii-heartbeat.sh.j2"
+
+echo "== #2236 Phase 5 (real Sentry wiring) =="
+# The dependency declaration and the guarded init call are paired — either
+# half missing without the other is a real bug (a declared-but-never-
+# initialized dep, or an init call that would ImportError with no
+# dependency declared).
+chk   "pyproject.toml declares sentry-sdk" \
+  "grep -q 'sentry-sdk' pyproject.toml"
+chk   "settings.py guards sentry_sdk.init() behind a non-empty SENTRY_DSN" \
+  "grep -q 'if SENTRY_DSN:' src/server/conf/settings.py && grep -q 'sentry_sdk.init(' src/server/conf/settings.py"
+chk   "settings.py disables Sentry PII capture (send_default_pii=False)" \
+  "grep -q 'send_default_pii=False' src/server/conf/settings.py"
 
 echo
 if [[ "${fails}" -gt 0 ]]; then

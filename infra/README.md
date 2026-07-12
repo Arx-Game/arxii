@@ -145,6 +145,18 @@ long-lived, rotate on suspicion):**
   setup steps (this is a chicken-and-egg: you generate the key, Terraform tells
   Linode to inject the matching public half into the new instance at first boot)
 
+**Pre-stored by the operator — OPTIONAL (#2236 Phase 5; missing/empty just
+disables the feature, never refuses the converge — `secrets_vault`'s
+`secrets_map_optional`, not `secrets_map`; not in `standup.sh`'s
+`REQUIRED_ARXII`):**
+- `ARXII_SENTRY_DSN` — error tracking. Sentry has a free tier; create a
+  project at [sentry.io](https://sentry.io) and grab the project's DSN
+  under Settings -> Client Keys (DSN). Leave unset to run without Sentry
+  (settings.py only calls `sentry_sdk.init()` when this is non-empty).
+  `SENTRY_ENVIRONMENT` (prod: `production`; rehearsal: `rehearsal`) and
+  `SENTRY_RELEASE` (the deployed commit SHA, stamped by `app_deploy` after
+  checkout) are derived on-box, not operator-supplied.
+
 **NOT pre-stored — produced by the tofu step at run time and piped into the
 ansible step's env in-memory (masked, never to disk/log):**
 - `ARXII_BACKUP_WRITER_ACCESS_KEY`, `ARXII_BACKUP_WRITER_SECRET_KEY` — the

@@ -271,6 +271,12 @@ vault_allow_empty:
   - ARXII_OFFBOX_ALERT_TOKEN
   - ARXII_CADDY_CF_DNS_TOKEN
 
+# secrets_vault (#2236 Phase 5) — tag any Sentry events from this box (if
+# ARXII_SENTRY_DSN is ever set for a rehearsal run — it isn't by default,
+# secrets_map_optional allows it empty everywhere) as "rehearsal", never
+# "production".
+vault_sentry_environment: rehearsal
+
 # base — authorized_keys are public, not sensitive (same var standup.sh
 # generates from a tofu output; ephemeral-stage doesn't echo them back as a
 # tofu output, so this is sourced directly from the env var instead).
