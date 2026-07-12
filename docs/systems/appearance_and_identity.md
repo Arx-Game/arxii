@@ -439,11 +439,14 @@ ruling 1b) — checked *after* the `AUTO_FAIL` check so an overlay-only target t
 *also* past the auto-fail band still reports indistinguishable `AUTO_FAIL`, not a
 reclassified `FAILURE`.
 
-**Deferred: crafted disguise kits.** Apostate's ruling explicitly marks kit-crafting
-"(not yet in scope)" — the baseline above derives purely from the existing overlay
-data (`DisguiseKind` + `ConcealmentLevel`); kit *quality* as a pierce-resistance
-modifier is a later slot-in, not built here. Draft child-issue body:
-`.superpowers/sdd/disguise-kit-issue-draft.md`.
+**Crafted disguise kits (#2249).** Built and wired. A `DisguiseKitEffect`
+item-effect model declares the overlay's `DisguiseKind` + `ConcealmentLevel`;
+`use_item` dispatches to `apply_disguise`, stamping the kit `ItemInstance` onto
+`CharacterFormState.applied_kit_instance`. `identification_difficulty` reads
+the kit's `QualityTier.stat_multiplier` for an additive baseline bonus — a
+better-crafted kit is harder to see through. Narratively-applied disguises (no
+kit instance) are unaffected (baseline unchanged). The Manipulation-folding
+"convince someone the kit disguise is genuinely you" check remains out of scope.
 
 **Built surfaces:** `world/forms/services/identification.py` (`identification_difficulty`,
 `attempt_identification`); `world/forms/types.py` (`IdentificationOdds`,
