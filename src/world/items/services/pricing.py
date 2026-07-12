@@ -24,6 +24,10 @@ def appraise(instance: ItemInstance) -> int:
     """
     base = instance.template.value
     tier = instance.quality_tier
-    multiplier = tier.stat_multiplier if tier is not None else Decimal(1)
+    # ``stat_multiplier`` is a DecimalField but can be a plain float in memory
+    # (unsaved/factory-built rows); wrap in Decimal(str(...)) as the rest of the
+    # codebase does (ItemInstance.quality_multiplier) so ``Decimal * float`` never
+    # raises TypeError.
+    multiplier = Decimal(str(tier.stat_multiplier)) if tier is not None else Decimal(1)
     material = instance.lore_value or 0
     return int((Decimal(base) * multiplier).to_integral_value()) + material

@@ -11,7 +11,7 @@ allowed direction; societies is the reusable renown primitive, ADR-0010).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeGuard
 
 from world.items.crafting.constants import (
     MASTERWORK_DEED_BASE_VALUE,
@@ -23,8 +23,12 @@ if TYPE_CHECKING:
     from world.items.models import QualityTier
 
 
-def is_masterwork(tier: QualityTier | None) -> bool:
-    """Whether a resolved quality tier counts as masterwork (#2243)."""
+def is_masterwork(tier: QualityTier | None) -> TypeGuard[QualityTier]:
+    """Whether a resolved quality tier counts as masterwork (#2243).
+
+    A ``TypeGuard`` so callers narrow a ``QualityTier | None`` to ``QualityTier``
+    inside an ``if is_masterwork(tier):`` block — a masterwork is never ``None``.
+    """
     return tier is not None and tier.stat_multiplier >= MASTERWORK_STAT_MULTIPLIER_THRESHOLD
 
 
