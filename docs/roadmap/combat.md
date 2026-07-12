@@ -112,10 +112,27 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   still has no position picker (telnet-only there). See
   [magic.md](../systems/magic.md) (Effect Palette) and [INDEX.md](../systems/INDEX.md)
   (Combat § "Cast-position targeting") for the full wiring.
+- **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
+  One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
+  in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips
+  the break bar to 0 and opens a vulnerability window (soak bypassed) → crossing a
+  phase's health trigger while still in that window transitions the boss and spawns its
+  authored reinforcements → a later phase transition stamps an enraged
+  `damage_multiplier` (proven via a real before/after NPC-damage comparison, not just a
+  field read) → the break bar re-breaks in the final phase, opening a second window →
+  the party finishes the boss off with `vulnerability_rounds_remaining > 0` still true at
+  the kill. Also proves enemy-NPC condition application (`ThreatPoolEntry
+  .conditions_applied` landing on the attacked PC — see the WIRED-UNPROVEN entry below
+  for why that's now PROVEN, not the reverse "onto the boss" direction). Scenario
+  composed by `BossFightScenarioFactory` (`world/combat/factories.py`); journey test:
+  `src/integration_tests/test_boss_fight_journey.py`.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
-- Enemy-NPC condition application · thread-pull final outcome. (Combo full journey proven in #2017.)
+- Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC
+  condition application — the other half of this bullet's old wording — is now proven
+  by the #2095 boss-fight journey above: `ThreatPoolEntry.conditions_applied` lands the
+  condition on the attacked PC, never on the attacking NPC/boss itself.)
 - **Guardian-reaction surfaces beyond the two #2207 journey tests above.** Wired but
   not journey-proven: the technique-guardian BLINK flavor's clean-success ward
   relocation (`force_move_to_position` to the guardian's own position —

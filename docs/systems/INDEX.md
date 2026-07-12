@@ -3666,6 +3666,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   action for DEFEND; reactive-defense handlers in `world/magic/services/effect_handlers.py`),
   covenants (speed_rank resolution order, `apply_equipped_armor_soak`),
   magic (technique use pipeline, `CombatPull`, effect palette — summon/reactive handlers)
+- **Test composition helper:** `BossFightScenarioFactory` (`world/combat/factories.py`,
+  #2095) composes a full 3-PC-vs-boss encounter (distinct-EffectType techniques, a
+  learned PC1/PC2 combo, a BOSS opponent with 3 authored `BossPhase` rows — break bar +
+  phase-2 reinforcement + phase-3 enrage — and a threat pool carrying both a flat-damage
+  entry and a `conditions_applied` entry) in one call, mirroring
+  `PlayableCombatScenarioFactory`'s style; use it instead of hand-rolling boss-fight
+  fixtures. Driven end-to-end by `src/integration_tests/test_boss_fight_journey.py`.
 - **Source:** `src/world/combat/`
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,
