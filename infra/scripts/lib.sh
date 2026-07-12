@@ -111,3 +111,32 @@ arxii_prod:
       ansible_user: ${ssh_user}
 EOF
 }
+
+# verify_restored_db <host> <port> <db> <user>
+#
+# Post-restore sanity check (#2236 review): asserts BOTH that
+# django_migrations has rows (the schema is really Django's, not some stray
+# leftover) AND that the public schema has at least a floor of tables (a
+# half-applied dump can still leave a handful of tables behind and pass a
+# bare ">0" check) — the same two-count-query + MIN_PUBLIC_TABLES=50 shape
+# restore.sh's own inline copy uses (see its header comment for the "why
+# 50" reasoning). Used by pull_prod_db.sh (a dev laptop/devcontainer tool,
+# safe to source lib.sh). restore.sh keeps ITS OWN inline copy standalone —
+# it deploys to the prod box over SSH, where lib.sh is never shipped, so it
+# cannot source this. Requires PGPASSWORD (or ~/.pgpass) already set by the
+# caller, same as every other psql call in this repo's scripts.
+MIN_PUBLIC_TABLES=50
+verify_restored_db() {
+  local host="$1" port="$2" db="$3" user="$4" counts migrations_n tables_n
+  counts="$(psql -tA -F' ' -v ON_ERROR_STOP=1 -h "${host}" -p "${port}" -U "${user}" "${db}" \
+    -c "select (select count(*) from django_migrations),
+               (select count(*) from information_schema.tables where table_schema='public');")"
+  read -r migrations_n tables_n <<<"${counts}"
+
+  [[ "${migrations_n}" -gt 0 ]] \
+    || fail "post-restore verification FAILED: django_migrations has 0 rows (schema not really restored)"
+  [[ "${tables_n}" -ge "${MIN_PUBLIC_TABLES}" ]] \
+    || fail "post-restore verification FAILED: only ${tables_n} public tables (< floor ${MIN_PUBLIC_TABLES})"
+
+  log "verified (${tables_n} public tables, django_migrations has ${migrations_n} rows)."
+}

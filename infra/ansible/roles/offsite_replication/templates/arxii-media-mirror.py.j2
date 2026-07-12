@@ -21,11 +21,20 @@
 # credential the sibling arxii-offsite.sh DB job also uses) -- never logged,
 # never echoed.
 #
-# Uses the `aws` CLI (s3api head-object / s3 cp) rather than boto3, matching
-# the sibling arxii-offsite.sh shell job's tooling -- awscli is already an
-# apt dependency this role installs (see tasks/main.yml).
+# Uses the `aws` CLI (s3api list-objects-v2 / s3 cp) rather than boto3,
+# matching the sibling arxii-offsite.sh shell job's tooling -- awscli is
+# already an apt dependency this role installs (see tasks/main.yml).
+#
+# #2236 review: existence checks were previously ONE `s3api head-object`
+# HTTP round-trip PER Cloudinary resource -- thousands of requests on a
+# large media library, almost all of them re-confirming "yes, still
+# mirrored" on every single run. Replaced with ONE paginated
+# `s3api list-objects-v2` listing upfront (under the `media/` prefix),
+# parsed into a Python set; membership is then an in-memory check per
+# resource. No-delete semantics and the counts/exit behavior are unchanged.
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -49,25 +58,44 @@ def aws_env() -> dict[str, str]:
     return env
 
 
-def object_exists(key: str, env: dict[str, str]) -> bool:
-    result = subprocess.run(
-        [
-            "aws", "--endpoint-url", R2_ENDPOINT, "s3api", "head-object",
-            "--bucket", R2_BUCKET, "--key", key,
-        ],
-        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-    )
-    return result.returncode == 0
+def list_existing_keys(env: dict[str, str]) -> set[str]:
+    """One paginated `s3api list-objects-v2` listing of everything already
+    under MEDIA_PREFIX in R2 -- replaces a per-resource head-object call.
+    Raises on a listing failure: a silently-empty set here would look like
+    "nothing mirrored yet" and re-upload the entire media library instead of
+    failing loudly."""
+    keys: set[str] = set()
+    continuation_token: str | None = None
+    while True:
+        cmd = [
+            "aws", "--endpoint-url", R2_ENDPOINT, "s3api", "list-objects-v2",
+            "--bucket", R2_BUCKET, "--prefix", MEDIA_PREFIX, "--output", "json",
+        ]
+        if continuation_token:
+            cmd += ["--continuation-token", continuation_token]
+        result = subprocess.run(
+            cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode(errors="replace")
+            raise RuntimeError(f"arxii-media-mirror: listing s3://{R2_BUCKET}/{MEDIA_PREFIX} FAILED: {stderr}")
+        payload = json.loads(result.stdout or b"{}")
+        for obj in payload.get("Contents", []):
+            keys.add(obj["Key"])
+        continuation_token = payload.get("NextContinuationToken")
+        if not payload.get("IsTruncated") or not continuation_token:
+            break
+    return keys
 
 
-def mirror_one(resource: dict, env: dict[str, str]) -> str:
+def mirror_one(resource: dict, existing_keys: set[str], env: dict[str, str]) -> str:
     """Returns "new", "skipped", or "failed". NEVER deletes/overwrites --
     an existing key is left untouched (incremental backup, not a sync)."""
     public_id = resource["public_id"]
     fmt = resource.get("format", "")
     key = f"{MEDIA_PREFIX}{public_id}.{fmt}" if fmt else f"{MEDIA_PREFIX}{public_id}"
 
-    if object_exists(key, env):
+    if key in existing_keys:
         return "skipped"
 
     secure_url = resource.get("secure_url")
@@ -123,11 +151,17 @@ def main() -> int:
         api_secret=os.environ["CLOUDINARY_API_SECRET"],
     )
     env = aws_env()
+    existing_keys = list_existing_keys(env)
+    print(
+        f"arxii-media-mirror: {len(existing_keys)} object(s) already present under "
+        f"s3://{R2_BUCKET}/{MEDIA_PREFIX}",
+        file=sys.stderr,
+    )
 
     counts = {"new": 0, "skipped": 0, "failed": 0}
     for resource_type in RESOURCE_TYPES:
         for resource in iter_resources(resource_type):
-            counts[mirror_one(resource, env)] += 1
+            counts[mirror_one(resource, existing_keys, env)] += 1
 
     total = sum(counts.values())
     print(

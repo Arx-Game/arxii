@@ -274,6 +274,10 @@ chkno "validate.yml's caddy job no longer uses '-print -quit' (first-match-only)
   "grep -n \"iname 'Caddyfile\\*' -print -quit\" .github/workflows/validate.yml"
 chk   "validate.yml's caddy job iterates over all found Caddyfile* templates" \
   "grep -q 'for cf in \"\${cfs\[@\]}\"' .github/workflows/validate.yml"
+chkno "validate.yml's caddy job no longer dispatches stock-vs-plugin by filename ('*rehearsal*' substring — same bug-class as -print -quit above)" \
+  "grep -n '\\*rehearsal\\*)' .github/workflows/validate.yml"
+chk   "validate.yml's caddy job dispatches stock-vs-plugin by template CONTENT (the acme_dns directive), not filename" \
+  "nc .github/workflows/validate.yml | grep -q \"grep -q 'acme_dns'\""
 
 # (d) both Caddyfile templates must carry the same site shape (ws + static
 # routes) — the "EDIT BOTH" contract enforced by grep, not just a comment.
@@ -329,6 +333,22 @@ assert_before "rehearse.sh's teardown trap is registered BEFORE the first tofu a
 # operator-supplied one (the entire point of an unattended rehearsal box).
 chk   "rehearse.sh generates PG/Django/superuser secrets via openssl rand (never operator env)" \
   "grep -q 'pg_password=\"\$(openssl rand -hex' infra/scripts/rehearse.sh && grep -q 'django_secret_key=\"\$(openssl rand -hex' infra/scripts/rehearse.sh && grep -q 'superuser_password=\"\$(openssl rand -hex' infra/scripts/rehearse.sh"
+
+# (i2) #2236 review: rehearse.sh single-sources the TLS-telnet port into its
+# generated group_vars (hostfw_tls_telnet_port/dh_tls_telnet_port) rather
+# than relying on the role defaults happening to still match rehearse.sh's
+# own TLS_TELNET_PORT constant. Extract the numeric default from all three
+# sources and assert they agree — silent drift here would mean smoke.sh's
+# TLS-telnet check probes a port host_firewall never actually opened.
+hostfw_default_port="$(grep -oE '^hostfw_tls_telnet_port: [0-9]+' infra/ansible/roles/host_firewall/defaults/main.yml | grep -oE '[0-9]+')"
+dh_default_port="$(grep -oE '^dh_tls_telnet_port: [0-9]+' infra/ansible/roles/django_hardening/defaults/main.yml | grep -oE '[0-9]+')"
+rehearse_const_port="$(grep -oE 'readonly TLS_TELNET_PORT=[0-9]+' infra/scripts/rehearse.sh | grep -oE '[0-9]+')"
+chk "hostfw_tls_telnet_port default, dh_tls_telnet_port default, and rehearse.sh's TLS_TELNET_PORT constant all agree" \
+  "[[ -n '${hostfw_default_port}' && '${hostfw_default_port}' == '${dh_default_port}' && '${dh_default_port}' == '${rehearse_const_port}' ]]"
+chk "rehearse.sh emits hostfw_tls_telnet_port into its generated group_vars (single-sourcing the port, not just trusting role defaults to match)" \
+  "grep -q 'hostfw_tls_telnet_port: \${TLS_TELNET_PORT}' infra/scripts/rehearse.sh"
+chk "rehearse.sh emits dh_tls_telnet_port into its generated group_vars" \
+  "grep -q 'dh_tls_telnet_port: \${TLS_TELNET_PORT}' infra/scripts/rehearse.sh"
 
 # (j) rehearse.yml workflow shape (mirrors standup.yml's CI button checks).
 chk   "rehearse.yml is workflow_dispatch"      "grep -q 'workflow_dispatch' .github/workflows/rehearse.yml"

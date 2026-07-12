@@ -106,6 +106,25 @@ teardown_s3_secret_key="${STAGE_TF_STATE_S3_SECRET_KEY}"
 
 teardown() {
   log "tearing down ephemeral stage (ALWAYS, even on failure; run_id=${RUN_ID})…"
+
+  # Empty the stage bucket BEFORE destroy (#2236 review): the backup-trigger
+  # step below writes a REAL backup object into it, and S3's DeleteBucket
+  # refuses to remove a non-empty bucket — every green run would otherwise
+  # leak this bucket forever. stage_bucket*/stage_bucket_writer_* (unlike
+  # STAGE_LINODE_TOKEN/STAGE_TF_STATE_S3_*, deliberately unset further down
+  # for defense-in-depth) are never unset, so they're still valid here even
+  # after that line runs. Guarded + `|| true`: an early failure (before the
+  # tofu apply/outputs step below ever ran) leaves stage_bucket unset —
+  # skip cleanly, nothing to empty — and a bucket that's already
+  # empty/nonexistent must not fail the teardown.
+  if [[ -n "${stage_bucket:-}" ]]; then
+    log "emptying stage bucket s3://${stage_bucket}/ before destroy…"
+    AWS_ACCESS_KEY_ID="${stage_bucket_writer_access_key}" \
+    AWS_SECRET_ACCESS_KEY="${stage_bucket_writer_secret_key}" \
+    aws --endpoint-url "${stage_bucket_s3_endpoint}" --region "${stage_bucket_region}" \
+      s3 rm "s3://${stage_bucket}/" --recursive >/dev/null 2>&1 || true
+  fi
+
   # AWS_* on EVERY backend-touching tofu invocation, not just `init` — the S3
   # backend needs live credentials to read/write remote state on every call
   # (nothing about them is cached to disk by `init`); a `VAR=val` command
@@ -135,6 +154,23 @@ tofu -chdir="${STAGE_DIR}" init -input=false \
   -backend-config="skip_requesting_account_id=true" \
   -backend-config="skip_s3_checksum=true" \
   -backend-config="skip_metadata_api_check=true"
+
+# Stale-state reuse guard (#2236 review): a previous run's stage MUST be
+# torn down before this one applies. Without this, a leftover box from a
+# failed teardown would silently re-converge IN PLACE — Ansible/site.yml is
+# idempotent, so `apply` would just update the existing instance rather than
+# provisioning a fresh one — which would stop this rehearsal from actually
+# proving the first-boot cloud-init/arxadmin/ssh-hardening path while it
+# keeps printing REHEARSAL PASSED.
+log "verifying stage state is empty (no leftover previous stage) before" \
+  "applying…"
+existing_state="$(AWS_ACCESS_KEY_ID="${STAGE_TF_STATE_S3_ACCESS_KEY}" \
+  AWS_SECRET_ACCESS_KEY="${STAGE_TF_STATE_S3_SECRET_KEY}" \
+  tofu -chdir="${STAGE_DIR}" state list 2>/dev/null || true)"
+[[ -z "${existing_state}" ]] \
+  || fail "a previous stage was not torn down — the rehearsal must start from" \
+     "empty state to prove a true first boot; destroy it first:" \
+     "AWS_ACCESS_KEY_ID=\$STAGE_TF_STATE_S3_ACCESS_KEY AWS_SECRET_ACCESS_KEY=\$STAGE_TF_STATE_S3_SECRET_KEY TF_VAR_linode_token=\$STAGE_LINODE_TOKEN TF_VAR_run_id=<old-run-id> TF_VAR_authorized_keys=\$ARXII_AUTHORIZED_KEYS tofu -chdir=${STAGE_DIR} destroy -auto-approve -input=false"
 
 # AWS_* required here too (see teardown()'s comment above — every
 # backend-touching command needs it, not just `init`).
@@ -227,6 +263,13 @@ rehearsal_mode: true
 hostfw_ssh_admin_cidrs: ["0.0.0.0/0", "::/0"]
 hostfw_cloudflare_ipv4_cidrs: ["192.0.2.0/24"]
 hostfw_cloudflare_ipv6_cidrs: ["2001:db8::/32"]
+# Single-sourced from this script's own \${TLS_TELNET_PORT} constant (#2236
+# review) — rather than relying on host_firewall's/django_hardening's role
+# defaults happening to still match rehearse.sh's constant, this makes
+# rehearse.sh authoritative in rehearsal, the same way tofu's tls_telnet_port
+# output is authoritative in prod (see standup.sh). acceptance.sh's Phase 3
+# P1 section cross-checks all three stay equal.
+hostfw_tls_telnet_port: ${TLS_TELNET_PORT}
 
 # caddy (roles/caddy/defaults/main.yml) — internal-CA template, no DNS-01,
 # no Cloudflare credential needed.
@@ -241,6 +284,8 @@ ttc_web_fqdn: "${REHEARSAL_FQDN}"
 dh_allowed_hosts: ["${REHEARSAL_FQDN}"]
 dh_web_fqdn: "${REHEARSAL_FQDN}"
 dh_default_from_email: "noreply@rehearsal.invalid"
+# Same single-sourcing as hostfw_tls_telnet_port above — see that comment.
+dh_tls_telnet_port: ${TLS_TELNET_PORT}
 
 # backups (roles/backups/defaults/main.yml) — the REAL stage bucket
 # (terraform/ephemeral-stage's object_storage_ephemeral module) with

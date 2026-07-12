@@ -141,18 +141,25 @@ jobs:
             # are intentionally left intact.
             rendered="/tmp/$(basename "$cf").rendered"
             sed -E 's/\{\{[^}]*\}\}/placeholder.example.com/g' "$cf" > "$rendered"
-            case "$cf" in
-              *rehearsal*)
-                # local_certs needs NO plugin — adapts fine with stock caddy.
-                # Deliberately validated WITHOUT the plugin build (keeping
-                # that true is the point: this file must never gain a
-                # DNS-01-only directive without CI catching it).
-                bin=/tmp/caddy-stock
-                ;;
-              *)
-                bin=/tmp/caddy-plugin
-                ;;
-            esac
+            # Dispatch on CONTENT (#2236 review), not filename: a "does the
+            # filename contain the word rehearsal" substring match trusts a
+            # naming convention that can drift (a renamed/new template
+            # silently gets the wrong binary and either false-FAILs on a
+            # missing plugin or false-PASSes without ever validating the
+            # plugin directive) — same bug-class as the `-print -quit`
+            # first-match-only issue this branch already fixed elsewhere in
+            # this same job. `acme_dns` is the actual requirement: only a
+            # template using it needs the caddy-dns/cloudflare plugin build.
+            if grep -q 'acme_dns' "$cf"; then
+              bin=/tmp/caddy-plugin
+            else
+              # local_certs (or no ACME directive at all) needs NO plugin —
+              # adapts fine with stock caddy. Deliberately validated WITHOUT
+              # the plugin build (keeping that true is the point: this file
+              # must never gain a DNS-01-only directive without CI catching
+              # it via a FAIL here, not a silent stock-binary pass).
+              bin=/tmp/caddy-stock
+            fi
             # `adapt` (NOT `validate`): checks Caddyfile syntax + that every
             # directive/module (incl. the cloudflare DNS plugin, where used)
             # is real, WITHOUT provisioning TLS — so no Cloudflare API

@@ -146,8 +146,11 @@ echo "== TLS-telnet handshake =="
 # `-servername` sends SNI in case Caddy's local_certs ever keys the cert by
 # SNI (Evennia's own SSL-telnet listener doesn't use SNI routing today, but
 # passing it is harmless and future-proof). A successful handshake writes at
-# least one CERTIFICATE PEM block to stdout.
-telnet_cert="$(printf '' | openssl s_client -connect "${HOST}:${TLS_TELNET_PORT}" \
+# least one CERTIFICATE PEM block to stdout. `timeout` (#2236 review): unlike
+# every curl check above, openssl s_client has no built-in time bound of its
+# own — a hung/black-holed connection would otherwise wedge this script
+# forever instead of failing this one check.
+telnet_cert="$(printf '' | timeout "${CURL_TIMEOUT_S}" openssl s_client -connect "${HOST}:${TLS_TELNET_PORT}" \
   -servername "${FQDN}" 2>/dev/null || true)"
 if grep -q 'BEGIN CERTIFICATE' <<<"${telnet_cert}"; then
   pass "TLS handshake on telnet port ${TLS_TELNET_PORT} -> cert received"

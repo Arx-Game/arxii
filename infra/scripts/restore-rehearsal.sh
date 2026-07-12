@@ -21,8 +21,10 @@
 # over the network from off-box could never have worked in the first place.
 #
 # Required: REHEARSAL_CONFIRM=1, STAGE-scoped creds (TF_VAR_linode_token =
-# stage token), RUN_ID, and the RESTORE_* read envs (see restore.sh) for
-# BOTH the linode and r2 sources (this script rehearses both in one run).
+# stage token), RUN_ID, the STAGE_TF_STATE_* backend/state creds (#2236
+# review — same contract rehearse.sh uses for this root's own remote
+# state), and the RESTORE_* read envs (see restore.sh) for BOTH the linode
+# and r2 sources (this script rehearses both in one run).
 # RESTORE_DB_USER's Postgres PASSWORD is NOT operator-supplied — it is
 # generated fresh per run and used only to create a throwaway superuser role
 # on the disposable stage box, destroyed along with it.
@@ -51,6 +53,19 @@ fail() { printf '[rehearsal] REFUSING: %s\n' "$*" >&2; exit 1; }
 [[ "$(basename "${STAGE_DIR}")" == "ephemeral-stage" ]] \
   || fail "guard: this only ever runs against the ephemeral-stage root"
 
+# Preflight — fail closed BEFORE spinning up a billed stage box (#2236
+# review). Same STAGE_TF_STATE_* env contract rehearse.sh uses for this
+# root's remote state: without these, the tofu calls below had NO
+# -backend-config at all and failed outright under -input=false (no state
+# was ever actually shared/isolated by key — see the -backend-config flags
+# added to the init call below).
+: "${STAGE_TF_STATE_BUCKET:?set STAGE_TF_STATE_BUCKET}"
+: "${STAGE_TF_STATE_KEY:?set STAGE_TF_STATE_KEY}"
+: "${STAGE_TF_STATE_REGION:?set STAGE_TF_STATE_REGION}"
+: "${STAGE_TF_STATE_ENDPOINT:?set STAGE_TF_STATE_ENDPOINT}"
+: "${STAGE_TF_STATE_S3_ACCESS_KEY:?set STAGE_TF_STATE_S3_ACCESS_KEY}"
+: "${STAGE_TF_STATE_S3_SECRET_KEY:?set STAGE_TF_STATE_S3_SECRET_KEY}"
+
 # Fail fast on missing creds BEFORE spinning up a stage box for a guaranteed
 # failure — both source's full credential sets are required since this
 # script rehearses linode AND r2 in the same run.
@@ -75,29 +90,60 @@ env_tmp="$(mktemp)"; chmod 600 "${env_tmp}"
 teardown() {
   rm -f "${env_tmp}"
   log "tearing down ephemeral stage (always, even on failure)…"
+  # AWS_* required on every backend-touching tofu call (#2236 review) — the
+  # S3 backend needs live credentials on every invocation, nothing about
+  # them is cached to disk by `init` (mirrors rehearse.sh). This script
+  # never unsets STAGE_TF_STATE_S3_*, so they're still valid here.
+  AWS_ACCESS_KEY_ID="${STAGE_TF_STATE_S3_ACCESS_KEY}" \
+  AWS_SECRET_ACCESS_KEY="${STAGE_TF_STATE_S3_SECRET_KEY}" \
   tofu -chdir="${STAGE_DIR}" destroy -auto-approve -input=false || \
     printf '[rehearsal] WARNING: stage teardown failed — destroy manually!\n' >&2
 }
 trap teardown EXIT
 
 log "provisioning ephemeral stage…"
-tofu -chdir="${STAGE_DIR}" init -input=false
+# -backend-config (#2236 review): this root's `backend "s3" {}` block is
+# empty by design (see terraform/ephemeral-stage/versions.tf's own header
+# comment) — the bucket/key/region/endpoint MUST be supplied via
+# -backend-config on every init, same flags rehearse.sh uses.
+AWS_ACCESS_KEY_ID="${STAGE_TF_STATE_S3_ACCESS_KEY}" \
+AWS_SECRET_ACCESS_KEY="${STAGE_TF_STATE_S3_SECRET_KEY}" \
+tofu -chdir="${STAGE_DIR}" init -input=false \
+  -backend-config="bucket=${STAGE_TF_STATE_BUCKET}" \
+  -backend-config="key=${STAGE_TF_STATE_KEY}" \
+  -backend-config="region=${STAGE_TF_STATE_REGION}" \
+  -backend-config="endpoint=${STAGE_TF_STATE_ENDPOINT}" \
+  -backend-config="skip_credentials_validation=true" \
+  -backend-config="skip_region_validation=true" \
+  -backend-config="use_path_style=true" \
+  -backend-config="skip_requesting_account_id=true" \
+  -backend-config="skip_s3_checksum=true" \
+  -backend-config="skip_metadata_api_check=true"
+
+AWS_ACCESS_KEY_ID="${STAGE_TF_STATE_S3_ACCESS_KEY}" \
+AWS_SECRET_ACCESS_KEY="${STAGE_TF_STATE_S3_SECRET_KEY}" \
 tofu -chdir="${STAGE_DIR}" apply -auto-approve -input=false
 
 # Defense-in-depth: confirm what we provisioned is tagged ephemeral-stage
 # before we trust the teardown will only hit stage.
+AWS_ACCESS_KEY_ID="${STAGE_TF_STATE_S3_ACCESS_KEY}" \
+AWS_SECRET_ACCESS_KEY="${STAGE_TF_STATE_S3_SECRET_KEY}" \
 tofu -chdir="${STAGE_DIR}" state list | grep -q . \
   || fail "no stage resources in stage state — aborting"
 
-stage_ip="$(tofu -chdir="${STAGE_DIR}" output -raw stage_ipv4)"
+stage_ip="$(AWS_ACCESS_KEY_ID="${STAGE_TF_STATE_S3_ACCESS_KEY}" \
+  AWS_SECRET_ACCESS_KEY="${STAGE_TF_STATE_S3_SECRET_KEY}" \
+  tofu -chdir="${STAGE_DIR}" output -raw stage_ipv4)"
 log "stage host: ${stage_ip}"
 
 wait_for_tcp "${stage_ip}" 22 "${SSH_WAIT_TIMEOUT_S}" "${SSH_WAIT_INTERVAL_S}"
 
 # Linode injects the stage-run keypair straight into root on this throwaway
-# box (terraform/modules/compute `authorized_keys` — same mechanism prod's
-# very first converge relies on). No arxadmin exists here; unlike prod,
-# nothing ever hardens this box, it just gets destroyed.
+# box (terraform/modules/compute_ephemeral `authorized_keys` — same
+# mechanism prod's very first converge relies on, via the prod compute
+# module; stale reference fixed #2236 review — this root has used
+# compute_ephemeral, not compute, since P1). No arxadmin exists here;
+# unlike prod, nothing ever hardens this box, it just gets destroyed.
 # shellcheck disable=SC2029  # client-side expansion is intentional: callers
 # pass a pre-quoted single command string (or a heredoc via `bash -s`).
 ssh_stage() { ssh "${SSH_OPTS[@]}" "root@${stage_ip}" "$@"; }

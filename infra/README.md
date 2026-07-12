@@ -388,6 +388,17 @@ left uncorrected, every rehearsal/restore-rehearsal teardown would have
 failed to destroy the stage instance+volume, leaking a billed Linode every
 run.) The prod modules are untouched.
 
+Two more teardown-correctness fixes (#2236 review): the stage backups
+bucket has **versioning OFF** (unlike the prod bucket) — the backup step
+above writes a real object into it, and versioning would leave delete
+markers behind a plain `s3 rm --recursive`, which would keep blocking
+`tofu destroy` on a non-empty bucket the same way `prevent_destroy` used
+to; `rehearse.sh`'s teardown now empties the bucket before destroying it.
+And before every `apply`, `rehearse.sh` now asserts the stage state is
+empty first — a leftover stage from a failed teardown would otherwise
+silently re-converge in place (Ansible is idempotent) instead of actually
+proving a true first boot, while still printing `REHEARSAL PASSED`.
+
 ### The gated `stage` Environment — minimal secret contract
 
 Mirrors `prod`'s contract (see above), stage-scoped:
@@ -464,10 +475,15 @@ tofu output -raw backups_s3_endpoint      # -> ARXII_BACKUPS_S3_ENDPOINT
 tofu output -raw region                   # -> ARXII_BACKUPS_REGION
 ```
 
-`DATABASE_URL` (already required for local dev) is the restore target — only
-the plain `postgres://user:pass@host:port/dbname` form is supported (no
-query string, no surrounding quotes; same restriction the justfile's
-`_testdb-url` recipe already imposes on the same variable).
+`DATABASE_URL` (already required for local dev) is the restore target.
+Accepted form: `postgres[ql]://user[:pass]@host[:port]/dbname` (no query
+string, no surrounding quotes) — password and port are optional (port
+defaults to 5432 when omitted). The dbname charset check mirrors the
+justfile's `_testdb-url` recipe's own check on the same variable, but that
+recipe doesn't otherwise parse the URL (it just splits on the last `/`), so
+this is not full parity with it — just the same dbname restriction.
+Out of scope (fails loudly, not silently): bracketed IPv6 hosts,
+percent-encoded passwords.
 
 ## Media durability (Cloudinary → R2 mirror)
 
@@ -536,10 +552,12 @@ above.
   `scripts/restore-rehearsal.sh` — the narrower backup/restore-only drill. `scripts/smoke.sh` —
   end-to-end HTTP/WS/TLS-telnet checks, reusable against rehearsal or real prod.
   `scripts/lib.sh` — shared helpers (`wait_for_tcp`, `select_ssh_user`, tofu-output caching,
-  inventory/YAML generation) used by `standup.sh` and `rehearse.sh`. `scripts/pull_prod_db.sh`
-  (#2236 Phase 4; `just pull-prod`) — dev-side prod→local DB pull, deliberately NOT sourcing
-  `lib.sh` (a small, cross-referenced duplicate of `restore.sh`'s verification query instead —
-  see "Pull prod data down" above).
+  inventory/YAML generation, `verify_restored_db` — the post-restore two-count+floor check) used
+  by `standup.sh`/`rehearse.sh`/`restore-rehearsal.sh` and, for `verify_restored_db`, also
+  `scripts/pull_prod_db.sh` (#2236 Phase 4; `just pull-prod`) — dev-side prod→local DB pull.
+  `scripts/restore.sh` keeps its OWN inline copy of that same check rather than sourcing
+  `lib.sh` — it deploys standalone to the prod box over SSH, where `lib.sh` is never shipped
+  (see "Pull prod data down" above).
 - `roles/offsite_replication` owns BOTH offsite jobs (#2236 Phase 4): the original DB dump
   mirror (`arxii-offsite.service/.timer`) and the new weekly Cloudinary→R2 media mirror
   (`arxii-media-mirror.service/.timer`, see "Media durability" above) — both gated by the same
