@@ -1,10 +1,22 @@
 ---
+- name: Fail-closed — required allow-lists must be non-empty
+  ansible.builtin.assert:
+    that:
+      - hostfw_ssh_admin_cidrs | length > 0
+      - hostfw_cloudflare_ipv4_cidrs | length > 0
+      - hostfw_cloudflare_ipv6_cidrs | length > 0
+    fail_msg: >-
+      Empty allow-set(s) would render a firewall that drops all SSH+web —
+      group_vars not generated — run via standup.sh.
+    quiet: true
+
 - name: Install nftables
   ansible.builtin.apt:
     name: nftables
     state: present
     update_cache: true
     cache_valid_time: 3600
+    lock_timeout: 600
 
 - name: Render nftables ruleset (syntax-checked before applying)
   ansible.builtin.template:

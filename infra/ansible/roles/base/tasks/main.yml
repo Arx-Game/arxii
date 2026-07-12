@@ -1,4 +1,45 @@
 ---
+# Fail-closed FIRST — nothing below is safe to run without a real admin key:
+# ssh_hardening (later in site.yml) disables root login, so if this list is
+# empty we'd converge toward a host nobody can reach.
+- name: Fail-closed — admin_authorized_keys must be supplied
+  ansible.builtin.assert:
+    that:
+      - admin_authorized_keys is defined
+      - (admin_authorized_keys | length) > 0
+    fail_msg: >-
+      admin_authorized_keys is empty/undefined — group_vars not generated —
+      run via standup.sh.
+    quiet: true
+
+# SSH admin login user — BEFORE anything else that could fail. First
+# converge connects as root (Linode injects the key there); this creates
+# the user ansible reconnects as on every later run.
+- name: Create the arxadmin login user (sudo, key-only)
+  ansible.builtin.user:
+    name: arxadmin
+    shell: /bin/bash
+    groups: sudo
+    create_home: true
+
+- name: Grant arxadmin passwordless sudo (validated to avoid a bad sudoers file)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/arxadmin
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+    content: |
+      # Managed by Ansible (base). Needed because ansible reconnects as
+      # arxadmin with become after ssh_hardening disables root login.
+      arxadmin ALL=(ALL) NOPASSWD:ALL
+
+- name: Authorize admin SSH keys for arxadmin
+  ansible.posix.authorized_key:
+    user: arxadmin
+    key: "{{ item }}"
+  loop: "{{ admin_authorized_keys }}"
+
 - name: Ensure service group exists
   ansible.builtin.group:
     name: "{{ base_service_group }}"
@@ -21,12 +62,21 @@
     group: "{{ base_service_group }}"
     mode: "0750"
 
+# Waits out first-boot provisioning so the apt lock isn't held by
+# apt-daily/apt-daily-upgrade on a fresh image; tolerated if cloud-init
+# is absent (non-Linode/test hosts).
+- name: Wait for cloud-init to finish (avoids racing the apt lock)
+  ansible.builtin.command: cloud-init status --wait
+  changed_when: false
+  failed_when: false
+
 - name: Install baseline packages
   ansible.builtin.apt:
     name: "{{ base_packages }}"
     state: present
     update_cache: true
     cache_valid_time: 3600
+    lock_timeout: 600
 
 # Install uv (Python project / venv manager). Pinned version + SHA verified.
 # Idempotent: if the binary already reports the pinned version, the install

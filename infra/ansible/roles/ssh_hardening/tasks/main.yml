@@ -1,4 +1,23 @@
 ---
+# Lockout guard — the base role must have already created arxadmin + its
+# key before we disable root login below, or this box becomes unreachable.
+- name: Check arxadmin authorized_keys exists (lockout guard)
+  ansible.builtin.stat:
+    path: /home/arxadmin/.ssh/authorized_keys
+  register: ssh_hardening_arxadmin_keys
+
+- name: Fail-closed — refuse to disable root login without arxadmin keys in place
+  ansible.builtin.assert:
+    that:
+      - ssh_hardening_arxadmin_keys.stat.exists and
+        (ssh_hardening_arxadmin_keys.stat.size | default(0)) > 0
+    fail_msg: >-
+      /home/arxadmin/.ssh/authorized_keys is missing/empty — applying this
+      drop-in (PermitRootLogin no) now would lock everyone out. LOCKOUT
+      WARNING: ensure the base role ran first and admin_authorized_keys
+      was non-empty.
+    quiet: true
+
 - name: Deploy hardened sshd drop-in (validated to avoid lockout)
   ansible.builtin.copy:
     dest: /etc/ssh/sshd_config.d/10-arxii-hardening.conf

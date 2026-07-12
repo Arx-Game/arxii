@@ -2,15 +2,18 @@
 # Convergence playbook for the prod host. Idempotent: re-running changes
 # nothing. Roles are added here as each is built (M3-M5); order matters
 # (base/hardening → secrets → data → web/email → app → backups → observ.).
+# host_firewall runs BEFORE fail2ban: it creates our nftables base table
+# first (add+flush of OUR table only), so fail2ban's own table attaches
+# afterward instead of being wiped by our next reload.
 - name: Converge Arx II production host
   hosts: arxii_prod
   become: true
   roles:
     - base
     - ssh_hardening
+    - host_firewall
     - fail2ban
     - unattended_upgrades
-    - host_firewall
     - secrets_vault
     - postgres
     - caddy

@@ -1,12 +1,24 @@
 ---
+# Two-step fail-closed: collect MISSING NAMES ONLY under no_log (values never
+# touch the log), then assert without no_log so the failure message actually
+# names which var(s) are missing instead of "result was suppressed".
+- name: Collect names of missing required secret env vars (values never logged)
+  ansible.builtin.set_fact:
+    secrets_vault_missing_env: >-
+      {{ secrets_vault_missing_env | default([]) +
+         ([item] if (lookup('env', item) | length == 0) else []) }}
+  loop: "{{ secrets_map.keys() | list }}"
+  no_log: true
+
 - name: Fail-closed — every required secret env var must be present & non-empty
   ansible.builtin.assert:
     that:
-      - "lookup('env', item) | length > 0"
-    fail_msg: "Required secret env '{{ item }}' is missing/empty (set it from the gated GitHub Environment / password manager)."
+      - (secrets_vault_missing_env | default([])) | length == 0
+    fail_msg: >-
+      Required secret env var(s) missing/empty: {{
+      secrets_vault_missing_env | default([]) | join(', ') }} (set from the
+      gated GitHub Environment / password manager).
     quiet: true
-  loop: "{{ secrets_map.keys() | list }}"
-  no_log: true
 
 - name: Defense-in-depth — operator/CI-only tokens must NOT be in this env
   ansible.builtin.assert:

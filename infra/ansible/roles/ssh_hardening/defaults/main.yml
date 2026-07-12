@@ -1,4 +1,4 @@
 ---
 ssh_allow_users:
-  - arxii
+  - arxadmin
 ssh_port: 22
