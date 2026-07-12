@@ -22,3 +22,7 @@ See `world/combat/AGENT_GLOSSARY.md` — positioning provides the `AWAY_FROM_ACT
 **Take a position** (#2005):
 An unplaced actor's voluntary first entry onto a room's position graph — restricted to PRIMARY/FEATURE positions (the ground entry kinds) and gated on the MOVEMENT capability, via `take_position()`/`TakePositionAction`/telnet `position <name>`. Distinct from moving (`move_to_position`, which requires already being placed and an edge to the destination) and from GM placement (`place_in_position`, the unchecked primitive that bypasses both restrictions).
 _Avoid_: enter a position, join the grid, spawn onto the graph
+
+**Rampart** (#2209, epic #2040 decision 3):
+A projected living barrier — a `Rampart` model row one-to-one on the `Position` it covers, with a shared `integrity`/`max_integrity` pool, a `RampartElementProfile` FK (Stone/Wind/Fire/Thorn, each an authored damage-resistance/vulnerability set plus one signature behavior), and a `crack_state` property (INTACT/CRACKED/CRUMBLING) that drives the tactical map's ring rendering. Position-anchored and faction-blind, like ADR-0109's conjured obstacles — it covers everyone standing there, not a chosen side. Combat owns the interception/clash-wiring seam; see `world/combat/AGENT_GLOSSARY.md`. See ADR-0122 for why it's an entity rather than per-bearer group conditions.
+_Avoid_: ward, barrier, bulwark, shield wall (all already claimed by other systems)

@@ -236,6 +236,14 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 | `PositionEdge` | Traversable adjacency between two `Position` nodes | `position_a` / `position_b` FK (canonical pk order); `is_passable`; `blocks_flight` — obstructs AERIAL-layer traversal; `gating_challenge` FK → `mechanics.ChallengeInstance` (nullable) |
 | `ObjectPosition` | One-to-one occupancy record | `objectdb` OneToOne PK; `position` FK — mirrors `db_location` |
 
+**Rampart — living barriers** (#2209, room-anchored; see the dedicated section below):
+
+| Model | Purpose | Key Fields / Constraints |
+|-------|---------|--------------------------|
+| `Rampart` | A projected barrier covering one `Position` | `position` `OneToOneField` → `Position` (`related_name="rampart"`, one rampart per position); `element_profile` FK → `RampartElementProfile` (`PROTECT`); `integrity` / `max_integrity` (`PositiveSmallIntegerField`); `created_by_sheet` FK → `CharacterSheet` (`SET_NULL`, null=staff-authored); `duration_rounds` (null=until collapse or scene end); `crack_state` property (INTACT/CRACKED/CRUMBLING band read off `integrity`/`max_integrity`) |
+| `RampartElementProfile` | An authored, reusable element (Stone/Wind/Fire/Thorn) | `name` (unique); `signature_behavior` (`RampartSignature`: SEAL_EDGES, MISSILE_WARD, MELEE_RETALIATION, GRASPING); `signature_value`; `signature_damage_type` / `signature_condition` FK (nullable, behavior-specific) |
+| `RampartElementResistance` | Per-damage-type resist/vulnerability row for a profile | `profile` FK → `RampartElementProfile` (`CASCADE`); `damage_type` FK (`PROTECT`); `value` (signed — positive resists, negative is a vulnerability); unique per (profile, damage_type) |
+
 **Blueprint template graph** (room-independent):
 
 | Model | Purpose | Key Fields / Constraints |
@@ -286,7 +294,17 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 | `room_position_adjacency(room)` | Full ADJACENT-reach adjacency map for a room (uses prefetched attrs when available) |
 | `adjacent_open_positions(position)` | Edges to passable, non-actively-gated neighbors |
 | `reachable_positions(objectdb)` | Multi-hop BFS over passable, non-gated edges |
-| `position_graph(room) -> PositionGraph` | Full node+edge graph for the tactical map (#2006) — every position and every edge (unlike `room_position_adjacency`, keeps impassable/gated edges so the UI can render them). `PositionGraph` is `{nodes: list[PositionNode], edges: list[PositionEdgeInfo]}`; `PositionNode` is `{id, name, kind, elevation_anchor_id, layout_x, layout_y}`, `PositionEdgeInfo` is `{position_a_id, position_b_id, is_passable, blocks_flight, gating_challenge_name}`. Zero extra queries when the caller's queryset prefetches `room.positions_cached` (with each position's edges onto `all_edges_as_a`); falls back to 2 queries otherwise. |
+| `position_graph(room) -> PositionGraph` | Full node+edge graph for the tactical map (#2006) — every position and every edge (unlike `room_position_adjacency`, keeps impassable/gated edges so the UI can render them). `PositionGraph` is `{nodes: list[PositionNode], edges: list[PositionEdgeInfo]}`; `PositionNode` is `{id, name, kind, elevation_anchor_id, layout_x, layout_y, rampart_element, rampart_integrity, rampart_max_integrity, rampart_crack_state}` (the last four, #2209, are `None` on an uncovered position), `PositionEdgeInfo` is `{position_a_id, position_b_id, is_passable, blocks_flight, gating_challenge_name}`. Zero extra queries when the caller's queryset prefetches `room.positions_cached` with each position's edges onto `all_edges_as_a` **and** `select_related("rampart__element_profile")` (the combat viewset does both); falls back to 3 queries otherwise (positions + edges + one `Rampart.objects.filter(position__room=room)` query). |
+
+*Ramparts (#2209):*
+
+| Function | Summary |
+|----------|---------|
+| `raise_rampart(position, *, caster_sheet, element_profile, integrity, duration_rounds=None, gating_challenge=None)` | Create (or replace, `update_or_create` keyed on `position`) the `Rampart` covering `position`. When `element_profile.signature_behavior == SEAL_EDGES`, also seals every `PositionEdge` touching the position via `create_conjured_obstacle` — Stone is a wall, not just a ward. |
+| `rampart_at(position) -> Rampart \| None` | The `Rampart` covering a position, or `None` |
+| `damage_rampart(rampart, chip) -> bool` | The single mutation seam for rampart integrity — chips `integrity` down by `chip`; deletes the row (collapse) at 0 and returns `True`. Both combat interception and WARD-Clash progress sync funnel through here so the two paths never drift apart. |
+| `expire_rampart_rounds(room)` | Per-round duration tick (mirrors `expire_obstacle_rounds`) — decrements `duration_rounds` on the room's ramparts, deleting at 0; staff-authored (`duration_rounds=None`) ramparts are never decremented |
+| `teardown_ramparts(room)` | Delete every `Rampart` in the room (scene end; mirrors `teardown_conjured_obstacles`) |
 
 *Placement + movement:*
 
@@ -336,7 +354,7 @@ Registered in `commands/default_cmdsets.py` alongside `CmdPlaces`.
 | `PositionSummarySerializer` | `{id, name}` |
 | `PersonaPositionSerializer` | `{persona_id, position: {id, name} | null}` |
 | `PositionAdjacencyItemSerializer` | `{position_id, adjacent_position_ids: [int]}` |
-| `PositionNodeSerializer` | `{id, name, kind, elevation_anchor_id, layout_x, layout_y}` — tactical-map node shape (#2006) |
+| `PositionNodeSerializer` | `{id, name, kind, elevation_anchor_id, layout_x, layout_y, rampart_element, rampart_integrity, rampart_max_integrity, rampart_crack_state}` — tactical-map node shape (#2006; rampart fields added #2209, all four `None` when uncovered) |
 | `PositionEdgeSerializer` | `{position_a_id, position_b_id, is_passable, blocks_flight, gating_challenge_name}` — tactical-map edge shape (#2006) |
 
 ### Scene API Extension [BUILT & WIRED]
@@ -364,10 +382,50 @@ Registered in `commands/default_cmdsets.py` alongside `CmdPlaces`.
 
 ### Frontend [BUILT & WIRED]
 
-- `TacticalMap` (`frontend/src/areas/components/TacticalMap.tsx`) — shared read-only `@xyflow/react` canvas rendering a Position graph: occupant avatars per node (`PositionMapNode.tsx`), edges styled by passability/gating (`edgeStyle`), click-to-move via the caller-supplied `moveActions`/`onDispatchMove`. Auto-layout (`tacticalLayout.ts`'s `computeTacticalLayout`, a pure BFS-ring placement) is used per-node when `layout_x`/`layout_y` are both null; explicit cosmetic coordinates take precedence. Dragging is disabled — coordinate authoring is out of scope for #2006.
+- `TacticalMap` (`frontend/src/areas/components/TacticalMap.tsx`) — shared read-only `@xyflow/react` canvas rendering a Position graph: occupant avatars per node (`PositionMapNode.tsx`), edges styled by passability/gating (`edgeStyle`), click-to-move via the caller-supplied `moveActions`/`onDispatchMove`. Auto-layout (`tacticalLayout.ts`'s `computeTacticalLayout`, a pure BFS-ring placement) is used per-node when `layout_x`/`layout_y` are both null; explicit cosmetic coordinates take precedence. Dragging is disabled — coordinate authoring is out of scope for #2006. `PositionMapNode` also renders a rampart ring overlay when a node carries `rampart_element` (#2209): solid border when INTACT, dashed when CRACKED, faint pulsing dashed when CRUMBLING, colored by element (stone=slate, wind=sky, fire=orange, thorn=green, neutral fallback for unrecognized elements), with a `title` tooltip (`"Stone Rampart 18/24"`).
 - `SceneTacticalMap` (`frontend/src/scenes/components/SceneTacticalMap.tsx`) — non-combat wrapper; builds `occupantsByPosition` from the scene's `persona_positions`, renders nothing when the room has no positions. Replaced the old `RoomPositionsPanel` text-list UI (#2006).
 - `CombatTacticalMap` (`frontend/src/combat/components/CombatTacticalMap.tsx`) — combat wrapper; builds `occupantsByPosition` from `Participant.current_position`/`Opponent.current_position` instead of `persona_positions`. Mounted as a "Map" tab in `CombatScenePage`'s right rail, alongside the existing "Your Turn" tab (`CombatTurnPanel`) — tab defaults to "Your Turn" (#2006).
 - `MovementActions` — shared component (extracted from combat; lives in `frontend/src/combat/components/`); renders adjacent-position move buttons (a non-map fallback list still used elsewhere).
+
+### Rampart — Living Barriers [BUILT & WIRED] (#2209, epic #2040 decision 3)
+
+A `Rampart` is a projected barrier entity covering a single `Position` — see ADR-0122 for
+why it's a position-anchored entity (one shared integrity pool, map-renderable crack state,
+a WARD-Clash meter subject, faction-blind coverage matching ADR-0109) rather than a
+`ConditionInstance` applied per-bearer. Models + services above; the cross-app pieces:
+
+- **Interception (combat-owned).** `world.combat.services.apply_rampart_interception`
+  resolves the target's `Position`, looks up its `Rampart` (`rampart_at`), and — unless a
+  WARD `Clash` is already ACTIVE and bound to it (the no-double-drain rule) — chips
+  `integrity` via `damage_rampart`. It runs at the very top of both damage-application
+  seams, **before** the `DAMAGE_PRE_APPLY` event emits: `apply_damage_to_participant`
+  (PC target) and `_resolve_opponent_pre_apply` (NPC/summon target). Firing order:
+  **Rampart → personal reactive interceptors (force-field/reflect/blink) → Guardian
+  reactions.** `chip = max(1, damage - resist)` (min-1 floor — a barrage always cracks a
+  rampart eventually); overflow beyond remaining `integrity` passes through to the normal
+  pipeline. A melee strike against a MELEE_RETALIATION (Fire) profile burns the NPC striker
+  back for `signature_value`; GRASPING (Thorn) is handled at the forced-move landing seam
+  instead (`force_move_to_position`), not here.
+- **Strike delivery** (`StrikeDelivery`: MELEE/MISSILE, `world/combat/constants.py`,
+  shared with the open wind-mechanic question #1555) and `is_area`
+  (`targeting_mode != SINGLE`) feed a Wind (MISSILE_WARD) profile's resist adjustment:
+  bonus against MISSILE, penalty against area strikes.
+- **WARD Clash meter sync.** `Clash.rampart` (nullable FK) binds a sustained-attack WARD
+  clash to the covered position's `Rampart`; `world.combat.clash._sync_rampart_progress`
+  mirrors each round's progress delta onto `rampart.integrity` via the same
+  `damage_rampart` seam (a decrease drains it; an increase strengthens it, capped at
+  `max_integrity`), so interception and clash-progress never drift apart.
+- **Palette content** (`world.magic.effect_palette_content.ensure_rampart_content`) seeds
+  the four elemental `RampartElementProfile` rows (Stone/seal_edges, Wind/missile_ward,
+  Fire/melee_retaliation, Thorn/grasping) with their `RampartElementResistance` rows, plus
+  one "Raise Rampart (\<Element\>)" Technique + FlowDefinition + TriggerDefinition + marker
+  `ConditionTemplate` per element (Thorn also seeds the "Entangled" condition its GRASPING
+  behavior applies). `raise_rampart_on_condition`
+  (`world.magic.services.effect_handlers`) is the `CONDITION_APPLIED` adapter that reads
+  the cast destination and calls `raise_rampart`.
+- **Lifecycle.** `expire_rampart_rounds`/`teardown_ramparts` ride the same per-round tick
+  and scene-end teardown as conjured obstacles (`world.vitals.services`,
+  `world.scenes.scene_admin_services`).
 
 ### Exceptions
 

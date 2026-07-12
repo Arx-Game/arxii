@@ -134,6 +134,28 @@ _Avoid_: duel lock, mark, fixate (use for the pairing specifically), taunt (taun
 An NPC opponent designated to pair off against a specific PC in a rival duel within a group fight — the dramatic thread inside the melee. Marked by `has_foil_behavior=True` on `CombatOpponent` with a lower `auto_lock_threshold` so the pairing forms readily from threat accumulation.
 _Avoid_: rival, nemesis (narrative terms — use "foil" for the mechanical pairing)
 
+**Rampart** (#2209, epic #2040 decision 3):
+A projected living barrier covering a `Position` — the model itself is owned by
+`world.areas.positioning` (see that app's `AGENT_GLOSSARY.md`; ADR-0122 for why it's an
+entity, not per-bearer conditions). Combat owns interception: `apply_rampart_interception`
+runs at the top of both damage-application seams — `apply_damage_to_participant` and
+`_resolve_opponent_pre_apply` (the opponent-side pre-apply resolver) — **before** the
+`DAMAGE_PRE_APPLY` event emits, so a Rampart chips first and personal reactive interceptors
+(force-field/reflect/blink) and Guardian reactions only ever see what's left after it. A
+sustained attack (`is_sustained_attack`) against a covered position instead opens a WARD
+`Clash` bound to the Rampart (`Clash.rampart`), which drains the same integrity pool as the
+meter — interception no-ops while that Clash is ACTIVE (the no-double-drain rule).
+_Avoid_: ward, barrier, bulwark, shield wall (all already claimed elsewhere)
+
+**Strike delivery** (`StrikeDelivery`, #2209, shared with the open wind-mechanic question
+#1555):
+How a strike reaches its target — `MELEE` or `MISSILE` — carried on `ThreatPoolEntry.delivery`
+(NPC threat-pool entries; default `MELEE`) and passed through to
+`apply_damage_to_participant`/`apply_rampart_interception` alongside `is_area`
+(`targeting_mode != SINGLE`). A Wind-element Rampart's `MISSILE_WARD` signature reads
+`delivery`/`is_area` directly: bonus resist against `MISSILE`, penalty against area strikes.
+_Avoid_: attack type, damage delivery, hit type
+
 **BondCombatBonus**:
 The relationship co-combat passive (#2021, ADR-0109). While a PC and a bonded character (relationship above `BondCombatConfig.min_developed_absolute_value`) are co-combatants and the ally is `ParticipantStatus.ACTIVE`, the PC gains `int(mechanical_bonus)` (cube root of developed absolute value) as a `ModifierContribution(RELATIONSHIP)` on every combat check. Soul-tethered pairs get `soul_tether_multiplier × mechanical_bonus`. Directed (one-sided): only the character who invested gets the bonus. Drops when the ally falls (handing off to #2013's grief spike). Also scales INTERPOSE/SUCCOR capability checks via `bond_bonus(actor, protected)` → `extra_modifiers`.
 _Avoid_: bond buff, ally bonus (use "bond combat bonus" or "co-combat passive")
