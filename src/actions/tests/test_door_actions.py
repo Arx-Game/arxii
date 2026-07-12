@@ -333,6 +333,39 @@ class ExitStateBarsGateTests(TestCase):
         intruder_state = sdm.initialize_state_for_object(intruder)
         assert exit_state.can_traverse(intruder_state) is True
 
+    def test_bars_on_one_exit_does_not_affect_second_exit_from_same_room(self):
+        """Bars are per-exit (OneToOne on ExitProfile) -- installing them on one
+        exit from a room must not block traversal of an unrelated, unbarred
+        second exit from the SAME room (#2177 whole-branch review, Minor #8).
+        """
+        from evennia_extensions.models import ExitProfile
+        from flows.object_states.exit_state import ExitState
+        from flows.scene_data_manager import SceneDataManager
+        from world.room_features.models import ExitBarsDetails
+
+        actor, barred_exit, _persona = self._owner_actor_room_and_exit()
+        room = actor.location
+        exit_profile = ExitProfile.get_or_create_for_exit(barred_exit)
+        ExitBarsDetails.objects.create(exit_profile=exit_profile, level=1)
+
+        other_destination = ObjectDBFactory(
+            db_key="BarsGateOtherDest", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        unbarred_exit = ObjectDBFactory(db_key="east", db_typeclass_path="typeclasses.exits.Exit")
+        unbarred_exit.location = room
+        unbarred_exit.destination = other_destination
+        unbarred_exit.save()
+
+        intruder = self._intruder(room)
+
+        sdm = SceneDataManager()
+        barred_state: ExitState = sdm.initialize_state_for_object(barred_exit)
+        unbarred_state: ExitState = sdm.initialize_state_for_object(unbarred_exit)
+        intruder_state = sdm.initialize_state_for_object(intruder)
+
+        assert barred_state.can_traverse(intruder_state) is False
+        assert unbarred_state.can_traverse(intruder_state) is True
+
 
 class BreakExitActionBarsTests(TestCase):
     def _actor_and_barred_unlocked_exit(self):

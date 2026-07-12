@@ -311,8 +311,7 @@ class BreakExitAction(Action):
         actor_state = sdm.initialize_state_for_object(actor)
         message_location(
             actor_state,
-            "$You() $conj(break) through the lock on {target}!"
-            " A loud crack echoes through the area.",
+            "$You() $conj(break) through {target}! A loud crack echoes through the area.",
             mapping={"target": exit_obj},
         )
 
@@ -320,4 +319,4 @@ class BreakExitAction(Action):
             actor, exit_obj, title_prefix="Break-in", concealed=False, base_value=10
         )
 
-        return ActionResult(success=True, message=f"You break through the lock on {exit_obj.key}!")
+        return ActionResult(success=True, message=f"You break through {exit_obj.key}!")

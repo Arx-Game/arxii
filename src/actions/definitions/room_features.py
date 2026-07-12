@@ -39,9 +39,6 @@ _MSG_NO_WARD = "There is no ward here to fund."
 _MSG_INSUFFICIENT_RESONANCE = "You don't have enough resonance."
 _MSG_INVALID_AMOUNT = "Amount must be positive."
 
-_DEFENSE_THRESHOLD_PER_LEVEL = 500
-_DEFENSE_TIME_LIMIT_DAYS = 14
-
 
 def _resolve_exit_obj_for_defense(actor: ObjectDB, kwargs: dict) -> ObjectDB | None:
     """Resolve the `exit` kwarg -- ObjectDB (telnet) or exit_id int (web).
@@ -411,8 +408,8 @@ class StartDefenseInstallationAction(Action):
             completion_mode=CompletionMode.SINGLE_THRESHOLD,
             owner_persona=persona,
             started_at=now,
-            time_limit=now + timedelta(days=_DEFENSE_TIME_LIMIT_DAYS),
-            threshold_target=_DEFENSE_THRESHOLD_PER_LEVEL * target_level,
+            time_limit=now + timedelta(days=_TIME_LIMIT_DAYS),
+            threshold_target=_THRESHOLD_PER_LEVEL * target_level,
             description=f"Install/upgrade {defense_kind} to level {target_level}",
         )
         DefenseProgressionDetails.objects.create(

@@ -9,7 +9,11 @@ from world.room_features.models import ExitBarsDetails, RoomAlarmDetails, RoomWa
 
 class DefenseInstallSerializer(serializers.Serializer):
     defense_kind = serializers.ChoiceField(choices=["EXIT_BARS", "ROOM_WARD", "ROOM_ALARM"])
-    target_level = serializers.IntegerField(min_value=1)
+    # default=1 matches telnet's `defense install <kind>` default when `level=` is
+    # omitted (commands/defenses.py's `_DEFAULT_INSTALL_LEVEL`) -- #2177 whole-branch
+    # review, Minor #11 (web/telnet asymmetry: this field previously had no default
+    # and was always required).
+    target_level = serializers.IntegerField(min_value=1, default=1)
     exit_id = serializers.IntegerField(required=False)
     resonance_id = serializers.IntegerField(required=False)
 

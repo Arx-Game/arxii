@@ -72,12 +72,27 @@ class DefenseInstallTests(DefenseApiTestCase):
         self.assertTrue(Project.objects.filter(pk=response.data["project_id"]).exists())
 
     def test_install_rejects_bad_body_with_400(self) -> None:
+        # target_level is intentionally omitted here -- it defaults to 1
+        # (#2177 whole-branch review, Minor #11: matches telnet's
+        # `defense install <kind>` default), so this exercises a genuinely
+        # bad body (missing the required defense_kind) rather than relying
+        # on target_level's since-removed required-ness.
+        response = self.client.post(
+            "/api/room-features/defenses/install/",
+            {},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_install_alarm_omitting_target_level_defaults_to_one(self) -> None:
         response = self.client.post(
             "/api/room-features/defenses/install/",
             {"defense_kind": "ROOM_ALARM"},
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        project = Project.objects.get(pk=response.data["project_id"])
+        self.assertEqual(project.defense_progression_details.target_level, 1)
 
     def test_install_bars_without_exit_id_returns_400(self) -> None:
         response = self.client.post(
