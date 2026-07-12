@@ -95,6 +95,28 @@
   inhabitant surfacing shipped as #1522's REST widgets + weather echo);
   Chilled/Soaked threshold conditions (Tehom's integration, per the spec).
 
+## Built (2026-07-12, #2276 — servant fetch)
+
+- **Servant fetch service** (`world.npc_services.servant_fetch`): when a
+  player with owner/tenant standing attempts to retrieve an item or outfit
+  in another room within their estate, and an active SERVANT `NPCAssignment`
+  exists, the `NotReachable` failure is intercepted at the action layer
+  (`GetAction`, `TakeOutAction`, `ApplyOutfitAction`). A servant NPC
+  "fetches" the item with a delayed completion (`evennia.utils.delay`) and
+  room echoes (departure + arrival).
+- **Estate-scoped:** servant lookup walks the `AreaClosure` chain (same as
+  `is_owner`/`is_tenant`).
+- **Cancellation:** `.ndb.active_fetch_token` (mirrors `TravelAction`); if
+  the actor moves before the fetch completes, the stale callback no-ops.
+  `cancel_servant_fetch` is called from `Character.at_post_move`.
+- **Outfit retrieval:** servant brings individual pieces to the actor and
+  equips them via the existing `equip()` service. Wardrobe stays in place.
+- **Only different-room `NotReachable` qualifies** — closed-container-in-
+  same-room does not trigger servant fetch.
+- **Servant assignment actions deferred** — `assign_servant` / `unassign_servant`
+  / `list_servant_assignments` (mirroring the #2178 guard pattern) are a
+  follow-up issue.
+
 ## Built (2026-07-12, #2178 — guard assignment + detection)
 
 - **`NPCAssignment` model** (`world.npc_services`): a join model with
