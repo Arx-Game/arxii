@@ -638,6 +638,7 @@ def apply_disguise(
     *,
     kind: DisguiseKind = DisguiseKind.MUNDANE,
     concealment_level: ConcealmentLevel = ConcealmentLevel.NONE,
+    kit_instance=None,
 ) -> CharacterFormState:
     """Paint a fake overlay over the character's real form (#1110).
 
@@ -647,6 +648,11 @@ def apply_disguise(
     unpierced viewer sees (#1272): NONE = full trait + descriptor, DESCRIPTOR = value only,
     FULL = nothing. Single-slot: applying a new overlay replaces any current one. The disguise
     form must belong to ``character`` and be a DISGUISE.
+
+    ``kit_instance`` (optional, #2249) stamps the ``ItemInstance`` whose use applied this overlay
+    onto ``CharacterFormState.applied_kit_instance``, so ``identification_difficulty`` can read its
+    ``QualityTier.stat_multiplier`` for the kit-quality bonus term. None when the overlay is
+    narratively applied (no kit involved).
     """
     if disguise_form.character_id != character.id:
         msg = "Cannot wear a disguise belonging to another character"
@@ -659,7 +665,8 @@ def apply_disguise(
     form_state, _ = CharacterFormState.objects.get_or_create(character=character)
     form_state.active_fake_overlay = disguise_form
     form_state.overlay_kind = kind
-    form_state.save(update_fields=["active_fake_overlay", "overlay_kind"])
+    form_state.applied_kit_instance = kit_instance
+    form_state.save(update_fields=["active_fake_overlay", "overlay_kind", "applied_kit_instance"])
     return form_state
 
 
@@ -673,7 +680,8 @@ def remove_disguise(character) -> None:
         return
     form_state.active_fake_overlay = None
     form_state.overlay_kind = ""
-    form_state.save(update_fields=["active_fake_overlay", "overlay_kind"])
+    form_state.applied_kit_instance = None
+    form_state.save(update_fields=["active_fake_overlay", "overlay_kind", "applied_kit_instance"])
 
 
 def _form_to_present(character, *, pierced: bool) -> CharacterForm | None:

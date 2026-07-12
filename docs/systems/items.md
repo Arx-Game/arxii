@@ -306,6 +306,53 @@ templates (consumable, 1 charge each) with appearance effects. Called from
 
 ---
 
+## Disguise Kit Effects (#2249)
+
+An `ItemTemplate` can declare **disguise overlay effects** via the
+`DisguiseKitEffect` sidecar model — a per-template detail row that, on use,
+applies a pierceable fake overlay over the character's real form via
+`apply_disguise`. Unlike `ItemTemplateAppearanceEffect` (which edits the real
+form in-place via `change_appearance`), a disguise kit paints a fake overlay
+that preserves the real form beneath — the pierce contest (perception vs.
+disguise / dispel) is the senior dev's domain.
+
+A kit's `QualityTier.stat_multiplier` (resolved at craft time via
+`resolve_capped_tier`) feeds an additive bonus into `identification_difficulty`'s
+baseline — a better-crafted kit is harder to see through. Narratively-applied
+disguises (no kit instance) are unaffected (baseline unchanged).
+
+### DisguiseKitEffect
+
+| Field | Purpose |
+|-------|---------|
+| `item_template` | FK to `ItemTemplate` (CASCADE; `related_name="disguise_kit_effects"`) |
+| `disguise_kind` | `DisguiseKind` choice (MUNDANE/MAGICAL) — how the overlay is pierced |
+| `concealment_level` | `ConcealmentLevel` choice (NONE/DESCRIPTOR/FULL) — what an unpierced viewer sees |
+
+### use_item Integration
+
+After existing consequence/charge dispatch and appearance effects, `use_item`
+calls `_apply_disguise_kit_effects(template, user, kit_instance)` which:
+1. Queries `template.disguise_kit_effects`.
+2. Finds or creates a DISGUISE `CharacterForm` for the user.
+3. Calls `apply_disguise` for each effect, passing the `kit_instance` so its
+   `QualityTier` is stamped onto `CharacterFormState.applied_kit_instance`.
+
+### Kit-Quality Bonus in Identification
+
+`identification_difficulty` (`world/forms/services/identification.py`) reads
+`CharacterFormState.applied_kit_instance.quality_tier.stat_multiplier` and adds
+an additive bonus to the baseline: `int(stat_multiplier * 10) - 10`. A
+stat_multiplier of 1.0 (Common) adds 0; 1.5 (Fine) adds 5; 2.0 (Masterwork)
+adds 10. PLACEHOLDER scale — revisit during playtest tuning.
+
+### Admin Authoring
+
+`DisguiseKitEffectInline` (TabularInline) on `ItemTemplateAdmin`, alongside
+`ItemTemplateAppearanceEffectInline`.
+
+---
+
 ## Integration with Capability/Challenge System
 
 Items interact with the capability/action pipeline in two distinct ways:

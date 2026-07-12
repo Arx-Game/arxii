@@ -75,6 +75,18 @@ _FAME_TIER_EASE: dict[str, int] = {
     FameTier.WORLD_FAMOUS: 20,
 }
 
+# Kit-quality bonus (#2249) — an additive baseline raise keyed off the applied
+# disguise kit's QualityTier.stat_multiplier. A better kit is harder to see
+# through (the mirror image of worn_quality_aggregate's perception-*bonus* use of
+# the same field, world.mechanics.services:683-739). PLACEHOLDER scale:
+# int(stat_multiplier * _KIT_QUALITY_SCALE) - _KIT_QUALITY_BASE, so a
+# stat_multiplier of 1.0 (Common) adds 0, 1.5 (Fine) adds 5, 2.0 (Masterwork)
+# adds 10. Consistent with the additive combine rule for familiarity eases
+# above; revisit alongside the other PLACEHOLDER magnitudes during playtest
+# tuning.
+_KIT_QUALITY_SCALE = 10
+_KIT_QUALITY_BASE = 10  # stat_multiplier of 1.0 → 0 bonus
+
 # The ease a *correct* named guess applies (Decision 3) — exposed on IdentificationOdds but
 # applied only by attempt_identification (#1107 Task 2), which alone knows the guess.
 _GUESS_CORRECT_EASE = 15
@@ -105,7 +117,8 @@ def _baseline_difficulty(target_character) -> int | None:
     form_state = getattr(target_character, "form_state", None)  # noqa: GETATTR_LITERAL
     if form_state is not None and form_state.active_fake_overlay_id is not None:
         overlay = form_state.active_fake_overlay
-        return _BASELINE_BY_KIND_AND_LEVEL[(form_state.overlay_kind, overlay.concealment_level)]
+        base = _BASELINE_BY_KIND_AND_LEVEL[(form_state.overlay_kind, overlay.concealment_level)]
+        return base + _kit_quality_bonus(target_character)
     if _presents_fake_name(target_character):
         return _MASK_FLOOR_DIFFICULTY
     return None
@@ -133,6 +146,26 @@ def _fame_ease(target_sheet: CharacterSheet) -> int:
     return _FAME_TIER_EASE[true_persona.fame_tier]
 
 
+def _kit_quality_bonus(target_character) -> int:
+    """The additive baseline raise from a kit-crafted disguise (#2249).
+
+    Reads the active overlay's ``applied_kit_instance.quality_tier
+    .stat_multiplier``. Returns 0 when no kit instance is stamped (narratively-
+    applied disguise — baseline unchanged, the spec's "existing narrative-only
+    disguise flow is unaffected" requirement).
+    """
+    form_state = getattr(target_character, "form_state", None)  # noqa: GETATTR_LITERAL
+    if form_state is None or form_state.applied_kit_instance_id is None:
+        return 0
+    kit = form_state.applied_kit_instance
+    if kit is None or kit.quality_tier is None:
+        return 0
+    from decimal import Decimal  # noqa: PLC0415
+
+    mult = Decimal(str(kit.quality_tier.stat_multiplier))
+    return max(0, int(mult * _KIT_QUALITY_SCALE) - _KIT_QUALITY_BASE)
+
+
 def identification_difficulty(viewer_sheet: CharacterSheet, target_character) -> IdentificationOdds:
     """The Identification check's target difficulty for ``viewer_sheet`` vs. ``target_character``.
 
@@ -158,6 +191,7 @@ def identification_difficulty(viewer_sheet: CharacterSheet, target_character) ->
             baseline=0,
             familiarity_ease=0,
             guess_ease=0,
+            kit_quality_bonus=0,
         )
 
     target_sheet = getattr(target_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
@@ -167,6 +201,7 @@ def identification_difficulty(viewer_sheet: CharacterSheet, target_character) ->
         familiarity_ease += _fame_ease(target_sheet)
 
     raw = baseline - familiarity_ease
+    kit_bonus = _kit_quality_bonus(target_character)
     return IdentificationOdds(
         applicable=True,
         difficulty=max(0, raw),
@@ -174,6 +209,7 @@ def identification_difficulty(viewer_sheet: CharacterSheet, target_character) ->
         baseline=baseline,
         familiarity_ease=familiarity_ease,
         guess_ease=_GUESS_CORRECT_EASE,
+        kit_quality_bonus=kit_bonus,
     )
 
 

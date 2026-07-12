@@ -10,7 +10,7 @@ from django.utils import timezone
 from evennia.objects.models import ObjectDB
 
 if TYPE_CHECKING:
-    from world.forms.models import FormTrait, FormTraitOption
+    from world.forms.models import CharacterFormState, FormTrait, FormTraitOption
     from world.items.models import ItemTemplate
 
 from world.checks.consequence_resolution import (
@@ -139,7 +139,12 @@ def use_item(
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     template = locked.template
     has_appearance_effects = template.appearance_effects.exists()
-    if template.on_use_pool_id is None and not has_appearance_effects:
+    has_disguise_kit_effects = template.disguise_kit_effects.exists()
+    if (
+        template.on_use_pool_id is None
+        and not has_appearance_effects
+        and not has_disguise_kit_effects
+    ):
         raise ItemNotUsable
     if template.is_consumable and locked.charges <= 0:
         raise NoChargesRemaining
@@ -178,6 +183,8 @@ def use_item(
         soft_deleted = False
 
     appearance_changes = _apply_appearance_effects(template, user)
+
+    _apply_disguise_kit_effects(template, user, locked)
 
     return UseItemResult(
         applied_effects=applied,
@@ -224,3 +231,44 @@ def _apply_appearance_effects(
         except NonCosmeticTraitError:
             pass  # defense-in-depth; clean() should prevent this
     return changes
+
+
+def _apply_disguise_kit_effects(
+    template: ItemTemplate, user: ObjectDB, kit_instance: ItemInstance
+) -> CharacterFormState | None:
+    """Apply disguise-kit effects declared on the item template (#2249).
+
+    For each ``DisguiseKitEffect`` row on the template, finds or creates the
+    matching DISGUISE ``CharacterForm`` for the user, then calls
+    ``apply_disguise`` with the kit instance so its ``QualityTier`` is stamped
+    onto ``CharacterFormState.applied_kit_instance`` for the kit-quality bonus
+    in ``identification_difficulty``.
+
+    Returns the updated ``CharacterFormState``, or ``None`` when the template
+    has no disguise-kit effects or the character has no sheet.
+    """
+    effects = list(template.disguise_kit_effects.all())
+    if not effects:
+        return None
+    from world.forms.models import CharacterForm, CharacterFormState, FormType  # noqa: PLC0415
+    from world.forms.services import apply_disguise  # noqa: PLC0415
+
+    sheet = getattr(user, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        return None
+
+    # Build or reuse a DISGUISE form for this character.
+    disguise_form, _ = CharacterForm.objects.get_or_create(
+        character=user,
+        form_type=FormType.DISGUISE,
+        is_player_created=True,
+    )
+    for effect in effects:
+        apply_disguise(
+            user,
+            disguise_form,
+            kind=effect.disguise_kind,
+            concealment_level=effect.concealment_level,
+            kit_instance=kit_instance,
+        )
+    return CharacterFormState.objects.get(character=user)

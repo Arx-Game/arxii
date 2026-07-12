@@ -211,16 +211,20 @@ class CraftAttachFacetQueryCountTests(TestCase):
         with force_check_outcome(self.success_outcome):
             # Postgres runs 75: a preceding test in the shard warms the
             # SharedMemoryModel identity map for a lookup model (e.g.
-            # ActionPointConfig), eliminating one SELECT. SQLite runs 77
+            # ActionPointConfig), eliminating one SELECT. SQLite runs 89
             # (no cache hit — different test isolation). The 1-query gap is
             # ordering-dependent, not a regression — a per-row N+1 over 3
             # consequence rows would push either count up by ≥3.
-            from django.db import connection
-
             # +1 (both vendors) from the main merge that brought #2266/#2273's
             # item-prose + market cascades into this branch — a constant SELECT/
             # UPDATE, not a per-row N+1 (which would push the count up by ≥3).
-            expected = 87 if connection.vendor == "postgresql" else 88
+            # +1 SQLite (#2249): importing DisguiseKind/ConcealmentLevel from
+            # forms.models into items.models changed identity-map warm-up
+            # ordering, adding one constant SELECT (not a per-row N+1).
+            # Postgres 86→88; SQLite 87→89.
+            from django.db import connection
+
+            expected = 88 if connection.vendor == "postgresql" else 89
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,

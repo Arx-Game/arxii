@@ -20,6 +20,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from actions.constants import TargetKind
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.forms.models import ConcealmentLevel, DisguiseKind
 from world.items.constants import (
     PROVENANCE_EVENT_TYPES,
     BodyRegion,
@@ -900,6 +901,43 @@ class ItemTemplateAppearanceEffect(SharedMemoryModel):
             raise ValidationError(
                 {"trait": f"{self.trait.display_name} is not a cosmetically editable trait."}
             )
+
+
+class DisguiseKitEffect(SharedMemoryModel):
+    """Declares a disguise overlay an item template can apply on use (#2249).
+
+    When a character uses an item whose template has disguise-kit-effect rows,
+    ``use_item`` calls ``apply_disguise`` for each row, painting a fake overlay
+    over the character's real form. Unlike ``ItemTemplateAppearanceEffect``
+    (which edits the real form in-place via ``change_appearance``), this applies
+    a pierceable overlay — the real form is preserved beneath.
+
+    ``disguise_kind`` records how the overlay is pierced (mundane → perception,
+    magical → dispel). ``concealment_level`` controls what an unpierced viewer
+    sees (#1272).
+    """
+
+    item_template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.CASCADE,
+        related_name="disguise_kit_effects",
+        help_text="The item template this disguise-kit effect belongs to.",
+    )
+    disguise_kind = models.CharField(
+        max_length=20,
+        choices=DisguiseKind.choices,
+        default=DisguiseKind.MUNDANE,
+        help_text="How the overlay is pierced: mundane (perception) or magical (dispel).",
+    )
+    concealment_level = models.CharField(
+        max_length=20,
+        choices=ConcealmentLevel.choices,
+        default=ConcealmentLevel.NONE,
+        help_text="What the overlay conceals from an unpierced viewer (#1272).",
+    )
+
+    def __str__(self) -> str:
+        return f"{self.item_template.name}: {self.get_disguise_kind_display()}"
 
 
 class EquippedItem(SharedMemoryModel):

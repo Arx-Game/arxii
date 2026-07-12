@@ -232,6 +232,80 @@ class IdentificationDifficultyTests(TestCase):
         odds = identification_difficulty(self.viewer_sheet, self.target_character)
         self.assertFalse(odds.auto_fail)
 
+    # --- kit-quality bonus (#2249): a kit-crafted disguise raises the baseline ---
+
+    def _apply_overlay_with_kit(self, *, kit_multiplier: float) -> None:
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+        from world.items.models import QualityTier
+
+        tier = QualityTier.objects.create(
+            name=f"Kit Tier {kit_multiplier}",
+            color_hex="#123456",
+            numeric_min=0,
+            numeric_max=100,
+            stat_multiplier=kit_multiplier,
+            sort_order=99,
+        )
+        template = ItemTemplateFactory(name=f"Disguise Kit {kit_multiplier}")
+        kit_instance = ItemInstanceFactory(template=template, quality_tier=tier)
+        disguise = CharacterFormFactory(
+            character=self.target_character, form_type=FormType.DISGUISE
+        )
+        apply_disguise(
+            self.target_character,
+            disguise,
+            kind=DisguiseKind.MUNDANE,
+            concealment_level=ConcealmentLevel.DESCRIPTOR,
+            kit_instance=kit_instance,
+        )
+
+    def test_kit_quality_raises_baseline(self):
+        self._apply_overlay_with_kit(kit_multiplier=2.0)
+        odds = identification_difficulty(self.viewer_sheet, self.target_character)
+        self.assertTrue(odds.applicable)
+        self.assertGreater(odds.kit_quality_bonus, 0)
+        self.assertEqual(
+            odds.baseline, DIFFICULTY_VALUES[DifficultyChoice.NORMAL] + odds.kit_quality_bonus
+        )
+
+    def test_no_kit_means_no_quality_bonus(self):
+        # Narratively-applied disguise (no kit instance) — baseline unchanged.
+        self._apply_overlay(
+            kind=DisguiseKind.MUNDANE, concealment_level=ConcealmentLevel.DESCRIPTOR
+        )
+        odds = identification_difficulty(self.viewer_sheet, self.target_character)
+        self.assertEqual(odds.kit_quality_bonus, 0)
+        self.assertEqual(odds.baseline, DIFFICULTY_VALUES[DifficultyChoice.NORMAL])
+
+    def test_high_quality_kit_makes_auto_fail_reachable(self):
+        # A magical FULL disguise with a very high-quality kit pushes past the
+        # auto-fail threshold even for a stranger.
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+        from world.items.models import QualityTier
+
+        tier = QualityTier.objects.create(
+            name="Godlike Kit",
+            color_hex="#FF0000",
+            numeric_min=0,
+            numeric_max=100,
+            stat_multiplier=10.0,
+            sort_order=999,
+        )
+        template = ItemTemplateFactory(name="Godlike Disguise Kit")
+        kit_instance = ItemInstanceFactory(template=template, quality_tier=tier)
+        disguise = CharacterFormFactory(
+            character=self.target_character, form_type=FormType.DISGUISE
+        )
+        apply_disguise(
+            self.target_character,
+            disguise,
+            kind=DisguiseKind.MAGICAL,
+            concealment_level=ConcealmentLevel.FULL,
+            kit_instance=kit_instance,
+        )
+        odds = identification_difficulty(self.viewer_sheet, self.target_character)
+        self.assertTrue(odds.auto_fail)
+
 
 class AttemptIdentificationTests(TestCase):
     """``attempt_identification`` — the roll + ``PersonaDiscovery``-write orchestrator (Task 2).
