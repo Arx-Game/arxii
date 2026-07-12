@@ -6,10 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        (
-            "items",
-            "0032_remove_itemtemplate_items_weapon_damage_requires_weapon_archetype_and_more",
-        ),
+        ("items", "0033_craftingrecipe_requires_knowledge_and_more"),
     ]
 
     operations = [
