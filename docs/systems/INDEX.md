@@ -3377,7 +3377,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   UNSATISFIED `OUTCOME_TIER` beat linked to the scene; fixes multiple beats
   sharing a scene all getting stamped with the same encounter's outcome;
   unset = legacy find-all-on-scene behavior, unchanged), `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR; plus the
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
+  JOUST (#1843, see "Mounted combat" below); plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
   `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
@@ -3420,6 +3421,39 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
+- **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
+  typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
+  `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →
+  `CharacterSheet`) and apply/remove the seeded "Mounted" `ConditionTemplate`
+  (`world.companions.mount_content`, no `ConditionCheckModifier` rows — mounting alone
+  grants no passive bonus). Dismount fires on three triggers: voluntary (`dismount
+  companion`), encounter exit (`LeaveEncounterAction`), and companion defeat
+  (`resolve_companion_defeat`'s die outcome, via `release_companion`).
+  `CombatManeuver.CHARGE`: `declare_charge(participant, technique, opponent)` requires the
+  Mounted condition and a target >= 1 hop away and reachable within `CHARGE_MAX_HOPS`;
+  resolution (`_resolve_charge_movement`, dispatched from `_resolve_pc_action`) force-moves
+  the rider onto the opponent's position then falls through to the normal weapon-attack
+  pipeline — `CombatTechniqueResolver` folds `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS`
+  (doubled for an equipped `GearArchetype.LANCE`) into the same
+  `collect_check_modifiers`/damage-budget seams every other check contribution uses; never
+  `bypass_pre_apply` — defenses/guardians/ramparts fire unchanged.
+  `CombatManeuver.JOUST`: `declare_joust(participant, technique)` only in a 2-participant
+  DUEL where both duelists hold Mounted and have a LANCE equipped; resolution
+  (`_resolve_joust_pass`) rolls one opposed weapon-attack check per side via the same
+  resolver seam and grades the `success_level` gap into `JOUST_DECISIVE_MARGIN`/
+  `JOUST_NARROW_MARGIN` bands — decisive unhorses the loser (2x lance damage + the seeded
+  "Unhorsed" condition + a force-dismount), narrow deals 1x lance damage, a tie jars both
+  with no damage; damage applies to the loser's mirror `CombatOpponent` via the existing
+  non-bypassing `apply_damage_to_opponent` path (ADR-0023 non-lethal PvP capping
+  unchanged). `LANCE_UNMOUNTED_PENALTY` applies at the same check-modifier seam to any
+  attack made with an equipped LANCE while not Mounted, regardless of maneuver.
+  `GearArchetype.LANCE` (`world.items.constants`) joins `WEAPON_ARCHETYPES`; a starter
+  "Lance" `ItemTemplate` seeds via `world.seeds.game_content.items.seed_lance_item`. Telnet:
+  `companion mount <name|id>` / `companion dismount` (`CmdCompanion`), `combat charge <opp>
+  with <technique>` / `combat joust [with] <technique>` (`CmdCombat`) — no web/frontend
+  surface (matches the several existing maneuvers that ship telnet-only since the web
+  "available actions" endpoint excludes REGISTRY maneuvers without `ActionTemplate`
+  backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
   trigger_kind, subject_sheet=None)` (`world/combat/escalation.py`) — the one write path for
   every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row; `SurgeTriggerKind`:

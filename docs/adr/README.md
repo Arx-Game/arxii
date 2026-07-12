@@ -154,6 +154,7 @@ treat those names as hints to confirm, not gospel.
 - [0121 — Portal anchors are a stackable magic-app model, not a RoomFeatureKind](0121-portal-anchors-are-a-stackable-magic-model.md) (related ADR-0010)
 - [0122 — Battle-earned Legend is win-gated at authored tier values, with a standout exception for both sides](0122-battle-legend-is-win-gated-with-standout-exceptions.md) (related ADR-0010)
 - [0123 — Swarm math is derived proportional losses, not a second health pool](0123-swarm-math-is-derived-losses-not-a-second-health-pool.md) (related #1712/#1713/#1714)
+- [0126 — A mount is a companion plus a verb-gating condition; charge/joust ride the existing move/duel seams](0126-mounts-are-companions-with-a-verb-gating-condition.md) (extends ADR-0023/0060)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

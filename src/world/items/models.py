@@ -370,6 +370,7 @@ class ItemTemplate(SharedMemoryModel):
                             GearArchetype.RANGED,
                             GearArchetype.THROWN,
                             GearArchetype.SHIELD,
+                            GearArchetype.LANCE,
                         ]
                     )
                     | models.Q(base_weapon_damage=0)

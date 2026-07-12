@@ -199,7 +199,15 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   see [battles.md](../systems/battles.md#swarm-math-1841) and ADR-0123. Capital
   ships (#1714/#1832) stay on their own per-hull Fortification track — swarm math
   is for hordes/packs/flocks, not vessels.
-- Mounts / charging / flying (P2, no-improv-flagged). Ranged / archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
+- Mounts / charging shipped at personal scale (#1843): mount/dismount riding
+  companions (`world.companions.services.mount_companion`/`dismount_companion`,
+  a seeded verb-gating "Mounted" condition, no passive bonuses), `CombatManeuver
+  .CHARGE` (force-move onto a distant opponent then attack, with flat
+  check/damage bonuses doubled for a `GearArchetype.LANCE`), and `CombatManeuver
+  .JOUST` (2-participant DUEL-only mounted lance pass, graded by opposed
+  success_level margin into unhorse/lesser-hit/tie bands). Flying, and any
+  battle-scale (war) mounted/cavalry mechanics, remain P2/unscoped. Ranged /
+  archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
 
 ## Reserved term: "clash"
 

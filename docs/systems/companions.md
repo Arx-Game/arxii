@@ -7,11 +7,13 @@ persistent, room-present companion.
 ## Models (`world.companions`)
 
 - `CompanionArchetype` — staff-authored catalog row (`domain`, `name`,
-  `description`, `bind_difficulty`, `capacity_cost`). Binding is
+  `description`, `bind_difficulty`, `capacity_cost`, `is_mount` — whether the
+  archetype is ridable, #1843). Binding is
   archetype-selection: no discrete in-room "wild creature" object is required.
 - `Companion` — the bound instance (`owner` → `CharacterSheet`, `archetype`,
   `granting_gift` → `magic.Gift`, `name`, `objectdb` → live `CompanionObject`,
-  `bonded_at`/`released_at`). Never hard-deleted.
+  `bonded_at`/`released_at`, `ridden_by` — nullable unique FK →
+  `CharacterSheet`, #1843, see "Mount riding" below). Never hard-deleted.
 
 ## Companion Capacity
 
@@ -44,6 +46,40 @@ key, #1918) — releases a bonded companion: destroys its live object, sets
 `released_at`, keeps the row. Reuses `_resolve_owned_companion` for
 ownership + active validation (mirrors `CompanionFightAction`/
 `DeployCompanionAction`).
+
+## Mount riding (#1843)
+
+A mount is a `Companion` whose archetype has `is_mount=True` — no separate
+model or typeclass. `world.companions.services.mount_companion(sheet,
+companion)` validates ownership, `is_active`, `archetype.is_mount`, a live
+`objectdb`, and that neither side is already mounted/ridden (`Companion
+.ridden_by` is a nullable **unique** FK → `CharacterSheet` — one rider per
+mount, enforced at the DB level), then sets `ridden_by` and applies the
+seeded "Mounted" `ConditionTemplate` (`world.companions.mount_content
+.ensure_mount_conditions`) to the rider. `dismount_companion(sheet)` is the
+inverse. Both raise `MountError` (a `user_message`-carrying exception,
+mirroring `CompanionOrderError`) on failure.
+
+Mounted carries **no passive check bonus** — it exists purely to gate two
+combat maneuvers (see the Combat system doc's "Mounted combat" entry):
+`CombatManeuver.CHARGE` (mounted charge into a normal attack, flat
+check/damage bonuses doubled for an equipped `GearArchetype.LANCE`) and
+`CombatManeuver.JOUST` (a mounted, lance-armed opposed pass, DUEL-only,
+2 participants, both sides Mounted + LANCE-equipped). A joust's decisive
+loss applies the seeded "Unhorsed" condition and force-dismounts the loser
+directly (no reactive trigger needed — the resolver already holds both
+sheets).
+
+Three dismount triggers: voluntary (`companion dismount`), encounter exit
+(`LeaveEncounterAction` force-dismounts on leaving combat), and companion
+defeat (`resolve_companion_defeat`'s die outcome routes through
+`release_companion`, which force-dismounts the rider before releasing the
+companion).
+
+Telnet: `companion mount <name|id>` / `companion dismount` (`CmdCompanion`,
+`commands/companion.py`) dispatch `MountCompanionAction`/
+`DismountCompanionAction` (`actions/definitions/companions.py`) on the same
+REGISTRY seam every other companion verb uses.
 
 ## API
 
