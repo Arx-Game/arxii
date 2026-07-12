@@ -100,6 +100,7 @@ from commands.organizations import CmdOrg
 from commands.outfit import CmdOutfit  # #1866
 from commands.persona import CmdPersona
 from commands.places import CmdPlaces  # #1866
+from commands.portals import CmdPortalAnchor  # #2222
 from commands.positions import CmdPosition  # #2005
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
@@ -378,6 +379,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPosition,
             # #2163 — "go there" travel: auto-walk to a character's location.
             CmdTravel,
+            # #2222 — portal anchor install/dissolve namespace.
+            CmdPortalAnchor,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
             CmdMarket,

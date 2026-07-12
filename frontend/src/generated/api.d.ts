@@ -8696,6 +8696,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/locations/portal-destinations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /?character_id=<id> — every anchor that character could portal-travel to now.
+     *
+     *     Rides ``world.magic.services.portal_travel.portal_destinations`` unmodified — the
+     *     service already applies the full leak-safe visibility contract (anchor kinds narrowed
+     *     to the character's known travel techniques; a locked anchor visible only with
+     *     owner/tenant standing at its room; the current room's own anchors excluded, since
+     *     that's not a destination). This view adds no filtering of its own.
+     */
+    get: operations['locations_portal_destinations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/applicable-pulls/': {
     parameters: {
       query?: never;
@@ -26784,6 +26809,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PlayerTrust'][];
     };
+    PaginatedPortalDestinationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PortalDestination'][];
+    };
     PaginatedProgressionUnlockItemList: {
       /** @example 123 */
       count: number;
@@ -29828,6 +29868,20 @@ export interface components {
     PolishIncrement: {
       category: string;
       value: number;
+    };
+    /**
+     * @description One anchor a character could portal-travel to right now (mirrors ``PortalDestination``).
+     *
+     *     Explicit fields only — never a raw model/dataclass dump, since a locked anchor's
+     *     visibility is already gated upstream by
+     *     ``world.magic.services.portal_travel.portal_destinations`` (#2222 leak table).
+     */
+    PortalDestination: {
+      anchor_id: number;
+      room_id: number;
+      room_name: string;
+      kind_name: string;
+      anchor_name: string;
     };
     /**
      * @description Serializer for PoseEndorsement create + read (Spec C Task 23).
@@ -45753,6 +45807,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterComfort'];
+        };
+      };
+    };
+  };
+  locations_portal_destinations_list: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the character to read destinations for (must be your own). */
+        character_id: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPortalDestinationList'];
         };
       };
     };

@@ -236,6 +236,7 @@ from actions.definitions.outfits import (
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.places import JoinPlaceAction, LeavePlaceAction
+from actions.definitions.portals import DissolvePortalAnchorAction, InstallPortalAnchorAction
 from actions.definitions.positioning import (
     GMPlaceInPositionAction,
     MoveToPositionAction,
@@ -608,6 +609,10 @@ _ALL_ACTIONS: list[Action] = [
     EnlistBattleParticipantAction(),
     BrowseBattleCatalogAction(),
     CollectFoodAction(),
+    # #2222 — portal anchor install/dissolve (travel_to's portal branch
+    # itself dispatches through TravelAction, already registered above).
+    InstallPortalAnchorAction(),
+    DissolvePortalAnchorAction(),
 ]
 
 # Lookup by key

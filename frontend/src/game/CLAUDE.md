@@ -45,6 +45,9 @@ Core game interface for real-time RPG interaction with WebSocket communication a
 - **`CharactersList.tsx`**: Characters present in the room with avatars
 - **`ExitsList.tsx`**: Clickable exit buttons for navigation
 - **`ObjectsList.tsx`**: Objects visible in the room
+- **`PortalsBlock.tsx`**: Portal-network destinations the active character could
+  travel to right now (#2222); renders nothing when empty. "Travel" dispatches the
+  same `travel_to` registry action the Go-there buttons use.
 
 ### Command System (`components/`)
 

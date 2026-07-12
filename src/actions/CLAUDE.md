@@ -285,7 +285,24 @@ They do not use the command system, dispatchers, or handlers.
   `StopTravelAction` (`"stop_travel"`, `target_type=SELF`) cancels the pending
   `.ndb.active_travel_task` and clears the token. Shared by telnet `CmdTravel`
   (`travel <name>` / `travel stop`, `src/commands/travel.py`) and the web "Go
-  there" buttons on the scene browser + presence panel.
+  there" buttons on the scene browser + presence panel. **Portal branch (#2222,
+  ADR-0121):** `TravelAction.execute()` calls `_try_portal_travel` FIRST — when
+  `world.magic.services.portal_travel.portal_route()` finds an eligible
+  (known travel-mode Technique, origin anchor, destination anchor) triple, it
+  commits instantly via `perform_portal_travel()` (anima debit, broadcasts,
+  `move_object`) and returns, skipping `find_route()`/hop-pacing entirely;
+  `None` falls through to the walking path unchanged.
+  `portals.py` (#2222, `category="magic"`) — the anchor-lifecycle pair, kept out of
+  `movement.py`: `InstallPortalAnchorAction` (key `"portal_anchor_install"`,
+  `target_type=SELF`) installs a `PortalAnchor` of a given `kind` in the actor's
+  current room (owner/tenant standing + flat `settings.PORTAL_ANCHOR_INSTALL_COST`
+  copper debit, wraps `install_portal_anchor`); `DissolvePortalAnchorAction`
+  (`"portal_anchor_dissolve"`) soft-deletes one (owner-gated, no refund, wraps
+  `dissolve_portal_anchor`) — resolves an explicit `anchor` kwarg (int pk or
+  instance) or auto-resolves the room's sole active anchor, failing loud rather
+  than guessing when a named id doesn't resolve. Module helper `anchors_in_room()`
+  is shared with telnet `CmdPortalAnchor` (`portal/install <kind>=<name>` /
+  `portal/dissolve [<kind>]`, `src/commands/portals.py`).
   `social.py` (#2183, ADR-0113) — `EntranceAction` (key `"entrance"`) gains a
   technique-driven path: `execute()` branches on a `technique_id` kwarg to
   `_execute_technique_entrance`, which mirrors `CastTechniqueAction.execute` (scene/

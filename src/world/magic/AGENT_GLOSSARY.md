@@ -115,6 +115,35 @@ A specific, storied, attunable ItemInstance in the world (a particular sword, am
 **Touchstone**:
 A resonance-tied `ItemInstance` a character has personally attuned via `attune_touchstone` (requires holding it, an unset `attuned_to_character_sheet`, and having claimed the item's `tied_resonance`). Attunement does not consume the item. Touchstone-mode component/item requirements (`RitualComponentRequirement`, `ItemRequirement`) match any attuned item whose `ResonanceTier` meets a floor, rather than one fixed catalog item — see ADR-0087.
 
+**Portal Anchor Kind** (#2222, ADR-0121):
+A staff-authored catalog row (`PortalAnchorKind`) naming a medium of portal travel (e.g.
+"Mirror") plus its narrative arrival/departure verb phrases. A `Technique.travel_anchor_kind`
+FK marks a technique as a travel-mode technique through that medium — many gifts can each
+unlock travel through the same anchor kind, or their own distinct one.
+_Avoid_: anchor type, portal kind.
+
+**Portal Anchor** (#2222, ADR-0121):
+A concrete, installed instance (`PortalAnchor`) of a Portal Anchor Kind in one specific room —
+"a tall silvered mirror" is a Mirror-kind anchor. Stackable: a room may hold more than one
+active anchor of different kinds at once (one active anchor per kind per room, enforced by a
+partial unique constraint). `is_network_open` gates whether strangers may travel to it; a
+locked anchor is still reachable by anyone with owner/tenant standing at its room. Dissolved
+(never hard-deleted) via `dissolved_at`, mirroring Room Feature dissolution. Explicitly NOT a
+`RoomFeatureInstance` (one-feature-per-room cardinality is wrong for a stackable network node)
+or a `RoomDecoration` (wrong domain — amenity/affinity dressing, not technique-gated travel
+connectivity) — see ADR-0121.
+_Avoid_: portal, waypoint, travel node.
+
+**Travel-Mode Technique** (#2222):
+A `Technique` whose `travel_anchor_kind` FK is set — knowing it lets a character portal-travel
+through anchors of that kind. A character "knows" an anchor kind for travel purposes by
+knowing any one `CharacterTechnique` bound to it; the technique's own `anima_cost` is the
+per-use cost (0 for the seeded "Mirrorwalk" starter). Distinct from a technique's ordinary
+combat/social effect — a travel-mode technique's payload IS the instant relocation, resolved
+by `world.magic.services.portal_travel.perform_portal_travel`, not a damage/condition/
+capability-grant row.
+_Avoid_: portal technique, teleport spell.
+
 **Mage Scar**:
 The player-facing name for a magical alteration imprinted on a character by magical exposure — a queued, tiered cosmetic-to-profound change carrying social, weakness, and resonance effects. Backend class and table names retain the `MagicalAlteration` naming.
 _Avoid_: Magical Scar, Magical Alteration (as the player-facing name).
