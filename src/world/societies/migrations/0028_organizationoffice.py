@@ -40,7 +40,7 @@ class Migration(migrations.Migration):
                     "feeds_check",
                     models.ForeignKey(
                         blank=True,
-                        help_text="Trait this office lends to the checks it stewards (declared; wiring is a follow-up).",
+                        help_text="Trait this office lends to the checks it stewards (declared; wiring is later).",
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="+",

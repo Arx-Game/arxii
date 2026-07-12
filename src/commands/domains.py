@@ -194,7 +194,7 @@ class CmdDomain(ArxCommand):
 
         positional, kwargs = _parse_kwargs(rest)
         domain = self._resolve_domain(" ".join(positional).strip() or None)
-        if "cost" not in kwargs or not kwargs["cost"].isdigit():
+        if "cost" not in kwargs or not kwargs["cost"].isdigit():  # noqa: STRING_LITERAL
             msg = (
                 "Usage: domain improve <domain> cost=<n> [gross=<n>] "
                 "[prosperity=<n>] [holding=<id>]"
