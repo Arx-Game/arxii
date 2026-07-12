@@ -48,6 +48,7 @@ from world.combat.constants import (
     ParticipantStatus,
     RiskLevel,
     StakesLevel,
+    StrikeDelivery,
     SurgeTriggerKind,
     TargetingMode,
     TargetSelection,
@@ -233,6 +234,12 @@ class ThreatPoolEntry(SharedMemoryModel):
         max_length=20,
         choices=TargetingMode.choices,
         default=TargetingMode.SINGLE,
+    )
+    delivery = models.CharField(
+        max_length=10,
+        choices=StrikeDelivery.choices,
+        default=StrikeDelivery.MELEE,
+        help_text="How this strike reaches its target — drives rampart interception (#2209).",
     )
     target_count = models.PositiveIntegerField(null=True, blank=True)
     target_selection = models.CharField(
@@ -2351,6 +2358,18 @@ class Clash(SharedMemoryModel):
             "big-attack entry for CLASH). Null for BREAK (NPC contributes nothing to the "
             "meter). Set at clash creation in Phase 5; Phase 3 reads it for the NPC "
             "per-round contribution."
+        ),
+    )
+    rampart = models.ForeignKey(
+        "areas.Rampart",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Set iff flavor=WARD and the sustained attack's PC target stands at a "
+            "rampart-covered position (#2209) — the rampart drains alongside progress "
+            "instead of the PC taking the strike directly."
         ),
     )
 
