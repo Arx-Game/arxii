@@ -2859,7 +2859,7 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793), `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink` (#1625), `SituationInstance`
+- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793), `PropertyDetonation` (#2210), `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink` (#1625), `SituationInstance`
 - **Key Functions:**
   - `instantiate_situation(template, location) -> SituationInstance` (#1625) — mints
     a SituationInstance + materializes its SituationTrapLink rows into Trap rows.
@@ -2867,6 +2867,11 @@ Unified modifier system — categories, types, sources, and per-character modifi
   - `property_damage_bonus(target, damage_type) -> int` (#1793) — sums `PropertyDamageModifier`
     rows for a target's active `Property` set; folded into combat technique damage in
     `CombatTechniqueResolver._profile_damage` (`world/combat/services.py`)
+  - `volatile_object_property(target) -> ObjectProperty | None` (#2210) — the
+    `ObjectProperty` row making `target` "volatile" (its `Property` carries a
+    `PropertyDetonation`), or `None`. Consumed by combat redirect resolution
+    (`world/combat/services.py`'s `_try_technique_interpose` REDIRECT branch) — see
+    combat.md's Redirect section.
   - `get_modifier_total(sheet, modifier_target) -> int` — Spec D PR1: invokes equipment
     walk (`passive_facet_bonuses` + `covenant_role_bonus`) when category is in
     `EQUIPMENT_RELEVANT_CATEGORIES`
@@ -3377,7 +3382,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
   `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
-  target/pair for position-consuming techniques, #2206, see "Cast-position targeting" below),
+  target/pair for position-consuming techniques, #2206, see "Cast-position targeting" below;
+  `redirect_opponent_target` (FK `CombatOpponent`, SET_NULL) / `redirect_object_target`
+  (FK `objects.ObjectDB`, SET_NULL) — mutually exclusive declared REDIRECT-flavor
+  destinations, #2210, see the Redirect section above),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `ComboSlot`, `ComboLearning` (use_count tracks repeat
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
@@ -3513,16 +3521,20 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Key Services (`world/combat/services.py`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
-  - `declare_interpose(participant, ally=None, technique=None)` — arm an INTERPOSE
-    `CombatRoundAction` for the round. **Guardian reaction declaration (#2207):** an
-    optional *technique* reuses `CombatRoundAction.focused_action` (no new column) to
-    carry a declared protective technique into the round; gated on the participant
-    knowing it (`CharacterTechnique`), it classifying to a non-`redirect` protective
-    flavor via `world.magic.services.targeting.protective_flavor` (`redirect` deferred
-    to #2210), and `ally` still resolving to an active co-encounter participant when
-    given. `technique=None` keeps the pre-#2207 mundane shape (passives only,
-    `focused_action` zeroed). See the combat `AGENT_GLOSSARY.md`'s Guardian reaction
-    entry and ADR-0118.
+  - `declare_interpose(participant, ally=None, technique=None, redirect_opponent_target=None, redirect_object_target=None)`
+    — arm an INTERPOSE `CombatRoundAction` for the round. **Guardian reaction
+    declaration (#2207):** an optional *technique* reuses `CombatRoundAction.
+    focused_action` (no new column) to carry a declared protective technique into the
+    round; gated on the participant knowing it (`CharacterTechnique`) and it
+    classifying to a protective flavor via `world.magic.services.targeting.
+    protective_flavor`, and `ally` still resolving to an active co-encounter
+    participant when given. `technique=None` keeps the pre-#2207 mundane shape
+    (passives only, `focused_action` zeroed). See the combat `AGENT_GLOSSARY.md`'s
+    Guardian reaction entry and ADR-0118. **Redirect declaration (#2210):**
+    `redirect_opponent_target`/`redirect_object_target` (mutually exclusive, both
+    `None` = "away") declare a REDIRECT-flavor technique's saved-damage destination
+    at declaration time (ADR-0032/0122), validated by `_validate_redirect_declaration`
+    — see combat `AGENT_GLOSSARY.md`'s Redirect entry.
   - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
     an armed interpose challenge naming *participant* (or "any ally") and dispatches it
     via `_dispatch_interpose_action`
@@ -3554,9 +3566,20 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     non-fizzle fire; grades via the SAME `_grade_interpose_damage` the mundane path uses
     (SHIELD divisor included). A clean `blink`-flavored block relocates the ward to the
     guardian's own current position (`force_move_to_position`) — a stand-in for #2206's
-    `CombatRoundAction.cast_destination`, preferred once that field lands. `redirect` is
-    rejected at declaration time, not here. See ADR-0118 for why this rolls outside
-    `use_technique`.
+    `CombatRoundAction.cast_destination`, preferred once that field lands. See ADR-0118
+    for why this rolls outside `use_technique`. **`redirect`-flavored resolution
+    (#2210):** `saved = amount_before - pre_payload.amount` after grading (zero
+    redirects nothing); `_resolve_technique_redirect` dispatches the saved amount to
+    the declared destination (`_redirect_away` / `_redirect_to_opponent` /
+    `_redirect_to_object`, each broadcasting via `broadcast_action_outcome`) —
+    `_redirect_to_opponent` calls `apply_damage_to_opponent(..., bypass_pre_apply=True)`
+    (ADR-0060's loop guard); `_redirect_to_object` fires the volatile object's
+    `PropertyDetonation.consequence_pool` at every combatant positioned there via the
+    new `world.room_features.trap_services.fire_pool_at_characters` (reuses
+    `apply_pool_deterministically`, no roll), then deletes the triggering
+    `ObjectProperty` (one-shot). Any destination no longer valid at resolution time
+    (opponent defeated, object moved/consumed/no Position) degrades to
+    `_redirect_away`.
   - `apply_interpose_outcome(pre_payload, result)` — SUCCESS zeroes payload, PARTIAL halves,
     FAILURE is a no-op
   - `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints
@@ -3631,6 +3654,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
     filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
     with `TechniqueAppliedCondition(target_kind=ALLY)`
+  - `ensure_redirect_content()` (`src/world/combat/redirect_content.py`, #2210) —
+    idempotent seed for one example volatile `Property` ("Volatile (Powder)") + its
+    `PropertyDetonation` sidecar + a small detonation `ConsequencePool` (one
+    DEAL_DAMAGE `Consequence`). Mirrors `ensure_interpose_content`'s self-contained
+    `get_or_create` idiom.
 - **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR / ENGAGE / DISENGAGE / RALLY / DEMORALIZE / TAUNT / PARLEY / USE_ITEM), `OpponentMoraleState` (STEADY / FALTER / BREAK — derived, `world.combat.morale`), `RoundStatus` (shared with
   `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
   COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
@@ -3639,24 +3667,33 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   yield, flee, use_item, my_action, available_combos, rally, demoralize, taunt, parley),
   duel challenge endpoints. **Guard declaration (#2207):** `InterposeSerializer`
   (`world/combat/serializers.py`) only carries `ally_participant_id` — the optional
-  `technique_id` (protective technique) has no bespoke REST verb yet, so the web Guard
-  panel dispatches through the generic REGISTRY path instead
+  `technique_id` (protective technique) and, since #2210, `redirect_opponent_target_id`/
+  `redirect_object_target_id` have no bespoke REST verb, so the web Guard panel
+  dispatches through the generic REGISTRY path instead
   (`POST /api/actions/characters/{characterId}/dispatch/` with
   `registry_key: "combat_interpose"`, `actions/definitions/combat_maneuvers.py`), the
-  same seam bespoke-verb-less maneuvers already use.
-- **Web (#2207):** a "Guard" panel in `YourTurn` (`frontend/src/combat/sections/
+  same seam bespoke-verb-less maneuvers already use. **Redirect picker data (#2210):**
+  `EncounterDetailSerializer.volatile_objects` — objects in the encounter room carrying
+  a detonatable `ObjectProperty` (`{id, name, position_id, position_name}`), single
+  query with `select_related` across the Position OneToOne link.
+- **Web (#2207/#2210):** a "Guard" panel in `YourTurn` (`frontend/src/combat/sections/
   YourTurn.tsx`) — a ward select (any-ally default or a named participant) plus an
   optional protective-technique select sourced from `PlayerAction.protective_flavor`
-  (new field, `barrier`/`blink`/`redirect`/`null` — `redirect` excluded from the picker
-  until #2210 lifts the declaration-time gate) — dispatches via `useGuardMutation`
-  (`frontend/src/combat/queries.ts`) and shows a "Guarding" badge once armed.
-- **Telnet parity (#2207):** `combat interpose [ally] [with <technique>]`
-  (`CmdCombat._resolve_interpose_args`, `src/commands/combat_maneuvers.py`) — both
-  clauses optional; `with <technique>` splits on `" with "` (mirrors
-  `CmdClashCommit`'s split) and resolves the technique name via `_find_technique_id`,
-  which already gates on the caller knowing it (defense-in-depth alongside the
-  service-layer gate in `declare_interpose`). Works ally-less: `combat interpose with
-  <technique>`.
+  (`barrier`/`blink`/`redirect`/`null`). Since #2210, picking a `redirect`-flavored
+  technique reveals a destination select (Away / `encounter.opponents` / `encounter.
+  volatile_objects`) — dispatches via `useGuardMutation`'s `redirectOpponentTargetId`/
+  `redirectObjectTargetId` args (`frontend/src/combat/queries.ts`) and shows a
+  "Guarding" badge once armed.
+- **Telnet parity (#2207/#2210):** `combat interpose [ally] [with <technique>] [into
+  <destination>]` (`CmdCombat._resolve_interpose_args`, `src/commands/
+  combat_maneuvers.py`) — all three clauses optional; `with <technique>` splits on
+  `" with "` (mirrors `CmdClashCommit`'s split) and resolves the technique name via
+  `_find_technique_id`, which already gates on the caller knowing it (defense-in-depth
+  alongside the service-layer gate in `declare_interpose`). `into <destination>`
+  (#2210) further splits the technique clause on `" into "`; `_resolve_redirect_
+  destination` resolves the name against an active opponent first, then a room
+  object; `into away` (or omitting the clause) is the default. Works ally-less:
+  `combat interpose with <technique> into <destination>`.
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
   conditions (`bulk_apply_conditions` — now installs reactive side-effects;

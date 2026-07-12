@@ -36,6 +36,27 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   of fatigue, ally damage zeroed) is journey-proven (`TechniqueGuardianBarrierResolutionTest`,
   SQLite tier). See ADR-0118 for why the technique-guardian roll happens outside
   `use_technique`.
+- **Redirects — away / chosen-enemy / volatile-object detonation (#2210, ADR-0122),
+  SQLite tier.** A guardian's REDIRECT-flavor technique (Mirror Ward-style reflection —
+  previously rejected at declaration, now the third resolved flavor alongside BARRIER
+  and BLINK) declares its saved-damage destination at `declare_interpose` time:
+  `redirect_opponent_target` (a `CombatOpponent`, structurally never a PC — ADR-0023) or
+  `redirect_object_target` (an ObjectDB that must be "volatile" — carries an
+  `ObjectProperty` whose `Property` has a `PropertyDetonation` sidecar,
+  `world.mechanics.services.volatile_object_property`). At resolution,
+  `saved = amount_before - payload.amount` after the shared tri-level grade routes to
+  the destination — clean-enemy full amount, partial-enemy half, defeated-enemy or
+  consumed/moved/position-less object degrades to "away" (the universal fallback).
+  Volatile-object detonation fires `PropertyDetonation.consequence_pool` at every
+  combatant positioned there (new `world.room_features.trap_services.
+  fire_pool_at_characters`) then deletes the triggering `ObjectProperty` — one-shot.
+  Journey-proven end-to-end (`world/combat/tests/test_redirect_resolution.py`,
+  `actions/tests/test_combat_maneuvers.py::InterposeRedirectDispatchSeamTest` —
+  the last one drives the real `InterposeAction.run()` seam, not just the service
+  call). Telnet: `combat interpose [ally] [with <technique>] [into <destination>]`.
+  Web: the Guard panel's technique picker no longer excludes `redirect`; picking one
+  reveals a destination select sourced from `EncounterDetailSerializer.
+  volatile_objects` + `encounter.opponents`.
 - Escalation → Audere offer → accept → real power change.
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
