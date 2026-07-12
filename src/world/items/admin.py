@@ -5,6 +5,7 @@ from django.contrib import admin
 from world.items.models import (
     AudacityTuning,
     CurrencyBalance,
+    DisguiseKitEffect,
     EquippedItem,
     FashionStyle,
     FashionStyleBonus,
@@ -57,6 +58,13 @@ class ItemTemplateAppearanceEffectInline(admin.TabularInline):
     autocomplete_fields = ["trait", "target_option"]
     verbose_name = "Appearance Effect"
     verbose_name_plural = "Appearance Effects"
+
+
+class DisguiseKitEffectInline(admin.TabularInline):
+    model = DisguiseKitEffect
+    extra = 1
+    verbose_name = "Disguise Kit Effect"
+    verbose_name_plural = "Disguise Kit Effects"
 
 
 class GarmentMitigationInline(admin.TabularInline):
@@ -153,6 +161,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         TemplateInteractionInline,
         GarmentMitigationInline,
         ItemTemplateAppearanceEffectInline,
+        DisguiseKitEffectInline,
     ]
 
 
