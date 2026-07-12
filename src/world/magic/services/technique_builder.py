@@ -69,32 +69,22 @@ def get_technique_cast_catalog():
     return ConsequencePool.objects.filter(parent=get_standalone_cast_pool()).order_by("name")
 
 
-def resolve_cast_action_template(
-    consequence_pool_id: int | None, *, action_category: str | None = None
-):
-    """Resolve the ActionTemplate a technique's action_template should point at.
+def get_combat_offense_catalog():
+    """Curated catalog: children of the base 'Combat: Melee Offense' ConsequencePool (#1995)."""
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.combat.seeds_offense import get_melee_offense_pool  # noqa: PLC0415
 
-    None (no flavor chosen) resolves to the shared base template — today's
-    unchanged default for non-physical categories. A PHYSICAL technique with
-    no chosen pool resolves to the combat 'Melee Attack' ActionTemplate (#1706)
-    so physical attacks roll a combat check (strength + Melee Combat) instead
-    of the magic fallback. A catalog pool id resolves to its matching seeded
-    ActionTemplate regardless of category. Raises InvalidConsequencePoolChoice
-    for any id that isn't a catalog member (including a valid-but-unrelated
-    ConsequencePool).
-    """
-    from actions.constants import ActionCategory  # noqa: PLC0415
+    return ConsequencePool.objects.filter(parent=get_melee_offense_pool()).order_by("name")
+
+
+def _resolve_catalog_template(consequence_pool_id: int, catalog):
+    """Validate ``consequence_pool_id`` is a member of ``catalog``, then resolve the
+    matching ActionTemplate. Raises InvalidConsequencePoolChoice for a non-member id
+    (including a valid-but-unrelated or wrong-category ConsequencePool)."""
     from actions.models import ActionTemplate  # noqa: PLC0415
     from world.magic.exceptions import InvalidConsequencePoolChoice  # noqa: PLC0415
-    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
 
-    if consequence_pool_id is None:
-        if action_category == ActionCategory.PHYSICAL:
-            from world.combat.factories import wire_melee_attack_action_template  # noqa: PLC0415
-
-            return wire_melee_attack_action_template()
-        return get_standalone_cast_template()
-    if not get_technique_cast_catalog().filter(pk=consequence_pool_id).exists():
+    if not catalog.filter(pk=consequence_pool_id).exists():
         raise InvalidConsequencePoolChoice
     matches = list(
         ActionTemplate.objects.filter(consequence_pool_id=consequence_pool_id).order_by("pk")[:2]
@@ -108,6 +98,43 @@ def resolve_cast_action_template(
             matches[0].pk,
         )
     return matches[0]
+
+
+def resolve_cast_action_template(
+    consequence_pool_id: int | None, *, action_category: str | None = None
+):
+    """Resolve the ActionTemplate a technique's action_template should point at.
+
+    None (no flavor chosen) resolves to the shared base template — today's
+    unchanged default for non-physical categories. A PHYSICAL technique with
+    no chosen pool resolves to the combat 'Melee Attack' ActionTemplate (#1706)
+    so physical attacks roll a combat check (strength + Melee Combat) instead
+    of the magic fallback.
+
+    A chosen consequence_pool_id validates against the catalog matching the
+    technique's action_category (#1995): PHYSICAL validates against the combat
+    'Combat: Melee Offense' catalog (``get_combat_offense_catalog``); every other
+    category validates against the magic 'Magic: Technique Cast' catalog
+    (``get_technique_cast_catalog``). Raises InvalidConsequencePoolChoice for a
+    pool id that isn't a member of the relevant catalog — including a
+    valid-but-wrong-category catalog pool (e.g. a magic flavor chosen for a
+    PHYSICAL technique) or an unrelated ConsequencePool.
+    """
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
+
+    is_physical = action_category == ActionCategory.PHYSICAL
+
+    if consequence_pool_id is None:
+        if is_physical:
+            from world.combat.factories import wire_melee_attack_action_template  # noqa: PLC0415
+
+            return wire_melee_attack_action_template()
+        return get_standalone_cast_template()
+
+    if is_physical:
+        return _resolve_catalog_template(consequence_pool_id, get_combat_offense_catalog())
+    return _resolve_catalog_template(consequence_pool_id, get_technique_cast_catalog())
 
 
 def create_technique(  # noqa: PLR0913

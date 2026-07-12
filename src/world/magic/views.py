@@ -207,18 +207,25 @@ class EffectTypeViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only catalog of curated consequence-pool flavors a technique author
-    may select (children of the shared base 'Magic: Technique Cast' pool)."""
+    may select — children of the shared base 'Magic: Technique Cast' pool AND
+    children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
+    list. The picker (TechniqueBuilderForm's "Outcome Flavor" select) does not
+    filter by action_category client-side today, so this listing stays flat
+    too rather than threading category through — resolve_cast_action_template
+    is still the seam that enforces a chosen flavor matches the technique's
+    action_category at submit time."""
 
     serializer_class = ConsequencePoolCatalogSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table
 
     def get_queryset(self):
-        from world.magic.services.technique_builder import (  # noqa: PLC0415
-            get_technique_cast_catalog,
-        )
+        from actions.models import ConsequencePool  # noqa: PLC0415
+        from world.combat.seeds_offense import get_melee_offense_pool  # noqa: PLC0415
+        from world.magic.seeds_cast import get_standalone_cast_pool  # noqa: PLC0415
 
-        return get_technique_cast_catalog()
+        base_pools = [get_standalone_cast_pool(), get_melee_offense_pool()]
+        return ConsequencePool.objects.filter(parent__in=base_pools).order_by("name")
 
 
 class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
