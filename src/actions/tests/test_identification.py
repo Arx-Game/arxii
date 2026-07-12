@@ -16,6 +16,7 @@ from actions.registry import get_action
 from evennia_extensions.factories import RoomProfileFactory
 from world.checks.test_helpers import force_check_outcome
 from world.npc_services.factories import FunctionaryFactory, NPCRoleFactory
+from world.npc_services.models import Functionary
 from world.roster.factories import RosterEntryFactory
 from world.scenes.factories import SceneFactory
 from world.scenes.interaction_services import get_active_scene
@@ -53,10 +54,18 @@ class RegistrationTests(IdentifyActionTestCase):
         assert isinstance(action, IdentifyAction)
         assert action.target_kind == TargetKind.PERSONA
 
-    def test_web_panel_surfaces_identify_for_a_placed_character(self) -> None:
-        # The _identification_actions adapter (player_interface.py) — registry actions are
-        # NOT auto-surfaced to the web panel; this adapter is the wire that makes identify
-        # reachable from the dynamic action panel (#2010's registry-adapter lesson).
+    def test_get_player_actions_never_lists_identify(self) -> None:
+        # #1107 Task 3 review (Critical finding): identify must NOT be surfaced by
+        # get_player_actions — every generic-panel consumer of that list
+        # (ActionPanel.tsx, PersonaContextMenu.tsx's targetedActions) dispatches through
+        # the CONSENT pipeline (createActionRequest), which identify (a no-consent
+        # private perception roll, ADR-0024) must never enter: it has no ActionTemplate
+        # and no CUSTOM_ACTION_RESOLVERS entry, so an accepted consent request would
+        # crash, and the masked target would wrongly get an accept/deny veto over the
+        # roll. identify's only web path is now a dedicated PersonaContextMenu
+        # "Identify" item that dispatches REGISTRY REST directly
+        # (useDispatchPlayerAction), never this listing. Superseded the old
+        # `_identification_actions` adapter this test used to assert the presence of.
         from actions.constants import ActionBackend
         from actions.player_interface import get_player_actions
 
@@ -66,10 +75,7 @@ class RegistrationTests(IdentifyActionTestCase):
             for a in actions
             if a.backend == ActionBackend.REGISTRY and a.ref.registry_key == "identify"
         ]
-        self.assertEqual(len(identify_entries), 1)
-        spec = identify_entries[0].target_spec
-        self.assertIsNotNone(spec)
-        self.assertEqual(spec.kind, TargetKind.PERSONA)
+        self.assertEqual(identify_entries, [])
 
 
 class PrerequisiteTests(IdentifyActionTestCase):
@@ -126,13 +132,28 @@ class OutcomeMessagingTests(IdentifyActionTestCase):
 
     def test_failure_and_no_functionary_botch_share_the_same_message(self) -> None:
         # Oracle rule, echoed at the action seam: a plain failure and a botch-with-no-NPC-to-
-        # blame both degrade to the identical FAILURE/AUTO_FAIL player_message.
+        # blame both degrade to the identical FAILURE/AUTO_FAIL player_message. Exercises the
+        # actual botch-with-no-functionary-to-blame branch of _roll_outcome_result (no
+        # Functionary exists in this TestCase's setUp) — #1107 Task 3 review, Minor finding 4:
+        # this test previously only ran a plain FAILURE (success_level=-1), never a real botch,
+        # so it never touched the "no functionary" degrade path its name promised.
+        self.assertFalse(Functionary.objects.exists())
+
         failure = CheckOutcomeFactory(name="IdentifyAction Failure", success_level=-1)
         with force_check_outcome(failure):
             failure_result = self.action.run(actor=self.viewer, target=self.target)
 
+        botch_without_functionary = CheckOutcomeFactory(
+            name="IdentifyAction Botch No Functionary", success_level=-2
+        )
+        with force_check_outcome(botch_without_functionary):
+            botch_result = self.action.run(actor=self.viewer, target=self.target)
+
         self.assertFalse(failure_result.success)
+        self.assertFalse(botch_result.success)
         self.assertTrue(failure_result.message)
+        self.assertEqual(failure_result.message, botch_result.message)
+        self.assertFalse(PersonaDiscovery.objects.exists())
 
 
 class GuessParsingTests(IdentifyActionTestCase):
@@ -177,6 +198,27 @@ class RestDispatchTargetResolutionTests(IdentifyActionTestCase):
 
     def test_run_with_unknown_persona_id_fails_cleanly(self) -> None:
         result = self.action.run(actor=self.viewer, target_persona_id=999999)
+
+        self.assertFalse(result.success)
+        self.assertIn("Identify whom", result.message)
+
+    def test_run_resolves_target_from_raw_persona_id_under_the_target_kwarg(self) -> None:
+        # #1107 Task 3 review, Minor finding 2: PersonaContextMenu's "Identify" item
+        # dispatches `kwargs: { target: <persona pk> }` — the same shape
+        # ChallengeAction's `_resolve_challenge_target` accepts (a raw persona pk under
+        # `target`, not `target_persona_id`). `.run()` must resolve that shape too,
+        # exactly like a real REST dispatch from the context menu would invoke it.
+        presented_persona = self.mask
+        success = CheckOutcomeFactory(name="IdentifyAction Target Kwarg Id", success_level=2)
+
+        with force_check_outcome(success):
+            result = self.action.run(actor=self.viewer, target=presented_persona.pk)
+
+        self.assertTrue(result.success)
+        self.assertEqual(PersonaDiscovery.objects.count(), 1)
+
+    def test_run_with_unknown_persona_id_under_target_kwarg_fails_cleanly(self) -> None:
+        result = self.action.run(actor=self.viewer, target=999999)
 
         self.assertFalse(result.success)
         self.assertIn("Identify whom", result.message)

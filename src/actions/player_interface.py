@@ -35,9 +35,23 @@ Registry exclusion note:
   rows.  They are excluded rather than emitted with a placeholder to avoid confusing the
   dispatch layer -- UNLESS a small per-action adapter hand-builds the ``PlayerAction``
   itself with ``check_type=None``, the pattern ``_positioning_actions``/
-  ``_set_the_stage_actions``/``_battle_staging_actions``/``_identification_actions``
-  use for REGISTRY actions that need web-panel visibility but aren't (and don't want to
-  become) ActionTemplate-backed.
+  ``_set_the_stage_actions``/``_battle_staging_actions`` use for REGISTRY actions that
+  need web-panel visibility but aren't (and don't want to become) ActionTemplate-backed.
+
+  ``identify`` (``actions/definitions/identification.py``) deliberately does NOT get one
+  of these adapters (#1107 Task 3 review, Critical finding): every generic-panel consumer
+  of ``get_player_actions`` (``ActionPanel.tsx``, ``PersonaContextMenu.tsx``) dispatches
+  its listed entries through ``createActionRequest`` -- the CONSENT pipeline
+  (``world.scenes.action_services.create_action_request`` /
+  ``_resolve_accepted_action_request``). Identify is a no-consent private perception roll
+  (ADR-0024 -- it doesn't act on the target's behavior) with no ``ActionTemplate`` and no
+  ``CUSTOM_ACTION_RESOLVERS`` entry, so a consent-pipeline dispatch would both hand the
+  masked target a veto it shouldn't have and crash on accept (``ValueError`` in
+  ``_resolve_standard_action``, no template/resolver to resolve against). Its only
+  correct web path is direct REGISTRY REST dispatch (``useDispatchPlayerAction`` ->
+  ``_dispatch_registry`` -> ``.run()``) from a dedicated ``PersonaContextMenu`` "Identify"
+  item (mirroring that menu's pre-existing ``challenge`` dispatch), never from a listing a
+  generic panel would render+fire through ``createActionRequest``.
 """
 
 from __future__ import annotations
@@ -400,11 +414,16 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_positioning_actions(character))
     actions.extend(_set_the_stage_actions(character))
     actions.extend(_battle_staging_actions(character))
-    actions.extend(_identification_actions(character))
     # Registry backend: all remaining registry actions excluded (no ActionTemplate /
     # check_type) — see module docstring.  When a registry action gains ActionTemplate
     # backing, or needs web-panel visibility without one, add it to an adapter above
     # (or a new one) rather than uncommenting a blanket _registry_actions(character).
+    # ``identify`` is deliberately NOT listed here (#1107 Task 3 review, Critical
+    # finding) — every consumer of this list dispatches through the CONSENT pipeline
+    # (createActionRequest), which identify must never enter. See the module docstring's
+    # "identify" paragraph. It's reached instead by a dedicated PersonaContextMenu
+    # "Identify" item that dispatches REGISTRY REST directly (useDispatchPlayerAction),
+    # plus telnet (CmdIdentify).
 
     # Single batched pass: attach enhancements/target_spec/strain to each
     # PlayerAction. All queries happen once for the whole character.
@@ -1118,37 +1137,9 @@ def _battle_staging_actions(character: ObjectDB) -> list[PlayerAction]:
     ]
 
 
-def _identification_actions(character: ObjectDB) -> list[PlayerAction]:
-    """Surface the ``identify`` REGISTRY action to the web (#1107 slice 5, Task 3).
-
-    ``IdentifyAction`` (``actions/definitions/identification.py``) is deliberately NOT
-    ActionTemplate-backed (see that module's docstring), so it doesn't reach the web via
-    ``_scene_actions`` the way Deceive/Persuade/Seduce do — it needs its own bespoke
-    adapter, mirroring ``_positioning_actions``/``_set_the_stage_actions``/
-    ``_battle_staging_actions``.
-
-    Offers one ``Identify`` entry whenever the character has a sheet and a location —
-    the only two things identifying anyone at all requires (target_kind=PERSONA is
-    resolved generically by ``_target_spec_for_action``'s hand-coded-Action branch,
-    reading ``IdentifyAction.target_kind``/``target_filters`` directly — no per-target
-    enumeration needed, same as the social ActionTemplate actions). Target validity
-    (co-located + presenting a fake-name persona) is deliberately NOT filtered here —
-    that's ``IdentifiableTargetPrerequisite``'s job at dispatch time. Filtering the
-    *picker* on "someone masked is present" would also be an oracle leak: the button's
-    mere appearance would become a free, actionless mask detector, whereas a targeted
-    attempt at least lands as a visible scene interaction (the spec's leak-analysis
-    table).
-    """
-    if _get_character_sheet(character) is None or character.location is None:
-        return []
-    return [
-        PlayerAction(
-            backend=ActionBackend.REGISTRY,
-            display_name="Identify",
-            ref=ActionRef(backend=ActionBackend.REGISTRY, registry_key="identify"),
-            description="Try to see through a mask or disguise to who's really underneath.",
-        )
-    ]
+# ``identify`` deliberately has no web-panel adapter here — see the module docstring's
+# "identify" paragraph (#1107 Task 3 review, Critical finding) and
+# ``PersonaContextMenu.tsx``'s dedicated "Identify" menu item.
 
 
 # ---------------------------------------------------------------------------

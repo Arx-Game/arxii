@@ -33,13 +33,20 @@ vi.mock('@/store/hooks', () => ({
   ),
 }));
 
-// Mock the combat dispatch hook (challenge affordance, #1181)
+// Mock the combat dispatch hook (challenge affordance, #1181; identify affordance, #1107)
 vi.mock('@/combat/queries', () => ({
   useDispatchPlayerAction: vi.fn(() => ({
     mutateAsync: vi.fn(() => Promise.resolve()),
     isPending: false,
   })),
   combatKeys: { duelChallengesAll: () => ['combat', 'duel-challenges'] },
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 import { PersonaContextMenu } from './PersonaContextMenu';
@@ -339,6 +346,72 @@ describe('PersonaContextMenu', () => {
     await user.click(screen.getByRole('button'));
     await screen.findByText('Intimidate');
     expect(screen.queryByTestId('challenge-to-duel-item')).not.toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Identify affordance (#1107 Task 3 review — Critical finding: identify must
+  // dispatch via the registry REST path, never the createActionRequest consent
+  // pipeline the targetedActions submenu below uses).
+  // ---------------------------------------------------------------------------
+
+  it('dispatches the identify action via the registry dispatch hook with the target persona id', async () => {
+    const user = userEvent.setup();
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: true, message: 'ok' })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      { wrapper: createWrapperWithScene([{ id: 10, name: 'Alice', character_sheet: 99 }]) }
+    );
+
+    await user.click(screen.getByRole('button'));
+    const identifyItem = await screen.findByTestId('identify-persona-item');
+    await user.click(identifyItem);
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'identify' },
+      kwargs: { target: 10 },
+    });
+  });
+
+  it('shows the identify item even when the target has opted out of social targeting', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      {
+        wrapper: createWrapperWithScene([
+          { id: 10, name: 'Alice', character_sheet: 99, allow_social_actions: false },
+        ]),
+      }
+    );
+
+    await user.click(screen.getByRole('button'));
+    expect(await screen.findByTestId('identify-persona-item')).toBeInTheDocument();
+  });
+
+  it('hides the identify item for the viewer’s own persona (no self-identify)', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="TestChar" sceneId="1">
+        <span>TestChar</span>
+      </PersonaContextMenu>,
+      { wrapper: createWrapperWithScene([{ id: 10, name: 'TestChar', character_sheet: 42 }]) }
+    );
+
+    await user.click(screen.getByRole('button'));
+    await screen.findByText('Intimidate');
+    expect(screen.queryByTestId('identify-persona-item')).not.toBeInTheDocument();
   });
 
   it('does not show "Attach to Pose" section when onAttachAction is not provided', async () => {

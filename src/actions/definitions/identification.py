@@ -18,9 +18,18 @@ ActionTemplate involved).
 
 Not auto-surfaced to the web dynamic action panel like the ActionTemplate-backed social
 actions are (``_scene_actions`` in ``actions/player_interface.py`` only picks up
-``ActionTemplate`` rows) — a REGISTRY action with no ActionTemplate backing needs its own
-adapter, per the #2005/#2010 battle-staging precedent (``_positioning_actions``/
-``_battle_staging_actions``); see ``_identification_actions`` in ``player_interface.py``.
+``ActionTemplate`` rows) — and deliberately NOT given a bespoke web-panel adapter either,
+unlike the #2005/#2010 battle-staging precedent (``_positioning_actions``/
+``_battle_staging_actions``). Every consumer of ``get_player_actions`` (``ActionPanel.tsx``,
+``PersonaContextMenu.tsx``) dispatches its listed entries through the CONSENT pipeline
+(``createActionRequest``), which identify — a no-consent private perception roll, ADR-0024 —
+must never enter (#1107 Task 3 review, Critical finding: it would both hand the masked
+target a veto it shouldn't have and crash on accept, no ``ActionTemplate``/
+``CUSTOM_ACTION_RESOLVERS`` entry to resolve against). Its only web path is a dedicated
+"Identify" item in ``PersonaContextMenu`` that dispatches REGISTRY REST directly
+(``useDispatchPlayerAction`` -> ``_dispatch_registry`` -> ``.run()``), mirroring that menu's
+pre-existing ``challenge`` dispatch; telnet reaches it via ``CmdIdentify``
+(``commands/identification.py``).
 """
 
 from __future__ import annotations
@@ -44,31 +53,48 @@ _NOT_PRESENT_MESSAGE = "They aren't here."
 _NOTHING_TO_SEE_MESSAGE = "Their face is their own — there is no mask to see through."
 
 
-def _resolve_identify_target(kwargs: dict[str, Any]) -> ObjectDB | None:
-    """Resolve the identify target from either dispatch shape (#1107 Task 3, the #2163 gotcha).
-
-    Telnet passes an already-resolved ``target`` ``ObjectDB`` directly. The web REGISTRY
-    dispatch path for a PERSONA-kind target instead sends ``target_persona_id`` (a ``Persona``
-    pk, per the frontend's ``ActionPanel`` dispatch convention) — REST dispatch
-    (``dispatch_player_action`` -> ``_dispatch_registry``) does no ``ObjectDB`` resolution of
-    its own; ``objectdb_target_kwargs`` only helps the *websocket* inputfunc, and only for wire
-    keys it's told about. Resolve defensively here so both dispatch shapes work, shared by the
-    prerequisite gate and ``execute()``.
-    """
-    target = kwargs.get("target")
-    if target is not None:
-        return target
-
-    persona_id = kwargs.get("target_persona_id")
-    if persona_id is None:
-        return None
-
+def _resolve_persona_pk_to_character(persona_id: Any) -> ObjectDB | None:
+    """Resolve a ``Persona`` pk to its owning character ``ObjectDB``, or ``None``."""
     from world.scenes.models import Persona  # noqa: PLC0415
 
     persona = Persona.objects.filter(pk=persona_id).select_related("character_sheet").first()
     if persona is None:
         return None
     return persona.character_sheet.character
+
+
+def _resolve_identify_target(kwargs: dict[str, Any]) -> ObjectDB | None:
+    """Resolve the identify target from any dispatch shape (#1107 Task 3, the #2163 gotcha;
+    hardened in the Task 3 review's Minor finding 1).
+
+    Three shapes are accepted, all keyed off ``target``/``target_persona_id``:
+
+    - Telnet passes an already-resolved ``target`` ``ObjectDB`` directly.
+    - The ``PersonaContextMenu`` "Identify" item (web) sends a raw ``target`` kwarg holding a
+      ``Persona`` pk (an ``int``) — mirroring ``ChallengeAction``'s
+      ``_resolve_challenge_target`` (``actions/definitions/duels.py``), the established
+      precedent for a context-menu-dispatched persona-pk ``target`` kwarg.
+    - The generic web REGISTRY dispatch convention instead sends ``target_persona_id`` (a
+      ``Persona`` pk) — kept for back-compat with the #2163 REST-dispatch gotcha this
+      resolver was originally written to cover.
+
+    REST dispatch (``dispatch_player_action`` -> ``_dispatch_registry``) does no ``ObjectDB``
+    resolution of its own; ``objectdb_target_kwargs`` only helps the *websocket* inputfunc, and
+    only for wire keys it's told about. Resolve defensively here so every dispatch shape works,
+    shared by the prerequisite gate and ``execute()``.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    target = kwargs.get("target")
+    if isinstance(target, ObjectDB):
+        return target
+    if target is not None:
+        return _resolve_persona_pk_to_character(target)
+
+    persona_id = kwargs.get("target_persona_id")
+    if persona_id is None:
+        return None
+    return _resolve_persona_pk_to_character(persona_id)
 
 
 def _presented_fake_persona(target_obj: ObjectDB) -> Persona | None:
@@ -216,6 +242,3 @@ class IdentifyAction(Action):
         result = attempt_identification(actor, target, guess_name=guess_name)
         success = result.outcome == IdentificationOutcome.SUCCESS
         return ActionResult(success=success, message=result.player_message)
-
-
-identify = IdentifyAction()
