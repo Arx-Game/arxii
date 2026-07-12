@@ -49,6 +49,20 @@ class CmdCombatRoutingTests(TestCase):
         self.assertEqual(ref.backend, ActionBackend.REGISTRY)
         self.assertEqual(ref.registry_key, "combat_use")
 
+    def test_charge_builds_registry_ref(self) -> None:
+        cmd = _make_cmd("charge Orc with Strike")
+        cmd._subverb = "charge"
+        ref = cmd.resolve_action_ref()
+        self.assertEqual(ref.backend, ActionBackend.REGISTRY)
+        self.assertEqual(ref.registry_key, "combat_charge")
+
+    def test_joust_builds_registry_ref(self) -> None:
+        cmd = _make_cmd("joust with Lance Strike")
+        cmd._subverb = "joust"
+        ref = cmd.resolve_action_ref()
+        self.assertEqual(ref.backend, ActionBackend.REGISTRY)
+        self.assertEqual(ref.registry_key, "combat_joust")
+
     def test_unknown_subverb_messages_and_does_not_dispatch(self) -> None:
         cmd = _make_cmd("frobnicate")
         with patch(_DISPATCH) as dispatch:
@@ -134,5 +148,51 @@ class CmdCombatArgResolutionTests(TestCase):
     def test_use_without_item_raises(self) -> None:
         cmd = _make_cmd("use")
         cmd._subverb, cmd._rest = "use", ""
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_charge_resolves_opponent_and_technique(self) -> None:
+        cmd = _make_cmd("charge Orc with Strike")
+        cmd._subverb, cmd._rest = "charge", "Orc with Strike"
+        with (
+            patch.object(cmd, "_resolve_opponent_pk", return_value=9) as resolve_opp,
+            patch.object(cmd, "_find_technique_id", return_value=4) as resolve_tech,
+        ):
+            kwargs = cmd.resolve_action_args()
+        resolve_opp.assert_called_once_with("Orc")
+        resolve_tech.assert_called_once_with("Strike")
+        self.assertEqual(kwargs, {"opponent_id": 9, "technique_id": 4})
+
+    def test_charge_without_with_clause_raises(self) -> None:
+        cmd = _make_cmd("charge Orc")
+        cmd._subverb, cmd._rest = "charge", "Orc"
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_charge_without_opponent_raises(self) -> None:
+        cmd = _make_cmd("charge with Strike")
+        cmd._subverb, cmd._rest = "charge", "with Strike"
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_joust_resolves_technique_with_prefix(self) -> None:
+        cmd = _make_cmd("joust with Lance Strike")
+        cmd._subverb, cmd._rest = "joust", "with Lance Strike"
+        with patch.object(cmd, "_find_technique_id", return_value=6) as resolve_tech:
+            kwargs = cmd.resolve_action_args()
+        resolve_tech.assert_called_once_with("Lance Strike")
+        self.assertEqual(kwargs, {"technique_id": 6})
+
+    def test_joust_resolves_bare_technique(self) -> None:
+        cmd = _make_cmd("joust Lance Strike")
+        cmd._subverb, cmd._rest = "joust", "Lance Strike"
+        with patch.object(cmd, "_find_technique_id", return_value=6) as resolve_tech:
+            kwargs = cmd.resolve_action_args()
+        resolve_tech.assert_called_once_with("Lance Strike")
+        self.assertEqual(kwargs, {"technique_id": 6})
+
+    def test_joust_without_technique_raises(self) -> None:
+        cmd = _make_cmd("joust")
+        cmd._subverb, cmd._rest = "joust", ""
         with self.assertRaises(CommandError):
             cmd.resolve_action_args()

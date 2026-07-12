@@ -392,6 +392,8 @@ class ActionRegistryTests(TestCase):
             "deploy_companion",
             "release_companion",
             "order_companion",
+            "mount_companion",
+            "dismount_companion",
             "lock_exit",
             "unlock_exit",
             "open_window",

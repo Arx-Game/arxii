@@ -54,6 +54,8 @@ from actions.definitions.companions import (
     BindCompanionAction,
     CompanionFightAction,
     DeployCompanionAction,
+    DismountCompanionAction,
+    MountCompanionAction,
     OrderCompanionAction,
     ReleaseCompanionAction,
 )
@@ -592,6 +594,8 @@ _ALL_ACTIONS: list[Action] = [
     DeployCompanionAction(),
     ReleaseCompanionAction(),
     OrderCompanionAction(),
+    MountCompanionAction(),
+    DismountCompanionAction(),
     # #1866 — door lock/unlock telnet coverage.
     LockAction(),
     UnlockAction(),

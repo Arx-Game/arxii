@@ -13,6 +13,7 @@ already exists and is reused by the ``combat yield`` subverb.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -628,6 +629,15 @@ class LeaveEncounterAction(Action):
             leave_encounter(participant)
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
+
+        # Encounter exit is one of the three dismount triggers (#1843, alongside
+        # voluntary dismount and companion defeat) — a mount doesn't carry over
+        # into whatever the rider does next outside the fight.
+        from world.companions.services import MountError, dismount_companion  # noqa: PLC0415
+
+        with contextlib.suppress(MountError):
+            dismount_companion(participant.character_sheet)
+
         return ActionResult(success=True, message="You withdraw from the fight.")
 
 
