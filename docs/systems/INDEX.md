@@ -886,6 +886,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `Domain`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law`
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
 - **Key Services:** `full_display_name` (particle naming), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`
+- **Civ-stats drive gameplay (#2238):** `Domain.income_multiplier` (prosperity / `DOMAIN_PROSPERITY_BASELINE`) scales a holding's gross in `currency.accrue_income_stream` — prosperity now drives income, not just display. `unrest_crisis_chance` / `maybe_open_unrest_crisis` roll a `DomainCrisis` when unrest is high (called from the weekly `domain_consumption_tick`). Unrest also skims food collection (`agriculture._apply_unrest_skim`) and a well-fed week recovers prosperity/unrest toward equilibrium (`agriculture` recovery drift). Still deferred (own PR): unrest→justice-heat *suppression* + crackdown loop (unrest makes a domain heat-safe until a crackdown spikes heat)
 - **DRF:** `OrganizationSerializer.house` block + `/api/societies/organizations/{id}/feed/`
 - **Web:** `/orgs/:id` house section + House Tidings; **Telnet:** `sheet/house`
 - **House creator (Phase D, CG-only):** `HouseTemplate` + `HouseClaim`; gates in `houses/creator.py` (`submit_house_claim`, `approve_house_claim`, `materialize_house_claim` at CG finalization); admin review; `/api/character-creation/house-titles/` + draft `house-claim` action
@@ -2708,11 +2709,15 @@ prosperity.
     multiplier` into each active Field's `uncollected_pool`.
   - `collect_field_food(character, field_instance)` — active collection dispatch;
     zeroes pool, rolls a Food Collection check, applies `COLLECTION_BAND_PCTS`
-    (reused from currency), lands food into domain's `FoodStockpile` (capped at
-    Granary capacity; excess is overflow/lost).
-  - `domain_consumption_tick()` — weekly cron (part of weekly rollover); each
-    domain's population consumes food; shortage raises unrest + lowers
-    prosperity; no stockpile row = perpetual shortage.
+    (reused from currency), then **unrest skims the haul** (`_apply_unrest_skim`,
+    #2238), lands food into domain's `FoodStockpile` (capped at Granary capacity;
+    excess is overflow/lost).
+  - `domain_consumption_tick()` — weekly cron (part of weekly rollover); the
+    domain **civ-stat update**: population consumes food; shortage raises unrest +
+    lowers prosperity; a **well-fed** week instead relaxes unrest + recovers
+    prosperity toward `FoodConfig.prosperity_equilibrium` (#2238, recovery drift);
+    then rolls `houses.maybe_open_unrest_crisis` per domain. No stockpile row =
+    perpetual shortage. Telemetry: `domains_processed` / `shortages` / `crises_opened`.
   - `resolve_domain_for_feature(instance)` — walks `RoomProfile.area` →
     `AreaClosure` ancestor chain to find the `Domain`.
   - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
