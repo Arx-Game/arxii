@@ -1729,7 +1729,7 @@ class TestSingleTargetNPCAutoResolve(TestCase):
         cls.initiator = PersonaFactory()
         # NPC primary: PersonaFactory leaves db_account None by default.
         cls.npc_persona = PersonaFactory()
-        cls.action_template = ActionTemplateFactory(name="intimidate")
+        cls.action_template = ActionTemplateFactory(name="Intimidate")
 
         KudosSourceCategory.objects.get_or_create(
             name="social_engagement",
@@ -1758,19 +1758,11 @@ class TestSingleTargetNPCAutoResolve(TestCase):
             target_persona=self.npc_persona,
             action_key="intimidate",
         )
-        # action_template is attached by a later pipeline step in production (the view/
-        # command layer) — this test attaches it directly so the guard sees a resolvable
-        # request, matching how ActionTemplate resolution actually works end-to-end.
-        request.action_template = self.action_template
-        request.save(update_fields=["action_template"])
-        # Re-run through the same path create_action_request uses, now that the template
-        # is attached — mirrors _auto_resolve_npc_targets's real call shape.
-        result = action_services._auto_resolve_npc_targets(request)
 
         request.refresh_from_db()
         self.assertEqual(request.status, ActionRequestStatus.RESOLVED)
-        self.assertIsNotNone(result)
-        self.assertEqual(result.action_key, "intimidate")
+        self.assertIsNotNone(request._auto_resolve_result)
+        self.assertEqual(request._auto_resolve_result.action_key, "intimidate")
 
     def test_unresolvable_single_target_stays_pending(self) -> None:
         """No ActionTemplate, no custom resolver, not a standalone cast -> stays PENDING.

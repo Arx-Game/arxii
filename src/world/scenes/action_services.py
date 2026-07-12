@@ -321,7 +321,16 @@ def create_action_request(  # noqa: PLR0913
         thread_used: Optional bond Thread paying a treatment's cost.
 
     Returns:
-        The created SceneActionRequest in PENDING status.
+        The created SceneActionRequest. Status is PENDING when the primary
+        target is a PC, or when the primary target is an NPC but the request
+        isn't yet resolvable (see ``_request_is_resolvable`` — e.g. no
+        ``action_template`` attached). Status is RESOLVED when the primary
+        (and/or additional) NPC target(s) auto-resolve at creation time
+        (#2214, #572). When auto-resolution fires, its result is NOT carried
+        by this return value — it's stashed on the transient
+        ``request._auto_resolve_result`` attribute for callers that need it
+        (e.g. the REST view surfaces it in the create response's ``result``
+        key).
 
     Raises:
         ValidationError: If technique is provided but fails validation, or if
