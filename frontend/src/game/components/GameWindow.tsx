@@ -200,7 +200,12 @@ export function GameWindow({
                 }`}
               >
                 {name}
-                <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
+                {/* The active character's own attention already lives in
+                    ConversationTabStrip's badges (#2166 review fold-in) — badging
+                    its own already-highlighted puppet tab too is redundant/wrong. */}
+                {name !== active && (
+                  <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
+                )}
               </button>
             );
           })}
