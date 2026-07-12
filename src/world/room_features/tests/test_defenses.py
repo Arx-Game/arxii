@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
-from evennia_extensions.models import ExitProfile
+from evennia_extensions.models import ExitProfile, RoomProfile
 from world.room_features.constants import (
     EXIT_BARS_MAX_LEVEL,
     ROOM_ALARM_MAX_LEVEL,
@@ -214,3 +214,103 @@ class CompleteDefenseInstallationTests(TestCase):
         complete_defense_installation(project)
         alarm = RoomAlarmDetails.objects.get(room_profile=room_profile)
         assert alarm.level == 2  # unchanged -- target_level (1) is not an upgrade
+
+
+class ReactToUnauthorizedEntryTests(TestCase):
+    def _room_ward_and_intruder(self, *, condition=None, damage=0):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory
+        from world.room_features.models import RoomWardDetails
+        from world.scenes.factories import PersonaFactory
+
+        room = ObjectDBFactory(db_key="ReactRoom", db_typeclass_path="typeclasses.rooms.Room")
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        resonance = ResonanceFactory()
+        ward = RoomWardDetails.objects.create(
+            room_profile=room_profile,
+            resonance=resonance,
+            reaction_condition=condition,
+            reaction_damage_amount=damage,
+        )
+        intruder = ObjectDBFactory(
+            db_key="ReactMallory", db_typeclass_path="typeclasses.characters.Character"
+        )
+        intruder.location = room
+        intruder.save()
+        sheet = CharacterSheetFactory(character=intruder)
+        PersonaFactory(character_sheet=sheet)
+        return room, ward, intruder
+
+    def test_ward_applies_condition_to_unauthorized_entrant(self):
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.room_features.services import react_to_unauthorized_entry
+
+        condition = ConditionTemplateFactory()
+        room, _ward, intruder = self._room_ward_and_intruder(condition=condition)
+        react_to_unauthorized_entry(intruder, room)
+        assert intruder.condition_instances.filter(condition=condition).exists()
+
+    def test_ward_lapsed_does_not_react(self):
+        from django.utils import timezone
+
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.room_features.services import react_to_unauthorized_entry
+
+        condition = ConditionTemplateFactory()
+        room, ward, intruder = self._room_ward_and_intruder(condition=condition)
+        ward.lapsed_at = timezone.now()
+        ward.save(update_fields=["lapsed_at"])
+        react_to_unauthorized_entry(intruder, room)
+        assert not intruder.condition_instances.filter(condition=condition).exists()
+
+    def test_owner_entering_does_not_trigger_ward(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.locations.services import transfer_ownership
+        from world.room_features.services import react_to_unauthorized_entry
+        from world.scenes.factories import PersonaFactory
+
+        condition = ConditionTemplateFactory()
+        room, _ward, _intruder = self._room_ward_and_intruder(condition=condition)
+        room_profile = RoomProfile.objects.get(objectdb=room)
+        owner = ObjectDBFactory(
+            db_key="ReactOwner", db_typeclass_path="typeclasses.characters.Character"
+        )
+        owner.location = room
+        owner.save()
+        owner_sheet = CharacterSheetFactory(character=owner)
+        owner_persona = PersonaFactory(character_sheet=owner_sheet)
+        owner_sheet.active_persona = owner_persona
+        owner_sheet.save(update_fields=["active_persona"])
+        transfer_ownership(room_profile=room_profile, to_persona=owner_persona)
+
+        react_to_unauthorized_entry(owner, room)
+        assert not owner.condition_instances.filter(condition=condition).exists()
+
+    def test_alarm_notifies_owner(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.locations.services import transfer_ownership
+        from world.narrative.models import NarrativeMessageDelivery
+        from world.room_features.models import RoomAlarmDetails
+        from world.room_features.services import react_to_unauthorized_entry
+        from world.scenes.factories import PersonaFactory
+
+        room = ObjectDBFactory(db_key="AlarmRoom", db_typeclass_path="typeclasses.rooms.Room")
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        owner_sheet = CharacterSheetFactory()
+        owner_persona = PersonaFactory(character_sheet=owner_sheet)
+        transfer_ownership(room_profile=room_profile, to_persona=owner_persona)
+        RoomAlarmDetails.objects.create(room_profile=room_profile)
+
+        intruder = ObjectDBFactory(
+            db_key="AlarmMallory", db_typeclass_path="typeclasses.characters.Character"
+        )
+        intruder.location = room
+        intruder.save()
+        intruder_sheet = CharacterSheetFactory(character=intruder)
+        PersonaFactory(character_sheet=intruder_sheet)
+
+        react_to_unauthorized_entry(intruder, room)
+        assert NarrativeMessageDelivery.objects.filter(
+            recipient_character_sheet=owner_sheet
+        ).exists()

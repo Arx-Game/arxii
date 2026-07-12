@@ -529,3 +529,97 @@ def _install_or_level_alarm(room_profile: RoomProfile, target_level: int) -> Non
         details.level = target_level
         details.last_upgraded_at = _tz.now()
         details.save(update_fields=["level", "last_upgraded_at"])
+
+
+# ---------------------------------------------------------------------------
+# Ward/alarm reaction to unauthorized traversal (#2177)
+# ---------------------------------------------------------------------------
+
+
+def react_to_unauthorized_entry(actor, room) -> None:
+    """React to `actor` entering `room` when an active ward/alarm is present
+    and the actor lacks owner/tenant standing (#2177).
+
+    Deterministic -- no CheckType roll, mirroring ExitState.can_traverse's
+    lock check (Decision 5). Called from
+    flows.service_functions.movement.traverse_exit after a successful move.
+    """
+    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        return
+    persona = active_persona_for_sheet(sheet)
+    if is_owner(persona, room) or is_tenant(persona, room):
+        return
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    room_profile = RoomProfile.objects.filter(objectdb=room).first()
+    if room_profile is None:
+        return
+
+    _trigger_ward(actor, room_profile)
+    _trigger_alarm(actor, room, room_profile)
+
+
+def _trigger_ward(actor, room_profile: RoomProfile) -> None:
+    from world.room_features.models import RoomWardDetails  # noqa: PLC0415
+
+    ward = RoomWardDetails.objects.filter(room_profile=room_profile).active().first()
+    if ward is None or ward.lapsed_at is not None:
+        return
+
+    if ward.reaction_condition_id is not None:
+        from world.conditions.services import apply_condition  # noqa: PLC0415
+
+        apply_condition(
+            actor,
+            ward.reaction_condition,
+            source_description="A ward reacts to your intrusion.",
+        )
+    if ward.reaction_damage_amount:
+        from world.scenes.sudden_harm import arm_or_apply_sudden_harm  # noqa: PLC0415
+
+        arm_or_apply_sudden_harm(
+            actor,
+            ward.reaction_damage_amount,
+            None,
+            source_description="A ward lashes out at the intrusion.",
+        )
+
+
+def _trigger_alarm(actor, room, room_profile: RoomProfile) -> None:
+    from world.room_features.models import RoomAlarmDetails  # noqa: PLC0415
+
+    alarm = RoomAlarmDetails.objects.filter(room_profile=room_profile).active().first()
+    if alarm is None:
+        return
+
+    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+    from flows.service_functions.communication import message_location  # noqa: PLC0415
+
+    sdm = SceneDataManager()
+    actor_state = sdm.initialize_state_for_object(actor)
+    message_location(actor_state, "An alarm flares to life -- someone has entered uninvited!")
+
+    from world.locations.constants import HolderType  # noqa: PLC0415
+    from world.locations.services import effective_owner  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    ownership = effective_owner(room)
+    if ownership is None:
+        return
+    # LocationOwnership.get_active_target() (inherited from DiscriminatorMixin)
+    # resolves the PARENT discriminator (area/room_profile), not the holder --
+    # the holder is a second, independent discriminator on this model
+    # (holder_type/holder_persona/holder_organization). Read it directly.
+    if ownership.holder_type != HolderType.PERSONA or ownership.holder_persona is None:
+        return
+    send_narrative_message(
+        recipients=[ownership.holder_persona.character_sheet],
+        body=f"Your alarm at {room.db_key} was triggered.",
+        category=NarrativeCategory.SYSTEM,
+    )
