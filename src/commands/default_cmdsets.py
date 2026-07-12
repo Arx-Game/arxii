@@ -48,7 +48,7 @@ from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
-from commands.door import CmdLock, CmdUnlock
+from commands.door import CmdBreak, CmdLock, CmdPick, CmdUnlock
 from commands.dramatic_moments import CmdMoment
 from commands.duels import CmdDuel
 from commands.durance import CmdDurance
@@ -207,6 +207,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdTabletalk,
             CmdLock,
             CmdUnlock,
+            CmdPick,
+            CmdBreak,
             CmdOpenWindow,
             CmdCloseWindow,
             CmdRitual,
