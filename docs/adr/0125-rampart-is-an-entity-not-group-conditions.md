@@ -1,4 +1,4 @@
-# ADR-0122: Rampart is a position-anchored entity, not per-bearer group conditions
+# ADR-0125: Rampart is a position-anchored entity, not per-bearer group conditions
 
 **Status:** Accepted (2026-07-12) · **Issue:** #2209 (Guardian epic #2040 decision 3)
 

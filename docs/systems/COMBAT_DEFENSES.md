@@ -54,7 +54,7 @@ personal defense above, and before `DAMAGE_PRE_APPLY` even emits.
   (Stone/Wind/Fire/Thorn elemental profiles).
 - **Scope:** position-anchored, faction-blind (ADR-0109) — covers everyone standing there,
   not a single bearer. See `docs/systems/areas.md`'s "Rampart — Living Barriers" section
-  and ADR-0122 for the full model + firing-order detail.
+  and ADR-0125 for the full model + firing-order detail.
 
 ## Barrier (force-field absorb)
 

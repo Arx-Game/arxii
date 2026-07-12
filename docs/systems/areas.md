@@ -389,7 +389,7 @@ Registered in `commands/default_cmdsets.py` alongside `CmdPlaces`.
 
 ### Rampart — Living Barriers [BUILT & WIRED] (#2209, epic #2040 decision 3)
 
-A `Rampart` is a projected barrier entity covering a single `Position` — see ADR-0122 for
+A `Rampart` is a projected barrier entity covering a single `Position` — see ADR-0125 for
 why it's a position-anchored entity (one shared integrity pool, map-renderable crack state,
 a WARD-Clash meter subject, faction-blind coverage matching ADR-0109) rather than a
 `ConditionInstance` applied per-bearer. Models + services above; the cross-app pieces:

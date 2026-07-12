@@ -262,7 +262,7 @@ combat per-app glossary has the full entry. _Avoid_: guardian ward, protect acti
 **Rampart** (#2209, epic #2040 decision 3):
 A projected living barrier covering a `Position` — one shared `integrity` pool, an
 authored elemental profile (Stone/Wind/Fire/Thorn), map-rendered crack state. Owned by
-`world.areas.positioning` (the model + ADR-0122's "why an entity" rationale); combat owns
+`world.areas.positioning` (the model + ADR-0125's "why an entity" rationale); combat owns
 interception (runs before `DAMAGE_PRE_APPLY`, ahead of personal reactives and Guardian
 reactions) and the WARD-Clash meter binding. Full entries:
 [areas/positioning AGENT_GLOSSARY](src/world/areas/positioning/AGENT_GLOSSARY.md),

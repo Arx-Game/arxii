@@ -136,7 +136,7 @@ _Avoid_: rival, nemesis (narrative terms — use "foil" for the mechanical pairi
 
 **Rampart** (#2209, epic #2040 decision 3):
 A projected living barrier covering a `Position` — the model itself is owned by
-`world.areas.positioning` (see that app's `AGENT_GLOSSARY.md`; ADR-0122 for why it's an
+`world.areas.positioning` (see that app's `AGENT_GLOSSARY.md`; ADR-0125 for why it's an
 entity, not per-bearer conditions). Combat owns interception: `apply_rampart_interception`
 runs at the top of both damage-application seams — `apply_damage_to_participant` and
 `_resolve_opponent_pre_apply` (the opponent-side pre-apply resolver) — **before** the

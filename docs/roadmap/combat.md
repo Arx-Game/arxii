@@ -50,7 +50,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   self-cast wards, so an ally ward strains its caster rather than a free ride for the ally;
   an upkeep payer who can't afford the round cost lapses the ward. No in-combat party AoE —
   deliberately not built.
-- **Rampart living barriers (#2209, epic #2040 decision 3, ADR-0122).** A position-anchored
+- **Rampart living barriers (#2209, epic #2040 decision 3, ADR-0125).** A position-anchored
   `Rampart` entity (`world.areas.positioning`) with a shared `integrity`/`max_integrity` pool
   covers everyone at its `Position`, faction-blind like ADR-0109's obstacles. Interception
   (`apply_rampart_interception`) chips it at the top of both damage-application seams, before

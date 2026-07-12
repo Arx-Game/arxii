@@ -783,7 +783,7 @@ Room-anchored spatial graph: named position nodes, traversable edges, per-object
 occupancy, capability-gated movement, GM terrain blueprints, a spatial tactical-map
 UI (scene + combat), dynamic battlefield reshaping (aerial layer, chasms,
 consequence effects for graph mutation and flight), and Rampart living barriers
-(#2209 — a position-anchored entity with a shared integrity pool, see ADR-0122).
+(#2209 — a position-anchored entity with a shared integrity pool, see ADR-0125).
 
 - **Models:** `Position` (`PositionKind` discriminator; `elevation_anchor` self-FK —
   the ground node an AERIAL or CHASM node is anchored to; `layout_x`/`layout_y`
@@ -3422,7 +3422,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
 - **Rampart interception (#2209, epic #2040 decision 3; see `docs/systems/areas.md`'s
-  "Rampart — Living Barriers" for the model and ADR-0122 for the design rationale):**
+  "Rampart — Living Barriers" for the model and ADR-0125 for the design rationale):**
   `apply_rampart_interception` (`world/combat/services.py`) chips a position-covering
   `Rampart`'s `integrity` — via the shared `damage_rampart` seam — at the top of both
   `apply_damage_to_participant` and `_resolve_opponent_pre_apply`, **before**
