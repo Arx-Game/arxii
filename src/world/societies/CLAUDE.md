@@ -13,6 +13,7 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`OrganizationRank`**: A single rung on an organization's five-tier rank ladder - uses SharedMemoryModel
 - **`OrganizationMembershipOffer`**: Pending or resolved invitation/application to join an organization - uses SharedMemoryModel
 - **`OrganizationMembership`**: Links Persona to Organization with an `OrganizationRank` rung; active rows have `left_at` and `exiled_at` null
+- **`OrganizationOffice`** (#2239): A named portfolio (`slug`, `title`, `holder` Persona, optional `feeds_check` Trait) orthogonal to rank — "Minister of the Domains". A leader appoints/vacates it; reusable for any "who runs X for this house" role. `feeds_check` is the declared trait the office is meant to lend to the checks it stewards (schema only — the check-lending wiring is a follow-up; a live `perform_check` needs an online character actor + a CheckType, not a Trait on a possibly-offline holder).
 - **`SocietyReputation`**: Reputation standing with a society per-persona
 - **`OrganizationReputation`**: Reputation standing with an organization per-persona
 - **`LegendSourceType`**: Categories of legend-generating events (combat, story, discovery, etc.) - uses SharedMemoryModel
@@ -34,6 +35,11 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 
 ### `membership_services.py`
 - **`ensure_default_rank_ladder()`**: Create the default five-tier `OrganizationRank` ladder for a generic organization (covenants are skipped)
+
+### `office_services.py` (#2239)
+- **`appoint_office(*, organization, slug, holder, title="", feeds_check=None)`**: install/replace an office holder (idempotent per org+slug)
+- **`vacate_office(*, organization, slug)`**: clear the holder (no-op when absent)
+- **`office_holder(organization, slug)`** / **`holds_office(persona, organization, slug)`**: read seams. Domain management (`houses.services.can_administer_domain`) gates on `holds_office` for the `domain-steward` slug.
 
 ### `types.py`
 - **`ReputationTier`**: Enum mapping hidden reputation values to named tiers

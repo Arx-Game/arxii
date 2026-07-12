@@ -87,6 +87,12 @@ from actions.definitions.crossing import resolve_crossing_offer
 from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.distinctions import GMAwardDistinctionAction
+from actions.definitions.domains import (
+    AddDomainHoldingAction,
+    AppointDomainOfficeAction,
+    StartDomainImprovementAction,
+    VacateDomainOfficeAction,
+)
 from actions.definitions.doors import BreakExitAction, LockAction, PickLockAction, UnlockAction
 from actions.definitions.dramatic_moments import (
     ConfirmDramaticMomentSuggestionAction,
@@ -617,6 +623,11 @@ _ALL_ACTIONS: list[Action] = [
     DeployCompanionAction(),
     ReleaseCompanionAction(),
     OrderCompanionAction(),
+    # #2239 — in-play domain management + office delegation.
+    AddDomainHoldingAction(),
+    StartDomainImprovementAction(),
+    AppointDomainOfficeAction(),
+    VacateDomainOfficeAction(),
     MountCompanionAction(),
     DismountCompanionAction(),
     # #1866 — door lock/unlock telnet coverage.

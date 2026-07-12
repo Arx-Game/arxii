@@ -250,6 +250,21 @@ They do not use the command system, dispatchers, or handlers.
   `can_modify_room_features`. Shared by telnet `CmdLabStation` (`station <subverb>`,
   `src/commands/crafting_station.py`) and the web `LabStationViewSet`
   (`/api/items/lab-stations/`);
+  `domains.py` (#2239) — four REGISTRY actions, all `target_type=SELF`,
+  `category="domains"`, making the CG/seed-only domain services reachable in play:
+  `AddDomainHoldingAction` (key `add_domain_holding`) and
+  `StartDomainImprovementAction` (`start_domain_improvement`) — thin over
+  `houses.services.add_holding`/`start_domain_improvement`, gated on
+  `can_administer_domain` (an org leader OR the `domain-steward` office holder);
+  `AppointDomainOfficeAction` (`appoint_domain_office`) and
+  `VacateDomainOfficeAction` (`vacate_domain_office`) — leadership-only
+  (`is_org_leader`), thin over `societies.office_services`. Each resolves its
+  `domain_id`/`holding_kind_id`/`holder_persona_id` from a plain int (REST-safe,
+  no ObjectDB FKs). Shared by telnet `CmdDomain` (`domain <subverb>`,
+  `src/commands/domains.py`); a React domain panel is a separable follow-up (no
+  existing domain UI to extend). The office's `feeds_check` trait is declared but
+  not yet wired into the improvement check — see the `OrganizationOffice` note in
+  `world/societies/CLAUDE.md`;
   `currency.py` (#1909) — the physical-cash face of the currency ledger, all
   `target_type=SELF`/`SINGLE`, `category="items"`: `WithdrawCoinsAction` (key
   `"withdraw_coins"`) mints a loose-coin cache via `mint_loose_cache`;

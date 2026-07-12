@@ -12,6 +12,11 @@ DOMAIN_PROSPERITY_BASELINE = 50
 UNREST_CRISIS_THRESHOLD = 60
 UNREST_CRISIS_PCT_PER_POINT = 2
 
+# --- Delegation (#2239) ---
+# Slug of the OrganizationOffice whose holder may run a house's domain in play
+# (add holdings, commission improvements) alongside the org's leadership rank.
+DOMAIN_STEWARD_OFFICE = "domain-steward"
+
 
 class TitleTier(models.TextChoices):
     """Rank of a landed/dynastic title. Realm-specific display labels are

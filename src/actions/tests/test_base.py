@@ -425,6 +425,11 @@ class ActionRegistryTests(TestCase):
             "enlist_battle_participant",
             "browse_battle_catalog",
             "collect_food",
+            # #2239 — in-play domain management + office delegation.
+            "add_domain_holding",
+            "start_domain_improvement",
+            "appoint_domain_office",
+            "vacate_domain_office",
             # #2222 — portal anchor install/dissolve.
             "portal_anchor_install",
             "portal_anchor_dissolve",

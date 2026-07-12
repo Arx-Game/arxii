@@ -524,6 +524,39 @@ def create_domain(*, area: Area, name: str, owner_org: Organization) -> Domain:
     return Domain.objects.create(area=area, name=name, owner_org=owner_org)
 
 
+def is_org_leader(persona, organization: Organization) -> bool:
+    """Whether ``persona`` holds a leadership rank (``can_manage_ranks``) in the org.
+
+    The active-membership gate mirrors ``OrganizationMembership``'s own truth —
+    ``left_at`` and ``exiled_at`` both null — so a departed or exiled member never
+    counts as a leader (#2239).
+    """
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    return OrganizationMembership.objects.filter(
+        organization=organization,
+        persona=persona,
+        left_at__isnull=True,
+        exiled_at__isnull=True,
+        rank__can_manage_ranks=True,
+    ).exists()
+
+
+def can_administer_domain(persona, domain: Domain) -> bool:
+    """Whether ``persona`` may run ``domain`` in play (#2239).
+
+    Two paths: an org leader (a ``can_manage_ranks`` rank) always may; the holder
+    of the ``domain-steward`` office may too. The office is the delegation payoff —
+    a head can hand day-to-day domain running to a Minister without granting rank
+    authority over the whole house.
+    """
+    from world.societies.houses.constants import DOMAIN_STEWARD_OFFICE  # noqa: PLC0415
+    from world.societies.office_services import holds_office  # noqa: PLC0415
+
+    org = domain.owner_org
+    return is_org_leader(persona, org) or holds_office(persona, org, DOMAIN_STEWARD_OFFICE)
+
+
 def add_holding(*, domain: Domain, kind: HoldingKind, name: str = "") -> DomainHolding:
     """Attach a working holding, materializing its income stream.
 

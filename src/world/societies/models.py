@@ -755,6 +755,66 @@ class OrganizationMembership(SharedMemoryModel):
         return self.organization.get_rank_title(self.rank.tier)
 
 
+class OrganizationOffice(SharedMemoryModel):
+    """A named portfolio within an organization, orthogonal to rank (#2239).
+
+    Ranks are a linear ladder of authority; an *office* is a hat a member wears —
+    "Minister of the Domains", "Master of Coin" — that a leader appoints and can
+    vacate independently of the holder's rung. Reusable well beyond domains: any
+    system that wants "who runs X for this house" reads an office by its ``slug``.
+
+    ``feeds_check`` records the Trait an office is meant to lend to the checks it
+    stewards (a domain-steward lends Stewardship). The check-lending itself is a
+    later slice — ``perform_check`` needs a live character actor and a CheckType,
+    and an office holder may be offline (see #2239 notes); this column is the
+    declared, admin-editable schema for that wiring, not yet a live effect.
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="offices",
+        help_text="The organization this office belongs to.",
+    )
+    slug = models.SlugField(
+        max_length=50,
+        help_text="Stable code identifier, e.g. 'domain-steward'.",
+    )
+    title = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Player-facing title, e.g. 'Minister of the Domains'.",
+    )
+    holder = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="offices_held",
+        help_text="The persona currently holding this office (null = vacant).",
+    )
+    feeds_check = models.ForeignKey(
+        "traits.Trait",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Trait this office lends to the checks it stewards (declared; wiring is later).",
+    )
+
+    class Meta:
+        ordering = ["organization", "slug"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "slug"],
+                name="unique_org_office_slug",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title or self.slug} ({self.organization})"
+
+
 class SocietyReputation(SharedMemoryModel):
     """
     Tracks a persona's reputation standing with a society.

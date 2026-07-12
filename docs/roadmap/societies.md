@@ -27,6 +27,7 @@ The social hierarchy of the game world — from massive NPC-backed societies too
 ## What's Needed for MVP
 - Territory control mechanics — organizations claiming, defending, and losing areas (Domain rows exist, #1884; contested control is not built)
 - ~~Domain management integration~~ — DONE for the abstract tier (#1884): domains + holdings feed OrgIncomeStream→treasury; material exports/imports remain
+- ~~In-play domain management + delegation~~ — DONE (#2239): the CG/seed-only `add_holding`/`start_domain_improvement` are reachable in play via `actions/definitions/domains.py` + telnet `CmdDomain`, gated on `can_administer_domain` (org leader OR `domain-steward` office). Delegation lands as `OrganizationOffice` (a named portfolio orthogonal to rank — "Minister of the Domains"). The office's `feeds_check` trait is declared schema; wiring it into the improvement check (a Minister lending their Stewardship) is a future increment — `perform_check` needs a live character actor + CheckType, not a Trait on a possibly-offline holder. A React domain panel is a separable follow-up.
 - Political mechanics — marriage-pact alliances built (#1884); betrayal consequences beyond pact breach, faction warfare
 - Army/military model — organizational military strength for territory and battle scenes
 - Wealth and treasury — organizational resources, income, expenditure
