@@ -60,13 +60,6 @@ class FindRouteTests(TestCase):
 
         assert find_route(room_a, room_b) is None
 
-    def test_different_area_returns_none(self):
-        room_a = make_room(self.area, "A")
-        room_b = make_room(self.other_area, "B")
-        make_exit(room_a, room_b, "east")
-
-        assert find_route(room_a, room_b) is None
-
     def test_destination_not_public_returns_none(self):
         room_a = make_room(self.area, "A")
         room_b = ObjectDBFactory(db_key="Private", db_typeclass_path="typeclasses.rooms.Room")
@@ -172,3 +165,69 @@ class FindRouteTests(TestCase):
             f"width (5 rooms at level 2), got {len(ctx.captured_queries)}: "
             f"{[q['sql'] for q in ctx.captured_queries]}"
         )
+
+
+class CrossAreaFindRouteTests(TestCase):
+    """#2223 Decision 1: the exit graph IS the connectivity — a room-level Exit
+    that crosses an Area boundary is a valid hop, with no separate Area-to-Area
+    adjacency model involved. These tests replace #2163's
+    `test_different_area_returns_none`, which asserted the old same-Area wall
+    that this feature removes.
+    """
+
+    def setUp(self):
+        self.area = AreaFactory()
+        self.other_area = AreaFactory()
+
+    def test_route_crosses_area_boundary_via_connecting_exit(self):
+        room_a = make_room(self.area, "A")
+        room_b = make_room(self.other_area, "B")
+        exit_ab = make_exit(room_a, room_b, "east")
+
+        route = find_route(room_a, room_b)
+
+        assert route == [exit_ab]
+
+    def test_multi_hop_route_crosses_boundary_partway(self):
+        room_a = make_room(self.area, "A")
+        room_boundary = make_room(self.area, "Boundary")
+        room_c = make_room(self.other_area, "C")
+        exit_a_boundary = make_exit(room_a, room_boundary, "east")
+        exit_boundary_c = make_exit(room_boundary, room_c, "east")
+
+        route = find_route(room_a, room_c)
+
+        assert route == [exit_a_boundary, exit_boundary_c]
+
+    def test_unlinked_areas_returns_none(self):
+        # Two Areas exist, but no exit connects any room in one to any room in
+        # the other — no adjacency data means no route, exactly like same-Area
+        # unreachability. Areas are not connected by fiat; only exits connect rooms.
+        room_a = make_room(self.area, "A")
+        room_b = make_room(self.other_area, "B")
+
+        assert find_route(room_a, room_b) is None
+
+    def test_hop_cap_enforced_across_boundary(self):
+        from django.test import override_settings
+
+        room_a = make_room(self.area, "A")
+        room_mid = make_room(self.area, "Mid")
+        room_b = make_room(self.other_area, "B")
+        make_exit(room_a, room_mid, "east")
+        make_exit(room_mid, room_b, "east")
+
+        with override_settings(TRAVEL_MAX_HOPS=1):
+            assert find_route(room_a, room_b) is None
+
+    def test_private_room_not_used_as_waypoint_across_boundary(self):
+        room_a = make_room(self.area, "A")
+        room_private = ObjectDBFactory(db_key="Private", db_typeclass_path="typeclasses.rooms.Room")
+        RoomProfile.objects.update_or_create(
+            objectdb=room_private, defaults={"area": self.other_area, "is_public": False}
+        )
+        room_c = make_room(self.other_area, "C")
+        make_exit(room_a, room_private, "east")
+        make_exit(room_private, room_c, "east")
+
+        assert find_route(room_a, room_c) is None

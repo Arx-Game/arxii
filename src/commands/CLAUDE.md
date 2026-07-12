@@ -555,8 +555,9 @@ actions, backends, and service functions.
   `travel <character name>` resolves the target's current room and dispatches
   `TravelAction` (key `travel_to`, `actions/definitions/movement.py`); `travel stop`
   dispatches `StopTravelAction` (key `stop_travel`). Mirrors `CmdWhere`'s public-only
-  scope — `find_route()` (`world.areas.positioning.travel`) only routes through
-  same-Area, publicly-listed rooms. Overrides `func()` directly (like `CmdPosition`)
+  scope — `find_route()` (`world.areas.positioning.travel`) routes through
+  publicly-listed rooms only, hop-capped, and freely crosses Area boundaries via
+  the room exit graph (#2223, ADR-0120). Overrides `func()` directly (like `CmdPosition`)
   rather than the base `ArxCommand._execute()` single-action recipe, since resolving
   the destination argument needs custom logic before dispatch. No business logic in
   the command. `TravelAction` itself gained a portal-travel branch (#2222) tried before

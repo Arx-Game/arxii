@@ -696,20 +696,26 @@ per-class, per-stage health rate authoring and the primary-class level service.
 ### Areas
 Spatial hierarchy for organizing rooms into regions, districts, and neighborhoods.
 
-- **Models:** `Area`, `AreaClosure` (unmanaged, materialized view)
+- **Models:** `Area` (nullable `grid_x`/`grid_y` parent-local rendering coordinates,
+  #2223), `AreaClosure` (unmanaged, materialized view)
 - **Enums:** `AreaLevel` (Region, District, Neighborhood)
-- **Key Functions:** `get_ancestry()`, `get_descendant_areas()`, `get_rooms_in_area()`, `reparent_area()`
-- **Presence & Travel (#1463 + #2163):** `where_listing()` — public presence directory,
-  returns `WhereEntry(persona_name, room_path, room_id)` per online character in a
-  publicly-listed room; `find_route(origin_room, destination_room) -> list[ObjectDB] | None`
-  (`world.areas.positioning.travel`) — frontier-batched BFS pathfinder, same-Area +
-  public-rooms-only, capped at `settings.TRAVEL_MAX_HOPS`. `TravelAction`/`StopTravelAction`
-  (`registry_key`s `travel_to`/`stop_travel`) auto-walk a computed route one hop at a time;
-  shared by telnet `CmdTravel` and "Go there" buttons on the scene browser + presence panel.
+- **Key Functions:** `get_ancestry()`, `get_descendant_areas()`, `get_rooms_in_area()`,
+  `reparent_area()`, `area_grid_path(area) -> list[tuple[int | None, int | None]]`
+  (#2223, root->area chain of parent-local `(grid_x, grid_y)` pairs; rendering-hint
+  data only, never consulted by `find_route()` or any routing code)
+- **Presence & Travel (#1463 + #2163 + #2222 + #2223):** `where_listing()` — public presence
+  directory, returns `WhereEntry(persona_name, room_path, room_id)` per online
+  character in a publicly-listed room; `find_route(origin_room, destination_room) ->
+  list[ObjectDB] | None` (`world.areas.positioning.travel`) — frontier-batched BFS
+  pathfinder that crosses Area boundaries via the room exit graph (ADR-0120; no
+  separate Area-to-Area adjacency model), public-rooms-only, capped at
+  `settings.TRAVEL_MAX_HOPS`. `TravelAction`/`StopTravelAction` (`registry_key`s
+  `travel_to`/`stop_travel`) auto-walk a computed route one hop at a time; shared by
+  telnet `CmdTravel` and "Go there" buttons on the scene browser + presence panel.
   `TravelAction.execute()` tries a portal-travel branch FIRST (#2222 — instant relocation via
   a known travel-mode `Technique` + matching anchors at both ends), falling back to this
   walking pathfinder unchanged when ineligible; see the Magic section's "Portal travel" entry.
-  See [areas.md](areas.md) "Presence & Travel" section.
+  See [areas.md](areas.md) "Presence & Travel" and "Coordinates" sections.
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
 - **Source:** `src/world/areas/`

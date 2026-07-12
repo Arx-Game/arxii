@@ -169,10 +169,14 @@ Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" se
   bridge~~ — SHIPPED (#2163): `where` rows and the scene browser (`ScenesListPage`)
   both grew "Go there" buttons dispatching the `travel_to` REGISTRY action
   (`TravelAction`/`StopTravelAction`, `actions/definitions/movement.py`), which
-  auto-walks a same-Area, public-rooms-only route computed by `find_route()`
+  auto-walks a public-rooms-only route computed by `find_route()`
   (`world/areas/positioning/travel.py`, frontier-batched BFS); telnet parity via
-  `CmdTravel` (`travel <name>` / `travel stop`). See `docs/systems/areas.md`'s
-  "Presence & Travel" section. **Portal travel — SHIPPED (#2222, ADR-0121):**
+  `CmdTravel` (`travel <name>` / `travel stop`). ~~Cross-Area routing~~ — SHIPPED
+  (#2223, ADR-0120): `find_route()` now crosses Area boundaries freely via the room
+  exit graph (hop cap and public-listing gate unchanged); `Area` also gained nullable
+  `grid_x`/`grid_y` parent-local rendering coordinates + `area_grid_path()`, rendering
+  hints only, never consulted by routing. See `docs/systems/areas.md`'s "Presence &
+  Travel" and "Coordinates" sections. **Portal travel — SHIPPED (#2222, ADR-0121):**
   `TravelAction.execute()` now tries an instant-relocation branch FIRST, before the
   walking pathfinder — a character who knows a portal-travel `Technique`
   (`travel_anchor_kind` set) and stands in a room with a matching active `PortalAnchor`
@@ -185,7 +189,7 @@ Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" se
   starter content: a "Mirror" anchor kind + "Mirrorwalking" Minor Gift/"Mirrorwalk"
   Technique + anchors in two seeded public rooms. See `docs/systems/magic.md`'s
   "Portal travel" section. Still open: no dedicated search/filter UI for browsing
-  scenes beyond the plain list, and cross-Area routing (still walking-only — see #2223).
+  scenes beyond the plain list.
 - Social feed — what's happening in the game right now (new achievements, notable events, active scenes)
 
 See `docs/audits/2026-07-10-webclient-rp-ux-audit.md` (epic #2155) for the full

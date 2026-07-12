@@ -604,6 +604,64 @@ class TravelActionTests(TestCase):
         assert actor.location == rooms[-1]
         assert actor.ndb.active_travel_token is None
 
+    @tag("postgres")  # a successful hop calls send_room_state -> get_ancestry,
+    # which walks the areas_areaclosure materialized view (PG-only).
+    def test_travel_crosses_area_boundary_and_arrives(self):
+        """#2223 action-seam test: origin and destination live in different
+        Areas joined by a boundary exit — TravelAction.run() must walk the
+        route across the boundary exactly like a same-Area walk (mirrors
+        world/areas/positioning/tests/test_travel.py's
+        test_multi_hop_route_crosses_boundary_partway, but dispatched through
+        the action.run() seam instead of calling find_route() directly).
+        """
+        area = AreaFactory()
+        other_area = AreaFactory()
+        room_a = ObjectDBFactory(db_key="CrossAreaA", db_typeclass_path="typeclasses.rooms.Room")
+        room_boundary = ObjectDBFactory(
+            db_key="CrossAreaBoundary", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        room_c = ObjectDBFactory(db_key="CrossAreaC", db_typeclass_path="typeclasses.rooms.Room")
+        RoomProfile.objects.update_or_create(
+            objectdb=room_a, defaults={"area": area, "is_public": True}
+        )
+        RoomProfile.objects.update_or_create(
+            objectdb=room_boundary, defaults={"area": area, "is_public": True}
+        )
+        RoomProfile.objects.update_or_create(
+            objectdb=room_c, defaults={"area": other_area, "is_public": True}
+        )
+        ObjectDBFactory(
+            db_key="exit_a_boundary",
+            db_typeclass_path="typeclasses.exits.Exit",
+            location=room_a,
+            destination=room_boundary,
+        )
+        ObjectDBFactory(
+            db_key="exit_boundary_c",
+            db_typeclass_path="typeclasses.exits.Exit",
+            location=room_boundary,
+            destination=room_c,
+        )
+        actor = ObjectDBFactory(
+            db_key="CrossAreaTraveler",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room_a,
+        )
+        action = TravelAction()
+
+        with patch.object(actor, "msg"), patch("actions.definitions.movement.delay") as mock_delay:
+
+            def run_immediately(_seconds, callback, *args, **kwargs):
+                callback(*args, **kwargs)
+
+            mock_delay.side_effect = run_immediately
+            result = action.run(actor, target=room_c)
+
+        assert result.success is True
+        actor.refresh_from_db()
+        assert actor.location == room_c
+        assert actor.ndb.active_travel_token is None
+
     def test_travel_no_route_fails_immediately(self):
         area = AreaFactory()
         room_a = ObjectDBFactory(db_key="A", db_typeclass_path="typeclasses.rooms.Room")

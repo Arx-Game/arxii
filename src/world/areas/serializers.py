@@ -35,7 +35,7 @@ class AreaListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Area
-        fields = ["id", "name", "level", "level_display", "children_count"]
+        fields = ["id", "name", "level", "level_display", "children_count", "grid_x", "grid_y"]
         read_only_fields = fields
 
 

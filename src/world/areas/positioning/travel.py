@@ -14,51 +14,47 @@ visited. Batching collapses that to one query per BFS *level*.
 from __future__ import annotations
 
 from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import room_is_publicly_listed
 
 
-def _area_id(room: ObjectDB) -> int | None:
-    """The room's Area pk, or None if it has no RoomProfile / no Area set."""
-    try:
-        return room.room_profile.area_id
-    except ObjectDoesNotExist:
-        return None
-
-
-def _is_usable_waypoint(dest: ObjectDB, visited: set[int], area_id: int | None) -> bool:
-    """Whether `dest` is a not-yet-visited, publicly-listed room in the target Area.
+def _is_usable_waypoint(dest: ObjectDB, visited: set[int]) -> bool:
+    """Whether `dest` is a not-yet-visited, publicly-listed room.
 
     Shared gate for both intermediate waypoints and the destination room itself —
     keeping this a single predicate is what pulls find_route's per-exit branching
     under the complexity threshold without changing any of the batching logic.
+
+    No Area check here (#2223 Decision 1): the exit graph itself IS the
+    connectivity. A room-level Exit that crosses an Area boundary is exactly as
+    usable a hop as one that stays within a single Area — there's no separate
+    Area-to-Area adjacency model to consult, and none is needed, since BFS
+    already walks whatever exits actually exist.
     """
     if dest is None or dest.id in visited:
         return False
-    if not room_is_publicly_listed(dest):
-        return False
-    return _area_id(dest) == area_id
+    return room_is_publicly_listed(dest)
 
 
 def find_route(origin_room: ObjectDB, destination_room: ObjectDB) -> list[ObjectDB] | None:
     """Find a public-room-only walking route from origin to destination.
 
-    Scoped to same-Area travel only (#2163 Decision 6) — cross-Area routing
-    needs Area-to-Area connectivity data this codebase doesn't have yet.
+    Walks the room/exit graph directly with no regard to Area boundaries
+    (#2223 Decision 1): a chain of exits that physically connects origin to
+    destination produces a route whatever Areas it crosses along the way. The
+    exit graph IS the connectivity data — a separate Area-to-Area adjacency
+    model would only duplicate what exits already encode, need hand
+    maintenance, and still couldn't produce a walkable route by itself (you'd
+    walk the exit graph anyway). #2163's original same-Area routing is simply
+    the special case where every room on the path happens to share one Area.
 
     Returns an ordered list of Exit ObjectDB instances forming the route, or
-    None if unreachable, the destination isn't publicly listed, the rooms are
-    in different Areas, or the route would exceed TRAVEL_MAX_HOPS.
+    None if unreachable, the destination isn't publicly listed, or the route
+    would exceed TRAVEL_MAX_HOPS.
     """
     if origin_room.id == destination_room.id:
         return []
-
-    origin_area_id = _area_id(origin_room)
-    dest_area_id = _area_id(destination_room)
-    if origin_area_id is None or origin_area_id != dest_area_id:
-        return None
 
     if not room_is_publicly_listed(destination_room):
         return None
@@ -78,9 +74,9 @@ def find_route(origin_room: ObjectDB, destination_room: ObjectDB) -> list[Object
         # load-bearing batching step (#2163 Decision 7). select_related
         # walks both the destination room AND its RoomProfile (a reverse
         # OneToOne, select_related-able) in the SAME query — without the
-        # room_profile leg, every room_is_publicly_listed()/_area_id() call
-        # below would issue its own query per candidate room, silently
-        # reintroducing the exact per-room N+1 this function exists to avoid.
+        # room_profile leg, every room_is_publicly_listed() call below would
+        # issue its own query per candidate room, silently reintroducing the
+        # exact per-room N+1 this function exists to avoid.
         exits = list(
             ObjectDB.objects.filter(
                 db_location_id__in=frontier,
@@ -91,7 +87,7 @@ def find_route(origin_room: ObjectDB, destination_room: ObjectDB) -> list[Object
         next_frontier: set[int] = set()
         for exit_obj in exits:
             dest = exit_obj.db_destination
-            if not _is_usable_waypoint(dest, visited, origin_area_id):
+            if not _is_usable_waypoint(dest, visited):
                 continue
 
             predecessor[dest.id] = (exit_obj, exit_obj.db_location_id)

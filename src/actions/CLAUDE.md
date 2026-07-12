@@ -276,8 +276,9 @@ They do not use the command system, dispatchers, or handlers.
   `movement.py` (#2163) — alongside the existing `GetAction`/`DropAction`/`GiveAction`/
   `TraverseExitAction`/`HomeAction`, the "go there" auto-walk pair: `TravelAction`
   (key `"travel_to"`, `target_type=SINGLE`) computes a route via
-  `world.areas.positioning.travel.find_route()` (same-Area, public-rooms-only
-  frontier-batched BFS) and paces one hop per `hop_delay_seconds` via
+  `world.areas.positioning.travel.find_route()` (cross-Area, public-rooms-only,
+  hop-capped frontier-batched BFS over the room exit graph — #2223, ADR-0120)
+  and paces one hop per `hop_delay_seconds` via
   `evennia.utils.delay()`, reusing `check_exit_traversal`/`traverse_exit` per hop
   so room-state broadcasts match a manual walk; a per-caller
   `.ndb.active_travel_token` makes re-dispatch/cancellation safe — a stale

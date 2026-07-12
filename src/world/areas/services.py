@@ -141,6 +141,19 @@ def where_listing(viewer_account: object | None = None) -> list[WhereEntry]:
     return entries
 
 
+def area_grid_path(area: Area) -> list[tuple[int | None, int | None]]:
+    """Return the chain of parent-local (grid_x, grid_y) pairs from root to ``area``.
+
+    Rendering-support primitive only (per this issue's Decision 2): each entry is
+    that area's position within ITS OWN parent's local grid, not a resolved world
+    coordinate — composing these into a global position is a future renderer's job,
+    not this helper's. Entries are ``(None, None)`` for any area in the chain with
+    unset coordinates; nothing here is consulted by ``find_route`` or any other
+    routing code.
+    """
+    return [(ancestor.grid_x, ancestor.grid_y) for ancestor in get_ancestry(area)]
+
+
 def get_effective_realm(area: Area) -> Realm | None:
     """Walk up the hierarchy to find the nearest realm assignment.
 

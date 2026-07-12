@@ -628,6 +628,7 @@
 
 ### Service Functions
 - `area_for_scene(scene: 'Scene | None') -> 'Area | None' — Resolve the Area for a scene's location, or None.`
+- `area_grid_path(area: 'Area') -> 'list[tuple[int | None, int | None]]' — Return the chain of parent-local (grid_x, grid_y) pairs from root to ``area``.`
 - `area_subtree_pks(area: 'Area') -> 'list[int]' — Return pks of ``area`` and all its descendants.`
 - `colored_area_path(room: 'ObjectDB') -> 'str' — Render a room's full area-hierarchy path with per-area colours (#1463).`
 - `get_ancestor_at_level(area: 'Area', target_level: 'AreaLevel') -> 'Area | None' — Walk the ancestry to find the ancestor at the given AreaLevel.`
