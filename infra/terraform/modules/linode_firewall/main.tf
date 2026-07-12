@@ -25,8 +25,8 @@ resource "linode_firewall" "this" {
     # is true for BOTH families (it only checks "is this a valid CIDR"), so
     # `::/0` landed in the ipv4 list and the Linode API rejected the whole
     # apply. IPv6 CIDRs always contain a colon; IPv4 CIDRs never do.
-    ipv4     = [for c in var.ssh_admin_cidrs : c if !strcontains(c, ":")]
-    ipv6     = [for c in var.ssh_admin_cidrs : c if strcontains(c, ":")]
+    ipv4 = [for c in var.ssh_admin_cidrs : c if !strcontains(c, ":")]
+    ipv6 = [for c in var.ssh_admin_cidrs : c if strcontains(c, ":")]
   }
 
   # HTTP/HTTPS — ONLY from Cloudflare ranges (origin not web-reachable direct).

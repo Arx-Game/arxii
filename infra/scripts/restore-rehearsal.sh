@@ -98,6 +98,8 @@ wait_for_tcp "${stage_ip}" 22 "${SSH_WAIT_TIMEOUT_S}" "${SSH_WAIT_INTERVAL_S}"
 # box (terraform/modules/compute `authorized_keys` — same mechanism prod's
 # very first converge relies on). No arxadmin exists here; unlike prod,
 # nothing ever hardens this box, it just gets destroyed.
+# shellcheck disable=SC2029  # client-side expansion is intentional: callers
+# pass a pre-quoted single command string (or a heredoc via `bash -s`).
 ssh_stage() { ssh "${SSH_OPTS[@]}" "root@${stage_ip}" "$@"; }
 scp_stage() { scp "${SSH_OPTS[@]}" "$@"; }
 

@@ -69,6 +69,7 @@
     cmd: >-
       gpg --dearmor -o /usr/share/keyrings/nodesource.gpg
       /tmp/nodesource-repo.gpg.key
+    creates: /usr/share/keyrings/nodesource.gpg
   when: not app_node_keyring.stat.exists
 
 - name: Lock down the NodeSource keyring perms
@@ -82,7 +83,7 @@
 # deb822 format (Ubuntu noble's own default sources style) rather than a
 # single-line `.list` entry — the equivalent one-line form doesn't fit this
 # repo's 100-char line limit without an awkward mid-URL wrap.
-- name: Add the NodeSource apt repo (Node {{ app_frontend_node_major }}.x, signed-by keyring)
+- name: Add the deb822 signed-by NodeSource apt repo for Node {{ app_frontend_node_major }}
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/nodesource.sources
     owner: root
@@ -101,7 +102,7 @@
 # unconditional update_cache: true was paying the full `apt-get update`
 # cost on every single converge forever after, even once nodejs is already
 # installed and the sources file is untouched).
-- name: Install Node.js {{ app_frontend_node_major }}.x (NodeSource)
+- name: Install NodeSource Node.js major {{ app_frontend_node_major }}
   ansible.builtin.apt:
     name: nodejs
     state: present
@@ -176,7 +177,10 @@
   register: app_frontend_build
   changed_when: app_frontend_needs_build
 
-- name: Record the frontend build's toolchain marker (node major + pnpm version)
+# noqa'd: this is deliberately NOT a handler — the marker must be written
+# in-order, immediately after the build task it records, not at end of play
+# (a failed later task would otherwise leave a built dist with no marker).
+- name: Record the frontend build's toolchain marker (node major + pnpm version)  # noqa: no-handler
   ansible.builtin.copy:
     content: "{{ app_frontend_node_major }} {{ app_frontend_pnpm_version }}"
     dest: "{{ app_frontend_toolchain_marker }}"

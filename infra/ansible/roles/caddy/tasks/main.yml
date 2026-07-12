@@ -23,6 +23,7 @@
 - name: Add the caddy-dns/cloudflare plugin (needs outbound HTTPS)
   ansible.builtin.command: caddy add-package github.com/caddy-dns/cloudflare
   when: "'dns.providers.cloudflare' not in caddy_modules_before.stdout"
+  changed_when: true # gated by the `when` above: if it runs, it swapped the binary
   # TRAP: a later plain `apt upgrade` of the `caddy` package replaces this
   # binary with the plugin-less stock one, silently dropping DNS-01 — the
   # next converge re-runs this task (guarded by the `when` above) and
