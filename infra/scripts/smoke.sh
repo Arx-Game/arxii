@@ -131,9 +131,12 @@ echo "== websocket upgrade (wss://.../ws/) =="
 # the actual Upgrade handshake; Caddy itself doesn't need special config for
 # it. A raw curl Upgrade request against the https:// URL is the standard
 # way to check a WS upgrade without a full WS client — 101 is success.
+# Nonce per RFC 6455 (random 16 bytes, base64). Generated at runtime — a
+# fixed literal here also false-positives the gitleaks generic-api-key rule.
+ws_key="$(openssl rand -base64 16)"
 ws_code="$(curl "${curl_args[@]}" -o /dev/null -w '%{http_code}' \
   -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
-  -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: c21va2UtdGVzdC1rZXk=' \
+  -H 'Sec-WebSocket-Version: 13' -H "Sec-WebSocket-Key: ${ws_key}" \
   "https://${FQDN}/ws/" 2>/dev/null || true)"
 if [[ "${ws_code}" == "101" ]]; then
   pass "GET /ws/ (Upgrade) -> 101"
