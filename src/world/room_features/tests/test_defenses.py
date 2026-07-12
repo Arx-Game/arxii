@@ -446,3 +446,19 @@ class RoomWardUpkeepTickTests(TestCase):
         room_ward_upkeep_tick()
         ward.refresh_from_db()
         assert ward.resonance_reserve == 100  # untouched
+
+    def test_tick_is_noop_for_already_lapsed_ward(self):
+        from django.utils import timezone
+
+        from world.room_features.services import room_ward_upkeep_tick
+
+        ward = self._ward(level=1, reserve=0)
+        original_lapsed_at = timezone.now()
+        ward.lapsed_at = original_lapsed_at
+        ward.save(update_fields=["lapsed_at"])
+
+        room_ward_upkeep_tick()
+
+        ward.refresh_from_db()
+        assert ward.lapsed_at == original_lapsed_at  # not re-stamped
+        assert ward.resonance_reserve == 0  # not re-clamped/modified
