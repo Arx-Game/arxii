@@ -192,6 +192,28 @@ else:
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arxmush.org")
 SITE_URL = env("SITE_URL", default="https://arxmush.org")
 
+# Sentry error/performance monitoring (#2236 Phase 5). Optional: an empty DSN
+# disables it entirely (dev/rehearsal have none), matching the ops dashboard's
+# `sentry_dsn_configured` probe in `web/admin/tuning/tech_health.py`, which reads
+# the same `SENTRY_DSN` env var. Deliberately separate from the bespoke, no-SaaS
+# `SystemErrorReport` path (#1164, `world/player_submissions/services.py`) — that
+# system stays player-facing and DB-backed by design; Sentry here is for
+# ops/dev-facing infra-level error and performance telemetry.
+SENTRY_DSN = env("SENTRY_DSN", default="")
+if SENTRY_DSN:
+    import sentry_sdk  # deferred so DSN-less envs pay zero import cost
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        # PII off by design — player privacy is content-boundaries ADR territory;
+        # Sentry must never capture request bodies, user emails, or IPs.
+        send_default_pii=False,
+        # Low sample rate: performance tracing is a sampling signal, not a full log.
+        traces_sample_rate=float(env("SENTRY_TRACES_SAMPLE_RATE", default="0.05")),
+        environment=env("SENTRY_ENVIRONMENT", default="production"),
+        release=env("SENTRY_RELEASE", default="") or None,
+    )
+
 # GitHub issue filing (#1164) — staff can file a public issue from a player bug
 # report or an auto-captured error. Repo + token are env-configured; an empty
 # token disables the feature (the API surfaces it as unavailable rather than 500ing).

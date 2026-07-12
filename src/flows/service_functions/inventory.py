@@ -29,6 +29,8 @@ from world.items.exceptions import (
     OwnedByAnother,
     RecipientNotAdjacent,
     TheftNotPermitted,
+    VaultAccessDenied,
+    VaultFull,
 )
 from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item, unequip_item
@@ -81,7 +83,34 @@ def _container_policy_denies(taker_sheet: CharacterSheet, container_instance: It
     return not is_friend(owner_tenure=owner_tenure, friend_tenure=taker_tenure)
 
 
-def _take_denial(
+def _vault_denies(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
+    """True when the item is a room item in a vault room and the taker lacks access (#2179).
+
+    Only room items (no holder_character_sheet) are vault-gated. Held
+    items are governed by the existing ownership layer. The vault is a
+    room-level access layer on top of the per-item ownership layer.
+    """
+    if item_instance.holder_character_sheet is not None:
+        return False
+    from world.room_features.vault_services import (  # noqa: PLC0415
+        has_vault_access,
+        vault_for_location,
+    )
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    vault = vault_for_location(item_instance.game_object.location)
+    if vault is None:
+        return False
+    if taker_sheet is None:
+        return True
+    try:
+        persona = taker_sheet.active_persona or taker_sheet.primary_persona
+    except Persona.DoesNotExist:
+        return True
+    return not has_vault_access(persona, vault)
+
+
+def _take_denial(  # noqa: PLR0911
     taker_sheet: CharacterSheet | None, item_instance: ItemInstance
 ) -> type[InventoryError] | None:
     """Why plain take refuses this item (#1909), or None when take is allowed.
@@ -91,6 +120,9 @@ def _take_denial(
     container's policy bars the taker, ``OwnedByAnother`` when the item's own
     ownership does.
     """
+    # Vault gate: room items in a vault room require vault access (#2179).
+    if _vault_denies(taker_sheet, item_instance):
+        return VaultAccessDenied
     if taker_sheet is None:
         # Sheet-less actors (GM/staff/companion tooling) keep legacy free-take
         # behavior — theft consequence machinery is sheet-anchored and cannot
@@ -219,8 +251,22 @@ def drop(character: CharacterState, item: ItemState) -> None:
     # Snapshot rows before iteration — unequip_item deletes them as we go.
     for equipped in list(item.instance.equipped_slots.all()):
         unequip_item(equipped_item=equipped)
+    # Vault capacity check (before move_to so we don't mutate on refusal) (#2179).
+    from world.room_features.vault_services import (  # noqa: PLC0415
+        vault_capacity_remaining,
+        vault_for_location,
+    )
+
+    vault = vault_for_location(character.obj.location)
+    if vault is not None and vault_capacity_remaining(vault) <= 0:
+        raise VaultFull
     if not item.instance.game_object.move_to(character.obj.location, quiet=True):
         raise NotReachable
+    # Vault deposit: clear ownership so the item becomes a true unheld
+    # room item, vault-protected by the access list (#2179).
+    if vault is not None:
+        item.instance.holder_character_sheet = None
+        item.instance.save(update_fields=["holder_character_sheet"])
     character.obj.carried_items.invalidate()
 
 
@@ -461,7 +507,7 @@ def _record_theft_deed(character: CharacterState, item: ItemState) -> None:
     )
 
 
-def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
+def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:  # noqa: PLR0911
     """Target-side-only availability (#1909): NPC-owned always; players by consent."""
     if not take_requires_steal(taker_sheet, item_instance):
         return False
@@ -475,7 +521,28 @@ def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInsta
     if guarded_sheet is None and item_instance.contained_in is not None:
         guarded_sheet = item_instance.contained_in.holder_character_sheet
     if guarded_sheet is None:
-        return True
+        # Check if this unowned item is in a vault room — if so, the
+        # vault founder's consent settings gate the theft (#2179).
+        from world.room_features.vault_services import vault_for_location  # noqa: PLC0415
+
+        vault = vault_for_location(item_instance.game_object.location)
+        if vault is not None:
+            founder_sheet = vault.founder_persona.character_sheet
+            founder_tenure = _active_tenure_for_sheet(founder_sheet)
+            if founder_tenure is None:
+                return True  # Founder has no active tenure — NPC-like, allow
+            from world.consent.services import (  # noqa: PLC0415
+                consent_blocks_targeting,
+                theft_category,
+            )
+
+            taker_tenure = _active_tenure_for_sheet(taker_sheet)
+            return not consent_blocks_targeting(
+                owner_tenure=founder_tenure,
+                category=theft_category(),
+                actor_tenure=taker_tenure,
+            )
+        return True  # Non-vault unowned items: unchanged behavior
     owner_tenure = _active_tenure_for_sheet(guarded_sheet)
     if owner_tenure is None:
         return True  # NPC/org holdings: always antagonism-allowed (spec decision 5)

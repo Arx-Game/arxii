@@ -509,8 +509,11 @@ class ConsequencePoolCatalogResolutionTests(TestCase):
         template = resolve_cast_action_template(None, action_category=ActionCategory.MENTAL)
         self.assertEqual(template.name, TECHNIQUE_CAST_TEMPLATE_NAME)
 
-    def test_explicit_pool_honored_regardless_of_category(self):
-        """An explicit catalog pool_id always wins (today's behavior preserved)."""
+    def test_explicit_magic_pool_honored_for_non_physical_category(self):
+        """An explicit magic catalog pool_id wins for any non-physical category
+        (today's behavior preserved). #1995 splits catalog validation by
+        category — see ConsequencePoolCatalogCombatSplitTests below for the
+        PHYSICAL-vs-magic-catalog cross-validation this used to skip."""
         from actions.constants import ActionCategory
         from world.magic.seeds_cast import (
             TECHNIQUE_CAST_TEMPLATE_NAME,
@@ -521,10 +524,65 @@ class ConsequencePoolCatalogResolutionTests(TestCase):
         catalog_templates = ensure_technique_catalog_content()
         chosen = catalog_templates[0]
         template = resolve_cast_action_template(
-            chosen.consequence_pool_id, action_category=ActionCategory.PHYSICAL
+            chosen.consequence_pool_id, action_category=ActionCategory.MENTAL
         )
         self.assertEqual(template.pk, chosen.pk)
         self.assertNotEqual(template.name, TECHNIQUE_CAST_TEMPLATE_NAME)
+
+
+class ConsequencePoolCatalogCombatSplitTests(TestCase):
+    """#1995 — PHYSICAL techniques validate against the combat 'Combat: Melee
+    Offense' catalog; every other category still validates against the magic
+    'Magic: Technique Cast' catalog. Wrong-catalog choices raise in both
+    directions."""
+
+    def test_physical_combat_pool_id_returns_flavor_template(self):
+        from actions.constants import ActionCategory
+        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        combat_templates = ensure_combat_offense_catalog_content()
+        chosen = combat_templates[0]
+        resolved = resolve_cast_action_template(
+            chosen.consequence_pool_id, action_category=ActionCategory.PHYSICAL
+        )
+        self.assertEqual(resolved.pk, chosen.pk)
+
+    def test_physical_magic_pool_id_raises(self):
+        from actions.constants import ActionCategory
+        from world.magic.exceptions import InvalidConsequencePoolChoice
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        magic_templates = ensure_technique_catalog_content()
+        chosen = magic_templates[0]
+        with self.assertRaises(InvalidConsequencePoolChoice):
+            resolve_cast_action_template(
+                chosen.consequence_pool_id, action_category=ActionCategory.PHYSICAL
+            )
+
+    def test_non_physical_combat_pool_id_raises(self):
+        from actions.constants import ActionCategory
+        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
+        from world.magic.exceptions import InvalidConsequencePoolChoice
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        combat_templates = ensure_combat_offense_catalog_content()
+        chosen = combat_templates[0]
+        with self.assertRaises(InvalidConsequencePoolChoice):
+            resolve_cast_action_template(
+                chosen.consequence_pool_id, action_category=ActionCategory.MENTAL
+            )
+
+    def test_combat_catalog_listing_returns_only_children_of_base(self):
+        from actions.factories import ConsequencePoolFactory
+        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
+        from world.magic.services.technique_builder import get_combat_offense_catalog
+
+        ensure_combat_offense_catalog_content()
+        ConsequencePoolFactory()  # stray, unrelated pool — must not appear
+        catalog = get_combat_offense_catalog()
+        self.assertEqual(catalog.count(), 2)
 
 
 class BuildTechniqueConsequencePoolTests(TestCase):
@@ -566,11 +624,25 @@ class BuildTechniqueConsequencePoolTests(TestCase):
         self.assertEqual(mental_tech.action_template_id, get_standalone_cast_template().pk)
 
     def test_catalog_pool_choice_assigns_matching_template(self):
+        """A magic catalog pool_id requires a non-physical action_category (#1995)."""
         from world.magic.seeds_cast import ensure_technique_catalog_content
         from world.magic.services.technique_builder import build_technique
 
         catalog_templates = ensure_technique_catalog_content()
         chosen = catalog_templates[1]
+        design = self._minimal_design_kwargs(
+            action_category="mental", consequence_pool_id=chosen.consequence_pool_id
+        )
+        tech = build_technique(design, creator=None)
+        self.assertEqual(tech.action_template_id, chosen.pk)
+
+    def test_combat_catalog_pool_choice_assigns_matching_template(self):
+        """A combat catalog pool_id requires the physical action_category (#1995)."""
+        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
+        from world.magic.services.technique_builder import build_technique
+
+        combat_templates = ensure_combat_offense_catalog_content()
+        chosen = combat_templates[1]
         design = self._minimal_design_kwargs(consequence_pool_id=chosen.consequence_pool_id)
         tech = build_technique(design, creator=None)
         self.assertEqual(tech.action_template_id, chosen.pk)

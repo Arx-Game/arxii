@@ -18,8 +18,8 @@ from world.codex.constants import CodexKnowledgeStatus
 from world.codex.models import CharacterCodexKnowledge
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 
-DEFAULT_STYLE = "Vernacular Timberframe PLACEHOLDER"
-THROWBACK = "Antique Imperial PLACEHOLDER"
+DEFAULT_STYLE = "Vernacular Timberframe"
+THROWBACK = "Antique Imperial"
 
 
 @tag("sqlite_safe")

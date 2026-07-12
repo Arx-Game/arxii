@@ -7846,6 +7846,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/crafting/create/quote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return a read-only cost+quality quote for minting a template (no mutation). */
+    get: operations['items_crafting_create_quote_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/crafting/create/recipes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List the item-creation recipes available to craft (#2240).
+     *
+     *     Recipe *knowledge* gating is a later slice (#2242); today this returns
+     *     every active ITEM_CREATE recipe's output template.
+     */
+    get: operations['items_crafting_create_recipes_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/equipped-items/': {
     parameters: {
       query?: never;
@@ -9215,7 +9254,15 @@ export interface paths {
     };
     /**
      * @description Read-only catalog of curated consequence-pool flavors a technique author
-     *     may select (children of the shared base 'Magic: Technique Cast' pool).
+     *     may select — children of the shared base 'Magic: Technique Cast' pool AND
+     *     children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
+     *     list by default. An optional ``?action_category=`` query param narrows to
+     *     the category-matching catalog (physical → combat flavors, anything else →
+     *     magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
+     *     path-derived category) only offer flavors the technique can legally keep —
+     *     resolve_cast_action_template enforces the same split at submit/finalize
+     *     time. The technique builder's category-agnostic picker keeps the flat
+     *     union by passing no param.
      */
     get: operations['magic_consequence_pool_catalog_list'];
     put?: never;
@@ -9235,7 +9282,15 @@ export interface paths {
     };
     /**
      * @description Read-only catalog of curated consequence-pool flavors a technique author
-     *     may select (children of the shared base 'Magic: Technique Cast' pool).
+     *     may select — children of the shared base 'Magic: Technique Cast' pool AND
+     *     children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
+     *     list by default. An optional ``?action_category=`` query param narrows to
+     *     the category-matching catalog (physical → combat flavors, anything else →
+     *     magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
+     *     path-derived category) only offer flavors the technique can legally keep —
+     *     resolve_cast_action_template enforces the same split at submit/finalize
+     *     time. The technique builder's category-agnostic picker keeps the flat
+     *     union by passing no param.
      */
     get: operations['magic_consequence_pool_catalog_retrieve'];
     put?: never;
@@ -14686,6 +14741,175 @@ export interface paths {
     patch: operations['risk_calibrations_partial_update'];
     trace?: never;
   };
+  '/api/room-features/defenses/fund-ward/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Write-only install/upgrade/fund routes spanning all three defense kinds. */
+    post: operations['room_features_defenses_fund_ward_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/defenses/install/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Write-only install/upgrade/fund routes spanning all three defense kinds. */
+    post: operations['room_features_defenses_install_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/defenses/upgrade/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Write-only install/upgrade/fund routes spanning all three defense kinds. */
+    post: operations['room_features_defenses_upgrade_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/exit-bars/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Status endpoint for installed exit bars.
+     *
+     *     ``pagination_class``/``filter_backends`` (#2177 whole-branch review,
+     *     Important #4) mirror ``world.items.views_station.LabStationViewSet`` --
+     *     reuse the repo's shared page-size-50 convention (``ItemTemplatePagination``)
+     *     and let a caller scope the list to a single exit via ``ExitBarsFilter``
+     *     rather than listing every installation in the game unscoped.
+     */
+    get: operations['room_features_exit_bars_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/exit-bars/{exit_profile_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Status endpoint for installed exit bars.
+     *
+     *     ``pagination_class``/``filter_backends`` (#2177 whole-branch review,
+     *     Important #4) mirror ``world.items.views_station.LabStationViewSet`` --
+     *     reuse the repo's shared page-size-50 convention (``ItemTemplatePagination``)
+     *     and let a caller scope the list to a single exit via ``ExitBarsFilter``
+     *     rather than listing every installation in the game unscoped.
+     */
+    get: operations['room_features_exit_bars_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/room-alarms/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Status endpoint for installed room alarms. See ``ExitBarsViewSet`` docstring. */
+    get: operations['room_features_room_alarms_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/room-alarms/{room_profile_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Status endpoint for installed room alarms. See ``ExitBarsViewSet`` docstring. */
+    get: operations['room_features_room_alarms_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/room-wards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Status endpoint for installed room wards. See ``ExitBarsViewSet`` docstring. */
+    get: operations['room_features_room_wards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/room-wards/{room_profile_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Status endpoint for installed room wards. See ``ExitBarsViewSet`` docstring. */
+    get: operations['room_features_room_wards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/entries/': {
     parameters: {
       query?: never;
@@ -18349,7 +18573,7 @@ export interface components {
       strength?: number;
       /** @description Second resource alongside strength (#1712). status is always derived from whichever resource crosses its own threshold first — see world.battles.resolution._compute_unit_status. Unlike strength (starts at its ceiling), morale starts well below it — sitting near MAX_MORALE is rare. */
       morale?: number;
-      /** @description Population data point mirroring CombatOpponent.swarm_count's naming/shape (#1794) — null means 'not a swarm-style unit'. No swarm-math resolution is wired against this field yet; that is left to #1714 (naval/aerial units) or a future issue that needs it. */
+      /** @description Population data point mirroring CombatOpponent.swarm_count's naming/shape (#1794) — null means 'not a swarm-style unit'. Swarm math (#1841): a banded check penalty for acting against the swarm folds into the battle modifier stack, and STRIKE/ROUT attrition costs bodies off it proportionally (see world.battles.constants.swarm_strike_modifier and world.battles.resolution._apply_swarm_losses). Capital vessels stay on the separate per-hull Fortification integrity track (#1713) — see docs/adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md. */
       individual_count?: number | null;
       readonly side_id: number;
       readonly place_id: number | null;
@@ -20332,6 +20556,13 @@ export interface components {
      * @enum {string}
      */
     CovenantTypeEnum: 'durance' | 'battle' | 'court';
+    /** @description A template a character can mint via item-creation crafting (#2240). */
+    CraftableTemplate: {
+      readonly id: number;
+      name: string;
+      /** @description Default full description when examined. Instances can override. */
+      description?: string;
+    };
     /** @description Read-only quote: costs, affordability, max quality tier, failure risks. */
     CraftingQuote: {
       costs: components['schemas']['CraftingQuoteCost'];
@@ -20705,6 +20936,9 @@ export interface components {
      * @enum {string}
      */
     DefendingSideRoleEnum: 'attacker' | 'defender';
+    DefenseInstallResult: {
+      project_id: number;
+    };
     /**
      * @description * `pose` - Pose (whole room)
      *     * `whisper` - Whisper (target only)
@@ -21287,6 +21521,7 @@ export interface components {
       readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
       readonly position_nodes: components['schemas']['PositionNode'][];
       readonly position_edges: components['schemas']['PositionEdge'][];
+      readonly volatile_objects: components['schemas']['VolatileObject'][];
       readonly is_lethal: boolean;
       readonly duel_winner: components['schemas']['DuelWinner'] | null;
     };
@@ -21789,6 +22024,21 @@ export interface components {
      * @enum {string}
      */
     ExecutionKindEnum: 'SERVICE' | 'FLOW' | 'SCENE_ACTION' | 'CEREMONY';
+    ExitBarsDetails: {
+      /** @description The exit these bars are installed on. */
+      exit_profile: number;
+      /** @description Durability tier. Capped at EXIT_BARS_MAX_LEVEL. */
+      level?: number;
+      /** Format: date-time */
+      installed_at?: string;
+      /** Format: date-time */
+      last_upgraded_at?: string | null;
+      /**
+       * Format: date-time
+       * @description Set when the bars are broken to destruction; null = active.
+       */
+      dissolved_at?: string | null;
+    };
     /** @description One axis of the owner build-HUD: pressure vs mitigation vs residual (#1514). */
     ExposureAxis: {
       key: string;
@@ -22073,6 +22323,9 @@ export interface components {
       /** @default false */
       all_characters: boolean;
     };
+    FundWardResult: {
+      resonance_reserve: number;
+    };
     /** @description Read-only representation of one selectable FuryTier (#1543). */
     FuryTierOption: {
       readonly id: number;
@@ -22291,6 +22544,7 @@ export interface components {
      *     * `ranged` - Ranged
      *     * `thrown` - Thrown
      *     * `shield` - Shield
+     *     * `lance` - Lance
      *     * `jewelry` - Jewelry
      *     * `clothing` - Clothing
      *     * `other` - Other
@@ -22306,6 +22560,7 @@ export interface components {
       | 'ranged'
       | 'thrown'
       | 'shield'
+      | 'lance'
       | 'jewelry'
       | 'clothing'
       | 'other';
@@ -25892,6 +26147,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['EventList'][];
     };
+    PaginatedExitBarsDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ExitBarsDetails'][];
+    };
     PaginatedFashionPresentationList: {
       /** @example 123 */
       count: number;
@@ -26950,6 +27220,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['Ritual'][];
     };
+    PaginatedRoomAlarmDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RoomAlarmDetails'][];
+    };
     PaginatedRoomSizeTierList: {
       /** @example 123 */
       count: number;
@@ -26964,6 +27249,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['RoomSizeTier'][];
+    };
+    PaginatedRoomWardDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RoomWardDetails'][];
     };
     PaginatedRosterEntryList: {
       /** @example 123 */
@@ -29967,6 +30267,10 @@ export interface components {
       readonly elevation_anchor_id: number | null;
       readonly layout_x: number | null;
       readonly layout_y: number | null;
+      readonly rampart_element: string | null;
+      readonly rampart_integrity: number | null;
+      readonly rampart_max_integrity: number | null;
+      readonly rampart_crack_state: string | null;
     };
     /** @description Compact public representation of a Position (id + name). */
     PositionSummary: {
@@ -30872,6 +31176,18 @@ export interface components {
      * @enum {string}
      */
     RoleEnum: 'attacker' | 'defender';
+    RoomAlarmDetails: {
+      /** @description The room this alarm watches. */
+      room_profile: number;
+      /** @description Alarm tier. Capped at ROOM_ALARM_MAX_LEVEL. */
+      level?: number;
+      /** Format: date-time */
+      installed_at?: string;
+      /** Format: date-time */
+      last_upgraded_at?: string | null;
+      /** Format: date-time */
+      dissolved_at?: string | null;
+    };
     /** @description The owner build-HUD payload for one room (#1514). */
     RoomComfortBreakdown: {
       enclosure: string;
@@ -30898,6 +31214,27 @@ export interface components {
       readonly id: number;
       name: string;
       units: number;
+    };
+    RoomWardDetails: {
+      /** @description The room this ward protects. */
+      room_profile: number;
+      /** @description Ward tier. Capped at ROOM_WARD_MAX_LEVEL. */
+      level?: number;
+      /** @description The resonance flavor powering this ward's upkeep. */
+      resonance: number;
+      /** @description Banked resonance the daily upkeep tick drains from. */
+      resonance_reserve?: number;
+      /**
+       * Format: date-time
+       * @description Set when resonance_reserve hits 0; ward stops reacting. Null = active.
+       */
+      lapsed_at?: string | null;
+      /** Format: date-time */
+      installed_at?: string;
+      /** Format: date-time */
+      last_upgraded_at?: string | null;
+      /** Format: date-time */
+      dissolved_at?: string | null;
     };
     /** @description Validate a roster application message. */
     RosterApplication: {
@@ -34122,6 +34459,13 @@ export interface components {
       mental: components['schemas']['FatiguePoolStatus'];
       well_rested: boolean;
       rested_today: boolean;
+    };
+    /** @description A detonatable object in the encounter room, for the redirect destination picker (#2210). */
+    VolatileObject: {
+      readonly id: number;
+      readonly name: string;
+      readonly position_id: number | null;
+      readonly position_name: string | null;
     };
     /** @description Read serializer for WeeklyVote instances. */
     WeeklyVote: {
@@ -40541,6 +40885,7 @@ export interface operations {
          *     * `ranged` - Ranged
          *     * `thrown` - Thrown
          *     * `shield` - Shield
+         *     * `lance` - Lance
          *     * `jewelry` - Jewelry
          *     * `clothing` - Clothing
          *     * `other` - Other
@@ -40549,6 +40894,7 @@ export interface operations {
           | 'clothing'
           | 'heavy_armor'
           | 'jewelry'
+          | 'lance'
           | 'light_armor'
           | 'medium_armor'
           | 'melee_one_hand'
@@ -44661,6 +45007,44 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  items_crafting_create_quote_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CraftingQuote'];
+        };
+      };
+    };
+  };
+  items_crafting_create_recipes_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CraftableTemplate'][];
+        };
       };
     };
   };
@@ -54740,6 +55124,195 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RiskCalibration'];
+        };
+      };
+    };
+  };
+  room_features_defenses_fund_ward_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundWardResult'];
+        };
+      };
+    };
+  };
+  room_features_defenses_install_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DefenseInstallResult'];
+        };
+      };
+    };
+  };
+  room_features_defenses_upgrade_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DefenseInstallResult'];
+        };
+      };
+    };
+  };
+  room_features_exit_bars_list: {
+    parameters: {
+      query?: {
+        exit_profile?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedExitBarsDetailsList'];
+        };
+      };
+    };
+  };
+  room_features_exit_bars_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        exit_profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ExitBarsDetails'];
+        };
+      };
+    };
+  };
+  room_features_room_alarms_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        room_profile?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRoomAlarmDetailsList'];
+        };
+      };
+    };
+  };
+  room_features_room_alarms_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        room_profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomAlarmDetails'];
+        };
+      };
+    };
+  };
+  room_features_room_wards_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        room_profile?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRoomWardDetailsList'];
+        };
+      };
+    };
+  };
+  room_features_room_wards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        room_profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomWardDetails'];
         };
       };
     };

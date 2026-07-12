@@ -23,6 +23,7 @@ from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.collect_food import CollectFoodAction
 from actions.definitions.combat_maneuvers import (
+    ChargeAction,
     CoverAction,
     DemoralizeAction,
     DisengageAction,
@@ -30,6 +31,7 @@ from actions.definitions.combat_maneuvers import (
     FleeAction,
     InterposeAction,
     JoinEncounterAction,
+    JoustAction,
     LeaveEncounterAction,
     ParleyAction,
     RallyAction,
@@ -52,6 +54,8 @@ from actions.definitions.companions import (
     BindCompanionAction,
     CompanionFightAction,
     DeployCompanionAction,
+    DismountCompanionAction,
+    MountCompanionAction,
     OrderCompanionAction,
     ReleaseCompanionAction,
 )
@@ -83,7 +87,7 @@ from actions.definitions.crossing import resolve_crossing_offer
 from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.distinctions import GMAwardDistinctionAction
-from actions.definitions.doors import LockAction, UnlockAction
+from actions.definitions.doors import BreakExitAction, LockAction, PickLockAction, UnlockAction
 from actions.definitions.dramatic_moments import (
     ConfirmDramaticMomentSuggestionAction,
     DismissDramaticMomentSuggestionAction,
@@ -211,6 +215,11 @@ from actions.definitions.movement import (
     TravelAction,
     TraverseExitAction,
 )
+from actions.definitions.npc_assignments import (
+    AssignGuardAction,
+    ListGuardAssignmentsAction,
+    UnassignGuardAction,
+)
 from actions.definitions.npc_services import (
     end_npc_interaction,
     resolve_npc_offer,
@@ -271,7 +280,12 @@ from actions.definitions.relationships import (
     RelationshipBumpAction,
 )
 from actions.definitions.ritual import PerformRitualAction
-from actions.definitions.room_features import RepairLabStationAction, StartRoomFeatureProjectAction
+from actions.definitions.room_features import (
+    FundRoomWardAction,
+    RepairLabStationAction,
+    StartDefenseInstallationAction,
+    StartRoomFeatureProjectAction,
+)
 from actions.definitions.rounds import (
     EndRoundAction,
     ForceResolveRoundAction,
@@ -297,7 +311,12 @@ from actions.definitions.scene_reactions import (
     ToggleFavoriteAction,
     ToggleReactionAction,
 )
-from actions.definitions.scenes import FinishSceneAction, GrantSceneGMAction, StartSceneAction
+from actions.definitions.scenes import (
+    FinishSceneAction,
+    GrantSceneGMAction,
+    MarkDecisiveCheckAction,
+    StartSceneAction,
+)
 from actions.definitions.ships import (
     CommissionShipAction,
     RepairShipAction,
@@ -325,6 +344,11 @@ from actions.definitions.social import (
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
+from actions.definitions.vault import (
+    VaultAccessAddAction,
+    VaultAccessListAction,
+    VaultAccessRemoveAction,
+)
 from actions.definitions.windows import CloseWindowAction, OpenWindowAction
 from actions.types import TargetType
 
@@ -446,6 +470,8 @@ _ALL_ACTIONS: list[Action] = [
     CoverAction(),
     InterposeAction(),
     SuccorAction(),
+    ChargeAction(),
+    JoustAction(),
     UseItemManeuverAction(),
     EngageAction(),
     DisengageAction(),
@@ -468,6 +494,7 @@ _ALL_ACTIONS: list[Action] = [
     StartSceneAction(),
     FinishSceneAction(),
     GrantSceneGMAction(),
+    MarkDecisiveCheckAction(),
     BeginEncounterRoundAction(),
     ResolveEncounterRoundAction(),
     AddOpponentAction(),
@@ -573,6 +600,8 @@ _ALL_ACTIONS: list[Action] = [
     ListMotifStylesAction(),
     StartRoomFeatureProjectAction(),
     RepairLabStationAction(),
+    StartDefenseInstallationAction(),
+    FundRoomWardAction(),
     BuyStockAction(),
     BuyWareAction(),
     ListWareAction(),
@@ -588,9 +617,13 @@ _ALL_ACTIONS: list[Action] = [
     DeployCompanionAction(),
     ReleaseCompanionAction(),
     OrderCompanionAction(),
+    MountCompanionAction(),
+    DismountCompanionAction(),
     # #1866 — door lock/unlock telnet coverage.
     LockAction(),
     UnlockAction(),
+    PickLockAction(),
+    BreakExitAction(),
     OpenWindowAction(),
     CloseWindowAction(),
     # #2116 — gift/technique/thread-weaving acquisition surface.
@@ -615,6 +648,14 @@ _ALL_ACTIONS: list[Action] = [
     # itself dispatches through TravelAction, already registered above).
     InstallPortalAnchorAction(),
     DissolvePortalAnchorAction(),
+    # #2179 — vault access-list management.
+    VaultAccessAddAction(),
+    VaultAccessRemoveAction(),
+    VaultAccessListAction(),
+    # #2178 — NPC guard assignment.
+    AssignGuardAction(),
+    UnassignGuardAction(),
+    ListGuardAssignmentsAction(),
 ]
 
 # Lookup by key

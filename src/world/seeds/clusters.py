@@ -165,6 +165,12 @@ def _seed_stealth() -> None:
     seed_stealth_check_content()
 
 
+def _seed_security() -> None:
+    from world.seeds.security_checks import seed_security_check_content  # noqa: PLC0415
+
+    seed_security_check_content()
+
+
 def _seed_perception() -> None:
     from world.seeds.perception_conditions import seed_perception_condition_content  # noqa: PLC0415
 
@@ -259,6 +265,20 @@ def _seed_project_resonance() -> None:
     ensure_project_kind_resonance_awards()
 
 
+def _seed_traits() -> None:
+    """No-op cluster (#2266): Trait rows are created by other clusters already —
+
+    ``character_creation`` seeds the 12 core stat Traits; the checks-family
+    clusters (``combat_checks``/``social``/``investigation``/``governance``/
+    ``stealth``/``security``) seed skill Traits alongside their CheckTypes.
+    Registered purely so the Game Setup inventory can show a Trait row count:
+    the #944 Phase-1 content-pipeline domain (``stats/``/``skills/`` via
+    ``core_management.content_fixtures``) had no inventory visibility at all
+    until this cluster existed, even though the rows themselves were always
+    seeded.
+    """
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -332,6 +352,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "domain_dev": _seed_domain_dev,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,
+    # Security: Larceny/Athletics skills + lockpick/break/escape/guard-detection
+    # CheckTypes (#2180). After "stealth" (reuses its Stealth skill for SNEAK)
+    # and "investigation" (reuses its Investigation skill for Guard Detection).
+    "security": _seed_security,
     # Perception: the Concealed condition primitive (#1225) — the seam Stealth
     # witness-reduction (#1464) and forms disguise-piercing will apply/clear.
     "perception": _seed_perception,
@@ -377,6 +401,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # PROJECT_CONTRIBUTION GainSource (#2038 — "projects to add gifts to
     # organizations"). No dependencies on any other cluster.
     "project_resonance": _seed_project_resonance,
+    # Traits: no-op — see _seed_traits docstring. Registered so the Game Setup
+    # inventory can show a Trait row count for the #944 content-pipeline domain,
+    # which had zero inventory visibility before #2266.
+    "traits": _seed_traits,
 }
 
 
@@ -419,6 +447,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from actions.models import ActionTemplate  # noqa: PLC0415
     from world.agriculture.models import CropType  # noqa: PLC0415
     from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
+    from world.buildings.models import BuildingKind, DecorationKind  # noqa: PLC0415
     from world.character_creation.models import (  # noqa: PLC0415
         Beginnings,
         CGExplanation,
@@ -452,7 +481,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.societies.houses.models import Title  # noqa: PLC0415
     from world.societies.models import PropagandaCampaignTier  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
-    from world.traits.models import ResultChart  # noqa: PLC0415
+    from world.traits.models import ResultChart, Trait  # noqa: PLC0415
 
     return {
         "checks": [CheckType, ResultChart],
@@ -483,8 +512,11 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # covenant-lifecycle content landed after the Big Button run.
         "magic": [Affinity, Resonance, Ritual],
         # Style also carries the seeded aesthetic vocabulary spread across the four
-        # audacity tiers (#2029).
-        "items": [ItemTemplate, Style],
+        # audacity tiers (#2029). BuildingKind/DecorationKind (#2266) — no cluster
+        # seeds these via the Big Button today (they're staff/content authored,
+        # e.g. `world.buildings.seeds.ensure_urban_building_kinds`); tracked here
+        # so a content load against them is inventory-visible.
+        "items": [ItemTemplate, Style, BuildingKind, DecorationKind],
         # Combat seeds check-types used by the resolution spine, not standalone
         # content rows; it still appears in the inventory as a seeded cluster.
         "combat": [],
@@ -517,6 +549,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "domain_dev": [],
         # Stealth seeds skill/check rows counted under "checks" (#1464).
         "stealth": [],
+        # Security seeds skill/check rows counted under "checks" (#2180).
+        "security": [],
         # Perception seeds the Concealed ConditionCategory + ConditionTemplate (#1225).
         "perception": [ConditionTemplate],
         # Civic hubs: the two reader RoomFeatureKinds + the crier NPCRole (#1450).
@@ -552,4 +586,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "project_resonance": [ProjectKindResonanceAward],
         # Agriculture: Field + Granary RoomFeatureKinds + starter CropTypes (#1864).
         "agriculture": [CropType, RoomFeatureKind],
+        # Traits: no-op seeder — see _seed_traits (#2266). Row count for the #944
+        # content-pipeline domain (stats/skills), previously invisible in this hub.
+        "traits": [Trait],
     }

@@ -7251,6 +7251,7 @@ paths:
           - clothing
           - heavy_armor
           - jewelry
+          - lance
           - light_armor
           - medium_armor
           - melee_one_hand
@@ -7270,6 +7271,7 @@ paths:
           * `ranged` - Ranged
           * `thrown` - Thrown
           * `shield` - Shield
+          * `lance` - Lance
           * `jewelry` - Jewelry
           * `clothing` - Clothing
           * `other` - Other
@@ -12313,6 +12315,43 @@ paths:
       responses:
         '201':
           description: No response body
+  /api/items/crafting/create/quote/:
+    get:
+      operationId: items_crafting_create_quote_retrieve
+      description: Return a read-only cost+quality quote for minting a template (no
+        mutation).
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CraftingQuote'
+          description: ''
+  /api/items/crafting/create/recipes/:
+    get:
+      operationId: items_crafting_create_recipes_list
+      description: |-
+        List the item-creation recipes available to craft (#2240).
+
+        Recipe *knowledge* gating is a later slice (#2242); today this returns
+        every active ITEM_CREATE recipe's output template.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CraftableTemplate'
+          description: ''
   /api/items/equipped-items/:
     get:
       operationId: items_equipped_items_list
@@ -14459,7 +14498,15 @@ paths:
       operationId: magic_consequence_pool_catalog_list
       description: |-
         Read-only catalog of curated consequence-pool flavors a technique author
-        may select (children of the shared base 'Magic: Technique Cast' pool).
+        may select — children of the shared base 'Magic: Technique Cast' pool AND
+        children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
+        list by default. An optional ``?action_category=`` query param narrows to
+        the category-matching catalog (physical → combat flavors, anything else →
+        magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
+        path-derived category) only offer flavors the technique can legally keep —
+        resolve_cast_action_template enforces the same split at submit/finalize
+        time. The technique builder's category-agnostic picker keeps the flat
+        union by passing no param.
       tags:
       - magic
       security:
@@ -14478,7 +14525,15 @@ paths:
       operationId: magic_consequence_pool_catalog_retrieve
       description: |-
         Read-only catalog of curated consequence-pool flavors a technique author
-        may select (children of the shared base 'Magic: Technique Cast' pool).
+        may select — children of the shared base 'Magic: Technique Cast' pool AND
+        children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
+        list by default. An optional ``?action_category=`` query param narrows to
+        the category-matching catalog (physical → combat flavors, anything else →
+        magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
+        path-derived category) only offer flavors the technique can legally keep —
+        resolve_cast_action_template enforces the same split at submit/finalize
+        time. The technique builder's category-agnostic picker keeps the flat
+        union by passing no param.
       parameters:
       - in: path
         name: id
@@ -24026,6 +24081,216 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/room-features/defenses/fund-ward/:
+    post:
+      operationId: room_features_defenses_fund_ward_create
+      description: Write-only install/upgrade/fund routes spanning all three defense
+        kinds.
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundWardResult'
+          description: ''
+  /api/room-features/defenses/install/:
+    post:
+      operationId: room_features_defenses_install_create
+      description: Write-only install/upgrade/fund routes spanning all three defense
+        kinds.
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefenseInstallResult'
+          description: ''
+  /api/room-features/defenses/upgrade/:
+    post:
+      operationId: room_features_defenses_upgrade_create
+      description: Write-only install/upgrade/fund routes spanning all three defense
+        kinds.
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefenseInstallResult'
+          description: ''
+  /api/room-features/exit-bars/:
+    get:
+      operationId: room_features_exit_bars_list
+      description: |-
+        Status endpoint for installed exit bars.
+
+        ``pagination_class``/``filter_backends`` (#2177 whole-branch review,
+        Important #4) mirror ``world.items.views_station.LabStationViewSet`` --
+        reuse the repo's shared page-size-50 convention (``ItemTemplatePagination``)
+        and let a caller scope the list to a single exit via ``ExitBarsFilter``
+        rather than listing every installation in the game unscoped.
+      parameters:
+      - in: query
+        name: exit_profile
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedExitBarsDetailsList'
+          description: ''
+  /api/room-features/exit-bars/{exit_profile_id}/:
+    get:
+      operationId: room_features_exit_bars_retrieve
+      description: |-
+        Status endpoint for installed exit bars.
+
+        ``pagination_class``/``filter_backends`` (#2177 whole-branch review,
+        Important #4) mirror ``world.items.views_station.LabStationViewSet`` --
+        reuse the repo's shared page-size-50 convention (``ItemTemplatePagination``)
+        and let a caller scope the list to a single exit via ``ExitBarsFilter``
+        rather than listing every installation in the game unscoped.
+      parameters:
+      - in: path
+        name: exit_profile_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExitBarsDetails'
+          description: ''
+  /api/room-features/room-alarms/:
+    get:
+      operationId: room_features_room_alarms_list
+      description: Status endpoint for installed room alarms. See ``ExitBarsViewSet``
+        docstring.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: room_profile
+        schema:
+          type: number
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRoomAlarmDetailsList'
+          description: ''
+  /api/room-features/room-alarms/{room_profile_id}/:
+    get:
+      operationId: room_features_room_alarms_retrieve
+      description: Status endpoint for installed room alarms. See ``ExitBarsViewSet``
+        docstring.
+      parameters:
+      - in: path
+        name: room_profile_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomAlarmDetails'
+          description: ''
+  /api/room-features/room-wards/:
+    get:
+      operationId: room_features_room_wards_list
+      description: Status endpoint for installed room wards. See ``ExitBarsViewSet``
+        docstring.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: room_profile
+        schema:
+          type: number
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRoomWardDetailsList'
+          description: ''
+  /api/room-features/room-wards/{room_profile_id}/:
+    get:
+      operationId: room_features_room_wards_retrieve
+      description: Status endpoint for installed room wards. See ``ExitBarsViewSet``
+        docstring.
+      parameters:
+      - in: path
+        name: room_profile_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomWardDetails'
+          description: ''
   /api/roster/entries/:
     get:
       operationId: roster_entries_list
@@ -30748,9 +31013,12 @@ components:
           minimum: 0
           nullable: true
           description: 'Population data point mirroring CombatOpponent.swarm_count''s
-            naming/shape (#1794) — null means ''not a swarm-style unit''. No swarm-math
-            resolution is wired against this field yet; that is left to #1714 (naval/aerial
-            units) or a future issue that needs it.'
+            naming/shape (#1794) — null means ''not a swarm-style unit''. Swarm math
+            (#1841): a banded check penalty for acting against the swarm folds into
+            the battle modifier stack, and STRIKE/ROUT attrition costs bodies off
+            it proportionally (see world.battles.constants.swarm_strike_modifier and
+            world.battles.resolution._apply_swarm_losses). Capital vessels stay on
+            the separate per-hull Fortification integrity track (#1713) — see docs/adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md.'
         side_id:
           type: integer
           readOnly: true
@@ -35097,6 +35365,22 @@ components:
         * `durance` - Covenant of the Durance
         * `battle` - Covenant of Battle
         * `court` - Covenant of the Court
+    CraftableTemplate:
+      type: object
+      description: A template a character can mint via item-creation crafting (#2240).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          description: Default full description when examined. Instances can override.
+      required:
+      - id
+      - name
     CraftingQuote:
       type: object
       description: 'Read-only quote: costs, affordability, max quality tier, failure
@@ -35840,6 +36124,13 @@ components:
       description: |-
         * `attacker` - Attacker
         * `defender` - Defender
+    DefenseInstallResult:
+      type: object
+      properties:
+        project_id:
+          type: integer
+      required:
+      - project_id
     DeliveryEnum:
       enum:
       - pose
@@ -37063,6 +37354,11 @@ components:
           items:
             $ref: '#/components/schemas/PositionEdge'
           readOnly: true
+        volatile_objects:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolatileObject'
+          readOnly: true
         is_lethal:
           type: boolean
           readOnly: true
@@ -37095,6 +37391,7 @@ components:
       - resolution_order
       - scene
       - surge_beats
+      - volatile_objects
     EncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.
@@ -38115,6 +38412,31 @@ components:
         * `FLOW` - Flow
         * `SCENE_ACTION` - Scene Action
         * `CEREMONY` - Ceremony
+    ExitBarsDetails:
+      type: object
+      properties:
+        exit_profile:
+          type: integer
+          description: The exit these bars are installed on.
+        level:
+          type: integer
+          maximum: 32767
+          minimum: 1
+          description: Durability tier. Capped at EXIT_BARS_MAX_LEVEL.
+        installed_at:
+          type: string
+          format: date-time
+        last_upgraded_at:
+          type: string
+          format: date-time
+          nullable: true
+        dissolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when the bars are broken to destruction; null = active.
+      required:
+      - exit_profile
     ExposureAxis:
       type: object
       description: 'One axis of the owner build-HUD: pressure vs mitigation vs residual
@@ -38701,6 +39023,13 @@ components:
       required:
       - friend
       - viewer
+    FundWardResult:
+      type: object
+      properties:
+        resonance_reserve:
+          type: integer
+      required:
+      - resonance_reserve
     FuryTierOption:
       type: object
       description: Read-only representation of one selectable FuryTier (#1543).
@@ -39215,6 +39544,7 @@ components:
       - ranged
       - thrown
       - shield
+      - lance
       - jewelry
       - clothing
       - other
@@ -39229,6 +39559,7 @@ components:
         * `ranged` - Ranged
         * `thrown` - Thrown
         * `shield` - Shield
+        * `lance` - Lance
         * `jewelry` - Jewelry
         * `clothing` - Clothing
         * `other` - Other
@@ -46229,6 +46560,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EventList'
+    PaginatedExitBarsDetailsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExitBarsDetails'
     PaginatedFashionPresentationList:
       type: object
       required:
@@ -47899,6 +48253,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ritual'
+    PaginatedRoomAlarmDetailsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomAlarmDetails'
     PaginatedRoomSizeTierList:
       type: object
       required:
@@ -47922,6 +48299,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RoomSizeTier'
+    PaginatedRoomWardDetailsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomWardDetails'
     PaginatedRosterEntryList:
       type: object
       required:
@@ -53156,6 +53556,22 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        rampart_element:
+          type: string
+          readOnly: true
+          nullable: true
+        rampart_integrity:
+          type: integer
+          readOnly: true
+          nullable: true
+        rampart_max_integrity:
+          type: integer
+          readOnly: true
+          nullable: true
+        rampart_crack_state:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - elevation_anchor_id
       - id
@@ -53163,6 +53579,10 @@ components:
       - layout_x
       - layout_y
       - name
+      - rampart_crack_state
+      - rampart_element
+      - rampart_integrity
+      - rampart_max_integrity
     PositionSummary:
       type: object
       description: Compact public representation of a Position (id + name).
@@ -55064,6 +55484,30 @@ components:
       description: |-
         * `attacker` - Attacker
         * `defender` - Defender
+    RoomAlarmDetails:
+      type: object
+      properties:
+        room_profile:
+          type: integer
+          description: The room this alarm watches.
+        level:
+          type: integer
+          maximum: 32767
+          minimum: 1
+          description: Alarm tier. Capped at ROOM_ALARM_MAX_LEVEL.
+        installed_at:
+          type: string
+          format: date-time
+        last_upgraded_at:
+          type: string
+          format: date-time
+          nullable: true
+        dissolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - room_profile
     RoomComfortBreakdown:
       type: object
       description: The owner build-HUD payload for one room (#1514).
@@ -55128,6 +55572,45 @@ components:
       - id
       - name
       - units
+    RoomWardDetails:
+      type: object
+      properties:
+        room_profile:
+          type: integer
+          description: The room this ward protects.
+        level:
+          type: integer
+          maximum: 32767
+          minimum: 1
+          description: Ward tier. Capped at ROOM_WARD_MAX_LEVEL.
+        resonance:
+          type: integer
+          description: The resonance flavor powering this ward's upkeep.
+        resonance_reserve:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Banked resonance the daily upkeep tick drains from.
+        lapsed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when resonance_reserve hits 0; ward stops reacting. Null
+            = active.
+        installed_at:
+          type: string
+          format: date-time
+        last_upgraded_at:
+          type: string
+          format: date-time
+          nullable: true
+        dissolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - resonance
+      - room_profile
     RosterApplication:
       type: object
       description: Validate a roster application message.
@@ -61375,6 +61858,30 @@ components:
       - rested_today
       - social
       - well_rested
+    VolatileObject:
+      type: object
+      description: A detonatable object in the encounter room, for the redirect destination
+        picker (#2210).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        position_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        position_name:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - id
+      - name
+      - position_id
+      - position_name
     WeeklyVote:
       type: object
       description: Read serializer for WeeklyVote instances.

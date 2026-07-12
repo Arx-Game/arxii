@@ -145,6 +145,18 @@ long-lived, rotate on suspicion):**
   setup steps (this is a chicken-and-egg: you generate the key, Terraform tells
   Linode to inject the matching public half into the new instance at first boot)
 
+**Pre-stored by the operator — OPTIONAL (#2236 Phase 5; missing/empty just
+disables the feature, never refuses the converge — `secrets_vault`'s
+`secrets_map_optional`, not `secrets_map`; not in `standup.sh`'s
+`REQUIRED_ARXII`):**
+- `ARXII_SENTRY_DSN` — error tracking. Sentry has a free tier; create a
+  project at [sentry.io](https://sentry.io) and grab the project's DSN
+  under Settings -> Client Keys (DSN). Leave unset to run without Sentry
+  (settings.py only calls `sentry_sdk.init()` when this is non-empty).
+  `SENTRY_ENVIRONMENT` (prod: `production`; rehearsal: `rehearsal`) and
+  `SENTRY_RELEASE` (the deployed commit SHA, stamped by `app_deploy` after
+  checkout) are derived on-box, not operator-supplied.
+
 **NOT pre-stored — produced by the tofu step at run time and piped into the
 ansible step's env in-memory (masked, never to disk/log):**
 - `ARXII_BACKUP_WRITER_ACCESS_KEY`, `ARXII_BACKUP_WRITER_SECRET_KEY` — the
@@ -290,6 +302,215 @@ Two things that catch people out:
   emergency way back in short of re-provisioning the box from a fresh
   Terraform apply.
 
+## Dress rehearsal (run this before the first prod button press)
+
+**#2236 Phase 3 P1.** Before the very first real "Stand up infra" run, run the
+dress rehearsal: **Actions → "Dress rehearsal (stage)" → Run workflow.** It
+pauses for a required-reviewer approval on the gated `stage` Environment
+(separate from `prod`), then stands up a throwaway Linode, converges the
+**FULL, real `site.yml`** on it (the same playbook `standup.sh` runs, no
+role/task forking — only a rehearsal-only `group_vars` overlay), smoke-tests
+the running game end-to-end, rehearses a real backup + restore against real
+(stage-scoped) object storage, and **always** tears everything down —
+whether it passed or failed. Equivalent local fallback:
+`scripts/rehearse.sh` (same preconditions as the workflow: `REHEARSAL_CONFIRM=1`,
+`RUN_ID`, the stage-scoped env below).
+
+### What it proves
+
+- The full `ansible/site.yml` role list actually converges, end to end, on a
+  brand-new box — not just `ansible-lint`/`--syntax-check` (CI's static
+  gate) or a human reading the roles.
+- The running game actually serves the real built frontend (not the
+  `FrontendAppView` "Frontend not built" fallback), static assets, a
+  websocket upgrade, a TLS-telnet handshake, and the admin login page — see
+  `scripts/smoke.sh`.
+- The nightly backup path (`arxii-backup.service`) actually produces an
+  object in real object storage, and `scripts/restore.sh` actually restores
+  it back — the SAME script, invoked the SAME way (over SSH, onto the box's
+  own loopback Postgres) `restore-rehearsal.sh` already used, but this time
+  against a box that just went through a real converge, not a bare
+  Postgres-only box.
+- Idempotency, fail-closed asserts (`host_firewall`, `django_hardening`,
+  `secrets_vault`), and the isolation doctrine below all hold under a real
+  `tofu apply`/`ansible-playbook` run, not just a static grep
+  (`acceptance.sh`).
+
+### What it deliberately CANNOT prove (first-prod-run-only residual risks)
+
+Rehearsal mode keeps the ephemeral-stage root's isolation absolute: **no
+prod refs, no prod-adjacent credential, ever.** That means three real things
+are structurally untested here and remain **residual risk on the actual
+first prod run**:
+
+- **Real ACME issuance (DNS-01).** Caddy runs with its own internal CA
+  (`local_certs`) via `Caddyfile.rehearsal.j2` instead of the real
+  `Caddyfile.j2`'s `acme_dns cloudflare` directive — there is no Cloudflare
+  DNS-edit token to give it (the ephemeral-stage root holds none, by
+  design). The `caddy-dns/cloudflare` plugin build step is skipped
+  entirely in rehearsal for the same reason.
+- **Real DNS.** The fqdn (`stage.rehearsal.invalid`, an RFC 2606 reserved
+  TLD — guaranteed unroutable and unissuable for real) is resolved via a
+  single `/etc/hosts` entry written directly on the stage box, not through
+  Cloudflare or any real nameserver.
+- **R2 offsite replication.** `offsite_replication` is skipped entirely
+  (`offsite_enabled: false`) — the R2 credential pair is a real Cloudflare
+  account/bucket, prod-adjacent, and the isolated ephemeral-stage root has
+  no such credential to give it.
+
+These three should be watched closely on the actual first `standup.sh` /
+"Stand up infra" run — they are the only parts of the stack this rehearsal
+does not exercise.
+
+### Isolation doctrine
+
+Same blast-radius isolation as `restore-rehearsal.sh` (§4.8): a **separate**
+Terraform root (`terraform/ephemeral-stage`), **separate** state (its own
+S3-compatible backend key), **separate** stage-scoped Linode token
+(`STAGE_LINODE_TOKEN` — never the prod `LINODE_TOKEN`). `rehearse.sh`'s tofu
+calls never touch `terraform/prod`; teardown runs via a `trap`, always,
+even on failure. Runtime secrets (`ARXII_PG_PASSWORD`,
+`ARXII_DJANGO_SECRET_KEY`, the first-run superuser password) are generated
+**fresh, every run, via `openssl rand`** — never operator-supplied, never
+reused between runs.
+
+Two Terraform modules exist **only** for this isolation: `modules/
+compute_ephemeral` and `modules/object_storage_ephemeral` mirror the prod
+`modules/compute`/`modules/object_storage` but omit `lifecycle {
+prevent_destroy = true }` — a literal that Terraform/OpenTofu cannot
+parameterize, so there is no way to flag "skip prevent_destroy in
+rehearsal" on the prod modules themselves. (Verified empirically while
+building this: `prevent_destroy` blocks `tofu destroy` on ANY root/state
+that calls the module, not just "prod usage" — a previous version of
+`ephemeral-stage/main.tf` reused the prod `compute` module directly on the
+mistaken belief that this didn't matter for a root meant to be destroyed;
+left uncorrected, every rehearsal/restore-rehearsal teardown would have
+failed to destroy the stage instance+volume, leaking a billed Linode every
+run.) The prod modules are untouched.
+
+Two more teardown-correctness fixes (#2236 review): the stage backups
+bucket has **versioning OFF** (unlike the prod bucket) — the backup step
+above writes a real object into it, and versioning would leave delete
+markers behind a plain `s3 rm --recursive`, which would keep blocking
+`tofu destroy` on a non-empty bucket the same way `prevent_destroy` used
+to; `rehearse.sh`'s teardown now empties the bucket before destroying it.
+And before every `apply`, `rehearse.sh` now asserts the stage state is
+empty first — a leftover stage from a failed teardown would otherwise
+silently re-converge in place (Ansible is idempotent) instead of actually
+proving a true first boot, while still printing `REHEARSAL PASSED`.
+
+### The gated `stage` Environment — minimal secret contract
+
+Mirrors `prod`'s contract (see above), stage-scoped:
+
+**Secrets:**
+- `STAGE_LINODE_TOKEN` — a Linode API token scoped to a **separate** account
+  or a token you are comfortable letting an automated job create/destroy
+  instances+volumes+buckets with; never the prod token.
+- `STAGE_TF_STATE_S3_ACCESS_KEY`, `STAGE_TF_STATE_S3_SECRET_KEY` — the
+  Object Storage key for the stage state key/prefix (scoped so it cannot
+  read/list the prod state key — see `docs/operations/observability-baseline.md`
+  §4.3/§4.8).
+- `ANSIBLE_SSH_PRIVATE_KEY` — reuse the SAME admin keypair prod uses (see
+  "Generating the SSH admin key" above); store a copy in the `stage`
+  Environment too (GitHub Environments don't inherit secrets from each
+  other).
+
+**Variables (non-secret):**
+- `STAGE_TF_STATE_BUCKET`, `STAGE_TF_STATE_KEY`, `STAGE_TF_STATE_REGION`,
+  `STAGE_TF_STATE_ENDPOINT` — the stage state backend config.
+- `ARXII_AUTHORIZED_KEYS` — reuse the same var name/value `prod` uses (the
+  public key is not secret by definition).
+- `ARXII_DJANGO_SUPERUSER_USERNAME`, `ARXII_DJANGO_SUPERUSER_EMAIL` —
+  optional; default to `arxii_admin` / `admin@rehearsal.invalid`.
+
+### Cost note
+
+One small Linode (`g6-standard-1`, smaller than prod's default) plus a
+throwaway Object Storage bucket, for roughly the 30–60 minutes the workflow
+runs (`timeout-minutes: 60`). Both are destroyed by the trap at the end of
+every run, pass or fail.
+
+### restore-rehearsal.sh vs. rehearse.sh
+
+`restore-rehearsal.sh` still exists — it's the narrower, faster,
+**backup/restore-ONLY** drill: a bare stage box, Postgres installed by hand,
+`restore.sh` rehearsed from BOTH the linode and R2 copies. Use it when all
+you need is "does restore still work" without paying for a full converge.
+`rehearse.sh` (this section) folds the SAME `restore.sh`-over-SSH logic in
+as its own final step, but only rehearses the stage bucket copy (there is no
+R2 in rehearsal — see "What it deliberately cannot prove" above) — its value
+is proving the restore path against a box that just went through a REAL
+site.yml converge, not a bare Postgres install.
+
+## Pull prod data down (dev/local)
+
+`just pull-prod confirm=yes` fetches the LATEST prod DB dump and restores it
+into your LOCAL dev Postgres (drop/recreate + `arx manage migrate`) — one
+command instead of the previous manual multi-step (#2236 Phase 4). It runs
+`infra/scripts/pull_prod_db.sh`, which:
+
+- Uses the READ-ONLY `dev_reader` Object Storage key (§4.9 of
+  `docs/operations/observability-baseline.md`) — structurally cannot `Put`/
+  `Delete`, so this tool can never write to the bucket and never touches
+  prod itself.
+- Picks the latest `arxii-*.sql.gz` under the bucket's `db/` prefix by the
+  timestamp embedded in the object name (not S3 list order — same technique
+  `restore.sh` uses).
+- OVERWRITES your local dev DB. Refuses without the explicit
+  `--i-understand-this-overwrites-local` flag (mirrors `restore.sh`'s gate
+  style); `just pull-prod` with no `confirm=yes` refuses and changes
+  nothing.
+
+**One-time setup** — after a successful stand-up, get the dev_reader
+credentials and bucket config from Terraform outputs and add them to
+`src/.env`:
+
+```bash
+cd infra/terraform/prod
+tofu output -raw dev_reader_access_key    # -> ARXII_DEV_READER_ACCESS_KEY
+tofu output -raw dev_reader_secret_key    # -> ARXII_DEV_READER_SECRET_KEY
+tofu output -raw backups_bucket           # -> ARXII_BACKUPS_BUCKET
+tofu output -raw backups_s3_endpoint      # -> ARXII_BACKUPS_S3_ENDPOINT
+tofu output -raw region                   # -> ARXII_BACKUPS_REGION
+```
+
+`DATABASE_URL` (already required for local dev) is the restore target.
+Accepted form: `postgres[ql]://user[:pass]@host[:port]/dbname` (no query
+string, no surrounding quotes) — password and port are optional (port
+defaults to 5432 when omitted). The dbname charset check mirrors the
+justfile's `_testdb-url` recipe's own check on the same variable, but that
+recipe doesn't otherwise parse the URL (it just splits on the last `/`), so
+this is not full parity with it — just the same dbname restriction.
+Out of scope (fails loudly, not silently): bracketed IPv6 hosts,
+percent-encoded passwords.
+
+## Media durability (Cloudinary → R2 mirror)
+
+User portraits/crests (`world.roster`'s `PlayerMedia`) live ONLY in
+Cloudinary — the nightly DB dump never covers binary media, so a
+Cloudinary-account-level loss previously had **no backup at all**.
+
+**Built (#2236 Phase 4):** `arxii-media-mirror.service` (+ weekly
+`arxii-media-mirror.timer`), installed by `roles/offsite_replication`
+alongside the existing DB offsite job. It pages through every Cloudinary
+resource (images/video/raw, all of them — not just `PlayerMedia`) and
+uploads any object not yet present in the SAME R2 offsite bucket under a
+`media/` prefix, using the existing R2 credential/endpoint. **Incremental,
+NEVER deletes** — a Cloudinary-side delete or overwrite never touches the
+R2 copy; the mirror is a backup, not a live sync. Cloudinary stays the
+primary/serving copy (the app never reads media from R2); R2 is
+recovery-only, so:
+
+- **RPO ≈ 7 days on media** (weekly cadence) vs. ~24h on the DB — accepted:
+  media is comparatively low-churn (portraits/crests, not gameplay state),
+  and this closes a "zero backup" gap, not a tight-RPO requirement.
+- Skipped entirely in rehearsal (`offsite_enabled: false` — same gate as
+  the DB offsite job; the R2 credential is prod-adjacent, see "Dress
+  rehearsal" above).
+- Watched by the off-box heartbeat (`roles/offbox_alerting`) alongside
+  `arxii-backup.service`/`arxii-offsite.service`.
+
 ## Known gap: Object Lock
 
 Both backup copies (the Linode primary bucket and the Cloudflare R2 offsite bucket) have
@@ -313,14 +534,34 @@ above.
 ## Layout
 
 - `terraform/bootstrap/` — one-time, idempotent: creates the remote-state bucket (no Object Lock).
-- `terraform/modules/` — compute, linode_firewall, cloudflare_dns, object_storage, r2_offsite.
+- `terraform/modules/` — compute, linode_firewall, cloudflare_dns, object_storage, r2_offsite;
+  plus `compute_ephemeral`/`object_storage_ephemeral` (#2236 Phase 3 P1) — ephemeral-only
+  mirrors of `compute`/`object_storage` without `prevent_destroy` (see "Dress rehearsal" above).
 - `terraform/prod/` — production composition; remote backend; full `prevent_destroy` set.
-- `terraform/ephemeral-stage/` — separate state + credential scope (blast-radius isolation).
+- `terraform/ephemeral-stage/` — separate state + credential scope (blast-radius isolation);
+  now also provisions a throwaway backups bucket (`object_storage_ephemeral`) for the dress
+  rehearsal's backup+restore step.
 - `ansible/` — `site.yml` and 16 roles. **No committed secret material**: the `secrets_vault`
-  role reads `ARXII_*` env vars (set on the ansible step by `standup.yml` from the gated
-  Environment) and renders a `0600` on-box `EnvironmentFile` in one `no_log` task.
-  `group_vars/secrets.env.example` is the names-only contract.
+  role reads `ARXII_*` env vars (set on the ansible step by `standup.yml`/`rehearse.sh` from the
+  gated Environment) and renders a `0600` on-box `EnvironmentFile` in one `no_log` task.
+  `group_vars/secrets.env.example` is the names-only contract. `roles/caddy` carries TWO
+  Caddyfile templates (`Caddyfile.j2` real DNS-01, `Caddyfile.rehearsal.j2` internal CA) —
+  edit both together, see either template's header.
 - `scripts/standup.sh` — the button. `scripts/restore.sh` — separate gated disaster recovery.
+  `scripts/rehearse.sh` — the dress-rehearsal ladder (#2236 Phase 3 P1; see above).
+  `scripts/restore-rehearsal.sh` — the narrower backup/restore-only drill. `scripts/smoke.sh` —
+  end-to-end HTTP/WS/TLS-telnet checks, reusable against rehearsal or real prod.
+  `scripts/lib.sh` — shared helpers (`wait_for_tcp`, `select_ssh_user`, tofu-output caching,
+  inventory/YAML generation, `verify_restored_db` — the post-restore two-count+floor check) used
+  by `standup.sh`/`rehearse.sh`/`restore-rehearsal.sh` and, for `verify_restored_db`, also
+  `scripts/pull_prod_db.sh` (#2236 Phase 4; `just pull-prod`) — dev-side prod→local DB pull.
+  `scripts/restore.sh` keeps its OWN inline copy of that same check rather than sourcing
+  `lib.sh` — it deploys standalone to the prod box over SSH, where `lib.sh` is never shipped
+  (see "Pull prod data down" above).
+- `roles/offsite_replication` owns BOTH offsite jobs (#2236 Phase 4): the original DB dump
+  mirror (`arxii-offsite.service/.timer`) and the new weekly Cloudinary→R2 media mirror
+  (`arxii-media-mirror.service/.timer`, see "Media durability" above) — both gated by the same
+  `offsite_enabled` role-level condition in `site.yml`, both using the same R2 credential/bucket.
 
 ## Status
 

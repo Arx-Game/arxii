@@ -55,6 +55,8 @@ treat those names as hints to confirm, not gospel.
 - [0006 — Scenes are provisional by default; never auto-persist RP](0006-scenes-are-provisional-never-auto-persist-rp.md)
 - [0091 — GANG_TURF resolves TIERED_PERIOD via a per-kind resolver registry, not a shared accessor](0091-gang-turf-tiered-period.md)
 - [0111 — One play surface — `/game` absorbs the scene toolset; `/scenes/:id` is the record page](0111-one-play-surface-game-absorbs-scene-toolset.md)
+- [0127 — Combat renders in-scene, not on a separate route](0127-combat-renders-in-scene-not-a-separate-route.md)
+- [0128 — Scene decisive-check is pre-declared, not post-hoc](0128-scene-decisive-check-is-pre-declared.md)
 
 ### Database & modeling
 - [0007 — No JSON fields; every setting is a typed, queryable column](0007-no-json-fields-typed-queryable-columns.md)
@@ -153,6 +155,12 @@ treat those names as hints to confirm, not gospel.
 - [0120 — Cross-Area travel rides the exit graph; Area coordinates are parent-local rendering data](0120-cross-area-travel-rides-the-exit-graph.md) (extends ADR-0081/0085)
 - [0121 — Portal anchors are a stackable magic-app model, not a RoomFeatureKind](0121-portal-anchors-are-a-stackable-magic-model.md) (related ADR-0010)
 - [0122 — Battle-earned Legend is win-gated at authored tier values, with a standout exception for both sides](0122-battle-legend-is-win-gated-with-standout-exceptions.md) (related ADR-0010)
+- [0123 — Swarm math is derived proportional losses, not a second health pool](0123-swarm-math-is-derived-losses-not-a-second-health-pool.md) (related #1712/#1713/#1714)
+- [0124 — Redirect destination is declared, not improvised](0124-redirect-destination-is-declared-not-improvised.md) (extends ADR-0032/0060; related ADR-0023)
+- [0125 — Rampart is a position-anchored entity, not per-bearer group conditions](0125-rampart-is-an-entity-not-group-conditions.md) (extends ADR-0109; epic #2040 decision 3)
+- [0126 — A mount is a companion plus a verb-gating condition; charge/joust ride the existing move/duel seams](0126-mounts-are-companions-with-a-verb-gating-condition.md) (extends ADR-0023/0060)
+- [0129 — Wind consumes as banded SCENE check modifiers on missile deliveries only](0129-wind-consumes-as-banded-scene-modifiers-on-missile-deliveries.md) (related #1522)
+- [0130 — The combat offense flavor catalog applies to standalone casts; combat rounds deliberately do not consume ActionTemplate.consequence_pool](0130-combat-offense-catalog-is-standalone-cast-only.md) (extends the #1320 magic technique-cast catalog pattern; related ADR-0096)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

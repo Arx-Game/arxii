@@ -34,6 +34,33 @@ if TYPE_CHECKING:
     from world.scenes.types import CastResult
 
 
+def _maybe_fire_decisive_for_direct_action(
+    actor: ObjectDB,
+    resolution: PendingActionResolution,
+) -> None:
+    """Fire any pending DecisiveCheckMarker after a direct social check (#1748)."""
+    from world.scenes.decisive_check_services import maybe_fire_decisive_check  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    main = resolution.main_result
+    if main is None:
+        return
+    if actor.location is None:
+        return
+    scene = get_active_scene(actor.location)
+    if scene is None:
+        return
+    try:
+        sheet = actor.sheet_data
+    except AttributeError:
+        return
+    maybe_fire_decisive_check(
+        scene=scene,
+        check_outcome=main.check_result.outcome,
+        initiator_sheet=sheet,
+    )
+
+
 @dataclass
 class _SocialTemplateAction(Action):
     """Base for social ActionTemplate-driven actions.
@@ -96,6 +123,8 @@ class _SocialTemplateAction(Action):
         # template action (Persuade/Intimidate/Entrance/…) moves NPC affection
         # (#1591). The raw ``resolution`` carries the success tier (ADR-0019).
         self._apply_disposition_delta(actor, kwargs.get("target_persona_id"), resolution)
+        # #1748: fire any pending decisive-check marker after a direct social check.
+        _maybe_fire_decisive_for_direct_action(actor, resolution)
         return template, result
 
     @staticmethod
@@ -559,9 +588,9 @@ class EntranceAction(_SocialTemplateAction):
     def _resolve_inline_entrance_result(  # noqa: PLR0913 - cohesive resolved-inline outcome params
         actor: ObjectDB,
         scene: Scene,
-        actor_sheet: CharacterSheet | None,
+        _actor_sheet: CharacterSheet | None,  # #2226: was used for seating, now generalized
         technique: Technique,
-        target: Persona | None,
+        _target: Persona | None,  # #2226: was used for seating, now generalized
         target_persona_id: int | None,
         entry_interaction: Interaction | None,
         cast: CastResult,
@@ -573,9 +602,6 @@ class EntranceAction(_SocialTemplateAction):
         combat-seed/PENDING branches in ``_dispatch_entrance_cast``.)
         """
         from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
-        from world.combat.cast_seed import (  # noqa: PLC0415
-            seed_or_feed_encounter_from_benign_intervention,
-        )
         from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
         from world.npc_services.social_disposition import (  # noqa: PLC0415
             apply_social_disposition_delta,
@@ -606,17 +632,9 @@ class EntranceAction(_SocialTemplateAction):
         if prompt:
             message = f"{message}\n{prompt}"
 
-        if (
-            target is not None
-            and actor_sheet is not None
-            and target.character_sheet_id != actor_sheet.pk
-        ):
-            seed_or_feed_encounter_from_benign_intervention(
-                caster_sheet=actor_sheet,
-                target_sheet=target.character_sheet,
-                scene=scene,
-            )
-
+        # #2226: combat seating for benign casts is now handled by
+        # _route_immediate_cast's generalized seating call — no need to
+        # duplicate it here.
         return _ActionResult(success=True, message=message)
 
     @staticmethod

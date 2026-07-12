@@ -362,17 +362,23 @@ export function useCoverMutation(encounterId: number) {
 // Guard (Interpose) mutation hook
 // ---------------------------------------------------------------------------
 
-/** Args for useGuardMutation — ward + optional protective technique (#2207). */
+/**
+ * Args for useGuardMutation — ward + optional protective technique (#2207) +
+ * optional redirect destination (#2210, mutually exclusive; both null = "away").
+ */
 export interface GuardMutationArgs {
   allyParticipantId: number | null;
   techniqueId: number | null;
+  redirectOpponentTargetId?: number | null;
+  redirectObjectTargetId?: number | null;
 }
 
 /**
  * Declare a guarding (Interpose) maneuver, optionally naming a ward ally
  * and/or a protective technique (#2207 — "Guard" in the UI, `interpose` on the
- * wire/maneuver enum). Unlike flee/cover, Interpose has no dedicated REST verb
- * that accepts `technique_id` — `InterposeSerializer`
+ * wire/maneuver enum), and — when the technique is REDIRECT-flavored — an
+ * optional saved-damage destination (#2210). Unlike flee/cover, Interpose has
+ * no dedicated REST verb that accepts `technique_id` — `InterposeSerializer`
  * (world/combat/serializers.py) only carries `ally_participant_id` — so this
  * rides the generic REGISTRY dispatch path (`combat_interpose`) via
  * `api.postDispatchAction` instead of a bespoke `api.post*` wrapper, the same
@@ -382,12 +388,14 @@ export interface GuardMutationArgs {
 export function useGuardMutation(encounterId: number, characterId: number) {
   return useEncounterMutation<DispatchResult, GuardMutationArgs>(
     encounterId,
-    ({ allyParticipantId, techniqueId }) =>
+    ({ allyParticipantId, techniqueId, redirectOpponentTargetId, redirectObjectTargetId }) =>
       api.postDispatchAction(characterId, {
         ref: { backend: 'registry', registry_key: 'combat_interpose' },
         kwargs: {
           ally_participant_id: allyParticipantId,
           technique_id: techniqueId,
+          redirect_opponent_target_id: redirectOpponentTargetId ?? null,
+          redirect_object_target_id: redirectObjectTargetId ?? null,
         },
       })
   );

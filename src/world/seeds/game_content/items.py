@@ -353,6 +353,39 @@ def seed_cosmetic_items() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Mounted-combat weapon (#1843)
+# ---------------------------------------------------------------------------
+
+
+def seed_lance_item() -> None:
+    """Seed the starter Lance ItemTemplate (#1843).
+
+    Kept out of ``_build_template_specs``/``seed_item_template_starter_catalog``
+    (that shared tuple shape has no ``base_weapon_damage`` slot — every row it
+    creates gets the field's ``0`` default) so the lance can carry a real
+    weapon-damage value without changing the shape for the other ten
+    templates. Mirrors ``seed_cosmetic_items``'s standalone get_or_create shape.
+    """
+    from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype  # noqa: PLC0415
+    from world.items.models import ItemTemplate, TemplateSlot  # noqa: PLC0415
+
+    template, _ = ItemTemplate.objects.get_or_create(
+        name="Lance",
+        defaults={
+            "gear_archetype": GearArchetype.LANCE,
+            "base_weapon_damage": 6,
+            "facet_capacity": 2,
+        },
+    )
+    for region in (BodyRegion.RIGHT_HAND, BodyRegion.LEFT_HAND):
+        TemplateSlot.objects.get_or_create(
+            template=template,
+            body_region=region,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -380,6 +413,7 @@ def seed_items_dev() -> ItemsDevSeedResult:
     compatibility = seed_gear_archetype_compatibility()
     styles = seed_style_vocabulary()
     seed_cosmetic_items()
+    seed_lance_item()
     return ItemsDevSeedResult(
         template_catalog=template_catalog,
         compatibility=compatibility,

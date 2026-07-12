@@ -21,7 +21,7 @@ from actions.constants import ResolutionPhase
 from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from commands.consent import CmdAccept, CmdDeny, CmdIntimidate
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_models import SceneActionRequest
@@ -65,6 +65,13 @@ class TelnetConsentJourneyTests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
             location=self.room,
         )
+        # #2214: create_action_request now auto-resolves a single-target NPC-primary
+        # request at creation time. Bob is the human respondent of this two-step
+        # intimidate-then-accept/deny journey, so he needs a real db_account —
+        # otherwise _persona_is_npc treats him as an NPC and the request resolves
+        # immediately instead of staying PENDING for CmdAccept/CmdDeny to act on.
+        self.target_char.db_account = AccountFactory()
+        self.target_char.save(update_fields=["db_account"])
         self.initiator_sheet = CharacterSheetFactory(character=self.initiator_char)
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
         self.scene = SceneFactory(is_active=True, location=self.room)

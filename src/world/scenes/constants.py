@@ -146,3 +146,11 @@ class ReactionValence(models.IntegerChoices):
     POSITIVE = 1, "Positive"
     NEUTRAL = 0, "Neutral"
     NEGATIVE = -1, "Negative"
+
+
+class DecisiveCheckMarkerStatus(models.TextChoices):
+    """Lifecycle status of a DecisiveCheckMarker (#1748)."""
+
+    PENDING = "pending", "Pending"
+    RESOLVED = "resolved", "Resolved"
+    CANCELLED = "cancelled", "Cancelled"

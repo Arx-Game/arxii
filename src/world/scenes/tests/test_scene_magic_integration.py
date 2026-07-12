@@ -13,6 +13,7 @@ from django.test import TestCase, tag
 
 from actions.factories import ConsequencePoolFactory
 from actions.models import ActionEnhancement
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.factories import create_social_action_templates
 from world.conditions.factories import (
@@ -61,6 +62,15 @@ class SceneMagicTestMixin:
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
+        # PC target: every test in this file drives the explicit accept flow,
+        # expecting the request to still be PENDING after creation (#2214 — an NPC
+        # target would auto-resolve at creation, and the later
+        # respond_to_action_request call would just return None). Mirrors
+        # test_action_services.py's _make_pc_persona() pattern, applied to an
+        # already-built persona rather than a fresh one.
+        target_character = cls.target.character_sheet.character
+        target_character.db_account = AccountFactory()
+        target_character.save(update_fields=["db_account"])
 
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(

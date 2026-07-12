@@ -154,6 +154,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     position_adjacency: [],
     position_nodes: [],
     position_edges: [],
+    volatile_objects: [],
     is_lethal: false,
     duel_winner: null,
     surge_beats: [],
@@ -478,8 +479,8 @@ describe('CombatTurnPanel — encounter outcome banner (#876)', () => {
 
     const banner = screen.getByRole('status');
     expect(banner).toHaveTextContent('Victory');
-    const returnLink = screen.getByRole('link', { name: /return to scene/i });
-    expect(returnLink).toHaveAttribute('href', '/scenes/8');
+    // #2197: no more "Return to Scene" link — the banner renders in-scene now.
+    expect(screen.queryByRole('link', { name: /return to scene/i })).not.toBeInTheDocument();
     // Live sections are replaced by the banner.
     expect(screen.queryByTestId('your-turn-stub')).not.toBeInTheDocument();
     expect(screen.queryByTestId('round-flow-section')).not.toBeInTheDocument();

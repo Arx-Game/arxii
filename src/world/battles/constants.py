@@ -170,6 +170,40 @@ UNIT_QUALITY_STRIKE_MODIFIER: dict[str, int] = {
     UnitQuality.ELITE: -20,
 }
 
+# Attacker-facing flat check modifier keyed off a target unit's
+# individual_count (#1841) — numbers are weight: breaking a 200-strong
+# formation is harder than breaking a dozen skirmishers, so the bands are
+# NEGATIVE, matching UNIT_QUALITY_STRIKE_MODIFIER's sign convention (tougher
+# target -> negative, ELITE is -20). Units never roll their own offense in
+# this resolution model, so target-side resilience is where a swarm's mass
+# expresses itself; as proportional losses (see _apply_swarm_losses) thin the
+# count, the penalty fades band by band and the horde becomes breakable.
+# Keys are inclusive count thresholds; swarm_strike_modifier() below picks the
+# highest threshold the count clears. Below the lowest threshold (or
+# individual_count is None, i.e. not a swarm-style unit) contributes 0.
+SWARM_STRIKE_MODIFIER_BANDS: dict[int, int] = {
+    10: -5,
+    50: -10,
+    200: -15,
+}
+
+
+def swarm_strike_modifier(count: int | None) -> int:
+    """Flat check modifier for acting against a swarm-style unit (#1841).
+
+    Returns 0 when ``count`` is None (not a swarm-style unit) or below the
+    lowest ``SWARM_STRIKE_MODIFIER_BANDS`` threshold (<10). Otherwise returns
+    the modifier for the highest threshold ``count`` meets or exceeds.
+    """
+    if count is None:
+        return 0
+    modifier = 0
+    for threshold, band_modifier in sorted(SWARM_STRIKE_MODIFIER_BANDS.items()):
+        if count >= threshold:
+            modifier = band_modifier
+    return modifier
+
+
 # Posture (#1711) trades VP-gain speed against check difficulty and failure
 # damage. Percent scaling applied to STRIKE_VP_PER_LEVEL / SUPPORT_VP gains;
 # flat modifiers applied to the STRIKE check and to BASE_FAILURE_DAMAGE.

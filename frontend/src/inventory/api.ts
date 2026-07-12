@@ -30,6 +30,7 @@ type ItemFacetRead = components['schemas']['ItemFacetRead'];
 type QualityTier = components['schemas']['QualityTier'];
 type FacetCraftResult = components['schemas']['FacetCraftResult'];
 export type CraftingQuote = components['schemas']['CraftingQuote'];
+export type CraftableTemplate = components['schemas']['CraftableTemplate'];
 export type StationStatus = components['schemas']['StationStatus'];
 export type LabStationDetails = components['schemas']['LabStationDetails'];
 // install/upgrade only ever start a Project — they do NOT synchronously
@@ -264,6 +265,45 @@ export async function getCraftingQuote(
     `${BASE_URL}/item-facets/quote/?item_instance=${itemInstanceId}&facet=${facetId}`
   );
   if (!res.ok) throw new Error(await readError(res, 'Failed to load crafting quote'));
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Item creation — mint a new item from a recipe (#2211 core, #2240 web surface)
+// ---------------------------------------------------------------------------
+
+export interface CreateItemResult {
+  created: boolean;
+  item_instance_id: number | null;
+  quality_tier: string | null;
+  consequence_label: string | null;
+}
+
+/** The item-creation recipes this character can craft (knowledge gating is #2242). */
+export async function listCraftableRecipes(): Promise<CraftableTemplate[]> {
+  const res = await apiFetch(`${BASE_URL}/crafting/create/recipes/`);
+  if (!res.ok) throw new Error(await readError(res, 'Failed to load craftable recipes'));
+  return res.json();
+}
+
+/** A read-only cost/quality quote for minting one template. */
+export async function getCreateItemQuote(templateId: number): Promise<CraftingQuote> {
+  const res = await apiFetch(`${BASE_URL}/crafting/create/quote/?template=${templateId}`);
+  if (!res.ok) throw new Error(await readError(res, 'Failed to load crafting quote'));
+  return res.json();
+}
+
+/** Roll the check and (on success) mint a new item instance. */
+export async function craftCreateItem(payload: {
+  template: number;
+  custom_name?: string;
+  custom_description?: string;
+}): Promise<CreateItemResult> {
+  const res = await apiFetch(`${BASE_URL}/crafting/create/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readError(res, 'Failed to craft item'));
   return res.json();
 }
 

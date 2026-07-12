@@ -4,6 +4,7 @@ from django.db.models import QuerySet
 import django_filters
 from rest_framework.exceptions import ValidationError
 
+from actions.models import ConsequencePool
 from world.magic.constants import GainSource, ParticipationRule
 from world.magic.models import (
     Cantrip,
@@ -16,6 +17,40 @@ from world.magic.models import (
     ThreadWeavingTeachingOffer,
 )
 from world.magic.models.sessions import RitualSession
+
+
+class ConsequencePoolCatalogFilter(django_filters.FilterSet):
+    """Filter for the consequence-pool flavor catalog listing (#1995).
+
+    ``action_category=physical`` narrows to the combat offense catalog's flavors;
+    any other valid ``ActionCategory`` value narrows to the magic technique-cast
+    catalog's; absent keeps the flat union of both (the technique builder's
+    category-agnostic picker default). The CG cantrip picker can pass the draft's
+    derived category so players are only offered flavors their technique can
+    legally keep at finalize time (``resolve_cast_action_template`` enforces the
+    same split at submit/finalize).
+    """
+
+    action_category = django_filters.CharFilter(method="filter_by_action_category")
+
+    class Meta:
+        model = ConsequencePool
+        fields = ["action_category"]
+
+    def filter_by_action_category(
+        self, queryset: QuerySet[ConsequencePool], name: str, value: str
+    ) -> QuerySet[ConsequencePool]:
+        """Narrow the catalog to the category-matching base pool's children."""
+        from actions.constants import ActionCategory  # noqa: PLC0415
+        from world.combat.seeds_offense import get_melee_offense_pool  # noqa: PLC0415
+        from world.magic.seeds_cast import get_standalone_cast_pool  # noqa: PLC0415
+
+        valid = {c.value for c in ActionCategory}
+        if value not in valid:
+            raise ValidationError({"action_category": "Invalid action category."})
+        if value == ActionCategory.PHYSICAL:
+            return queryset.filter(parent=get_melee_offense_pool())
+        return queryset.filter(parent=get_standalone_cast_pool())
 
 
 class CantripFilter(django_filters.FilterSet):

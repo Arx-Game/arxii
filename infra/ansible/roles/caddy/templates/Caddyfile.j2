@@ -1,6 +1,9 @@
-# Managed by Ansible (caddy). Auto-HTTPS via ACME DNS-01 (Cloudflare),
-# reverse-proxy to the LOCALHOST-bound app backend. Cloudflare proxies in
-# front (Full strict); Caddy still terminates TLS on the origin leg.
+# EDIT BOTH: this file's site-block shape (ws/static/proxy routes, headers)
+# must stay in lockstep with Caddyfile.rehearsal.j2 (caddy_rehearsal_mode:
+# true) — they are the same site, two different ACME strategies. Managed by
+# Ansible (caddy). Auto-HTTPS via ACME DNS-01 (Cloudflare), reverse-proxy to
+# the LOCALHOST-bound app backend. Cloudflare proxies in front (Full
+# strict); Caddy still terminates TLS on the origin leg.
 {
 	email {{ caddy_acme_email }}
 	# DNS-01 — token from the env-injected EnvironmentFile (never in repo).

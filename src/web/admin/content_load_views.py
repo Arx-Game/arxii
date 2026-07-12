@@ -17,6 +17,7 @@ from pathlib import Path
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
+from django.db import Error as DjangoDbError
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
@@ -72,11 +73,24 @@ def content_load_run(request: HttpRequest) -> HttpResponse:
 
     try:
         result = build_all(content_root)
+        created, updated = load_entries(result)
     except ContentError as exc:
         messages.error(request, str(exc))
         return HttpResponseRedirect(reverse("admin_game_setup"))
-
-    created, updated = load_entries(result)
+    except DjangoDbError as exc:
+        # Unlike the tools/build_content_fixtures.py CLI wrapper, this view
+        # never needs to catch ImproperlyConfigured — an admin request only
+        # reaches here with Django already fully configured. An unmigrated
+        # or unreachable DB (e.g. the npc_roles/ faction_affiliation lookup,
+        # or load_entries' update_or_create) is the one environmental
+        # failure mode left; surface it the same clean way as ContentError
+        # instead of a raw 500.
+        messages.error(
+            request,
+            f"Database error while loading content: {exc} "
+            "(hint: run `arx manage migrate` to bring the dev DB schema up to date).",
+        )
+        return HttpResponseRedirect(reverse("admin_game_setup"))
     placeholders = sum(result.placeholder_counts.values())
     messages.success(
         request,

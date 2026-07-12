@@ -36,14 +36,14 @@ function renderWrapped(scene: SceneDetail = SCENE) {
 }
 
 describe('SceneHeader combat badge', () => {
-  it('shows an In Combat badge when the scene has an active encounter', () => {
+  it('shows an In Combat badge (not a link — combat renders in-scene, #2197) when the scene has an active encounter', () => {
     mockUseEncounterForScene.mockReturnValue({ data: { id: 1 }, isLoading: false, isError: false });
 
     renderWrapped();
 
     const badge = screen.getByTestId('scene-header-combat-badge');
     expect(badge).toHaveTextContent('In Combat');
-    expect(badge.closest('a')).toHaveAttribute('href', '/scenes/9/combat');
+    expect(badge.closest('a')).toBeNull();
   });
 
   it('does not show the badge when there is no active encounter', () => {

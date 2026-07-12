@@ -230,6 +230,24 @@ choice (or `None`) into the `ActionTemplate` the Technique's `action_template` F
 to; every catalog `ActionTemplate` shares the base template's `check_type`/`pipeline`/
 `target_type`, so only the consequence pool actually varies.
 
+**Combat offense catalog (#1995) [BUILT & WIRED]** — the PHYSICAL sibling of the catalog
+above. `world.combat.seeds_offense` mirrors the same base-pool + curated-catalog shape for
+the combat "Melee Attack" `ActionTemplate` (seeded by
+`world.combat.factories.wire_melee_attack_action_template`, which now wires
+`consequence_pool` onto the base "Combat: Melee Offense" pool instead of leaving it `None`):
+`ensure_melee_offense_pool()` seeds the 3 canonical tiers; `ensure_combat_offense_catalog_content()`
+seeds the curated flavors ("Brutal", "Precise") as children ActionTemplates ("Melee Attack:
+Brutal" / "Melee Attack: Precise"). `resolve_cast_action_template(consequence_pool_id,
+action_category=...)` now branches by category: PHYSICAL validates the chosen pool against
+`get_combat_offense_catalog()`; every other category still validates against
+`get_technique_cast_catalog()` — a magic flavor chosen for a PHYSICAL technique (or vice
+versa) raises `InvalidConsequencePoolChoice`. The catalog listing endpoint
+(`GET /api/magic/consequence-pool-catalog/`) returns both catalogs' entries in one flat list
+(the picker doesn't filter by `action_category` client-side, so the listing doesn't either).
+**This catalog applies to standalone casts only** — combat ROUND resolution never reads
+`ActionTemplate.consequence_pool` (see "Combat" doc's note on `wire_melee_attack_action_template`
+and ADR-0130).
+
 ### Targeting Model (#1321) [BUILT & WIRED]
 
 Standalone casts now validate targets, resolve AoE expansion, apply conditions, and route
@@ -255,6 +273,10 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 - Hostile → `seed_or_feed_encounter_from_cast` (combat).
 - Benign + behavior-altering → PENDING `SceneActionRequest` (consent required).
 - Benign + capability/stat → resolves immediately, including on other PCs.
+- **Any benign cast that affects an ACTIVE combatant** seats the caster in
+  that combatant's encounter (#2226, ADR-0119) — via
+  `seat_caster_for_benign_intervention`, called post-resolution on both the
+  immediate and consent-accept paths. Risk acknowledgement is automatic.
 
 **Shared condition application** (`world/magic/services/condition_application.py`):
 `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind, source_character, applied_condition_rows=None)`
@@ -1082,7 +1104,7 @@ time:
 
 | Branch | What happens |
 |--------|--------------|
-| Resolved inline (self/room/no-target, or a benign no-consent cast at another PC) | Full hooks fire immediately once the success level clears 0: entry-flourish offer, disposition delta (non-hostile only), the `Dramatic Moment Suggestion` check, and — when the target is another sheet's ACTIVE combatant — a **benign-intervention combat join** (`seed_or_feed_encounter_from_benign_intervention`, see combat.md). |
+| Resolved inline (self/room/no-target, or a benign no-consent cast at another PC) | Full hooks fire immediately once the success level clears 0: entry-flourish offer, disposition delta (non-hostile only), the `Dramatic Moment Suggestion` check. A **benign-intervention combat join** (`seat_caster_for_benign_intervention`, #2226/ADR-0119) fires for *any* benign cast (not just entrances) that affects an ACTIVE combatant — see the consent-routing note above. |
 | Hostile cast at another PC | Seeds/feeds a combat encounter (`seed_or_feed_encounter_from_cast(..., from_entrance=True)`) — flourish only; the success level isn't known until the declared cast resolves at round resolution (see combat.md's `_maybe_suggest_entrance_dramatic_moment`). |
 | PENDING (benign consent-gated, or hostile #777 risk-gated) | No hooks at declaration; `SceneActionRequest.originated_as_entrance` marks the request so `resolve_accepted_cast` fires the deferred hooks at accept-time resolution instead. |
 | Soulfray gate not confirmed | Registers a `PendingCast` (mirrors `cast.py`) carrying an `"entrance": True` marker in its kwargs; `SoulfrayPendingHandler`'s `accept soulfray` re-dispatch reads the marker and re-enters through the `"entrance"` REGISTRY action (not `"cast_technique"`) so the flourish/suggestion/intervention hooks stay reachable — see `world/magic/offer_handlers.py`. |

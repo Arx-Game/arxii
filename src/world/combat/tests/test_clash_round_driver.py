@@ -26,6 +26,7 @@ from world.combat.factories import (
     CombatEncounterFactory,
     StrainConfigFactory,
     ThreatPoolEntryFactory,
+    WardClashFactory,
 )
 from world.combat.models import Clash, ClashRound, CombatOpponent
 from world.combat.types import (
@@ -459,4 +460,138 @@ class RunClashRoundTests(TestCase):
             row["status"],
             ClashStatus.ACTIVE,
             "clash.status must remain ACTIVE when resolve_clash raises",
+        )
+
+
+class RampartWardSyncTests(TestCase):
+    """A rampart-backed WARD clash's progress drain mirrors onto Rampart.integrity (#2209)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.config_strain = StrainConfigFactory()
+        cls.config_clash = ClashConfigFactory()
+        # resolve_clash needs a CheckOutcome at or below success_level=-2
+        # (NPC_DECISIVE) to fire the resolution consequence pool.
+        CheckOutcomeFactory(name="rr_ws_botch", success_level=-2)
+
+    def _make_rampart(self, *, integrity: int, max_integrity: int = 30):
+        from world.areas.positioning.constants import RampartSignature
+        from world.areas.positioning.factories import RampartElementProfileFactory, RampartFactory
+
+        profile = RampartElementProfileFactory(signature_behavior=RampartSignature.SEAL_EDGES)
+        return RampartFactory(
+            element_profile=profile, integrity=integrity, max_integrity=max_integrity
+        )
+
+    def test_npc_drain_mirrors_onto_rampart(self) -> None:
+        """A no-contribution round drains both clash.progress and rampart.integrity by the
+        same NPC-pressure amount."""
+        rampart = self._make_rampart(integrity=12)
+        entry = ThreatPoolEntryFactory(clash_npc_pressure=3)
+        clash = WardClashFactory(
+            progress=rampart.integrity,
+            pc_win_threshold=20,
+            triggering_threat_entry=entry,
+            rampart=rampart,
+        )
+
+        result = run_clash_round(
+            clash=clash,
+            round_number=1,
+            pc_contributions=[],
+            config_clash=self.config_clash,
+            config_strain=self.config_strain,
+        )
+
+        self.assertEqual(result.progress_after, 9)  # 12 - 3
+        clash.refresh_from_db()
+        self.assertEqual(clash.progress, 9)
+        rampart.refresh_from_db()
+        self.assertEqual(rampart.integrity, 9)
+
+    def test_pc_contribution_strengthens_rampart_capped_at_max(self) -> None:
+        """A PC contribution that outweighs NPC pressure strengthens the rampart, capped
+        at max_integrity."""
+        rampart = self._make_rampart(integrity=28, max_integrity=30)
+        entry = ThreatPoolEntryFactory(clash_npc_pressure=0)
+        clash = WardClashFactory(
+            progress=rampart.integrity,
+            pc_win_threshold=50,
+            triggering_threat_entry=entry,
+            rampart=rampart,
+        )
+        sheet = self._make_character()
+        technique = self._make_technique()
+        contribution = self._make_contribution(character_sheet=sheet, technique=technique)
+
+        with force_check_outcome(CheckOutcomeFactory(name="rr_ws_success", success_level=1)):
+            run_clash_round(
+                clash=clash,
+                round_number=1,
+                pc_contributions=[contribution],
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        rampart.refresh_from_db()
+        self.assertLessEqual(rampart.integrity, 30)  # capped at max_integrity
+        clash.refresh_from_db()
+        self.assertEqual(rampart.integrity, min(30, clash.progress))
+
+    def test_drain_to_zero_collapses_rampart_and_resolves_npc_decisive(self) -> None:
+        """Progress draining to 0 collapses the rampart (row deleted) alongside the
+        existing NPC_DECISIVE threshold path."""
+        from world.areas.positioning.models import Rampart
+
+        rampart = self._make_rampart(integrity=3)
+        entry = ThreatPoolEntryFactory(clash_npc_pressure=5)
+        clash = WardClashFactory(
+            progress=rampart.integrity,
+            pc_win_threshold=20,
+            triggering_threat_entry=entry,
+            rampart=rampart,
+            started_round=1,
+        )
+
+        # round_number(2) != started_round(1): not the uncontested-creation-round
+        # skip, so the threshold check actually runs this round.
+        result = run_clash_round(
+            clash=clash,
+            round_number=2,
+            pc_contributions=[],
+            config_clash=self.config_clash,
+            config_strain=self.config_strain,
+        )
+
+        self.assertIsNotNone(result.resolution)
+        clash.refresh_from_db()
+        self.assertEqual(clash.status, ClashStatus.RESOLVED)
+        self.assertEqual(clash.resolution, ClashResolution.NPC_DECISIVE)
+        self.assertFalse(Rampart.objects.filter(pk=rampart.pk).exists())
+
+    def _make_character(self, current: int = 20, maximum: int = 20) -> object:
+        sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=sheet.character, current=current, maximum=maximum)
+        CharacterEngagementFactory(character=sheet.character)
+        return sheet
+
+    def _make_technique(self, anima_cost: int = 3) -> object:
+        check_type = ActionTemplateFactory().check_type
+        template = ActionTemplateFactory(check_type=check_type)
+        return TechniqueFactory(
+            intensity=5,
+            control=10,
+            anima_cost=anima_cost,
+            action_template=template,
+        )
+
+    def _make_contribution(
+        self, *, character_sheet: object, technique: object, npc_attack_affinity: object = None
+    ) -> PreparedClashContribution:
+        return PreparedClashContribution(
+            character_sheet=character_sheet,
+            action_slot="FOCUSED",
+            technique=technique,
+            strain_commitment=0,
+            npc_attack_affinity=npc_attack_affinity,
         )

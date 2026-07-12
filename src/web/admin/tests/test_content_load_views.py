@@ -9,6 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from world.buildings.models import DecorationKind
 from world.traits.models import Trait
 
 GOOD_SKILL = """---
@@ -16,6 +17,12 @@ name: Performance
 category: social
 ---
 PLACEHOLDER Captivating an audience through music, oration, or storytelling.
+"""
+
+GOOD_DECORATION_KIND = """---
+name: Great Hearth
+---
+A roaring stone hearth that drives out the worst of the cold.
 """
 
 
@@ -85,6 +92,7 @@ class TestContentLoadConfigured(TestCase):
         self.addCleanup(self.content.cleanup)
         self.root = Path(self.content.name)
         _write(self.root, "skills/performance.md", GOOD_SKILL)
+        _write(self.root, "decoration_kinds/hearth.md", GOOD_DECORATION_KIND)
 
     def test_game_setup_reports_configured(self) -> None:
         self.client.force_login(self.super)
@@ -93,6 +101,7 @@ class TestContentLoadConfigured(TestCase):
         self.assertTrue(resp.context["content_repo_configured"])
 
     def test_run_loads_content_and_flashes_success(self) -> None:
+        """One run across two domains (#2266) — the flashed count covers both."""
         self.client.force_login(self.super)
         with mock.patch.dict("os.environ", {"CONTENT_REPO_PATH": str(self.root)}):
             resp = self.client.post(reverse("admin_content_load_run"))
@@ -100,8 +109,9 @@ class TestContentLoadConfigured(TestCase):
         self.assertEqual(resp.url, reverse("admin_game_setup"))
         trait = Trait.objects.get(name="Performance")
         self.assertIn("PLACEHOLDER", trait.description)
+        self.assertTrue(DecorationKind.objects.filter(name="Great Hearth").exists())
         messages = list(resp.wsgi_request._messages)
-        self.assertTrue(any("1 created" in str(m) for m in messages))
+        self.assertTrue(any("2 created" in str(m) for m in messages))
         self.assertTrue(any("1 placeholder" in str(m) for m in messages))
 
     def test_run_with_missing_dir_redirects_with_error(self) -> None:

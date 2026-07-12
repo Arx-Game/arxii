@@ -45,3 +45,30 @@ ACROBATICS_CAPABILITY_NAME: str = "acrobatics"
 # seeded by ``wire_fall_triggers`` and located by ``install_fall_triggers``.
 # Hoisted here so the trigger/flow name has a single source of truth (#1284).
 FALL_TRIGGER_NAME: str = "fall_to_plummet"
+
+
+class RampartSignature(models.TextChoices):
+    """The one authored behavior a RampartElementProfile grants its Ramparts (#2209).
+
+    SEAL_EDGES: raising the rampart also seals every PositionEdge touching its
+        position (Stone — a wall, not just a ward).
+    MISSILE_WARD: signature_value adjusts resist against MISSILE-delivery strikes
+        and area strikes (Wind).
+    MELEE_RETALIATION: a blocked melee strike burns the striker back for
+        signature_value of signature_damage_type (Fire) — NPCs only, ADR-0023.
+    GRASPING: a CombatOpponent forced onto this rampart's position is afflicted
+        with signature_condition (Thorn).
+    """
+
+    SEAL_EDGES = "seal_edges", "Seal Edges"
+    MISSILE_WARD = "missile_ward", "Missile Ward"
+    MELEE_RETALIATION = "melee_retaliation", "Melee Retaliation"
+    GRASPING = "grasping", "Grasping"
+
+
+class RampartCrackState(models.TextChoices):
+    """Coarse integrity band for a Rampart, read off ``Rampart.crack_state``."""
+
+    INTACT = "intact", "Intact"
+    CRACKED = "cracked", "Cracked"
+    CRUMBLING = "crumbling", "Crumbling"

@@ -541,6 +541,49 @@ def create_zone_hazard_on_condition(  # noqa: PLR0913
     )
 
 
+def raise_rampart_on_condition(
+    *,
+    payload: Any,
+    position_id: int,
+    element_profile_id: int,
+    integrity: int,
+    duration_rounds: int | None = None,
+) -> None:
+    """CONDITION_APPLIED adapter: raise a living-barrier Rampart at the cast destination (#2209).
+
+    Reads the destination from payload.instance.cast_destination (set by the
+    cast pipeline via position_params); falls back to the static position_id
+    step param for backward compatibility (placeholder 0 -> no-op), mirroring
+    create_zone_hazard_on_condition. Delegates to raise_rampart, which replaces
+    any existing rampart on the position (re-cast semantics) and — for a
+    SEAL_EDGES profile — also seals every PositionEdge touching the position.
+    """
+    from world.areas.positioning.models import RampartElementProfile  # noqa: PLC0415
+    from world.areas.positioning.services import raise_rampart  # noqa: PLC0415
+
+    try:
+        instance = payload.instance
+    except AttributeError:
+        instance = None
+    if instance is not None and instance.cast_destination_id is not None:
+        position = instance.cast_destination
+    elif position_id > 0:
+        position = Position.objects.get(pk=position_id)
+    else:
+        return  # no position resolved — no-op
+
+    element_profile = RampartElementProfile.objects.get(pk=element_profile_id)
+    caster_sheet = _caster_sheet_from_instance(instance)
+
+    raise_rampart(
+        position,
+        caster_sheet=caster_sheet,
+        element_profile=element_profile,
+        integrity=integrity,
+        duration_rounds=duration_rounds,
+    )
+
+
 def summon_ally_on_condition(
     *, payload: Any, threat_pool_id: int, bond_rounds: int | None = None, max_health: int = 30
 ) -> None:

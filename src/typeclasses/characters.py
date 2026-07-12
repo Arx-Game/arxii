@@ -384,6 +384,9 @@ class Character(ObjectParent, DefaultCharacter):
             from world.missions.services.trigger_dispatch import (
                 maybe_dispatch_on_enter,
             )
+            from world.npc_services.guard_services import (
+                check_guard_detection,
+            )
             from world.player_submissions.services import run_safely
             from world.room_features.trap_services import (
                 check_room_traps_on_entry,
@@ -424,6 +427,13 @@ class Character(ObjectParent, DefaultCharacter):
                         companion.objectdb.move_to(self.location, quiet=True)
 
             run_safely("companion_follow_on_move", _companion_follow_on_move, actor=self)
+
+            # Guard detection (#2178) — post-arrival stealth check.
+            run_safely(
+                "guard_detection_on_enter",
+                lambda: check_guard_detection(self, self.location),
+                actor=self,
+            )
 
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.

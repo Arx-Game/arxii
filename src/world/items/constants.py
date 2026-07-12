@@ -109,13 +109,15 @@ class GearArchetype(models.TextChoices):
     RANGED = "ranged", "Ranged"
     THROWN = "thrown", "Thrown"
     SHIELD = "shield", "Shield"
+    LANCE = "lance", "Lance"
     JEWELRY = "jewelry", "Jewelry"
     CLOTHING = "clothing", "Clothing"
     OTHER = "other", "Other"
 
 
 # Archetype groupings for combat-stat gating (issue #508). SHIELD appears in
-# both: a shield can soak and (rarely) bash.
+# both: a shield can soak and (rarely) bash. LANCE (#1843) is a mounted-combat
+# weapon archetype — off-mount attacks take LANCE_UNMOUNTED_PENALTY.
 WEAPON_ARCHETYPES = frozenset(
     {
         GearArchetype.MELEE_ONE_HAND,
@@ -123,6 +125,7 @@ WEAPON_ARCHETYPES = frozenset(
         GearArchetype.RANGED,
         GearArchetype.THROWN,
         GearArchetype.SHIELD,
+        GearArchetype.LANCE,
     }
 )
 ARMOR_ARCHETYPES = frozenset(

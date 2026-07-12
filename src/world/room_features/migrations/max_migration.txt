@@ -1,1 +1,1 @@
-0011_alter_roomfeaturekind_service_strategy
+0014_alter_roomfeaturekind_service_strategy_vaultdetails_and_more

@@ -117,6 +117,42 @@ vi.mock('@/battles/queries', () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Mock combat queries/CombatRail — the combat-rail fold-in (#2197). Default:
+// no active encounter, so the page stays single-column with no rail.
+// ---------------------------------------------------------------------------
+
+const mockUseEncounterForScene = vi.fn(
+  (): {
+    data: { id: number } | null | undefined;
+    isLoading: boolean;
+    isError: boolean;
+  } => ({
+    data: null,
+    isLoading: false,
+    isError: false,
+  })
+);
+
+vi.mock('@/combat/queries', async (importOriginal) => {
+  // SceneTacticalMap (rendered in the header) also pulls real hooks (e.g.
+  // useDispatchPlayerAction) from this module — preserve everything else and
+  // only override useEncounterForScene.
+  const actual = await importOriginal<typeof import('@/combat/queries')>();
+  return {
+    ...actual,
+    useEncounterForScene: () => mockUseEncounterForScene(),
+  };
+});
+
+vi.mock('@/combat/components/CombatRail', () => ({
+  CombatRail: ({ sceneId, encounterId }: { sceneId: number; encounterId: number }) => (
+    <div data-testid="combat-rail-stub" data-scene-id={sceneId} data-encounter-id={encounterId}>
+      CombatRail [{encounterId}]
+    </div>
+  ),
+}));
+
+// ---------------------------------------------------------------------------
 // Mock pending-unlinked-actions hook — Phase 10's chip strip queries this.
 // ---------------------------------------------------------------------------
 
@@ -260,6 +296,12 @@ describe('SceneDetailPage', () => {
       isLoading: false,
       isError: false,
     });
+    // Reset encounter query to default (no active encounter) by default.
+    mockUseEncounterForScene.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
   });
 
   it('renders without crashing', () => {
@@ -366,5 +408,47 @@ describe('SceneDetailPage', () => {
     expect(link).toHaveAttribute('href', '/scenes/1/battle');
     expect(link).toHaveTextContent('Battle Map');
     expect(queryByTestId('scene-battle-writeup-link')).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Combat rail fold-in (#2197) — CombatRail renders in-scene instead of a
+  // dedicated /scenes/:id/combat route.
+  // -------------------------------------------------------------------------
+
+  it('renders CombatRail when the scene has an active encounter (#2197)', () => {
+    mockUseEncounterForScene.mockReturnValue({
+      data: { id: 7 },
+      isLoading: false,
+      isError: false,
+    });
+
+    const { getByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    const rail = getByTestId('combat-rail-stub');
+    expect(rail).toBeInTheDocument();
+    expect(rail).toHaveAttribute('data-encounter-id', '7');
+    expect(rail).toHaveAttribute('data-scene-id', '1');
+  });
+
+  it('does not render CombatRail when there is no active encounter (#2197)', () => {
+    mockUseEncounterForScene.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
+
+    const { queryByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    expect(queryByTestId('combat-rail-stub')).not.toBeInTheDocument();
   });
 });
