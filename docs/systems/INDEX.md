@@ -2921,6 +2921,12 @@ crafting framework and check-driven facet/style attachment. #2211 added the ITEM
 mint pipeline; #2240 made it playable web-first: `ItemCreateCraftViewSet` serves
 `GET .../crafting/create/recipes/` (browse) + `.../quote/` (cost/quality) alongside the
 `POST` mint, and the React `CreateItemDialog` (Wardrobe "Craft item") drives them.
+#2242 added **recipe knowledge**: `CraftingRecipe.requires_knowledge` gates a pattern
+behind `CharacterRecipeKnowledge` (a character↔recipe join) — open recipes stay open,
+gated ones need a learned row. Both the browse endpoint and `run_crafting_recipe` enforce
+it; `world.items.crafting.knowledge` carries `character_knows_recipe` / `grant_recipe_knowledge`
+/ `teach_recipe` (teacher must know it), raising `RecipeNotKnown`. Discovery via the clue
+loop is a future hook.
 
 - **Models:**
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,

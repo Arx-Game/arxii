@@ -372,6 +372,16 @@ def run_crafting_recipe(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if recipe.check_type is None:
         raise CraftingNotConfigured
 
+    # Recipe-knowledge gate (#2242) — a gated recipe needs a learned pattern.
+    if recipe.requires_knowledge:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.items.crafting.knowledge import character_knows_recipe  # noqa: PLC0415
+        from world.items.exceptions import RecipeNotKnown  # noqa: PLC0415
+
+        crafter_sheet = CharacterSheet.objects.filter(character=crafter_character).first()
+        if crafter_sheet is None or not character_knows_recipe(crafter_sheet, recipe):
+            raise RecipeNotKnown
+
     # --- 2. Pre-validate (never waste a roll) ---
     handler = get_handler(kind)
     handler.pre_validate(

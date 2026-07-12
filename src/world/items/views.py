@@ -1522,21 +1522,26 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
     @extend_schema(responses=CraftableTemplateSerializer(many=True))
     @action(detail=False, methods=[HTTPMethod.GET], url_path="recipes")
     def recipes(self, request: Request) -> Response:
-        """List the item-creation recipes available to craft (#2240).
+        """List the item-creation recipes this character can craft (#2240, #2242).
 
-        Recipe *knowledge* gating is a later slice (#2242); today this returns
-        every active ITEM_CREATE recipe's output template.
+        Open recipes are always listed; a ``requires_knowledge`` recipe appears
+        only when the acting character has learned it (#2242).
         """
+        from django.db.models import Q  # noqa: PLC0415
+
         from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
         from world.items.crafting.models import CraftingRecipe  # noqa: PLC0415
 
+        actor_sheet = _resolve_actor_sheet(request, "crafter_sheet_id", from_query=True)
         recipes = (
             CraftingRecipe.objects.filter(
                 kind=CraftingRecipeKind.ITEM_CREATE,
                 output_item_template__is_active=True,
                 output_item_template__is_craftable=True,
             )
+            .filter(Q(requires_knowledge=False) | Q(known_by__character_sheet=actor_sheet))
             .select_related("output_item_template")
+            .distinct()
             .order_by("output_item_template__name")
         )
         templates = [r.output_item_template for r in recipes]

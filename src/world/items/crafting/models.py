@@ -102,6 +102,14 @@ class CraftingRecipe(SharedMemoryModel):
             "kinds (FACET_ATTACH / STYLE_ATTACH)."
         ),
     )
+    requires_knowledge = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, only a character who holds CharacterRecipeKnowledge for this "
+            "recipe may browse or craft it (#2242) — a taught/discovered pattern. "
+            "Default False: an open recipe anyone with the skill can make."
+        ),
+    )
 
     class Meta:
         app_label = "items"
@@ -368,3 +376,39 @@ class LabStationDetails(SharedMemoryModel):
     @property
     def is_broken(self) -> bool:
         return self.durability <= 0
+
+
+class CharacterRecipeKnowledge(SharedMemoryModel):
+    """A recipe a character has learned — taught, discovered, or granted (#2242).
+
+    Gates the ``requires_knowledge`` recipes: a character may only browse/craft a
+    gated recipe if they hold one of these rows. Open recipes (the default) need
+    no row. The acquisition seams are ``teach_recipe`` (an information economy —
+    who knows the alaricite pattern) and ``grant_recipe_knowledge`` (GM / future
+    discovery via the clue loop).
+    """
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="recipe_knowledge",
+    )
+    recipe = models.ForeignKey(
+        CraftingRecipe,
+        on_delete=models.CASCADE,
+        related_name="known_by",
+    )
+    learned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "items"
+        ordering = ["character_sheet", "recipe"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "recipe"],
+                name="items_characterrecipeknowledge_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"sheet {self.character_sheet_id} knows {self.recipe}"
