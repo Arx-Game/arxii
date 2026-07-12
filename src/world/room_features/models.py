@@ -519,8 +519,10 @@ class RoomAlarmDetails(SharedMemoryModel):
     OneToOne with RoomProfile -- independent of RoomFeatureInstance and of
     RoomWardDetails (a room may hold both simultaneously). On an unauthorized
     entry, echoes to the room (identity-transparent, ADR-0083) and notifies
-    the room's owner persona via send_narrative_message (offline-safe). No
-    resonance upkeep -- only the ward is magical.
+    the room's owner and/or tenant personas via send_narrative_message
+    (offline-safe -- covers tenant-only rooms, e.g. a new character's
+    starting residence, which have no LocationOwnership row). No resonance
+    upkeep -- only the ward is magical.
     """
 
     room_profile = models.OneToOneField(
