@@ -34,11 +34,17 @@ vi.mock('@/components/ui/select', () => ({
   SelectSeparator: () => null,
 }));
 
-vi.mock('../actionQueries', () => ({
-  fetchPendingRequests: vi.fn(),
-  fetchPendingTargets: vi.fn(),
-  respondToRequest: vi.fn(),
-}));
+vi.mock('../actionQueries', async (importOriginal) => {
+  // Keep the real toastDispositionMessage (it only depends on 'sonner', mocked
+  // below) so these tests exercise the shared helper's actual wiring/logic.
+  const actual = await importOriginal<typeof import('../actionQueries')>();
+  return {
+    ...actual,
+    fetchPendingRequests: vi.fn(),
+    fetchPendingTargets: vi.fn(),
+    respondToRequest: vi.fn(),
+  };
+});
 
 vi.mock('sonner', () => ({
   toast: {

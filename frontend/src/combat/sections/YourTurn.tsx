@@ -76,7 +76,7 @@ export interface YourTurnProps {
   encounter?: EncounterDetail | null;
   /**
    * Cast-time position selection, controlled by the caller (#2206). CombatTurnPanel/
-   * CombatScenePage lift this above the rail tabs so the tactical-map tab can share
+   * CombatRail lift this above the rail tabs so the tactical-map tab can share
    * it with this panel. Optional and falls back to local `useState` when the caller
    * doesn't provide it (e.g. tests rendering YourTurn standalone) — unlike
    * ActionDeclarationCard's castPosition prop, which has no such local-state
@@ -129,6 +129,12 @@ const PROTECTIVE_FLAVOR_LABELS: Record<string, string> = {
 /** Sentinel Select values — Radix Select disallows an empty-string item value. */
 const GUARD_ANYONE_VALUE = '__anyone__';
 const GUARD_NO_TECHNIQUE_VALUE = '__none__';
+/** Redirect destination sentinel (#2210) — the universal fallback; also the
+ *  default when the picker's kwargs are omitted entirely. */
+const GUARD_DESTINATION_AWAY = '__away__';
+/** Redirect destination Select value prefixes (#2210) — parsed in handleGuard. */
+const GUARD_DESTINATION_OPPONENT_PREFIX = 'opponent:';
+const GUARD_DESTINATION_OBJECT_PREFIX = 'object:';
 
 /**
  * Derive the focused slot's category from the selected technique's
@@ -505,10 +511,15 @@ export function YourTurn({
   // round"; protective technique defaults to "none" (mundane interpose).
   const [guardAllyId, setGuardAllyId] = useState<string>(GUARD_ANYONE_VALUE);
   const [guardTechniqueId, setGuardTechniqueId] = useState<string>(GUARD_NO_TECHNIQUE_VALUE);
+  // Redirect destination picker state (#2210) — only shown/consulted when the
+  // selected guard technique is REDIRECT-flavored; "away" is the default and
+  // universal fallback (same default the backend applies when the kwargs are
+  // omitted entirely).
+  const [guardDestination, setGuardDestination] = useState<string>(GUARD_DESTINATION_AWAY);
 
   // Cast-time position selection for the focused technique (#2206). Controlled
   // by the caller when castPositionProp/onCastPositionChangeProp are supplied
-  // (CombatScenePage lifts this above the rail tabs so the tactical-map tab
+  // (CombatRail lifts this above the rail tabs so the tactical-map tab
   // shares it); falls back to local state otherwise (e.g. standalone tests).
   const [localCastPosition, setLocalCastPosition] = useState<CastPosition>({});
   const castPosition = castPositionProp ?? localCastPosition;
@@ -540,6 +551,7 @@ export function YourTurn({
     setCoverAllyId('');
     setGuardAllyId(GUARD_ANYONE_VALUE);
     setGuardTechniqueId(GUARD_NO_TECHNIQUE_VALUE);
+    setGuardDestination(GUARD_DESTINATION_AWAY);
     setManeuverError(null);
     setCastPosition({});
   }, [roundNumber, setCastPosition]);
@@ -684,7 +696,7 @@ export function YourTurn({
 
   // Report the current shape to the caller (#2206) — lets the tactical-map tab
   // know whether map-click position-picking should be active, and keeps
-  // knowing even after this panel unmounts on tab switch (CombatScenePage's
+  // knowing even after this panel unmounts on tab switch (CombatRail's
   // state persists across its children's mount/unmount).
   useEffect(() => {
     onPositionShapeChange?.(focusedTechniquePositionShape);
@@ -735,15 +747,18 @@ export function YourTurn({
 
   // Techniques offered as a Guard's optional protective technique (#2207): any
   // available combat-cast technique whose protective_flavor classifier resolved.
-  // 'redirect' is excluded until #2210 builds its resolution — the server
-  // rejects it at declaration today, so offering it would only surface errors.
+  // 'redirect' techniques resolve since #2210 — the destination picker below
+  // surfaces when one is selected.
   const protectiveTechniques = availableActions.filter(
-    (a) =>
-      a.ref.backend === 'combat' &&
-      a.protective_flavor != null &&
-      a.protective_flavor !== 'redirect' &&
-      a.ref.technique_id != null
+    (a) => a.ref.backend === 'combat' && a.protective_flavor != null && a.ref.technique_id != null
   );
+
+  // The currently-selected guard technique's protective flavor (#2210) — gates
+  // the redirect destination picker.
+  const selectedGuardTechnique = protectiveTechniques.find(
+    (a) => String(a.ref.technique_id) === guardTechniqueId
+  );
+  const isRedirectGuardTechnique = selectedGuardTechnique?.protective_flavor === 'redirect';
 
   // ---------------------------------------------------------------------------
   // Dispatch
@@ -859,8 +874,19 @@ export function YourTurn({
       guardAllyId === GUARD_ANYONE_VALUE ? null : parseInt(guardAllyId, 10) || null;
     const techniqueId =
       guardTechniqueId === GUARD_NO_TECHNIQUE_VALUE ? null : parseInt(guardTechniqueId, 10) || null;
+    // Redirect destination (#2210) — "away" (the sentinel default) sends
+    // neither kwarg, matching the backend's own null-means-away default.
+    let redirectOpponentTargetId: number | null = null;
+    let redirectObjectTargetId: number | null = null;
+    if (guardDestination.startsWith(GUARD_DESTINATION_OPPONENT_PREFIX)) {
+      redirectOpponentTargetId =
+        parseInt(guardDestination.slice(GUARD_DESTINATION_OPPONENT_PREFIX.length), 10) || null;
+    } else if (guardDestination.startsWith(GUARD_DESTINATION_OBJECT_PREFIX)) {
+      redirectObjectTargetId =
+        parseInt(guardDestination.slice(GUARD_DESTINATION_OBJECT_PREFIX.length), 10) || null;
+    }
     declareGuard(
-      { allyParticipantId, techniqueId },
+      { allyParticipantId, techniqueId, redirectOpponentTargetId, redirectObjectTargetId },
       {
         onSuccess: (result) => {
           // The generic dispatch endpoint always resolves 200 — a business-rule
@@ -1222,6 +1248,43 @@ export function YourTurn({
                         {action.display_name}
                         {action.protective_flavor != null
                           ? ` (${PROTECTIVE_FLAVOR_LABELS[action.protective_flavor] ?? action.protective_flavor})`
+                          : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {isRedirectGuardTechnique && (
+                <Select
+                  value={guardDestination}
+                  onValueChange={setGuardDestination}
+                  disabled={isLocked || !isDeclaringPhase || guardPending}
+                >
+                  <SelectTrigger
+                    data-testid="guard-redirect-destination-select"
+                    className="h-8 text-xs"
+                  >
+                    <SelectValue placeholder="Redirect destination" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={GUARD_DESTINATION_AWAY}>Away (default)</SelectItem>
+                    {(encounter?.opponents ?? []).map((opponent) => (
+                      <SelectItem
+                        key={`opp-${opponent.id}`}
+                        value={`${GUARD_DESTINATION_OPPONENT_PREFIX}${opponent.id}`}
+                      >
+                        {opponent.name}
+                      </SelectItem>
+                    ))}
+                    {(encounter?.volatile_objects ?? []).map((volatileObject) => (
+                      <SelectItem
+                        key={`obj-${volatileObject.id}`}
+                        value={`${GUARD_DESTINATION_OBJECT_PREFIX}${volatileObject.id}`}
+                      >
+                        {volatileObject.name}
+                        {volatileObject.position_name != null
+                          ? ` (${volatileObject.position_name})`
                           : ''}
                       </SelectItem>
                     ))}

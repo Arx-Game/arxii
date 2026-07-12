@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("areas", "0018_rampartelementprofile_rampart_and_more"),
-        ("combat", "0045_combatroundaction_from_entrance"),
+        ("combat", "0047_combatroundaction_redirect_object_target_and_more"),
     ]
 
     operations = [

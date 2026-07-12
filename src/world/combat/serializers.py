@@ -744,6 +744,15 @@ class EncounterListSerializer(serializers.ModelSerializer):
             return obj.opponents.count()
 
 
+class VolatileObjectSerializer(serializers.Serializer):
+    """A detonatable object in the encounter room, for the redirect destination picker (#2210)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    position_id = serializers.IntegerField(read_only=True, allow_null=True)
+    position_name = serializers.CharField(read_only=True, allow_null=True)
+
+
 class EncounterDetailSerializer(serializers.ModelSerializer):
     """Full encounter state with covenant-filtered action visibility."""
 
@@ -767,6 +776,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     position_adjacency = serializers.SerializerMethodField()
     position_nodes = serializers.SerializerMethodField()
     position_edges = serializers.SerializerMethodField()
+    volatile_objects = serializers.SerializerMethodField()
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -827,6 +837,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "position_adjacency",
             "position_nodes",
             "position_edges",
+            "volatile_objects",
             "is_lethal",
             "duel_winner",
         ]
@@ -1099,6 +1110,39 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         graph = position_graph(obj.room)
         return PositionEdgeSerializer(graph.edges, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(VolatileObjectSerializer(many=True))
+    def get_volatile_objects(self, obj: CombatEncounter) -> list[dict[str, object]]:
+        """Return every volatile (detonatable) object in the encounter room (#2210).
+
+        Objects carrying an ``ObjectProperty`` whose ``Property`` has a
+        ``PropertyDetonation`` row — the redirect destination picker's data
+        source. One query with ``select_related`` across the OneToOne position
+        link; empty list when the encounter has no room.
+        """
+        if obj.room_id is None:
+            return []
+        from world.mechanics.models import ObjectProperty  # noqa: PLC0415
+
+        rows = ObjectProperty.objects.filter(
+            object__db_location_id=obj.room_id,
+            property__detonation__isnull=False,
+        ).select_related("object", "object__object_position__position")
+        entries = []
+        for row in rows:
+            try:
+                position = row.object.object_position.position
+            except ObjectDoesNotExist:
+                position = None
+            entries.append(
+                {
+                    "id": row.object_id,
+                    "name": row.object.db_key,
+                    "position_id": position.pk if position is not None else None,
+                    "position_name": position.name if position is not None else None,
+                }
+            )
+        return VolatileObjectSerializer(entries, many=True).data  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------

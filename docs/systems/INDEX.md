@@ -842,7 +842,8 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   `frontend/src/areas/components/`) + `SceneTacticalMap` (scene wrapper, replaces the old
   `RoomPositionsPanel`, `frontend/src/scenes/components/`) + `CombatTacticalMap` (combat
   wrapper — occupants from `current_position` not `persona_positions` — mounted as a "Map"
-  tab in `CombatScenePage`'s right rail alongside "Your Turn"/`CombatTurnPanel`,
+  tab in `CombatRail`'s right rail alongside "Your Turn"/`CombatTurnPanel` (#2197: `CombatRail`
+  renders in-scene on `SceneDetailPage`'s `/scenes/:id`, not a dedicated route,
   `frontend/src/combat/components/`) + `MovementActions` (shared adjacent-position button
   list, `frontend/src/combat/components/`). `PositionMapNode` renders a covering Rampart as
   a colored ring (solid/dashed/pulsing-dashed by `crack_state`, #2209).
@@ -1546,7 +1547,7 @@ action consent flow, and a three-mode non-combat round framework.
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
 - **Key Functions:**
-  - `create_action_request(scene, initiator_persona, target_persona, action_key, ..., effort_level)` — dispatches a request; NPC additional targets auto-accept immediately.
+  - `create_action_request(scene, initiator_persona, target_persona, action_key, ..., effort_level)` — dispatches a request; NPC targets (primary or additional) auto-accept immediately (#2214), guarded so an unresolvable request stays PENDING instead of raising.
   - `respond_to_action_request(action_request, decision, difficulty=None, resist_effort="")` — primary-target consent + resolution; defender supplies plausibility band + optional active resistance.
   - `respond_to_action_target(action_target, decision, difficulty=None, resist_effort="")` — per-additional-target consent + resolution (never touches siblings).
   - `broadcast_scene_message(scene, action)` — pushes scene state to participants via WebSocket.
@@ -2868,7 +2869,7 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793), `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink` (#1625), `SituationInstance`
+- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793), `PropertyDetonation` (#2210), `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink` (#1625), `SituationInstance`
 - **Key Functions:**
   - `instantiate_situation(template, location) -> SituationInstance` (#1625) — mints
     a SituationInstance + materializes its SituationTrapLink rows into Trap rows.
@@ -2876,6 +2877,11 @@ Unified modifier system — categories, types, sources, and per-character modifi
   - `property_damage_bonus(target, damage_type) -> int` (#1793) — sums `PropertyDamageModifier`
     rows for a target's active `Property` set; folded into combat technique damage in
     `CombatTechniqueResolver._profile_damage` (`world/combat/services.py`)
+  - `volatile_object_property(target) -> ObjectProperty | None` (#2210) — the
+    `ObjectProperty` row making `target` "volatile" (its `Property` carries a
+    `PropertyDetonation`), or `None`. Consumed by combat redirect resolution
+    (`world/combat/services.py`'s `_try_technique_interpose` REDIRECT branch) — see
+    combat.md's Redirect section.
   - `get_modifier_total(sheet, modifier_target) -> int` — Spec D PR1: invokes equipment
     walk (`passive_facet_bonuses` + `covenant_role_bonus`) when category is in
     `EQUIPMENT_RELEVANT_CATEGORIES`
@@ -2926,7 +2932,10 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 services, and equipment-modifier integration. Spec D PR2 (#1031) added the generic
-crafting framework and check-driven facet/style attachment.
+crafting framework and check-driven facet/style attachment. #2211 added the ITEM_CREATE
+mint pipeline; #2240 made it playable web-first: `ItemCreateCraftViewSet` serves
+`GET .../crafting/create/recipes/` (browse) + `.../quote/` (cost/quality) alongside the
+`POST` mint, and the React `CreateItemDialog` (Wardrobe "Craft item") drives them.
 
 - **Models:**
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,
@@ -2971,7 +2980,8 @@ crafting framework and check-driven facet/style attachment.
   accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
   `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
   provenance used by the lore-critical predicate); `CraftingRecipeKind` (FACET_ATTACH,
-  STYLE_ATTACH); `CostConsumption` (NONE, PARTIAL, FULL); `ContainerAccessPolicy` (#1909 —
+  STYLE_ATTACH, ITEM_CREATE — the mint pipeline, #2211); `CostConsumption` (NONE, PARTIAL,
+  FULL); `ContainerAccessPolicy` (#1909 —
   `OPEN` / `FRIENDS` / `OWNER_ONLY`, who may take contents out of a container; steal
   bypasses it with consequences); `StyleAudacity` (#2029 — UNDERSTATED/EXPRESSIVE/BOLD/
   OUTRAGEOUS ordinal tier on `Style`)
@@ -3382,11 +3392,15 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   UNSATISFIED `OUTCOME_TIER` beat linked to the scene; fixes multiple beats
   sharing a scene all getting stamped with the same encounter's outcome;
   unset = legacy find-all-on-scene behavior, unchanged), `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR; plus the
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
+  JOUST (#1843, see "Mounted combat" below); plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
   `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
-  target/pair for position-consuming techniques, #2206, see "Cast-position targeting" below),
+  target/pair for position-consuming techniques, #2206, see "Cast-position targeting" below;
+  `redirect_opponent_target` (FK `CombatOpponent`, SET_NULL) / `redirect_object_target`
+  (FK `objects.ObjectDB`, SET_NULL) — mutually exclusive declared REDIRECT-flavor
+  destinations, #2210, see the Redirect section above),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `ComboSlot`, `ComboLearning` (use_count tracks repeat
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
@@ -3401,10 +3415,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (the entrance's own recognition hooks fired flourish-only at declaration time — the
   suggestion was deferred). `world.combat.cast_seed
   .seed_or_feed_encounter_from_benign_intervention(*, caster_sheet, target_sheet, scene)`
-  is the benign sibling: seats a non-combatant whose protective (non-hostile) entrance
-  cast landed on an already-embattled ally into the fight — no opponent row, no stakes
+  is the benign sibling: seats a non-combatant whose protective (non-hostile) cast
+  landed on an already-embattled ally into the fight — no opponent row, no stakes
   lock, no FOCUSED declaration (the cast already resolved standalone); no-ops when there
-  is no feedable encounter or the target isn't embattled in it.
+  is no feedable encounter or the target isn't embattled in it. #2226 (ADR-0119)
+  generalized this to **all** benign casts via the `seat_caster_for_benign_intervention`
+  wrapper (`cast_seed.py`), called post-resolution from `_route_immediate_cast` and
+  `resolve_accepted_cast`; the entrance path's own seating calls were removed (the
+  generalized calls supersede them).
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
     side-field; ALLY opponents fight *for* the party (summons, and future charm/
@@ -3434,6 +3452,39 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (`world/combat/clash.py`) mirrors each round's progress delta onto `rampart.integrity`
   through the same `damage_rampart` seam, so interception (paused while that clash is
   ACTIVE) and clash-progress never drift apart.
+- **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
+  typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
+  `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →
+  `CharacterSheet`) and apply/remove the seeded "Mounted" `ConditionTemplate`
+  (`world.companions.mount_content`, no `ConditionCheckModifier` rows — mounting alone
+  grants no passive bonus). Dismount fires on three triggers: voluntary (`dismount
+  companion`), encounter exit (`LeaveEncounterAction`), and companion defeat
+  (`resolve_companion_defeat`'s die outcome, via `release_companion`).
+  `CombatManeuver.CHARGE`: `declare_charge(participant, technique, opponent)` requires the
+  Mounted condition and a target >= 1 hop away and reachable within `CHARGE_MAX_HOPS`;
+  resolution (`_resolve_charge_movement`, dispatched from `_resolve_pc_action`) force-moves
+  the rider onto the opponent's position then falls through to the normal weapon-attack
+  pipeline — `CombatTechniqueResolver` folds `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS`
+  (doubled for an equipped `GearArchetype.LANCE`) into the same
+  `collect_check_modifiers`/damage-budget seams every other check contribution uses; never
+  `bypass_pre_apply` — defenses/guardians/ramparts fire unchanged.
+  `CombatManeuver.JOUST`: `declare_joust(participant, technique)` only in a 2-participant
+  DUEL where both duelists hold Mounted and have a LANCE equipped; resolution
+  (`_resolve_joust_pass`) rolls one opposed weapon-attack check per side via the same
+  resolver seam and grades the `success_level` gap into `JOUST_DECISIVE_MARGIN`/
+  `JOUST_NARROW_MARGIN` bands — decisive unhorses the loser (2x lance damage + the seeded
+  "Unhorsed" condition + a force-dismount), narrow deals 1x lance damage, a tie jars both
+  with no damage; damage applies to the loser's mirror `CombatOpponent` via the existing
+  non-bypassing `apply_damage_to_opponent` path (ADR-0023 non-lethal PvP capping
+  unchanged). `LANCE_UNMOUNTED_PENALTY` applies at the same check-modifier seam to any
+  attack made with an equipped LANCE while not Mounted, regardless of maneuver.
+  `GearArchetype.LANCE` (`world.items.constants`) joins `WEAPON_ARCHETYPES`; a starter
+  "Lance" `ItemTemplate` seeds via `world.seeds.game_content.items.seed_lance_item`. Telnet:
+  `companion mount <name|id>` / `companion dismount` (`CmdCompanion`), `combat charge <opp>
+  with <technique>` / `combat joust [with] <technique>` (`CmdCombat`) — no web/frontend
+  surface (matches the several existing maneuvers that ship telnet-only since the web
+  "available actions" endpoint excludes REGISTRY maneuvers without `ActionTemplate`
+  backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
   trigger_kind, subject_sheet=None)` (`world/combat/escalation.py`) — the one write path for
   every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row; `SurgeTriggerKind`:
@@ -3512,7 +3563,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     drf-spectacular does not introspect them (pre-existing generator gap) — generated
     frontend types were not regenerated for this field, a known/documented degradation.
   - **Frontend:** a Positions picker in `ActionDeclarationCard` (single/pair, reach-greyed),
-    shape-aware `position_params` dispatch kwargs, state lifted to `CombatScenePage`, and
+    shape-aware `position_params` dispatch kwargs, state lifted to `CombatRail` (#2197: renders
+    in-scene on `/scenes/:id`, formerly the now-deleted `CombatScenePage`'s own route), and
     map-click picking via `TacticalMap.onPickPosition` (`frontend/src/areas/components/`).
   - **Telnet needed zero changes** — #2019's `position=`/`position_a=,position_b=` command
     grammar (`commands/combat.py`) already produced a `position_params` kwarg; #2206 is what
@@ -3535,16 +3587,20 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Key Services (`world/combat/services.py`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
-  - `declare_interpose(participant, ally=None, technique=None)` — arm an INTERPOSE
-    `CombatRoundAction` for the round. **Guardian reaction declaration (#2207):** an
-    optional *technique* reuses `CombatRoundAction.focused_action` (no new column) to
-    carry a declared protective technique into the round; gated on the participant
-    knowing it (`CharacterTechnique`), it classifying to a non-`redirect` protective
-    flavor via `world.magic.services.targeting.protective_flavor` (`redirect` deferred
-    to #2210), and `ally` still resolving to an active co-encounter participant when
-    given. `technique=None` keeps the pre-#2207 mundane shape (passives only,
-    `focused_action` zeroed). See the combat `AGENT_GLOSSARY.md`'s Guardian reaction
-    entry and ADR-0118.
+  - `declare_interpose(participant, ally=None, technique=None, redirect_opponent_target=None, redirect_object_target=None)`
+    — arm an INTERPOSE `CombatRoundAction` for the round. **Guardian reaction
+    declaration (#2207):** an optional *technique* reuses `CombatRoundAction.
+    focused_action` (no new column) to carry a declared protective technique into the
+    round; gated on the participant knowing it (`CharacterTechnique`) and it
+    classifying to a protective flavor via `world.magic.services.targeting.
+    protective_flavor`, and `ally` still resolving to an active co-encounter
+    participant when given. `technique=None` keeps the pre-#2207 mundane shape
+    (passives only, `focused_action` zeroed). See the combat `AGENT_GLOSSARY.md`'s
+    Guardian reaction entry and ADR-0118. **Redirect declaration (#2210):**
+    `redirect_opponent_target`/`redirect_object_target` (mutually exclusive, both
+    `None` = "away") declare a REDIRECT-flavor technique's saved-damage destination
+    at declaration time (ADR-0032/0122), validated by `_validate_redirect_declaration`
+    — see combat `AGENT_GLOSSARY.md`'s Redirect entry.
   - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
     an armed interpose challenge naming *participant* (or "any ally") and dispatches it
     via `_dispatch_interpose_action`
@@ -3576,9 +3632,20 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     non-fizzle fire; grades via the SAME `_grade_interpose_damage` the mundane path uses
     (SHIELD divisor included). A clean `blink`-flavored block relocates the ward to the
     guardian's own current position (`force_move_to_position`) — a stand-in for #2206's
-    `CombatRoundAction.cast_destination`, preferred once that field lands. `redirect` is
-    rejected at declaration time, not here. See ADR-0118 for why this rolls outside
-    `use_technique`.
+    `CombatRoundAction.cast_destination`, preferred once that field lands. See ADR-0118
+    for why this rolls outside `use_technique`. **`redirect`-flavored resolution
+    (#2210):** `saved = amount_before - pre_payload.amount` after grading (zero
+    redirects nothing); `_resolve_technique_redirect` dispatches the saved amount to
+    the declared destination (`_redirect_away` / `_redirect_to_opponent` /
+    `_redirect_to_object`, each broadcasting via `broadcast_action_outcome`) —
+    `_redirect_to_opponent` calls `apply_damage_to_opponent(..., bypass_pre_apply=True)`
+    (ADR-0060's loop guard); `_redirect_to_object` fires the volatile object's
+    `PropertyDetonation.consequence_pool` at every combatant positioned there via the
+    new `world.room_features.trap_services.fire_pool_at_characters` (reuses
+    `apply_pool_deterministically`, no roll), then deletes the triggering
+    `ObjectProperty` (one-shot). Any destination no longer valid at resolution time
+    (opponent defeated, object moved/consumed/no Position) degrades to
+    `_redirect_away`.
   - `apply_interpose_outcome(pre_payload, result)` — SUCCESS zeroes payload, PARTIAL halves,
     FAILURE is a no-op
   - `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints
@@ -3653,6 +3720,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
     filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
     with `TechniqueAppliedCondition(target_kind=ALLY)`
+  - `ensure_redirect_content()` (`src/world/combat/redirect_content.py`, #2210) —
+    idempotent seed for one example volatile `Property` ("Volatile (Powder)") + its
+    `PropertyDetonation` sidecar + a small detonation `ConsequencePool` (one
+    DEAL_DAMAGE `Consequence`). Mirrors `ensure_interpose_content`'s self-contained
+    `get_or_create` idiom.
 - **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR / ENGAGE / DISENGAGE / RALLY / DEMORALIZE / TAUNT / PARLEY / USE_ITEM), `OpponentMoraleState` (STEADY / FALTER / BREAK — derived, `world.combat.morale`), `RoundStatus` (shared with
   `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
   COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
@@ -3661,24 +3733,33 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   yield, flee, use_item, my_action, available_combos, rally, demoralize, taunt, parley),
   duel challenge endpoints. **Guard declaration (#2207):** `InterposeSerializer`
   (`world/combat/serializers.py`) only carries `ally_participant_id` — the optional
-  `technique_id` (protective technique) has no bespoke REST verb yet, so the web Guard
-  panel dispatches through the generic REGISTRY path instead
+  `technique_id` (protective technique) and, since #2210, `redirect_opponent_target_id`/
+  `redirect_object_target_id` have no bespoke REST verb, so the web Guard panel
+  dispatches through the generic REGISTRY path instead
   (`POST /api/actions/characters/{characterId}/dispatch/` with
   `registry_key: "combat_interpose"`, `actions/definitions/combat_maneuvers.py`), the
-  same seam bespoke-verb-less maneuvers already use.
-- **Web (#2207):** a "Guard" panel in `YourTurn` (`frontend/src/combat/sections/
+  same seam bespoke-verb-less maneuvers already use. **Redirect picker data (#2210):**
+  `EncounterDetailSerializer.volatile_objects` — objects in the encounter room carrying
+  a detonatable `ObjectProperty` (`{id, name, position_id, position_name}`), single
+  query with `select_related` across the Position OneToOne link.
+- **Web (#2207/#2210):** a "Guard" panel in `YourTurn` (`frontend/src/combat/sections/
   YourTurn.tsx`) — a ward select (any-ally default or a named participant) plus an
   optional protective-technique select sourced from `PlayerAction.protective_flavor`
-  (new field, `barrier`/`blink`/`redirect`/`null` — `redirect` excluded from the picker
-  until #2210 lifts the declaration-time gate) — dispatches via `useGuardMutation`
-  (`frontend/src/combat/queries.ts`) and shows a "Guarding" badge once armed.
-- **Telnet parity (#2207):** `combat interpose [ally] [with <technique>]`
-  (`CmdCombat._resolve_interpose_args`, `src/commands/combat_maneuvers.py`) — both
-  clauses optional; `with <technique>` splits on `" with "` (mirrors
-  `CmdClashCommit`'s split) and resolves the technique name via `_find_technique_id`,
-  which already gates on the caller knowing it (defense-in-depth alongside the
-  service-layer gate in `declare_interpose`). Works ally-less: `combat interpose with
-  <technique>`.
+  (`barrier`/`blink`/`redirect`/`null`). Since #2210, picking a `redirect`-flavored
+  technique reveals a destination select (Away / `encounter.opponents` / `encounter.
+  volatile_objects`) — dispatches via `useGuardMutation`'s `redirectOpponentTargetId`/
+  `redirectObjectTargetId` args (`frontend/src/combat/queries.ts`) and shows a
+  "Guarding" badge once armed.
+- **Telnet parity (#2207/#2210):** `combat interpose [ally] [with <technique>] [into
+  <destination>]` (`CmdCombat._resolve_interpose_args`, `src/commands/
+  combat_maneuvers.py`) — all three clauses optional; `with <technique>` splits on
+  `" with "` (mirrors `CmdClashCommit`'s split) and resolves the technique name via
+  `_find_technique_id`, which already gates on the caller knowing it (defense-in-depth
+  alongside the service-layer gate in `declare_interpose`). `into <destination>`
+  (#2210) further splits the technique clause on `" into "`; `_resolve_redirect_
+  destination` resolves the name against an active opponent first, then a room
+  object; `into away` (or omitting the clause) is the default. Works ally-less:
+  `combat interpose with <technique> into <destination>`.
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
   conditions (`bulk_apply_conditions` — now installs reactive side-effects;
@@ -3688,6 +3769,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   action for DEFEND; reactive-defense handlers in `world/magic/services/effect_handlers.py`),
   covenants (speed_rank resolution order, `apply_equipped_armor_soak`),
   magic (technique use pipeline, `CombatPull`, effect palette — summon/reactive handlers)
+- **Test composition helper:** `BossFightScenarioFactory` (`world/combat/factories.py`,
+  #2095) composes a full 3-PC-vs-boss encounter (distinct-EffectType techniques, a
+  learned PC1/PC2 combo, a BOSS opponent with 3 authored `BossPhase` rows — break bar +
+  phase-2 reinforcement + phase-3 enrage — and a threat pool carrying both a flat-damage
+  entry and a `conditions_applied` entry) in one call, mirroring
+  `PlayableCombatScenarioFactory`'s style; use it instead of hand-rolling boss-fight
+  fixtures. Driven end-to-end by `src/integration_tests/test_boss_fight_journey.py`.
 - **Source:** `src/world/combat/`
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,
@@ -3715,8 +3803,9 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   #1711; `properties` (M2M → `mechanics.Property`, presence-only tags) and `capabilities`
   (M2M → `conditions.CapabilityType` through `BattleUnitCapability`, authored per-unit
   magnitude) replace #1711's single-select `composition`/`UnitComposition`, #1794;
-  `individual_count` (nullable, data-only, mirrors `CombatOpponent.swarm_count`'s naming,
-  #1794); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
+  `individual_count` (nullable, mirrors `CombatOpponent.swarm_count`'s naming, #1794;
+  drives a banded STRIKE bonus + proportional STRIKE/ROUT body loss via
+  `swarm_strike_modifier`/`_apply_swarm_losses`, #1841); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
   → `character_sheets.CharacterSheet`, #1711; `strength` attrited by STRIKE; `morale` — a
   second resource, starts well below its ceiling, damaged by ROUT / restored by RALLY,
   #1712; `status` always DERIVED jointly from `strength` + `morale` via
@@ -3801,14 +3890,18 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
   `BattleRoundResult` — casts each declaration's `technique` via `resolve_battle_technique`
   (routes through the real `use_technique` magic envelope, not a generic shared check),
-  folding in the five-source modifier stack (Property affinity, terrain, unit quality,
-  commander bonus, posture — #1711/#1794); REPEL resolves before every other kind so its defense
+  folding in the full modifier stack (Property affinity, terrain, weather property/
+  capability, unit quality, swarm-count band bonus, commander bonus, posture, move cost —
+  #1711/#1794/#1715/#2007/#1841); REPEL resolves before every other kind so its defense
   bonus is live for STRIKE in the same round (#1712). STRIKE/ROUT attrite
   strength/morale + award VP; SUPPORT/REPEL/HOLD award flat VP; RALLY restores morale;
   RESCUE clears Surrounded; BREACH attrites a `Fortification`'s `integrity` (setting
   `breached=True` at 0) + awards VP; FORTIFY restores it (capped at `max_integrity`) +
-  awards flat VP (#1713); failure debits PC health + `process_damage_consequences`.
-  Returns `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties)`.
+  awards flat VP (#1713); failure debits PC health + `process_damage_consequences`. A
+  swarm-style target (`individual_count` not None) also loses bodies proportional to
+  STRIKE's net attrition / ROUT's actual morale loss via `_apply_swarm_losses` (#1841).
+  Returns `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties,
+  unit_losses)`.
   `BattleTechniqueResolver` is the `resolve_fn` passed to `use_technique`.
 - **Round context (`world.battles.round_context`):** `BattleRoundContext(RoundContext)` —
   wired into `get_active_round_context` (after combat branch); `resolve_battle_round_context`

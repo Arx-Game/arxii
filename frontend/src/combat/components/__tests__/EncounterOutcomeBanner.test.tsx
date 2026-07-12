@@ -1,27 +1,20 @@
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { EncounterOutcomeBanner } from '../EncounterOutcomeBanner';
 
 describe('EncounterOutcomeBanner', () => {
   it('renders the outcome label', () => {
-    render(
-      <MemoryRouter>
-        <EncounterOutcomeBanner outcome="victory" sceneId={12} />
-      </MemoryRouter>
-    );
+    render(<EncounterOutcomeBanner outcome="victory" />);
 
     expect(screen.getByRole('status')).toHaveTextContent('Victory');
   });
 
-  it('renders a Return to Scene link to the given sceneId', () => {
-    render(
-      <MemoryRouter>
-        <EncounterOutcomeBanner outcome="defeat" sceneId={12} />
-      </MemoryRouter>
-    );
+  // #2197: the "Return to Scene" link was removed — the banner now renders
+  // inline on the scene page itself (CombatRail), so it would have been
+  // self-referential.
+  it('does not render a Return to Scene link', () => {
+    render(<EncounterOutcomeBanner outcome="defeat" />);
 
-    const link = screen.getByRole('link', { name: /return to scene/i });
-    expect(link).toHaveAttribute('href', '/scenes/12');
+    expect(screen.queryByRole('link', { name: /return to scene/i })).not.toBeInTheDocument();
   });
 });

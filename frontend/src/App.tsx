@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { GuestOnlyRoute } from './components/GuestOnlyRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -27,7 +27,6 @@ import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { TidingsPage } from './tidings/pages/TidingsPage';
 import { JournalPage } from './missions/pages/JournalPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
-import { CombatScenePage } from './combat/pages/CombatScenePage';
 import { BattleMapPage } from './battles/pages/BattleMapPage';
 import { BattleWriteupPage } from './battles/pages/BattleWriteupPage';
 import MailPage from './mail/pages/MailPage';
@@ -282,6 +281,17 @@ function PageLoadingFallback() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// /scenes/:id/combat redirect (#2197) — combat now renders in-scene via
+// CombatRail on SceneDetailPage, so the old dedicated combat route just
+// bounces back to the scene, preserving the :id param.
+// ---------------------------------------------------------------------------
+
+export function CombatRouteRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/scenes/${id}`} replace />;
+}
+
 function App() {
   return (
     <Layout>
@@ -349,7 +359,7 @@ function App() {
         <Route path="/tidings" element={<TidingsPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
-        <Route path="/scenes/:id/combat" element={<CombatScenePage />} />
+        <Route path="/scenes/:id/combat" element={<CombatRouteRedirect />} />
         <Route path="/scenes/:id/battle" element={<BattleMapPage />} />
         <Route path="/battles/:id" element={<BattleWriteupPage />} />
         <Route path="/events" element={<EventsListPage />} />

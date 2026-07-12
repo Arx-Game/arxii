@@ -7251,6 +7251,7 @@ paths:
           - clothing
           - heavy_armor
           - jewelry
+          - lance
           - light_armor
           - medium_armor
           - melee_one_hand
@@ -7270,6 +7271,7 @@ paths:
           * `ranged` - Ranged
           * `thrown` - Thrown
           * `shield` - Shield
+          * `lance` - Lance
           * `jewelry` - Jewelry
           * `clothing` - Clothing
           * `other` - Other
@@ -12313,6 +12315,43 @@ paths:
       responses:
         '201':
           description: No response body
+  /api/items/crafting/create/quote/:
+    get:
+      operationId: items_crafting_create_quote_retrieve
+      description: Return a read-only cost+quality quote for minting a template (no
+        mutation).
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CraftingQuote'
+          description: ''
+  /api/items/crafting/create/recipes/:
+    get:
+      operationId: items_crafting_create_recipes_list
+      description: |-
+        List the item-creation recipes available to craft (#2240).
+
+        Recipe *knowledge* gating is a later slice (#2242); today this returns
+        every active ITEM_CREATE recipe's output template.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CraftableTemplate'
+          description: ''
   /api/items/equipped-items/:
     get:
       operationId: items_equipped_items_list
@@ -30748,9 +30787,12 @@ components:
           minimum: 0
           nullable: true
           description: 'Population data point mirroring CombatOpponent.swarm_count''s
-            naming/shape (#1794) — null means ''not a swarm-style unit''. No swarm-math
-            resolution is wired against this field yet; that is left to #1714 (naval/aerial
-            units) or a future issue that needs it.'
+            naming/shape (#1794) — null means ''not a swarm-style unit''. Swarm math
+            (#1841): a banded check penalty for acting against the swarm folds into
+            the battle modifier stack, and STRIKE/ROUT attrition costs bodies off
+            it proportionally (see world.battles.constants.swarm_strike_modifier and
+            world.battles.resolution._apply_swarm_losses). Capital vessels stay on
+            the separate per-hull Fortification integrity track (#1713) — see docs/adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md.'
         side_id:
           type: integer
           readOnly: true
@@ -35097,6 +35139,22 @@ components:
         * `durance` - Covenant of the Durance
         * `battle` - Covenant of Battle
         * `court` - Covenant of the Court
+    CraftableTemplate:
+      type: object
+      description: A template a character can mint via item-creation crafting (#2240).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          description: Default full description when examined. Instances can override.
+      required:
+      - id
+      - name
     CraftingQuote:
       type: object
       description: 'Read-only quote: costs, affordability, max quality tier, failure
@@ -37063,6 +37121,11 @@ components:
           items:
             $ref: '#/components/schemas/PositionEdge'
           readOnly: true
+        volatile_objects:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolatileObject'
+          readOnly: true
         is_lethal:
           type: boolean
           readOnly: true
@@ -37095,6 +37158,7 @@ components:
       - resolution_order
       - scene
       - surge_beats
+      - volatile_objects
     EncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.
@@ -39215,6 +39279,7 @@ components:
       - ranged
       - thrown
       - shield
+      - lance
       - jewelry
       - clothing
       - other
@@ -39229,6 +39294,7 @@ components:
         * `ranged` - Ranged
         * `thrown` - Thrown
         * `shield` - Shield
+        * `lance` - Lance
         * `jewelry` - Jewelry
         * `clothing` - Clothing
         * `other` - Other
@@ -61390,6 +61456,30 @@ components:
       - rested_today
       - social
       - well_rested
+    VolatileObject:
+      type: object
+      description: A detonatable object in the encounter room, for the redirect destination
+        picker (#2210).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        position_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        position_name:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - id
+      - name
+      - position_id
+      - position_name
     WeeklyVote:
       type: object
       description: Read serializer for WeeklyVote instances.

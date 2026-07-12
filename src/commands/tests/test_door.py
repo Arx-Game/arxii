@@ -1,4 +1,4 @@
-"""Tests for the real CmdLock/CmdUnlock (#1866, replacing the stubs)."""
+"""Tests for CmdLock/CmdUnlock (#1866) and CmdPick/CmdBreak (#2176)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from actions.types import ActionResult
-from commands.door import CmdLock, CmdUnlock
+from commands.door import CmdBreak, CmdLock, CmdPick, CmdUnlock
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 
 
@@ -73,3 +73,39 @@ class CmdLockTests(TestCase):
         payload = kwargs_calls[0]["command_error"]
         assert "find" in payload["error"].lower() or "such" in payload["error"].lower()
         assert payload["command"] == "lock nowhere"
+
+
+class CmdPickTests(CmdLockTests):
+    """Tests for CmdPick (#2176) — telnet face of PickLockAction."""
+
+    def test_pick_dispatches_pick_lock_action(self):
+        caller, exit_obj = self._caller_and_exit()
+        with patch("commands.door.PickLockAction.run") as mocked:
+            mocked.return_value = ActionResult(success=True, message="Picked.")
+            self._run(CmdPick, caller, "gate")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["exit"] == exit_obj
+
+    def test_pick_no_such_exit(self):
+        caller, _ = self._caller_and_exit()
+        kwargs_calls: list[dict] = []
+        messages = self._run(CmdPick, caller, "nowhere", kwargs_out=kwargs_calls)
+        assert any("find" in m.lower() or "such" in m.lower() for m in messages)
+
+
+class CmdBreakTests(CmdLockTests):
+    """Tests for CmdBreak (#2176) — telnet face of BreakExitAction."""
+
+    def test_break_dispatches_break_exit_action(self):
+        caller, exit_obj = self._caller_and_exit()
+        with patch("commands.door.BreakExitAction.run") as mocked:
+            mocked.return_value = ActionResult(success=True, message="Broken.")
+            self._run(CmdBreak, caller, "gate")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["exit"] == exit_obj
+
+    def test_break_no_such_exit(self):
+        caller, _ = self._caller_and_exit()
+        kwargs_calls: list[dict] = []
+        messages = self._run(CmdBreak, caller, "nowhere", kwargs_out=kwargs_calls)
+        assert any("find" in m.lower() or "such" in m.lower() for m in messages)

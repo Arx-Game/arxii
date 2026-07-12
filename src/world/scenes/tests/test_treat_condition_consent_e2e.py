@@ -7,8 +7,10 @@ chain through to a visible severity change. Only the non-deterministic dice
 (scene/engagement/bond/duplicate/cost) and the reduction itself runs un-mocked,
 mirroring ``test_treatment_aftermath.py`` / ``test_treatment_mage_scar.py``.
 
-Flows: GET discovery → POST create (PENDING) → POST respond (target accepts)
-→ severity reduced + request RESOLVED + result interaction recorded.
+Flow: GET discovery → POST create → the target is an NPC persona, so
+create_action_request auto-resolves the request immediately (#2214) →
+severity reduced + request RESOLVED + result interaction recorded, all
+within the single create() call (no separate respond() step).
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ from world.roster.factories import (
     RosterEntryFactory,
     RosterTenureFactory,
 )
-from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
+from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.factories import SceneFactory
 from world.traits.factories import CheckOutcomeFactory
@@ -72,7 +74,8 @@ def _give_account_character(account, character) -> None:
 
 
 class TreatConditionWebConsentE2ETests(TestCase):
-    """Web E2E: discovery → create → respond runs the real reduction chain."""
+    """Web E2E: discovery → create (auto-resolves against the NPC target) runs the real
+    reduction chain."""
 
     def setUp(self) -> None:
         # Evennia ObjectDB fixtures must be built in setUp, not setUpTestData:
@@ -89,8 +92,11 @@ class TreatConditionWebConsentE2ETests(TestCase):
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
 
         # Two accounts wired via the roster: helper (POSTs the request) and
-        # target (POSTs the respond). Both need roster wiring so the
-        # account-based get_account_personas resolves their personas.
+        # target (unused for a POST now that create auto-resolves against the
+        # NPC target persona, #2214; kept for parity with the sibling unit
+        # tests and in case a future respond-path regression test needs it).
+        # Both need roster wiring so the account-based get_account_personas
+        # resolves their personas.
         self.helper_account = AccountFactory()
         _give_account_character(self.helper_account, self.helper_char)
         self.target_account = AccountFactory()
@@ -151,9 +157,6 @@ class TreatConditionWebConsentE2ETests(TestCase):
     def _create_url(self) -> str:
         return reverse("sceneactionrequest-list")
 
-    def _respond_url(self, pk: int) -> str:
-        return reverse("sceneactionrequest-respond", kwargs={"pk": pk})
-
     # ------------------------------------------------------------------
     # E2E test
     # ------------------------------------------------------------------
@@ -161,11 +164,12 @@ class TreatConditionWebConsentE2ETests(TestCase):
     def test_discovery_create_respond_reduces_severity_and_resolves(self) -> None:
         """Full web consent chain runs perform_treatment REAL and reduces severity.
 
-        GET discovery → 200 with candidates; POST create → 201 PENDING with
-        treatment FKs; target POSTs respond (accept) → custom resolver fires →
-        perform_treatment → decay_condition_severity (REAL). Asserts: severity
-        dropped by reduction_on_success (3) and instance still open, request
-        RESOLVED, result interaction recorded on the scene.
+        GET discovery → 200 with candidates; POST create → 201, and since the
+        target is an NPC persona the request auto-resolves immediately (#2214) →
+        custom resolver fires → perform_treatment → decay_condition_severity
+        (REAL) — no separate respond() call is needed. Asserts: severity dropped
+        by reduction_on_success (3) and instance still open, request RESOLVED,
+        result interaction recorded on the scene.
         """
         self._gate_patches()
 
@@ -184,7 +188,8 @@ class TreatConditionWebConsentE2ETests(TestCase):
         assert candidate["treatment"]["name"] == self.treatment.name
         assert candidate["target_effect"]["id"] == self.instance.id
 
-        # 2. Create: helper POSTs the treat_condition request → 201 PENDING.
+        # 2. Create: helper POSTs the treat_condition request -> 201, auto-resolves
+        # immediately (NPC target, #2214) instead of staying PENDING for a later respond().
         create_payload = {
             "scene": self.scene.pk,
             "initiator_persona": self.helper_sheet.primary_persona.pk,
@@ -197,28 +202,17 @@ class TreatConditionWebConsentE2ETests(TestCase):
         assert create_response.status_code == status.HTTP_201_CREATED, create_response.data
         request_pk = create_response.data["id"]
         request = SceneActionRequest.objects.get(pk=request_pk)
-        assert request.status == ActionRequestStatus.PENDING
+        assert request.status == ActionRequestStatus.RESOLVED
         assert request.treatment_id == self.treatment.pk
         assert request.target_condition_instance_id == self.instance.pk
         assert request.target_persona_id == self.target_sheet.primary_persona.pk
 
-        # 3. Respond: target account authenticates and accepts → resolver fires.
-        self.client.force_authenticate(user=self.target_account)
-        respond_response = self.client.post(
-            self._respond_url(request_pk),
-            {"decision": ConsentDecision.ACCEPT},
-            format="json",
-        )
-        assert respond_response.status_code == status.HTTP_200_OK, respond_response.data
-
-        # Severity dropped by reduction_on_success (3): 5 → 2, still open.
+        # Severity dropped by reduction_on_success (3): 5 -> 2, still open.
         self.instance.refresh_from_db()
         assert self.instance.severity == 2, self.instance.severity
         assert self.instance.resolved_at is None, "partial reduction must leave the condition OPEN"
 
-        # Request flipped to RESOLVED; a result interaction was recorded.
-        request.refresh_from_db()
-        assert request.status == ActionRequestStatus.RESOLVED
+        # Request already RESOLVED; a result interaction was recorded.
         assert request.result_interaction_id is not None
         from world.scenes.models import Interaction
 

@@ -202,6 +202,54 @@ class ReleaseCompanionAction(Action):
 
 
 @dataclass
+class MountCompanionAction(Action):
+    """Mount a bonded, ridable companion (#1843)."""
+
+    key: str = "mount_companion"
+    name: str = "Mount"
+    icon: str = "horse"
+    category: str = "companions"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor, context=None, **kwargs) -> ActionResult:
+        from world.companions.services import MountError, mount_companion  # noqa: PLC0415
+
+        companion_id = kwargs.get("companion_id")
+        if not companion_id:
+            return ActionResult(success=False, message="Mount which companion?")
+        companion, failure = _resolve_owned_companion(actor, companion_id)
+        if failure is not None:
+            return failure
+        try:
+            mount_companion(actor.sheet_data, companion)
+        except MountError as err:
+            return ActionResult(success=False, message=err.user_message)
+        return ActionResult(success=True, message=f"You mount {companion.name}.")
+
+
+@dataclass
+class DismountCompanionAction(Action):
+    """Dismount from whichever companion the actor is currently riding (#1843)."""
+
+    key: str = "dismount_companion"
+    name: str = "Dismount"
+    icon: str = "horse"
+    category: str = "companions"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor, context=None, **kwargs) -> ActionResult:
+        from world.companions.services import MountError, dismount_companion  # noqa: PLC0415
+
+        try:
+            companion = dismount_companion(actor.sheet_data)
+        except MountError as err:
+            return ActionResult(success=False, message=err.user_message)
+        return ActionResult(success=True, message=f"You dismount {companion.name}.")
+
+
+@dataclass
 class OrderCompanionAction(Action):
     """Direct a deployed companion in combat (#1921).
 

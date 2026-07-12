@@ -13,8 +13,20 @@ An NPC entity in a `CombatEncounter`, defined by its `OpponentTier`, health/soak
 _Avoid_: enemy, monster, mob, NPC participant
 
 **Maneuver**:
-A special non-technique declaration a PC can make for a round (`CombatManeuver`: FLEE, COVER, YIELD, INTERPOSE, SUCCOR, RALLY, DEMORALIZE, TAUNT, PARLEY) — a verb that is neither a technique cast nor a clash commit. Each is a real Action on the shared dispatch seam.
+A special non-technique declaration a PC can make for a round (`CombatManeuver`: FLEE, COVER, YIELD, INTERPOSE, SUCCOR, RALLY, DEMORALIZE, TAUNT, PARLEY, CHARGE, JOUST) — a verb that is neither a technique cast nor a clash commit. Each is a real Action on the shared dispatch seam.
 _Avoid_: special move, stance, command
+
+**Charge** (#1843):
+The CHARGE maneuver — a mounted PC (see `world/companions/AGENT_GLOSSARY.md`'s Mounted entry) closes distance to a declared opponent >= 1 hop away, then attacks. Resolution force-moves the rider onto the opponent's position and falls through to the normal weapon-attack pipeline; `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS` (doubled for an equipped Lance) fold into the existing check-modifier/damage-budget seams — never a bespoke bonus path. Requires Mounted; declaring it unmounted or against an already-in-reach target is rejected.
+_Avoid_: rush, gap-close, sprint attack
+
+**Joust** (#1843):
+The JOUST maneuver — a mounted, Lance-armed opposed pass between exactly two Mounted+Lance-equipped duelists in a DUEL encounter. One opposed check per side, graded by the `success_level` gap: a decisive gap unhorses the loser (double Lance damage + Unhorsed + a forced dismount), a narrow gap deals single Lance damage without unhorsing, a tie jars both with no damage. Not declarable outside a 2-participant DUEL, and not declarable unless both sides already hold Mounted + a Lance.
+_Avoid_: tilt (period term, not used in code/UI), lance charge (that's Charge, above)
+
+**Unhorsed** (#1843):
+The seeded `ConditionTemplate` applied to a JOUST's decisive-margin loser, which force-dismounts them (`world.companions.services.dismount_companion`, called directly by the resolver — no reactive trigger needed).
+_Avoid_: dismounted (that's the state after Unhorsed resolves, not the condition's own name), thrown
 
 **Morale**:
 A first-class depletable resolve pool on `CombatOpponent` (#2015), mirroring war-scale `BattleUnit.morale`. The derived state (STEADY/FALTER/BREAK) is read via `morale_state_for` — never stored. Falter weakens NPC output in `select_npc_actions`; Break sets `OpponentStatus.FLED`. Mindless opponents (`OpponentTierTemplate.has_morale=False`) resist morale checks with a flat difficulty modifier — not an immunity; a powerful enough roll breaks through (Arx's "power can do the impossible" tenet).
@@ -47,10 +59,25 @@ _Avoid_: block, guard, intercept, bodyguard
 **Guardian reaction** (#2207):
 The declared protect-with-technique reaction a PC arms via `declare_interpose(participant, ally=None, technique=None)`. Two mechanically distinct resolution branches share the one declaration field (`CombatRoundAction.focused_action`, reused rather than adding a parallel column):
 - **Mundane** (`technique=None`, Interpose's original shape): dispatches through `world.mechanics.reactions.dispatch_capability_reaction(select_best_check_rating=True)`, which picks the higher-rated of the guardian's *real* available reaction approaches (Reflexes vs. Melee Defense, via `compute_check_rating`) — deterministic, zero extra rolls, never inventing an action outside `get_available_actions`'s output (ADR-0032). Costs fatigue on fire.
-- **Technique-guardian** (`technique=<a known, learned Technique classifying to a non-redirect protective flavor>`): resolved by `world.combat.services._try_technique_interpose`, which rolls the guardian's own cast check (`resolve_cast_check_type`) instead of a capability-reaction challenge, and pays a flat `ConditionTemplate.reactive_anima_cost` (fizzle if unaffordable — no roll, no charge) instead of fatigue. See ADR-0118 for why this rolls outside `use_technique`. Grading (clean/partial/fail) is shared with the mundane path via `_grade_interpose_damage`; a clean BLINK-flavored block relocates the ward to the guardian's position.
+- **Technique-guardian** (`technique=<a known, learned Technique classifying to a protective flavor>`): resolved by `world.combat.services._try_technique_interpose`, which rolls the guardian's own cast check (`resolve_cast_check_type`) instead of a capability-reaction challenge, and pays a flat `ConditionTemplate.reactive_anima_cost` (fizzle if unaffordable — no roll, no charge) instead of fatigue. See ADR-0118 for why this rolls outside `use_technique`. Grading (clean/partial/fail) is shared with the mundane path via `_grade_interpose_damage`; a clean BLINK-flavored block relocates the ward to the guardian's position; a REDIRECT-flavored block sends the saved amount to the declared destination — see **Redirect**, below.
 
-`world.magic.services.targeting.protective_flavor(technique)` classifies a technique's reactive-trigger handler into `barrier` (absorb_pool) / `blink` (blink_dodge) / `redirect` (reflect_damage) by walking its authored condition→reactive-trigger→flow data — no new authored field. `redirect` is rejected at declaration time (mirror-style reflection needs its own resolution path, deferred to #2210). A guardian can also shield an ALLY-allegiance `CombatOpponent` (a summon) — but only via the *any-ally* (`ally=None`) declaration, since `focused_ally_target` FKs `CombatParticipant` and cannot name a `CombatOpponent` directly (a named-ally guard of a summon is a follow-up).
+`world.magic.services.targeting.protective_flavor(technique)` classifies a technique's reactive-trigger handler into `barrier` (absorb_pool) / `blink` (blink_dodge) / `redirect` (reflect_damage) by walking its authored condition→reactive-trigger→flow data — no new authored field. A guardian can also shield an ALLY-allegiance `CombatOpponent` (a summon) — but only via the *any-ally* (`ally=None`) declaration, since `focused_ally_target` FKs `CombatParticipant` and cannot name a `CombatOpponent` directly (a named-ally guard of a summon is a follow-up).
 _Avoid_: guardian ward, protect action
+
+**Redirect** (#2210):
+A REDIRECT-flavor Guardian reaction's saved-damage destination, declared at
+`declare_interpose` time (ADR-0032/0122) via `CombatRoundAction.redirect_opponent_target`
+(FK `CombatOpponent` — structurally never a PC, ADR-0023) or `redirect_object_target`
+(FK ObjectDB, must be **Volatile** — see `world/mechanics/AGENT_GLOSSARY.md`). Both null
+(or the declared destination no longer valid at resolution — the enemy defeated, the
+object moved or already detonated) means "away," the universal fallback: the saved
+amount (`amount_before - payload.amount` after grading) simply vanishes with a
+deflection broadcast. A chosen-enemy redirect applies the saved amount via
+`apply_damage_to_opponent(..., bypass_pre_apply=True)` (the ADR-0060 loop guard); a
+volatile-object redirect fires the object's `PropertyDetonation.consequence_pool` at
+every combatant positioned there, then deletes the triggering `ObjectProperty` —
+one-shot, never reusable.
+_Avoid_: reflect target, bounce destination, deflection target
 
 **Succor**:
 The maneuver by which a PC shelters a specific ally from a round-ticked environmental hazard (sunlight, poison gas) this round — the environmental-DoT sibling of Interpose (which blocks an incoming attack, not a lingering hazard). Always names a specific ally; there is no "any ally" path like Interpose has, since environmental shelter is "I'm sheltering THIS person," not "I'll block whichever hazard lands on someone." Resolves through the same graded capability-check spine as Interpose.

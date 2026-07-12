@@ -294,7 +294,12 @@ it fires **once per accepted target**:
 **Idempotency contract:** a resolver registered for a multi-target action is invoked
 once per accepted `SceneActionTarget`; any cast-level side-effects (e.g. anima deduction,
 kudos, renown) must therefore be idempotent with respect to invocation count across targets.
-NPC targets are auto-accepted at dispatch time via `_auto_resolve_npc_targets()`.
+NPC targets — both the primary and any additional-target rows — are auto-accepted at
+dispatch time via `_auto_resolve_npc_targets()` (#2214 extended this from
+additional-targets-only to always run, so a lone NPC primary target resolves too,
+guarded by a resolvability check so a request with no real resolution path — no
+matching `ActionTemplate`, no custom resolver, not a standalone cast — stays PENDING
+instead of raising).
 
 ### Key Service Functions
 
@@ -306,7 +311,11 @@ from world.scenes.action_services import (
 )
 
 # Create a request (primary + additional targets).
-# NPC additional targets are auto-resolved immediately.
+# NPC targets (primary or additional) are auto-resolved immediately at creation (#2214).
+# The primary's result, when auto-resolved, is available via the create-endpoint response's
+# "result" key (or, calling the service directly, via the transient
+# request._auto_resolve_result attribute) — not via this function's return value, which
+# stays a bare SceneActionRequest for backward compatibility with existing callers.
 # effort_level is the initiator's declared EffortLevel value (default "medium").
 request = create_action_request(
     scene=scene,

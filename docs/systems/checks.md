@@ -214,7 +214,36 @@ Check compositions are authored as seed data (the design tenet: **stat + skill (
 | `magic` | cast/ritual checks | willpower + ritualism/occult/theology |
 | `investigation` (#1705) | `Search` | perception + Investigation |
 | `governance` (#930) | Tax/Investment checks | stat + Scholarship/Economics |
+| `stealth` (#1464) | `Stealth` | agility + Stealth |
+| `security` (#2180) | `Lockpick` / `Break and Enter` / `Escape Through Window` / `Guard Detection` | wits+Larceny / strength+Athletics / agility+Athletics / perception+Investigation |
 
 **Resist checks** (Reflexes, Escalation Pace, Endurance, Mortal Resolve) are the tenet-permitted single-stat exception — they seed exactly one `CheckTypeTrait`. The `Melee Combat` skill catalog (with weapon-class specializations aligned to `progression.services.scene_integration`'s `weapon_map`) is seeded by the `combat_checks` cluster; the penetration/flee retrofits depend on it.
 
 **Technique routing (#1706):** `resolve_cast_action_template` reads `Technique.action_category` — a `PHYSICAL` technique with no chosen consequence-pool flavor resolves to the combat `Melee Attack` `ActionTemplate` (so physical attacks roll a combat check, not the magic fallback); non-physical techniques resolve to the magic standalone cast template.
+
+---
+
+## Security Checks (#2180)
+
+Five security-domain check types seeded via the `"security"` cluster
+(`world/seeds/security_checks.py`):
+
+| CheckType | Category | Composition | Used by |
+|---|---|---|---|
+| Stealth | Physical | agility + Stealth | Sneaking past guards (reuses #1464 seed) |
+| Lockpick | Physical | wits + Larceny (+ Lockpicking) | Picking locks (#2176) |
+| Break and Enter | Physical | strength + Athletics | Forcing barriers (#2176) |
+| Escape Through Window | Physical | agility + Athletics (+ Climbing) | Fleeing via window (#2175) |
+| Guard Detection | Exploration | perception + Investigation | Guard NPC spotting intruders (#2178) |
+
+**`SecurityCheckKind`** (`world/checks/constants.py`) maps each kind to its
+CheckType name via `SECURITY_CHECK_TYPE_NAMES`.
+
+**`resolve_security_check(kind, actor, *, target_difficulty, extra_modifiers)`**
+(`world/checks/security_services.py`) is the helper entry point. It looks up the
+CheckType by name and delegates to `perform_check`. The caller computes
+`target_difficulty` from domain context (lock level, guard level, window height).
+
+Two new skills: **Larceny** (fine manipulation — locks, pockets) and **Athletics**
+(running, climbing, force). Specializations: **Lockpicking** (under Larceny) and
+**Climbing** (under Athletics). All weights PLACEHOLDER (1.0).

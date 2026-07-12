@@ -165,6 +165,12 @@ def _seed_stealth() -> None:
     seed_stealth_check_content()
 
 
+def _seed_security() -> None:
+    from world.seeds.security_checks import seed_security_check_content  # noqa: PLC0415
+
+    seed_security_check_content()
+
+
 def _seed_perception() -> None:
     from world.seeds.perception_conditions import seed_perception_condition_content  # noqa: PLC0415
 
@@ -332,6 +338,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "domain_dev": _seed_domain_dev,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,
+    # Security: Larceny/Athletics skills + lockpick/break/escape/guard-detection
+    # CheckTypes (#2180). After "stealth" (reuses its Stealth skill for SNEAK)
+    # and "investigation" (reuses its Investigation skill for Guard Detection).
+    "security": _seed_security,
     # Perception: the Concealed condition primitive (#1225) — the seam Stealth
     # witness-reduction (#1464) and forms disguise-piercing will apply/clear.
     "perception": _seed_perception,
@@ -517,6 +527,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "domain_dev": [],
         # Stealth seeds skill/check rows counted under "checks" (#1464).
         "stealth": [],
+        # Security seeds skill/check rows counted under "checks" (#2180).
+        "security": [],
         # Perception seeds the Concealed ConditionCategory + ConditionTemplate (#1225).
         "perception": [ConditionTemplate],
         # Civic hubs: the two reader RoomFeatureKinds + the crier NPCRole (#1450).

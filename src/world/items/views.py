@@ -52,6 +52,7 @@ from world.items.models import (
     TemplateSlot,
 )
 from world.items.serializers import (
+    CraftableTemplateSerializer,
     CraftingQuoteSerializer,
     EquippedItemReadSerializer,
     FacetCraftResultSerializer,
@@ -1508,14 +1509,64 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
 
 @extend_schema(tags=["items"])
 class ItemCreateCraftViewSet(viewsets.ViewSet):
-    """ViewSet for item-creation crafting: POST rolls the check and mints a new ItemInstance.
+    """ViewSet for item-creation crafting: browse recipes, quote, and mint (#2211/#2240).
 
-    POST /api/items/crafting/create/ — validates the template, dispatches through
-    CreateItemAction, and returns 201 on success (item created) or 200 on a failed roll.
+    - GET  /api/items/crafting/create/recipes/ — what this character can craft.
+    - GET  /api/items/crafting/create/quote/   — cost/quality quote for one template.
+    - POST /api/items/crafting/create/          — roll the check and mint the item.
     """
 
-    http_method_names = ["post", "head", "options"]
+    http_method_names = ["get", "post", "head", "options"]
     permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=CraftableTemplateSerializer(many=True))
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="recipes")
+    def recipes(self, request: Request) -> Response:
+        """List the item-creation recipes available to craft (#2240).
+
+        Recipe *knowledge* gating is a later slice (#2242); today this returns
+        every active ITEM_CREATE recipe's output template.
+        """
+        from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
+        from world.items.crafting.models import CraftingRecipe  # noqa: PLC0415
+
+        recipes = (
+            CraftingRecipe.objects.filter(
+                kind=CraftingRecipeKind.ITEM_CREATE,
+                output_item_template__is_active=True,
+                output_item_template__is_craftable=True,
+            )
+            .select_related("output_item_template")
+            .order_by("output_item_template__name")
+        )
+        templates = [r.output_item_template for r in recipes]
+        return Response(CraftableTemplateSerializer(templates, many=True).data)
+
+    @extend_schema(responses=CraftingQuoteSerializer)
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="quote")
+    def quote(self, request: Request) -> Response:
+        """Return a read-only cost+quality quote for minting a template (no mutation)."""
+        from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
+        from world.items.crafting.services import build_crafting_quote  # noqa: PLC0415
+
+        template_pk = _parse_int_param(request.query_params.get("template"))  # noqa: USE_FILTERSET
+        if template_pk is None:
+            raise serializers.ValidationError({"template": REQUIRED_QUERY_PARAM_MESSAGE})
+        try:
+            template = ItemTemplate.objects.get(pk=template_pk, is_active=True)
+        except ItemTemplate.DoesNotExist as exc:
+            raise NotFound from exc
+        actor_sheet = _resolve_actor_sheet(request, "crafter_sheet_id", from_query=True)
+        try:
+            quote = build_crafting_quote(
+                kind=CraftingRecipeKind.ITEM_CREATE,
+                crafter_character=actor_sheet.character,
+                crafter_character_sheet=actor_sheet,
+                output_template=template,
+            )
+        except CraftingNotConfigured as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(CraftingQuoteSerializer(quote).data)
 
     def create(self, request: Request) -> Response:
         """Roll the crafting check and (on success) mint a new ItemInstance."""

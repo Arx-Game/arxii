@@ -77,26 +77,17 @@ class CmdTreatCondition(ArxCommand):
         treatment = candidate["treatment"]
         target_effect = candidate["target_effect"]
         bond_thread = candidate.get("bond_thread")
+        is_condition_target = candidate["target_effect_type"] == TARGET_EFFECT_CONDITION
 
         request = create_action_request(
             scene=scene,
             initiator_persona=initiator_persona,
             target_persona=target_persona,
             action_key="treat_condition",
-        )
-        request.treatment = treatment
-        if candidate["target_effect_type"] == TARGET_EFFECT_CONDITION:
-            request.target_condition_instance = target_effect
-        else:
-            request.target_pending_alteration = target_effect
-        request.thread_used = bond_thread
-        request.save(
-            update_fields=[
-                "treatment",
-                "target_condition_instance",
-                "target_pending_alteration",
-                "thread_used",
-            ]
+            treatment=treatment,
+            target_condition_instance=(target_effect if is_condition_target else None),
+            target_pending_alteration=(target_effect if not is_condition_target else None),
+            thread_used=bond_thread,
         )
 
         self.msg(

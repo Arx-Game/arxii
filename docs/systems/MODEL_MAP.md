@@ -20,6 +20,7 @@
   - wound_pool_damage_types <- conditions.DamageType
   - death_pool_damage_types <- conditions.DamageType
   - condition_stages <- conditions.ConditionStage
+  - property_detonations <- mechanics.PropertyDetonation
   - situation_trap_links <- mechanics.SituationTrapLink
   - context_attachments <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
@@ -1308,6 +1309,7 @@
   - employments <- currency.CharacterEmployment
   - treasured_by <- boundaries.TreasuredSubject
   - companions <- companions.Companion
+  - ridden_companion <- companions.Companion
   - secrets <- secrets.Secret
   - secret_grievances <- secrets.SecretGrievance
   - leverage_held <- secrets.Leverage
@@ -1806,6 +1808,8 @@
   - cast_destination -> areas.Position [FK] (nullable)
   - cast_position_a -> areas.Position [FK] (nullable)
   - cast_position_b -> areas.Position [FK] (nullable)
+  - redirect_opponent_target -> combat.CombatOpponent [FK] (nullable)
+  - redirect_object_target -> objects.ObjectDB [FK] (nullable)
   - interaction -> scenes.Interaction [FK] (nullable)
 **Pointed to by:**
   - extra_targets <- combat.CombatRoundActionTarget
@@ -2004,11 +2008,13 @@
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' — Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' — Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.`
 - `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' — Declare a PC's action for the current round.`
+- `declare_charge(participant: 'CombatParticipant', technique: 'Technique', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a mounted charge — closes distance to *opponent*, then attacks (#1843).`
 - `declare_clash_contribution(*, participant: 'CombatParticipant', clash: 'Clash', action_slot: 'str', technique: 'Technique', strain_commitment: 'int') -> 'ClashContributionDeclaration' — Write (or overwrite) a PC's clash contribution declaration for the current round.`
 - `declare_cover(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a covering maneuver for an ally -- passives-only, auto-ready.`
 - `declare_demoralize(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a demoralizing maneuver — break an opponent's nerve, auto-ready (#2015).`
 - `declare_flee(participant: 'CombatParticipant') -> 'CombatRoundAction' — Declare intent to flee -- passives-only maneuver, auto-ready.`
-- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None) -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
+- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None, redirect_opponent_target: 'CombatOpponent | None' = None, redirect_object_target: 'ObjectDB | None' = None) -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
+- `declare_joust(participant: 'CombatParticipant', technique: 'Technique') -> 'CombatRoundAction' — Declare a joust — a mounted, lance-armed opposed pass (#1843).`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
 - `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
@@ -2078,6 +2084,7 @@
   - archetype -> companions.CompanionArchetype [FK]
   - granting_gift -> magic.Gift [FK]
   - objectdb -> objects.ObjectDB [FK] (nullable)
+  - ridden_by -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
   - deployments <- companions.CompanionDeployment
   - orders <- companions.CompanionOrder
@@ -2106,10 +2113,12 @@
 ### Service Functions
 - `bind_companion(*, owner: 'CharacterSheet', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' — Create a bonded Companion + its live CompanionObject in owner's current room.`
 - `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Total Companion Capacity character_sheet has via gift's Thread level.`
+- `dismount_companion(sheet: 'CharacterSheet') -> 'Companion' — Dismount *sheet* from whichever companion it is currently riding.`
 - `get_pull_effects_for_thread(thread: 'Thread', **filters: 'object') -> 'list[ThreadPullEffect]' — Return ThreadPullEffect rows for ``thread`` with gift-specific preference.`
 - `handle_stables_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — STABLES strategy: row-only install/level + create StablesDetails (#1863).`
 - `materialize_companion_as_battle_vehicle(companion: 'Companion', battle: 'Battle', side: 'BattleSide') -> 'BattleVehicle' — Bridge a persistent Companion into a battle-scale BattleVehicle (#1873).`
 - `materialize_companion_as_combat_opponent(companion: 'Companion', encounter: 'CombatEncounter', *, threat_pool: 'ThreatPool | None' = None) -> 'CombatOpponent' — Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).`
+- `mount_companion(sheet: 'CharacterSheet', companion: 'Companion') -> 'Companion' — Mount *sheet* on *companion* — applies the Mounted condition to the rider.`
 - `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) — Validate and upsert a CompanionOrder directive (#1921).`
 - `release_companion(companion: 'Companion') -> 'None' — Release a bonded companion: destroy its live object, keep the row.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' — Resolve a bridged companion's defeat consequence (#1873).`
@@ -4452,6 +4461,7 @@
   - challenge_template_properties <- mechanics.ChallengeTemplateProperty
   - object_properties <- mechanics.ObjectProperty
   - damage_modifiers <- mechanics.PropertyDamageModifier
+  - detonation <- mechanics.PropertyDetonation
   - applications <- mechanics.Application
   - required_by_applications <- mechanics.Application
   - challenge_templates <- mechanics.ChallengeTemplate
@@ -4480,6 +4490,11 @@
 **Foreign Keys:**
   - property -> mechanics.Property [FK]
   - damage_type -> conditions.DamageType [FK] (nullable)
+
+### PropertyDetonation
+**Foreign Keys:**
+  - property -> mechanics.Property [OneToOne]
+  - consequence_pool -> actions.ConsequencePool [FK]
 
 ### Application
 **Foreign Keys:**
@@ -4638,6 +4653,7 @@
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' — Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — Authored covenant-role bonus for ``target``, scaled by character level (#985).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
+- `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' — Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
 - `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven equipment effectiveness bonus (#2022).`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven stat scaling across engaged roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`

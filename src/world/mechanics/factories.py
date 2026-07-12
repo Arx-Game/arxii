@@ -33,6 +33,7 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
     PropertyDamageModifier,
+    PropertyDetonation,
     SituationChallengeLink,
     SituationInstance,
     SituationTemplate,
@@ -255,6 +256,17 @@ class PropertyDamageModifierFactory(DjangoModelFactory):
     property = factory.SubFactory(PropertyFactory)
     damage_type = None
     modifier_value = 10
+
+
+class PropertyDetonationFactory(DjangoModelFactory):
+    """Factory for creating PropertyDetonation instances."""
+
+    class Meta:
+        model = PropertyDetonation
+
+    property = factory.SubFactory(PropertyFactory)
+    consequence_pool = factory.SubFactory(ConsequencePoolFactory)
+    description = ""
 
 
 class ApplicationFactory(DjangoModelFactory):

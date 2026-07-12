@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from evennia_extensions.factories import AccountFactory
 from integration_tests.game_content.characters import CharacterContent
 from integration_tests.game_content.magic import MagicContent
 from integration_tests.game_content.social import SocialContent
@@ -33,6 +34,12 @@ class SocialMagicConsequenceTests(TestCase):
         cls.target_char, cls.target_persona = CharacterContent.create_base_social_character(
             name="Wren"
         )
+        # Wire a real controlling account so _persona_is_npc reads this as a PC
+        # (#2214) — these tests drive an explicit create-then-accept flow via
+        # respond_to_action_request and must stay PENDING until that call runs,
+        # not auto-resolve inside create_action_request itself.
+        cls.target_char.db_account = AccountFactory()
+        cls.target_char.save(update_fields=["db_account"])
         MagicContent.grant_techniques_to_character(
             cls.initiator_char, list(cls.magic.techniques.values())
         )

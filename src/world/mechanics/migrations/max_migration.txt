@@ -1,1 +1,1 @@
-0010_situationchallengelink_target_object_name
+0011_propertydetonation

@@ -28,12 +28,12 @@ function renderHeader(props: { hasActiveEncounter?: boolean; hasActiveBattle?: b
 }
 
 describe('RoomHeader combat/battle badges', () => {
-  it('shows an In Combat badge linking to the combat route when hasActiveEncounter is true', () => {
+  it('shows an In Combat badge linking to the scene (combat renders in-scene, #2197) when hasActiveEncounter is true', () => {
     renderHeader({ hasActiveEncounter: true });
 
     const badge = screen.getByTestId('room-header-combat-badge');
     expect(badge).toHaveTextContent('In Combat');
-    expect(badge.closest('a')).toHaveAttribute('href', '/scenes/7/combat');
+    expect(badge.closest('a')).toHaveAttribute('href', '/scenes/7');
   });
 
   it('shows a Battle badge linking to the battle map when hasActiveBattle is true', () => {
