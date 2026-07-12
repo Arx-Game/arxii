@@ -23,6 +23,7 @@ from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.collect_food import CollectFoodAction
 from actions.definitions.combat_maneuvers import (
+    ChargeAction,
     CoverAction,
     DemoralizeAction,
     DisengageAction,
@@ -30,6 +31,7 @@ from actions.definitions.combat_maneuvers import (
     FleeAction,
     InterposeAction,
     JoinEncounterAction,
+    JoustAction,
     LeaveEncounterAction,
     ParleyAction,
     RallyAction,
@@ -446,6 +448,8 @@ _ALL_ACTIONS: list[Action] = [
     CoverAction(),
     InterposeAction(),
     SuccorAction(),
+    ChargeAction(),
+    JoustAction(),
     UseItemManeuverAction(),
     EngageAction(),
     DisengageAction(),

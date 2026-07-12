@@ -219,6 +219,87 @@ class InterposeAction(Action):
 
 
 @dataclass
+class ChargeAction(Action):
+    """Declare a mounted charge — close distance to an opponent, then attack (#1843).
+
+    Requires a technique the way a normal attack declaration would (wraps
+    ``declare_charge``, which forwards it to the normal weapon-attack
+    pipeline with CHARGE bonuses folded in at resolution).
+    """
+
+    key: str = "combat_charge"
+    name: str = "Charge"
+    icon: str = "horse"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        opponent_id: int | None = None,
+        technique_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_charge  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        opponent = _resolve_opponent(participant, opponent_id)
+        if opponent is None:
+            return ActionResult(success=False, message="No such opponent in this encounter.")
+        technique = _resolve_technique(technique_id)
+        if technique is None:
+            return ActionResult(success=False, message="Charge with which technique?")
+        try:
+            declare_charge(participant, technique, opponent)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You spur your mount into a charge!")
+
+
+@dataclass
+class JoustAction(Action):
+    """Declare a joust — a mounted, lance-armed opposed pass (#1843).
+
+    Only declarable in a 2-participant DUEL where both duelists are Mounted
+    and wielding a LANCE (wraps ``declare_joust``, validated there).
+    """
+
+    key: str = "combat_joust"
+    name: str = "Joust"
+    icon: str = "horse"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        technique_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_joust  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        technique = _resolve_technique(technique_id)
+        if technique is None:
+            return ActionResult(success=False, message="Joust with which technique?")
+        try:
+            declare_joust(participant, technique)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You level your lance for the joust!")
+
+
+@dataclass
 class SuccorAction(Action):
     """Shelter a specific ally from environmental hazards (wraps ``declare_succor``)."""
 
