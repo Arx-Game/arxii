@@ -619,7 +619,11 @@ def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
 
 @dataclass(frozen=True)
 class PositionNode:
-    """One node in the tactical-map graph (#2006) — kind, elevation, and layout."""
+    """One node in the tactical-map graph (#2006) — kind, elevation, and layout.
+
+    ``rampart_*`` fields (#2209) are populated from the position's covering
+    ``Rampart`` (one-to-one) when present, else all four are ``None``.
+    """
 
     id: int
     name: str
@@ -627,6 +631,10 @@ class PositionNode:
     elevation_anchor_id: int | None
     layout_x: int | None
     layout_y: int | None
+    rampart_element: str | None
+    rampart_integrity: int | None
+    rampart_max_integrity: int | None
+    rampart_crack_state: str | None
 
 
 @dataclass(frozen=True)
@@ -652,7 +660,7 @@ class PositionGraph:
     edges: list[PositionEdgeInfo] = field(default_factory=list)
 
 
-def _position_node(position: Position) -> PositionNode:
+def _position_node(position: Position, rampart: Rampart | None) -> PositionNode:
     return PositionNode(
         id=position.pk,
         name=position.name,
@@ -660,6 +668,10 @@ def _position_node(position: Position) -> PositionNode:
         elevation_anchor_id=position.elevation_anchor_id,
         layout_x=position.layout_x,
         layout_y=position.layout_y,
+        rampart_element=rampart.element_profile.name if rampart else None,
+        rampart_integrity=rampart.integrity if rampart else None,
+        rampart_max_integrity=rampart.max_integrity if rampart else None,
+        rampart_crack_state=rampart.crack_state if rampart else None,
     )
 
 
@@ -684,8 +696,10 @@ def position_graph(room: ObjectDB) -> PositionGraph:
 
     When called via a viewset whose queryset prefetches ``room.positions_cached``
     with each position's full edge set onto ``all_edges_as_a`` (a
-    ``Prefetch(to_attr=...)``), this function builds the graph in-memory with
-    zero extra queries. Falls back to 2 queries otherwise (positions + edges).
+    ``Prefetch(to_attr=...)``) and each position's ``rampart`` (#2209, via
+    ``select_related("rampart__element_profile")`` on that same Prefetch's
+    queryset), this function builds the graph in-memory with zero extra
+    queries. Falls back to 3 queries otherwise (positions + edges + ramparts).
 
     Because edges are stored canonically (position_a.pk < position_b.pk),
     collecting only each position's edges_as_a across the whole room's
@@ -694,7 +708,10 @@ def position_graph(room: ObjectDB) -> PositionGraph:
     positions_cached = getattr(room, "positions_cached", None)  # noqa: GETATTR_LITERAL
     if positions_cached is not None:
         positions = sorted(positions_cached, key=lambda p: p.pk)
-        nodes = [_position_node(p) for p in positions]
+        nodes = [
+            _position_node(p, getattr(p, "rampart", None))  # noqa: GETATTR_LITERAL
+            for p in positions
+        ]
         edges = [
             _position_edge_info(edge)
             for p in positions
@@ -703,12 +720,19 @@ def position_graph(room: ObjectDB) -> PositionGraph:
         return PositionGraph(nodes=nodes, edges=edges)
 
     positions = list(Position.objects.filter(room=room).order_by("pk"))
-    nodes = [_position_node(p) for p in positions]
+    ramparts_by_position = _ramparts_by_position_id(room)
+    nodes = [_position_node(p, ramparts_by_position.get(p.pk)) for p in positions]
     raw_edges = PositionEdge.objects.filter(position_a__room=room).select_related(
         "gating_challenge__template"
     )
     edges = [_position_edge_info(edge) for edge in raw_edges]
     return PositionGraph(nodes=nodes, edges=edges)
+
+
+def _ramparts_by_position_id(room: ObjectDB) -> dict[int, Rampart]:
+    """One query: every Rampart covering a position in *room*, keyed by position_id."""
+    ramparts = Rampart.objects.filter(position__room=room).select_related("element_profile")
+    return {rampart.position_id: rampart for rampart in ramparts}
 
 
 def adjacent_open_positions(position: Position) -> list[PositionEdge]:

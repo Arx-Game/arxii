@@ -53151,6 +53151,22 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        rampart_element:
+          type: string
+          readOnly: true
+          nullable: true
+        rampart_integrity:
+          type: integer
+          readOnly: true
+          nullable: true
+        rampart_max_integrity:
+          type: integer
+          readOnly: true
+          nullable: true
+        rampart_crack_state:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - elevation_anchor_id
       - id
@@ -53158,6 +53174,10 @@ components:
       - layout_x
       - layout_y
       - name
+      - rampart_crack_state
+      - rampart_element
+      - rampart_integrity
+      - rampart_max_integrity
     PositionSummary:
       type: object
       description: Compact public representation of a Position (id + name).

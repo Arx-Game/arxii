@@ -204,7 +204,9 @@ class CombatEncounterViewSet(ModelViewSet):
         ).prefetch_related(
             Prefetch(
                 "room__positions",
-                queryset=Position.objects.order_by("pk").prefetch_related(
+                queryset=Position.objects.order_by("pk")
+                .select_related("rampart__element_profile")
+                .prefetch_related(
                     Prefetch(
                         "edges_as_a",
                         queryset=PositionEdge.objects.filter(is_passable=True).only(
