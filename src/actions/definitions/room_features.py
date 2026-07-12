@@ -37,6 +37,7 @@ _MSG_NO_EXIT = "Install bars on which exit?"
 _MSG_WARD_NEEDS_RESONANCE = "A ward installation needs a resonance."
 _MSG_NO_WARD = "There is no ward here to fund."
 _MSG_INSUFFICIENT_RESONANCE = "You don't have enough resonance."
+_MSG_INVALID_AMOUNT = "Amount must be positive."
 
 _DEFENSE_THRESHOLD_PER_LEVEL = 500
 _DEFENSE_TIME_LIMIT_DAYS = 14
@@ -414,6 +415,8 @@ class FundRoomWardAction(Action):
         from world.room_features.services import can_modify_room_features  # noqa: PLC0415
 
         amount = kwargs["amount"]
+        if amount <= 0:
+            return ActionResult(success=False, message=_MSG_INVALID_AMOUNT)
 
         persona = _resolve_active_persona(actor)
         if persona is None:

@@ -203,3 +203,97 @@ class FundRoomWardActionTests(TestCase):
         assert result.success
         ward.refresh_from_db()
         assert ward.lapsed_at is None
+
+    def test_fund_ward_negative_amount_rejected(self):
+        from actions.definitions.room_features import _MSG_INVALID_AMOUNT, FundRoomWardAction
+
+        actor, ward, _sheet, _resonance = self._owner_actor_with_ward(balance=50)
+        result = FundRoomWardAction().run(actor=actor, amount=-100)
+        assert not result.success
+        assert result.message == _MSG_INVALID_AMOUNT
+        ward.refresh_from_db()
+        assert ward.resonance_reserve == 0
+
+    def test_fund_ward_zero_amount_rejected(self):
+        from actions.definitions.room_features import _MSG_INVALID_AMOUNT, FundRoomWardAction
+
+        actor, _ward, _sheet, _resonance = self._owner_actor_with_ward(balance=50)
+        result = FundRoomWardAction().run(actor=actor, amount=0)
+        assert not result.success
+        assert result.message == _MSG_INVALID_AMOUNT
+
+    def test_fund_ward_no_active_persona_fails(self):
+        from actions.definitions.room_features import (
+            _MSG_NO_ACTIVE_CHARACTER,
+            FundRoomWardAction,
+        )
+
+        room = ObjectDBFactory(
+            db_key="FundRoomNoPersona", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        actor = CharacterFactory(db_key="FundGrace", location=room)
+        result = FundRoomWardAction().run(actor=actor, amount=20)
+        assert not result.success
+        assert result.message == _MSG_NO_ACTIVE_CHARACTER
+
+    def test_fund_ward_not_standing_fails(self):
+        from actions.definitions.room_features import _MSG_NOT_STANDING, FundRoomWardAction
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models.aura import CharacterResonance
+        from world.room_features.models import RoomWardDetails
+
+        room = ObjectDBFactory(
+            db_key="FundRoomNotStanding", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        actor = CharacterFactory(db_key="FundDave", location=room)
+        sheet = CharacterSheetFactory(character=actor)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        # Deliberately no transfer_ownership()/tenancy call -- no standing.
+        resonance = ResonanceFactory()
+        RoomWardDetails.objects.create(room_profile=room_profile, resonance=resonance)
+        CharacterResonance.objects.create(character_sheet=sheet, resonance=resonance, balance=50)
+        result = FundRoomWardAction().run(actor=actor, amount=20)
+        assert not result.success
+        assert result.message == _MSG_NOT_STANDING
+
+    def test_fund_ward_no_ward_in_room_fails(self):
+        from actions.definitions.room_features import _MSG_NO_WARD, FundRoomWardAction
+
+        room = ObjectDBFactory(db_key="FundRoomNoWard", db_typeclass_path="typeclasses.rooms.Room")
+        actor = CharacterFactory(db_key="FundEve", location=room)
+        sheet = CharacterSheetFactory(character=actor)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        transfer_ownership(room_profile=room_profile, to_persona=persona)
+        # No RoomWardDetails created for this room_profile.
+        result = FundRoomWardAction().run(actor=actor, amount=20)
+        assert not result.success
+        assert result.message == _MSG_NO_WARD
+
+    def test_fund_ward_no_resonance_row_fails(self):
+        from actions.definitions.room_features import (
+            _MSG_INSUFFICIENT_RESONANCE,
+            FundRoomWardAction,
+        )
+        from world.magic.factories import ResonanceFactory
+        from world.room_features.models import RoomWardDetails
+
+        room = ObjectDBFactory(db_key="FundRoomNoRow", db_typeclass_path="typeclasses.rooms.Room")
+        actor = CharacterFactory(db_key="FundFrank", location=room)
+        sheet = CharacterSheetFactory(character=actor)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        transfer_ownership(room_profile=room_profile, to_persona=persona)
+        resonance = ResonanceFactory()
+        RoomWardDetails.objects.create(room_profile=room_profile, resonance=resonance)
+        # Deliberately no CharacterResonance row at all for this persona/resonance.
+        result = FundRoomWardAction().run(actor=actor, amount=20)
+        assert not result.success
+        assert result.message == _MSG_INSUFFICIENT_RESONANCE
