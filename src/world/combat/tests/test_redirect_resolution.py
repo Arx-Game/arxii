@@ -297,3 +297,32 @@ class RedirectVolatileObjectResolutionTest(_RedirectResolutionTestBase):
         self.assertEqual(
             self.ally_vitals.health, 100, "the ward is still shielded even on degrade-to-away"
         )
+
+
+class VolatileObjectsSerializerTest(TestCase):
+    """EncounterDetailSerializer.volatile_objects lists volatile objects in the room (#2210)."""
+
+    def test_volatile_object_listed_with_position(self) -> None:
+        from world.combat.serializers import EncounterDetailSerializer
+
+        room = create_object("typeclasses.rooms.Room", key="VolatileSerRoom", nohome=True)
+        encounter = CombatEncounterFactory(room=room)
+        volatile_property = ensure_redirect_content()
+        keg = create_object("typeclasses.objects.Object", key="SerKeg", location=room)
+        ObjectProperty.objects.create(object=keg, property=volatile_property)
+        position = PositionFactory(room=room, name="hearth")
+        place_in_position(keg, position)
+
+        entries = EncounterDetailSerializer().get_volatile_objects(encounter)
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["id"], keg.pk)
+        self.assertEqual(entries[0]["name"], "SerKeg")
+        self.assertEqual(entries[0]["position_id"], position.pk)
+        self.assertEqual(entries[0]["position_name"], "hearth")
+
+    def test_no_room_returns_empty_list(self) -> None:
+        from world.combat.serializers import EncounterDetailSerializer
+
+        encounter = CombatEncounterFactory(room=None)
+        self.assertEqual(EncounterDetailSerializer().get_volatile_objects(encounter), [])

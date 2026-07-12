@@ -21287,6 +21287,7 @@ export interface components {
       readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
       readonly position_nodes: components['schemas']['PositionNode'][];
       readonly position_edges: components['schemas']['PositionEdge'][];
+      readonly volatile_objects: components['schemas']['VolatileObject'][];
       readonly is_lethal: boolean;
       readonly duel_winner: components['schemas']['DuelWinner'] | null;
     };
@@ -34120,6 +34121,13 @@ export interface components {
       mental: components['schemas']['FatiguePoolStatus'];
       well_rested: boolean;
       rested_today: boolean;
+    };
+    /** @description A detonatable object in the encounter room, for the redirect destination picker (#2210). */
+    VolatileObject: {
+      readonly id: number;
+      readonly name: string;
+      readonly position_id: number | null;
+      readonly position_name: string | null;
     };
     /** @description Read serializer for WeeklyVote instances. */
     WeeklyVote: {
