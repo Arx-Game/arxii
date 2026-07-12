@@ -270,6 +270,25 @@ manage *args:
 migrate:
     uv run arx manage migrate
 
+# --- Prod data pull ------------------------------------------------------------
+
+# Fetch the LATEST prod DB dump (via the read-only `dev_reader` Object
+# Storage key) and OVERWRITE the local dev DB with it (drop/recreate, then
+# migrate) — see infra/README.md "Pull prod data down" for the one-time
+# ARXII_DEV_READER_*/ARXII_BACKUPS_* config in src/.env. Explicit
+# `confirm=yes` required — mirrors the confirmation-flag gate
+# infra/scripts/restore.sh already uses for the same class of destructive
+# operation; a bare `just pull-prod` refuses and changes nothing.
+#   just pull-prod confirm=yes
+pull-prod confirm="no":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "{{confirm}}" = "yes" ]; then
+        bash infra/scripts/pull_prod_db.sh --i-understand-this-overwrites-local
+    else
+        bash infra/scripts/pull_prod_db.sh
+    fi
+
 # --- Server ------------------------------------------------------------------
 
 start:

@@ -321,6 +321,47 @@ chk   "rehearse.yml uses the gated stage env"  "grep -q 'environment: stage' .gi
 chk   "rehearse.yml invokes the shared script" "grep -q 'infra/scripts/rehearse.sh' .github/workflows/rehearse.yml"
 chk   "rehearse.yml sets a concurrency group"  "grep -q 'group: arxii-rehearse' .github/workflows/rehearse.yml"
 
+echo "== #2236 Phase 4 (pull-prod + media mirror) =="
+# (a) pull_prod_db.sh: read-only dev tool, hard confirmation gate, and
+# EXACTLY one 's3 cp' call whose direction is s3:// -> local tmp (a download)
+# — never an upload/write path back to the bucket (the dev_reader key is
+# read-only anyway, but the script itself must never even attempt a write).
+chk   "pull_prod_db.sh refuses without --i-understand-this-overwrites-local" \
+  "grep -q -- '--i-understand-this-overwrites-local' infra/scripts/pull_prod_db.sh"
+chk   "pull_prod_db.sh's only 's3 cp' downloads (source s3://, dest local tmp)" \
+  "grep -q 's3 cp \"s3://\${BACKUPS_BUCKET}/db/\${latest}\" \"\${tmp}/dump.sql.gz\"' infra/scripts/pull_prod_db.sh"
+chk   "pull_prod_db.sh has exactly one 's3 cp' call (no upload path)" \
+  "[[ \$(grep -c 's3 cp' infra/scripts/pull_prod_db.sh) -eq 1 ]]"
+chkno "pull_prod_db.sh never calls a delete/rm S3 operation" \
+  "grep -inE 's3 rm|delete-object' infra/scripts/pull_prod_db.sh"
+
+# (b) justfile's pull-prod recipe gates on confirm=yes and passes the real
+# flag through — a bare `just pull-prod` must not silently overwrite.
+chk   "justfile's pull-prod recipe defaults confirm to \"no\"" \
+  "grep -q 'pull-prod confirm=\"no\"' justfile"
+chk   "justfile's pull-prod recipe passes --i-understand-this-overwrites-local only on confirm=yes" \
+  "grep -q -- '--i-understand-this-overwrites-local' justfile"
+
+# (c) the media mirror is a BACKUP, never a sync: no delete/rm S3 call
+# anywhere in the script, by construction (this is the whole point — a
+# Cloudinary-side delete must never propagate to the R2 copy).
+chkno "arxii-media-mirror.py.j2 never calls a delete/rm S3 operation" \
+  "grep -inE 's3 rm|delete-object|delete_resources|s3api delete' infra/ansible/roles/offsite_replication/templates/arxii-media-mirror.py.j2"
+
+# (d) the weekly timer + service exist in offsite_replication (same role/
+# bucket/credential as the DB offsite job — see meta/main.yml + defaults).
+chk   "offsite_replication installs arxii-media-mirror.service" \
+  "grep -q 'arxii-media-mirror.service' infra/ansible/roles/offsite_replication/tasks/main.yml"
+chk   "offsite_replication installs + enables arxii-media-mirror.timer" \
+  "grep -q 'arxii-media-mirror.timer' infra/ansible/roles/offsite_replication/tasks/main.yml && grep -q 'name: arxii-media-mirror.timer' infra/ansible/roles/offsite_replication/tasks/main.yml"
+chk   "arxii-media-mirror.service carries OnFailure= alerting (same convention as backup/offsite)" \
+  "awk '/dest: \\/etc\\/systemd\\/system\\/arxii-media-mirror.service/,/notify: Reload systemd/' infra/ansible/roles/offsite_replication/tasks/main.yml | grep -q 'OnFailure=arxii-alert-failure@%n.service'"
+
+# (e) the heartbeat watch list picks up the new unit — a failed media-mirror
+# run must surface the same way a failed backup/offsite run does.
+chk   "offbox_alerting heartbeat watches arxii-media-mirror.service" \
+  "grep -q 'arxii-media-mirror.service' infra/ansible/roles/offbox_alerting/templates/arxii-heartbeat.sh.j2"
+
 echo
 if [[ "${fails}" -gt 0 ]]; then
   echo "ACCEPTANCE: ${fails} FAILED"; exit 1
@@ -340,4 +381,8 @@ ACCOUNT-TIME checklist (run once real creds exist — cannot be static):
       converge, smoke.sh all-PASS, backup object lands in the stage bucket,
       restore rehearsal verifies — run this BEFORE the first real
       standup.sh/"Stand up infra" button press
+  [ ] `just pull-prod confirm=yes` (#2236 Phase 4) pulls a real dev_reader-
+      keyed dump and restores it into a scratch local DB
+  [ ] arxii-media-mirror.service (#2236 Phase 4) completes with 0 failed on
+      a real box and lands objects under media/ in the real R2 bucket
 EOF

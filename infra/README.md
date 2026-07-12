@@ -420,6 +420,69 @@ R2 in rehearsal — see "What it deliberately cannot prove" above) — its value
 is proving the restore path against a box that just went through a REAL
 site.yml converge, not a bare Postgres install.
 
+## Pull prod data down (dev/local)
+
+`just pull-prod confirm=yes` fetches the LATEST prod DB dump and restores it
+into your LOCAL dev Postgres (drop/recreate + `arx manage migrate`) — one
+command instead of the previous manual multi-step (#2236 Phase 4). It runs
+`infra/scripts/pull_prod_db.sh`, which:
+
+- Uses the READ-ONLY `dev_reader` Object Storage key (§4.9 of
+  `docs/operations/observability-baseline.md`) — structurally cannot `Put`/
+  `Delete`, so this tool can never write to the bucket and never touches
+  prod itself.
+- Picks the latest `arxii-*.sql.gz` under the bucket's `db/` prefix by the
+  timestamp embedded in the object name (not S3 list order — same technique
+  `restore.sh` uses).
+- OVERWRITES your local dev DB. Refuses without the explicit
+  `--i-understand-this-overwrites-local` flag (mirrors `restore.sh`'s gate
+  style); `just pull-prod` with no `confirm=yes` refuses and changes
+  nothing.
+
+**One-time setup** — after a successful stand-up, get the dev_reader
+credentials and bucket config from Terraform outputs and add them to
+`src/.env`:
+
+```bash
+cd infra/terraform/prod
+tofu output -raw dev_reader_access_key    # -> ARXII_DEV_READER_ACCESS_KEY
+tofu output -raw dev_reader_secret_key    # -> ARXII_DEV_READER_SECRET_KEY
+tofu output -raw backups_bucket           # -> ARXII_BACKUPS_BUCKET
+tofu output -raw backups_s3_endpoint      # -> ARXII_BACKUPS_S3_ENDPOINT
+tofu output -raw region                   # -> ARXII_BACKUPS_REGION
+```
+
+`DATABASE_URL` (already required for local dev) is the restore target — only
+the plain `postgres://user:pass@host:port/dbname` form is supported (no
+query string, no surrounding quotes; same restriction the justfile's
+`_testdb-url` recipe already imposes on the same variable).
+
+## Media durability (Cloudinary → R2 mirror)
+
+User portraits/crests (`world.roster`'s `PlayerMedia`) live ONLY in
+Cloudinary — the nightly DB dump never covers binary media, so a
+Cloudinary-account-level loss previously had **no backup at all**.
+
+**Built (#2236 Phase 4):** `arxii-media-mirror.service` (+ weekly
+`arxii-media-mirror.timer`), installed by `roles/offsite_replication`
+alongside the existing DB offsite job. It pages through every Cloudinary
+resource (images/video/raw, all of them — not just `PlayerMedia`) and
+uploads any object not yet present in the SAME R2 offsite bucket under a
+`media/` prefix, using the existing R2 credential/endpoint. **Incremental,
+NEVER deletes** — a Cloudinary-side delete or overwrite never touches the
+R2 copy; the mirror is a backup, not a live sync. Cloudinary stays the
+primary/serving copy (the app never reads media from R2); R2 is
+recovery-only, so:
+
+- **RPO ≈ 7 days on media** (weekly cadence) vs. ~24h on the DB — accepted:
+  media is comparatively low-churn (portraits/crests, not gameplay state),
+  and this closes a "zero backup" gap, not a tight-RPO requirement.
+- Skipped entirely in rehearsal (`offsite_enabled: false` — same gate as
+  the DB offsite job; the R2 credential is prod-adjacent, see "Dress
+  rehearsal" above).
+- Watched by the off-box heartbeat (`roles/offbox_alerting`) alongside
+  `arxii-backup.service`/`arxii-offsite.service`.
+
 ## Known gap: Object Lock
 
 Both backup copies (the Linode primary bucket and the Cloudflare R2 offsite bucket) have
@@ -461,7 +524,14 @@ above.
   `scripts/restore-rehearsal.sh` — the narrower backup/restore-only drill. `scripts/smoke.sh` —
   end-to-end HTTP/WS/TLS-telnet checks, reusable against rehearsal or real prod.
   `scripts/lib.sh` — shared helpers (`wait_for_tcp`, `select_ssh_user`, tofu-output caching,
-  inventory/YAML generation) used by `standup.sh` and `rehearse.sh`.
+  inventory/YAML generation) used by `standup.sh` and `rehearse.sh`. `scripts/pull_prod_db.sh`
+  (#2236 Phase 4; `just pull-prod`) — dev-side prod→local DB pull, deliberately NOT sourcing
+  `lib.sh` (a small, cross-referenced duplicate of `restore.sh`'s verification query instead —
+  see "Pull prod data down" above).
+- `roles/offsite_replication` owns BOTH offsite jobs (#2236 Phase 4): the original DB dump
+  mirror (`arxii-offsite.service/.timer`) and the new weekly Cloudinary→R2 media mirror
+  (`arxii-media-mirror.service/.timer`, see "Media durability" above) — both gated by the same
+  `offsite_enabled` role-level condition in `site.yml`, both using the same R2 credential/bucket.
 
 ## Status
 

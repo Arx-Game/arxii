@@ -19,3 +19,11 @@ offsite_enabled: true
 # "Known gap: Object Lock"); this client never deletes remote objects
 # regardless, and the R2 credential's independence from Linode's is the
 # actual backstop today.
+
+# #2236 Phase 4 — weekly Cloudinary -> R2 media mirror (arxii-media-mirror.
+# service/.timer, same role/same R2 bucket+credential as the DB offsite job
+# above; separate `media/` prefix). Gated by the SAME `offsite_enabled` — see
+# site.yml's role-level `when:` — so it is skipped entirely in rehearsal for
+# the identical reason (the R2 credential is prod-adjacent).
+media_mirror_day: "Sun"
+media_mirror_window: "04:30"   # after both the nightly backup and DB-offsite windows

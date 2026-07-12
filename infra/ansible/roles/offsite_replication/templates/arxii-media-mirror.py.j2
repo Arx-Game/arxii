@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+# Managed by Ansible (offsite_replication). Weekly Cloudinary -> Cloudflare
+# R2 media mirror -- closes the "media is in NO backup" gap (#2236 Phase 4):
+# user portraits/crests live ONLY in Cloudinary today (settings.py's
+# cloudinary block; world.roster's PlayerMedia stores cloudinary_public_id/
+# url), so the nightly DB dump never covers them.
+#
+# INCREMENTAL, NEVER DELETES. Pages through every Cloudinary resource (all
+# resource_types: image/video/raw) and uploads any object not already
+# present in R2 under media/<public_id>.<format>. A Cloudinary-side delete
+# (or overwrite) never deletes/overwrites the R2 copy -- this script has no
+# delete/rm code path at all, by design: the mirror is a BACKUP, not a live
+# sync. Cloudinary stays the primary/serving copy; R2 is recovery-only.
+#
+# Run via `uv run --project {{ app_current }} python3 <this file>` (see the
+# systemd unit) so it resolves the `cloudinary`
+# package already in the app's locked venv (pyproject.toml dependency)
+# without a separate pip install. Credentials come from the systemd unit's
+# EnvironmentFile (CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET -- same names the
+# app itself reads; R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY -- the SEPARATE R2
+# credential the sibling arxii-offsite.sh DB job also uses) -- never logged,
+# never echoed.
+#
+# Uses the `aws` CLI (s3api head-object / s3 cp) rather than boto3, matching
+# the sibling arxii-offsite.sh shell job's tooling -- awscli is already an
+# apt dependency this role installs (see tasks/main.yml).
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import tempfile
+import urllib.request
+
+import cloudinary
+import cloudinary.api
+
+R2_ENDPOINT = "{{ offsite_r2_endpoint }}"
+R2_BUCKET = "{{ offsite_r2_bucket }}"
+MEDIA_PREFIX = "media/"
+RESOURCE_TYPES = ("image", "video", "raw")
+MAX_RESULTS = 500
+
+
+def aws_env() -> dict[str, str]:
+    env = dict(os.environ)
+    env["AWS_ACCESS_KEY_ID"] = os.environ["R2_ACCESS_KEY_ID"]
+    env["AWS_SECRET_ACCESS_KEY"] = os.environ["R2_SECRET_ACCESS_KEY"]
+    return env
+
+
+def object_exists(key: str, env: dict[str, str]) -> bool:
+    result = subprocess.run(
+        [
+            "aws", "--endpoint-url", R2_ENDPOINT, "s3api", "head-object",
+            "--bucket", R2_BUCKET, "--key", key,
+        ],
+        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+    )
+    return result.returncode == 0
+
+
+def mirror_one(resource: dict, env: dict[str, str]) -> str:
+    """Returns "new", "skipped", or "failed". NEVER deletes/overwrites --
+    an existing key is left untouched (incremental backup, not a sync)."""
+    public_id = resource["public_id"]
+    fmt = resource.get("format", "")
+    key = f"{MEDIA_PREFIX}{public_id}.{fmt}" if fmt else f"{MEDIA_PREFIX}{public_id}"
+
+    if object_exists(key, env):
+        return "skipped"
+
+    secure_url = resource.get("secure_url")
+    if not secure_url:
+        print(f"arxii-media-mirror: no secure_url for {public_id!r}", file=sys.stderr)
+        return "failed"
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp_path = tmp.name
+            with urllib.request.urlopen(secure_url, timeout=60) as resp:  # noqa: S310
+                tmp.write(resp.read())
+
+        upload = subprocess.run(
+            ["aws", "--endpoint-url", R2_ENDPOINT, "s3", "cp", tmp_path, f"s3://{R2_BUCKET}/{key}"],
+            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=False,
+        )
+        if upload.returncode != 0:
+            stderr = upload.stderr.decode(errors="replace")
+            print(f"arxii-media-mirror: upload FAILED for {key}: {stderr}", file=sys.stderr)
+            return "failed"
+        return "new"
+    except Exception as exc:  # noqa: BLE001 -- one bad asset must not abort the whole run
+        print(f"arxii-media-mirror: FAILED {key}: {exc}", file=sys.stderr)
+        return "failed"
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+def iter_resources(resource_type: str):
+    cursor = None
+    while True:
+        kwargs = {"resource_type": resource_type, "max_results": MAX_RESULTS}
+        if cursor:
+            kwargs["next_cursor"] = cursor
+        page = cloudinary.api.resources(**kwargs)
+        for resource in page.get("resources", []):
+            yield resource
+        cursor = page.get("next_cursor")
+        if not cursor:
+            break
+
+
+def main() -> int:
+    cloudinary.config(
+        cloud_name=os.environ["CLOUDINARY_CLOUD_NAME"],
+        api_key=os.environ["CLOUDINARY_API_KEY"],
+        api_secret=os.environ["CLOUDINARY_API_SECRET"],
+    )
+    env = aws_env()
+
+    counts = {"new": 0, "skipped": 0, "failed": 0}
+    for resource_type in RESOURCE_TYPES:
+        for resource in iter_resources(resource_type):
+            counts[mirror_one(resource, env)] += 1
+
+    total = sum(counts.values())
+    print(
+        f"arxii-media-mirror: {total} resource(s) checked -- "
+        f"{counts['new']} new, {counts['skipped']} already mirrored, {counts['failed']} failed"
+    )
+    return 1 if counts["failed"] else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
