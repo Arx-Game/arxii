@@ -328,6 +328,19 @@ resolving on accept).
 > The scene feed markdown gap the audit also flagged (`EvenniaMessage` never
 > parsing `RichTextInput`'s markdown) is closed by the same restyle: the
 > structured feed renders `FormattedContent`, not raw `EvenniaMessage`.
+>
+> **#2166 multi-character attention — DONE.** A player running several PCs at
+> once gets background-character attention routing, entirely client-side and
+> per-PC scoped: `GameTopBar`/`GameWindow` badge each alt character by tier
+> (`sessionAttention` — red numeric for a direct whisper/@-target, muted dot
+> for ambient activity, active character excluded); an unseen background
+> whisper fires a switch-through toast; duel challenges and scene action
+> (consent) requests addressed to ANY played character surface account-wide
+> and act/respond **as the addressed character**, not whichever PC happens to
+> be active (`DuelChallengeNotifier` fix + new `ConsentAttentionNotifier`,
+> backed by a new `role=incoming` filter on `/api/action-requests/`); and
+> every composer carries a standing "speaking as" identity chip. See
+> `docs/systems/scenes.md`'s "#2166 multi-character attention" subsection.
 
 - **Rich text editor** — DONE. `RichTextInput` (toolbar, shortcuts, color picker,
   `@name` autocomplete) composes into scenes on `/game`; the feed renders it via

@@ -408,7 +408,16 @@ with `distinct_initiators >= MIN_ENGAGEMENT_BAR` (currently 2) are granted Kudos
 - `POST /api/action-requests/` - Dispatch a new action request (single- or multi-target)
 - `POST /api/action-requests/{id}/respond/` - Accept or deny a primary-target request; also handles additional-target consent when `target_persona_id` is included in the payload
 
-**Filters:** `scene`, `status`, `initiator`, `target`
+**Filters:** `scene`, `status`, `initiator`, `target`, `role` (#2166 — `incoming`/
+`outgoing`, mirroring `world.combat.filters.DuelChallengeFilter.role` verbatim;
+narrows the queryset's already-account-scoped `Q(initiator_persona_id__in=...) |
+Q(target_persona_id__in=...)` — every persona across every character the
+account has ever played, via `get_account_personas` — down to just the
+`target_persona_id__in=...` side for `incoming`). `GET
+/api/action-requests/?status=pending&role=incoming` is what
+`ConsentAttentionNotifier` polls for an account-wide "pending requests
+addressed to any of my played characters" view; no `scene` param needed, and
+it never surfaces another account's requests.
 
 ### Action Targets (`/api/action-targets/`)
 
@@ -766,6 +775,64 @@ never message content) via `threadTabsStorage.ts`'s `localStorage` helpers, and
 `gameSlice` resets both tab fields whenever the session's scene id actually
 changes, since a tab pointing at a previous scene's thread set is unsafe to keep
 open.
+
+### #2166 multi-character attention
+
+Cross-character attention routing so a player running several PCs at once
+doesn't have to poll every tab for background activity — all of it client-side
+and per-PC scoped, no new server data or write path.
+
+**Two-tier attention derivation:** `sessionAttention(session, personaId)`
+(`frontend/src/game/attention.ts`) is a pure, selector-side function reusing
+#2165's `getThreadKey`/`countUnread` grouping against
+`threadLastSeen`/`sceneBaselineId` — the same threshold rule the tab strip's
+own unread badges already use, just re-run per background session instead of
+per open tab. `direct` = unread on `whisper:*` threads plus `target:*` threads
+that include that session's `personaId` (an @-target, duel challenge, or
+consent request aimed at that persona specifically); `ambient` = any other
+thread unread, or the legacy `session.unread` scalar. `GameTopBar`'s alt
+avatars and `GameWindow`'s puppet tab bar both render the tier as a red
+numeric badge (direct) or a muted dot (ambient) — the **active** character is
+always excluded (its own attention already lives in `ConversationTabStrip`'s
+per-tab badges), so nothing double-counts.
+
+**Whisper toasts:** `handleInteractionPayload.ts` (`frontend/src/hooks/`)
+fires one toast when a whisper lands on a session that isn't the active one
+and wasn't authored by that session's own persona, deduped per
+`character:interactionId` (a shared whisper delivered to two of the player's
+own characters toasts once per character, not once total). Clicking the toast
+switches the active session, opens the whisper's thread tab, and navigates to
+`/game` — the same switch-through a player would do by hand.
+
+**Right-character prompt dispatch:** duel challenges and scene action
+(consent) requests addressed to a background character surface and act **as
+that character**, not the currently-active one. `DuelChallengeNotifier`
+(`frontend/src/combat/`) already polled account-wide; the fix was resolving
+each challenge's `challenged` CharacterSheet id against the account's roster
+and binding `useDispatchPlayerAction` to that character per-toast, so Accept/
+Decline dispatch under the addressed character's id even while a different PC
+is active. `ConsentAttentionNotifier` (`frontend/src/scenes/components/`) is
+the same shape for scene action requests: it polls
+`GET /api/action-requests/?status=pending&role=incoming` (see the `role`
+filter under Action Requests below), resolves the request's `target_persona`
+against the roster's `primary_persona_id`/`active_persona_id`, and toasts
+"Consent request for `<Character>`: `<action>` from `<initiator>`" with no
+accept/deny in the toast itself — clicking only switches to (or starts a
+session for) the addressed character and navigates to `/game`, where the
+existing per-scene `ConsentPrompt` owns the graded response.
+
+**Speaking-as chip:** every composer (`CommandInput.tsx`, on both `/game` and
+`/scenes/:id`) renders a standing avatar+name chip naming whichever character
+is about to speak, even for single-character players — a permanent answer to
+"who am I talking as right now" independent of the attention badges above.
+
+**Per-PC scoping ("Never out alts", `docs/roadmap/design-tenets.md`):** all of
+the above is derived client-side from data the account already legitimately
+holds (its own sessions' cached interactions, its own roster's persona ids,
+requests already scoped server-side to `get_account_personas`) — no new
+account-wide field is added to any payload another player can see, and
+nothing here merges or unions what two of an account's characters can
+perceive.
 
 ---
 

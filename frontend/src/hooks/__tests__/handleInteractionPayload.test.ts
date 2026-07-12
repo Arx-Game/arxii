@@ -30,6 +30,7 @@ import { addSceneInteraction, openThreadTab, setActiveSession } from '@/store/ga
 import type { InteractionWsPayload } from '../types';
 import type { MyRosterEntry } from '@/roster/types';
 import type { NavigateFunction } from 'react-router-dom';
+import type { AppDispatch } from '@/store/store';
 
 function makeRosterEntries(): MyRosterEntry[] {
   return [
@@ -69,12 +70,12 @@ function makeWhisperPayload(overrides: Partial<InteractionWsPayload> = {}): Inte
 }
 
 describe('handleInteractionPayload', () => {
-  let dispatch: ReturnType<typeof vi.fn>;
+  let dispatch: AppDispatch;
   let navigate: NavigateFunction;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    dispatch = vi.fn();
+    dispatch = vi.fn() as unknown as AppDispatch;
     navigate = vi.fn() as unknown as NavigateFunction;
     getStateMock.mockReturnValue({ game: { active: 'Alice' } });
     getQueryDataMock.mockReturnValue(makeRosterEntries());
