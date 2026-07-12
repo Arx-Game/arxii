@@ -138,6 +138,7 @@ from commands.story import CmdStory
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
 from commands.travel import CmdTravel  # #2163
+from commands.vault import CmdVault
 from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
@@ -393,6 +394,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdMarket,
             # #1832 — ship commission/upgrade/repair/status namespace.
             CmdShip,
+            # #2179 — vault access-list management namespace.
+            CmdVault,
             # #2032 — spendable resonance balances + grant history (bare/history subverbs).
             CmdResonance,
         )
