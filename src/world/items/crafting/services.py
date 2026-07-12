@@ -500,7 +500,7 @@ def run_crafting_recipe(  # noqa: C901, PLR0912, PLR0913, PLR0915
         )
 
         crafter_sheet = CharacterSheet.objects.filter(character=crafter_character).first()
-        if is_masterwork(tier) and crafter_sheet is not None:
+        if tier is not None and is_masterwork(tier) and crafter_sheet is not None:
             award_masterwork_renown(
                 crafter_character_sheet=crafter_sheet,
                 tier=tier,
