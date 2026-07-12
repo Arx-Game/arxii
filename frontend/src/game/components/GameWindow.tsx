@@ -14,6 +14,29 @@ import { setActiveSession } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Link } from 'react-router-dom';
 import type { MyRosterEntry } from '@/roster/types';
+import { sessionAttention } from '@/game/attention';
+
+/**
+ * Two-tier attention indicator (#2166 Decision 4a) on a puppet session tab —
+ * direct (unseen whisper/@-target aimed at that character) badges a small
+ * red numeric count, mirroring `ConversationTabStrip`'s `UnreadBadge`;
+ * ambient (any other unread) shows a muted dot; neither renders nothing.
+ */
+function AttentionBadge({ direct, ambient }: { direct: number; ambient: boolean }) {
+  if (direct > 0) {
+    return (
+      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+        {direct}
+      </span>
+    );
+  }
+  if (ambient) {
+    return (
+      <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-muted-foreground/60" />
+    );
+  }
+  return null;
+}
 
 /** The active scene's live feed, composed once by `GamePage` (#2156). */
 export interface GameWindowSceneFeed {
@@ -165,20 +188,22 @@ export function GameWindow({
     <div className="flex min-h-0 flex-1 flex-col">
       {sessionNames.length >= 2 && (
         <div className="mb-2 flex gap-2 border-b">
-          {sessionNames.map((name) => (
-            <button
-              key={name}
-              onClick={() => handleTabClick(name)}
-              className={`relative rounded-t px-2 py-1 text-sm ${
-                active === name ? 'border-b-2 border-primary' : ''
-              }`}
-            >
-              {name}
-              {sessions[name].unread > 0 && (
-                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500" />
-              )}
-            </button>
-          ))}
+          {sessionNames.map((name) => {
+            const personaId = characters.find((c) => c.name === name)?.primary_persona_id ?? null;
+            const attention = sessionAttention(sessions[name], personaId);
+            return (
+              <button
+                key={name}
+                onClick={() => handleTabClick(name)}
+                className={`relative rounded-t px-2 py-1 text-sm ${
+                  active === name ? 'border-b-2 border-primary' : ''
+                }`}
+              >
+                {name}
+                <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
+              </button>
+            );
+          })}
         </div>
       )}
       {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}

@@ -22,7 +22,11 @@ export interface SessionAttention {
  * `personaId` (an @-target/duel-challenge/consent-request aimed at this
  * persona specifically). `countUnread` already excludes the viewer's own
  * authored interactions, so a thread containing only this persona's own poses
- * contributes to neither tier.
+ * contributes to neither tier. Both require `personaId != null` — until the
+ * roster resolves it, `countUnread` can't exclude the session's own authored
+ * messages, so whisper/target unread routes to `ambient` instead (avoids a
+ * pre-roster-load flicker where a session's own echoed whisper reads as
+ * direct).
  *
  * `ambient` = true when any other thread (room/place scroll, or a `target:*`
  * thread NOT aimed at this persona) has unread, or the legacy `session.unread`
@@ -56,7 +60,12 @@ export function sessionAttention(session: Session, personaId: number | null): Se
 
     const isWhisper = key.startsWith('whisper:');
     const isTargetedAtMe = key.startsWith('target:') && targetIncludes(key, personaId);
-    if (isWhisper || isTargetedAtMe) {
+    // Guard on personaId != null (#2166 review fold-in): countUnread can't
+    // exclude the viewer's own authored interactions without a personaId, so
+    // before the roster loads (personaId still null) a session's own echoed
+    // whisper would otherwise count as unread and get misattributed to
+    // direct. Route it to ambient instead until personaId resolves.
+    if (personaId != null && (isWhisper || isTargetedAtMe)) {
       direct += unread;
     } else {
       ambient = true;

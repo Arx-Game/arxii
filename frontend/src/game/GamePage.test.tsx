@@ -13,6 +13,8 @@ import {
   setSessionRoom,
   setSessionScene,
   addSceneInteraction,
+  addSessionMessage,
+  setSceneBaseline,
   clearSceneInteractions,
   resetGame,
 } from '@/store/gameSlice';
@@ -692,6 +694,88 @@ describe('GamePage', () => {
       expect(screen.getByText(/no messages yet/i)).toBeInTheDocument();
       expect(screen.queryByLabelText('Thread sidebar')).not.toBeInTheDocument();
       expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Puppet session tab bar attention badge (#2166) — GameWindow's multi-puppet
+  // tab strip (rendered when 2+ sessions are open) badges the SAME two-tier
+  // `sessionAttention` result as GameTopBar's alt-character avatars.
+  // ---------------------------------------------------------------------------
+
+  describe('puppet tab bar attention badge (#2166)', () => {
+    it('badges a background puppet tab with a numeric direct count on an unseen whisper', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      store.dispatch(startSession(SECOND_NAME));
+      store.dispatch(setSceneBaseline({ character: SECOND_NAME, baselineId: 0 }));
+      store.dispatch(
+        addSceneInteraction({
+          character: SECOND_NAME,
+          interaction: {
+            id: 1,
+            persona: { id: 99, name: 'Other', thumbnail_url: '' },
+            content: 'psst.',
+            mode: 'whisper',
+            timestamp: '2026-01-01T00:00:00Z',
+            scene_id: 200,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [8],
+            target_persona_ids: [],
+          },
+        })
+      );
+      // Back to Aria active; Bianca stays a background session.
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+
+      const { container } = renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      // Scope to the puppet session tab bar itself (GameWindow.tsx) — "Aria"
+      // and "Bianca" also appear as persona names elsewhere in the feed.
+      const tabBar = container.querySelector('.mb-2.flex.gap-2.border-b') as HTMLElement;
+      const biancaTab = within(tabBar).getByText(SECOND_NAME).closest('button') as HTMLElement;
+      expect(within(biancaTab).getByText('1')).toBeInTheDocument();
+    });
+
+    it('shows a muted ambient dot on a background puppet tab with unread but no direct attention', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      store.dispatch(startSession(SECOND_NAME));
+      // Switch back to Aria BEFORE the message arrives, so addSessionMessage
+      // sees an inactive Bianca session and increments her unread scalar.
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+      store.dispatch(
+        addSessionMessage({
+          character: SECOND_NAME,
+          message: { content: 'The kitchen stirs.', timestamp: Date.now(), type: 'text' },
+        })
+      );
+
+      const { container } = renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const tabBar = container.querySelector('.mb-2.flex.gap-2.border-b') as HTMLElement;
+      const biancaTab = within(tabBar).getByText(SECOND_NAME).closest('button') as HTMLElement;
+      expect(within(biancaTab).queryByText(/[0-9]/)).not.toBeInTheDocument();
+      expect(biancaTab.querySelector('.bg-muted-foreground\\/60')).not.toBeNull();
+    });
+
+    it('renders no badge on the active puppet tab', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      store.dispatch(startSession(SECOND_NAME));
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+
+      const { container } = renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const tabBar = container.querySelector('.mb-2.flex.gap-2.border-b') as HTMLElement;
+      const ariaTab = within(tabBar).getByText(ACTIVE_NAME).closest('button') as HTMLElement;
+      expect(within(ariaTab).queryByText(/[0-9]/)).not.toBeInTheDocument();
+      expect(ariaTab.querySelector('.bg-muted-foreground\\/60')).toBeNull();
+      expect(ariaTab.querySelector('.bg-red-500')).toBeNull();
     });
   });
 

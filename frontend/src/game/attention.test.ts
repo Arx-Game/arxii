@@ -144,7 +144,7 @@ describe('sessionAttention', () => {
     expect(result).toEqual({ direct: 0, ambient: true });
   });
 
-  it('handles a null personaId (no active persona known) without throwing', () => {
+  it('routes a whisper to ambient (not direct) when personaId is null (pre-roster-load flicker guard)', () => {
     const session = makeSession({
       sceneInteractions: [
         makeInteraction({
@@ -158,6 +158,6 @@ describe('sessionAttention', () => {
 
     const result = sessionAttention(session, null);
 
-    expect(result).toEqual({ direct: 1, ambient: false });
+    expect(result).toEqual({ direct: 0, ambient: true });
   });
 });
