@@ -107,7 +107,12 @@ actions, backends, and service functions.
   `UnlockAction` (`actions/definitions/doors.py`). Room-owner/tenant gated via the
   Actions' prerequisite, not in the command; no key-item system — lock state is a
   plain `db.locked` Evennia attribute on the Exit, checked by
-  `ExitState.can_traverse`.
+  `ExitState.can_traverse`. `CmdPick`/`CmdBreak` (`pick`/`break`, #2176) —
+  the intruder path: `pick` dispatches `PickLockAction` (key `"pick_lock"`,
+  check-gated Wits + Larceny, concealed deed); `break` dispatches
+  `BreakExitAction` (key `"break_exit"`, always succeeds, damages building
+  condition tier by 1, non-concealed deed). Both gated only on
+  `HasCharacterSheetPrerequisite` — no owner/tenant standing required.
 - **`offer_registry.py`**: `OfferHandler` protocol, `_REGISTRY`, `register_offer_handler`,
   `get_all_pending`, `find_handler` — pure-Python in-process registry; no DB model.
 - **`offer_response.py`**: `CmdDecline` (`decline`) — registry-offer decline; see also
