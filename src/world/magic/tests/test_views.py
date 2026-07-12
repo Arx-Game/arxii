@@ -582,3 +582,26 @@ class ConsequencePoolCatalogViewSetTests(APITestCase):
         self.assertTrue(any("Melee Offense: Precise" in n for n in names))
         self.assertTrue(any("Technique Cast: Wild Surge" in n for n in names))
         self.assertTrue(any("Technique Cast: Precise Working" in n for n in names))
+
+    def test_list_filters_by_action_category(self):
+        """#1995 — ?action_category= narrows to the category-matching catalog:
+        physical → combat flavors only; non-physical → magic flavors only;
+        invalid value → 400."""
+        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+
+        ensure_technique_catalog_content()
+        ensure_combat_offense_catalog_content()
+
+        physical = self.client.get("/api/magic/consequence-pool-catalog/?action_category=physical")
+        self.assertEqual(physical.status_code, 200)
+        self.assertEqual(len(physical.data), 2)
+        self.assertTrue(all("Melee Offense" in row["name"] for row in physical.data))
+
+        mental = self.client.get("/api/magic/consequence-pool-catalog/?action_category=mental")
+        self.assertEqual(mental.status_code, 200)
+        self.assertEqual(len(mental.data), 2)
+        self.assertTrue(all("Technique Cast" in row["name"] for row in mental.data))
+
+        invalid = self.client.get("/api/magic/consequence-pool-catalog/?action_category=bogus")
+        self.assertEqual(invalid.status_code, 400)

@@ -1252,14 +1252,44 @@ class FinalizeMagicDataCantripTests(TestCase):
         assert technique.description == "A revolutionary's fire."
 
     def test_technique_uses_catalog_consequence_pool(self) -> None:
-        """finalize_magic_data assigns the chosen catalog pool's ActionTemplate."""
+        """finalize_magic_data assigns the chosen catalog pool's ActionTemplate.
+
+        A magic catalog pool requires a non-physical derived category (#1995), so
+        the draft's path authors action_category=mental."""
+        from actions.constants import ActionCategory
         from world.character_creation.services import finalize_magic_data
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.classes.factories import PathFactory
         from world.magic.models import CharacterGift, Technique
         from world.magic.seeds_cast import ensure_technique_catalog_content
 
         catalog_templates = ensure_technique_catalog_content()
         chosen = catalog_templates[0]
+        sheet = CharacterSheetFactory()
+        mental_path = PathFactory(name="Mental Test Path", action_category=ActionCategory.MENTAL)
+        draft = self._create_draft(
+            cantrip=self.cantrip,
+            consequence_pool_id=chosen.consequence_pool_id,
+            path=mental_path,
+        )
+
+        finalize_magic_data(draft, sheet)
+
+        gift = CharacterGift.objects.get(character=sheet).gift
+        technique = Technique.objects.get(gift=gift)
+        self.assertEqual(technique.action_template_id, chosen.pk)
+
+    def test_technique_uses_combat_catalog_pool_for_physical_draft(self) -> None:
+        """A PHYSICAL-derived draft (no path → PHYSICAL default) picking a combat
+        offense flavor keeps it: technique.action_template is that combat flavor
+        template (#1995)."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
+        from world.magic.models import CharacterGift, Technique
+
+        combat_templates = ensure_combat_offense_catalog_content()
+        chosen = combat_templates[0]
         sheet = CharacterSheetFactory()
         draft = self._create_draft(
             cantrip=self.cantrip, consequence_pool_id=chosen.consequence_pool_id
@@ -1270,6 +1300,7 @@ class FinalizeMagicDataCantripTests(TestCase):
         gift = CharacterGift.objects.get(character=sheet).gift
         technique = Technique.objects.get(gift=gift)
         self.assertEqual(technique.action_template_id, chosen.pk)
+        self.assertEqual(technique.action_template.name, "Melee Attack: Brutal")
 
     def test_technique_falls_back_to_default_on_invalid_pool_id(self) -> None:
         """A stale/invalid selected_consequence_pool_id degrades to the
@@ -1329,6 +1360,7 @@ class FinalizeMagicDataCantripTests(TestCase):
         custom_gift_description: str = "",
         glimpse_story: str = "",
         consequence_pool_id: int | None = None,
+        path: object | None = None,
     ) -> CharacterDraft:
         """Create a minimal draft with cantrip data for finalize_magic_data testing."""
         from evennia_extensions.factories import AccountFactory
@@ -1351,6 +1383,7 @@ class FinalizeMagicDataCantripTests(TestCase):
             account=AccountFactory(),
             draft_data=draft_data,
             selected_tradition=tradition,
+            selected_path=path,
         )
 
 

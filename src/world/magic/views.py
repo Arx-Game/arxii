@@ -49,6 +49,7 @@ from world.magic.filters import (
     CharacterAuraFilter,
     CharacterGiftFilter,
     CharacterResonanceFilter,
+    ConsequencePoolCatalogFilter,
     ResonanceGrantFilterSet,
     RitualSessionFilterSet,
     ThreadFilter,
@@ -209,15 +210,19 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only catalog of curated consequence-pool flavors a technique author
     may select — children of the shared base 'Magic: Technique Cast' pool AND
     children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
-    list. The picker (TechniqueBuilderForm's "Outcome Flavor" select) does not
-    filter by action_category client-side today, so this listing stays flat
-    too rather than threading category through — resolve_cast_action_template
-    is still the seam that enforces a chosen flavor matches the technique's
-    action_category at submit time."""
+    list by default. An optional ``?action_category=`` query param narrows to
+    the category-matching catalog (physical → combat flavors, anything else →
+    magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
+    path-derived category) only offer flavors the technique can legally keep —
+    resolve_cast_action_template enforces the same split at submit/finalize
+    time. The technique builder's category-agnostic picker keeps the flat
+    union by passing no param."""
 
     serializer_class = ConsequencePoolCatalogSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ConsequencePoolCatalogFilter
 
     def get_queryset(self):
         from actions.models import ConsequencePool  # noqa: PLC0415
