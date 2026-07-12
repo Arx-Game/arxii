@@ -46,6 +46,7 @@ from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.models.flows import FlowDefinition, FlowStepDefinition
 from flows.models.triggers import TriggerDefinition
+from world.areas.positioning.constants import RampartSignature
 from world.combat.constants import ActionCategory
 from world.conditions.constants import (
     BLINK_CONDITION_NAME,
@@ -199,6 +200,44 @@ _TELEKINESIS_TRIGGER_NAME: str = "telekinesis_condition_applied"
 #: obstacle / telekinesis.  Runtime destination selection (cast-time target picker) is
 #: a follow-up; the Task 15/16 E2Es pass a real Position via test setup.
 _PLACEHOLDER_POSITION_ID: int = 0
+
+# ---------------------------------------------------------------------------
+# #2209: Rampart (living barrier) bundle
+# ---------------------------------------------------------------------------
+
+#: Gift shared by all four "Raise Rampart" techniques.
+RAMPART_GIFT_NAME: str = "Wardcraft"
+
+#: TechniqueStyle shared by all four "Raise Rampart" techniques.
+RAMPART_STYLE_NAME: str = "Elemental Bulwark Stance"
+
+#: Name of the Thorn rampart's GRASPING signature_condition. Applied not through
+#: this bundle's own CONDITION_APPLIED trigger but at the shared forced-move
+#: landing seam (world.mechanics.effect_handlers._apply_grasping_if_covered).
+RAMPART_ENTANGLED_CONDITION_NAME: str = "Entangled"
+
+#: Dotted path to the CONDITION_APPLIED -> raise_rampart_on_condition adapter.
+_RAISE_RAMPART_ADAPTER_PATH: str = "world.magic.services.effect_handlers.raise_rampart_on_condition"
+
+#: Mid-tier integrity seeded for every Raise Rampart technique (#2209).
+_RAMPART_INTEGRITY: int = 24
+
+#: One row per element: (element_name, signature_behavior, signature_value,
+#: signature_damage_type_name, signature_condition_name, resistances).
+#: resistances is a tuple of (damage_type_name, value) pairs, small ints (2-6).
+_RAMPART_ELEMENTS: tuple[tuple[str, str, int, str | None, str | None, tuple], ...] = (
+    ("Stone", RampartSignature.SEAL_EDGES, 0, None, None, (("Force", 6), ("Acid", 3))),
+    ("Wind", RampartSignature.MISSILE_WARD, 4, None, None, (("Lightning", 3), ("Poison", 4))),
+    ("Fire", RampartSignature.MELEE_RETALIATION, 4, "Fire", None, (("Cold", 5),)),
+    (
+        "Thorn",
+        RampartSignature.GRASPING,
+        0,
+        None,
+        RAMPART_ENTANGLED_CONDITION_NAME,
+        (("Poison", 4), ("Acid", 2)),
+    ),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1193,6 +1232,152 @@ def ensure_telekinesis_content() -> None:
     )
 
 
+def ensure_rampart_content() -> None:
+    """Idempotently seed the "Raise Rampart" bundle: 4 elemental profiles + techniques (#2209).
+
+    For each of Stone/Wind/Fire/Thorn, creates (get_or_create):
+
+    1. A ``RampartElementProfile`` named after the element, with its authored
+       ``signature_behavior``/``signature_value`` and a couple of small
+       ``RampartElementResistance`` rows (2-6).
+    2. A ``FlowDefinition`` with a single ``CALL_SERVICE_FUNCTION`` step pointing at
+       ``raise_rampart_on_condition``, carrying the profile's pk and a mid-tier
+       ``integrity`` (24) as static params alongside the placeholder ``position_id``
+       (runtime destination selection is the cast-time ``cast_destination``, same
+       mechanism Barricade/teleport use).
+    3. A ``TriggerDefinition`` on ``CONDITION_APPLIED`` with a SELF filter.
+    4. A "<Element> Rampart" marker ``ConditionTemplate`` in the "Fortification"
+       category, duration ``UNTIL_USED``.
+    5. A "Raise Rampart (<Element>)" ``Technique`` with a SELF ``TechniqueAppliedCondition``.
+
+    Thorn's GRASPING signature additionally seeds the "Entangled" ``ConditionTemplate``
+    (``RAMPART_ENTANGLED_CONDITION_NAME``) in a "Restrained" category — applied not
+    through this bundle's own trigger but at the shared forced-move landing seam
+    (``world.mechanics.effect_handlers._apply_grasping_if_covered``).
+    """
+    from world.areas.positioning.models import (  # noqa: PLC0415
+        RampartElementProfile,
+        RampartElementResistance,
+    )
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionCategory, DamageType  # noqa: PLC0415
+
+    for (
+        element_name,
+        signature_behavior,
+        signature_value,
+        signature_damage_type_name,
+        signature_condition_name,
+        resistances,
+    ) in _RAMPART_ELEMENTS:
+        signature_damage_type = None
+        if signature_damage_type_name is not None:
+            signature_damage_type, _created = DamageType.objects.get_or_create(
+                name=signature_damage_type_name
+            )
+
+        signature_condition = None
+        if signature_condition_name is not None:
+            restrained_cat, _created = ConditionCategory.objects.get_or_create(
+                name="Restrained",
+                defaults={
+                    "description": "Conditions that bind or immobilize the bearer.",
+                    "is_negative": True,
+                    "display_order": 45,
+                },
+            )
+            signature_condition, _created = ConditionTemplate.objects.get_or_create(
+                name=signature_condition_name,
+                defaults={
+                    "description": (
+                        "Bound by grasping growth after being forced onto a Thorn "
+                        "rampart's position."
+                    ),
+                    "category": restrained_cat,
+                    "default_duration_type": DurationType.ROUNDS,
+                    "default_duration_value": 2,
+                    "is_stackable": False,
+                    "max_stacks": 1,
+                    "has_progression": False,
+                    "can_be_dispelled": True,
+                },
+            )
+
+        # 1. RampartElementProfile + resistances.
+        profile, _created = RampartElementProfile.objects.get_or_create(
+            name=element_name,
+            defaults={
+                "description": f"A living barrier woven from {element_name.lower()}.",
+                "signature_behavior": signature_behavior,
+                "signature_value": signature_value,
+                "signature_damage_type": signature_damage_type,
+                "signature_condition": signature_condition,
+            },
+        )
+        for damage_type_name, value in resistances:
+            damage_type, _created = DamageType.objects.get_or_create(name=damage_type_name)
+            RampartElementResistance.objects.get_or_create(
+                profile=profile,
+                damage_type=damage_type,
+                defaults={"value": value},
+            )
+
+        # 2. Flow: single CALL_SERVICE_FUNCTION step with static position placeholder.
+        root_step = _seed_call_service_flow(
+            f"rampart_{element_name.lower()}_on_condition_applied",
+            _RAISE_RAMPART_ADAPTER_PATH,
+            extra_params={
+                "position_id": _PLACEHOLDER_POSITION_ID,
+                "element_profile_id": profile.pk,
+                "integrity": _RAMPART_INTEGRITY,
+            },
+        )
+        rampart_flow = root_step.flow
+
+        # 3. Trigger: CONDITION_APPLIED, SELF filter.
+        rampart_trigger, _created = TriggerDefinition.objects.get_or_create(
+            name=f"rampart_{element_name.lower()}_condition_applied",
+            defaults={
+                "event_name": EventName.CONDITION_APPLIED,
+                "flow_definition": rampart_flow,
+                "base_filter_condition": _SELF_TARGET_FILTER,
+                "priority": 0,
+                "description": (
+                    f"Raises a {element_name} rampart at the cast destination when the "
+                    f"{element_name} Rampart condition is applied."
+                ),
+            },
+        )
+
+        # 4. ConditionTemplate: "<Element> Rampart" marker in the Fortification category.
+        condition = _seed_active_condition(
+            f"{element_name} Rampart",
+            category_name="Fortification",
+            category_is_negative=False,
+            category_display_order=41,
+            description=(
+                f"A transient marker applied when the caster invokes Raise Rampart "
+                f"({element_name}). The CONDITION_APPLIED trigger raises the living "
+                "barrier, then the marker expires."
+            ),
+        )
+        condition.reactive_triggers.add(rampart_trigger)
+
+        # 5. Technique.
+        _seed_technique(
+            f"Raise Rampart ({element_name})",
+            gift_name=RAMPART_GIFT_NAME,
+            style_name=RAMPART_STYLE_NAME,
+            effect_type_name="Fortification",
+            description="Techniques that raise living barriers on the battlefield.",
+            technique_description=(
+                f"Weave a {element_name.lower()}-aspected living barrier at the target "
+                "position, chipping down as it absorbs strikes."
+            ),
+            condition_template=condition,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Unified entry point — Task 14c
 # ---------------------------------------------------------------------------
@@ -1210,6 +1395,7 @@ def ensure_effect_palette_content() -> None:
       Phase Step (blink_dodge).
     - **Task 14c** — Phase Jump (teleport), Barricade (obstacle), Ghostform
       (incorporeal), Earthmeld (sink), Force Grip (telekinesis).
+    - **#2209** — Raise Rampart (Stone/Wind/Fire/Thorn).
 
     This is the single function that integration-test setup (Tasks 15/16 E2Es)
     and the staff seed loader call.
@@ -1226,3 +1412,5 @@ def ensure_effect_palette_content() -> None:
     ensure_incorporeal_content()
     ensure_sink_content()
     ensure_telekinesis_content()
+    # #2209
+    ensure_rampart_content()

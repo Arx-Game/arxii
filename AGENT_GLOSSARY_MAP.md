@@ -259,6 +259,15 @@ non-`redirect` protective flavor (`world.magic.services.targeting.protective_fla
 instead rolls the guardian's own cast check and pays anima, not fatigue (ADR-0118). The
 combat per-app glossary has the full entry. _Avoid_: guardian ward, protect action.
 
+**Rampart** (#2209, epic #2040 decision 3):
+A projected living barrier covering a `Position` — one shared `integrity` pool, an
+authored elemental profile (Stone/Wind/Fire/Thorn), map-rendered crack state. Owned by
+`world.areas.positioning` (the model + ADR-0125's "why an entity" rationale); combat owns
+interception (runs before `DAMAGE_PRE_APPLY`, ahead of personal reactives and Guardian
+reactions) and the WARD-Clash meter binding. Full entries:
+[areas/positioning AGENT_GLOSSARY](src/world/areas/positioning/AGENT_GLOSSARY.md),
+[combat AGENT_GLOSSARY](src/world/combat/AGENT_GLOSSARY.md).
+
 **Technique Entrance** (#2183):
 An Entrance whose check IS a technique cast — the cast's success level substitutes for the
 entrance's social roll entirely (ADR-0113). Distinct from Entry Flourish (the resonance

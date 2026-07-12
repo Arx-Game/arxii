@@ -156,6 +156,8 @@
   - consequence_effects <- checks.ConsequenceEffect
   - position_shelters <- areas.PositionShelter
   - blueprint_position_shelters <- areas.BlueprintPositionShelter
+  - rampart_signature_profiles <- areas.RampartElementProfile
+  - rampart_resistances <- areas.RampartElementResistance
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
@@ -205,6 +207,7 @@
   - treatment_backlash_source <- conditions.TreatmentTemplate
   - consequence_effects <- checks.ConsequenceEffect
   - stat_rules_for <- achievements.ConditionStatRule
+  - rampart_signature_profiles <- areas.RampartElementProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
 
 ### ConditionStage
@@ -582,6 +585,7 @@
   - edges_as_b <- areas.PositionEdge
   - occupants <- areas.ObjectPosition
   - shelters <- areas.PositionShelter
+  - rampart <- areas.Rampart
   - traps <- room_features.Trap
 
 ### PositionEdge
@@ -626,6 +630,25 @@
 **Foreign Keys:**
   - blueprint_position -> areas.BlueprintPosition [FK]
   - damage_type -> conditions.DamageType [FK]
+
+### RampartElementProfile
+**Foreign Keys:**
+  - signature_damage_type -> conditions.DamageType [FK] (nullable)
+  - signature_condition -> conditions.ConditionTemplate [FK] (nullable)
+**Pointed to by:**
+  - resistances <- areas.RampartElementResistance
+  - rampart_set <- areas.Rampart
+
+### RampartElementResistance
+**Foreign Keys:**
+  - profile -> areas.RampartElementProfile [FK]
+  - damage_type -> conditions.DamageType [FK]
+
+### Rampart
+**Foreign Keys:**
+  - position -> areas.Position [OneToOne]
+  - element_profile -> areas.RampartElementProfile [FK]
+  - created_by_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### Service Functions
 - `area_for_scene(scene: 'Scene | None') -> 'Area | None' — Resolve the Area for a scene's location, or None.`
@@ -1304,6 +1327,7 @@
   - achievements <- achievements.CharacterAchievement
   - titles <- achievements.CharacterTitle
   - conjured_obstacles <- areas.PositionEdge
+  - ramparts <- areas.Rampart
   - owned_instances <- instances.InstancedRoom
   - captivities <- captivity.Captivity
   - journal_entries <- journals.JournalEntry
@@ -1895,6 +1919,7 @@
   - resolution_consequence_pool -> actions.ConsequencePool [FK]
   - per_round_consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - triggering_threat_entry -> combat.ThreatPoolEntry [FK] (nullable)
+  - rampart -> areas.Rampart [FK] (nullable)
 **Pointed to by:**
   - rounds <- combat.ClashRound
   - declarations <- combat.ClashContributionDeclaration
@@ -1967,11 +1992,12 @@
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Create a CombatParticipant linking a PC to an encounter.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
-- `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
+- `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' — Reduce ``damage`` by role-gated equipped-armor soak (#1174).`
 - `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' — Add fatigue to the pool.`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' — Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' — Subtract attack-cover from damage.`
+- `apply_rampart_interception(character_or_opponent: 'Character', damage: 'int', damage_type: 'DamageType | None', *, attacker_ref: 'object | None', delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'int' — Intercept a strike against a rampart-covered position (#2209).`
 - `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' — Assess break-bar damage for all boss opponents with a break bar.`
 - `begin_declaration_phase(encounter: 'CombatEncounter') -> 'None' — Advance round_number by 1 and set status to DECLARING.`
 - `check_and_advance_boss_phase(opponent: 'CombatOpponent') -> 'BossPhase | None' — Check whether a boss should advance to the next phase and apply it.`
@@ -2151,6 +2177,8 @@
   - consequence_effects <- checks.ConsequenceEffect
   - position_shelters <- areas.PositionShelter
   - blueprint_position_shelters <- areas.BlueprintPositionShelter
+  - rampart_signature_profiles <- areas.RampartElementProfile
+  - rampart_resistances <- areas.RampartElementResistance
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
@@ -2200,6 +2228,7 @@
   - treatment_backlash_source <- conditions.TreatmentTemplate
   - consequence_effects <- checks.ConsequenceEffect
   - stat_rules_for <- achievements.ConditionStatRule
+  - rampart_signature_profiles <- areas.RampartElementProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
 
 ### ConditionStage

@@ -778,11 +778,12 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
 - **Source:** `src/world/locations/`
 - **Details:** `src/world/locations/CLAUDE.md`
 
-### Positioning (#530 + #1017 + #1018 + #2006)
+### Positioning (#530 + #1017 + #1018 + #2006 + #2209)
 Room-anchored spatial graph: named position nodes, traversable edges, per-object
 occupancy, capability-gated movement, GM terrain blueprints, a spatial tactical-map
-UI (scene + combat), and dynamic battlefield reshaping (aerial layer, chasms,
-consequence effects for graph mutation and flight).
+UI (scene + combat), dynamic battlefield reshaping (aerial layer, chasms,
+consequence effects for graph mutation and flight), and Rampart living barriers
+(#2209 — a position-anchored entity with a shared integrity pool, see ADR-0125).
 
 - **Models:** `Position` (`PositionKind` discriminator; `elevation_anchor` self-FK —
   the ground node an AERIAL or CHASM node is anchored to; `layout_x`/`layout_y`
@@ -792,7 +793,10 @@ consequence effects for graph mutation and flight).
   and blueprint layers; **blueprint models** `PositionBlueprint` (reusable GM-authored
   layout), `BlueprintPosition` (`layout_x`/`layout_y` too), `BlueprintEdge`;
   `RoomProfile.default_blueprint` FK (`evennia_extensions`) links a room to its
-  preferred layout.
+  preferred layout. **Rampart trio (#2209):** `Rampart` (`OneToOneField` → `Position`,
+  `integrity`/`max_integrity`, `element_profile` FK, `crack_state` property),
+  `RampartElementProfile` (authored Stone/Wind/Fire/Thorn rows, one `RampartSignature`
+  behavior each), `RampartElementResistance` (per-damage-type resist/vulnerability row).
 - **Key Services:** `create_position` / `remove_position` / `connect_positions` /
   `disconnect_positions` / `edge_between` / `place_in_position` /
   `move_to_position` (adjacency + passability + MOVEMENT capability + active-gating) /
@@ -804,7 +808,9 @@ consequence effects for graph mutation and flight).
   **staging** `instantiate_blueprint(blueprint, room, *, replace=False)`;
   **aerial layer** `materialize_aerial_layer(room)` / `teardown_aerial_layer(room)` /
   `enter_aerial(objectdb)` / `leave_aerial(objectdb)`;
-  **fall seam** `maybe_emit_fall(objectdb, position)` — emits `EventName.FELL` when entering a CHASM
+  **fall seam** `maybe_emit_fall(objectdb, position)` — emits `EventName.FELL` when entering a CHASM;
+  **ramparts** `raise_rampart` / `rampart_at` / `damage_rampart` (shared mutation seam — also
+  used by combat's WARD-Clash progress sync) / `expire_rampart_rounds` / `teardown_ramparts` (#2209)
 - **Enums:** `PositionKind` (PRIMARY / FEATURE / ELEVATED / AERIAL / BARRIER_SIDE / CHASM);
   `PositionDestination` in `world/checks/constants.py`
   (ACTOR_POSITION / GATING_FAR_SIDE / NAMED / AWAY_FROM_ACTOR) — governs `MOVE_TO_POSITION`
@@ -814,7 +820,9 @@ consequence effects for graph mutation and flight).
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
   `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer`, `PositionNodeSerializer`,
   `PositionEdgeSerializer` (the last two are the tactical-map node/edge shapes, #2006 —
-  used by both combat and scenes layers)
+  used by both combat and scenes layers; `PositionNodeSerializer` gained `rampart_element` /
+  `rampart_integrity` / `rampart_max_integrity` / `rampart_crack_state`, all `None` when
+  uncovered, #2209)
 - **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`), `TakePositionAction`
   (`registry_key="take_position"` — voluntary PRIMARY/FEATURE entry for an UNPLACED actor,
   #2005), `GMPlaceInPositionAction` (`registry_key="gm_place_in_position"` — staff/scene-GM
@@ -837,7 +845,8 @@ consequence effects for graph mutation and flight).
   tab in `CombatRail`'s right rail alongside "Your Turn"/`CombatTurnPanel` (#2197: `CombatRail`
   renders in-scene on `SceneDetailPage`'s `/scenes/:id`, not a dedicated route,
   `frontend/src/combat/components/`) + `MovementActions` (shared adjacent-position button
-  list, `frontend/src/combat/components/`)
+  list, `frontend/src/combat/components/`). `PositionMapNode` renders a covering Rampart as
+  a colored ring (solid/dashed/pulsing-dashed by `crack_state`, #2209).
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
   aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
 - **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /
@@ -3430,6 +3439,19 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
+- **Rampart interception (#2209, epic #2040 decision 3; see `docs/systems/areas.md`'s
+  "Rampart — Living Barriers" for the model and ADR-0125 for the design rationale):**
+  `apply_rampart_interception` (`world/combat/services.py`) chips a position-covering
+  `Rampart`'s `integrity` — via the shared `damage_rampart` seam — at the top of both
+  `apply_damage_to_participant` and `_resolve_opponent_pre_apply`, **before**
+  `DAMAGE_PRE_APPLY` emits. Firing order: Rampart → personal reactive interceptors → Guardian
+  reactions. `ThreatPoolEntry.delivery` (`StrikeDelivery`: MELEE/MISSILE, shared with the
+  open wind-mechanic question #1555) plus `is_area` (`targeting_mode != SINGLE`) feed a Wind
+  profile's `MISSILE_WARD` resist adjustment. `Clash.rampart` (nullable FK) binds a
+  sustained-attack WARD clash to the covered position's Rampart; `_sync_rampart_progress`
+  (`world/combat/clash.py`) mirrors each round's progress delta onto `rampart.integrity`
+  through the same `damage_rampart` seam, so interception (paused while that clash is
+  ACTIVE) and clash-progress never drift apart.
 - **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
   typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
   `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →

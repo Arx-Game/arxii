@@ -1283,7 +1283,11 @@ def tick_round_for_targets(
         advance_plummet(target_list)
 
         # #2019: expire conjured obstacles + zone hazards in the target rooms.
-        from world.areas.positioning.services import expire_obstacle_rounds  # noqa: PLC0415
+        # #2209: ramparts expire on the same per-round tick.
+        from world.areas.positioning.services import (  # noqa: PLC0415
+            expire_obstacle_rounds,
+            expire_rampart_rounds,
+        )
         from world.room_features.trap_services import tick_zone_hazards  # noqa: PLC0415
 
         rooms_seen: set[int] = set()
@@ -1292,4 +1296,5 @@ def tick_round_for_targets(
             if room is not None and room.id not in rooms_seen:
                 rooms_seen.add(room.id)
                 expire_obstacle_rounds(room)
+                expire_rampart_rounds(room)
                 tick_zone_hazards(room)

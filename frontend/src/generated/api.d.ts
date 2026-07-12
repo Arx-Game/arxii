@@ -30014,6 +30014,10 @@ export interface components {
       readonly elevation_anchor_id: number | null;
       readonly layout_x: number | null;
       readonly layout_y: number | null;
+      readonly rampart_element: string | null;
+      readonly rampart_integrity: number | null;
+      readonly rampart_max_integrity: number | null;
+      readonly rampart_crack_state: string | null;
     };
     /** @description Compact public representation of a Position (id + name). */
     PositionSummary: {

@@ -71,6 +71,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   self-cast wards, so an ally ward strains its caster rather than a free ride for the ally;
   an upkeep payer who can't afford the round cost lapses the ward. No in-combat party AoE —
   deliberately not built.
+- **Rampart living barriers (#2209, epic #2040 decision 3, ADR-0125).** A position-anchored
+  `Rampart` entity (`world.areas.positioning`) with a shared `integrity`/`max_integrity` pool
+  covers everyone at its `Position`, faction-blind like ADR-0109's obstacles. Interception
+  (`apply_rampart_interception`) chips it at the top of both damage-application seams, before
+  `DAMAGE_PRE_APPLY` and ahead of personal reactives/Guardian reactions; a sustained barrage
+  instead opens a WARD `Clash` bound to the Rampart (`Clash.rampart`), whose progress syncs
+  the same integrity pool. Four authored elemental profiles (Stone/seal-edges, Wind/missile-
+  ward, Fire/melee-retaliation, Thorn/grasping) ship via the effect palette
+  (`ensure_rampart_content`), each with its own "Raise Rampart" technique. Crack-state
+  (INTACT/CRACKED/CRUMBLING) renders on the tactical map as a colored ring
+  (`PositionMapNode`, #2209).
 - **On-use items as a round action (#2023/#2120).** `combat use <item> [on <target>]`
   (telnet) and `POST /api/combat/{pk}/use_item/` (web) both declare a USE_ITEM
   `CombatRoundAction` through the shared `combat_use` REGISTRY action; round resolution
@@ -171,7 +182,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 
 - **Effect palette** — SHIPPED (#1584: summon, reflect, incorporeal, sink, telekinesis, teleport,
-  obstacle, force-field; combat position-targeting #2206; ally/party ward variants #2208). The
+  obstacle, force-field; combat position-targeting #2206; ally/party ward variants #2208; Rampart
+  living barriers #2209). The
   three position-consuming effects (telekinesis/teleport/obstacle → Force Grip/Phase Jump/Barricade)
   have real runtime destination selection for combat (#2206) — the non-combat web cast path still
   lacks a position picker. Remaining per-effect follow-ups live in the capability ledger, not here.

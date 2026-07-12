@@ -1029,6 +1029,30 @@ def _connect_edge(
     )
 
 
+def _apply_grasping_if_covered(target: "ObjectDB", destination: "Position") -> None:  # noqa: OBJECTDB_PARAM
+    """Afflict a CombatOpponent forced onto a GRASPING rampart's position (#2209).
+
+    The shared landing seam: every forced-move (knockback, force-grip, ...)
+    funnels through ``force_move_to_position`` via ``_move_to_position``, so
+    hooking here catches every way a CombatOpponent can be shoved onto a
+    rampart-covered position. No-op for PC targets, non-GRASPING profiles, an
+    absent rampart, or an absent signature_condition.
+    """
+    from world.areas.positioning.constants import RampartSignature  # noqa: PLC0415
+    from world.areas.positioning.services import rampart_at  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+    rampart = rampart_at(destination)
+    if rampart is None or rampart.element_profile.signature_behavior != RampartSignature.GRASPING:
+        return
+    condition = rampart.element_profile.signature_condition
+    if condition is None:
+        return
+    if not CombatOpponent.objects.filter(objectdb=target).exists():
+        return
+    apply_condition(target, condition)
+
+
 def _move_to_position(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -1050,6 +1074,7 @@ def _move_to_position(
         )
     force_move_to_position(target, destination)
     maybe_emit_fall(target, destination)
+    _apply_grasping_if_covered(target, destination)
     return AppliedEffect(
         effect_type=EffectType.MOVE_TO_POSITION,
         description=f"Moved {target.db_key} to {destination.name}",

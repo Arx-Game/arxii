@@ -220,6 +220,13 @@ class TargetingMode(models.TextChoices):
     ALL = "all", "All"
 
 
+class StrikeDelivery(models.TextChoices):
+    """How a ThreatPoolEntry's strike reaches its target (#2209 rampart interception)."""
+
+    MELEE = "melee", "Melee"
+    MISSILE = "missile", "Missile"
+
+
 class TargetSelection(models.TextChoices):
     """How an NPC selects its target."""
 

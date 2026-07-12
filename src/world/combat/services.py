@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePool
     from flows.events.payloads import DamageSource
     from typeclasses.characters import Character
-    from world.areas.positioning.models import Position
+    from world.areas.positioning.models import Position, RampartElementProfile
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
@@ -93,6 +93,7 @@ from world.combat.constants import (
     OpponentTier,
     PaceMode,
     ParticipantStatus,
+    StrikeDelivery,
     TargetingMode,
     TargetSelection,
 )
@@ -3910,7 +3911,19 @@ def _resolve_opponent_pre_apply(
     trigger band) still runs. Used by :func:`_try_companion_defend`'s redirect
     to avoid double-charging a guardian that already had a chance to interpose
     earlier in the same blow.
+
+    Rampart interception (#2209) runs first, before the DAMAGE_PRE_APPLY emit —
+    an opponent (e.g. an ALLY summon) standing at a rampart-covered position is
+    shielded exactly like a PC. No threat entry is available on this path, so
+    delivery/is_area default to MELEE/False.
     """
+    if opponent.objectdb is not None:
+        raw_damage = apply_rampart_interception(
+            opponent.objectdb,
+            raw_damage,
+            damage_type,
+            attacker_ref=source_sheet.character if source_sheet is not None else None,
+        )
     raw_damage, dropped = _emit_opponent_pre_apply(opponent, raw_damage, damage_type, source_sheet)
     if dropped:
         return raw_damage, True
@@ -4334,6 +4347,8 @@ def apply_damage_to_participant(  # noqa: PLR0913
     source: object | None = None,
     source_sheet: CharacterSheet | None = None,
     on_hit_pool: ConsequencePool | None = None,
+    delivery: str = StrikeDelivery.MELEE,
+    is_area: bool = False,
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
 
@@ -4343,6 +4358,12 @@ def apply_damage_to_participant(  # noqa: PLR0913
     When ``source_sheet`` is provided (e.g. PC vs PC damage), increments the
     source's ``damage_dealt`` counter. The target always gets a
     ``damage_received`` increment (regardless of source).
+
+    ``delivery``/``is_area`` (#2209) — NPC callers pass the striking
+    ``ThreatPoolEntry.delivery`` and ``targeting_mode != SINGLE``; other
+    callers default to MELEE/False. Rampart interception (see
+    ``apply_rampart_interception``) runs first, before any other reduction,
+    UNLESS ``bypass_pre_apply=True`` (the reflect/retaliation loop guard).
 
     Emits reactive events:
     - DAMAGE_PRE_APPLY (cancellable, mutable amount)
@@ -4359,6 +4380,17 @@ def apply_damage_to_participant(  # noqa: PLR0913
 
     character = participant.character_sheet.character
     room = character.location
+
+    if not bypass_pre_apply:
+        damage = apply_rampart_interception(
+            character,
+            damage,
+            damage_type,
+            attacker_ref=source,
+            delivery=delivery,
+            is_area=is_area,
+        )
+
     damage_source = classify_source(source)
 
     # --- DAMAGE_PRE_APPLY (cancellable, amount may be modified) ---
@@ -5185,6 +5217,8 @@ def resolve_npc_attack(
         damage_type=opponent_action.threat_entry.damage_type,
         source=opponent_action.opponent,
         on_hit_pool=opponent_action.threat_entry.on_hit_consequence_pool,
+        delivery=opponent_action.threat_entry.delivery,
+        is_area=opponent_action.threat_entry.targeting_mode != TargetingMode.SINGLE,
     )
 
     return DefenseResult(
@@ -6306,6 +6340,8 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
                 damage_type=npc_action.threat_entry.damage_type,
                 source=opponent,
                 on_hit_pool=npc_action.threat_entry.on_hit_consequence_pool,
+                delivery=npc_action.threat_entry.delivery,
+                is_area=npc_action.threat_entry.targeting_mode != TargetingMode.SINGLE,
             )
         outcome.damage_results.append(dmg_result)
 
@@ -8834,6 +8870,130 @@ def apply_position_cover(character: Character, damage: int, damage_type: DamageT
         return damage
     cover = position_shelter_value(position, damage_type, attacks_only=True)
     return max(0, damage - cover)
+
+
+def _fire_rampart_retaliation(
+    profile: RampartElementProfile,
+    attacker_ref: object | None,
+) -> None:
+    """MELEE_RETALIATION signature: burn a melee striker's CombatOpponent back.
+
+    Mirrors ``reflect_damage`` (world/magic/services/effect_handlers.py) —
+    ``bypass_pre_apply=True`` terminates re-emission so the retaliation strike
+    cannot itself trigger another rampart interception or reflect loop. Never
+    retaliates against a PC (ADR-0023): a no-op unless ``attacker_ref``
+    resolves to a ``CombatOpponent``.
+    """
+    if not isinstance(attacker_ref, CombatOpponent):
+        return
+    if profile.signature_value <= 0:
+        return
+    apply_damage_to_opponent(
+        attacker_ref,
+        profile.signature_value,
+        bypass_pre_apply=True,
+        damage_type=profile.signature_damage_type,
+    )
+
+
+def _rampart_resist(
+    profile: RampartElementProfile,
+    damage_type: DamageType | None,
+    *,
+    delivery: str,
+    is_area: bool,
+) -> int:
+    """The resist term for one intercepted strike: base row + MISSILE_WARD adjustment."""
+    from world.areas.positioning.constants import RampartSignature  # noqa: PLC0415
+
+    resist = 0
+    if damage_type is not None:
+        resist = sum(
+            profile.resistances.filter(damage_type=damage_type).values_list("value", flat=True)
+        )
+    if profile.signature_behavior == RampartSignature.MISSILE_WARD:
+        if delivery == StrikeDelivery.MISSILE:
+            resist += profile.signature_value
+        if is_area:
+            resist -= profile.signature_value
+    return resist
+
+
+def apply_rampart_interception(  # noqa: PLR0913
+    character_or_opponent: Character,  # noqa: OBJECTDB_PARAM - ObjectDB target, mirrors apply_position_cover
+    damage: int,
+    damage_type: DamageType | None,
+    *,
+    attacker_ref: object | None,
+    delivery: str = StrikeDelivery.MELEE,
+    is_area: bool = False,
+) -> int:
+    """Intercept a strike against a rampart-covered position (#2209).
+
+    Resolves the target's Position via the same lookup ``apply_position_cover``
+    uses. No-op (damage passes through unchanged) when the target is
+    unpositioned, has no Rampart, or the strike is a sustained attack already
+    being drained by an active WARD Clash bound to this rampart — the
+    no-double-drain rule; the clash drains instead.
+
+    Math: resist is the profile's resistance row for ``damage_type`` (0 if
+    untyped or absent); a MISSILE_WARD profile additionally adds
+    ``signature_value`` against MISSILE delivery and subtracts it against area
+    strikes. ``chip = max(1, damage - resist)`` (a min-1 floor so barrages
+    always crack the rampart). A chip that doesn't clear the rampart's
+    remaining integrity fully absorbs the strike (returns 0); a chip that
+    clears it collapses the rampart and lets the overflow remainder through.
+
+    Fires MELEE_RETALIATION on interception for a melee strike. GRASPING is
+    handled at the forced-move landing seam (``force_move_to_position``), not
+    here.
+
+    Returns the damage that should continue through the normal pipeline.
+    """
+    if damage <= 0:
+        return damage
+    from world.areas.positioning.constants import RampartSignature  # noqa: PLC0415
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        damage_rampart,
+        position_of,
+        rampart_at,
+    )
+
+    position = position_of(character_or_opponent)
+    if position is None:
+        return damage
+    rampart = rampart_at(position)
+    if rampart is None:
+        return damage
+
+    # No-double-drain: a sustained attack already draining via an active WARD
+    # clash bound to this rampart skips interception entirely.
+    from world.combat.constants import ClashFlavor, ClashStatus  # noqa: PLC0415
+
+    active_ward = Clash.objects.filter(
+        rampart=rampart, flavor=ClashFlavor.WARD, status=ClashStatus.ACTIVE
+    ).exists()
+    if active_ward:
+        return damage
+
+    profile = rampart.element_profile
+    resist = _rampart_resist(profile, damage_type, delivery=delivery, is_area=is_area)
+    chip = max(1, damage - resist)
+
+    if chip < rampart.integrity:
+        damage_rampart(rampart, chip)
+        pass_through = 0
+    else:
+        overflow = chip - rampart.integrity
+        damage_rampart(rampart, chip)
+        pass_through = min(damage, overflow)
+
+    if delivery == StrikeDelivery.MELEE and profile.signature_behavior == (
+        RampartSignature.MELEE_RETALIATION
+    ):
+        _fire_rampart_retaliation(profile, attacker_ref)
+
+    return pass_through
 
 
 def elevation_bonus(

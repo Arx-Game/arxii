@@ -9,7 +9,10 @@ first; evasion scales the amount, then barrier/DR/soak layer on top.
 ```
 NPC attack (ThreatPoolEntry.base_damage)
   → [evasion check]        scales base_damage by multiplier         (#1994)
+  → Rampart interception   position-covering barrier chips first      (#2209)
   → DAMAGE_PRE_APPLY       barrier absorb_pool, reflect, DEFEND halve (#1584)
+                           (Guardian reactions also resolve here, after
+                            the target's own DAMAGE_PRE_APPLY trigger band)
   → on-hit consequence     fires threat entry's on_hit_consequence_pool
   → thread DR              flat subtraction                           (#1175)
   → damage-type resistance condition-sourced resistance modifier
@@ -39,6 +42,19 @@ The PC rolls a defense check; the success level scales incoming damage.
 - **Modifier seam:** `resolve_npc_attack` routes the defense check through
   `collect_check_modifiers` — fashion, covenant-role, equipment, and condition
   modifiers all apply to defense, exactly as they do for offense.
+
+## Rampart interception (position-anchored barrier)
+
+A `Rampart` (#2209) covering the target's `Position` chips first — upstream of every
+personal defense above, and before `DAMAGE_PRE_APPLY` even emits.
+
+- **Handler:** `apply_rampart_interception` (`world/combat/services.py`), called at the top
+  of `apply_damage_to_participant` and `_resolve_opponent_pre_apply`.
+- **Content seed:** `ensure_rampart_content()` in `world/magic/effect_palette_content.py`
+  (Stone/Wind/Fire/Thorn elemental profiles).
+- **Scope:** position-anchored, faction-blind (ADR-0109) — covers everyone standing there,
+  not a single bearer. See `docs/systems/areas.md`'s "Rampart — Living Barriers" section
+  and ADR-0125 for the full model + firing-order detail.
 
 ## Barrier (force-field absorb)
 
