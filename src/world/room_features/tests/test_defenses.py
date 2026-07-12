@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
@@ -337,8 +339,9 @@ class ReactToUnauthorizedEntryTests(TestCase):
         assert vitals.health == 85
 
     def test_alarm_message_is_identity_transparent(self):
-        """``RoomAlarmDetails`` is identity-transparent (ADR-0083): the owner
-        notification body must never contain the intruder's name/key.
+        """``RoomAlarmDetails`` is identity-transparent (ADR-0083): neither the
+        owner notification body nor the room echo may ever contain the
+        intruder's name/key.
         """
         from world.character_sheets.factories import CharacterSheetFactory
         from world.locations.services import transfer_ownership
@@ -364,7 +367,10 @@ class ReactToUnauthorizedEntryTests(TestCase):
         intruder_sheet = CharacterSheetFactory(character=intruder)
         PersonaFactory(character_sheet=intruder_sheet)
 
-        react_to_unauthorized_entry(intruder, room)
+        with patch.object(room, "msg_contents") as room_msg_contents:
+            react_to_unauthorized_entry(intruder, room)
+            echo_text = room_msg_contents.call_args.args[0]
+        assert intruder.db_key not in echo_text
 
         delivery = NarrativeMessageDelivery.objects.get(recipient_character_sheet=owner_sheet)
         assert intruder.db_key not in delivery.message.body
