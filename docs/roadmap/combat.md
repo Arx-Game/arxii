@@ -36,7 +36,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   of fatigue, ally damage zeroed) is journey-proven (`TechniqueGuardianBarrierResolutionTest`,
   SQLite tier). See ADR-0118 for why the technique-guardian roll happens outside
   `use_technique`.
-- **Redirects — away / chosen-enemy / volatile-object detonation (#2210, ADR-0122),
+- **Redirects — away / chosen-enemy / volatile-object detonation (#2210, ADR-0124),
   SQLite tier.** A guardian's REDIRECT-flavor technique (Mirror Ward-style reflection —
   previously rejected at declaration, now the third resolved flavor alongside BARRIER
   and BLINK) declares its saved-damage destination at `declare_interpose` time:
