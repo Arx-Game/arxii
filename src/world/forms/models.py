@@ -368,6 +368,18 @@ class CharacterFormState(SharedMemoryModel):
         default="",
         help_text="How the active overlay is pierced (mundane vs magical). Blank ⇒ no overlay.",
     )
+    applied_kit_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="applied_disguise_overlays",
+        help_text=(
+            "The disguise-kit ItemInstance whose use applied the active overlay (#2249). "
+            "Null when the overlay was applied narratively (not from a kit). "
+            "Cleared when the overlay is removed."
+        ),
+    )
 
     class Meta:
         verbose_name = "Character Form State"
