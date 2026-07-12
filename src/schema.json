@@ -7251,6 +7251,7 @@ paths:
           - clothing
           - heavy_armor
           - jewelry
+          - lance
           - light_armor
           - medium_armor
           - melee_one_hand
@@ -7270,6 +7271,7 @@ paths:
           * `ranged` - Ranged
           * `thrown` - Thrown
           * `shield` - Shield
+          * `lance` - Lance
           * `jewelry` - Jewelry
           * `clothing` - Clothing
           * `other` - Other
@@ -39271,6 +39273,7 @@ components:
       - ranged
       - thrown
       - shield
+      - lance
       - jewelry
       - clothing
       - other
@@ -39285,6 +39288,7 @@ components:
         * `ranged` - Ranged
         * `thrown` - Thrown
         * `shield` - Shield
+        * `lance` - Lance
         * `jewelry` - Jewelry
         * `clothing` - Clothing
         * `other` - Other
