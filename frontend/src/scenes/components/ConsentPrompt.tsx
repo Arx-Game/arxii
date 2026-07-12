@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert, Check, X } from 'lucide-react';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -10,24 +9,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { fetchPendingRequests, fetchPendingTargets, respondToRequest } from '../actionQueries';
-import type {
-  ActionRequest,
-  ActionRequestResponse,
-  PendingActionTarget,
-  StakesSummary,
-} from '../actionTypes';
+import {
+  fetchPendingRequests,
+  fetchPendingTargets,
+  respondToRequest,
+  toastDispositionMessage,
+} from '../actionQueries';
+import type { ActionRequest, PendingActionTarget, StakesSummary } from '../actionTypes';
 
 interface Props {
   sceneId: string;
-}
-
-// Shared by respond and respondTarget's onSuccess — an NPC disposition shift
-// (#2158) may follow either the primary or an additional-target accept.
-function toastDispositionMessage(data: ActionRequestResponse) {
-  if (data.result?.disposition_message) {
-    toast.success(data.result.disposition_message);
-  }
 }
 
 /**

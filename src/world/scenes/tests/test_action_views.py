@@ -6,7 +6,9 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from actions.types import TargetType
+from actions.constants import ResolutionPhase
+from actions.factories import ActionTemplateFactory
+from actions.types import PendingActionResolution, StepResult, TargetType
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
@@ -35,6 +37,29 @@ from world.scenes.tests.cast_test_helpers import (
     make_castable_technique,
     make_enhanced_result as _make_enhanced_result,
 )
+
+
+def _make_pending_resolution(success: bool = True) -> PendingActionResolution:
+    """Build a minimal PendingActionResolution for mocking start_action_resolution.
+
+    Mirrors test_action_services.py's identically-named helper (Task 1, #2214).
+    """
+    check_result = MagicMock()
+    check_result.success_level = 1 if success else -1
+    check_result.outcome_name = "Success" if success else "Failure"
+    main_result = StepResult(
+        step_label="main",
+        check_result=check_result,
+        consequence_id=None,
+    )
+    return PendingActionResolution(
+        template_id=1,
+        character_id=1,
+        target_difficulty=45,
+        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
+        current_phase=ResolutionPhase.COMPLETE,
+        main_result=main_result,
+    )
 
 
 class SceneActionRequestViewSetTestCase(APITestCase):
@@ -166,6 +191,27 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         ids = {row["id"] for row in response.data["results"]}
         assert ids == {incoming_to_background_char.pk}
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_single_target_npc_auto_resolves_with_result(self, mock_resolve: MagicMock) -> None:
+        """POST at a lone NPC target_persona -> 201, RESOLVED, result key present (#2214)."""
+        from world.scenes.factories import PersonaFactory
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        ActionTemplateFactory(name="Intimidate")
+        npc_persona = PersonaFactory()
+        url = reverse("sceneactionrequest-list")
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": npc_persona.pk,
+            "action_key": "intimidate",
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.data["status"] == ActionRequestStatus.RESOLVED
+        assert "result" in response.data
+        assert response.data["result"]["action_key"] == "intimidate"
 
 
 def _make_area_action_mock() -> MagicMock:
