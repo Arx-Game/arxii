@@ -28,16 +28,20 @@ def domain_consumption_tick() -> dict[str, int]:
         Telemetry dict with ``domains_processed`` and ``shortages``.
     """
     from world.societies.houses.models import Domain  # noqa: PLC0415
+    from world.societies.houses.services import maybe_open_unrest_crisis  # noqa: PLC0415
 
     config = get_food_config()
 
     domains = list(Domain.objects.all())
     domains_processed = 0
     shortages = 0
+    crises_opened = 0
 
     for domain in domains:
         try:
             had_shortage = _consume_domain(domain, config)
+            # After the food-driven civ update, simmering unrest may boil over (#2238).
+            crisis = maybe_open_unrest_crisis(domain)
         except Exception:
             logger.exception(
                 "Domain consumption tick failed for domain %s; continuing.",
@@ -47,10 +51,13 @@ def domain_consumption_tick() -> dict[str, int]:
         domains_processed += 1
         if had_shortage:
             shortages += 1
+        if crisis is not None:
+            crises_opened += 1
 
     return {
         "domains_processed": domains_processed,
         "shortages": shortages,
+        "crises_opened": crises_opened,
     }
 
 

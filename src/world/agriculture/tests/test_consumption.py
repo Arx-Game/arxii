@@ -101,3 +101,24 @@ class DomainConsumptionTickTests(TestCase):
         domain.refresh_from_db()
         self.assertEqual(domain.unrest, 15)
         self.assertEqual(domain.prosperity, 45)
+
+    def test_high_unrest_can_open_a_crisis_on_the_tick(self):
+        # #2238 — simmering unrest boils over on the weekly tick.
+        from unittest.mock import patch
+
+        from world.agriculture.models import FoodStockpile
+        from world.areas.factories import AreaFactory
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.models import Domain, DomainCrisis
+
+        org = OrganizationFactory()
+        domain = Domain.objects.create(
+            area=AreaFactory(), name="Powderkeg", owner_org=org, population=100, unrest=90
+        )
+        FoodStockpile.objects.create(domain=domain, stored=200)  # fed → no shortage
+
+        with patch("random.random", return_value=0.0):  # force the crisis roll to fire
+            result = domain_consumption_tick()
+
+        self.assertEqual(result["crises_opened"], 1)
+        self.assertEqual(DomainCrisis.objects.filter(domain=domain).count(), 1)

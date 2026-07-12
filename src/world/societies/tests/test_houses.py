@@ -416,6 +416,46 @@ class DomainTests(TestCase):
         accrue_income_stream(stream)
         self.assertEqual(stream.uncollected_pool, 500)  # no domain_holding → no scaling
 
+    def test_unrest_crisis_chance_is_zero_at_or_below_threshold(self):
+        from world.societies.houses.services import unrest_crisis_chance
+
+        self.assertEqual(unrest_crisis_chance(50), 0.0)
+        self.assertEqual(unrest_crisis_chance(60), 0.0)
+
+    def test_unrest_crisis_chance_scales_above_threshold(self):
+        from world.societies.houses.services import unrest_crisis_chance
+
+        self.assertAlmostEqual(unrest_crisis_chance(80), 0.4)  # (80 - 60) * 2 / 100
+
+    def test_maybe_open_unrest_crisis_fires_on_a_low_roll(self):
+        from world.societies.houses.models import DomainCrisis
+        from world.societies.houses.services import maybe_open_unrest_crisis
+
+        domain = create_domain(area=self.area, name="Restless", owner_org=self.org)
+        domain.unrest = 80
+        domain.save(update_fields=["unrest"])
+
+        crisis = maybe_open_unrest_crisis(domain, roll=0.0)
+        self.assertIsNotNone(crisis)
+        self.assertEqual(DomainCrisis.objects.filter(domain=domain).count(), 1)
+
+    def test_maybe_open_unrest_crisis_skips_while_one_is_open(self):
+        from world.societies.houses.services import maybe_open_unrest_crisis
+
+        domain = create_domain(area=self.area, name="Restless", owner_org=self.org)
+        domain.unrest = 90
+        domain.save(update_fields=["unrest"])
+
+        maybe_open_unrest_crisis(domain, roll=0.0)
+        # An unresolved crisis is already open → no second one piles on.
+        self.assertIsNone(maybe_open_unrest_crisis(domain, roll=0.0))
+
+    def test_maybe_open_unrest_crisis_never_fires_for_a_calm_domain(self):
+        from world.societies.houses.services import maybe_open_unrest_crisis
+
+        domain = create_domain(area=self.area, name="Calm", owner_org=self.org)  # unrest 10
+        self.assertIsNone(maybe_open_unrest_crisis(domain, roll=0.0))
+
     def test_improvement_project_applies_on_success(self):
         domain = create_domain(area=self.area, name="Westrock Vale", owner_org=self.org)
         kind = HoldingKind.objects.create(

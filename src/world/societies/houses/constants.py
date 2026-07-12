@@ -7,6 +7,11 @@ from django.db import models
 # Above it holdings over-yield; below they under-yield; at 0 prosperity, no income.
 DOMAIN_PROSPERITY_BASELINE = 50
 
+# Unrest above this threshold can boil over into a DomainCrisis on the weekly tick;
+# each point above it adds UNREST_CRISIS_PCT_PER_POINT% to the weekly chance.
+UNREST_CRISIS_THRESHOLD = 60
+UNREST_CRISIS_PCT_PER_POINT = 2
+
 
 class TitleTier(models.TextChoices):
     """Rank of a landed/dynastic title. Realm-specific display labels are

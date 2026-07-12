@@ -27,6 +27,8 @@ from world.roster.services.kinship import (
     parents_of,
 )
 from world.societies.houses.constants import (
+    UNREST_CRISIS_PCT_PER_POINT,
+    UNREST_CRISIS_THRESHOLD,
     PactCommitmentKind,
     PactDissolutionReason,
     RecognitionRuleKind,
@@ -35,6 +37,7 @@ from world.societies.houses.constants import (
 )
 from world.societies.houses.models import (
     Domain,
+    DomainCrisis,
     DomainHolding,
     FealtyEdge,
     HoldingKind,
@@ -698,3 +701,42 @@ def sync_house_channel(house: Organization, *, include_vassals: bool = True):
         if not channel.has_connection(account):
             channel.connect(account)
     return channel
+
+
+def unrest_crisis_chance(unrest: int) -> float:
+    """Weekly probability (0..1) that unrest boils over into a DomainCrisis (#2238).
+
+    Zero at or below ``UNREST_CRISIS_THRESHOLD``; each point above adds
+    ``UNREST_CRISIS_PCT_PER_POINT`` percent, capped at certainty. PLACEHOLDER.
+    """
+    if unrest <= UNREST_CRISIS_THRESHOLD:
+        return 0.0
+    return min(1.0, (unrest - UNREST_CRISIS_THRESHOLD) * UNREST_CRISIS_PCT_PER_POINT / 100)
+
+
+def maybe_open_unrest_crisis(domain: Domain, *, roll: float | None = None) -> DomainCrisis | None:
+    """Roll for an unrest-driven crisis on the weekly tick (#2238).
+
+    Skips while an unresolved crisis is already open on the domain (one at a
+    time). ``roll`` (0..1) is overridable for tests; defaults to random. Returns
+    the opened ``DomainCrisis`` or None. Surfacing the crisis (feed / mission
+    conversion) is the GM's move — this only opens it.
+    """
+    import random  # noqa: PLC0415
+
+    from world.societies.houses.constants import DomainCrisisSeverity  # noqa: PLC0415
+
+    if domain.crises.filter(resolved_at__isnull=True).exists():
+        return None
+    chance = unrest_crisis_chance(domain.unrest)
+    if chance <= 0:
+        return None
+    if roll is None:
+        roll = random.random()  # noqa: S311 — a game crisis roll, not cryptography
+    if roll >= chance:
+        return None
+    return DomainCrisis.objects.create(
+        domain=domain,
+        severity=DomainCrisisSeverity.CRISIS,
+        description="PLACEHOLDER — simmering unrest boiled over into a crisis.",
+    )
