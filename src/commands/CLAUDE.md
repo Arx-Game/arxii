@@ -638,6 +638,20 @@ actions, backends, and service functions.
   `actions/definitions/room_features.py`. Bare `station` shows a status hub (level,
   durability, broken flag) for the Lab station in the caller's current room, if any.
   Mirrors `CmdSanctum`'s subverb-routing shape. No business logic in the command.
+- **`domains.py`**: `CmdDomain` (`domain`, #2239) — the in-play domain-management
+  namespace. One `ArxCommand` routes a leading subverb to the four Actions in
+  `actions/definitions/domains.py` via `action.run()` (mirrors `CmdCovenant`):
+  `domain holding <domain> <kind> [name=…]` → `AddDomainHoldingAction`;
+  `domain improve <domain> cost=<n> [gross=<n>] [prosperity=<n>] [holding=<id>]` →
+  `StartDomainImprovementAction`; `domain appoint <domain> <char> [title=…]
+  [check=<trait>]` → `AppointDomainOfficeAction`; `domain vacate <domain>` →
+  `VacateDomainOfficeAction`. Bare `domain`/`domain list` lists the domains the
+  caller's active persona may run; `domain offices <domain>` lists the house's
+  offices + holders. The `<domain>` argument is resolved by name among the
+  caller's administrable domains (omit it when they run exactly one).
+  `_parse_kwargs` supports free-text values (a `key=` value runs to the next
+  `key=` token). No business logic in the command; authorization is re-checked in
+  the Action layer.
 - **`hire.py`**: `CmdHire` (`hire`, #1493) — telnet face of the three NPC-service lifecycle
   Actions (`npc_start`, `npc_resolve`, `npc_end`). Parses `hire <role> [as <persona>]`,
   `hire offer <id>`, `hire end`, and bare `hire` status hub. Stores the ephemeral

@@ -5783,6 +5783,7 @@
   - sent_org_membership_offers <- societies.OrganizationMembershipOffer
   - received_org_membership_offers <- societies.OrganizationMembershipOffer
   - organization_memberships <- societies.OrganizationMembership
+  - offices_held <- societies.OrganizationOffice
   - society_reputations <- societies.SocietyReputation
   - organization_reputations <- societies.OrganizationReputation
   - legend_entries <- societies.LegendEntry
@@ -6291,6 +6292,7 @@
   - gift_grants <- societies.OrganizationGiftGrant
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership
+  - offices <- societies.OrganizationOffice
   - reputations <- societies.OrganizationReputation
   - gang_turf_projects <- societies.GangTurfDetails
   - fealty <- societies.FealtyEdge
@@ -6350,6 +6352,12 @@
   - organization -> societies.Organization [FK]
   - persona -> scenes.Persona [FK]
   - rank -> societies.OrganizationRank [FK] (nullable)
+
+### OrganizationOffice
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - holder -> scenes.Persona [FK] (nullable)
+  - feeds_check -> traits.Trait [FK] (nullable)
 
 ### SocietyReputation
 **Foreign Keys:**

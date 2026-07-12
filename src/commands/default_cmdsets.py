@@ -48,6 +48,7 @@ from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
+from commands.domains import CmdDomain
 from commands.door import CmdLock, CmdUnlock
 from commands.dramatic_moments import CmdMoment
 from commands.duels import CmdDuel
@@ -372,6 +373,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPathIntent,
             # #1346 — covenant membership lifecycle telnet namespace.
             CmdCovenant,
+            # #2239 — in-play domain management + office delegation.
+            CmdDomain,
             # #1592 — battle system: GM lifecycle + player declare namespace.
             CmdBattle,
             # #1866 — facet/style attach/detach telnet namespace.
