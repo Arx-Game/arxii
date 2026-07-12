@@ -2084,6 +2084,29 @@ register as additional kinds.
   escalation), `core.mixins`.
 - **Source:** `src/world/npc_services/`
 
+### NPC Guard Assignment (#2178)
+Owner-gated NPC guard postings with post-arrival detection. A room owner
+assigns a Functionary or NPCAsset as a GUARD; when an unauthorized character
+enters, the intruder rolls Stealth vs. a difficulty constant.
+
+- **Model:** `NPCAssignment` (`world.npc_services.models`) — join model with
+  `DiscriminatorMixin` (Functionary XOR NPCAsset), `room` FK, `assignment_role`
+  (GUARD/DOORMAN/SERVANT), `assigned_by` persona FK, `is_active`/`ended_at`.
+  One active GUARD per room (partial unique constraint).
+- **Detection service:** `check_guard_detection(character, room)`
+  (`world.npc_services.guard_services`) — fires from
+  `Character.at_post_move` as a `run_safely` block. Resolves the room's active
+  GUARD; if the arriving character lacks owner/tenant standing, rolls the
+  existing `Stealth` CheckType against `GUARD_DETECTION_DIFFICULTY` (PLACEHOLDER
+  50). On failure: room echo + owner `.msg()` if online and co-located. On
+  success: no echo (intruder passes unnoticed).
+- **Actions:** `assign_guard` / `unassign_guard` / `list_guard_assignments`
+  (REGISTRY, `IsRoomOwnerPrerequisite`-gated, `target_type=SELF`).
+- **Telnet:** `guard` command (`guard assign <npc>` / `guard unassign` / `guard`).
+- **Deferred:** servant fetch (intercepts `NotReachable`), persistent security
+  log, doorman pre-traversal announcement.
+- **Source:** `src/world/npc_services/guard_services.py`
+
 ### Missions & Living Grid
 Branching narrative quest chains — a character receives a mission with broad objectives,
 makes decisions at branching points gated by skills/traits/predicates, and the consequences

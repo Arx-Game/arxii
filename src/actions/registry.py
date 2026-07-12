@@ -215,6 +215,11 @@ from actions.definitions.movement import (
     TravelAction,
     TraverseExitAction,
 )
+from actions.definitions.npc_assignments import (
+    AssignGuardAction,
+    ListGuardAssignmentsAction,
+    UnassignGuardAction,
+)
 from actions.definitions.npc_services import (
     end_npc_interaction,
     resolve_npc_offer,
@@ -625,6 +630,10 @@ _ALL_ACTIONS: list[Action] = [
     # itself dispatches through TravelAction, already registered above).
     InstallPortalAnchorAction(),
     DissolvePortalAnchorAction(),
+    # #2178 — NPC guard assignment.
+    AssignGuardAction(),
+    UnassignGuardAction(),
+    ListGuardAssignmentsAction(),
 ]
 
 # Lookup by key

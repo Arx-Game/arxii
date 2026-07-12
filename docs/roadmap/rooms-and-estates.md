@@ -95,6 +95,28 @@
   inhabitant surfacing shipped as #1522's REST widgets + weather echo);
   Chilled/Soaked threshold conditions (Tehom's integration, per the spec).
 
+## Built (2026-07-12, #2178 — guard assignment + detection)
+
+- **`NPCAssignment` model** (`world.npc_services`): a join model with
+  `DiscriminatorMixin` (Functionary XOR NPCAsset) that records which NPC is
+  posted to a room, in what role (GUARD/DOORMAN/SERVANT), by which owner
+  persona. One active guard per room (partial unique constraint). Retired
+  assignments stay as audit history (`is_active=False`, `ended_at`).
+- **Guard detection service** (`world.npc_services.guard_services`):
+  `check_guard_detection(character, room)` fires from
+  `Character.at_post_move` as a `run_safely` block. If the destination room
+  has an active GUARD and the arriving character lacks owner/tenant standing,
+  the intruder rolls their existing `Stealth` CheckType against
+  `GUARD_DETECTION_DIFFICULTY` (PLACEHOLDER 50). On failure: room echo +
+  owner alert (if online and co-located). On success: intruder passes
+  unnoticed.
+- **Assignment actions**: `assign_guard` / `unassign_guard` /
+  `list_guard_assignments` (REGISTRY actions, `IsRoomOwnerPrerequisite`-gated).
+- **Telnet**: `guard` command (`guard assign <npc>` / `guard unassign` /
+  `guard`).
+- **Servant fetch deferred** to a follow-up issue — it hooks into the
+  inventory `NotReachable` path, a different subsystem.
+
 ## Built (2026-07-10, #2036 — residence declaration + room aura tagging)
 
 - **Residence declaration widened:** `set_primary_home` now also writes
