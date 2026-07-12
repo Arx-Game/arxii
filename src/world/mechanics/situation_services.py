@@ -43,10 +43,16 @@ def instantiate_situation(template: SituationTemplate, location: ObjectDB) -> Si
         if trap_links:
             from evennia_extensions.models import RoomProfile  # noqa: PLC0415
 
-            room_profile = RoomProfile.objects.filter(objectdb=location).first()
-            if room_profile is None:
+            # Use a values_list query to bypass the SharedMemoryModel
+            # idmapper cache, which can return a stale RoomProfile from a
+            # prior test in the same shard process.
+            room_profile_pk = (
+                RoomProfile.objects.filter(objectdb=location).values_list("pk", flat=True).first()
+            )
+            if room_profile_pk is None:
                 msg = "location has no RoomProfile"
                 raise ObjectDoesNotExist(msg)
+            room_profile = RoomProfile.objects.get(pk=room_profile_pk)
             for trap_link in trap_links:
                 Trap.objects.create(
                     room_profile=room_profile,

@@ -4,7 +4,7 @@ from django.test import TestCase
 from evennia import create_object
 
 from actions.definitions.situations import SetSituationAction
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
@@ -108,18 +108,16 @@ class SetSituationActionTest(TestCase):
     def test_missing_room_profile_with_trap_link_fails_cleanly(self) -> None:
         """A trap-link-bearing template in a room with no RoomProfile should fail
         cleanly (#1895 Finding 2), not raise ObjectDoesNotExist unhandled."""
-        from evennia.utils.idmapper.models import flush_cache
-
         from evennia_extensions.models import RoomProfile
 
         action = SetSituationAction()
         account = AccountFactory(is_staff=True)
-        bare_location = ObjectDBFactory()
-        # Explicitly ensure no RoomProfile exists for this ObjectDB, then
-        # flush the idmapper cache so the SharedMemoryModel identity map
-        # doesn't return a stale RoomProfile from a prior test.
+        # Use a real Room typeclass (which auto-creates a RoomProfile), then
+        # delete the RoomProfile so the room has none. This avoids idmapper
+        # cache issues where ObjectDBFactory() might pick up a stale
+        # RoomProfile from a prior test's cached ObjectDB instance.
+        bare_location = _make_room("No-Profile Room")
         RoomProfile.objects.filter(objectdb=bare_location).delete()
-        flush_cache()
         actor = CharacterFactory(db_key="stager-no-profile", location=bare_location)
         actor.db_account = account
         template = SituationTemplateFactory()
