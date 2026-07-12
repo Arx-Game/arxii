@@ -479,7 +479,13 @@ def complete_defense_installation(
     if details.defense_kind == DefenseKind.EXIT_BARS:
         _install_or_level_bars(details.target_exit_profile, details.target_level)
     elif details.defense_kind == DefenseKind.ROOM_WARD:
-        _install_or_level_ward(details.target_room_profile, details.target_level, details.resonance)
+        _install_or_level_ward(
+            details.target_room_profile,
+            details.target_level,
+            details.resonance,
+            reaction_condition=details.reaction_condition,
+            reaction_damage_amount=details.reaction_damage_amount or 0,
+        )
     else:
         _install_or_level_alarm(details.target_room_profile, details.target_level)
 
@@ -499,7 +505,14 @@ def _install_or_level_bars(exit_profile, target_level: int) -> None:
         details.save(update_fields=["level", "last_upgraded_at"])
 
 
-def _install_or_level_ward(room_profile: RoomProfile, target_level: int, resonance) -> None:
+def _install_or_level_ward(
+    room_profile: RoomProfile,
+    target_level: int,
+    resonance,
+    *,
+    reaction_condition=None,
+    reaction_damage_amount: int = 0,
+) -> None:
     from django.utils import timezone as _tz  # noqa: PLC0415
 
     from world.room_features.models import RoomWardDetails  # noqa: PLC0415
@@ -507,13 +520,29 @@ def _install_or_level_ward(room_profile: RoomProfile, target_level: int, resonan
     details = RoomWardDetails.objects.filter(room_profile=room_profile).active().first()
     if details is None:
         RoomWardDetails.objects.create(
-            room_profile=room_profile, level=max(1, target_level), resonance=resonance
+            room_profile=room_profile,
+            level=max(1, target_level),
+            resonance=resonance,
+            reaction_condition=reaction_condition,
+            reaction_damage_amount=reaction_damage_amount,
         )
         return
+    update_fields: list[str] = []
     if target_level > details.level:
         details.level = target_level
         details.last_upgraded_at = _tz.now()
-        details.save(update_fields=["level", "last_upgraded_at"])
+        update_fields.extend(["level", "last_upgraded_at"])
+    # Update reaction fields if new values were provided on upgrade.
+    # A None condition preserves the existing one; a non-None condition
+    # replaces it. Damage is always set (0 is a valid "no damage" choice).
+    if reaction_condition is not None:
+        details.reaction_condition = reaction_condition
+        update_fields.append("reaction_condition")
+    if reaction_damage_amount:
+        details.reaction_damage_amount = reaction_damage_amount
+        update_fields.append("reaction_damage_amount")
+    if update_fields:
+        details.save(update_fields=update_fields)
 
 
 def _install_or_level_alarm(room_profile: RoomProfile, target_level: int) -> None:

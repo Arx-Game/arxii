@@ -55596,6 +55596,18 @@ components:
           maximum: 2147483647
           minimum: 0
           description: Banked resonance the daily upkeep tick drains from.
+        reaction_condition:
+          type: integer
+          nullable: true
+          description: Condition applied to an unauthorized entrant, if set.
+        reaction_condition_name:
+          type: string
+          readOnly: true
+        reaction_damage_amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Damage dealt to an unauthorized entrant, if nonzero.
         lapsed_at:
           type: string
           format: date-time
@@ -55614,6 +55626,7 @@ components:
           format: date-time
           nullable: true
       required:
+      - reaction_condition_name
       - resonance
       - room_profile
     RosterApplication:

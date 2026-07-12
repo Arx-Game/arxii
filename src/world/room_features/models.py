@@ -710,6 +710,23 @@ class DefenseProgressionDetails(SharedMemoryModel):
         related_name="defense_progression_projects",
         help_text="Required for ROOM_WARD installs only.",
     )
+    reaction_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="defense_progression_projects",
+        help_text=(
+            "Optional ward reaction condition (ROOM_WARD installs only). "
+            "Must be from a ConditionCategory with is_negative=True."
+        ),
+    )
+    reaction_damage_amount = models.PositiveIntegerField(
+        default=0,
+        null=True,
+        blank=True,
+        help_text="Optional ward reaction damage (ROOM_WARD installs only).",
+    )
 
     class Meta:
         constraints = [

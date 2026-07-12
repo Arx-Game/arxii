@@ -31224,6 +31224,11 @@ export interface components {
       resonance: number;
       /** @description Banked resonance the daily upkeep tick drains from. */
       resonance_reserve?: number;
+      /** @description Condition applied to an unauthorized entrant, if set. */
+      reaction_condition?: number | null;
+      readonly reaction_condition_name: string;
+      /** @description Damage dealt to an unauthorized entrant, if nonzero. */
+      reaction_damage_amount?: number;
       /**
        * Format: date-time
        * @description Set when resonance_reserve hits 0; ward stops reacting. Null = active.

@@ -210,6 +210,7 @@
   - rampart_signature_profiles <- areas.RampartElementProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
   - ward_reactions <- room_features.RoomWardDetails
+  - defense_progression_projects <- room_features.DefenseProgressionDetails
 
 ### ConditionStage
 **Foreign Keys:**
@@ -2238,6 +2239,7 @@
   - rampart_signature_profiles <- areas.RampartElementProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
   - ward_reactions <- room_features.RoomWardDetails
+  - defense_progression_projects <- room_features.DefenseProgressionDetails
 
 ### ConditionStage
 **Foreign Keys:**

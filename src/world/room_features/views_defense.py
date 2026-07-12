@@ -102,6 +102,10 @@ class DefenseInstallViewSet(viewsets.ViewSet):
             kwargs["resonance"] = Resonance.objects.filter(
                 pk=serializer.validated_data["resonance_id"]
             ).first()
+        if "reaction_condition_id" in serializer.validated_data:  # noqa: STRING_LITERAL
+            kwargs["reaction_condition_id"] = serializer.validated_data["reaction_condition_id"]
+        if "reaction_damage_amount" in serializer.validated_data:  # noqa: STRING_LITERAL
+            kwargs["reaction_damage_amount"] = serializer.validated_data["reaction_damage_amount"]
         result = StartDefenseInstallationAction().run(actor=actor, **kwargs)
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
