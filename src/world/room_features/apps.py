@@ -89,3 +89,13 @@ class RoomFeaturesConfig(AppConfig):
             RoomFeatureServiceStrategy.SOCIAL_HUB,
             handle_social_hub_progression,
         )
+
+        # #2179 — Vault room feature (secure storage + access list).
+        from world.room_features.vault_services import (  # noqa: PLC0415
+            handle_vault_progression,
+        )
+
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.VAULT,
+            handle_vault_progression,
+        )
