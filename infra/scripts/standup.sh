@@ -187,13 +187,14 @@ main() {
 
   log "Reading tofu outputs…"
   # Non-sensitive scalars.
-  local ip web_fqdn telnet_fqdn backups_bucket backups_s3_endpoint
+  local ip web_fqdn telnet_fqdn backups_bucket backups_s3_endpoint backups_region
   local r2_offsite_bucket r2_s3_endpoint tls_telnet_port
   ip="$(tf_out instance_ipv4)"
   web_fqdn="$(tf_out web_fqdn)"
   telnet_fqdn="$(tf_out telnet_fqdn)"
   backups_bucket="$(tf_out backups_bucket)"
   backups_s3_endpoint="$(tf_out backups_s3_endpoint)"
+  backups_region="$(tf_out region)"
   r2_offsite_bucket="$(tf_out r2_offsite_bucket)"
   r2_s3_endpoint="$(tf_out r2_s3_endpoint)"
   tls_telnet_port="$(tf_out tls_telnet_port)"
@@ -259,6 +260,7 @@ dh_default_from_email: "noreply@${TF_VAR_domain}"
 # backups (roles/backups/defaults/main.yml)
 backups_bucket: "${backups_bucket}"
 backups_s3_endpoint: "${backups_s3_endpoint}"
+backups_region: "${backups_region}"
 
 # offsite_replication (roles/offsite_replication/defaults/main.yml)
 offsite_r2_bucket: "${r2_offsite_bucket}"

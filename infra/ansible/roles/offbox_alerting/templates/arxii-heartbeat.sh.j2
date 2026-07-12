@@ -1,11 +1,29 @@
 #!/usr/bin/env bash
 # Managed by Ansible (offbox_alerting). Dead-man's-switch heartbeat + cert
-# expiry early warning. OFFBOX_ALERT_TOKEN (the check URL) from the
-# EnvironmentFile; never echoed.
+# expiry early warning + failed-backup-unit detection. OFFBOX_ALERT_TOKEN
+# (the check URL) from the EnvironmentFile; never echoed.
 set -euo pipefail
 set +x
 
 base="${OFFBOX_ALERT_TOKEN}"   # full base ping URL incl. the check id
+
+# Failed backup/offsite units: these also carry their own OnFailure=
+# alert-failure@ unit (fires immediately on failure), but a heartbeat check
+# is a second, independent line of defense — it catches the case where the
+# OnFailure= alert itself didn't fire/land (e.g. transient network blip at
+# the moment of failure) by re-flagging the failed state on every heartbeat
+# until someone clears it.
+failed_units=()
+for u in arxii-backup.service arxii-offsite.service; do
+  if systemctl is-failed --quiet "${u}"; then
+    failed_units+=("${u}")
+  fi
+done
+if [ "${#failed_units[@]}" -gt 0 ]; then
+  msg="backup unit(s) in failed state: ${failed_units[*]}"
+  curl -fsS -m 10 "${base}/fail" -d "${msg}" >/dev/null || true
+  exit 0
+fi
 
 # Cert-expiry: if the SSL-telnet/web cert expires within the warn window,
 # signal the /fail endpoint so the external service alerts EARLY.
@@ -15,6 +33,22 @@ if [ -f "{{ offbox_cert_path }}" ]; then
   now_s="$(date +%s)"
   if [ $(( (end_s - now_s) / 86400 )) -lt {{ offbox_cert_warn_days }} ]; then
     curl -fsS -m 10 "${base}/fail" -d "cert expiring <{{ offbox_cert_warn_days }}d" >/dev/null || true
+    exit 0
+  fi
+
+  # Self-signed detection: Evennia auto-generates a self-signed cert (~20yr
+  # validity) the FIRST time it starts without ssl.cert/ssl.key present.
+  # That masks the real failure mode — Caddy's ACME cert never got synced
+  # (tls_telnet_cert's timer hasn't run yet, or DNS-01 has been silently
+  # failing since e.g. the caddy-dns/cloudflare plugin got dropped by a
+  # plain apt upgrade) — because a 20-year cert sails straight past the
+  # expiry check above. Issuer == Subject is the hallmark of a self-signed
+  # cert; flag it explicitly instead of trusting a distant expiry date.
+  issuer="$(openssl x509 -issuer -noout -in "{{ offbox_cert_path }}" 2>/dev/null || true)"
+  subject="$(openssl x509 -subject -noout -in "{{ offbox_cert_path }}" 2>/dev/null || true)"
+  if [ -n "${issuer}" ] && [ "${issuer#issuer=}" = "${subject#subject=}" ]; then
+    curl -fsS -m 10 "${base}/fail" \
+      -d "telnet cert is self-signed (Caddy cert never synced)" >/dev/null || true
     exit 0
   fi
 fi

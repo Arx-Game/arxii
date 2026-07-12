@@ -14,6 +14,33 @@ app_service: arxii
 # Evennia is a forking Twisted daemon; it writes its PID file relative to
 # the gamedir (server/server.pid), NOT relative to app_current.
 app_pidfile: /opt/arxii/current/src/server/server.pid
+# Evennia is actually TWO daemons (Server + Portal — see src/server/README.md
+# "server.pid and portal.pid"). systemd's Type=forking/PIDFile only tracks
+# server.pid; the watchdog (below) reads both.
+app_portal_pidfile: /opt/arxii/current/src/server/portal.pid
+
+# Release-local paths (Task D). Pre-flip deploy steps (uv sync, frontend
+# build, migrate, collectstatic) must run against the RELEASE directory,
+# NOT `current`/app_gamedir — the symlink hasn't been flipped to this
+# release yet, so a failure here must not touch what's already live.
+# Mirrors app_current/app_gamedir one level down (app_ref-scoped instead of
+# `current`-scoped).
+app_release_dir: "{{ app_releases_dir }}/{{ app_ref }}"
+app_release_gamedir: "{{ app_releases_dir }}/{{ app_ref }}/src"
+
+# Frontend build (Task D). The box has no Node preinstalled — installed here
+# via the NodeSource apt repo, pinned to the Node 20.x line to match CI
+# (.github/workflows/ci.yml `node-version: 20`).
+app_frontend_node_major: "20"
+# frontend/package.json has NO "packageManager" field to read a pnpm-version
+# contract from (checked). CI instead pins the pnpm MAJOR via
+# `pnpm/action-setup { version: 9 }` in .github/workflows/ci.yml — mirror
+# that pin here (corepack resolves the latest matching 9.x release) rather
+# than inventing an unpinned "latest".
+app_frontend_pnpm_version: "9"
+app_frontend_dir: "{{ app_release_dir }}/frontend"
+# vite.config.ts `build.outDir` — see frontend/vite.config.ts.
+app_frontend_dist_index: "{{ app_release_dir }}/src/web/static/dist/index.html"
 
 # First-run Django/Evennia superuser. Username + email are operator choices
 # (set via Environment Variables on the workflow); the password comes from

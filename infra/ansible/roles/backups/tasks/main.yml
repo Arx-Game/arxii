@@ -33,6 +33,10 @@
       [Unit]
       Description=Arx II pg_dump -> Linode Object Storage (primary)
       After=postgresql.service
+      # A failed backup must not fail silently into the journal — fire the
+      # off-box alert (roles/offbox_alerting installs the arxii-alert-failure@
+      # template unit; %n expands to this unit's own full name).
+      OnFailure=arxii-alert-failure@%n.service
       [Service]
       Type=oneshot
       EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}

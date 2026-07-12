@@ -17,6 +17,14 @@ output "backups_bucket" {
 output "backups_s3_endpoint" {
   value = module.object_storage.s3_endpoint
 }
+# roles/backups/defaults/main.yml `backups_region` — the object_storage
+# bucket/endpoint are already region-scoped (var.region), but the backup
+# script's `aws s3 cp --region` flag needs the value directly, and standup.sh
+# has no other way to read a TF_VAR_* value back out (see the echoed-inputs
+# block below).
+output "region" {
+  value = var.region
+}
 output "r2_offsite_bucket" {
   value = module.r2_offsite.bucket
 }

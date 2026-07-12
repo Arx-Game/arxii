@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Managed by Ansible (app_deploy). Portal-crash watchdog.
+#
+# Type=forking + PIDFile=server.pid (arxii.service.j2) only supervises the
+# Server daemon. Evennia runs Server + Portal as two SEPARATE processes
+# (server.pid + portal.pid — see src/server/README.md); a Portal-only crash
+# leaves the unit "active" from systemd's point of view (Server is fine)
+# while players cannot connect. This timer-driven script checks BOTH
+# pidfiles every run and restarts the unit (+ fires an off-box alert) when
+# the unit claims active but a daemon is dead.
+#
+# Failure modes this deliberately guards against becoming false positives —
+# a watchdog that flaps (restarts on every transient blip) is worse than no
+# watchdog at all:
+#   - Mid-deploy reload/restart: `evennia reload`/`start` transiently leaves
+#     a pidfile stale or briefly regenerates it. We skip entirely while the
+#     unit's own sub-state shows a start/reload/restart in flight.
+#   - Fresh start: right after (re)start, Evennia daemonizes and (re)writes
+#     both pidfiles — that write is not instantaneous. A GRACE_PERIOD_S
+#     window after the unit's ActiveEnterTimestamp tolerates a missing
+#     pidfile without restarting (which would just race the fresh start).
+set -euo pipefail
+set +x
+
+SERVICE="{{ app_service }}.service"
+SERVER_PID="{{ app_pidfile }}"
+PORTAL_PID="{{ app_portal_pidfile }}"
+GRACE_PERIOD_S=120
+
+log() { printf '[watchdog] %s\n' "$*"; }
+
+# Not active at all (stopped/failed) — not our concern; systemd's own
+# Restart=on-failure handles a fully-dead unit. We only catch the "unit
+# says active but one daemon silently died" case.
+active_state="$(systemctl is-active "${SERVICE}" 2>/dev/null || true)"
+if [ "${active_state}" != "active" ]; then
+  log "unit not active (${active_state}) — nothing to do"
+  exit 0
+fi
+
+# Mid-deploy guard: ActiveState can read "active" straight through a
+# reload; the low-level sub-state is what actually distinguishes "steady
+# state" from "something is happening right now".
+sub_state="$(systemctl show -p SubState --value "${SERVICE}" 2>/dev/null || true)"
+case "${sub_state}" in
+  reload|activating|auto-restart|start*)
+    log "unit sub-state is '${sub_state}' — deploy/restart in flight, skipping this run"
+    exit 0
+    ;;
+esac
+
+# Grace period since the unit last became active — the two pidfiles are
+# written by the forked daemons, not instantaneously at unit-active time.
+active_enter="$(systemctl show -p ActiveEnterTimestamp --value "${SERVICE}" 2>/dev/null || true)"
+now_s="$(date +%s)"
+if [ -n "${active_enter}" ] && [ "${active_enter}" != "n/a" ]; then
+  active_enter_s="$(date -d "${active_enter}" +%s 2>/dev/null || echo 0)"
+  age_s=$(( now_s - active_enter_s ))
+else
+  age_s=999999   # unknown timestamp — treat as long-running, no grace
+fi
+
+pid_alive() {
+  local pidfile="$1" pid
+  [ -f "${pidfile}" ] || return 1
+  pid="$(cat "${pidfile}" 2>/dev/null || true)"
+  [ -n "${pid}" ] || return 1
+  kill -0 "${pid}" 2>/dev/null
+}
+
+dead=0
+for pf in "${SERVER_PID}" "${PORTAL_PID}"; do
+  if ! pid_alive "${pf}"; then
+    if [ "${age_s}" -lt "${GRACE_PERIOD_S}" ]; then
+      log "pidfile ${pf} missing/dead but unit started ${age_s}s ago" \
+        "(< ${GRACE_PERIOD_S}s grace) — skipping"
+      exit 0
+    fi
+    log "pidfile ${pf} missing or its process is not running"
+    dead=1
+  fi
+done
+
+if [ "${dead}" -ne 1 ]; then
+  log "both server.pid and portal.pid processes alive — OK"
+  exit 0
+fi
+
+log "restarting ${SERVICE} (an Evennia daemon is dead while the unit reports active)"
+systemctl restart "${SERVICE}"
+
+# Off-box alert — same convention as offbox_alerting's heartbeat script
+# (base ping URL + token in OFFBOX_ALERT_TOKEN from the EnvironmentFile;
+# posting to "${base}/fail" signals the external dead-man's-switch to alert
+# immediately instead of waiting for the next missed heartbeat).
+if [ -n "${OFFBOX_ALERT_TOKEN:-}" ]; then
+  curl -fsS -m 10 "${OFFBOX_ALERT_TOKEN}/fail" \
+    -d "watchdog restarted ${SERVICE}: a dead Evennia daemon was detected" >/dev/null || true
+fi
