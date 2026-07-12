@@ -20,6 +20,7 @@ from commands.account.account_info import CmdAccount, CmdRoster
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
+from commands.agriculture import CmdHarvest
 from commands.alterations import CmdMageScar
 from commands.battle import CmdBattle
 from commands.canon_review import CmdCanonReview
@@ -283,6 +284,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdHide,
             # #1491 — telnet face of RestAction; spend AP to become Well-Rested.
             CmdRest,
+            # #2237 — telnet face of CollectFoodAction; harvest a field's food.
+            CmdHarvest,
             # #1866 — telnet face of SearchAction; search for clues in a room.
             CmdSearch,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.

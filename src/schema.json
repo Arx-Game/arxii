@@ -573,6 +573,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/AggregateBeatContribution'
           description: ''
+  /api/agriculture/collect/:
+    post:
+      operationId: agriculture_collect_create
+      description: |-
+        Collect food from a Field into its domain's stockpile.
+
+        Web dispatch of ``CollectFoodAction``: the body names the Field feature by
+        ``field_instance_id``; the Action resolves it (the REST path does no
+        ObjectDB resolution) and lands the food. Mirrors ``fatigue.RestView``.
+      tags:
+      - agriculture
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/areas/:
     get:
       operationId: areas_list
