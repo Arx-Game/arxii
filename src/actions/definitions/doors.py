@@ -241,11 +241,14 @@ class PickLockAction(Action):
 
 @dataclass
 class BreakExitAction(Action):
-    """Break through a locked exit — loud, always succeeds.
+    """Break through a locked and/or barred exit — loud, always succeeds.
 
-    Unlocks the exit (``db.locked = False``), damages the building's
-    condition tier by 1 (floored at DECAYED), emits a loud room echo,
-    and creates a non-concealed Legend deed tagged with ``burglary``.
+    Forces through either gate: unlocks the exit (``db.locked = False``) if
+    locked, and/or drops any active ``ExitBarsDetails`` level by 1 (#2177),
+    dissolving the bars entirely once the level would drop below 1. Also
+    damages the building's condition tier by 1 (floored at DECAYED), emits
+    a loud room echo, and creates a non-concealed Legend deed tagged with
+    ``burglary``.
     """
 
     key: str = "break_exit"
@@ -270,10 +273,30 @@ class BreakExitAction(Action):
         if exit_obj is None:
             return ActionResult(success=False, message="Break which exit?")
 
-        if not exit_obj.db.locked:
+        from evennia_extensions.models import ExitProfile  # noqa: PLC0415
+        from world.room_features.models import ExitBarsDetails  # noqa: PLC0415
+
+        exit_profile = ExitProfile.objects.filter(objectdb=exit_obj).first()
+        bars = (
+            ExitBarsDetails.objects.filter(exit_profile=exit_profile).active().first()
+            if exit_profile is not None
+            else None
+        )
+        was_locked = bool(exit_obj.db.locked)
+        if not was_locked and bars is None:
             return ActionResult(success=False, message="That exit isn't locked.")
 
-        exit_obj.db.locked = False
+        if was_locked:
+            exit_obj.db.locked = False
+        if bars is not None:
+            from django.utils import timezone as _tz  # noqa: PLC0415
+
+            if bars.level <= 1:
+                bars.dissolved_at = _tz.now()
+                bars.save(update_fields=["dissolved_at"])
+            else:
+                bars.level -= 1
+                bars.save(update_fields=["level"])
 
         from world.buildings.constants import ConditionTier  # noqa: PLC0415
         from world.buildings.room_services import building_for_room  # noqa: PLC0415

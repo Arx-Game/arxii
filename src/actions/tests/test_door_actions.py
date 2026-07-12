@@ -332,3 +332,55 @@ class ExitStateBarsGateTests(TestCase):
         exit_state: ExitState = sdm.initialize_state_for_object(exit_obj)
         intruder_state = sdm.initialize_state_for_object(intruder)
         assert exit_state.can_traverse(intruder_state) is True
+
+
+class BreakExitActionBarsTests(TestCase):
+    def _actor_and_barred_unlocked_exit(self):
+        from evennia_extensions.models import ExitProfile
+        from world.room_features.models import ExitBarsDetails
+
+        room = ObjectDBFactory(db_key="BreakBarsRoom", db_typeclass_path="typeclasses.rooms.Room")
+        destination = ObjectDBFactory(
+            db_key="BreakBarsDest", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        account = AccountFactory(username="break_bars_account")
+        actor = CharacterFactory(db_key="BreakBarsDave", location=room)
+        actor.db_account = account
+        actor.save()
+        sheet = CharacterSheetFactory(character=actor)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+        exit_obj = ObjectDBFactory(db_key="bars_exit", db_typeclass_path="typeclasses.exits.Exit")
+        exit_obj.location = room
+        exit_obj.destination = destination
+        exit_obj.save()
+        exit_profile = ExitProfile.get_or_create_for_exit(exit_obj)
+        bars = ExitBarsDetails.objects.create(exit_profile=exit_profile, level=2)
+        return actor, exit_obj, bars
+
+    def test_break_barred_unlocked_exit_succeeds_and_drops_level(self):
+        actor, exit_obj, bars = self._actor_and_barred_unlocked_exit()
+        assert exit_obj.db.locked is not True
+        result = BreakExitAction().run(actor=actor, exit=exit_obj)
+        assert result.success
+        bars.refresh_from_db()
+        assert bars.level == 1
+
+    def test_break_barred_exit_at_level_1_dissolves_bars(self):
+        actor, exit_obj, bars = self._actor_and_barred_unlocked_exit()
+        bars.level = 1
+        bars.save(update_fields=["level"])
+        result = BreakExitAction().run(actor=actor, exit=exit_obj)
+        assert result.success
+        bars.refresh_from_db()
+        assert bars.dissolved_at is not None
+
+    def test_break_locked_and_barred_clears_both(self):
+        actor, exit_obj, bars = self._actor_and_barred_unlocked_exit()
+        exit_obj.db.locked = True
+        result = BreakExitAction().run(actor=actor, exit=exit_obj)
+        assert result.success
+        assert exit_obj.db.locked is False
+        bars.refresh_from_db()
+        assert bars.level == 1
