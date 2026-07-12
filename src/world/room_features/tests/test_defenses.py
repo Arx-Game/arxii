@@ -314,3 +314,87 @@ class ReactToUnauthorizedEntryTests(TestCase):
         assert NarrativeMessageDelivery.objects.filter(
             recipient_character_sheet=owner_sheet
         ).exists()
+
+    def test_ward_damage_debits_intruder_health(self):
+        """``reaction_damage_amount`` genuinely debits health via ``arm_or_apply_sudden_harm``.
+
+        Regression guard for #1228/PR #1285: a prior damage path silently no-op'd
+        because it never wrote the debit through to ``vitals.health`` before running
+        consequences. Asserting only "no exception raised" would not have caught
+        that -- assert the actual health drop.
+        """
+        from world.room_features.services import react_to_unauthorized_entry
+        from world.vitals.factories import CharacterVitalsFactory
+
+        room, _ward, intruder = self._room_ward_and_intruder(damage=15)
+        vitals = CharacterVitalsFactory(
+            character_sheet=intruder.sheet_data, health=100, max_health=100
+        )
+
+        react_to_unauthorized_entry(intruder, room)
+
+        vitals.refresh_from_db()
+        assert vitals.health == 85
+
+    def test_alarm_message_is_identity_transparent(self):
+        """``RoomAlarmDetails`` is identity-transparent (ADR-0083): the owner
+        notification body must never contain the intruder's name/key.
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.locations.services import transfer_ownership
+        from world.narrative.models import NarrativeMessageDelivery
+        from world.room_features.models import RoomAlarmDetails
+        from world.room_features.services import react_to_unauthorized_entry
+        from world.scenes.factories import PersonaFactory
+
+        room = ObjectDBFactory(
+            db_key="AlarmIdentityRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        owner_sheet = CharacterSheetFactory()
+        owner_persona = PersonaFactory(character_sheet=owner_sheet)
+        transfer_ownership(room_profile=room_profile, to_persona=owner_persona)
+        RoomAlarmDetails.objects.create(room_profile=room_profile)
+
+        intruder = ObjectDBFactory(
+            db_key="IdentityMallory", db_typeclass_path="typeclasses.characters.Character"
+        )
+        intruder.location = room
+        intruder.save()
+        intruder_sheet = CharacterSheetFactory(character=intruder)
+        PersonaFactory(character_sheet=intruder_sheet)
+
+        react_to_unauthorized_entry(intruder, room)
+
+        delivery = NarrativeMessageDelivery.objects.get(recipient_character_sheet=owner_sheet)
+        assert intruder.db_key not in delivery.message.body
+
+    def test_alarm_org_holder_does_not_crash_or_notify(self):
+        """``_trigger_alarm`` no-ops (does not crash) when the room's owner is an
+        Organization -- only a Persona holder gets notified (#2177 Task 8 fix).
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.locations.services import transfer_ownership
+        from world.narrative.models import NarrativeMessageDelivery
+        from world.room_features.models import RoomAlarmDetails
+        from world.room_features.services import react_to_unauthorized_entry
+        from world.scenes.factories import PersonaFactory
+        from world.societies.factories import OrganizationFactory
+
+        room = ObjectDBFactory(db_key="AlarmOrgRoom", db_typeclass_path="typeclasses.rooms.Room")
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        org = OrganizationFactory()
+        transfer_ownership(room_profile=room_profile, to_organization=org)
+        RoomAlarmDetails.objects.create(room_profile=room_profile)
+
+        intruder = ObjectDBFactory(
+            db_key="OrgMallory", db_typeclass_path="typeclasses.characters.Character"
+        )
+        intruder.location = room
+        intruder.save()
+        intruder_sheet = CharacterSheetFactory(character=intruder)
+        PersonaFactory(character_sheet=intruder_sheet)
+
+        react_to_unauthorized_entry(intruder, room)  # must not raise
+
+        assert not NarrativeMessageDelivery.objects.exists()
