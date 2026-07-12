@@ -63,3 +63,26 @@ class ModifierSourceKind(models.TextChoices):
     AFFINITY = "affinity", "Affinity"
     PULL = "pull", "Combat Pull"
     RELATIONSHIP = "relationship", "Relationship"
+
+
+class SecurityCheckKind(models.TextChoices):
+    """Security-domain check kinds map to CheckType rows (#2180).
+
+    Each kind maps to a CheckType name via SECURITY_CHECK_TYPE_NAMES.
+    resolve_security_check() looks up the CheckType by name.
+    """
+
+    SNEAK = "sneak", "Sneak"
+    LOCKPICK = "lockpick", "Lockpick"
+    BREAK_AND_ENTER = "break_and_enter", "Break and Enter"
+    ESCAPE_THROUGH_WINDOW = "escape_through_window", "Escape Through Window"
+    GUARD_DETECTION = "guard_detection", "Guard Detection"
+
+
+SECURITY_CHECK_TYPE_NAMES: dict[SecurityCheckKind, str] = {
+    SecurityCheckKind.SNEAK: "Stealth",
+    SecurityCheckKind.LOCKPICK: "Lockpick",
+    SecurityCheckKind.BREAK_AND_ENTER: "Break and Enter",
+    SecurityCheckKind.ESCAPE_THROUGH_WINDOW: "Escape Through Window",
+    SecurityCheckKind.GUARD_DETECTION: "Guard Detection",
+}
