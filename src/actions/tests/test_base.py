@@ -392,6 +392,8 @@ class ActionRegistryTests(TestCase):
             "order_companion",
             "lock_exit",
             "unlock_exit",
+            "pick_lock",
+            "break_exit",
             "open_window",
             "close_window",
             # #2116 — gift/technique/thread-weaving acquisition surface.
