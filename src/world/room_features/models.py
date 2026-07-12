@@ -15,6 +15,7 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.room_features.constants import (
+    DefenseKind,
     RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
     RoomFeatureServiceStrategy,
@@ -550,3 +551,72 @@ class RoomAlarmDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Alarm L{self.level} @ room {self.room_profile_id}"
+
+
+class DefenseProgressionDetails(SharedMemoryModel):
+    """Per-(ROOM_DEFENSE_INSTALLATION Project) details payload (#2177).
+
+    Mirrors RoomFeatureProgressionDetails' shape but targets the independent
+    defense-details models instead of RoomFeatureKind/RoomFeatureInstance.
+    Exactly one of target_exit_profile/target_room_profile is set, matching
+    defense_kind (enforced by the CheckConstraint below).
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="defense_progression_details",
+        primary_key=True,
+    )
+    defense_kind = models.CharField(max_length=16, choices=DefenseKind.choices)
+    target_exit_profile = models.ForeignKey(
+        "evennia_extensions.ExitProfile",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="defense_progression_projects",
+        help_text="Set only for EXIT_BARS installs/upgrades.",
+    )
+    target_room_profile = models.ForeignKey(
+        ROOM_PROFILE_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="defense_progression_projects",
+        help_text="Set only for ROOM_WARD/ROOM_ALARM installs/upgrades.",
+    )
+    target_level = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="defense_progression_projects",
+        help_text="Required for ROOM_WARD installs only.",
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(target_level__gte=1),
+                name="defense_progression_target_level_gte_1",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        defense_kind=DefenseKind.EXIT_BARS,
+                        target_exit_profile__isnull=False,
+                        target_room_profile__isnull=True,
+                    )
+                    | models.Q(
+                        defense_kind__in=[DefenseKind.ROOM_WARD, DefenseKind.ROOM_ALARM],
+                        target_exit_profile__isnull=True,
+                        target_room_profile__isnull=False,
+                    )
+                ),
+                name="defense_progression_target_matches_kind",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"DefenseProgression#{self.project_id}: {self.defense_kind} L{self.target_level}"
