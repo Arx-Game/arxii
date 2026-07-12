@@ -17,6 +17,7 @@ import {
   createActionRequest,
   castTechnique,
   useCastableTechniques,
+  toastDispositionMessage,
 } from '../actionQueries';
 import { fetchScene, sceneKeys } from '../queries';
 import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
@@ -182,8 +183,9 @@ export function ActionPanel({ sceneId }: Props) {
       strain_commitment?: number;
       effort_level?: string;
     }) => createActionRequest(sceneId, params),
-    onSuccess: () => {
+    onSuccess: (data) => {
       invalidateActionOutcomeQueries();
+      toastDispositionMessage(data);
       setOpen(false);
       setTargetingAction(null);
       setStrainByAction({});
