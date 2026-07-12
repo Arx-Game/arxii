@@ -28,16 +28,20 @@ def domain_consumption_tick() -> dict[str, int]:
         Telemetry dict with ``domains_processed`` and ``shortages``.
     """
     from world.societies.houses.models import Domain  # noqa: PLC0415
+    from world.societies.houses.services import maybe_open_unrest_crisis  # noqa: PLC0415
 
     config = get_food_config()
 
     domains = list(Domain.objects.all())
     domains_processed = 0
     shortages = 0
+    crises_opened = 0
 
     for domain in domains:
         try:
             had_shortage = _consume_domain(domain, config)
+            # After the food-driven civ update, simmering unrest may boil over (#2238).
+            crisis = maybe_open_unrest_crisis(domain)
         except Exception:
             logger.exception(
                 "Domain consumption tick failed for domain %s; continuing.",
@@ -47,10 +51,13 @@ def domain_consumption_tick() -> dict[str, int]:
         domains_processed += 1
         if had_shortage:
             shortages += 1
+        if crisis is not None:
+            crises_opened += 1
 
     return {
         "domains_processed": domains_processed,
         "shortages": shortages,
+        "crises_opened": crises_opened,
     }
 
 
@@ -69,6 +76,7 @@ def _consume_domain(domain, config) -> bool:
     if stockpile.stored >= needed:
         stockpile.stored -= needed
         stockpile.save(update_fields=["stored"])
+        _apply_recovery(domain, config)
         return False
 
     # Shortage: consume what's available, apply penalties.
@@ -83,3 +91,22 @@ def _apply_shortage(domain, config) -> None:
     domain.unrest = min(100, domain.unrest + config.shortage_unrest_penalty)
     domain.prosperity = max(0, domain.prosperity - config.shortage_prosperity_penalty)
     domain.save(update_fields=["unrest", "prosperity"])
+
+
+def _apply_recovery(domain, config) -> None:
+    """A well-fed week relaxes unrest and recovers prosperity toward equilibrium (#2238).
+
+    Unrest always eases toward 0; prosperity only climbs back *up to* the
+    equilibrium, so a single missed harvest isn't permanently punitive — but
+    improvements that pushed prosperity above the equilibrium are left untouched.
+    """
+    unrest = max(0, domain.unrest - config.recovery_unrest_relief)
+    prosperity = domain.prosperity
+    if prosperity < config.prosperity_equilibrium:
+        prosperity = min(
+            config.prosperity_equilibrium, prosperity + config.recovery_prosperity_gain
+        )
+    if unrest != domain.unrest or prosperity != domain.prosperity:
+        domain.unrest = unrest
+        domain.prosperity = prosperity
+        domain.save(update_fields=["unrest", "prosperity"])

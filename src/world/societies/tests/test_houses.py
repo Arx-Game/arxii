@@ -5,7 +5,11 @@ from django.test import TestCase
 
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import GenderFactory
-from world.currency.services import get_or_create_treasury, transfer
+from world.currency.services import (
+    accrue_income_stream,
+    get_or_create_treasury,
+    transfer,
+)
 from world.projects.constants import ProjectKind, ProjectStatus
 from world.roster.constants import MembershipBasis
 from world.roster.factories import (
@@ -386,6 +390,71 @@ class DomainTests(TestCase):
         self.assertEqual(holding.income_stream.organization, self.org)
         self.assertEqual(holding.income_stream.gross_amount, 1200)
         self.assertEqual(holding.income_stream.area, self.area)
+
+    def test_accrual_scales_a_holdings_gross_by_domain_prosperity(self):
+        # #2238 — prosperity drives income: a thriving domain amasses more per cycle.
+        domain = create_domain(area=self.area, name="Westrock Vale", owner_org=self.org)
+        kind = HoldingKind.objects.create(
+            name="Farmland", stream_kind="domain_tax", base_gross=1000
+        )
+        stream = add_holding(domain=domain, kind=kind).income_stream
+
+        for prosperity, expected in ((50, 1000), (100, 2000), (0, 0)):
+            domain.prosperity = prosperity
+            domain.save(update_fields=["prosperity"])
+            stream.uncollected_pool = 0
+            stream.save(update_fields=["uncollected_pool"])
+            accrue_income_stream(stream)
+            self.assertEqual(stream.uncollected_pool, expected, f"prosperity {prosperity}")
+
+    def test_accrual_is_unscaled_for_non_domain_streams(self):
+        from world.currency.models import OrgIncomeStream
+
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Kickups", kind="crime_kickup", gross_amount=500
+        )
+        accrue_income_stream(stream)
+        self.assertEqual(stream.uncollected_pool, 500)  # no domain_holding → no scaling
+
+    def test_unrest_crisis_chance_is_zero_at_or_below_threshold(self):
+        from world.societies.houses.services import unrest_crisis_chance
+
+        self.assertEqual(unrest_crisis_chance(50), 0.0)
+        self.assertEqual(unrest_crisis_chance(60), 0.0)
+
+    def test_unrest_crisis_chance_scales_above_threshold(self):
+        from world.societies.houses.services import unrest_crisis_chance
+
+        self.assertAlmostEqual(unrest_crisis_chance(80), 0.4)  # (80 - 60) * 2 / 100
+
+    def test_maybe_open_unrest_crisis_fires_on_a_low_roll(self):
+        from world.societies.houses.models import DomainCrisis
+        from world.societies.houses.services import maybe_open_unrest_crisis
+
+        domain = create_domain(area=self.area, name="Restless", owner_org=self.org)
+        domain.unrest = 80
+        domain.save(update_fields=["unrest"])
+
+        crisis = maybe_open_unrest_crisis(domain, roll=0.0)
+        self.assertIsNotNone(crisis)
+        self.assertEqual(DomainCrisis.objects.filter(domain=domain).count(), 1)
+
+    def test_maybe_open_unrest_crisis_skips_while_one_is_open(self):
+        from world.societies.houses.services import maybe_open_unrest_crisis
+
+        domain = create_domain(area=self.area, name="Restless", owner_org=self.org)
+        domain.unrest = 90
+        domain.save(update_fields=["unrest"])
+
+        maybe_open_unrest_crisis(domain, roll=0.0)
+        # An unresolved crisis is already open → no second one piles on.
+        self.assertIsNone(maybe_open_unrest_crisis(domain, roll=0.0))
+
+    def test_maybe_open_unrest_crisis_never_fires_for_a_calm_domain(self):
+        from world.societies.houses.services import maybe_open_unrest_crisis
+
+        domain = create_domain(area=self.area, name="Calm", owner_org=self.org)  # unrest 10
+        self.assertIsNone(maybe_open_unrest_crisis(domain, roll=0.0))
 
     def test_improvement_project_applies_on_success(self):
         domain = create_domain(area=self.area, name="Westrock Vale", owner_org=self.org)
