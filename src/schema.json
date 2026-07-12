@@ -37121,6 +37121,11 @@ components:
           items:
             $ref: '#/components/schemas/PositionEdge'
           readOnly: true
+        volatile_objects:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolatileObject'
+          readOnly: true
         is_lethal:
           type: boolean
           readOnly: true
@@ -37153,6 +37158,7 @@ components:
       - resolution_order
       - scene
       - surge_beats
+      - volatile_objects
     EncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.
@@ -61430,6 +61436,30 @@ components:
       - rested_today
       - social
       - well_rested
+    VolatileObject:
+      type: object
+      description: A detonatable object in the encounter room, for the redirect destination
+        picker (#2210).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        position_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        position_name:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - id
+      - name
+      - position_id
+      - position_name
     WeeklyVote:
       type: object
       description: Read serializer for WeeklyVote instances.

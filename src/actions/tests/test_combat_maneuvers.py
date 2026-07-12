@@ -118,6 +118,91 @@ class CoverInterposeActionTest(CombatManeuverActionTestBase):
         self.assertEqual(action.maneuver, CombatManeuver.INTERPOSE)
         self.assertIsNone(action.focused_ally_target_id)
 
+    def test_interpose_rejects_unknown_redirect_opponent(self) -> None:
+        result = InterposeAction().run(self.character, redirect_opponent_target_id=999999)
+        self.assertFalse(result.success)
+
+
+class InterposeRedirectDispatchSeamTest(CombatManeuverActionTestBase):
+    """Declare + resolve one REDIRECT round through the real Action.run() seam (#2210).
+
+    Proves the wiring end-to-end on the SAME seam telnet/web use — not just the
+    service layer test_redirect_resolution.py already covers.
+    """
+
+    def _ally_participant(self) -> CombatParticipant:
+        ally_sheet = CharacterSheetFactory(character=CharacterFactory(db_key="redirectally"))
+        return CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=ally_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+    def test_declare_via_action_run_then_resolve_redirects_to_opponent(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from world.combat.constants import OpponentStatus
+        from world.combat.factories import CombatOpponentFactory
+        from world.combat.interpose_content import ensure_interpose_content
+        from world.combat.services import apply_damage_to_participant
+        from world.magic.effect_palette_content import (
+            REFLECT_TECHNIQUE_NAME,
+            ensure_reflect_content,
+        )
+        from world.magic.factories import CharacterAnimaFactory
+        from world.magic.models import CharacterTechnique, Technique
+
+        ensure_interpose_content()
+        ensure_reflect_content()
+        mirror_ward = Technique.objects.get(name=REFLECT_TECHNIQUE_NAME)
+        CharacterTechnique.objects.create(character=self.sheet, technique=mirror_ward)
+        CharacterAnimaFactory(character=self.character, current=10, maximum=10)
+        self.character.db_location = self.encounter.room
+        self.character.save(update_fields=["db_location"])
+
+        ally = self._ally_participant()
+        ally.character_sheet.character.db_location = self.encounter.room
+        ally.character_sheet.character.save(update_fields=["db_location"])
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter, status=OpponentStatus.ACTIVE, health=100, max_health=100
+        )
+
+        result = InterposeAction().run(
+            self.character,
+            ally_participant_id=ally.pk,
+            technique_id=mirror_ward.pk,
+            redirect_opponent_target_id=opponent.pk,
+        )
+        self.assertTrue(result.success, result.message)
+
+        action = CombatRoundAction.objects.get(participant=self.participant, round_number=1)
+        self.assertEqual(action.focused_action_id, mirror_ward.pk)
+        self.assertEqual(action.redirect_opponent_target_id, opponent.pk)
+
+        # Resolve one round: the encounter must be RESOLVING for interpose
+        # dispatch to fire (a declaration-time-only test proves nothing about
+        # the resolution side).
+        self.encounter.status = RoundStatus.RESOLVING
+        self.encounter.save(update_fields=["status"])
+        ally_vitals, _ = CharacterVitals.objects.get_or_create(
+            character_sheet=ally.character_sheet, defaults={"health": 100, "max_health": 100}
+        )
+        ally_vitals.health = 100
+        ally_vitals.max_health = 100
+        ally_vitals.save()
+
+        with patch(
+            "world.combat.services.perform_check",
+            return_value=SimpleNamespace(success_level=2),
+        ):
+            apply_damage_to_participant(ally, 40)
+
+        ally_vitals.refresh_from_db()
+        opponent.refresh_from_db()
+        self.assertEqual(ally_vitals.health, 100, "the ward is shielded")
+        self.assertEqual(opponent.health, 60, "the saved damage redirects to the chosen enemy")
+
 
 class UseItemManeuverActionTest(CombatManeuverActionTestBase):
     """Tests for UseItemManeuverAction (#2120), key ``combat_use``."""

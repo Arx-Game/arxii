@@ -59,10 +59,25 @@ _Avoid_: block, guard, intercept, bodyguard
 **Guardian reaction** (#2207):
 The declared protect-with-technique reaction a PC arms via `declare_interpose(participant, ally=None, technique=None)`. Two mechanically distinct resolution branches share the one declaration field (`CombatRoundAction.focused_action`, reused rather than adding a parallel column):
 - **Mundane** (`technique=None`, Interpose's original shape): dispatches through `world.mechanics.reactions.dispatch_capability_reaction(select_best_check_rating=True)`, which picks the higher-rated of the guardian's *real* available reaction approaches (Reflexes vs. Melee Defense, via `compute_check_rating`) — deterministic, zero extra rolls, never inventing an action outside `get_available_actions`'s output (ADR-0032). Costs fatigue on fire.
-- **Technique-guardian** (`technique=<a known, learned Technique classifying to a non-redirect protective flavor>`): resolved by `world.combat.services._try_technique_interpose`, which rolls the guardian's own cast check (`resolve_cast_check_type`) instead of a capability-reaction challenge, and pays a flat `ConditionTemplate.reactive_anima_cost` (fizzle if unaffordable — no roll, no charge) instead of fatigue. See ADR-0118 for why this rolls outside `use_technique`. Grading (clean/partial/fail) is shared with the mundane path via `_grade_interpose_damage`; a clean BLINK-flavored block relocates the ward to the guardian's position.
+- **Technique-guardian** (`technique=<a known, learned Technique classifying to a protective flavor>`): resolved by `world.combat.services._try_technique_interpose`, which rolls the guardian's own cast check (`resolve_cast_check_type`) instead of a capability-reaction challenge, and pays a flat `ConditionTemplate.reactive_anima_cost` (fizzle if unaffordable — no roll, no charge) instead of fatigue. See ADR-0118 for why this rolls outside `use_technique`. Grading (clean/partial/fail) is shared with the mundane path via `_grade_interpose_damage`; a clean BLINK-flavored block relocates the ward to the guardian's position; a REDIRECT-flavored block sends the saved amount to the declared destination — see **Redirect**, below.
 
-`world.magic.services.targeting.protective_flavor(technique)` classifies a technique's reactive-trigger handler into `barrier` (absorb_pool) / `blink` (blink_dodge) / `redirect` (reflect_damage) by walking its authored condition→reactive-trigger→flow data — no new authored field. `redirect` is rejected at declaration time (mirror-style reflection needs its own resolution path, deferred to #2210). A guardian can also shield an ALLY-allegiance `CombatOpponent` (a summon) — but only via the *any-ally* (`ally=None`) declaration, since `focused_ally_target` FKs `CombatParticipant` and cannot name a `CombatOpponent` directly (a named-ally guard of a summon is a follow-up).
+`world.magic.services.targeting.protective_flavor(technique)` classifies a technique's reactive-trigger handler into `barrier` (absorb_pool) / `blink` (blink_dodge) / `redirect` (reflect_damage) by walking its authored condition→reactive-trigger→flow data — no new authored field. A guardian can also shield an ALLY-allegiance `CombatOpponent` (a summon) — but only via the *any-ally* (`ally=None`) declaration, since `focused_ally_target` FKs `CombatParticipant` and cannot name a `CombatOpponent` directly (a named-ally guard of a summon is a follow-up).
 _Avoid_: guardian ward, protect action
+
+**Redirect** (#2210):
+A REDIRECT-flavor Guardian reaction's saved-damage destination, declared at
+`declare_interpose` time (ADR-0032/0122) via `CombatRoundAction.redirect_opponent_target`
+(FK `CombatOpponent` — structurally never a PC, ADR-0023) or `redirect_object_target`
+(FK ObjectDB, must be **Volatile** — see `world/mechanics/AGENT_GLOSSARY.md`). Both null
+(or the declared destination no longer valid at resolution — the enemy defeated, the
+object moved or already detonated) means "away," the universal fallback: the saved
+amount (`amount_before - payload.amount` after grading) simply vanishes with a
+deflection broadcast. A chosen-enemy redirect applies the saved amount via
+`apply_damage_to_opponent(..., bypass_pre_apply=True)` (the ADR-0060 loop guard); a
+volatile-object redirect fires the object's `PropertyDetonation.consequence_pool` at
+every combatant positioned there, then deletes the triggering `ObjectProperty` —
+one-shot, never reusable.
+_Avoid_: reflect target, bounce destination, deflection target
 
 **Succor**:
 The maneuver by which a PC shelters a specific ally from a round-ticked environmental hazard (sunlight, poison gas) this round — the environmental-DoT sibling of Interpose (which blocks an incoming attack, not a lingering hazard). Always names a specific ally; there is no "any ally" path like Interpose has, since environmental shelter is "I'm sheltering THIS person," not "I'll block whichever hazard lands on someone." Resolves through the same graded capability-check spine as Interpose.

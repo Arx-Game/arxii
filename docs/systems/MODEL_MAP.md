@@ -20,6 +20,7 @@
   - wound_pool_damage_types <- conditions.DamageType
   - death_pool_damage_types <- conditions.DamageType
   - condition_stages <- conditions.ConditionStage
+  - property_detonations <- mechanics.PropertyDetonation
   - situation_trap_links <- mechanics.SituationTrapLink
   - context_attachments <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
@@ -1783,6 +1784,8 @@
   - cast_destination -> areas.Position [FK] (nullable)
   - cast_position_a -> areas.Position [FK] (nullable)
   - cast_position_b -> areas.Position [FK] (nullable)
+  - redirect_opponent_target -> combat.CombatOpponent [FK] (nullable)
+  - redirect_object_target -> objects.ObjectDB [FK] (nullable)
   - interaction -> scenes.Interaction [FK] (nullable)
 **Pointed to by:**
   - extra_targets <- combat.CombatRoundActionTarget
@@ -1984,7 +1987,7 @@
 - `declare_cover(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a covering maneuver for an ally -- passives-only, auto-ready.`
 - `declare_demoralize(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a demoralizing maneuver — break an opponent's nerve, auto-ready (#2015).`
 - `declare_flee(participant: 'CombatParticipant') -> 'CombatRoundAction' — Declare intent to flee -- passives-only maneuver, auto-ready.`
-- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None) -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
+- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None, redirect_opponent_target: 'CombatOpponent | None' = None, redirect_object_target: 'ObjectDB | None' = None) -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
 - `declare_joust(participant: 'CombatParticipant', technique: 'Technique') -> 'CombatRoundAction' — Declare a joust — a mounted, lance-armed opposed pass (#1843).`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
 - `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
@@ -4429,6 +4432,7 @@
   - challenge_template_properties <- mechanics.ChallengeTemplateProperty
   - object_properties <- mechanics.ObjectProperty
   - damage_modifiers <- mechanics.PropertyDamageModifier
+  - detonation <- mechanics.PropertyDetonation
   - applications <- mechanics.Application
   - required_by_applications <- mechanics.Application
   - challenge_templates <- mechanics.ChallengeTemplate
@@ -4457,6 +4461,11 @@
 **Foreign Keys:**
   - property -> mechanics.Property [FK]
   - damage_type -> conditions.DamageType [FK] (nullable)
+
+### PropertyDetonation
+**Foreign Keys:**
+  - property -> mechanics.Property [OneToOne]
+  - consequence_pool -> actions.ConsequencePool [FK]
 
 ### Application
 **Foreign Keys:**
@@ -4615,6 +4624,7 @@
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' — Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — Authored covenant-role bonus for ``target``, scaled by character level (#985).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
+- `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' — Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
 - `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven equipment effectiveness bonus (#2022).`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven stat scaling across engaged roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`

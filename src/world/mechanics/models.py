@@ -676,6 +676,34 @@ class PropertyDamageModifier(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.property.name} -> {self.modifier_value:+d} {dt_name}"
 
 
+class PropertyDetonation(SharedMemoryModel):
+    """Marks a Property as "volatile" — carrying a one-shot detonation payload.
+
+    An object is volatile when it holds an ``ObjectProperty`` whose ``property``
+    has a ``PropertyDetonation`` row (see ``Property.detonation``, the OneToOne
+    reverse accessor). Combat redirect resolution (#2210) fires
+    ``consequence_pool`` against everyone positioned at the volatile object's
+    Position when a guardian redirects saved damage into it, then deletes the
+    triggering ``ObjectProperty`` row — the volatility is spent, not reusable.
+    """
+
+    property = models.OneToOneField(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="detonation",
+    )
+    consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        related_name="property_detonations",
+        help_text="Graded/deterministic payload fired against everyone at the object's position.",
+    )
+    description = models.TextField(blank=True)
+
+    def __str__(self) -> str:
+        return f"{self.property.name} (volatile)"
+
+
 class Application(NaturalKeyMixin, SharedMemoryModel):
     """
     Pure eligibility record: Capability + Property = 'you can attempt this'.

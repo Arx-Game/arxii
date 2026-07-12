@@ -52,6 +52,15 @@ _OPPONENT_SUBVERBS = {"demoralize", "taunt", "parley"}
 # mirrors ``CmdClashCommit``'s ``" with "`` split in ``commands/combat.py``.
 _WITH_SEPARATOR = " with "
 
+# Further trailing-clause separator for a redirect destination (#2210):
+# ``interpose [ally] with <technique> into <away|enemy|object>``. Same
+# padded-string split trick, applied to whatever ``with`` already carved off.
+_INTO_SEPARATOR = " into "
+
+# Explicit no-op spelling of the redirect "away" fallback (#2210) — matches
+# omitting the "into" clause entirely.
+_REDIRECT_AWAY_KEYWORD = "away"
+
 
 class CmdCombat(_CombatCommandMixin, DispatchCommand):
     """Take a combat action other than casting or clashing.
@@ -60,8 +69,11 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat                      — show your combat status + available actions
         combat flee                 — declare a desperate flee this round
         combat cover <ally>         — cover an ally's escape
-        combat interpose [ally] [with <technique>] — guard an ally (or any ally) from
-                                     harm, optionally carrying a known protective technique
+        combat interpose [ally] [with <technique>] [into <destination>] — guard an
+                                     ally (or any ally) from harm, optionally carrying a
+                                     known protective technique; a REDIRECT technique's
+                                     saved damage destination (enemy name, object name,
+                                     or "away" — the default) is declared with "into"
         combat succor <ally>        — shelter an ally from environmental hazards
         combat use <item> [on <target>] — use a held on-use item this round
         combat rally <ally>         — inspire an ally, bolstering their next action
@@ -139,30 +151,48 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         return self._rest
 
     def _resolve_interpose_args(self, text: str) -> dict[str, Any]:
-        """Parse ``[ally] [with <technique>]`` for the interpose subverb (#2207).
+        """Parse ``[ally] [with <technique>] [into <destination>]`` (#2207, #2210).
 
-        Both clauses are optional: bare ``combat interpose`` guards any ally with a
-        plain declaration; ``combat interpose <ally>`` names a specific ally;
-        ``with <technique>`` (order-independent trailer split on ``" with "``,
-        case-insensitive — mirrors ``CmdClashCommit``'s split, `commands/combat.py`)
-        carries a known protective technique into the declaration. The technique
-        name is resolved via `_find_technique_id`, which already gates on the caller
-        knowing it — the service-layer check in ``declare_interpose`` is
-        defense-in-depth for non-telnet callers.
+        All three clauses are optional: bare ``combat interpose`` guards any ally
+        with a plain declaration; ``combat interpose <ally>`` names a specific
+        ally; ``with <technique>`` (order-independent trailer split on
+        ``" with "``, case-insensitive — mirrors ``CmdClashCommit``'s split,
+        `commands/combat.py`) carries a known protective technique into the
+        declaration. The technique name is resolved via `_find_technique_id`,
+        which already gates on the caller knowing it — the service-layer check
+        in ``declare_interpose`` is defense-in-depth for non-telnet callers.
+
+        ``into <destination>`` (#2210) declares a REDIRECT technique's saved-
+        damage destination, split off the technique clause the same padded-
+        string way: ``into away`` (or omitting the clause entirely) is the
+        default fallback; any other name resolves first against an active
+        opponent, then a room object, in `_resolve_redirect_destination`.
         """
         # Pad with spaces so a bare "with <technique>" (no ally clause) still
         # matches the " with " separator at position 0; both slices come off the
         # SAME padded string so the indexes stay consistent.
         padded = f" {text} "
         ally_text = text
-        technique_text = ""
+        rest_text = ""
         with_index = padded.lower().find(_WITH_SEPARATOR)
         if with_index != -1:
             ally_text = padded[:with_index].strip()
-            technique_text = padded[with_index + len(_WITH_SEPARATOR) :].strip()
-            if not technique_text:
-                msg = "Usage: combat interpose [ally] with <technique>."
+            rest_text = padded[with_index + len(_WITH_SEPARATOR) :].strip()
+            if not rest_text:
+                msg = "Usage: combat interpose [ally] with <technique> [into <destination>]."
                 raise CommandError(msg)
+
+        technique_text = rest_text
+        destination_text = ""
+        if rest_text:
+            padded_rest = f" {rest_text} "
+            into_index = padded_rest.lower().find(_INTO_SEPARATOR)
+            if into_index != -1:
+                technique_text = padded_rest[:into_index].strip()
+                destination_text = padded_rest[into_index + len(_INTO_SEPARATOR) :].strip()
+                if not technique_text or not destination_text:
+                    msg = "Usage: combat interpose [ally] with <technique> into <destination>."
+                    raise CommandError(msg)
 
         ally_text = ally_text.strip()
         kwargs: dict[str, Any] = {
@@ -170,7 +200,44 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         }
         if technique_text:
             kwargs["technique_id"] = self._find_technique_id(technique_text)
+        if destination_text:
+            kwargs.update(self._resolve_redirect_destination(destination_text))
         return kwargs
+
+    def _resolve_redirect_destination(self, name: str) -> dict[str, Any]:
+        """Resolve a redirect destination name (#2210): opponent, then room object.
+
+        ``away`` (case-insensitive) is the explicit no-op spelling of the
+        universal fallback — omitting the ``into`` clause entirely does the
+        same thing, so this just short-circuits to an empty kwargs dict.
+        """
+        if name.lower() == _REDIRECT_AWAY_KEYWORD:
+            return {}
+
+        from world.combat.constants import OpponentStatus  # noqa: PLC0415
+        from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+        participant = self._combat_participant_or_none()
+        if participant is None:
+            msg = "You are not in an active combat round."
+            raise CommandError(msg)
+
+        opponent = CombatOpponent.objects.filter(
+            encounter=participant.encounter,
+            status=OpponentStatus.ACTIVE,
+            name__iexact=name,
+        ).first()
+        if opponent is not None:
+            return {"redirect_opponent_target_id": opponent.pk}
+
+        room = participant.encounter.room
+        obj = None
+        if room is not None:
+            obj = next((o for o in room.contents if o.db_key.lower() == name.lower()), None)
+        if obj is None:
+            msg = f"No enemy or object named '{name}' to redirect into."
+            raise CommandError(msg)
+        return {"redirect_object_target_id": obj.pk}
 
     def _resolve_charge_args(self, text: str) -> dict[str, Any]:
         """Parse ``<opponent> with <technique>`` for the charge subverb (#1843).
@@ -389,7 +456,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         """Print resource/risk state + the declared action + available subverbs."""
         lines = [
             "|wCombat actions|n: "
-            "flee, cover <ally>, interpose [ally] [with <technique>], succor <ally>, "
+            "flee, cover <ally>, interpose [ally] [with <technique>] [into <dest>], "
+            "succor <ally>, "
             "use <item> [on <target>], "
             "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, "
             "charge <opp> with <technique>, joust with <technique>, "
