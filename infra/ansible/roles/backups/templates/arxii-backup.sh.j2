@@ -23,6 +23,9 @@ aws --endpoint-url "{{ backups_s3_endpoint }}" --region "{{ backups_region }}" \
     s3 cp "$dump" "s3://{{ backups_bucket }}/db/arxii-${ts}.sql.gz"
 
 # Keep only the newest local copy (the offsite job consumes it). Server-side
-# retention/immutability is Object Lock on the bucket, not this client.
+# retention/immutability was meant to be Object Lock on the bucket, not this
+# client — but Object Lock is a KNOWN GAP (#2236, see infra/README.md
+# "Known gap: Object Lock"); nothing here prunes the bucket, only the local
+# staging copy.
 ls -1t "{{ backups_staging }}"/arxii-*.sql.gz | tail -n +2 | xargs -r rm -f
 ln -sf "$dump" "{{ backups_staging }}/latest.sql.gz"

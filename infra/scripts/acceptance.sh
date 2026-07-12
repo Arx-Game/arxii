@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 #
-# acceptance.sh — STATIC acceptance harness ("the tests" for the IaC; tofu/
-# ansible can't run locally on Windows, CI is the dynamic gate). Asserts the
-# plan's safety invariants by inspecting the repo. Exit 1 on ANY violation.
-# Account-independent: no creds, no cloud, no apply.
+# acceptance.sh — STATIC CONTRACT CHECKS for the IaC ("the tests"; tofu/
+# ansible can't run locally on Windows, CI is the dynamic gate). Greps the
+# repo for the plan's safety invariants AND (see the #2236 section below)
+# cross-file contracts that a single-file grep can't see. Exit 1 on ANY
+# violation. Account-independent: no creds, no cloud, no apply.
+#
+# HONEST SCOPE (per the #2236 audit): a PASS here means the checked
+# invariants hold in the source text right now — it is NOT a deploy-
+# readiness proof. It cannot catch a real `tofu apply`/`ansible-playbook`
+# failure, a bad credential, or a runtime-only bug. See the ACCOUNT-TIME
+# checklist printed at the end for what still needs real infrastructure.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; cd "${ROOT}"
 fails=0
@@ -87,11 +94,127 @@ chk   "standup.yml is workflow_dispatch"      "grep -q 'workflow_dispatch' .gith
 chk   "standup.yml uses the gated prod env"   "grep -q 'environment: prod' .github/workflows/standup.yml"
 chk   "standup.yml invokes the shared script" "grep -q 'infra/scripts/standup.sh' .github/workflows/standup.yml"
 
+echo "== #2236 cross-file CONTRACT checks (regression guards) =="
+# These exist because the #2236 audit found the 23 single-file grep checks
+# above would have caught NONE of the real blockers — every one of them was
+# a mismatch BETWEEN two files (a preflight list vs. a secrets map, a task
+# order, a paired plugin+directive) that a same-file grep can't see. Each
+# check below asserts one such cross-file invariant.
+
+# (a) Every secrets_vault secrets_map key must have a standup.sh preflight
+# guard, with two documented exemptions: the ARXII_BACKUP_WRITER_* pair is
+# produced by tofu post-apply and handed to ansible in-memory (never
+# operator-supplied, so it can't be a preflight requirement); and
+# ARXII_DJANGO_SUPERUSER_USERNAME/EMAIL are non-secret with sensible
+# defaults (live in Variables, not Secrets — see secrets.env.example) and
+# so are never added to secrets_map at all. A secret added to the map
+# without also adding it to REQUIRED_ARXII (or documenting a real
+# exemption here) would silently ship with no preflight guard.
+secrets_map_missing=""
+# shellcheck disable=SC2013  # tokens are single-word ARXII_* names, word-split is fine
+for k in $(sed -n '/^secrets_map:/,/^[^ ]/p' \
+             infra/ansible/roles/secrets_vault/defaults/main.yml \
+             | grep -oE 'ARXII_[A-Z0-9_]+'); do
+  case "${k}" in
+    ARXII_BACKUP_WRITER_ACCESS_KEY|ARXII_BACKUP_WRITER_SECRET_KEY) continue ;;
+  esac
+  grep -q "${k}" infra/scripts/standup.sh || secrets_map_missing="${secrets_map_missing} ${k}"
+done
+chk "every secrets_vault secrets_map key (less the tofu-post-apply BACKUP_WRITER pair) has a standup.sh preflight guard" \
+  "[[ -z '${secrets_map_missing}' ]]"
+
+# (b) standup.sh must unset the provisioning tokens BEFORE invoking
+# ansible-playbook (order-sensitive — defense-in-depth so LINODE_TOKEN /
+# CLOUDFLARE_API_TOKEN can never reach the box even by accident).
+unset_line="$(grep -nE '^[[:space:]]*unset LINODE_TOKEN CLOUDFLARE_API_TOKEN' infra/scripts/standup.sh | head -1 | cut -d: -f1)"
+ansible_line="$(grep -nE '^[[:space:]]*ansible-playbook -i' infra/scripts/standup.sh | head -1 | cut -d: -f1)"
+chk "standup.sh unsets LINODE_TOKEN/CLOUDFLARE_API_TOKEN before invoking ansible-playbook" \
+  "[[ -n '${unset_line}' && -n '${ansible_line}' && '${unset_line}' -lt '${ansible_line}' ]]"
+
+# (c) The caddy DNS-01 plugin install and the Caddyfile directive that
+# needs it are paired — if either half disappears the other is stale.
+chk   "caddy role installs the caddy-dns/cloudflare plugin (add-package)" \
+  "grep -q 'caddy add-package github.com/caddy-dns/cloudflare' infra/ansible/roles/caddy/tasks/main.yml"
+chk   "Caddyfile.j2 still uses DNS-01 via cloudflare (paired with add-package above)" \
+  "grep -q 'acme_dns cloudflare' infra/ansible/roles/caddy/templates/Caddyfile.j2"
+
+# (d) nftables must never `flush ruleset` (wipes fail2ban's own table too);
+# it must flush only OUR table. nc() strips comments first so the check
+# asserts real code, not the explanatory comment that mentions the banned
+# phrase.
+chkno "nftables.conf.j2 has no 'flush ruleset'" \
+  "nc infra/ansible/roles/host_firewall/templates/nftables.conf.j2 | grep -w ruleset"
+chk   "nftables.conf.j2 flushes only OUR table (flush table inet ...)" \
+  "nc infra/ansible/roles/host_firewall/templates/nftables.conf.j2 | grep -qE 'flush table inet\\b'"
+
+# (e) SSH identity: base creates a login-capable admin (arxadmin) via
+# authorized_key, and ssh_hardening's allowlist names that same user — not
+# the nologin service account.
+chk   "base role creates the arxadmin login user" \
+  "grep -q 'name: arxadmin' infra/ansible/roles/base/tasks/main.yml"
+chk   "base role authorizes SSH keys for arxadmin (authorized_key task)" \
+  "grep -q 'ansible.posix.authorized_key' infra/ansible/roles/base/tasks/main.yml && grep -q 'user: arxadmin' infra/ansible/roles/base/tasks/main.yml"
+chk   "ssh_hardening's ssh_allow_users references arxadmin (not the nologin service user)" \
+  "grep -A1 '^ssh_allow_users:' infra/ansible/roles/ssh_hardening/defaults/main.yml | grep -q arxadmin"
+
+# (f) The first-run superuser PASSWORD (unlike username/email) is a real
+# secret with no safe default — it must be preflight-required.
+chk   "ARXII_DJANGO_SUPERUSER_PASSWORD is a standup.sh preflight-required secret" \
+  "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_DJANGO_SUPERUSER_PASSWORD"
+
+# (g) app_deploy must flip `current` AFTER uv sync/migrate/collectstatic —
+# never before, or a mid-deploy failure leaves `current` pointing at a
+# half-prepared release.
+uv_sync_line="$(grep -n 'name: Build the project venv from uv.lock' infra/ansible/roles/app_deploy/tasks/main.yml | head -1 | cut -d: -f1)"
+symlink_line="$(grep -n 'name: Atomically point' infra/ansible/roles/app_deploy/tasks/main.yml | head -1 | cut -d: -f1)"
+chk "app_deploy flips the current symlink AFTER uv sync/migrate/collectstatic" \
+  "[[ -n '${uv_sync_line}' && -n '${symlink_line}' && '${symlink_line}' -gt '${uv_sync_line}' ]]"
+
+# (h) Backups: PGPASSWORD must be exported (pg_hba requires scram, not
+# trust, even on 127.0.0.1) and both the backup + offsite units must carry
+# OnFailure= alerting (a failed backup that fails silently is worse than no
+# backup — you find out at restore time).
+chk   "arxii-backup.sh.j2 exports PGPASSWORD" \
+  "grep -q 'export PGPASSWORD=' infra/ansible/roles/backups/templates/arxii-backup.sh.j2"
+chk   "arxii-backup.service carries OnFailure= alerting" \
+  "grep -q 'OnFailure=arxii-alert-failure@%n.service' infra/ansible/roles/backups/tasks/main.yml"
+chk   "arxii-offsite.service carries OnFailure= alerting" \
+  "grep -q 'OnFailure=arxii-alert-failure@%n.service' infra/ansible/roles/offsite_replication/tasks/main.yml"
+
+# (i) restore.sh supports a real drop/recreate restore with a remote
+# target; restore-rehearsal.sh must run it ON the ephemeral stage box over
+# SSH, never against the operator's own local machine (the original bug
+# this rework fixed).
+chk   "restore.sh supports RESTORE_TARGET_HOST and drops/recreates the DB before restoring" \
+  "grep -q 'RESTORE_TARGET_HOST' infra/scripts/restore.sh && grep -q 'dropdb' infra/scripts/restore.sh"
+chk   "restore-rehearsal.sh runs restore.sh remotely on the stage box via ssh (ssh_stage marker), not locally" \
+  "grep -q 'ssh_stage bash -c' infra/scripts/restore-rehearsal.sh && grep -q 'bash /root/restore.sh' infra/scripts/restore-rehearsal.sh"
+# Every mention of restore-rehearsal.sh's OWN local copy of restore.sh
+# (SCRIPT_DIR}/restore.sh) must be the scp_stage line that ships it to the
+# stage box — never a bare local bash-exec of that same path.
+local_restore_refs="$(grep -c 'SCRIPT_DIR}/restore.sh' infra/scripts/restore-rehearsal.sh || true)"
+scp_restore_refs="$(grep -c 'scp_stage.*SCRIPT_DIR}/restore.sh' infra/scripts/restore-rehearsal.sh || true)"
+chk "restore-rehearsal.sh's only local reference to restore.sh is the scp_stage copy (never exec'd against the invoking machine)" \
+  "[[ '${local_restore_refs}' -eq '${scp_restore_refs}' ]]"
+
+# (j) standup.sh generates the group_vars the fail-closed asserts below
+# depend on; host_firewall and django_hardening both refuse to converge on
+# an empty (ungenerated) config rather than silently opening/allowing
+# everything.
+chk   "standup.sh generates group_vars/arxii_prod.yml from tofu output" \
+  "grep -q 'Generating inventory + group_vars from tofu output' infra/scripts/standup.sh"
+chk   "host_firewall fails closed on empty allow-lists" \
+  "grep -q 'Fail-closed' infra/ansible/roles/host_firewall/tasks/main.yml && grep -q 'length > 0' infra/ansible/roles/host_firewall/tasks/main.yml"
+chk   "django_hardening fails closed on empty ALLOWED_HOSTS" \
+  "grep -q 'dh_allowed_hosts | length > 0' infra/ansible/roles/django_hardening/tasks/main.yml"
+
 echo
 if [[ "${fails}" -gt 0 ]]; then
   echo "ACCEPTANCE: ${fails} FAILED"; exit 1
 fi
-echo "ACCEPTANCE: all static checks PASS"
+echo "ACCEPTANCE: all static contract checks PASS (single-file greps + #2236"
+echo "cross-file checks) — this is NOT a deploy-readiness proof; see the"
+echo "ACCOUNT-TIME checklist below for what still needs real credentials."
 cat <<'EOF'
 
 ACCOUNT-TIME checklist (run once real creds exist — cannot be static):

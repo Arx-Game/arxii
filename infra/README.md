@@ -17,9 +17,27 @@ Environment secrets and invokes the exact same script below (one source of truth
 
 - **Apply-only and safe to re-run.** It never runs `tofu destroy`, never restores data, never
   re-initialises an existing database. Pressing it twice is a no-op, not a reset.
+- **SSH identity.** The very first converge (brand-new host) connects as `root` — Linode injects
+  the operator's key there via cloud-init before `arxadmin` exists. That first run's `base` role
+  creates a dedicated `arxadmin` sudo user and installs the admin key(s) there; `ssh_hardening`
+  then disables root login. Every later run connects as `arxadmin` instead — `standup.sh` probes
+  both (non-destructively, `select_ssh_user()`) and picks whichever answers, so the operator never
+  hand-edits the inventory user. The `arxii` service account stays a non-login (nologin) user.
 - **Restore is deliberately separate.** Disaster recovery is `scripts/restore.sh`, a distinct,
   human-gated tool that refuses to run without an explicit `--i-understand-this-overwrites` flag.
-  It is *not* reachable from the button.
+  It is *not* reachable from the button. It terminates existing connections and drops/recreates the
+  target database before restoring (a half-applied plain-SQL restore can otherwise pass a naive
+  "has tables" check), then verifies both `django_migrations` row-count and a floor of public
+  tables. When restoring into the box's own local Postgres (the default, `RESTORE_TARGET_HOST=
+  127.0.0.1`), it stops `arxii.service` first and restarts it afterward — even on failure, via a
+  trap.
+- **Rehearsal proves restore works, without ever touching prod or your machine.**
+  `scripts/restore-rehearsal.sh` spins up an ephemeral stage box (separate Terraform state and
+  credentials), installs Postgres on it, then runs `restore.sh` *on that box over SSH* — restoring
+  into the stage box's own loopback Postgres, never the operator's local machine (the original bug
+  this rework fixed: `RESTORE_TARGET_HOST` defaulting to `127.0.0.1` used to mean "whoever invoked
+  the script"). It rehearses both the Linode and R2 copies in one run, then always tears the stage
+  down (trap, even on failure).
 - **Telnet:** TLS-only. A TLS-capable MUD client (Mudlet, TinTin++, etc.) is required; the bare
   `telnet` command-line binary is intentionally unsupported. Plaintext telnet is closed.
 - **Single entry point — state has no locking.** The S3-compatible backend (Linode Object
@@ -127,24 +145,41 @@ Variables unset — fine for a private playtest box, override for prod.
 
 ## What the button actually does to game state (first run vs. re-run)
 
+Before touching the box, `standup.sh` reads `tofu output` and writes a gitignored
+`ansible/inventory/group_vars/arxii_prod.yml` (0600) — firewall allow-lists, FQDNs,
+bucket/endpoint config, the admin's public keys — so none of that needs hand-editing or
+living in the repo; every ansible role's fail-closed asserts (host_firewall,
+django_hardening, ...) exist because a role must never silently converge against an empty,
+ungenerated config.
+
 The deploy is idempotent: re-runs are safe and mostly no-ops. Per release,
 after the box itself is provisioned, the app_deploy role runs (in order):
 
 1. **Git checkout** the release ref into `/opt/arxii/releases/<ref>`.
-2. **Atomic symlink** `/opt/arxii/current → /opt/arxii/releases/<ref>`.
-3. **`uv sync --frozen --no-dev`** — rebuild the project venv from the
+2. **`uv sync --frozen --no-dev`** — rebuild the project venv from the
    locked `uv.lock` (no implicit resolution drift). Idempotent: a no-op
    if nothing changed.
+3. **Frontend build, on-box.** Installs Node.js 20.x (NodeSource, signed apt
+   keyring) and pnpm (corepack) if not already present, then
+   `pnpm install --frozen-lockfile && pnpm build` for the release's frontend
+   bundle. Node/pnpm installation only happens once; the frontend rebuild
+   recurs every release. **The first deploy takes noticeably longer** than
+   subsequent ones as a result.
 4. **`evennia migrate --noinput`** — apply Django/Evennia migrations.
    Idempotent: a no-op once everything is applied.
 5. **`evennia collectstatic --noinput`** — gather admin/Evennia static
    files for Caddy. Idempotent.
-6. **Superuser check + create**. If any superuser already exists in the DB
+6. **Atomic symlink** `/opt/arxii/current → /opt/arxii/releases/<ref>` — done
+   **last** among the release-prep steps, only after the venv, frontend
+   build, migrations, and static collection all succeed against the new
+   release directory. A failure at any earlier step leaves `current`
+   pointing at the last-good release instead of a half-prepared one.
+7. **Superuser check + create**. If any superuser already exists in the DB
    (the *common* case after the first run), the create step is **skipped
    entirely** — your existing superuser is untouched, password unchanged.
    Only on a truly first run (or after a manual delete) does it create
    one from the `DJANGO_SUPERUSER_*` env vars.
-7. **systemd** brings the service up (`evennia start` under the gated
+8. **systemd** brings the service up (`evennia start` under the gated
    service user, in the `arxii.slice` cgroup with the memory cap from
    `base_game_memory_max`). On subsequent deploys it `reloads` instead
    of restarting, so the Portal keeps connected players online across
@@ -157,6 +192,25 @@ What the button **does not** do (deliberately, by-design):
 - It does not run `tofu destroy`, drop the database, reset the
   superuser, or restore from backup. Disaster recovery is the separate,
   `--i-understand-this-overwrites`-gated `scripts/restore.sh`.
+
+## Ongoing safety nets (after stand-up)
+
+Installed once by the converge, then running unattended on the box:
+
+- **Portal/Server watchdog** (`arxii-watchdog.timer`, every minute). Evennia runs Server +
+  Portal as two separate processes; if the unit's supervised process (Server) stays up but
+  the Portal alone dies, systemd sees the unit as "active" and does nothing while players
+  can no longer connect. The watchdog checks both pidfiles, restarts the unit, and fires an
+  off-box alert when either is dead but the unit claims active.
+- **Backup-failure alerting.** `arxii-backup.service` and `arxii-offsite.service` both carry
+  `OnFailure=` units that fire an immediate off-box alert on failure; the daily heartbeat
+  independently re-flags any backup/offsite unit still in a failed state, in case the
+  `OnFailure=` alert itself didn't land.
+- **Telnet cert renewal** (`arxii-telnet-cert.timer`, daily). Caddy's ACME cert is the
+  source of truth; Evennia's SSL-telnet paths are hardcoded and don't reload on `evennia
+  reload`, so this timer syncs the cert in and reboots Evennia **only when the cert
+  actually changed** (no needless player disconnects). The heartbeat's cert-expiry and
+  self-signed-issuer checks catch the case where this sync has silently stopped working.
 
 ## Generating the SSH admin key (one-time)
 
