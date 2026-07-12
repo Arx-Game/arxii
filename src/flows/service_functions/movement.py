@@ -133,6 +133,16 @@ def traverse_exit(
             msg = "You cannot go that way."
             raise CommandError(msg)
 
+    # #2177: react to ward/alarm on successful entry. Guard on actual
+    # arrival (not just "no exception raised") because the pre-existing
+    # at_traverse-exception branch above falls through to here without
+    # returning when at_failed_traverse exists -- this task doesn't change
+    # that existing control flow, only avoids reacting on a failed move.
+    if caller.obj.location == destination.obj:
+        from world.room_features.services import react_to_unauthorized_entry  # noqa: PLC0415
+
+        react_to_unauthorized_entry(caller.obj, destination.obj)
+
 
 hooks = {
     "move_object": move_object,

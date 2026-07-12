@@ -48,6 +48,7 @@ from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
+from commands.defenses import CmdDefense
 from commands.door import CmdBreak, CmdLock, CmdPick, CmdUnlock
 from commands.dramatic_moments import CmdMoment
 from commands.duels import CmdDuel
@@ -393,6 +394,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPortalAnchor,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
+            # #2177 — exit/room defense (bars/ward/alarm) install/upgrade/fund namespace.
+            CmdDefense,
             CmdMarket,
             # #1832 — ship commission/upgrade/repair/status namespace.
             CmdShip,

@@ -143,6 +143,39 @@
   Sanctum's Ritual of Homecoming writes the same `LocationValueModifier` row shape onto
   its own room.
 
+## Built (2026-07-12, #2177 — installable exit/room defenses: bars/ward/alarm)
+
+Builds the "guards/defenses" half of the security/access slice **#1515** split off #1514
+(see "Climate → comfort" below) — installable, upgradeable, non-`RoomFeatureKind`
+defenses:
+
+- **`ExitBarsDetails`** (OneToOne to `ExitProfile`) — a per-exit durability tier gating
+  `ExitState.can_traverse` **alongside** the pre-existing lock check (both must pass, not
+  a replacement). `BreakExitAction` (#2176) is the bypass: always succeeds, drops
+  `level` by 1 per hit, dissolves (soft-delete) at 0 — the same intruder path that
+  already bypasses a locked exit.
+- **`RoomWardDetails`** (OneToOne to `RoomProfile`) — a magical ward funded by a
+  `resonance` + `resonance_reserve`, drained by a daily `room_ward_upkeep_tick` cron;
+  depletion lapses the ward (`lapsed_at`) rather than dissolving it. Reaction to an
+  unauthorized entrant is **deterministic** (no check roll, Decision 5): applies a
+  `reaction_condition` and/or `reaction_damage_amount`.
+- **`RoomAlarmDetails`** (OneToOne to `RoomProfile`, independent of the ward — a room
+  may hold both) — no resonance upkeep; echoes an unauthorized entry to the room
+  (identity-transparent, ADR-0083) and notifies the owner persona offline-safe.
+- Ward/alarm both react from one shared entry point, `react_to_unauthorized_entry`
+  (`world/room_features/services.py`), called by
+  `flows.service_functions.movement.traverse_exit` right after a successful
+  unauthorized move — no new trigger/polling wiring needed.
+- Install/upgrade rides the existing Project + progression-details pattern
+  (`DefenseProgressionDetails`) via `StartDefenseInstallationAction` /
+  `FundRoomWardAction`; surfaced on both the web (`DefenseInstallViewSet`) and telnet
+  (`CmdDefense`, `defense install/upgrade/fund`).
+- See "Room Features" → "Installable exit/room defenses" in `docs/systems/INDEX.md`
+  for the full model/dispatch writeup.
+- **Not built here (remaining #1515 scope):** windows-as-egress, and any
+  ownership-role-gated *installation rights* beyond the existing owner/tenant Project
+  gate (see "Ownership design notes" below).
+
 ## Overview
 
 Rooms are the spatial substrate of the world. Buildings and estates are

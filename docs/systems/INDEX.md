@@ -2667,8 +2667,8 @@ registering a service strategy + per-kind details model.
     `feature_kind` + `target_level` + `existing_instance` (null for
     install; set for upgrade).
 - **Dispatch:** each `service_strategy` value resolves to a
-  `handle_progression(project, details) -> RoomFeatureInstance` strategy
-  function. SANCTUM strategy lives at
+  `handler(project, target_level, outcome_tier) -> None` strategy
+  function (`world/room_features/services.py`). SANCTUM strategy lives at
   `world.magic.services.sanctum.handle_progression`; future kinds
   register their own.
 - **Tests:** `src/world/room_features/tests/`. SANCTUM install and
@@ -2679,6 +2679,44 @@ registering a service strategy + per-kind details model.
   check/consequence-pool path — see `trap_services.py`'s `check_room_traps_on_entry` /
   `check_traps_at_position`. Not a `RoomFeatureInstance` kind; a plain FK to `RoomProfile`
   since a room may hold several.
+- **Installable exit/room defenses — bars/ward/alarm** (`world.room_features.models`,
+  #2177): three independent details models, siblings of `RoomFeatureInstance` (like
+  `Trap` above) — **NOT** `RoomFeatureKind` instances. A room can hold a
+  `RoomFeatureInstance` (e.g. LAB or SANCTUM) *and* a `RoomWardDetails` *and* a
+  `RoomAlarmDetails` simultaneously; an `ExitBarsDetails` hangs off a specific exit, not
+  a room, so one room's several exits can each carry their own bars independently.
+  - `ExitBarsDetails` — OneToOne to `evennia_extensions.ExitProfile`. `level` scales
+    durability; gates `flows.object_states.exit_state.ExitState.can_traverse`
+    **alongside** the pre-existing lock check (both must pass) rather than replacing it.
+    Bypassed by breaking through: `BreakExitAction` (#2176, key `break_exit`) always
+    succeeds and drops `level` by 1 per hit, dissolving the row (soft-delete via
+    `dissolved_at`) at 0 rather than flooring it — the same intruder path that bypasses
+    a locked exit.
+  - `RoomWardDetails` — OneToOne to `RoomProfile`. `level` scales the reaction;
+    `resonance` (FK to `magic.Resonance`) + `resonance_reserve` fund a daily upkeep
+    cost drained by the `room_ward_upkeep_tick` cron job (`world/room_features/
+    services.py`); reserve hitting 0 sets `lapsed_at` (ward stops reacting, but is
+    never dissolved by lapsing alone — a lapsed ward can be refunded). Reaction is
+    **deterministic, not a CheckType roll** (Decision 5): applies `reaction_condition`
+    (FK to `conditions.ConditionTemplate`) and/or `reaction_damage_amount` to an
+    unauthorized entrant.
+  - `RoomAlarmDetails` — OneToOne to `RoomProfile`, independent of `RoomWardDetails`
+    (a room may hold both). No resonance upkeep — only the ward is magical. On an
+    unauthorized entry, echoes to the room (identity-transparent, ADR-0083) and
+    notifies the room's owner persona via `send_narrative_message` (offline-safe).
+  - **Reaction dispatch:** both ward and alarm react from one shared entry point,
+    `react_to_unauthorized_entry(actor, room)` (`world/room_features/services.py`),
+    called by `flows.service_functions.movement.traverse_exit` immediately after a
+    successful unauthorized move (`_trigger_ward` / `_trigger_alarm`) — the same seam
+    every exit traversal already goes through, so no separate polling/trigger wiring
+    was needed.
+  - **Installation/upgrade** rides the pre-existing Project + Progression-details
+    pattern (`DefenseProgressionDetails`, mirroring `RoomFeatureProgressionDetails`)
+    via `StartDefenseInstallationAction` / `FundRoomWardAction`
+    (`actions/definitions/room_features.py`); dispatched by both the web
+    `DefenseInstallViewSet` (`world/room_features/views_defense.py`) and telnet
+    `CmdDefense` (`commands/defenses.py`, `defense install <bars|ward|alarm>` /
+    `defense upgrade` / `defense fund`) through the same seam.
 
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room

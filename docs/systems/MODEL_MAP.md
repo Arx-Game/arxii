@@ -209,6 +209,7 @@
   - stat_rules_for <- achievements.ConditionStatRule
   - rampart_signature_profiles <- areas.RampartElementProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
+  - ward_reactions <- room_features.RoomWardDetails
 
 ### ConditionStage
 **Foreign Keys:**
@@ -402,10 +403,16 @@
   - feature_instance <- room_features.RoomFeatureInstance
   - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
   - traps <- room_features.Trap
+  - ward_details <- room_features.RoomWardDetails
+  - alarm_details <- room_features.RoomAlarmDetails
+  - defense_progression_projects <- room_features.DefenseProgressionDetails
 
 ### ExitProfile
 **Foreign Keys:**
   - objectdb -> objects.ObjectDB [OneToOne]
+**Pointed to by:**
+  - bars_details <- room_features.ExitBarsDetails
+  - defense_progression_projects <- room_features.DefenseProgressionDetails
 
 
 ## flows
@@ -2230,6 +2237,7 @@
   - stat_rules_for <- achievements.ConditionStatRule
   - rampart_signature_profiles <- areas.RampartElementProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
+  - ward_reactions <- room_features.RoomWardDetails
 
 ### ConditionStage
 **Foreign Keys:**
@@ -3527,6 +3535,8 @@
   - combat_pulls <- combat.CombatPull
   - mission_route_rewards <- missions.MissionOptionRouteReward
   - projects <- projects.Project
+  - wards <- room_features.RoomWardDetails
+  - defense_progression_projects <- room_features.DefenseProgressionDetails
 
 ### ResonanceTier
 
@@ -5329,6 +5339,7 @@
   - ship_construction_details <- ships.ShipConstructionDetails
   - ship_repair_details <- ships.ShipRepairDetails
   - room_feature_progression_details <- room_features.RoomFeatureProgressionDetails
+  - defense_progression_details <- room_features.DefenseProgressionDetails
 
 ### Contribution
 **Foreign Keys:**

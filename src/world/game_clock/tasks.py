@@ -634,6 +634,8 @@ def register_all_tasks() -> None:
         )
     )
 
+    _register_room_ward_upkeep_task()
+
     _register_agriculture_tasks()
 
     # Unified weekly rollover — orchestrates all weekly systems in sequence.
@@ -684,6 +686,28 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
             callable=roll_and_echo_weather,
             interval=timedelta(hours=2),
             description="Roll regional weather (every 2 real hrs ≈ 6 IC hrs) and echo to rooms.",
+        )
+    )
+
+
+def _register_room_ward_upkeep_task() -> None:
+    """Register the daily ward resonance-upkeep tick (#2177).
+
+    Extracted from ``register_all_tasks`` to keep that function under the
+    ruff PLR0915 statement limit.
+    """
+    from world.room_features.services import room_ward_upkeep_tick
+
+    register_task(
+        CronDefinition(
+            task_key="room_features.ward_upkeep_tick",
+            callable=room_ward_upkeep_tick,
+            interval=timedelta(hours=24),
+            description=(
+                "Drain each active RoomWardDetails.resonance_reserve by "
+                "level * 5; lapse the ward (stops reacting, not dissolved) "
+                "when depleted. #2177."
+            ),
         )
     )
 
