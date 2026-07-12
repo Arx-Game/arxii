@@ -7871,10 +7871,10 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List the item-creation recipes available to craft (#2240).
+     * @description List the item-creation recipes this character can craft (#2240, #2242).
      *
-     *     Recipe *knowledge* gating is a later slice (#2242); today this returns
-     *     every active ITEM_CREATE recipe's output template.
+     *     Open recipes are always listed; a ``requires_knowledge`` recipe appears
+     *     only when the acting character has learned it (#2242).
      */
     get: operations['items_crafting_create_recipes_list'];
     put?: never;
