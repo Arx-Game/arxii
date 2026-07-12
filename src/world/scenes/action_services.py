@@ -136,7 +136,7 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
-    from world.magic.models import FuryTier, PendingAlteration, Technique
+    from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
     from world.magic.types.pull import CastPullDeclaration
     from world.roster.models import RosterTenure
     from world.scenes.place_models import Place
@@ -266,6 +266,10 @@ def create_action_request(  # noqa: PLR0913
     delivery_receivers: list[Persona] | None = None,
     additional_target_personas: list[Persona] | None = None,
     pull: CastPullDeclaration | None = None,
+    treatment: TreatmentTemplate | None = None,
+    target_condition_instance: ConditionInstance | None = None,
+    target_pending_alteration: PendingAlteration | None = None,
+    thread_used: Thread | None = None,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
@@ -309,6 +313,12 @@ def create_action_request(  # noqa: PLR0913
             ``SceneActionPullDeclaration`` on the request so it survives the
             consent gap. Charged exactly once at accept-time via
             ``_charge_social_pull``. ``None`` for actions without a pull.
+        treatment: Optional TreatmentTemplate being attempted (treat_condition only).
+            Set at creation — not after, via a post-hoc save — so it's already on the
+            row before auto-resolve may fire for an NPC target (#2214).
+        target_condition_instance: Optional ConditionInstance being treated.
+        target_pending_alteration: Optional PendingAlteration being treated.
+        thread_used: Optional bond Thread paying a treatment's cost.
 
     Returns:
         The created SceneActionRequest in PENDING status.
@@ -351,6 +361,10 @@ def create_action_request(  # noqa: PLR0913
         fury_commitment=fury_commitment,
         fury_anchor=fury_anchor,
         delivery=delivery,
+        treatment=treatment,
+        target_condition_instance=target_condition_instance,
+        target_pending_alteration=target_pending_alteration,
+        thread_used=thread_used,
         **snapshot_kwargs,
     )
     if delivery_receivers:
@@ -367,8 +381,12 @@ def create_action_request(  # noqa: PLR0913
             tier=pull.tier,
         )
         decl.threads.set(pull.threads)
-    if additional:  # multi-target only — single-target path unchanged
-        _auto_resolve_npc_targets(request)
+    # #2214: always attempt auto-resolve — a lone NPC primary target (no additional
+    # rows) must resolve too, not just the multi-target case. The result is stashed as
+    # a transient attribute (mirrors interaction_services.py's _active_scene_cache
+    # idiom) rather than changed into create_action_request's return type, which 30+
+    # existing callers across the test suite expect to stay a bare SceneActionRequest.
+    request._auto_resolve_result = _auto_resolve_npc_targets(request)  # noqa: SLF001
 
     # #1278 — if the initiator is a blocked player reaching the blocker (via any identity), flag
     # the attempt for staff. The coded block stops the exact pair; circumvention is not code-
@@ -1113,19 +1131,47 @@ def respond_to_action_target(
     return None
 
 
-def _auto_resolve_npc_targets(action_request: SceneActionRequest) -> None:
+def _request_is_resolvable(action_request: SceneActionRequest) -> bool:
+    """True when accepting this request has a real resolution path.
+
+    Mirrors ``_resolve_accepted_action_request``'s own dispatch (custom resolver,
+    standalone cast, or a real ``ActionTemplate``). Guards auto-resolve-at-dispatch
+    from raising ``ValueError`` on a data/fixture gap (a request whose action_key has
+    no matching template) — that ValueError is a real validation signal for the
+    ``respond()`` endpoint (a human explicitly consenting to a broken request), but
+    auto-resolve-at-creation has no human in the loop to show it to, so it should
+    silently leave the request PENDING instead, exactly as it did before #2214.
+    """
+    return (
+        action_request.action_key in CUSTOM_ACTION_RESOLVERS
+        or action_request.is_standalone_cast
+        or action_request.action_template is not None
+    )
+
+
+def _auto_resolve_npc_targets(
+    action_request: SceneActionRequest,
+) -> EnhancedSceneActionResult | None:
     """Resolve NPC targets immediately at dispatch; PC targets stay PENDING.
 
-    The primary target (if present and NPC) is resolved via
-    ``respond_to_action_request``; each NPC additional-target row is resolved
-    via ``respond_to_action_target``. PC targets are left in PENDING status.
+    The primary target (if present, NPC, and resolvable) is resolved via
+    ``respond_to_action_request``, whose result is returned to the caller (#2214 — the
+    primary's disposition/check result needs to reach ``create_action_request``'s caller).
+    Each NPC additional-target row is resolved via ``respond_to_action_target`` as before;
+    those per-row results are intentionally not collected here (#2214 non-goal — surfacing
+    them needs a list-shaped response, a separate concern). PC targets, and any target whose
+    request isn't resolvable yet (see ``_request_is_resolvable``), are left PENDING.
     """
     primary = action_request.target_persona
-    if primary is not None and _persona_is_npc(primary):
-        respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
+    result: EnhancedSceneActionResult | None = None
+    if primary is not None and _persona_is_npc(primary) and _request_is_resolvable(action_request):
+        result = respond_to_action_request(
+            action_request=action_request, decision=ConsentDecision.ACCEPT
+        )
     for row in action_request.additional_targets.filter(status=ActionRequestStatus.PENDING):
-        if _persona_is_npc(row.target_persona):
+        if _persona_is_npc(row.target_persona) and _request_is_resolvable(action_request):
             respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+    return result
 
 
 def _resolve_enhanced_action(  # noqa: PLR0913

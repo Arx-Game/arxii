@@ -1717,6 +1717,77 @@ class TestNPCAndAreaFallbackDifficulty(TestCase):
         )
 
 
+class TestSingleTargetNPCAutoResolve(TestCase):
+    """#2214: a single-target (no additional_target_personas) NPC-primary request
+    auto-resolves at create_action_request time, mirroring the existing multi-target
+    NPC behavior (#572) instead of staying PENDING forever.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        # NPC primary: PersonaFactory leaves db_account None by default.
+        cls.npc_persona = PersonaFactory()
+        cls.action_template = ActionTemplateFactory(name="intimidate")
+
+        KudosSourceCategory.objects.get_or_create(
+            name="social_engagement",
+            defaults={
+                "display_name": "Social Engagement",
+                "description": "Seeded for tests on the no-migrations fast tier.",
+                "default_amount": 1,
+            },
+        )
+
+    def setUp(self) -> None:
+        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
+        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+        self.addCleanup(self.accrue_patcher.stop)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_single_target_npc_primary_resolves_at_create(self, mock_resolve: MagicMock) -> None:
+        """A lone NPC target_persona (no additional targets) is RESOLVED, not PENDING."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.npc_persona,
+            action_key="intimidate",
+        )
+        # action_template is attached by a later pipeline step in production (the view/
+        # command layer) — this test attaches it directly so the guard sees a resolvable
+        # request, matching how ActionTemplate resolution actually works end-to-end.
+        request.action_template = self.action_template
+        request.save(update_fields=["action_template"])
+        # Re-run through the same path create_action_request uses, now that the template
+        # is attached — mirrors _auto_resolve_npc_targets's real call shape.
+        result = action_services._auto_resolve_npc_targets(request)
+
+        request.refresh_from_db()
+        self.assertEqual(request.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.action_key, "intimidate")
+
+    def test_unresolvable_single_target_stays_pending(self) -> None:
+        """No ActionTemplate, no custom resolver, not a standalone cast -> stays PENDING.
+
+        Guards the fixture/data-gap case from crashing (ValueError) instead of resolving.
+        """
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.npc_persona,
+            action_key="totally_unregistered_key",
+        )
+        request.refresh_from_db()
+        self.assertEqual(request.status, ActionRequestStatus.PENDING)
+        self.assertIsNone(request._auto_resolve_result)
+
+
 class SocialModifierSeamTests(TestCase):
     """The social/scene action path funnels its check through ``collect_check_modifiers`` (#1696).
 
