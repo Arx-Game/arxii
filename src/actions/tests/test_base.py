@@ -425,6 +425,10 @@ class ActionRegistryTests(TestCase):
             # #2222 — portal anchor install/dissolve.
             "portal_anchor_install",
             "portal_anchor_dissolve",
+            # #2178 — NPC guard assignment.
+            "assign_guard",
+            "unassign_guard",
+            "list_guard_assignments",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
