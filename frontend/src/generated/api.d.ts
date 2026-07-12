@@ -383,6 +383,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/agriculture/collect/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Collect food from a Field into its domain's stockpile.
+     *
+     *     Web dispatch of ``CollectFoodAction``: the body names the Field feature by
+     *     ``field_instance_id``; the Action resolves it (the REST path does no
+     *     ObjectDB resolution) and lands the food. Mirrors ``fatigue.RestView``.
+     */
+    post: operations['agriculture_collect_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/areas/': {
     parameters: {
       query?: never;
@@ -34701,6 +34724,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['AggregateBeatContribution'];
         };
+      };
+    };
+  };
+  agriculture_collect_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
