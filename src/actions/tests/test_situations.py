@@ -108,9 +108,14 @@ class SetSituationActionTest(TestCase):
     def test_missing_room_profile_with_trap_link_fails_cleanly(self) -> None:
         """A trap-link-bearing template in a room with no RoomProfile should fail
         cleanly (#1895 Finding 2), not raise ObjectDoesNotExist unhandled."""
+        from evennia_extensions.models import RoomProfile
+
         action = SetSituationAction()
         account = AccountFactory(is_staff=True)
         bare_location = ObjectDBFactory()
+        # Ensure no RoomProfile exists for this ObjectDB (the idmapper cache
+        # can return a stale reverse relation from a prior test's Room).
+        RoomProfile.objects.filter(objectdb=bare_location).delete()
         actor = CharacterFactory(db_key="stager-no-profile", location=bare_location)
         actor.db_account = account
         template = SituationTemplateFactory()
