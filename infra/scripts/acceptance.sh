@@ -188,7 +188,9 @@ chk   "arxii-offsite.service carries OnFailure= alerting" \
 chk   "restore.sh supports RESTORE_TARGET_HOST and drops/recreates the DB before restoring" \
   "grep -q 'RESTORE_TARGET_HOST' infra/scripts/restore.sh && grep -q 'dropdb' infra/scripts/restore.sh"
 chk   "restore-rehearsal.sh runs restore.sh remotely on the stage box via ssh (ssh_stage marker), not locally" \
-  "grep -q 'ssh_stage bash -c' infra/scripts/restore-rehearsal.sh && grep -q 'bash /root/restore.sh' infra/scripts/restore-rehearsal.sh"
+  "grep -qE 'ssh_stage \"set -a;.*bash /root/restore\.sh' infra/scripts/restore-rehearsal.sh"
+chkno "restore-rehearsal.sh never reintroduces the split 'ssh_stage bash -c' argv shape (ssh flattens multi-arg remote commands with un-requoted spaces, so sourcing rehearsal.env under set -a in the outer shell never reaches restore.sh as a child process — see the fix comment above the ssh_stage call)" \
+  "grep -q 'ssh_stage bash -c' infra/scripts/restore-rehearsal.sh"
 # Every mention of restore-rehearsal.sh's OWN local copy of restore.sh
 # (SCRIPT_DIR}/restore.sh) must be the scp_stage line that ships it to the
 # stage box — never a bare local bash-exec of that same path.

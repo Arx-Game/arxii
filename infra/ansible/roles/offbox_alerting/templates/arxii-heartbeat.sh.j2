@@ -12,9 +12,14 @@ base="${OFFBOX_ALERT_TOKEN}"   # full base ping URL incl. the check id
 # is a second, independent line of defense — it catches the case where the
 # OnFailure= alert itself didn't fire/land (e.g. transient network blip at
 # the moment of failure) by re-flagging the failed state on every heartbeat
-# until someone clears it.
+# until someone clears it. arxii-telnet-cert.service is watched here too
+# (#2236 review): its --require-cert flag was removed (a fresh stand-up's
+# Persistent=true timer used to race Caddy's first ACME issuance, guaranteeing
+# a spurious failed unit with nothing to clear it) — this is now the ONLY
+# detector for a real cert-sync failure, alongside the self-signed check
+# below.
 failed_units=()
-for u in arxii-backup.service arxii-offsite.service; do
+for u in arxii-backup.service arxii-offsite.service arxii-telnet-cert.service; do
   if systemctl is-failed --quiet "${u}"; then
     failed_units+=("${u}")
   fi

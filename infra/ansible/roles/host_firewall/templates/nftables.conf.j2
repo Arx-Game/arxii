@@ -18,6 +18,14 @@ table inet filter {
     set sshadmin { type ipv4_addr; flags interval;
 {% if hostfw_ssh_admin_cidrs %}        elements = { {{ hostfw_ssh_admin_cidrs | select('search', '\\.') | join(', ') }} }
 {% endif %}    }
+    # IPv6 admin CIDRs (mirrors terraform's linode_firewall module, which
+    # splits the same hostfw_ssh_admin_cidrs list on colon-presence via
+    # strcontains(c, ":") — an IPv6-only operator CIDR used to pass the edge
+    # firewall and then get silently dropped here, since only the v4 set was
+    # ever matched below).
+    set sshadmin6 { type ipv6_addr; flags interval;
+{% if hostfw_ssh_admin_cidrs %}        elements = { {{ hostfw_ssh_admin_cidrs | select('search', ':') | join(', ') }} }
+{% endif %}    }
 
     chain input {
         type filter hook input priority filter; policy drop;
@@ -30,6 +38,7 @@ table inet filter {
 
         # SSH — admin allowlist (open by default at the edge; operator decision)
         tcp dport {{ hostfw_ssh_port }} ip saddr @sshadmin accept
+        tcp dport {{ hostfw_ssh_port }} ip6 saddr @sshadmin6 accept
 
         # Web — Cloudflare ranges only (origin not web-reachable directly)
         tcp dport { 80, 443 } ip saddr @cf4 accept

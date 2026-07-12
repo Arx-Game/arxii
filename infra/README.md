@@ -78,7 +78,8 @@ Environment secrets and invokes the exact same script below (one source of truth
       high-stakes; this removes the "powerful standing token sitting in GitHub forever"
       risk.
 - [ ] The **runtime app secrets stay** (`ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`,
-      `ARXII_RESEND_API_KEY`, the R2 credential, the SSH admin private key, etc.).
+      the Cloudinary trio, `ARXII_RESEND_API_KEY`, the R2 credential, the SSH admin
+      private key, etc.).
       Unlike the provisioning tokens above, these are long-lived: the running game needs
       them every day. Rotate only on suspicion of compromise. Do **not** pass them as
       workflow inputs (dispatch inputs are unmasked — they belong in Environment Secrets,
@@ -103,7 +104,11 @@ NEVER reach the box; revoke at the provider after each successful run):**
 **Pre-stored by the operator — runtime app secrets (ansible step → exported
 as `ARXII_*` on that step ONLY; rendered to the 0600 on-box EnvironmentFile;
 long-lived, rotate on suspicion):**
-- `ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`, `ARXII_CLOUDINARY_URL`,
+- `ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`,
+  `ARXII_CLOUDINARY_CLOUD_NAME`, `ARXII_CLOUDINARY_API_KEY`,
+  `ARXII_CLOUDINARY_API_SECRET` (three discrete secrets — settings.py's
+  `cloudinary.config()` reads each individually via `env()`, so a single
+  combined `CLOUDINARY_URL` would be silently ignored, not an error),
   `ARXII_RESEND_API_KEY`, `ARXII_OFFBOX_ALERT_TOKEN`
 - `ARXII_CADDY_CF_DNS_TOKEN` — Cloudflare **DNS-edit-scoped** token used by
   Caddy for ACME DNS-01 (distinct from the provisioning Cloudflare token;

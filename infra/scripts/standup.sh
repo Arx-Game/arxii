@@ -38,7 +38,8 @@ DRY_RUN=0
 # Environment). Mirrors the secrets_vault map. The backup-writer keys are NOT
 # here — they are produced by tofu and exported post-apply.
 readonly REQUIRED_ARXII=(
-  ARXII_PG_PASSWORD ARXII_DJANGO_SECRET_KEY ARXII_CLOUDINARY_URL
+  ARXII_PG_PASSWORD ARXII_DJANGO_SECRET_KEY
+  ARXII_CLOUDINARY_CLOUD_NAME ARXII_CLOUDINARY_API_KEY ARXII_CLOUDINARY_API_SECRET
   ARXII_RESEND_API_KEY ARXII_R2_ACCESS_KEY_ID ARXII_R2_SECRET_ACCESS_KEY
   ARXII_OFFBOX_ALERT_TOKEN ARXII_CADDY_CF_DNS_TOKEN
   ARXII_DJANGO_SUPERUSER_PASSWORD
@@ -126,6 +127,13 @@ wait_for_ssh() {
 select_ssh_user() {
   local ip="$1"
   local -a key_args=()
+  # Not fatal: CI always sets this (standup.yml exports
+  # ANSIBLE_PRIVATE_KEY_FILE before invoking this script); a local operator
+  # run may instead rely on ssh-agent already holding the key, which this
+  # probe (and ansible-playbook itself) will happily use with no -i flag.
+  # Just a nudge in case that assumption is wrong.
+  [[ -n "${ANSIBLE_PRIVATE_KEY_FILE:-}" ]] || \
+    log "ANSIBLE_PRIVATE_KEY_FILE not set — relying on ssh-agent for the admin key (CI always sets this; set it locally if the probe below fails to authenticate)."
   [[ -n "${ANSIBLE_PRIVATE_KEY_FILE:-}" ]] && key_args=(-i "${ANSIBLE_PRIVATE_KEY_FILE}")
   if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
       "${key_args[@]}" "arxadmin@${ip}" true 2>/dev/null; then
@@ -255,6 +263,7 @@ ttc_web_fqdn: "${web_fqdn}"
 # django_hardening (roles/django_hardening/defaults/main.yml)
 dh_allowed_hosts: ["${web_fqdn}", "${telnet_fqdn}"]
 dh_web_fqdn: "${web_fqdn}"
+dh_tls_telnet_port: ${tls_telnet_port}
 dh_default_from_email: "noreply@${TF_VAR_domain}"
 
 # backups (roles/backups/defaults/main.yml)

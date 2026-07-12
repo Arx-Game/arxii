@@ -152,9 +152,19 @@ ssh_stage chmod 600 /root/rehearsal.env
 for src in linode r2; do
   log "rehearsing restore from ${src} onto the stage DB" \
     "(over SSH, on the stage box's OWN loopback Postgres)…"
-  ssh_stage bash -c \
-    'set -a; . /root/rehearsal.env; set +a;
-     bash /root/restore.sh --i-understand-this-overwrites --source '"${src}"
+  # ONE pre-quoted string to ssh_stage (not "bash" "-c" "STRING" as separate
+  # argv elements) — ssh flattens multiple remote-command args by joining
+  # them with spaces and handing the result to the remote shell UNQUOTED, so
+  # `bash -c 'set -a; ...' "${src}"` used to split into TWO top-level remote
+  # commands: `bash -c set` (a no-op) followed by the rest — including the
+  # `. /root/rehearsal.env` — run in the outer login shell instead of inside
+  # `bash -c`, so `set -a` never applied to that source and restore.sh (a
+  # separate child process) never saw the exported vars, killing every
+  # rehearsal on `${RESTORE_DB:?}`. Passing ssh_stage a single already-
+  # complete string keeps it as one argv element all the way to the remote
+  # shell, which then parses the whole `set -a; ...; bash ...` sequence
+  # itself, correctly.
+  ssh_stage "set -a; . /root/rehearsal.env; set +a; bash /root/restore.sh --i-understand-this-overwrites --source ${src}"
   log "restore from ${src}: OK + verified"
 done
 

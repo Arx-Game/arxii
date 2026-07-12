@@ -18,6 +18,8 @@ https://www.12factor.net/
 https://github.com/joke2k/django-environ
 """
 
+import contextlib
+
 import environ
 from evennia.settings_default import *
 
@@ -480,3 +482,24 @@ from web.admin import arx_admin_site
 
 admin.site = arx_admin_site
 admin.sites.site = arx_admin_site
+
+######################################################################
+# Production hardening overlay (optional)
+######################################################################
+
+# Rendered by Ansible (roles/django_hardening) on the prod box ONLY —
+# gitignored (src/server/.gitignore), absent in dev/CI, so this import is a
+# no-op everywhere except the production host. It contains NO secret VALUES
+# (only env-reads via os.environ, sourced from the secrets_vault
+# EnvironmentFile, plus a handful of prod-only booleans/lists that env()
+# alone can't express — DEBUG, ALLOWED_HOSTS, cookie/proxy/SSL toggles,
+# WEBSOCKET_CLIENT_URL, rate limits). SECRET_KEY, DATABASE_URL, the
+# Cloudinary trio, RESEND_API_KEY, FRONTEND_URL, and SITE_URL are all
+# already handled above by this file's own env() reads against that same
+# EnvironmentFile — nothing here re-derives them. Importing LAST (star
+# import, so anything it sets simply overrides the dev default set above)
+# does NOT violate this file's stance against a secret-VALUES file living
+# outside version control (see the module docstring) — it's an env-driven
+# overlay, same 12-factor contract as the rest of this file.
+with contextlib.suppress(ImportError):
+    from server.conf.secret_settings import *

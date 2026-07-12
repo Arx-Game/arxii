@@ -18,11 +18,18 @@
       Description=Sync Caddy ACME cert into Evennia SSL-telnet (reboot only if changed)
       [Service]
       Type=oneshot
-      # --require-cert: this unit is only ever started by the daily timer
-      # below, so a missing Caddy cert should surface as a failed unit
-      # rather than a silent no-op (manual/interactive runs of the plain
-      # script keep the soft exit — see the script's own header comment).
-      ExecStart=/usr/local/sbin/arxii-sync-telnet-cert --require-cert
+      # No --require-cert: this unit's own daily timer has Persistent=true,
+      # so it fires immediately on a fresh stand-up, racing Caddy's first
+      # ACME issuance — a --require-cert flag here used to make THAT race a
+      # guaranteed spurious failed unit on every first converge, with no
+      # timer/watch to ever clear it. The script's soft "no Caddy cert yet"
+      # exit-0 (see its own header comment) is correct for every caller,
+      # timer included. The real detector for "cert never synced" is
+      # offbox_alerting's heartbeat, which watches this unit's
+      # systemctl is-failed state AND independently checks Caddy's
+      # cert for self-signed-issuer (a synced cert would never be
+      # self-signed) — see roles/offbox_alerting.
+      ExecStart=/usr/local/sbin/arxii-sync-telnet-cert
   notify: Reload systemd
 
 - name: Install the cert-sync timer (runs in the maintenance window)

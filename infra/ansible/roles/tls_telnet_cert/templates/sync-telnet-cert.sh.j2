@@ -4,29 +4,23 @@
 # context — only a full `evennia reboot` does (drops TLS-telnet players), so
 # we reboot ONLY when the cert actually changed (no needless disconnects).
 #
-# --require-cert: passed by the daily systemd timer/service so a missing
-# Caddy cert shows up as a FAILED unit (systemd/journal-visible) instead of
-# silently doing nothing. Interactive/converge invocation (no flag) keeps the
-# soft "no cert yet" exit — early in a fresh stand-up, before Caddy has
-# finished its first ACME issuance, that is expected and not an error.
+# Always soft-exits 0 when Caddy has no cert yet — including when invoked by
+# the daily timer/service (no --require-cert flag; #2236 review removed it).
+# The timer's Persistent=true means it fires immediately on a fresh
+# stand-up, before Caddy's first ACME issuance has necessarily completed —
+# a --require-cert-style hard failure there would be a guaranteed spurious
+# failed unit on every first converge. The heartbeat (roles/offbox_alerting)
+# is the real detector for "cert never synced": it watches this unit's
+# systemctl is-failed state (now always healthy on its own) AND separately
+# flags a self-signed Caddy cert (a synced cert is never self-signed).
 set -euo pipefail
-
-REQUIRE_CERT=0
-[ "${1:-}" = "--require-cert" ] && REQUIRE_CERT=1
 
 SRC_CRT="$(ls {{ ttc_caddy_cert_glob }} 2>/dev/null | head -1 || true)"
 SRC_KEY="$(ls {{ ttc_caddy_key_glob }} 2>/dev/null | head -1 || true)"
 DST_CRT="{{ ttc_game_dir }}/server/ssl.cert"
 DST_KEY="{{ ttc_game_dir }}/server/ssl.key"
 
-if [ -z "$SRC_CRT" ] || [ -z "$SRC_KEY" ]; then
-  if [ "$REQUIRE_CERT" -eq 1 ]; then
-    echo "no Caddy cert yet — required by --require-cert (timer invocation)" >&2
-    exit 1
-  fi
-  echo "no Caddy cert yet"
-  exit 0
-fi
+[ -n "$SRC_CRT" ] && [ -n "$SRC_KEY" ] || { echo "no Caddy cert yet"; exit 0; }
 
 new="$(sha256sum "$SRC_CRT" | awk '{print $1}')"
 old="$(sha256sum "$DST_CRT" 2>/dev/null | awk '{print $1}' || echo none)"

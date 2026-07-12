@@ -4,5 +4,8 @@
 # box is down the EXTERNAL service alerts (works precisely when on-box
 # monitoring can't). Plus a cert-expiry early warning.
 offbox_ping_interval: "*-*-* *:0/15:00"   # every 15 min
-offbox_cert_path: "{{ ttc_game_dir | default('/opt/arxii/current') }}/server/ssl.cert"
+# Base path matches ttc_game_dir's fallback default (the src/-based GAME_DIR
+# — see roles/tls_telnet_cert/defaults/main.yml's comment) — NOT app_current
+# itself; Evennia's ssl.cert lives under GAME_DIR/server/, one level deeper.
+offbox_cert_path: "{{ ttc_game_dir | default('/opt/arxii/current/src') }}/server/ssl.cert"
 offbox_cert_warn_days: 10
