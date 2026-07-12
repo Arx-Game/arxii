@@ -251,3 +251,84 @@ class BreakExitActionTests(TestCase):
         actor, exit_obj, _room = self._actor_and_locked_exit()
         result = BreakExitAction().run(actor=actor, exit=exit_obj)
         assert result.success
+
+
+class ExitStateBarsGateTests(TestCase):
+    def _owner_actor_room_and_exit(self):
+        room = ObjectDBFactory(db_key="BarsGateRoom", db_typeclass_path="typeclasses.rooms.Room")
+        destination = ObjectDBFactory(
+            db_key="BarsGateDest", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        account = AccountFactory(username="bars_gate_account")
+        actor = CharacterFactory(db_key="BarsGateAlice", location=room)
+        actor.db_account = account
+        actor.save()
+        sheet = CharacterSheetFactory(character=actor)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+        from evennia_extensions.models import RoomProfile
+
+        room_profile = RoomProfile.objects.filter(objectdb=room).first()
+        if room_profile is None:
+            room_profile = RoomProfile.objects.create(objectdb=room)
+        transfer_ownership(room_profile=room_profile, to_persona=persona)
+        exit_obj = ObjectDBFactory(db_key="west", db_typeclass_path="typeclasses.exits.Exit")
+        exit_obj.location = room
+        exit_obj.destination = destination
+        exit_obj.save()
+        return actor, exit_obj, persona
+
+    def _intruder(self, room):
+        account = AccountFactory(username="bars_gate_intruder")
+        intruder = CharacterFactory(db_key="BarsGateMallory", location=room)
+        intruder.db_account = account
+        intruder.save()
+        sheet = CharacterSheetFactory(character=intruder)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+        return intruder
+
+    def test_barred_unlocked_exit_blocks_non_owner(self):
+        from evennia_extensions.models import ExitProfile
+        from flows.object_states.exit_state import ExitState
+        from flows.scene_data_manager import SceneDataManager
+        from world.room_features.models import ExitBarsDetails
+
+        actor, exit_obj, _persona = self._owner_actor_room_and_exit()
+        exit_profile = ExitProfile.get_or_create_for_exit(exit_obj)
+        ExitBarsDetails.objects.create(exit_profile=exit_profile, level=1)
+        intruder = self._intruder(actor.location)
+
+        sdm = SceneDataManager()
+        exit_state: ExitState = sdm.initialize_state_for_object(exit_obj)
+        intruder_state = sdm.initialize_state_for_object(intruder)
+        assert exit_obj.db.locked is not True
+        assert exit_state.can_traverse(intruder_state) is False
+
+    def test_barred_exit_allows_owner(self):
+        from evennia_extensions.models import ExitProfile
+        from flows.object_states.exit_state import ExitState
+        from flows.scene_data_manager import SceneDataManager
+        from world.room_features.models import ExitBarsDetails
+
+        actor, exit_obj, _persona = self._owner_actor_room_and_exit()
+        exit_profile = ExitProfile.get_or_create_for_exit(exit_obj)
+        ExitBarsDetails.objects.create(exit_profile=exit_profile, level=1)
+
+        sdm = SceneDataManager()
+        exit_state: ExitState = sdm.initialize_state_for_object(exit_obj)
+        actor_state = sdm.initialize_state_for_object(actor)
+        assert exit_state.can_traverse(actor_state) is True
+
+    def test_no_bars_unaffected(self):
+        from flows.object_states.exit_state import ExitState
+        from flows.scene_data_manager import SceneDataManager
+
+        actor, exit_obj, _persona = self._owner_actor_room_and_exit()
+        intruder = self._intruder(actor.location)
+        sdm = SceneDataManager()
+        exit_state: ExitState = sdm.initialize_state_for_object(exit_obj)
+        intruder_state = sdm.initialize_state_for_object(intruder)
+        assert exit_state.can_traverse(intruder_state) is True
