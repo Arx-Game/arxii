@@ -58,9 +58,10 @@ from world.traits.models import CheckOutcome
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.areas.positioning.models import Rampart
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence
-    from world.combat.models import Clash, CombatEncounter, CombatRoundAction
+    from world.combat.models import Clash, CombatEncounter, CombatOpponentAction, CombatRoundAction
     from world.magic.models import Affinity, Technique
 
 
@@ -580,6 +581,41 @@ def affinity_tilt(
     return -magnitude
 
 
+def _sync_rampart_progress(*, clash: Clash, progress_after: int) -> None:
+    """Mirror a rampart-backed WARD clash's per-round progress delta onto its Rampart (#2209).
+
+    ``clash.progress`` still holds the pre-round value when this is called (the
+    caller reassigns it right after). A decrease drains the rampart via
+    ``damage_rampart`` — collapsing (row deleted) in lockstep with the existing
+    ``progress <= 0`` -> ``NPC_DECISIVE`` threshold path. An increase
+    strengthens the rampart directly, capped at ``max_integrity``. No-op once
+    the rampart has already collapsed underneath this clash.
+    """
+    delta = progress_after - clash.progress
+    if delta == 0:
+        return
+    from world.areas.positioning.models import Rampart  # noqa: PLC0415
+    from world.areas.positioning.services import damage_rampart  # noqa: PLC0415
+
+    rampart = Rampart.objects.filter(pk=clash.rampart_id).first()
+    if rampart is None:
+        return
+    if delta < 0:
+        collapsed = damage_rampart(rampart, -delta)
+        if collapsed:
+            # damage_rampart deleted the row. The DB-level SET_NULL FK cascade
+            # already nulled clash.rampart_id in the database, but the
+            # idmapper-cached relation on this in-memory `clash` instance
+            # still points at the now-pk-less Rampart object (idmapper cache
+            # survives collector SET_NULL) — clear it in-memory too so the
+            # caller's clash.save() below doesn't trip Django's stale-related-
+            # object guard.
+            clash.rampart = None
+    else:
+        rampart.integrity = min(rampart.max_integrity, rampart.integrity + delta)
+        rampart.save(update_fields=["integrity"])
+
+
 @transaction.atomic
 def aggregate_clash_round(
     *,
@@ -669,6 +705,11 @@ def aggregate_clash_round(
     for c in pc_contributions:
         if c.clash_interaction is not None:
             persist_power_ledger(interaction=c.clash_interaction, ledger=c.power_ledger)
+
+    # 4c. Mirror this round's progress delta into the bound Rampart (#2209),
+    #     using clash.progress's still-pre-mutation value as the "before".
+    if clash.flavor == ClashFlavor.WARD and clash.rampart_id is not None:
+        _sync_rampart_progress(clash=clash, progress_after=progress_after)
 
     # 5. Update clash.progress with the new value.
     clash.progress = progress_after
@@ -1498,6 +1539,25 @@ def _detect_lock_escaping(*, encounter: CombatEncounter, round_number: int) -> l
     return created
 
 
+def _rampart_covering_ward_target(npc_action: CombatOpponentAction) -> Rampart | None:
+    """Return the Rampart covering the sustained attack's PC target, if any (#2209).
+
+    A sustained attack targets one or more PCs (``npc_action.targets``); the
+    WARD binds to the first target's position, mirroring the singular "the
+    sustained attack's PC target" framing — a barrage that hits multiple PCs
+    still opens one WARD clash for the (opponent, threat entry) pair.
+    """
+    from world.areas.positioning.services import position_of, rampart_at  # noqa: PLC0415
+
+    target_participant = npc_action.targets.first()
+    if target_participant is None:
+        return None
+    position = position_of(target_participant.character_sheet.character)
+    if position is None:
+        return None
+    return rampart_at(position)
+
+
 def _detect_ward(*, encounter: CombatEncounter, round_number: int) -> list[Clash]:
     """Detect WARD opportunities: sustained NPC attacks.
 
@@ -1506,7 +1566,10 @@ def _detect_ward(*, encounter: CombatEncounter, round_number: int) -> list[Clash
     pair (a sustained attack opens exactly one WARD for its duration).
 
     ``ward_ends_on_round = round_number + sustained_duration_rounds``
-    ``progress`` starts at ``pc_win_threshold`` (full ward integrity; NPC drains it).
+    ``progress`` starts at ``pc_win_threshold`` (full ward integrity; NPC drains it) —
+    UNLESS the target stands at a rampart-covered position (#2209), in which
+    case ``clash.rampart`` is set and ``progress`` instead starts at the
+    rampart's current ``integrity`` (``pc_win_threshold`` is unchanged either way).
     ``pc_win_threshold = sustained_duration_rounds * clash_npc_pressure``
 
     Skips silently when the threat entry has no ``clash_resolution_pool``.
@@ -1547,6 +1610,9 @@ def _detect_ward(*, encounter: CombatEncounter, round_number: int) -> list[Clash
         threshold = duration * pressure
         ward_ends = round_number + duration
 
+        rampart = _rampart_covering_ward_target(npc_action)
+        progress = rampart.integrity if rampart is not None else threshold
+
         clash = Clash.objects.create(
             encounter=encounter,
             npc_opponent=npc_action.opponent,
@@ -1555,12 +1621,13 @@ def _detect_ward(*, encounter: CombatEncounter, round_number: int) -> list[Clash
             per_round_consequence_pool=entry.clash_per_round_pool,
             flavor=ClashFlavor.WARD,
             lock_pc_role=None,
-            progress=threshold,  # starts at full integrity
+            progress=progress,
             pc_win_threshold=threshold,
             npc_win_threshold=None,
             ward_ends_on_round=ward_ends,
             started_round=round_number,
             triggering_threat_entry=entry,
+            rampart=rampart,
         )
         created.append(clash)
 
