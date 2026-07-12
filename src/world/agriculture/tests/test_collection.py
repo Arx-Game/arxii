@@ -73,3 +73,23 @@ class CollectFieldFoodTests(TestCase):
         instance = RoomFeatureInstanceFactory(feature_kind=kind)
         with self.assertRaises(ValueError):
             collect_field_food(MagicMock(), instance)
+
+
+class UnrestSkimTests(TestCase):
+    """#2238 — unrest skims the food haul on the way into the stockpile."""
+
+    def test_no_unrest_no_skim(self):
+        from world.agriculture.services.collection import _apply_unrest_skim
+
+        self.assertEqual(_apply_unrest_skim(100, 0), 100)
+
+    def test_unrest_skims_proportionally(self):
+        from world.agriculture.services.collection import _apply_unrest_skim
+
+        self.assertEqual(_apply_unrest_skim(100, 40), 60)  # 40% skimmed
+
+    def test_skim_is_capped(self):
+        from world.agriculture.services.collection import _apply_unrest_skim
+
+        # unrest 100 caps at UNREST_COLLECTION_SKIM_MAX_PCT (60) → only 40% lands.
+        self.assertEqual(_apply_unrest_skim(100, 100), 40)

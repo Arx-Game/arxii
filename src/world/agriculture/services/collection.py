@@ -28,6 +28,18 @@ def _collection_band_pct(success_level: int) -> int | None:
     return None
 
 
+def _apply_unrest_skim(landed: int, unrest: int) -> int:
+    """Unrest skims the food haul (#2238): pct skimmed = min(cap, unrest).
+
+    A domain in chaos loses food on the way in — the more unrest, the less lands,
+    up to ``UNREST_COLLECTION_SKIM_MAX_PCT``.
+    """
+    from world.agriculture.constants import UNREST_COLLECTION_SKIM_MAX_PCT  # noqa: PLC0415
+
+    skim_pct = min(UNREST_COLLECTION_SKIM_MAX_PCT, unrest)
+    return landed * (100 - skim_pct) // 100
+
+
 @transaction.atomic
 def collect_field_food(character, field_instance) -> FoodCollectionResult:
     """One active collection dispatch from a Field's uncollected pool.
@@ -106,6 +118,9 @@ def collect_field_food(character, field_instance) -> FoodCollectionResult:
             overflow=landed,
             success_level=success_level,
         )
+
+    # Unrest skims the haul (#2238): a domain in chaos loses food on the way in.
+    landed = _apply_unrest_skim(landed, domain.unrest)
 
     stockpile, _ = FoodStockpile.objects.get_or_create(domain=domain)
     capacity = max_food_capacity(domain)
