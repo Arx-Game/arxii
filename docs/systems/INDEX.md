@@ -3392,10 +3392,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (the entrance's own recognition hooks fired flourish-only at declaration time — the
   suggestion was deferred). `world.combat.cast_seed
   .seed_or_feed_encounter_from_benign_intervention(*, caster_sheet, target_sheet, scene)`
-  is the benign sibling: seats a non-combatant whose protective (non-hostile) entrance
-  cast landed on an already-embattled ally into the fight — no opponent row, no stakes
+  is the benign sibling: seats a non-combatant whose protective (non-hostile) cast
+  landed on an already-embattled ally into the fight — no opponent row, no stakes
   lock, no FOCUSED declaration (the cast already resolved standalone); no-ops when there
-  is no feedable encounter or the target isn't embattled in it.
+  is no feedable encounter or the target isn't embattled in it. #2226 (ADR-0119)
+  generalized this to **all** benign casts via the `seat_caster_for_benign_intervention`
+  wrapper (`cast_seed.py`), called post-resolution from `_route_immediate_cast` and
+  `resolve_accepted_cast`; the entrance path's own seating calls were removed (the
+  generalized calls supersede them).
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
     side-field; ALLY opponents fight *for* the party (summons, and future charm/

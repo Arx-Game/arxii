@@ -255,6 +255,10 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 - Hostile → `seed_or_feed_encounter_from_cast` (combat).
 - Benign + behavior-altering → PENDING `SceneActionRequest` (consent required).
 - Benign + capability/stat → resolves immediately, including on other PCs.
+- **Any benign cast that affects an ACTIVE combatant** seats the caster in
+  that combatant's encounter (#2226, ADR-0119) — via
+  `seat_caster_for_benign_intervention`, called post-resolution on both the
+  immediate and consent-accept paths. Risk acknowledgement is automatic.
 
 **Shared condition application** (`world/magic/services/condition_application.py`):
 `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind, source_character, applied_condition_rows=None)`
@@ -1082,7 +1086,7 @@ time:
 
 | Branch | What happens |
 |--------|--------------|
-| Resolved inline (self/room/no-target, or a benign no-consent cast at another PC) | Full hooks fire immediately once the success level clears 0: entry-flourish offer, disposition delta (non-hostile only), the `Dramatic Moment Suggestion` check, and — when the target is another sheet's ACTIVE combatant — a **benign-intervention combat join** (`seed_or_feed_encounter_from_benign_intervention`, see combat.md). |
+| Resolved inline (self/room/no-target, or a benign no-consent cast at another PC) | Full hooks fire immediately once the success level clears 0: entry-flourish offer, disposition delta (non-hostile only), the `Dramatic Moment Suggestion` check. A **benign-intervention combat join** (`seat_caster_for_benign_intervention`, #2226/ADR-0119) fires for *any* benign cast (not just entrances) that affects an ACTIVE combatant — see the consent-routing note above. |
 | Hostile cast at another PC | Seeds/feeds a combat encounter (`seed_or_feed_encounter_from_cast(..., from_entrance=True)`) — flourish only; the success level isn't known until the declared cast resolves at round resolution (see combat.md's `_maybe_suggest_entrance_dramatic_moment`). |
 | PENDING (benign consent-gated, or hostile #777 risk-gated) | No hooks at declaration; `SceneActionRequest.originated_as_entrance` marks the request so `resolve_accepted_cast` fires the deferred hooks at accept-time resolution instead. |
 | Soulfray gate not confirmed | Registers a `PendingCast` (mirrors `cast.py`) carrying an `"entrance": True` marker in its kwargs; `SoulfrayPendingHandler`'s `accept soulfray` re-dispatch reads the marker and re-enters through the `"entrance"` REGISTRY action (not `"cast_technique"`) so the flourish/suggestion/intervention hooks stay reachable — see `world/magic/offer_handlers.py`. |

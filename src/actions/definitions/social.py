@@ -559,9 +559,9 @@ class EntranceAction(_SocialTemplateAction):
     def _resolve_inline_entrance_result(  # noqa: PLR0913 - cohesive resolved-inline outcome params
         actor: ObjectDB,
         scene: Scene,
-        actor_sheet: CharacterSheet | None,
+        _actor_sheet: CharacterSheet | None,  # #2226: was used for seating, now generalized
         technique: Technique,
-        target: Persona | None,
+        _target: Persona | None,  # #2226: was used for seating, now generalized
         target_persona_id: int | None,
         entry_interaction: Interaction | None,
         cast: CastResult,
@@ -573,9 +573,6 @@ class EntranceAction(_SocialTemplateAction):
         combat-seed/PENDING branches in ``_dispatch_entrance_cast``.)
         """
         from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
-        from world.combat.cast_seed import (  # noqa: PLC0415
-            seed_or_feed_encounter_from_benign_intervention,
-        )
         from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
         from world.npc_services.social_disposition import (  # noqa: PLC0415
             apply_social_disposition_delta,
@@ -606,17 +603,9 @@ class EntranceAction(_SocialTemplateAction):
         if prompt:
             message = f"{message}\n{prompt}"
 
-        if (
-            target is not None
-            and actor_sheet is not None
-            and target.character_sheet_id != actor_sheet.pk
-        ):
-            seed_or_feed_encounter_from_benign_intervention(
-                caster_sheet=actor_sheet,
-                target_sheet=target.character_sheet,
-                scene=scene,
-            )
-
+        # #2226: combat seating for benign casts is now handled by
+        # _route_immediate_cast's generalized seating call — no need to
+        # duplicate it here.
         return _ActionResult(success=True, message=message)
 
     @staticmethod

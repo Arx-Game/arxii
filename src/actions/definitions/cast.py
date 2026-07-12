@@ -146,7 +146,12 @@ class CastTechniqueAction(Action):
                 ),
             )
 
-        return ActionResult(success=True, message="Your technique resolves.")
+        message = "Your technique resolves."
+        if cast.combat_seated:
+            message = (
+                f"{message}\nYour cast reaches an embattled ally — you are drawn into the fight."
+            )
+        return ActionResult(success=True, message=message)
 
     def round_declaration(
         self,
