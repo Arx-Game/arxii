@@ -7,3 +7,6 @@ hostfw_ssh_admin_cidrs: []        # operator decision (defaults open at edge)
 hostfw_cloudflare_ipv4_cidrs: []
 hostfw_cloudflare_ipv6_cidrs: []
 hostfw_tls_telnet_port: 4003
+# Must stay in lockstep with ssh_hardening's ssh_port and the Linode edge
+# firewall's SSH rule — all three gate the same port.
+hostfw_ssh_port: 22

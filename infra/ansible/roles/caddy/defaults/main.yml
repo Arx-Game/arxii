@@ -1,10 +1,24 @@
 ---
 caddy_web_fqdn: "play.example"          # = tofu output web_fqdn
-caddy_backend: "127.0.0.1:4001"         # localhost-bound app/ws backend
+caddy_backend: "127.0.0.1:4001"         # localhost-bound Django/web app backend
+# Evennia portal websocket, localhost-bound. Templated into the Caddyfile's
+# @ws route exactly like caddy_backend above (a single whole-address token,
+# not "host:{{ var }}" split across a literal host and a templated port) —
+# CI's validate.yml stubs every WHOLE `{{ ... }}` substitution with one
+# hostname placeholder (`placeholder.example.com`) before running `caddy
+# adapt`, and a bare hostname is itself a valid reverse_proxy upstream (no
+# port = Caddy's default), so this form survives that stub. The old
+# "port-only var, hardcoded host" split would NOT have survived it (that's
+# why it used to be informational-only) — keep this as a whole address.
+caddy_ws_backend: "127.0.0.1:4002"
+# STATIC_ROOT (verified against src/server/conf/settings.py + Evennia's
+# settings_default.py: STATIC_ROOT = GAME_DIR/server/.static, GAME_DIR =
+# os.getcwd() when Django commands run from src/). app_deploy's collectstatic
+# populates this under the `current` symlink.
+caddy_static_root: "/opt/arxii/current/src/server/.static"
 # ACME behind Cloudflare proxy needs DNS-01 (HTTP-01 is intercepted by the
 # orange-cloud). DNS-01 requires Caddy BUILT WITH the caddy-dns/cloudflare
-# plugin (apt caddy has NO plugins → xcaddy / Caddy "download with plugins";
-# IMPLEMENTATION-VERIFY, do not assume the apt binary works) and a
+# plugin (added idempotently by tasks/main.yml via `caddy add-package`) and a
 # DNS-edit-scoped Cloudflare token supplied via env (CADDY_CF_DNS_TOKEN),
 # which is a NEW on-box secret to add to the gated-Environment contract.
 caddy_acme_email: "ops@example"

@@ -5,6 +5,7 @@
     state: present
     update_cache: true
     cache_valid_time: 3600
+    lock_timeout: 600
 
 - name: Install the offsite-replication script
   ansible.builtin.template:
@@ -24,6 +25,9 @@
       [Unit]
       Description=Arx II offsite replicate latest dump -> Cloudflare R2 (3-2-1)
       After=arxii-backup.service
+      # Same OnFailure= alerting convention as arxii-backup.service — see
+      # roles/offbox_alerting for the arxii-alert-failure@ template unit.
+      OnFailure=arxii-alert-failure@%n.service
       [Service]
       Type=oneshot
       EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}

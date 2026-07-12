@@ -1,5 +1,7 @@
 # Real inventory is generated from tofu output — do not commit it.
 inventory/hosts.yml
+# Same for the generated group_vars — do not commit it.
+inventory/group_vars/arxii_prod.yml
 # This is a PUBLIC repo: NO secret material is committed, encrypted or not.
 # Secrets live only in the gated GitHub Environment and reach the host as
 # env -> the secrets_vault 0600 EnvironmentFile. There is no committed vault

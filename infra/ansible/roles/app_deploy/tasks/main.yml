@@ -11,21 +11,18 @@
   ansible.builtin.git:
     repo: "{{ app_repo }}"
     version: "{{ app_ref }}"
-    dest: "{{ app_releases_dir }}/{{ app_ref }}"
+    dest: "{{ app_release_dir }}"
     depth: 1
   become: true
   become_user: "{{ app_user }}"
   register: app_checkout
 
-- name: Atomically point `current` at this release
-  ansible.builtin.file:
-    src: "{{ app_releases_dir }}/{{ app_ref }}"
-    dest: "{{ app_current }}"
-    state: link
-    owner: "{{ app_user }}"
-    group: "{{ app_group }}"
-    force: true
-  register: app_symlink
+# NOTE: the `current` symlink is intentionally NOT flipped yet. Everything
+# below through collectstatic runs against {{ app_release_dir }} (the
+# checked-out release), not `current` — a failure in uv sync / the frontend
+# build / migrate / collectstatic must leave the currently-live release
+# (whatever `current` still points at) untouched, instead of stranding a
+# half-deployed `current` with no rollback.
 
 # Build the project venv from uv.lock so the `evennia` entrypoint exists
 # under the service user. --frozen ensures we install EXACTLY what the
@@ -33,11 +30,166 @@
 - name: Build the project venv from uv.lock (uv sync --frozen --no-dev)
   ansible.builtin.command:
     cmd: "{{ base_uv_bin }} sync --frozen --no-dev"
-    chdir: "{{ app_current }}"
+    chdir: "{{ app_release_dir }}"
   become: true
   become_user: "{{ app_user }}"
   register: app_uv_sync
   changed_when: app_uv_sync.rc == 0 and app_uv_sync.stdout is search('Installed|Removed|Updated|Resolved')
+
+# --- Frontend build ---------------------------------------------------------
+# The React app is the primary interface (see frontend/CLAUDE.md); its build
+# output (src/web/static/dist/) is gitignored and this box has no Node, so we
+# build it here rather than shipping prebuilt assets. Placed AFTER uv sync
+# (not before) because frontend/scripts/postbuild.mjs runs
+# `uv run --project .. arx manage collectstatic --noinput` as part of
+# `pnpm build` — its guard only checks whether `uv` is on PATH, not whether
+# the project venv has been synced. Running the frontend build before uv
+# sync would let that guard pass (uv IS on PATH, installed by the base role)
+# but then `uv run` would sync-on-demand without --frozen/--no-dev,
+# duplicating and potentially drifting from the explicit uv sync step above.
+# Placing the build after uv sync means postbuild's `uv run` finds an
+# already-synced --frozen --no-dev venv and just uses it.
+- name: Check for an existing NodeSource keyring (idempotency)
+  ansible.builtin.stat:
+    path: /usr/share/keyrings/nodesource.gpg
+  register: app_node_keyring
+
+# NodeSource does not publish a fixed checksum for this key (it can rotate
+# independent of releases) — HTTPS/TLS is the only integrity guarantee
+# available here, matching NodeSource's own documented install instructions.
+- name: Download the NodeSource GPG signing key (TLS-only; no published checksum to pin)
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /tmp/nodesource-repo.gpg.key
+    mode: "0644"
+  when: not app_node_keyring.stat.exists
+
+- name: Dearmor the NodeSource key into the apt keyring dir
+  ansible.builtin.command:
+    cmd: >-
+      gpg --dearmor -o /usr/share/keyrings/nodesource.gpg
+      /tmp/nodesource-repo.gpg.key
+    creates: /usr/share/keyrings/nodesource.gpg
+  when: not app_node_keyring.stat.exists
+
+- name: Lock down the NodeSource keyring perms
+  ansible.builtin.file:
+    path: /usr/share/keyrings/nodesource.gpg
+    owner: root
+    group: root
+    mode: "0644"
+  when: not app_node_keyring.stat.exists
+
+# deb822 format (Ubuntu noble's own default sources style) rather than a
+# single-line `.list` entry — the equivalent one-line form doesn't fit this
+# repo's 100-char line limit without an awkward mid-URL wrap.
+- name: Add the deb822 signed-by NodeSource apt repo for Node {{ app_frontend_node_major }}
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/nodesource.sources
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Types: deb
+      URIs: https://deb.nodesource.com/node_{{ app_frontend_node_major }}.x
+      Suites: nodistro
+      Components: main
+      Signed-By: /usr/share/keyrings/nodesource.gpg
+  register: app_nodesource_sources
+
+# update_cache only fires when the sources file above actually changed (a
+# stale cache would miss a brand-new repo on the run that added it, but an
+# unconditional update_cache: true was paying the full `apt-get update`
+# cost on every single converge forever after, even once nodejs is already
+# installed and the sources file is untouched).
+- name: Install NodeSource Node.js major {{ app_frontend_node_major }}
+  ansible.builtin.apt:
+    name: nodejs
+    state: present
+    update_cache: "{{ app_nodesource_sources is changed }}"
+    lock_timeout: 600
+
+- name: Enable corepack shims (system-wide; bundled with Node.js)
+  ansible.builtin.command: corepack enable
+  changed_when: false
+
+# frontend/package.json has no "packageManager" field (see defaults/main.yml
+# comment) — pin/activate the pnpm major CI uses instead of "latest".
+- name: Pin + activate the pnpm version corepack will use (matches CI's pin)
+  ansible.builtin.command: "corepack prepare pnpm@{{ app_frontend_pnpm_version }} --activate"
+  environment:
+    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+
+# Idempotency precheck: a converge where the checkout didn't change and a
+# built bundle already exists for this release needs no rebuild (pnpm
+# install + vite build are the slow part of every deploy otherwise). The
+# toolchain marker (below) closes the gap where dist/ exists and the
+# checkout is unchanged, but app_frontend_node_major/app_frontend_
+# pnpm_version themselves were bumped since that bundle was built.
+- name: Check whether this release already has a built frontend bundle
+  ansible.builtin.stat:
+    path: "{{ app_frontend_dist_index }}"
+  register: app_frontend_dist_stat
+
+- name: Check the frontend bundle's toolchain marker
+  ansible.builtin.stat:
+    path: "{{ app_frontend_toolchain_marker }}"
+  register: app_frontend_toolchain_marker_stat
+
+- name: Read the frontend bundle's toolchain marker, if present
+  ansible.builtin.slurp:
+    src: "{{ app_frontend_toolchain_marker }}"
+  register: app_frontend_toolchain_marker_content
+  when: app_frontend_toolchain_marker_stat.stat.exists
+
+- name: Decide whether the frontend needs a rebuild
+  ansible.builtin.set_fact:
+    app_frontend_needs_build: >-
+      {{ app_checkout is changed
+         or not app_frontend_dist_stat.stat.exists
+         or not app_frontend_toolchain_marker_stat.stat.exists
+         or (app_frontend_toolchain_marker_content | default({'content': ''})).content
+            | b64decode != (app_frontend_node_major ~ ' ' ~ app_frontend_pnpm_version) }}
+
+- name: Install frontend deps (pnpm install --frozen-lockfile)
+  ansible.builtin.command: pnpm install --frozen-lockfile
+  args:
+    chdir: "{{ app_frontend_dir }}"
+  become: true
+  become_user: "{{ app_user }}"
+  when: app_frontend_needs_build
+  register: app_frontend_pnpm_install
+  changed_when: app_frontend_needs_build
+
+# vite always rewrites hashed assets, so "changed" here is really "did we
+# decide to build" (see app_frontend_needs_build above) rather than
+# anything vite itself reports.
+- name: Build the frontend bundle (pnpm build; runs postbuild's collectstatic hook)
+  ansible.builtin.command: pnpm build
+  args:
+    chdir: "{{ app_frontend_dir }}"
+  become: true
+  become_user: "{{ app_user }}"
+  when: app_frontend_needs_build
+  register: app_frontend_build
+  changed_when: app_frontend_needs_build
+
+# noqa'd: this is deliberately NOT a handler — the marker must be written
+# in-order, immediately after the build task it records, not at end of play
+# (a failed later task would otherwise leave a built dist with no marker).
+- name: Record the frontend build's toolchain marker (node major + pnpm version)  # noqa: no-handler
+  ansible.builtin.copy:
+    content: "{{ app_frontend_node_major }} {{ app_frontend_pnpm_version }}"
+    dest: "{{ app_frontend_toolchain_marker }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0644"
+  become: true
+  become_user: "{{ app_user }}"
+  when: app_frontend_build is changed
 
 # Django/Evennia migrations are idempotent: re-running when up-to-date is a
 # no-op (output contains no "Applying" lines). Sourcing the rendered
@@ -53,7 +205,7 @@
     set -o pipefail
     {{ base_uv_bin }} run evennia migrate --noinput
   args:
-    chdir: "{{ app_gamedir }}"
+    chdir: "{{ app_release_gamedir }}"
     executable: /bin/bash
   become: true
   become_user: "{{ app_user }}"
@@ -62,6 +214,13 @@
 
 # Collect Django/Evennia static assets so Caddy can serve /static/ off disk
 # (admin CSS/JS, Evennia static, anything Django's staticfiles knows about).
+# (The frontend build's postbuild hook already ran collectstatic once for
+# the hashed dist/ assets; this is Django/Evennia's own full collectstatic
+# pass and is idempotent to re-run.) Guarded: skip entirely on a converge
+# where neither the checkout nor the frontend build changed — postbuild's
+# collectstatic already ran during THIS release's build (or a prior one,
+# if the frontend didn't need a rebuild either), so there is nothing new
+# to collect and the pass-over-every-static-file cost is pure waste.
 - name: Collect Django static files (idempotent)
   ansible.builtin.shell: |
     set -a
@@ -71,17 +230,33 @@
     set -o pipefail
     {{ base_uv_bin }} run evennia collectstatic --noinput
   args:
-    chdir: "{{ app_gamedir }}"
+    chdir: "{{ app_release_gamedir }}"
     executable: /bin/bash
   become: true
   become_user: "{{ app_user }}"
+  when: app_checkout is changed or app_frontend_build is changed
   register: app_collectstatic
   changed_when: "'0 static files copied' not in app_collectstatic.stdout"
+
+# Everything above is proven to work against THIS release directory before
+# we ever touch what's live. Only now do we flip the symlink.
+- name: Atomically point `current` at this release
+  ansible.builtin.file:
+    src: "{{ app_release_dir }}"
+    dest: "{{ app_current }}"
+    state: link
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    force: true
+  register: app_symlink
 
 # Idempotent superuser bootstrap: if any superuser already exists, skip
 # the create entirely. The credentials come from gated Environment values
 # (username/email = Variables, password = Secret); `evennia
 # createsuperuser --noinput` reads them from DJANGO_SUPERUSER_* env.
+# Runs post-flip (via app_gamedir, which now resolves through `current` to
+# this release) — it needs the running config, same as before; only its
+# position relative to the symlink flip changed.
 - name: Check whether a Django superuser already exists (first-run guard)
   ansible.builtin.shell: |
     set -a
@@ -146,5 +321,60 @@
     app_checkout is changed
     or app_symlink is changed
     or app_uv_sync is changed
+    or app_frontend_build is changed
     or app_migrate is changed
     or app_collectstatic is changed
+
+# --- Portal-crash watchdog ---------------------------------------------------
+# Type=forking + PIDFile=server.pid (arxii.service.j2) only supervises the
+# Server daemon. Evennia actually runs Server + Portal as two separate
+# processes (server.pid + portal.pid — see src/server/README.md); if the
+# Portal alone dies, systemd still sees the unit as "active" (Server is
+# fine) and does nothing, but players cannot connect. This timer-driven
+# script checks BOTH pidfiles and restarts the unit + fires an off-box
+# alert when the unit claims active but a daemon is dead.
+- name: Install the watchdog script
+  ansible.builtin.template:
+    src: arxii-watchdog.sh.j2
+    dest: /usr/local/sbin/arxii-watchdog
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install the watchdog service (reads OFFBOX_ALERT_TOKEN from the EnvironmentFile)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-watchdog.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx II Portal/Server liveness watchdog (restart-on-half-dead)
+      [Service]
+      Type=oneshot
+      EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+      ExecStart=/usr/local/sbin/arxii-watchdog
+  notify: Reload systemd
+
+- name: Install the watchdog timer (checks every minute)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-watchdog.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx II watchdog check (every minute)
+      [Timer]
+      OnCalendar=*-*-* *:*:00
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  notify: Reload systemd
+
+- name: Enable the watchdog timer
+  ansible.builtin.systemd_service:
+    name: arxii-watchdog.timer
+    enabled: true
+    state: started
+    daemon_reload: true

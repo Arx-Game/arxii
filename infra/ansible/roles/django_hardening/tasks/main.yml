@@ -1,4 +1,10 @@
 ---
+- name: Fail closed if group_vars weren't generated (empty ALLOWED_HOSTS rejects everything)
+  ansible.builtin.assert:
+    that: "dh_allowed_hosts | length > 0"
+    fail_msg: "dh_allowed_hosts is empty — group_vars not generated — run via standup.sh"
+    quiet: true
+
 - name: Assert no on-box MTA is installed (Resend relay only)
   ansible.builtin.package_facts:
     manager: auto

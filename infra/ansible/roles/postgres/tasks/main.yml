@@ -7,6 +7,7 @@
     state: present
     update_cache: true
     cache_valid_time: 3600
+    lock_timeout: 600
 
 - name: Harden postgresql.conf (localhost-only bind, scram)
   ansible.builtin.template:
@@ -35,6 +36,25 @@
     state: present
   become: true
   become_user: postgres
+
+# Two-step fail-closed (mirrors secrets_vault's pattern): no_log on the
+# fact-gathering step (its RHS touches the actual secret value via
+# lookup('env', ...)), then assert on the resulting BOOLEAN without no_log —
+# a no_log assert also suppresses its own fail_msg ("output has been
+# hidden"), which used to leave operators with no idea WHY it failed.
+- name: Determine whether ARXII_PG_PASSWORD is non-empty (value never logged)
+  ansible.builtin.set_fact:
+    postgres_pg_password_present: "{{ (lookup('env', 'ARXII_PG_PASSWORD') | length > 0) }}"
+  no_log: true
+
+- name: Fail-closed — ARXII_PG_PASSWORD must be non-empty
+  ansible.builtin.assert:
+    that:
+      - postgres_pg_password_present
+    fail_msg: >-
+      Refuses to set an empty DB password. Running this role outside
+      standup.sh requires exporting ARXII_PG_PASSWORD.
+    quiet: true
 
 - name: Ensure the application role exists with the env-sourced password
   community.postgresql.postgresql_user:

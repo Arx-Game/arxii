@@ -21,8 +21,12 @@ resource "linode_firewall" "this" {
     action   = "ACCEPT"
     protocol = "TCP"
     ports    = "22"
-    ipv4     = [for c in var.ssh_admin_cidrs : c if can(cidrhost(c, 0))]
-    ipv6     = [for c in var.ssh_admin_cidrs : c if !can(cidrhost(c, 0))]
+    # Family split by literal syntax, not `can(cidrhost(...))` — that predicate
+    # is true for BOTH families (it only checks "is this a valid CIDR"), so
+    # `::/0` landed in the ipv4 list and the Linode API rejected the whole
+    # apply. IPv6 CIDRs always contain a colon; IPv4 CIDRs never do.
+    ipv4 = [for c in var.ssh_admin_cidrs : c if !strcontains(c, ":")]
+    ipv6 = [for c in var.ssh_admin_cidrs : c if strcontains(c, ":")]
   }
 
   # HTTP/HTTPS — ONLY from Cloudflare ranges (origin not web-reachable direct).

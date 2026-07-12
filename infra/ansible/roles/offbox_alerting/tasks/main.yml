@@ -5,6 +5,19 @@
     state: present
     update_cache: true
     cache_valid_time: 3600
+    lock_timeout: 600
+
+# Installed before the heartbeat/alert-failure scripts below, both of which
+# call it (app_deploy's arxii-watchdog, installed earlier in site.yml's role
+# order, guards its own call instead — its timer could fire on a first
+# converge before THIS role, and so this file, exists yet).
+- name: Install the shared off-box alert helper (arxii-alert <message>)
+  ansible.builtin.template:
+    src: arxii-alert.sh.j2
+    dest: /usr/local/sbin/arxii-alert
+    owner: root
+    group: root
+    mode: "0750"
 
 - name: Install heartbeat script
   ansible.builtin.template:
@@ -51,3 +64,33 @@
     enabled: true
     state: started
     daemon_reload: true
+
+# --- Generic OnFailure= alert unit ------------------------------------------
+# Owned here (not by roles/backups or roles/offsite_replication) because
+# this role already owns the off-box-alert endpoint/token convention
+# (OFFBOX_ALERT_TOKEN + the base-ping-URL + "/fail" idiom used by the
+# heartbeat above); backups/offsite just reference this template unit by
+# name via their own OnFailure=arxii-alert-failure@%n.service, keeping the
+# alerting mechanism in one place instead of duplicated per consumer.
+- name: Install the generic OnFailure= alert script
+  ansible.builtin.template:
+    src: arxii-alert-failure.sh.j2
+    dest: /usr/local/sbin/arxii-alert-failure
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install the OnFailure= alert template unit (instantiated as arxii-alert-failure@<unit>)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-alert-failure@.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx II off-box failure alert for %i
+      [Service]
+      Type=oneshot
+      EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+      ExecStart=/usr/local/sbin/arxii-alert-failure %i
+  notify: Reload systemd

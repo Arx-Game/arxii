@@ -6,10 +6,22 @@ secrets_group: arxii
 
 # ARXII_* env var (set by standup.yml from the gated Environment, on the
 # ansible step only) -> EnvironmentFile key the app/backup/alert consume.
+# Dest names mirror EXACTLY what src/server/conf/settings.py reads via
+# env() (SECRET_KEY, CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET) — settings.py
+# never imports the django_hardening overlay for these, so a mismatch here
+# means a silent ImproperlyConfigured / empty-Cloudinary-config on the box.
 secrets_map:
   ARXII_PG_PASSWORD: POSTGRES_PASSWORD
-  ARXII_DJANGO_SECRET_KEY: DJANGO_SECRET_KEY
-  ARXII_CLOUDINARY_URL: CLOUDINARY_URL
+  ARXII_DJANGO_SECRET_KEY: SECRET_KEY
+  # Three discrete vars, NOT a single CLOUDINARY_URL: settings.py calls
+  # cloudinary.config(cloud_name=env("CLOUDINARY_CLOUD_NAME", default=""),
+  # api_key=env(...), api_secret=env(...)) — each with an explicit
+  # default="" kwarg, so a CLOUDINARY_URL var alone would be silently
+  # ignored (settings.py never reads that name) and cloudinary.config()
+  # would render with all-empty credentials instead of erroring loudly.
+  ARXII_CLOUDINARY_CLOUD_NAME: CLOUDINARY_CLOUD_NAME
+  ARXII_CLOUDINARY_API_KEY: CLOUDINARY_API_KEY
+  ARXII_CLOUDINARY_API_SECRET: CLOUDINARY_API_SECRET
   ARXII_RESEND_API_KEY: RESEND_API_KEY
   ARXII_BACKUP_WRITER_ACCESS_KEY: BACKUP_WRITER_ACCESS_KEY
   ARXII_BACKUP_WRITER_SECRET_KEY: BACKUP_WRITER_SECRET_KEY

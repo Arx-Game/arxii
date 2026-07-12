@@ -32,7 +32,7 @@ import { handleMailArrivedPayload } from './handleMailArrivedPayload';
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { MyRosterEntry } from '@/roster/types';
-import { WS_PORT } from '@/config';
+import { getWebSocketUrl } from '@/config';
 import { toast } from 'sonner';
 import { fetchAccount } from '@/evennia_replacements/api';
 
@@ -67,11 +67,8 @@ export function useGameSocket() {
         }
       }
 
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const socketPort = WS_PORT;
-
       // Clean websocket URL - middleware will inject session auth from cookies
-      const url = `${protocol}://${window.location.hostname}:${socketPort}/ws/game/`;
+      const url = getWebSocketUrl(window.location);
       const socket = new WebSocket(url);
       sockets[character] = socket;
 
