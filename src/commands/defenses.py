@@ -126,12 +126,11 @@ class CmdDefense(DispatchCommand):
             "target_level": int(level_raw),
         }
         if kind_key == _KIND_BARS:
-            exit_obj = self.caller.search(
-                parsed.get(_EXIT_KWARG, ""), location=self.caller.location
+            exit_obj = self.search_or_raise(
+                parsed.get(_EXIT_KWARG, ""),
+                location=self.caller.location,
+                not_found_msg="Usage: defense install bars level=<n> exit=<name>.",
             )
-            if exit_obj is None:
-                msg = "Usage: defense install bars level=<n> exit=<name>."
-                raise CommandError(msg)
             kwargs["exit"] = exit_obj
         if kind_key == _KIND_WARD:
             resonance_name = parsed.get(_RESONANCE_KWARG, "")
