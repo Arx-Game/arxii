@@ -14725,6 +14725,153 @@ export interface paths {
     patch: operations['risk_calibrations_partial_update'];
     trace?: never;
   };
+  '/api/room-features/defenses/fund-ward/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Write-only install/upgrade/fund routes spanning all three defense kinds. */
+    post: operations['room_features_defenses_fund_ward_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/defenses/install/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Write-only install/upgrade/fund routes spanning all three defense kinds. */
+    post: operations['room_features_defenses_install_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/defenses/upgrade/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Write-only install/upgrade/fund routes spanning all three defense kinds. */
+    post: operations['room_features_defenses_upgrade_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/exit-bars/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['room_features_exit_bars_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/exit-bars/{exit_profile_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['room_features_exit_bars_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/room-alarms/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['room_features_room_alarms_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/room-alarms/{room_profile_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['room_features_room_alarms_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/room-wards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['room_features_room_wards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/room-wards/{room_profile_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['room_features_room_wards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/entries/': {
     parameters: {
       query?: never;
@@ -20751,6 +20898,9 @@ export interface components {
      * @enum {string}
      */
     DefendingSideRoleEnum: 'attacker' | 'defender';
+    DefenseInstallResult: {
+      project_id: number;
+    };
     /**
      * @description * `pose` - Pose (whole room)
      *     * `whisper` - Whisper (target only)
@@ -21836,6 +21986,21 @@ export interface components {
      * @enum {string}
      */
     ExecutionKindEnum: 'SERVICE' | 'FLOW' | 'SCENE_ACTION' | 'CEREMONY';
+    ExitBarsDetails: {
+      /** @description The exit these bars are installed on. */
+      exit_profile: number;
+      /** @description Durability tier. Capped at EXIT_BARS_MAX_LEVEL. */
+      level?: number;
+      /** Format: date-time */
+      installed_at?: string;
+      /** Format: date-time */
+      last_upgraded_at?: string | null;
+      /**
+       * Format: date-time
+       * @description Set when the bars are broken to destruction; null = active.
+       */
+      dissolved_at?: string | null;
+    };
     /** @description One axis of the owner build-HUD: pressure vs mitigation vs residual (#1514). */
     ExposureAxis: {
       key: string;
@@ -22119,6 +22284,9 @@ export interface components {
       friend: number;
       /** @default false */
       all_characters: boolean;
+    };
+    FundWardResult: {
+      resonance_reserve: number;
     };
     /** @description Read-only representation of one selectable FuryTier (#1543). */
     FuryTierOption: {
@@ -30923,6 +31091,18 @@ export interface components {
      * @enum {string}
      */
     RoleEnum: 'attacker' | 'defender';
+    RoomAlarmDetails: {
+      /** @description The room this alarm watches. */
+      room_profile: number;
+      /** @description Alarm tier. Capped at ROOM_ALARM_MAX_LEVEL. */
+      level?: number;
+      /** Format: date-time */
+      installed_at?: string;
+      /** Format: date-time */
+      last_upgraded_at?: string | null;
+      /** Format: date-time */
+      dissolved_at?: string | null;
+    };
     /** @description The owner build-HUD payload for one room (#1514). */
     RoomComfortBreakdown: {
       enclosure: string;
@@ -30949,6 +31129,27 @@ export interface components {
       readonly id: number;
       name: string;
       units: number;
+    };
+    RoomWardDetails: {
+      /** @description The room this ward protects. */
+      room_profile: number;
+      /** @description Ward tier. Capped at ROOM_WARD_MAX_LEVEL. */
+      level?: number;
+      /** @description The resonance flavor powering this ward's upkeep. */
+      resonance: number;
+      /** @description Banked resonance the daily upkeep tick drains from. */
+      resonance_reserve?: number;
+      /**
+       * Format: date-time
+       * @description Set when resonance_reserve hits 0; ward stops reacting. Null = active.
+       */
+      lapsed_at?: string | null;
+      /** Format: date-time */
+      installed_at?: string;
+      /** Format: date-time */
+      last_upgraded_at?: string | null;
+      /** Format: date-time */
+      dissolved_at?: string | null;
     };
     /** @description Validate a roster application message. */
     RosterApplication: {
@@ -54838,6 +55039,183 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RiskCalibration'];
+        };
+      };
+    };
+  };
+  room_features_defenses_fund_ward_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundWardResult'];
+        };
+      };
+    };
+  };
+  room_features_defenses_install_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DefenseInstallResult'];
+        };
+      };
+    };
+  };
+  room_features_defenses_upgrade_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DefenseInstallResult'];
+        };
+      };
+    };
+  };
+  room_features_exit_bars_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ExitBarsDetails'][];
+        };
+      };
+    };
+  };
+  room_features_exit_bars_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        exit_profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ExitBarsDetails'];
+        };
+      };
+    };
+  };
+  room_features_room_alarms_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomAlarmDetails'][];
+        };
+      };
+    };
+  };
+  room_features_room_alarms_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        room_profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomAlarmDetails'];
+        };
+      };
+    };
+  };
+  room_features_room_wards_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomWardDetails'][];
+        };
+      };
+    };
+  };
+  room_features_room_wards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        room_profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomWardDetails'];
         };
       };
     };
