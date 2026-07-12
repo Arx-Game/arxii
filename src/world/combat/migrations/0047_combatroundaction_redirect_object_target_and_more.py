@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("combat", "0045_combatroundaction_from_entrance"),
+        ("combat", "0046_alter_combatroundaction_maneuver"),
         ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
     ]
 
