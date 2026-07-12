@@ -5,7 +5,11 @@ from django.test import TestCase
 
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import GenderFactory
-from world.currency.services import get_or_create_treasury, transfer
+from world.currency.services import (
+    accrue_income_stream,
+    get_or_create_treasury,
+    transfer,
+)
 from world.projects.constants import ProjectKind, ProjectStatus
 from world.roster.constants import MembershipBasis
 from world.roster.factories import (
@@ -386,6 +390,31 @@ class DomainTests(TestCase):
         self.assertEqual(holding.income_stream.organization, self.org)
         self.assertEqual(holding.income_stream.gross_amount, 1200)
         self.assertEqual(holding.income_stream.area, self.area)
+
+    def test_accrual_scales_a_holdings_gross_by_domain_prosperity(self):
+        # #2238 — prosperity drives income: a thriving domain amasses more per cycle.
+        domain = create_domain(area=self.area, name="Westrock Vale", owner_org=self.org)
+        kind = HoldingKind.objects.create(
+            name="Farmland", stream_kind="domain_tax", base_gross=1000
+        )
+        stream = add_holding(domain=domain, kind=kind).income_stream
+
+        for prosperity, expected in ((50, 1000), (100, 2000), (0, 0)):
+            domain.prosperity = prosperity
+            domain.save(update_fields=["prosperity"])
+            stream.uncollected_pool = 0
+            stream.save(update_fields=["uncollected_pool"])
+            accrue_income_stream(stream)
+            self.assertEqual(stream.uncollected_pool, expected, f"prosperity {prosperity}")
+
+    def test_accrual_is_unscaled_for_non_domain_streams(self):
+        from world.currency.models import OrgIncomeStream
+
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Kickups", kind="crime_kickup", gross_amount=500
+        )
+        accrue_income_stream(stream)
+        self.assertEqual(stream.uncollected_pool, 500)  # no domain_holding → no scaling
 
     def test_improvement_project_applies_on_success(self):
         domain = create_domain(area=self.area, name="Westrock Vale", owner_org=self.org)

@@ -2,6 +2,11 @@
 
 from django.db import models
 
+# --- Domain economics (#2238) — PLACEHOLDER magnitudes ---
+# Prosperity at which a domain's holdings yield their base gross (a neutral 1.0x).
+# Above it holdings over-yield; below they under-yield; at 0 prosperity, no income.
+DOMAIN_PROSPERITY_BASELINE = 50
+
 
 class TitleTier(models.TextChoices):
     """Rank of a landed/dynastic title. Realm-specific display labels are

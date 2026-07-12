@@ -13,6 +13,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.societies.houses.constants import (
+    DOMAIN_PROSPERITY_BASELINE,
     DomainCrisisSeverity,
     HouseClaimStatus,
     PactCommitmentKind,
@@ -242,6 +243,16 @@ class Domain(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def income_multiplier(self) -> float:
+        """How prosperity scales a holding's gross this cycle (#2238).
+
+        A neutral 1.0 at ``DOMAIN_PROSPERITY_BASELINE``; a thriving domain
+        over-yields, a struggling one under-yields, and a collapsed domain
+        (prosperity 0) earns nothing. PLACEHOLDER curve — deliberately linear.
+        """
+        return self.prosperity / DOMAIN_PROSPERITY_BASELINE
 
 
 class HoldingKind(SharedMemoryModel):
