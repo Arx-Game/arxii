@@ -30,7 +30,7 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 
-HEARTH = "Great Hearth PLACEHOLDER"
+HEARTH = "Great Hearth"
 
 
 def _room_in(area, *, name="A Room", enclosure=RoomEnclosure.WALLED):
@@ -136,7 +136,7 @@ class FixtureActionTests(ComfortHudBase):
     def test_unknown_kind_lists_options(self) -> None:
         result = get_action("place_room_fixture").run(actor=self.actor, kind="Nonsense")
         self.assertFalse(result.success)
-        self.assertIn("PLACEHOLDER", result.message)
+        self.assertIn(HEARTH, result.message)
 
     def test_non_owner_cannot_place(self) -> None:
         stranger = CharacterFactory()

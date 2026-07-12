@@ -91,10 +91,10 @@ class RoomCommandParseTests(TestCase):
         assert (key, kwargs) == ("set_building_style", {"style": "Antique Imperial"})
 
     def test_fixture_switches_route(self) -> None:
-        key, kwargs = self._dispatch(["fixture"], "Great Hearth PLACEHOLDER")
-        assert (key, kwargs) == ("place_room_fixture", {"kind": "Great Hearth PLACEHOLDER"})
-        key, kwargs = self._dispatch(["removefixture"], "Great Hearth PLACEHOLDER")
-        assert (key, kwargs) == ("remove_room_fixture", {"kind": "Great Hearth PLACEHOLDER"})
+        key, kwargs = self._dispatch(["fixture"], "Great Hearth")
+        assert (key, kwargs) == ("place_room_fixture", {"kind": "Great Hearth"})
+        key, kwargs = self._dispatch(["removefixture"], "Great Hearth")
+        assert (key, kwargs) == ("remove_room_fixture", {"kind": "Great Hearth"})
 
     def test_extend_routes_added_budget(self) -> None:
         key, kwargs = self._dispatch(["extend"], "50")

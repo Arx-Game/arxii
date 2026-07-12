@@ -4336,7 +4336,11 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
 - **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
   maintainers' private content repository (`CONTENT_REPO_PATH` env var) via
   `core_management.content_fixtures.build_all` + `load_entries`; linked from the Game
-  Setup hub.
+  Setup hub. Domains (`DOMAIN_BUILDERS`, `core_management/content_fixtures.py`): `stats`/
+  `skills` → `traits.Trait` (#944); `npc_roles` → `npc_services.NPCRole`, `items` →
+  `items.ItemTemplate`, `building_kinds` → `buildings.BuildingKind`, `decoration_kinds` →
+  `buildings.DecorationKind` (#2266) — every domain upserts by a DB-unique `name`; rooms/
+  areas are deferred (no natural key on `Area`/`RoomProfile` today).
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,

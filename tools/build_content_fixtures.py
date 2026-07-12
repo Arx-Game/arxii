@@ -71,6 +71,16 @@ def main() -> int:
         print(f"Content path does not exist: {content_root}", file=sys.stderr)
         return 2
 
+    # Django env needed even for --check (#2266): npc_roles/'s optional
+    # faction_affiliation field is validated by an eager DB lookup, same as
+    # every other domain's shape validation. Settings resolve .env relative
+    # to src/. Harmless for domains that don't touch the DB.
+    import django  # noqa: PLC0415
+
+    os.chdir(SRC_ROOT)
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+    django.setup()
+
     try:
         result = build_all(content_root)
     except ContentError as exc:
@@ -90,16 +100,14 @@ def main() -> int:
     print(f"OK: {total} content files -> {len(written)} fixture file(s).")
 
     if args.load:
-        # Upsert path (NOT loaddata — see load_entries docstring). Needs the
-        # Django env; settings resolve .env relative to src/.
-        import django  # noqa: PLC0415
-
-        os.chdir(SRC_ROOT)
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
-        django.setup()
+        # Upsert path (NOT loaddata — see load_entries docstring).
         from core_management.content_fixtures import load_entries  # noqa: PLC0415
 
-        created, updated = load_entries(result)
+        try:
+            created, updated = load_entries(result)
+        except ContentError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
         print(f"loaded: {created} created, {updated} updated.")
     return 0
 

@@ -72,11 +72,10 @@ def content_load_run(request: HttpRequest) -> HttpResponse:
 
     try:
         result = build_all(content_root)
+        created, updated = load_entries(result)
     except ContentError as exc:
         messages.error(request, str(exc))
         return HttpResponseRedirect(reverse("admin_game_setup"))
-
-    created, updated = load_entries(result)
     placeholders = sum(result.placeholder_counts.values())
     messages.success(
         request,
