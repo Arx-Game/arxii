@@ -31,3 +31,26 @@ export function threadToComposerMode(thread: Thread, roomName: string): Composer
       };
   }
 }
+
+/**
+ * Composer mode for an open conversation TAB (#2165) — always `locked`.
+ * Prefers the resolved thread; a restored tab whose thread hasn't backfilled
+ * yet derives a safe audience from the key shape alone. An unresolved whisper
+ * key yields `targets: []`, which CommandInput's whisper guard refuses to
+ * send — fail-closed beats mis-sending to the room.
+ */
+export function tabKeyToComposerMode(
+  key: string,
+  threads: Thread[],
+  roomName: string
+): ComposerMode {
+  const thread = threads.find((t) => t.key === key);
+  if (thread) return { ...threadToComposerMode(thread, roomName), locked: true };
+  if (key.startsWith('place:')) {
+    return { command: 'tt', targets: [], label: 'Tabletalk', locked: true };
+  }
+  if (key.startsWith('whisper:')) {
+    return { command: 'whisper', targets: [], label: 'Whisper', locked: true };
+  }
+  return { command: 'pose', targets: [], label: `Pose → ${roomName}`, locked: true };
+}

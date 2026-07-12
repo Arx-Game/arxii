@@ -460,6 +460,28 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     pending entry-flourish offer inbox (#1140)
   - `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`; resolves
     offer via `resolve_entry_flourish_offer` and fires the self-grant (#1140)
+- **Portal travel (#2222, ADR-0121):** `PortalAnchorKind` (staff-authored anchor medium
+  catalog — arrival/departure verbs) + `PortalAnchor` (stackable per-room install, FK
+  `room_profile`, PROTECT FK `kind`, soft-deleted via `dissolved_at`, partial-unique per
+  `(room_profile, kind)` while active) + `Technique.travel_anchor_kind` (nullable FK — marks
+  a technique as portal-travel through that medium). Services
+  (`world/magic/services/portal_travel.py`): `travel_anchor_kinds_for` /
+  `portal_destinations` / `portal_route` / `perform_portal_travel` /
+  `install_portal_anchor` / `dissolve_portal_anchor`. Eligibility never consults
+  `RoomProfile.is_public` — reachability is the anchor's own `is_network_open` flag OR
+  owner/tenant standing at the destination. `TravelAction`'s portal branch
+  (`actions/definitions/movement.py`, key `travel_to`) tries this FIRST, falling back to
+  #2163's walking pathfinder unchanged when ineligible. Install costs a flat
+  `settings.PORTAL_ANCHOR_INSTALL_COST` (default 5000 copper) via `InstallPortalAnchorAction`
+  (key `portal_anchor_install`)/`DissolvePortalAnchorAction` (key `portal_anchor_dissolve`,
+  owner-gated, no refund); telnet `CmdPortalAnchor` (`portal/install <kind>=<name>` /
+  `portal/dissolve [<kind>]`). API: `GET
+  /api/locations/portal-destinations/?character_id=<id>` (`world.locations.views
+  .PortalDestinationsViewSet` — lives in `world.locations`, not `world.magic`, alongside the
+  sibling `ComfortViewSet`; see Locations section). Frontend: `PortalsBlock`
+  (room-panel). Seed: `ensure_portal_travel_content()` — "Mirror" anchor kind, MINOR Gift
+  "Mirrorwalking" + "Mirrorwalk" Technique, starter anchors in the seeded magic-story cascade
+  rooms. See magic.md "Portal travel" for the full eligibility chain + exception table.
 - **Offer registry** (`commands/offer_registry.py`): generic pending-offer dispatch; `SurgeOfferHandler` and `CrossingOfferHandler` in `world/magic/offer_handlers.py`. Telnet: `accept <keyword>` / `decline <keyword>`.
 - **Technique authoring action:** `AuthorTechniqueAction` (key `"author_technique"`, category
   `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
@@ -624,10 +646,14 @@ shapeshift lifecycle.
 - **Enums:** `TraitType` (color/style), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`
 - **Key Services:** `assume_alternate_self(sheet, alt)`, `revert_alternate_self(sheet)`,
   `switch_form(character, target_form)`, `revert_to_true_form(character)`,
-  `get_presented_appearance(character)`, `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604)
+  `get_presented_appearance(character)`, `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604),
+  `identification_difficulty(viewer_sheet, target_character)` / `attempt_identification(viewer, target, guess_name=None)` (`world/forms/services/identification.py`, #1107 slice 5 — the PC-to-PC "who's really under this mask" check; second `PersonaDiscovery` producer, see [appearance_and_identity.md](appearance_and_identity.md) §"Identification loop (slice 5)")
 - **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`
-- **Integrates with:** character_sheets (appearance, character anchor), scenes (Persona),
-  mechanics (ModifierSource / CharacterModifier), magic (CharacterTechnique)
+- **Integrates with:** character_sheets (appearance, character anchor), scenes (Persona,
+  `PersonaDiscovery`, `CharacterRelationship`-adjacent familiarity), mechanics
+  (ModifierSource / CharacterModifier), magic (CharacterTechnique), npc_services
+  (`random_active_functionary` botch picker), actions (`IdentifyAction`, registry key
+  `identify`)
 - **Source:** `src/world/forms/`
 - **Details:** [forms.md](forms.md)
 ### Appearance & Identity (architecture)
@@ -635,10 +661,15 @@ How Persona (identity), Form (real body), disguise/illusion (fake overlay), and 
 true-form/natural baseline compose into what a viewer sees — plus the per-persona
 descriptor overlay, cosmetic editing, and shapeshift slots.
 
-- **Spans:** forms (body), scenes (Persona), character_sheets (anchor)
+- **Spans:** forms (body), scenes (Persona), character_sheets (anchor), npc_services
+  (Functionary botch picker), actions (`IdentifyAction`)
 - **Key ideas:** four-question model; `(Persona × FormTrait)` descriptor; single
-  render composition (viewer-gated); real-vs-fake truth ledger; cosmetic vs disguise
-- **Status:** design (slices); depends on #1044
+  render composition (viewer-gated); real-vs-fake truth ledger; cosmetic vs disguise;
+  PC-to-PC identification loop (familiarity-staged intellect+Investigation check vs.
+  the illusion-piercing contest, kept distinct)
+- **Status:** design (slices 1-4); **slice 5 (PC-to-PC identification loop) BUILT,
+  #1107** — `identify` registry action + telnet `CmdIdentify` + `PersonaContextMenu`
+  web dispatch; depends on #1044
 - **Details:** [appearance_and_identity.md](appearance_and_identity.md)
 ### Classes (Paths)
 Character paths with evolution hierarchy through stages of power; also owns the
@@ -672,7 +703,7 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   `reparent_area()`, `area_grid_path(area) -> list[tuple[int | None, int | None]]`
   (#2223, root->area chain of parent-local `(grid_x, grid_y)` pairs; rendering-hint
   data only, never consulted by `find_route()` or any routing code)
-- **Presence & Travel (#1463 + #2163 + #2223):** `where_listing()` — public presence
+- **Presence & Travel (#1463 + #2163 + #2222 + #2223):** `where_listing()` — public presence
   directory, returns `WhereEntry(persona_name, room_path, room_id)` per online
   character in a publicly-listed room; `find_route(origin_room, destination_room) ->
   list[ObjectDB] | None` (`world.areas.positioning.travel`) — frontier-batched BFS
@@ -681,6 +712,9 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   `settings.TRAVEL_MAX_HOPS`. `TravelAction`/`StopTravelAction` (`registry_key`s
   `travel_to`/`stop_travel`) auto-walk a computed route one hop at a time; shared by
   telnet `CmdTravel` and "Go there" buttons on the scene browser + presence panel.
+  `TravelAction.execute()` tries a portal-travel branch FIRST (#2222 — instant relocation via
+  a known travel-mode `Technique` + matching anchors at both ends), falling back to this
+  walking pathfinder unchanged when ineligible; see the Magic section's "Portal travel" entry.
   See [areas.md](areas.md) "Presence & Travel" and "Coordinates" sections.
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
@@ -731,7 +765,10 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
   `IsRoomTenantPrerequisite` (widened #2036 to owner-OR-tenant standing, not a direct tenancy row
   only — same widened gate now used by `SetPrimaryHomeAction` itself).
 - **API:** `GET /api/locations/comfort/?character_id=<id>` (`ComfortViewSet`) — personal comfort
-  readout, tenure-gated
+  readout, tenure-gated; `GET /api/locations/portal-destinations/?character_id=<id>`
+  (`PortalDestinationsViewSet`, #2222) — every portal-network anchor that character could
+  travel to right now (list-only discovery; travel itself dispatches `travel_to` — see the
+  Magic section's "Portal travel" entry)
 - **Frontend:** `ComfortWidget` (`frontend/src/comfort/`) — silent unless something is biting
 - **Integrates with:** areas (`AreaClosure` cascade walk), magic (resonance axis feeds Sanctum
   income, `world/magic/CLAUDE.md`), conditions (`DamageType` FK for the hazard-shelter axis),
@@ -2724,7 +2761,13 @@ prosperity.
   - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
     across all active Granaries in the domain's area subtree.
 - **Action:** `CollectFoodAction` (key `"collect_food"`, category
-  `"agriculture"`) — the single commit seam for telnet + web.
+  `"agriculture"`) — the single commit seam for telnet + web. Resolves its Field
+  from a pre-resolved `field_instance`, a `field_instance_id` (web/REST — the REST
+  path does no ObjectDB resolution, so the action resolves it), or the active FIELD
+  feature in `actor.location` (telnet). **Surfaces (#2237):** telnet `harvest`
+  (`commands/agriculture.py` `CmdHarvest`) + web `POST /api/agriculture/collect/`
+  (`CollectFoodView`, body `{field_instance_id}`). Without a surface the loop
+  couldn't close — the pool filled but never drained.
 - **Events:** `FOOD_COLLECTED`, `FOOD_SHORTAGE` (in `flows/constants.py`).
 - **Cron tasks:** `agriculture.field_production` (daily 24h),
   `agriculture.domain_consumption` (weekly, via weekly rollover).

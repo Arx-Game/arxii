@@ -2,6 +2,7 @@ import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
 import { GamePage } from './GamePage';
+import { saveThreadTabs, loadThreadTabs } from './threadTabsStorage';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
@@ -232,6 +233,9 @@ function seedActiveSceneWithRoom() {
 describe('GamePage', () => {
   beforeEach(() => {
     store.dispatch(setAccount(null));
+    // #2165: the save effect now writes real localStorage during render, so
+    // clear between tests to keep them isolated from each other.
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -267,6 +271,16 @@ describe('GamePage', () => {
     });
 
     it('clicking a thread in the sidebar actually filters the center feed (review fix)', async () => {
+      // #2165 update: clicking a non-room thread row now OPENS A TAB
+      // (GamePage's handleThreadClick dispatches openThreadTab) rather than
+      // toggling useThreading's local enabledThreadKeys filter — that old
+      // narrowing mechanism is retired for the /game room feed (it still
+      // backs /scenes/:id's SceneInteractionPanel, untouched here). The feed
+      // narrows because the active TAB drives `tabInteractions` now, and the
+      // way back to the full feed is the room row, not "All" (clicking "All"
+      // only clears the retired enabledThreadKeys filter, which no longer
+      // drives what's on screen once a tab is active — see the "conversation
+      // tabs (#2165)" describe block below for that contract's own coverage).
       store.dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       seedWhisperThread();
@@ -285,15 +299,14 @@ describe('GamePage', () => {
       expect(whisperButton).not.toBeNull();
       await user.click(whisperButton as HTMLElement);
 
-      // Clicking the whisper thread must narrow the feed to just that thread —
-      // the room pose disappears and the whisper stays (GamePage's
-      // handleThreadClick must call toggleThreadVisibility, not just
-      // setSelectedThread, or filteredInteractions never changes).
+      // Clicking the whisper thread opens its tab and narrows the feed to
+      // just that thread — the room pose disappears and the whisper stays.
       expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
       expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
 
-      // "All" restores both threads.
-      await user.click(within(sidebar).getByText('All'));
+      // The room row restores the full feed (the room anchor).
+      const roomButton = within(sidebar).getByText('The Grand Ballroom').closest('button');
+      await user.click(roomButton as HTMLElement);
       expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
       expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
     });
@@ -746,6 +759,399 @@ describe('GamePage', () => {
       await user.click(trigger);
 
       expect(screen.queryByText('Tabletalk')).not.toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Conversation tabs (#2165): sidebar-click opens/focuses a tab; the tab
+  // strip narrows the feed + locks the composer; close falls back to the
+  // room anchor; a scene change clears every open tab.
+  // ---------------------------------------------------------------------------
+
+  describe('conversation tabs (#2165)', () => {
+    it('sidebar whisper click opens a tab, narrows feed, locks composer to it', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button') as HTMLElement;
+      await user.click(whisperRow);
+
+      // A tablist appears with the room anchor + the whisper tab, the
+      // whisper tab selected.
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      const tabs = within(tablist).getAllByRole('tab');
+      expect(tabs).toHaveLength(2);
+      const whisperTab = within(tablist)
+        .getByText(/whisper/i)
+        .closest('[role="tab"]') as HTMLElement;
+      expect(whisperTab).toHaveAttribute('aria-selected', 'true');
+      const roomTab = within(tablist)
+        .getByText('The Grand Ballroom')
+        .closest('[role="tab"]') as HTMLElement;
+      expect(roomTab).toHaveAttribute('aria-selected', 'false');
+
+      // The feed narrows to ONLY the whisper thread's interactions.
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+
+      // The composer is locked to the whisper audience.
+      const lockedMode = screen.getByTitle('Audience is locked to this conversation tab');
+      expect(lockedMode).toHaveTextContent(/whisper/i);
+      expect(screen.queryByRole('button', { name: 'Pose' })).not.toBeInTheDocument();
+
+      // #2165 fold-in fix: the sidebar's OWN row selection must track the
+      // active tab too, not stay pinned to the room. Without the fix,
+      // `threading.selectedThreadKey` never changes once tab wiring takes
+      // over, so the room row stays permanently marked selected
+      // (`font-semibold`, per ThreadSidebar.tsx) and the whisper row never
+      // is, even while its tab is the one showing.
+      expect(whisperRow).toHaveClass('font-semibold');
+      const roomRow = within(sidebar)
+        .getByText('The Grand Ballroom')
+        .closest('button') as HTMLElement;
+      expect(roomRow).not.toHaveClass('font-semibold');
+    });
+
+    it('clicking room anchor tab restores full feed, re-enables mode dropdown', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button') as HTMLElement;
+      await user.click(whisperRow);
+
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      const roomTab = within(tablist)
+        .getByText('The Grand Ballroom')
+        .closest('[role="tab"]') as HTMLElement;
+      await user.click(roomTab);
+
+      // Full feed is back.
+      expect(await screen.findByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+
+      // The mode dropdown is re-enabled (unlocked) — the trigger button
+      // renders instead of the locked static label.
+      expect(await screen.findByRole('button', { name: 'Pose' })).toBeInTheDocument();
+      expect(
+        screen.queryByTitle('Audience is locked to this conversation tab')
+      ).not.toBeInTheDocument();
+
+      // The tab strip still shows both tabs — closing wasn't involved — with
+      // the room anchor now selected.
+      expect(roomTab).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('badges whisper tab unread while room anchor active, clears on switch', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = () =>
+        within(sidebar)
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+      const roomRow = () =>
+        within(sidebar).getByText('The Grand Ballroom').closest('button') as HTMLElement;
+
+      // Open the whisper tab, then focus back on the room anchor — the tab
+      // stays open (only closing removes it from openThreadTabs).
+      await user.click(whisperRow());
+      await screen.findByRole('tablist', { name: 'Conversations' });
+      await user.click(roomRow());
+
+      // A new whisper arrives, in the same thread, from someone else, while
+      // the room anchor is active.
+      store.dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 3,
+            persona: { id: 9, name: 'Bystander', thumbnail_url: '' },
+            content: 'psst, did you hear?',
+            mode: 'whisper',
+            timestamp: '2026-01-01T00:02:00Z',
+            scene_id: 100,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [7],
+            target_persona_ids: [],
+          },
+        })
+      );
+
+      const tablist = screen.getByRole('tablist', { name: 'Conversations' });
+      const whisperTab = () =>
+        within(tablist)
+          .getByText(/whisper/i)
+          .closest('[role="tab"]') as HTMLElement;
+
+      await waitFor(() => {
+        expect(within(whisperTab()).getByText('1')).toBeInTheDocument();
+      });
+
+      // Switching to the whisper tab clears its badge.
+      await user.click(whisperTab());
+      await waitFor(() => {
+        expect(within(whisperTab()).queryByText(/^[1-9]/)).not.toBeInTheDocument();
+      });
+    });
+
+    it('closing the active tab falls back to room anchor; sidebar reopens it', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = () =>
+        within(sidebar)
+          .getByText(/whisper/i)
+          .closest('button') as HTMLElement;
+
+      await user.click(whisperRow());
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      const closeButton = within(tablist).getByRole('button', { name: /close whisper/i });
+      await user.click(closeButton);
+
+      // The strip disappears entirely (no open tabs left).
+      expect(screen.queryByRole('tablist', { name: 'Conversations' })).not.toBeInTheDocument();
+
+      // The room anchor is active again — full feed is back.
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+
+      // Clicking the sidebar thread again reopens the tab.
+      await user.click(whisperRow());
+      expect(await screen.findByRole('tablist', { name: 'Conversations' })).toBeInTheDocument();
+    });
+
+    it('clears the tab strip when the active puppet moves into a new scene', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button') as HTMLElement;
+      await user.click(whisperRow);
+      await screen.findByRole('tablist', { name: 'Conversations' });
+
+      store.dispatch(
+        setSessionScene({
+          character: ACTIVE_NAME,
+          scene: {
+            id: 300,
+            name: 'The Garden',
+            description: '',
+            is_owner: false,
+            has_unseen_observer: false,
+          },
+        })
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByRole('tablist', { name: 'Conversations' })).not.toBeInTheDocument();
+      });
+    });
+
+    it('sidebar All button restores the room feed while a whisper tab is active', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button') as HTMLElement;
+      await user.click(whisperRow);
+      await screen.findByRole('tablist', { name: 'Conversations' });
+
+      // Feed is narrowed to the whisper thread only.
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+
+      // Clicking the sidebar's "All" button (#2165 review fix) must restore
+      // the room feed AND re-anchor the tab strip to the room tab —
+      // `threading.showAll()` alone only resets the filter/mute state, not
+      // the active conversation tab.
+      const allButton = within(sidebar).getByRole('button', { name: 'All' });
+      await user.click(allButton);
+
+      expect(await screen.findByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
+
+      const tablist = screen.getByRole('tablist', { name: 'Conversations' });
+      const roomTab = within(tablist)
+        .getByText('The Grand Ballroom')
+        .closest('[role="tab"]') as HTMLElement;
+      expect(roomTab).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('room tab click resets a stale composer mode left by a drawer whisper', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await screen.findByText('stretches languidly.');
+
+      // Drawer-whisper (#2156): clicking the pose's avatar opens the
+      // character card; "Whisper" sets an UNLOCKED composer mode targeting
+      // the persona, before any conversation tab exists.
+      await user.click(screen.getByRole('button', { name: `View ${ACTIVE_NAME}` }));
+      await user.click(await screen.findByRole('button', { name: 'Whisper' }));
+      expect(screen.getByText(`Whisper → ${ACTIVE_NAME}`)).toBeInTheDocument();
+
+      // Open and activate a real conversation tab.
+      seedWhisperThread();
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperRow = await within(sidebar).findByText(/whisper/i);
+      await user.click(whisperRow.closest('button') as HTMLElement);
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+
+      // Clicking the strip's room tab (#2165 review fix) must reset the
+      // composer to the room pose mode — not leave the stale drawer-whisper
+      // mode that predates any tab.
+      const roomTab = within(tablist)
+        .getByText('The Grand Ballroom')
+        .closest('[role="tab"]') as HTMLElement;
+      await user.click(roomTab);
+
+      expect(await screen.findByRole('button', { name: 'Pose' })).toBeInTheDocument();
+      expect(screen.getByText('Pose → The Grand Ballroom')).toBeInTheDocument();
+      expect(screen.queryByText(`Whisper → ${ACTIVE_NAME}`)).not.toBeInTheDocument();
+    });
+
+    it('restores a persisted tab layout on mount (#2165 localStorage persistence)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      // Pre-seed localStorage for the fixture character+scene BEFORE the
+      // scene/session exists in Redux — the hydration effect reads this on
+      // first render once `active`+`sceneId` are both set.
+      saveThreadTabs(ACTIVE_NAME, '100', {
+        openThreadTabs: ['whisper:9'],
+        activeThreadTab: 'whisper:9',
+      });
+
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      // The restored tab is active on mount, narrowing the feed to the
+      // (currently empty) whisper thread — the room pose is NOT visible.
+      // No interaction has arrived for this thread yet, so the strip falls
+      // back to the generic 'Whisper' label until real messages backfill it.
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      const whisperTab = within(tablist)
+        .getByText('Whisper')
+        .closest('[role="tab"]') as HTMLElement;
+      expect(whisperTab).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('does not clobber a restored tab layout in storage on mount (review race fix)', async () => {
+      // Regression for a task-review finding on 408e8f8c1: the hydrate effect
+      // used to set a ref synchronously and dispatch `hydrateThreadTabs`, but
+      // the save effect ran in the SAME commit right after — its closure
+      // still held the pre-hydration `openThreadTabs: []`, so it wrote (and
+      // pruned) an empty layout over the entry this test just seeded. Assert
+      // on STORAGE, not just the DOM: the DOM self-heals on the corrective
+      // re-render, but a durable empty write underneath would go unnoticed.
+      store.dispatch(setAccount(mockAccount));
+      saveThreadTabs(ACTIVE_NAME, '100', {
+        openThreadTabs: ['whisper:9'],
+        activeThreadTab: 'whisper:9',
+      });
+
+      seedActiveSceneWithPose();
+      renderWithProviders(<GamePage />);
+
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      await within(tablist).findByText('Whisper');
+
+      expect(localStorage.getItem(`arx:threadTabs:${ACTIVE_NAME}:100`)).not.toBeNull();
+      expect(loadThreadTabs(ACTIVE_NAME, '100')).toEqual({
+        openThreadTabs: ['whisper:9'],
+        activeThreadTab: 'whisper:9',
+      });
+    });
+
+    it("keeps puppet A's persisted tab layout intact after a round trip through puppet B (A->B->A, review race fix)", async () => {
+      // Same review finding as above, in the shape the reviewer specifically
+      // flagged: a ref-based hydration guard doesn't re-run once set, so a
+      // character/scene round trip (A->B->A) re-triggers the hydrate effect
+      // for A a second time with no self-heal render to fall back on if
+      // anything raced. Assert A's storage survives the round trip untouched.
+      store.dispatch(setAccount(mockAccount));
+      saveThreadTabs(ACTIVE_NAME, '100', {
+        openThreadTabs: ['whisper:9'],
+        activeThreadTab: 'whisper:9',
+      });
+
+      seedActiveSceneWithPose();
+      store.dispatch(startSession(SECOND_NAME));
+      store.dispatch(
+        setSessionScene({
+          character: SECOND_NAME,
+          scene: {
+            id: 200,
+            name: 'The Kitchen',
+            description: '',
+            is_owner: false,
+            has_unseen_observer: false,
+          },
+        })
+      );
+      // startSession(SECOND_NAME) above made Bianca active — switch back to
+      // Aria before rendering (this test starts with Aria in view).
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+
+      renderWithProviders(<GamePage />);
+      const tablist = await screen.findByRole('tablist', { name: 'Conversations' });
+      await within(tablist).findByText('Whisper');
+
+      // Round-trip through puppet B, then back to A.
+      store.dispatch(setActiveSession(SECOND_NAME));
+      store.dispatch(setActiveSession(ACTIVE_NAME));
+
+      await waitFor(() => {
+        expect(loadThreadTabs(ACTIVE_NAME, '100')).toEqual({
+          openThreadTabs: ['whisper:9'],
+          activeThreadTab: 'whisper:9',
+        });
+      });
     });
   });
 });

@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
 import { ChatWindow } from './ChatWindow';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
+import { ConversationTabStrip, type ConversationTabStripProps } from './ConversationTabStrip';
 import { SystemLane } from './SystemLane';
 import { SceneMessages } from '@/scenes/components/SceneMessages';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
@@ -54,6 +56,8 @@ interface GameWindowProps {
   placeBar?: ReactNode;
   /** `PendingActionAttachments`, rendered directly above the composer (#2156). */
   pendingAttachments?: ReactNode;
+  /** Open conversation tabs (#2165); absent = no strip, plain feed. */
+  conversationTabs?: ConversationTabStripProps;
 }
 
 export function GameWindow({
@@ -77,10 +81,53 @@ export function GameWindow({
   isAtPlace,
   placeBar,
   pendingAttachments,
+  conversationTabs,
 }: GameWindowProps) {
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
+
+  // #2165 per-tab scroll: remember each tab's scroll offset, restore on
+  // switch, and stick to bottom while the reader is already at the bottom
+  // (adapted from ChatWindow's autoScroll pattern).
+  const feedScrollRef = useRef<HTMLDivElement>(null);
+  const scrollPositionsRef = useRef(new Map<string, number>());
+  const pinnedRef = useRef(true);
+  const activeConvKey = conversationTabs?.activeKey ?? 'room';
+  const interactionCount = sceneFeed?.interactions.length ?? 0;
+
+  useEffect(() => {
+    const el = feedScrollRef.current;
+    if (!el) return;
+    const saved = scrollPositionsRef.current.get(activeConvKey);
+    if (saved !== undefined) {
+      el.scrollTop = saved;
+      pinnedRef.current = el.scrollHeight - saved - el.clientHeight < 8;
+    } else {
+      el.scrollTop = el.scrollHeight;
+      pinnedRef.current = true;
+    }
+    // Prune scroll offsets for tabs that are no longer open (#2165 review
+    // fold-in) — otherwise a closed tab's entry lingers in the map forever.
+    const liveKeys = new Set(['room', ...(conversationTabs?.tabs.map((t) => t.key) ?? [])]);
+    for (const key of scrollPositionsRef.current.keys()) {
+      if (!liveKeys.has(key)) scrollPositionsRef.current.delete(key);
+    }
+  }, [activeConvKey, conversationTabs?.tabs]);
+
+  useEffect(() => {
+    const el = feedScrollRef.current;
+    if (el && pinnedRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [interactionCount, activeConvKey]);
+
+  const handleFeedScroll = () => {
+    const el = feedScrollRef.current;
+    if (!el) return;
+    scrollPositionsRef.current.set(activeConvKey, el.scrollTop);
+    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+  };
 
   if (characters.length === 0) {
     return (
@@ -134,9 +181,14 @@ export function GameWindow({
           ))}
         </div>
       )}
+      {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}
       {sceneFeed ? (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            className="min-h-0 flex-1 overflow-y-auto"
+            ref={feedScrollRef}
+            onScroll={handleFeedScroll}
+          >
             <SceneMessages
               sceneId={sceneFeed.sceneId}
               filteredInteractions={sceneFeed.interactions}

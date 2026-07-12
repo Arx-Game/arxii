@@ -1098,6 +1098,139 @@ Dramatic Moment Suggestion check (`maybe_suggest_dramatic_moments`). Shared by
 (`world/scenes/cast_services.py`), and combat's round-resolution hook — one signature, three
 call sites, no drift.
 
+### Portal travel (#2222, ADR-0121)
+
+A character who **knows** a portal-travel `Technique` and stands in a room carrying a
+matching active anchor can travel instantly to any other room whose matching anchor is
+reachable — no hop pacing, no `find_route()` walk. `TravelAction.execute()`
+(`actions/definitions/movement.py`, key `travel_to`, #2163) tries the portal branch FIRST;
+when ineligible it falls through to the pre-existing walking pathfinder byte-identical to
+before this issue.
+
+**Models** (`world/magic/models/portals.py`):
+
+| Model | Purpose |
+|-------|---------|
+| `PortalAnchorKind` | Staff-authored catalog of anchor media (e.g. "Mirror"). `name` (unique), `description`, `arrival_verb`/`departure_verb` (default "steps out of"/"steps into") — narrate travel through anchors of this kind. |
+| `PortalAnchor` | A concrete anchor installed in one room. FK `room_profile` (`evennia_extensions.RoomProfile`, CASCADE), FK `kind` (`PortalAnchorKind`, PROTECT), `name` (descriptive, e.g. "a tall silvered mirror"), `is_network_open` (bool, default True), FK `installed_by` (`scenes.Persona`, SET_NULL), `installed_at`, `dissolved_at` (null = active; soft-delete, mirrors `RoomFeatureInstance.dissolved_at`). `.objects.active()` excludes dissolved rows. Partial `UniqueConstraint(room_profile, kind)` WHERE `dissolved_at IS NULL` — one active anchor per kind per room; dissolving frees the room for a fresh install of the same kind. |
+| `Technique.travel_anchor_kind` | Nullable FK → `PortalAnchorKind` (PROTECT). Set = this technique is a portal-travel technique through this anchor medium; a character "knows" a travel kind by knowing any `CharacterTechnique` whose `Technique.travel_anchor_kind` matches. |
+
+Migration `0101_portalanchorkind_technique_travel_anchor_kind_and_more.py` is the sole
+migration for this feature.
+
+**Eligibility chain** (never consults `RoomProfile.is_public` — network reachability is
+governed entirely by the anchor's own openness/standing gate, #2222 Decision 5b):
+
+1. The traveler knows a `Technique` with `travel_anchor_kind` set (any one technique per
+   kind is enough — `_known_travel_technique_map`).
+2. The traveler's **current** room carries an active `PortalAnchor` of that same kind.
+3. The **destination** room carries an active `PortalAnchor` of the same kind.
+4. That destination anchor is **open-or-standing**: `is_network_open=True`, OR the
+   traveler holds owner/tenant standing at the destination room
+   (`world.locations.services.is_owner`/`is_tenant`).
+
+**Services** (`world/magic/services/portal_travel.py`):
+
+```python
+def travel_anchor_kinds_for(character: ObjectDB) -> list[PortalAnchorKind]: ...
+    # kinds of the character's known travel-mode techniques
+
+def portal_destinations(character: ObjectDB) -> list[PortalDestination]: ...
+    # every active, reachable destination anchor (kinds narrowed to known techniques;
+    # excludes the current room; locked anchors visible only with owner/tenant standing);
+    # ordered by destination room name
+
+def portal_route(character: ObjectDB, destination_room: ObjectDB) -> PortalRoute | None: ...
+    # the eligible (technique, origin anchor, destination anchor) triple for one specific
+    # destination, or None
+
+def perform_portal_travel(character: ObjectDB, route: PortalRoute) -> None: ...
+    # commits: anima debit (deduct_anima), departure broadcast, move_object(quiet=True),
+    # arrival broadcast, room-state push
+
+def install_portal_anchor(persona: Persona, room: ObjectDB, kind: PortalAnchorKind, name: str) -> PortalAnchor: ...
+    # owner/tenant standing -> no existing active anchor of this kind here -> flat copper
+    # debit (settings.PORTAL_ANCHOR_INSTALL_COST) from the persona's purse -> create
+
+def dissolve_portal_anchor(persona: Persona, anchor: PortalAnchor) -> None: ...
+    # owner-gated soft-delete (dissolved_at=now); no refund
+```
+
+`PortalRoute`/`PortalDestination` are frozen dataclasses in
+`world/magic/types/portal_travel.py`. `perform_portal_travel`'s anima debit goes through
+`world.magic.services.anima.deduct_anima` (the same standalone primitive `use_technique`
+uses in the scene-cast pipeline — a no-op for `anima_cost <= 0`, which every seeded travel
+technique is today); movement reuses `flows.service_functions.movement.move_object` plus the
+`SceneDataManager` state-handle/`send_room_state` idiom `HomeAction` uses. Both departure and
+arrival broadcasts are plain third-person text (not `$You()`/actor-stance), so every viewer —
+including the traveler — sees the identical line.
+
+`install_portal_anchor`'s **install cost** is a flat, staff-tunable setting:
+`PORTAL_ANCHOR_INSTALL_COST = env.int("PORTAL_ANCHOR_INSTALL_COST", default=5000)`
+(`src/server/conf/settings.py`) — copper, debited from the installer's purse via
+`world.currency.services.transfer` (the same purse-debit primitive
+`world.projects.services.donate_to_project` uses). The balance is checked before debiting
+(never take the installer's money for an install that would be rejected anyway); a
+`transfer()` `ValidationError` (the row-locked backstop against a concurrent debit racing the
+pre-check) is caught and re-raised as `PortalAnchorFundsInsufficient`.
+
+Exceptions (`world/magic/exceptions.py`): `PortalAnchorStandingRequired`,
+`PortalAnchorKindAlreadyInstalled`, `PortalAnchorFundsInsufficient`,
+`PortalAnchorDissolveNotAllowed` — each carries `user_message` for safe action-result/HTTP
+surfacing.
+
+**Actions & telnet** (`actions/definitions/portals.py`, both REGISTRY, `target_type=SELF`,
+`category="magic"`):
+
+- `InstallPortalAnchorAction` (key `portal_anchor_install`) — installs an anchor of a given
+  `kind` (kwarg, resolved from an int pk, a `PortalAnchorKind` instance, or a name string) in
+  the actor's current room.
+- `DissolvePortalAnchorAction` (key `portal_anchor_dissolve`) — dissolves an `anchor` kwarg
+  (pre-resolved instance, int pk, or omitted to auto-resolve the room's sole active anchor;
+  an explicit id that fails to resolve fails loud rather than silently falling through to
+  auto-resolution, which could dissolve the wrong anchor). A room with multiple active
+  anchors and no explicit `anchor` fails with a disambiguation message.
+
+`anchors_in_room(location)` (module helper) returns active anchors in a room, shared by
+`DissolvePortalAnchorAction` and the telnet command (mirrors `sanctum_in_room`).
+
+Telnet: `CmdPortalAnchor` (`commands/portals.py`, key `portal`) — `portal/install
+<kind>=<name>` and `portal/dissolve [<kind>]`, switch-routed (mirrors `CmdRoom`'s manual
+switch dispatch). Resolves kind/anchor from text before calling `.run()` directly — no
+business logic in the command.
+
+`TravelAction`'s portal branch (`_try_portal_travel`, a `@staticmethod` on `TravelAction`)
+calls `portal_route` then `perform_portal_travel`; shared by telnet `CmdTravel` and the web
+"Go there" buttons (both dispatch `travel_to` unchanged — only the eligibility check inside
+`execute()` is new).
+
+**API** (`world/locations/views.py` + `urls.py` + `serializers.py`, NOT under
+`/api/magic/` — it lives alongside the sibling `ComfortViewSet` in `world.locations`, the app
+that owns location-scoped, character-personal read APIs):
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/locations/portal-destinations/?character_id=<id>` | GET | `PortalDestinationsViewSet` (list-only, paginated, `IsAuthenticated`) — every anchor `character_id` (must be an owned character) could portal-travel to right now. Rides `portal_destinations()` unmodified — no extra filtering at the API layer. Fields: `anchor_id`, `room_id`, `room_name`, `kind_name`, `anchor_name`. |
+
+Discovery only — travel itself still dispatches the existing `travel_to` action.
+
+**Frontend:** `PortalsBlock` (`frontend/src/game/components/room-panel/PortalsBlock.tsx`) —
+mounted in `RoomPanel`; queries `usePortalDestinationsQuery` (`src/locations/queries.ts`,
+disabled without an active character), renders nothing when the destination list is empty,
+otherwise a compact kind/anchor/room list with a "Travel" button that dispatches the same
+`travel_to` registry action the #2163 Go-there buttons use (`{ target: roomId }`).
+
+**Seed content** (`world/seeds/game_content/magic.py`,
+`ensure_portal_travel_content()`, called from `seed_magic_dev()`): a "Mirror"
+`PortalAnchorKind`; a self-contained "Reflection" Resonance (Celestial affinity) carried by a
+new MINOR `Gift` "Mirrorwalking"; a "Mirrorwalk" `Technique`
+(`travel_anchor_kind=Mirror`, `anima_cost=0`, reusing the "Translocation Stance" style and
+"Teleport" `EffectType`); a `GiftUnlock` row gating it behind `xp_cost=50` (mirrors the two
+other single-purpose magic unlocks this module seeds); and starter Mirror `PortalAnchor` rows
+in the seeded magic-story cascade rooms ("The Hallowed Threshold (Low)", "The Resonant
+Sanctum (Aligned)") so the network is reachable, not just cataloged. Idempotent throughout
+(`get_or_create`).
+
 ### Other
 
 | Model | Purpose |

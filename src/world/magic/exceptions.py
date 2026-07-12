@@ -534,3 +534,32 @@ class StyleBindingCapExceeded(MagicError):
 
 class StyleNotBound(MagicError):
     user_message = "That style is not bound to any of your resonances."
+
+
+# =============================================================================
+# Portal travel — anchor install/dissolve exceptions (#2222)
+# =============================================================================
+
+
+class PortalAnchorStandingRequired(MagicError):
+    """Raised when installing an anchor without owner or tenant standing."""
+
+    user_message = "You don't have standing to install a portal anchor here."
+
+
+class PortalAnchorKindAlreadyInstalled(MagicError):
+    """Raised when the room already has an active anchor of the requested kind."""
+
+    user_message = "An anchor of that kind is already installed here."
+
+
+class PortalAnchorFundsInsufficient(MagicError):
+    """Raised when the installer's purse can't cover ``PORTAL_ANCHOR_INSTALL_COST``."""
+
+    user_message = "You cannot afford to install a portal anchor here."
+
+
+class PortalAnchorDissolveNotAllowed(MagicError):
+    """Raised when dissolving an anchor without owner standing (owner-gated, #2222)."""
+
+    user_message = "You don't have standing to dissolve this anchor."

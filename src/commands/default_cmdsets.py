@@ -20,6 +20,7 @@ from commands.account.account_info import CmdAccount, CmdRoster
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
+from commands.agriculture import CmdHarvest
 from commands.alterations import CmdMageScar
 from commands.battle import CmdBattle
 from commands.canon_review import CmdCanonReview
@@ -39,6 +40,7 @@ from commands.consent import (
     CmdPerform,
     CmdPersuade,
     CmdRestoreSense,
+    CmdSeduce,
 )
 from commands.consent_preferences import CmdConsent
 from commands.covenant import CmdCovenant
@@ -87,6 +89,7 @@ from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.grant_distinction import CmdGrantDistinction
 from commands.grant_item import CmdGrantItem
 from commands.hire import CmdHire
+from commands.identification import CmdIdentify  # #1107
 from commands.imbue import CmdImbue
 from commands.investigation import CmdSearch  # #1866
 from commands.journals import CmdJournal
@@ -99,6 +102,7 @@ from commands.organizations import CmdOrg
 from commands.outfit import CmdOutfit  # #1866
 from commands.persona import CmdPersona
 from commands.places import CmdPlaces  # #1866
+from commands.portals import CmdPortalAnchor  # #2222
 from commands.positions import CmdPosition  # #2005
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
@@ -239,6 +243,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPersuade,
             CmdDeceive,
             CmdFlirt,
+            CmdSeduce,
             CmdPerform,
             CmdEntrance,
             CmdRestoreSense,
@@ -283,8 +288,12 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdHide,
             # #1491 — telnet face of RestAction; spend AP to become Well-Rested.
             CmdRest,
+            # #2237 — telnet face of CollectFoodAction; harvest a field's food.
+            CmdHarvest,
             # #1866 — telnet face of SearchAction; search for clues in a room.
             CmdSearch,
+            # #1107 slice 5 — telnet face of IdentifyAction; see through a mask/disguise.
+            CmdIdentify,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
             # #2003 — staff canon-review queue (perm(Admin)).
@@ -375,6 +384,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPosition,
             # #2163 — "go there" travel: auto-walk to a character's location.
             CmdTravel,
+            # #2222 — portal anchor install/dissolve namespace.
+            CmdPortalAnchor,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
             CmdMarket,

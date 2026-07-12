@@ -105,3 +105,20 @@ def remove_functionary(*, role: NPCRole, room: RoomProfile) -> bool:
         is_active=False
     )
     return updated > 0
+
+
+def random_active_functionary() -> Functionary | None:
+    """One random active Functionary (role also active), or ``None`` if there are none.
+
+    The botch-outcome NPC picker for Identification (#1107 slice 5): a fumbled identification
+    check fake-IDs a random Functionary rather than naming a PC (the spec's oracle rule — a botch
+    must never out a real player). ``order_by("?")`` issues a Postgres ``ORDER BY RANDOM()`` —
+    a full-table sort, but the Functionary table is small (a handful of NPC placements per room)
+    so this is acceptable at this scale; revisit if the catalog grows large enough to matter.
+    """
+    return (
+        Functionary.objects.filter(is_active=True, role__is_active=True)
+        .select_related("role")
+        .order_by("?")
+        .first()
+    )

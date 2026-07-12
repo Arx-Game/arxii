@@ -90,6 +90,16 @@ queries it via React Query, and renders a compact band glance (reasons in the to
 something is biting** — it stays silent while the character is comfortable, so a cozy room isn't
 cluttered. Mirrors the weather widget's read pattern (`world/weather/CLAUDE.md`).
 
+**Portal-destinations API (#2222).** `GET /api/locations/portal-destinations/?character_id=<id>`
+(`PortalDestinationsViewSet`, `PortalDestinationSerializer`, list-only, paginated) — every
+`world.magic` `PortalAnchor` the character could portal-travel to right now. Lives here
+(not `world.magic`) as the sibling of `ComfortViewSet` above — same personal, tenure-gated
+shape (only serves a character the requesting account plays). Rides
+`world.magic.services.portal_travel.portal_destinations()` unmodified; this view adds no
+filtering of its own. Discovery only — travel itself dispatches the pre-existing `travel_to`
+registry action, unchanged by this endpoint. See `docs/systems/magic.md`'s "Portal travel"
+section for the full model/eligibility/action detail.
+
 See `docs/plans/2026-05-09-location-stats-design.md` for the original
 cascade design and `docs/plans/2026-05-14-room-cascade-resonance-unification.md`
 for the resonance axis addition.

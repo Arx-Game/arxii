@@ -21,6 +21,8 @@ export interface ComposerMode {
   command: string; // "pose" | "say" | "tt" | "whisper"
   targets: string[]; // persona names for @targeting
   label: string; // "Pose -> The Grand Ballroom"
+  /** #2165: audience is fixed by the active conversation tab — mode switching disabled. */
+  locked?: boolean;
 }
 
 const KNOWN_COMMANDS = ['pose', 'say', 'emit', 'emote', 'whisper', 'tt', 'tabletalk'];
@@ -248,14 +250,13 @@ export function CommandInput({
 
   const handleModeChange = useCallback(
     (mode: string) => {
-      if (onModeChange && composerMode) {
-        const label = mode.charAt(0).toUpperCase() + mode.slice(1);
-        onModeChange({
-          command: mode,
-          targets: composerMode.targets,
-          label,
-        });
-      }
+      if (!onModeChange || !composerMode || composerMode.locked) return;
+      const label = mode.charAt(0).toUpperCase() + mode.slice(1);
+      onModeChange({
+        command: mode,
+        targets: composerMode.targets,
+        label,
+      });
     },
     [onModeChange, composerMode]
   );
@@ -324,6 +325,7 @@ export function CommandInput({
             currentMode={composerMode?.command ?? 'pose'}
             onModeChange={handleModeChange}
             isAtPlace={isAtPlace ?? false}
+            locked={composerMode?.locked ?? false}
           />
         }
         rightSlot={

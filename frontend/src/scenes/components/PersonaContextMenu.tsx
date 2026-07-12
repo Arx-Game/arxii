@@ -11,7 +11,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Ban, HeartPulse, Swords, VolumeX, Zap, ScrollText } from 'lucide-react';
+import { Ban, HeartPulse, Swords, VolumeX, Zap, ScrollText, Eye } from 'lucide-react';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction, combatKeys } from '@/combat/queries';
@@ -26,6 +26,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateBlock, useCreateMute } from '@/social/queries';
+import { toast } from 'sonner';
 import { createActionRequest, fetchAvailableActions } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerAction } from '../actionTypes';
 import type { SceneDetail } from '../types';
@@ -123,6 +124,21 @@ export function PersonaContextMenu({
     characterId ?? 0
   );
 
+  // #1107 Task 3 review (Critical finding): Identify dispatches via the same registry
+  // path as Challenge — it MUST NOT flow through the generic targetedActions/
+  // createActionRequest consent pipeline below. Identify is a no-consent private
+  // perception roll (ADR-0024) with no ActionTemplate and no custom consent resolver;
+  // routing it through createActionRequest would both hand the masked target a veto
+  // they shouldn't have and crash on accept. It is deliberately not surfaced by the
+  // backend's get_player_actions listing (see actions/player_interface.py's module
+  // docstring) — this menu item is its only web entry point.
+  const { mutateAsync: dispatchIdentify, isPending: isIdentifyPending } = useDispatchPlayerAction(
+    characterId ?? 0
+  );
+  // No allow_social_actions gate (unlike canChallenge): identify doesn't check the
+  // target's social-consent preference, only presence + self-exclusion.
+  const canIdentify = characterId !== null && targetPersona !== null && !isSelfTarget;
+
   const [pendingWhisper, setPendingWhisper] = useState<PendingWhisper | null>(null);
 
   // #1278 — block/mute. The viewer's own face in this scene is the blocker persona; a block needs
@@ -181,9 +197,9 @@ export function PersonaContextMenu({
   // list renders an inline "No treatable conditions." message in the dialog.
   const canTreat = characterId !== null && !isSelfTarget;
 
-  // The menu is worth showing if there are targeted actions, a challenge, treat,
-  // or block/mute.
-  if (targetedActions.length === 0 && !canChallenge && !canTreat && !canModerate) {
+  // The menu is worth showing if there are targeted actions, a challenge, identify,
+  // treat, or block/mute.
+  if (targetedActions.length === 0 && !canChallenge && !canIdentify && !canTreat && !canModerate) {
     return <>{children}</>;
   }
 
@@ -193,6 +209,26 @@ export function PersonaContextMenu({
       kwargs: { target: personaId },
     })
       .then(() => queryClient.invalidateQueries({ queryKey: combatKeys.duelChallengesAll() }))
+      .catch(() => {});
+  }
+
+  // The outcome message is the entire payoff of an Identify attempt (the oracle rule
+  // keeps FAILURE/AUTO_FAIL indistinguishable in that message's text itself — the
+  // toast styling success/non-success split is fine, since result.success already
+  // distinguishes SUCCESS from everything else for the roller).
+  function handleIdentify() {
+    dispatchIdentify({
+      ref: { backend: 'registry', registry_key: 'identify' },
+      kwargs: { target: personaId },
+    })
+      .then((result) => {
+        if (!result.message) return;
+        if (result.success) {
+          toast.success(result.message);
+        } else {
+          toast.error(result.message);
+        }
+      })
       .catch(() => {});
   }
 
@@ -214,6 +250,19 @@ export function PersonaContextMenu({
               >
                 <Swords className="mr-2 h-4 w-4" />
                 Challenge to a duel
+              </DropdownMenuItem>
+              {(canIdentify || targetedActions.length > 0) && <DropdownMenuSeparator />}
+            </>
+          )}
+          {canIdentify && (
+            <>
+              <DropdownMenuItem
+                disabled={isIdentifyPending}
+                data-testid="identify-persona-item"
+                onClick={handleIdentify}
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                Identify
               </DropdownMenuItem>
               {targetedActions.length > 0 && <DropdownMenuSeparator />}
             </>

@@ -289,6 +289,10 @@ class TravelAction(Action):
         if origin is None:
             return ActionResult(success=False, message="You have no location to travel from.")
 
+        portal_result = self._try_portal_travel(actor, destination)
+        if portal_result is not None:
+            return portal_result
+
         route = find_route(origin, destination)
         if route is None:
             return ActionResult(success=False, message="There's no clear public path there.")
@@ -308,6 +312,27 @@ class TravelAction(Action):
         actor.ndb.active_travel_task = task
 
         return ActionResult(success=True, message="You set off.")
+
+    @staticmethod
+    def _try_portal_travel(actor: ObjectDB, destination: ObjectDB) -> ActionResult | None:
+        """Portal branch (#2222): instant relocation when an eligible route exists.
+
+        Tried FIRST, before the walking pathfinder — a character with a known
+        portal-travel technique and anchors at both ends skips hop pacing and
+        `find_route` entirely. Returns ``None`` (not a failure result) when
+        ineligible, so `execute()` falls through to the walking path
+        byte-identical to before this issue.
+        """
+        from world.magic.services.portal_travel import (  # noqa: PLC0415
+            perform_portal_travel,
+            portal_route,
+        )
+
+        route = portal_route(actor, destination)
+        if route is None:
+            return None
+        perform_portal_travel(actor, route)
+        return ActionResult(success=True, message="You travel instantly through the network.")
 
     @staticmethod
     def _do_hop(actor: ObjectDB, route: list[ObjectDB], hop_index: int, token: uuid.UUID) -> None:

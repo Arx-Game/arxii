@@ -295,6 +295,19 @@ describe('CommandInput', () => {
     expect(screen.getByTestId('action-attachment')).toBeInTheDocument();
   });
 
+  it('renders the locked mode label with no dropdown trigger when locked (#2165)', () => {
+    const mode: ComposerMode = {
+      command: 'whisper',
+      targets: ['Alise'],
+      label: 'Whisper → Alise',
+      locked: true,
+    };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+
+    expect(screen.getByTitle('Audience is locked to this conversation tab')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /whisper/i })).not.toBeInTheDocument();
+  });
+
   it('pose with detachments uses REST submitPose and skips WebSocket send', async () => {
     const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
     render(

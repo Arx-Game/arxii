@@ -217,6 +217,11 @@ MAX_ESTABLISHED_PERSONAS_PER_SHEET = env.int("MAX_ESTABLISHED_PERSONAS_PER_SHEET
 # bound against a pathological/disconnected-but-still-searched graph.
 TRAVEL_MAX_HOPS = env.int("TRAVEL_MAX_HOPS", default=50)
 
+# Flat copper cost to install a portal anchor (e.g. a magic mirror) in a room
+# the installer owns or has tenancy in (#2222). Deliberately cheap — a token
+# cost, not a Project-scale grind (issue #2222 Decision 4).
+PORTAL_ANCHOR_INSTALL_COST = env.int("PORTAL_ANCHOR_INSTALL_COST", default=5000)
+
 # Web frontend base URL — the React app's origin. Referenced by allauth's
 # headless redirect config below, CSRF_TRUSTED_ORIGINS, and telnet-side
 # signposts (connection screen, characterless post-login message; #2122)

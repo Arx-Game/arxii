@@ -129,7 +129,7 @@ actions, backends, and service functions.
   `_actor_may_gm_encounter` (staff or `encounter.scene.is_gm(account)`) in the Action layer —
   reads the same `SceneParticipation.is_gm` flag `enroll_present_table_gms`/
   `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113). No business logic in the command.
-- **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept` (extended to check offer registry first; consent
+- **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdSeduce`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338/#1695); `CmdAccept` (extended to check offer registry first; consent
   fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
 - **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
@@ -560,7 +560,20 @@ actions, backends, and service functions.
   the room exit graph (#2223, ADR-0120). Overrides `func()` directly (like `CmdPosition`)
   rather than the base `ArxCommand._execute()` single-action recipe, since resolving
   the destination argument needs custom logic before dispatch. No business logic in
-  the command.
+  the command. `TravelAction` itself gained a portal-travel branch (#2222) tried before
+  the walking pathfinder — see `src/actions/CLAUDE.md` and `world/magic/CLAUDE.md`
+  "Portal travel"; no command-layer change was needed since `CmdTravel` already
+  dispatches the same `travel_to` action.
+- **`portals.py`**: `CmdPortalAnchor` (`portal`, `cmd:all()`, #2222) — install/dissolve a
+  portal anchor in the caller's current room. `portal/install <kind>=<name>` resolves
+  the `PortalAnchorKind` by name (case-insensitive exact) and dispatches
+  `InstallPortalAnchorAction` (key `portal_anchor_install`,
+  `actions/definitions/portals.py`); `portal/dissolve [<kind>]` resolves the room's sole
+  active anchor (or, given a kind, that kind's anchor) and dispatches
+  `DissolvePortalAnchorAction` (key `portal_anchor_dissolve`). Switch-routed (mirrors
+  `CmdRoom`'s manual switch dispatch, `locations.py`); no business logic in the command
+  — kind/anchor resolution from text is the only work done here, all gating (standing,
+  funds, duplicate-kind) lives in the actions/services.
 - **`who.py`**: `CmdWho` (`who`, #1463) — the online roster. Thin read over
   `world.scenes.presence.who_listing`: online characters by **active** persona with a **coarse**
   idle marker (active / idle / away — never exact, so identical idle times can't out an account's

@@ -378,6 +378,7 @@
   - residents <- character_sheets.CharacterSheet
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
+  - portal_anchors <- magic.PortalAnchor
   - fame_reaction_lines <- societies.FameReactionLine
   - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - hidden_clues <- clues.RoomClue
@@ -3573,6 +3574,7 @@
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - action_template -> actions.ActionTemplate [FK] (nullable)
   - target_weather_type -> weather.WeatherType [FK] (nullable)
+  - travel_anchor_kind -> magic.PortalAnchorKind [FK] (nullable)
   - restrictions -> magic.Restriction [M2M]
   - applied_conditions -> conditions.ConditionTemplate [M2M]
   - properties -> mechanics.Property [M2M]
@@ -3945,6 +3947,17 @@
 **Foreign Keys:**
   - motif_resonance -> magic.MotifResonance [FK]
   - style -> items.Style [FK]
+
+### PortalAnchorKind
+**Pointed to by:**
+  - travel_techniques <- magic.Technique
+  - anchors <- magic.PortalAnchor
+
+### PortalAnchor
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - kind -> magic.PortalAnchorKind [FK]
+  - installed_by -> scenes.Persona [FK] (nullable)
 
 ### LevelPowerConfig
 

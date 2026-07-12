@@ -143,6 +143,7 @@ class ActionRegistryTests(TestCase):
             "look_at_item",
             "inventory",
             "search",
+            "identify",
             "say",
             "pose",
             "emit",
@@ -415,6 +416,9 @@ class ActionRegistryTests(TestCase):
             "enlist_battle_participant",
             "browse_battle_catalog",
             "collect_food",
+            # #2222 — portal anchor install/dissolve.
+            "portal_anchor_install",
+            "portal_anchor_dissolve",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -176,8 +176,20 @@ Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" se
   exit graph (hop cap and public-listing gate unchanged); `Area` also gained nullable
   `grid_x`/`grid_y` parent-local rendering coordinates + `area_grid_path()`, rendering
   hints only, never consulted by routing. See `docs/systems/areas.md`'s "Presence &
-  Travel" and "Coordinates" sections. Still open: no dedicated search/filter UI for
-  browsing scenes beyond the plain list.
+  Travel" and "Coordinates" sections. **Portal travel — SHIPPED (#2222, ADR-0121):**
+  `TravelAction.execute()` now tries an instant-relocation branch FIRST, before the
+  walking pathfinder — a character who knows a portal-travel `Technique`
+  (`travel_anchor_kind` set) and stands in a room with a matching active `PortalAnchor`
+  can travel directly to any other room whose matching anchor is open-or-standing,
+  skipping hop pacing entirely; falls through to the unchanged walking path when
+  ineligible. Anchors are staff/player-installed per room (owner/tenant standing + a
+  flat copper cost, `PORTAL_ANCHOR_INSTALL_COST`) via `portal_anchor_install`/
+  `portal_anchor_dissolve` (telnet `portal/install`/`portal/dissolve`); discovery via
+  `GET /api/locations/portal-destinations/` and the room-panel `PortalsBlock`. Seeded
+  starter content: a "Mirror" anchor kind + "Mirrorwalking" Minor Gift/"Mirrorwalk"
+  Technique + anchors in two seeded public rooms. See `docs/systems/magic.md`'s
+  "Portal travel" section. Still open: no dedicated search/filter UI for browsing
+  scenes beyond the plain list.
 - Social feed — what's happening in the game right now (new achievements, notable events, active scenes)
 
 See `docs/audits/2026-07-10-webclient-rp-ux-audit.md` (epic #2155) for the full
