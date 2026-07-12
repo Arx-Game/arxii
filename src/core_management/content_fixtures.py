@@ -4,8 +4,25 @@ The maintainers' content repository (never named in this repo — located via
 the ``CONTENT_REPO_PATH`` env var) holds one file per entry: YAML
 frontmatter for mechanical keys, markdown body for prose. This module
 parses, validates, and emits Django fixture JSON serialized with natural
-keys, so ``loaddata`` upserts by identity — idempotent across database
-wipes, pk churn, and migration rebuilds.
+keys (no "pk" key), identity-stable across database wipes, pk churn, and
+migration rebuilds.
+
+Honest ``loaddata`` semantics (#946, #2266 review fix): every domain's model
+now carries ``NaturalKeyMixin``, so ``loaddata`` on the emitted JSON
+correctly *resolves* an existing same-name row rather than raising
+``IntegrityError`` on a blind INSERT — but on a `SharedMemoryModel`,
+``loaddata`` still cannot **update** that resolved row. The identity map
+returns the cached instance, `loaddata` writes the incoming field values
+onto it, then Django's `save(force_insert=False)` path re-fetches from the
+cache and the new values never land in the DB (verified cross-process,
+#946). So the emitted fixture JSON is **fresh-DB / insert-or-resolve only**
+— safe to `loaddata` against an empty table or a table whose rows it
+already matches, but never a reliable way to push edited content onto rows
+that already exist with different values. ``load_entries`` (below), which
+drives both ``tools/build_content_fixtures.py --load`` and the admin "Load
+private content repo" button, calls ``update_or_create`` directly against
+the live model manager instead of going through ``loaddata`` — that is the
+**only** update-safe path for re-authored content.
 
 Import-safe without Django configured (the tools wrapper and tests use it
 standalone). ``build_all()`` stays DB-free for every domain EXCEPT
@@ -25,19 +42,36 @@ and Django only touches the fields present in ``defaults`` — on CREATE, an
 absent key falls through to the model field's own default; on UPDATE, an
 absent key leaves the existing row's value untouched. So "key omitted from
 frontmatter" already means "don't touch this field" for free, with no extra
-mechanism needed. This is the convention every optional field in this module
-follows (``default_rapport_starting_value``, ``default_description_template``,
-``faction_affiliation``, ``value``, ``weight``) — keep it when adding more.
+mechanism needed. This is the convention every scalar optional field in this
+module follows (``default_rapport_starting_value``,
+``default_description_template``, ``value``, ``weight``) — keep it when
+adding more.
 
-FK-by-name fields (``faction_affiliation``) are emitted in the fixture using
-Django's own natural-key fixture convention — a one-element list
-(``["Org Name"]``) — rather than a resolved pk or model instance, so the
-generated JSON stays plain-JSON-serializable (``write_fixtures`` just calls
-``json.dumps``) and also stays loadable by a real ``loaddata`` against a
-fresh DB, since ``Organization`` already carries ``NaturalKeyMixin``
-(``world/societies/models.py``) — no new natural-key infrastructure needed.
-``load_entries`` resolves that list back into a real instance immediately
-before the write.
+Three-state convention for clearable FK-by-name fields (``faction_affiliation``,
+#2266 review fix): a scalar field has only "omit" vs "set"; a nullable FK-by-name
+field genuinely needs a third state — "clear the existing value" — that "omit"
+can't express (omit already means "leave it alone"). So ``faction_affiliation``
+is handled distinctly from the scalar fields above:
+
+- key ABSENT from frontmatter → omitted from ``fields`` → untouched on UPDATE
+  (same as every scalar field).
+- key PRESENT but null/empty (``faction_affiliation:`` or ``faction_affiliation:
+  null``) → emitted as ``fields["faction_affiliation"] = None`` → UPDATE sets the
+  FK to null, clearing it. Requires the target field to be nullable
+  (``NPCRole.faction_affiliation`` is, per spec); a future clearable FK-by-name
+  field that ISN'T nullable must raise ``ContentError`` for the explicit-null
+  case instead of emitting ``None``.
+- key PRESENT with a non-empty string → resolved/validated as an Organization
+  name and emitted using Django's own natural-key fixture convention — a
+  one-element list (``["Org Name"]``) — rather than a resolved pk or model
+  instance, so the generated JSON stays plain-JSON-serializable
+  (``write_fixtures`` just calls ``json.dumps``) and also stays loadable by a
+  real ``loaddata`` against a fresh DB, since ``Organization`` already carries
+  ``NaturalKeyMixin`` (``world/societies/models.py``) — no new natural-key
+  infrastructure needed. ``_resolve_natural_key_fields`` (used by
+  ``load_entries``) resolves that list back into a real instance immediately
+  before the write; a bare ``None`` passes through untouched (not a list, so
+  the resolver skips it and ``update_or_create`` receives the null directly).
 
 Domains: ``stats``/``skills`` → ``traits.Trait`` rows (name, type, category,
 description); ``npc_roles`` → ``npc_services.NPCRole`` (name, description,
@@ -197,26 +231,40 @@ def _build_npc_role_fixture(entry: ContentEntry) -> dict:
     (int), ``default_description_template`` (string; the class-1 nameless-NPC
     flavor line, distinct from ``description`` — ratified Q1: a second
     optional key on the same file, body stays the full ``description``).
+
+    ``faction_affiliation`` is three-state (#2266 review fix; see the module
+    docstring): key ABSENT from frontmatter omits the field (UPDATE leaves the
+    existing value untouched); key PRESENT but null/empty emits ``None``
+    (UPDATE clears it — ``NPCRole.faction_affiliation`` is nullable); key
+    PRESENT with a non-empty string resolves/validates it as an Organization
+    name. Without this, a builder that only checked truthiness would make the
+    field one-way-sticky — content could set it but never clear it back out.
     """
     name = _require_name_and_body(entry)
     fields: dict = {"name": name, "description": entry.body}
 
-    faction = entry.meta.get(FIELD_FACTION_AFFILIATION)
-    if faction:
-        if not isinstance(faction, str):
+    if FIELD_FACTION_AFFILIATION in entry.meta:
+        faction = entry.meta[FIELD_FACTION_AFFILIATION]
+        if not faction:
+            # Explicit null/empty: clear the FK on UPDATE. NPCRole.faction_affiliation
+            # is nullable (null=True, blank=True), so a bare None is a valid
+            # update_or_create default.
+            fields[FIELD_FACTION_AFFILIATION] = None
+        elif not isinstance(faction, str):
             msg = f"{entry.path}: 'faction_affiliation' must be a string (org name)."
             raise ContentError(msg)
-        from world.societies.models import Organization  # noqa: PLC0415
+        else:
+            from world.societies.models import Organization  # noqa: PLC0415
 
-        try:
-            Organization.objects.get_by_natural_key(faction)
-        except Organization.DoesNotExist:
-            msg = f"{entry.path}: 'faction_affiliation' organization {faction!r} not found."
-            raise ContentError(msg) from None
-        # Django's own natural-key fixture convention (a 1-element list) —
-        # keeps this JSON-serializable; load_entries resolves it back to an
-        # instance right before the write.
-        fields[FIELD_FACTION_AFFILIATION] = [faction]
+            try:
+                Organization.objects.get_by_natural_key(faction)
+            except Organization.DoesNotExist:
+                msg = f"{entry.path}: 'faction_affiliation' organization {faction!r} not found."
+                raise ContentError(msg) from None
+            # Django's own natural-key fixture convention (a 1-element list) —
+            # keeps this JSON-serializable; load_entries resolves it back to an
+            # instance right before the write.
+            fields[FIELD_FACTION_AFFILIATION] = [faction]
 
     if FIELD_DEFAULT_RAPPORT_STARTING_VALUE in entry.meta:
         value = entry.meta[FIELD_DEFAULT_RAPPORT_STARTING_VALUE]
@@ -363,15 +411,34 @@ def _resolve_natural_key_fields(model, fields: dict, source_path: Path | None) -
     (build-time validation already checked this once; re-checking here is
     the only way to guarantee correctness against a DB that may have
     changed between build and load).
+
+    Guard (#2266 review fix): ``isinstance(value, list)`` alone only tells us
+    a builder emitted a list; it says nothing about whether the *field* is
+    relational. A plain (non-FK) model field that happened to be list-valued
+    would fall through to ``get_field(...).related_model`` and raise a bare
+    ``AttributeError`` (regular ``Field`` has no ``related_model`` attribute
+    — only relation fields do), crashing ``load_entries`` mid-batch instead
+    of failing cleanly. So this checks ``field.is_relation`` first and raises
+    a normal ``ContentError`` naming the field (and the source file, when
+    known) for a non-relational list value, matching every other validation
+    failure's error style in this module.
     """
     for field_name, value in list(fields.items()):
         if not isinstance(value, list):
             continue
-        related_model = model._meta.get_field(field_name).related_model  # noqa: SLF001
+        field = model._meta.get_field(field_name)  # noqa: SLF001
+        location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+        if not field.is_relation:
+            msg = (
+                f"{location}: {field_name!r} on {model._meta.label} is a list-valued "  # noqa: SLF001
+                "field but not a relational one — natural-key resolution only "
+                "supports FK-by-name values (a 1-element list)."
+            )
+            raise ContentError(msg)
+        related_model = field.related_model
         try:
             fields[field_name] = related_model.objects.get_by_natural_key(*value)
         except related_model.DoesNotExist:
-            location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
             msg = f"{location}: {field_name!r} {related_model.__name__} {value!r} not found."
             raise ContentError(msg) from None
 
