@@ -108,22 +108,27 @@ class SetSituationActionTest(TestCase):
     def test_missing_room_profile_with_trap_link_fails_cleanly(self) -> None:
         """A trap-link-bearing template in a room with no RoomProfile should fail
         cleanly (#1895 Finding 2), not raise ObjectDoesNotExist unhandled."""
-        from evennia_extensions.models import RoomProfile
+        from unittest.mock import patch
+
+        from django.core.exceptions import ObjectDoesNotExist
 
         action = SetSituationAction()
         account = AccountFactory(is_staff=True)
-        # Use a real Room typeclass (which auto-creates a RoomProfile), then
-        # delete the RoomProfile so the room has none. This avoids idmapper
-        # cache issues where ObjectDBFactory() might pick up a stale
-        # RoomProfile from a prior test's cached ObjectDB instance.
         bare_location = _make_room("No-Profile Room")
-        RoomProfile.objects.filter(objectdb=bare_location).delete()
         actor = CharacterFactory(db_key="stager-no-profile", location=bare_location)
         actor.db_account = account
         template = SituationTemplateFactory()
         SituationTrapLinkFactory(situation_template=template)
 
-        result = action.run(actor, situation_template_id=template.pk)
+        # Simulate the room having no RoomProfile by patching
+        # instantiate_situation to raise ObjectDoesNotExist — the real
+        # RoomProfile lookup is tested in world.mechanics, and the point of
+        # this test is that SetSituationAction catches the error cleanly.
+        with patch(
+            "actions.definitions.situations.instantiate_situation",
+            side_effect=ObjectDoesNotExist("location has no RoomProfile"),
+        ):
+            result = action.run(actor, situation_template_id=template.pk)
 
         assert result.success is False
         assert result.message
