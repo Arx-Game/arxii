@@ -893,7 +893,7 @@ Mechanical regional climate + transient weather feeding the #1514 comfort substr
 - **Constants:** `MONTH_TEMPERATURE_SHIFT` (12-value seasonal curve), `WEATHER_FADE_DAYS`, `WEATHER_SOURCE_PREFIX` — PLACEHOLDER magnitudes
 - **Integrates with:** locations (exposure axes + comfort cascade), areas (`Area.climate`, `RegionWeatherState.area`), game_clock (IC season/phase/month), codex (lore), battles (read-only `get_effective_weather(area)` via `Battle.region` to seed ambient weather; `Battle.weather_override`/`BattlePlace.weather_override` are battle-owned casts, not writes into `world.weather`, #1715 — see the "Battles" section)
 - **Feast days:** `special_weather_for_today()` — on an `ic_month`/`ic_day` match the tick forces the feast's special `WeatherType` (Eclipse / Moon Madness) world-wide, overriding the climate-gated roll (the GM-lever automation)
-- **Not yet wired:** re-seed-as-upsert for edited emits (loaddata duplicates keyless emit rows); wind-as-mechanic combat consumer (#1555, Tehom). Madness *mechanical* effects on characters are out of scope (Tehom)
+- **Not yet wired:** re-seed-as-upsert for edited emits (loaddata duplicates keyless emit rows). Madness *mechanical* effects on characters are out of scope (Tehom)
 - **Source:** `src/world/weather/` — see `world/weather/CLAUDE.md`
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
@@ -3445,13 +3445,26 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `Rampart`'s `integrity` — via the shared `damage_rampart` seam — at the top of both
   `apply_damage_to_participant` and `_resolve_opponent_pre_apply`, **before**
   `DAMAGE_PRE_APPLY` emits. Firing order: Rampart → personal reactive interceptors → Guardian
-  reactions. `ThreatPoolEntry.delivery` (`StrikeDelivery`: MELEE/MISSILE, shared with the
-  open wind-mechanic question #1555) plus `is_area` (`targeting_mode != SINGLE`) feed a Wind
+  reactions. `ThreatPoolEntry.delivery` (`StrikeDelivery`: MELEE/MISSILE — also the field the
+  wind-as-mechanic consumer below reads) plus `is_area` (`targeting_mode != SINGLE`) feed a Wind
   profile's `MISSILE_WARD` resist adjustment. `Clash.rampart` (nullable FK) binds a
   sustained-attack WARD clash to the covered position's Rampart; `_sync_rampart_progress`
   (`world/combat/clash.py`) mirrors each round's progress delta onto `rampart.integrity`
   through the same `damage_rampart` seam, so interception (paused while that clash is
   ACTIVE) and clash-progress never drift apart.
+- **Wind-as-mechanic (#1555, ADR-0129):** the combat consumer of the WIND exposure axis
+  (`world.locations.services.felt_exposure`, `StatKey.WIND`; provider is #1522).
+  `wind_penalty(felt: int) -> int` (`world/combat/constants.py`) bands felt WIND into a check
+  modifier — CALM (<15) → 0, BREEZY (15-39) → -5, WINDY (40-69) → -10, GALE (70+) → -20.
+  On the PC offense side, `CombatTechniqueResolver._roll_check` (`world/combat/services.py`)
+  appends a `ModifierContribution(source_kind=SCENE, label="Wind", ...)` when the attacker's
+  strongest equipped weapon (`_select_equipped_weapon`, the same pick the damage path uses)
+  has `gear_archetype` RANGED or THROWN and the encounter has a room; melee/lance attacks skip
+  the `felt_exposure` lookup entirely. On the NPC side, `resolve_npc_attack` adds the
+  same-magnitude *positive* contribution to the PC's defense roll when the attacking
+  `ThreatPoolEntry.delivery` is MISSILE — symmetric with the offense side ("the gale that
+  ruins your shot ruins theirs"); flat `base_damage` entries with no defense check
+  (`defense_check_type` unset) never reach this seam.
 - **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
   typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
   `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →
