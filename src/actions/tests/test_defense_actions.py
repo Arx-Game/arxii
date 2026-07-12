@@ -148,6 +148,243 @@ class StartDefenseInstallationActionTests(TestCase):
         assert Project.objects.filter(pk=result.data["project_id"]).exists()
 
 
+class WardReactionConditionInstallTests(TestCase):
+    """Tests for the #2280 ward reaction condition + damage wiring."""
+
+    def _owner_actor_and_room(self):
+        room = ObjectDBFactory(db_key="WardReactRoom", db_typeclass_path="typeclasses.rooms.Room")
+        account = AccountFactory(username="ward_react")
+        actor = CharacterFactory(db_key="WardReactAlice", location=room)
+        actor.db_account = account
+        actor.save()
+        sheet = CharacterSheetFactory(character=actor)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        transfer_ownership(room_profile=room_profile, to_persona=persona)
+        return actor, room, room_profile
+
+    def _negative_condition(self):
+        from world.conditions.factories import (
+            ConditionCategoryFactory,
+            ConditionTemplateFactory,
+        )
+
+        category = ConditionCategoryFactory(is_negative=True)
+        return ConditionTemplateFactory(name="Burning", category=category)
+
+    def _positive_condition(self):
+        from world.conditions.factories import (
+            ConditionCategoryFactory,
+            ConditionTemplateFactory,
+        )
+
+        category = ConditionCategoryFactory(is_negative=False)
+        return ConditionTemplateFactory(name="Empowered", category=category)
+
+    def test_install_ward_with_condition_and_damage(self):
+        from world.magic.factories import ResonanceFactory
+
+        actor, _room, _room_profile = self._owner_actor_and_room()
+        resonance = ResonanceFactory()
+        condition = self._negative_condition()
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=1,
+            resonance=resonance,
+            reaction_condition=condition,
+            reaction_damage_amount=5,
+        )
+        assert result.success
+        from world.room_features.models import DefenseProgressionDetails
+
+        details = DefenseProgressionDetails.objects.get(project_id=result.data["project_id"])
+        assert details.reaction_condition == condition
+        assert details.reaction_damage_amount == 5
+
+    def test_install_ward_with_condition_only(self):
+        from world.magic.factories import ResonanceFactory
+
+        actor, _room, _room_profile = self._owner_actor_and_room()
+        resonance = ResonanceFactory()
+        condition = self._negative_condition()
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=1,
+            resonance=resonance,
+            reaction_condition=condition,
+        )
+        assert result.success
+        from world.room_features.models import DefenseProgressionDetails
+
+        details = DefenseProgressionDetails.objects.get(project_id=result.data["project_id"])
+        assert details.reaction_condition == condition
+        assert details.reaction_damage_amount == 0
+
+    def test_install_ward_with_damage_only(self):
+        from world.magic.factories import ResonanceFactory
+
+        actor, _room, _room_profile = self._owner_actor_and_room()
+        resonance = ResonanceFactory()
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=1,
+            resonance=resonance,
+            reaction_damage_amount=10,
+        )
+        assert result.success
+        from world.room_features.models import DefenseProgressionDetails
+
+        details = DefenseProgressionDetails.objects.get(project_id=result.data["project_id"])
+        assert details.reaction_condition is None
+        assert details.reaction_damage_amount == 10
+
+    def test_install_ward_with_neither_condition_nor_damage(self):
+        from world.magic.factories import ResonanceFactory
+
+        actor, _room, _room_profile = self._owner_actor_and_room()
+        resonance = ResonanceFactory()
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=1,
+            resonance=resonance,
+        )
+        assert result.success
+        from world.room_features.models import DefenseProgressionDetails
+
+        details = DefenseProgressionDetails.objects.get(project_id=result.data["project_id"])
+        assert details.reaction_condition is None
+        assert details.reaction_damage_amount == 0
+
+    def test_install_ward_rejects_non_negative_condition(self):
+        from actions.definitions.room_features import _MSG_CONDITION_NOT_NEGATIVE
+        from world.magic.factories import ResonanceFactory
+
+        actor, _room, _room_profile = self._owner_actor_and_room()
+        resonance = ResonanceFactory()
+        condition = self._positive_condition()
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=1,
+            resonance=resonance,
+            reaction_condition=condition,
+        )
+        assert not result.success
+        assert result.message == _MSG_CONDITION_NOT_NEGATIVE
+
+    def test_install_ward_rejects_nonexistent_condition_id(self):
+        from actions.definitions.room_features import _MSG_CONDITION_NOT_FOUND
+        from world.magic.factories import ResonanceFactory
+
+        actor, _room, _room_profile = self._owner_actor_and_room()
+        resonance = ResonanceFactory()
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=1,
+            resonance=resonance,
+            reaction_condition_id=999999,
+        )
+        assert not result.success
+        assert result.message == _MSG_CONDITION_NOT_FOUND.format(name=999999)
+
+    def test_install_ward_with_condition_id_resolves_condition(self):
+        from world.magic.factories import ResonanceFactory
+
+        actor, _room, _room_profile = self._owner_actor_and_room()
+        resonance = ResonanceFactory()
+        condition = self._negative_condition()
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=1,
+            resonance=resonance,
+            reaction_condition_id=condition.pk,
+        )
+        assert result.success
+        from world.room_features.models import DefenseProgressionDetails
+
+        details = DefenseProgressionDetails.objects.get(project_id=result.data["project_id"])
+        assert details.reaction_condition == condition
+
+    def test_complete_defense_installation_sets_reaction_fields_on_ward(self):
+        """End-to-end: project completion creates a ward with reaction fields."""
+        from world.magic.factories import ResonanceFactory
+        from world.room_features.services import complete_defense_installation
+
+        actor, _room, room_profile = self._owner_actor_and_room()
+        resonance = ResonanceFactory()
+        condition = self._negative_condition()
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=1,
+            resonance=resonance,
+            reaction_condition=condition,
+            reaction_damage_amount=7,
+        )
+        assert result.success
+
+        from world.projects.models import Project
+
+        project = Project.objects.get(pk=result.data["project_id"])
+        complete_defense_installation(project)
+
+        from world.room_features.models import RoomWardDetails
+
+        ward = RoomWardDetails.objects.get(room_profile=room_profile)
+        assert ward.reaction_condition == condition
+        assert ward.reaction_damage_amount == 7
+
+    def test_upgrade_ward_preserves_existing_reaction_condition(self):
+        """Upgrading a ward without specifying a new condition keeps the old one."""
+        from world.magic.factories import ResonanceFactory
+        from world.room_features.services import complete_defense_installation
+
+        actor, _room, room_profile = self._owner_actor_and_room()
+        resonance = ResonanceFactory()
+        condition = self._negative_condition()
+
+        # Install with condition
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=1,
+            resonance=resonance,
+            reaction_condition=condition,
+            reaction_damage_amount=3,
+        )
+        assert result.success
+        from world.projects.models import Project
+
+        project = Project.objects.get(pk=result.data["project_id"])
+        complete_defense_installation(project)
+
+        # Upgrade without specifying condition — should preserve
+        result2 = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.ROOM_WARD,
+            target_level=2,
+            resonance=resonance,
+        )
+        assert result2.success
+        project2 = Project.objects.get(pk=result2.data["project_id"])
+        complete_defense_installation(project2)
+
+        from world.room_features.models import RoomWardDetails
+
+        ward = RoomWardDetails.objects.get(room_profile=room_profile)
+        assert ward.level == 2
+        assert ward.reaction_condition == condition
+        assert ward.reaction_damage_amount == 3
+
+
 class FundRoomWardActionTests(TestCase):
     def _owner_actor_with_ward(self, balance=50):
         from world.magic.factories import ResonanceFactory

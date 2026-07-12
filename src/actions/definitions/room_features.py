@@ -38,6 +38,8 @@ _MSG_WARD_NEEDS_RESONANCE = "A ward installation needs a resonance."
 _MSG_NO_WARD = "There is no ward here to fund."
 _MSG_INSUFFICIENT_RESONANCE = "You don't have enough resonance."
 _MSG_INVALID_AMOUNT = "Amount must be positive."
+_MSG_CONDITION_NOT_FOUND = "No such condition template: {name}."
+_MSG_CONDITION_NOT_NEGATIVE = "A ward reaction condition must be from a harmful category."
 
 
 def _resolve_exit_obj_for_defense(actor: ObjectDB, kwargs: dict) -> ObjectDB | None:
@@ -368,6 +370,44 @@ class StartDefenseInstallationAction(Action):
             return target_room_profile, resonance, _MSG_NOT_AN_UPGRADE
         return target_room_profile, resonance, None
 
+    @staticmethod
+    def _resolve_reaction_condition(defense_kind: str, kwargs: dict) -> tuple[Any, str | None]:
+        """Resolve the optional ward reaction condition + damage from kwargs.
+
+        Returns ``(reaction_condition, rejection)``. ``reaction_condition``
+        is a ``ConditionTemplate`` instance or ``None``. ``rejection`` is
+        an error message string or ``None`` on success.
+
+        Accepts either a pre-resolved ``ConditionTemplate`` instance
+        (telnet path, ``reaction_condition`` kwarg) or an int pk (web REST
+        path, ``reaction_condition_id`` kwarg — REST dispatch does no
+        ObjectDB resolution, per the ``objectdb_target_kwargs`` note in
+        ``src/actions/CLAUDE.md``).
+
+        Only meaningful for ``ROOM_WARD`` installs; returns ``(None, None)``
+        for other kinds.
+        """
+        from world.room_features.constants import DefenseKind  # noqa: PLC0415
+
+        if defense_kind != DefenseKind.ROOM_WARD:
+            return None, None
+
+        condition = kwargs.get("reaction_condition")
+        if condition is None:
+            condition_id = kwargs.get("reaction_condition_id")
+            if condition_id is not None:
+                from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+
+                condition = ConditionTemplate.objects.filter(pk=condition_id).first()
+                if condition is None:
+                    return None, _MSG_CONDITION_NOT_FOUND.format(name=condition_id)
+
+        if condition is not None:
+            if not condition.category.is_negative:
+                return None, _MSG_CONDITION_NOT_NEGATIVE
+
+        return condition, None
+
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
         from world.projects.models import Project  # noqa: PLC0415
@@ -402,6 +442,12 @@ class StartDefenseInstallationAction(Action):
         if rejection is not None:
             return ActionResult(success=False, message=rejection)
 
+        reaction_condition, rejection = self._resolve_reaction_condition(defense_kind, kwargs)
+        if rejection is not None:
+            return ActionResult(success=False, message=rejection)
+
+        reaction_damage_amount = kwargs.get("reaction_damage_amount") or 0
+
         now = timezone.now()
         project = Project.objects.create(
             kind=ProjectKind.ROOM_DEFENSE_INSTALLATION,
@@ -419,6 +465,8 @@ class StartDefenseInstallationAction(Action):
             target_room_profile=target_room_profile,
             target_level=target_level,
             resonance=resonance,
+            reaction_condition=reaction_condition,
+            reaction_damage_amount=reaction_damage_amount,
         )
         return ActionResult(
             success=True,

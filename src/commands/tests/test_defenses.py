@@ -191,6 +191,80 @@ class DefenseCommandKwargsTests(TestCase):
             with self.assertRaises(CommandError):
                 cmd.resolve_action_args()
 
+    def test_install_ward_resolves_condition_and_damage(self) -> None:
+        cmd = _make_cmd("install ward resonance=Fire condition=Burning damage=5")
+        cmd._subverb = "install"
+        cmd._rest = "ward resonance=Fire condition=Burning damage=5"
+        mock_resonance = MagicMock()
+        mock_condition = MagicMock()
+        mock_condition.category.is_negative = True
+        with (
+            patch(_RESONANCE_OBJECTS) as res_obj,
+            patch("world.conditions.models.ConditionTemplate.objects") as cond_obj,
+        ):
+            res_obj.filter.return_value.first.return_value = mock_resonance
+            cond_obj.filter.return_value.first.return_value = mock_condition
+            kwargs = cmd.resolve_action_args()
+
+        self.assertEqual(kwargs["defense_kind"], "ROOM_WARD")
+        self.assertEqual(kwargs["resonance"], mock_resonance)
+        self.assertEqual(kwargs["reaction_condition"], mock_condition)
+        self.assertEqual(kwargs["reaction_damage_amount"], 5)
+
+    def test_install_ward_unknown_condition_raises_command_error(self) -> None:
+        cmd = _make_cmd("install ward resonance=Fire condition=Nonexistent")
+        cmd._subverb = "install"
+        cmd._rest = "ward resonance=Fire condition=Nonexistent"
+        mock_resonance = MagicMock()
+        with (
+            patch(_RESONANCE_OBJECTS) as res_obj,
+            patch("world.conditions.models.ConditionTemplate.objects") as cond_obj,
+        ):
+            res_obj.filter.return_value.first.return_value = mock_resonance
+            cond_obj.filter.return_value.first.return_value = None
+            with self.assertRaises(CommandError):
+                cmd.resolve_action_args()
+
+    def test_install_ward_non_negative_condition_raises_command_error(self) -> None:
+        cmd = _make_cmd("install ward resonance=Fire condition=Empowered")
+        cmd._subverb = "install"
+        cmd._rest = "ward resonance=Fire condition=Empowered"
+        mock_resonance = MagicMock()
+        mock_condition = MagicMock()
+        mock_condition.category.is_negative = False
+        with (
+            patch(_RESONANCE_OBJECTS) as res_obj,
+            patch("world.conditions.models.ConditionTemplate.objects") as cond_obj,
+        ):
+            res_obj.filter.return_value.first.return_value = mock_resonance
+            cond_obj.filter.return_value.first.return_value = mock_condition
+            with self.assertRaises(CommandError):
+                cmd.resolve_action_args()
+
+    def test_install_ward_damage_only_without_condition(self) -> None:
+        cmd = _make_cmd("install ward resonance=Fire damage=10")
+        cmd._subverb = "install"
+        cmd._rest = "ward resonance=Fire damage=10"
+        mock_resonance = MagicMock()
+        with patch(_RESONANCE_OBJECTS) as res_obj:
+            res_obj.filter.return_value.first.return_value = mock_resonance
+            kwargs = cmd.resolve_action_args()
+
+        self.assertEqual(kwargs["defense_kind"], "ROOM_WARD")
+        self.assertEqual(kwargs["resonance"], mock_resonance)
+        self.assertEqual(kwargs["reaction_damage_amount"], 10)
+        self.assertNotIn("reaction_condition", kwargs)
+
+    def test_install_ward_invalid_damage_raises_command_error(self) -> None:
+        cmd = _make_cmd("install ward resonance=Fire damage=abc")
+        cmd._subverb = "install"
+        cmd._rest = "ward resonance=Fire damage=abc"
+        mock_resonance = MagicMock()
+        with patch(_RESONANCE_OBJECTS) as res_obj:
+            res_obj.filter.return_value.first.return_value = mock_resonance
+            with self.assertRaises(CommandError):
+                cmd.resolve_action_args()
+
     def test_fund_resolves_amount(self) -> None:
         cmd = _make_cmd("fund amount=50")
         cmd._subverb = "fund"

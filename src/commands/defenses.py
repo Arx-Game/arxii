@@ -45,6 +45,8 @@ _LEVEL_KWARG = "level"
 _AMOUNT_KWARG = "amount"
 _EXIT_KWARG = "exit"
 _RESONANCE_KWARG = "resonance"
+_CONDITION_KWARG = "condition"
+_DAMAGE_KWARG = "damage"
 
 _DEFAULT_INSTALL_LEVEL = "1"
 
@@ -66,6 +68,7 @@ class CmdDefense(DispatchCommand):
     Usage:
         defense                              — status hub
         defense install <bars|ward|alarm> [level=<n>]
+        defense install ward level=<n> resonance=<name> [condition=<name>] [damage=<n>]
         defense upgrade <bars|ward|alarm> level=<n>
         defense fund amount=<n>              — fund the room's ward
     """
@@ -133,18 +136,43 @@ class CmdDefense(DispatchCommand):
             )
             kwargs["exit"] = exit_obj
         if kind_key == _KIND_WARD:
-            resonance_name = parsed.get(_RESONANCE_KWARG, "")
-            if not resonance_name:
-                msg = "Usage: defense install ward level=<n> resonance=<name>."
-                raise CommandError(msg)
-            from world.magic.models.affinity import Resonance  # noqa: PLC0415
-
-            resonance = Resonance.objects.filter(name__iexact=resonance_name).first()
-            if resonance is None:
-                msg = f"No such resonance: {resonance_name}."
-                raise CommandError(msg)
-            kwargs["resonance"] = resonance
+            self._resolve_ward_kwargs(parsed, kwargs)
         return kwargs
+
+    @staticmethod
+    def _resolve_ward_kwargs(parsed: dict[str, str], kwargs: dict[str, Any]) -> None:
+        """Resolve resonance + optional condition/damage for a ward install."""
+        resonance_name = parsed.get(_RESONANCE_KWARG, "")
+        if not resonance_name:
+            msg = "Usage: defense install ward level=<n> resonance=<name>."
+            raise CommandError(msg)
+        from world.magic.models.affinity import Resonance  # noqa: PLC0415
+
+        resonance = Resonance.objects.filter(name__iexact=resonance_name).first()
+        if resonance is None:
+            msg = f"No such resonance: {resonance_name}."
+            raise CommandError(msg)
+        kwargs["resonance"] = resonance
+
+        condition_name = parsed.get(_CONDITION_KWARG, "")
+        if condition_name:
+            from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+
+            condition = ConditionTemplate.objects.filter(name__iexact=condition_name).first()
+            if condition is None:
+                msg = f"No such condition: {condition_name}."
+                raise CommandError(msg)
+            if not condition.category.is_negative:
+                msg = "A ward reaction condition must be from a harmful category."
+                raise CommandError(msg)
+            kwargs["reaction_condition"] = condition
+
+        damage_raw = parsed.get(_DAMAGE_KWARG, "")
+        if damage_raw:
+            if not damage_raw.isdigit():
+                msg = "Damage must be a positive number."
+                raise CommandError(msg)
+            kwargs["reaction_damage_amount"] = int(damage_raw)
 
     def _show_status_hub(self) -> None:
         """Show the local room's ward/alarm status, if any."""

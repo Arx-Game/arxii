@@ -16,6 +16,8 @@ class DefenseInstallSerializer(serializers.Serializer):
     target_level = serializers.IntegerField(min_value=1, default=1)
     exit_id = serializers.IntegerField(required=False)
     resonance_id = serializers.IntegerField(required=False)
+    reaction_condition_id = serializers.IntegerField(required=False)
+    reaction_damage_amount = serializers.IntegerField(required=False, min_value=0)
 
 
 class DefenseInstallResultSerializer(serializers.Serializer):
@@ -37,6 +39,10 @@ class ExitBarsDetailsSerializer(serializers.ModelSerializer):
 
 
 class RoomWardDetailsSerializer(serializers.ModelSerializer):
+    reaction_condition_name = serializers.CharField(
+        source="reaction_condition.name", read_only=True, default=None
+    )
+
     class Meta:
         model = RoomWardDetails
         fields = [
@@ -44,6 +50,9 @@ class RoomWardDetailsSerializer(serializers.ModelSerializer):
             "level",
             "resonance",
             "resonance_reserve",
+            "reaction_condition",
+            "reaction_condition_name",
+            "reaction_damage_amount",
             "lapsed_at",
             "installed_at",
             "last_upgraded_at",

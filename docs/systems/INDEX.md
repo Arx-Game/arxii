@@ -2698,8 +2698,12 @@ registering a service strategy + per-kind details model.
     services.py`); reserve hitting 0 sets `lapsed_at` (ward stops reacting, but is
     never dissolved by lapsing alone — a lapsed ward can be refunded). Reaction is
     **deterministic, not a CheckType roll** (Decision 5): applies `reaction_condition`
-    (FK to `conditions.ConditionTemplate`) and/or `reaction_damage_amount` to an
-    unauthorized entrant.
+    (FK to `conditions.ConditionTemplate`, filtered to `ConditionCategory.is_negative=True`
+    at install time per #2280) and/or `reaction_damage_amount` to an
+    unauthorized entrant. Both fields are set at install/upgrade time through
+    `StartDefenseInstallationAction` (kwargs `reaction_condition`/`reaction_condition_id`
+    + `reaction_damage_amount`), carried by `DefenseProgressionDetails`, and applied
+    by `_install_or_level_ward` on project completion.
   - `RoomAlarmDetails` — OneToOne to `RoomProfile`, independent of `RoomWardDetails`
     (a room may hold both). No resonance upkeep — only the ward is magical. On an
     unauthorized entry, echoes to the room (identity-transparent, ADR-0083) and
@@ -2716,7 +2720,11 @@ registering a service strategy + per-kind details model.
     (`actions/definitions/room_features.py`); dispatched by both the web
     `DefenseInstallViewSet` (`world/room_features/views_defense.py`) and telnet
     `CmdDefense` (`commands/defenses.py`, `defense install <bars|ward|alarm>` /
-    `defense upgrade` / `defense fund`) through the same seam.
+    `defense upgrade` / `defense fund`) through the same seam. Ward installs
+    accept optional `condition=<name>` (telnet) / `reaction_condition_id` (web)
+    and `damage=<n>` / `reaction_damage_amount` kwargs (#2280) to configure the
+    ward's reaction at install time; the condition must be from a harmful
+    (`is_negative=True`) category.
 
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room
