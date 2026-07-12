@@ -191,3 +191,37 @@ class ItemCreationCraftTests(TestCase):
         self.assertTrue(result.success)
         self.assertTrue(result.data["result"].created)
         self.assertEqual(result.data["result"].item_instance.custom_name, "Action Sword")
+
+    def test_gated_recipe_requires_learned_knowledge(self):
+        # #2242 — a requires_knowledge recipe rejects a crafter who hasn't learned it.
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.knowledge import grant_recipe_knowledge
+        from world.items.crafting.models import CraftingRecipe
+        from world.items.crafting.services import run_crafting_recipe
+        from world.items.exceptions import RecipeNotKnown
+        from world.traits.factories import CheckOutcomeFactory
+
+        template = self._craftable_template()
+        recipe = CraftingRecipe.objects.get(
+            kind=CraftingRecipeKind.ITEM_CREATE, output_item_template=template
+        )
+        recipe.requires_knowledge = True
+        recipe.save(update_fields=["requires_knowledge"])
+
+        def _craft():
+            return run_crafting_recipe(
+                kind=CraftingRecipeKind.ITEM_CREATE,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=None,
+                target=None,
+                output_overrides={"output_template": template},
+            )
+
+        with force_check_outcome(CheckOutcomeFactory(name="GateSuccess", success_level=5)):
+            with self.assertRaises(RecipeNotKnown):
+                _craft()
+            # Learn it, and the same craft now proceeds.
+            grant_recipe_knowledge(self.sheet, recipe)
+            self.assertTrue(_craft().attached)

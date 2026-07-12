@@ -352,3 +352,24 @@ class ItemCreateBrowseAndQuoteTests(CraftingApiTestCase):
     def test_quote_unknown_template_is_404(self):
         response = self.client.get("/api/items/crafting/create/quote/", {"template": 999999})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_recipes_hides_gated_recipes_until_learned(self):
+        # #2242 — a requires_knowledge recipe appears only once the character learns it.
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.knowledge import grant_recipe_knowledge
+        from world.items.crafting.models import CraftingRecipe
+
+        secret = ItemTemplateFactory(name="Alaricite Blade", is_craftable=True)
+        recipe = CraftingRecipe.objects.create(
+            name="Alaricite Blade recipe",
+            kind=CraftingRecipeKind.ITEM_CREATE,
+            output_item_template=secret,
+            requires_knowledge=True,
+        )
+
+        response = self.client.get("/api/items/crafting/create/recipes/")
+        self.assertNotIn("Alaricite Blade", [r["name"] for r in response.data])
+
+        grant_recipe_knowledge(self.owner_sheet, recipe)
+        response = self.client.get("/api/items/crafting/create/recipes/")
+        self.assertIn("Alaricite Blade", [r["name"] for r in response.data])

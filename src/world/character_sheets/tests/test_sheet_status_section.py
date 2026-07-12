@@ -36,8 +36,11 @@ class SheetStatusSectionTests(TestCase):
         text = "\n".join(lines)
 
         self.assertIn("wounded", text)  # WOUND_DESCRIPTIONS band word
-        self.assertNotIn("50", text.replace("50c", ""))  # no raw health numbers
-        self.assertNotIn("100", text)
+        # Exclude the character's own name — a factory sequence like "TestChar_950"
+        # carries digits; the assertion targets raw *health* numbers, not the header.
+        body = text.replace(self.character.key, "").replace("50c", "")
+        self.assertNotIn("50", body)  # no raw health numbers
+        self.assertNotIn("100", body)
 
     def test_renders_coin_and_ap_lines(self) -> None:
         purse = get_or_create_purse(self.sheet)

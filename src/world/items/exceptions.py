@@ -160,6 +160,20 @@ class CraftingStationBroken(ItemError):
     )
 
 
+class RecipeNotKnown(ItemError):
+    """Raised when a character acts on a gated recipe they have not learned (#2242)."""
+
+    user_message = "You don't know that recipe."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You don't know that recipe.", "You can't teach a recipe you don't know."},
+    )
+
+    def __init__(self, message: str | None = None) -> None:
+        if message:
+            self.user_message = message
+        super().__init__(self.user_message)
+
+
 # ---------------------------------------------------------------------------
 # Inventory action errors (pick_up, drop, give, equip, etc.)
 # ---------------------------------------------------------------------------
