@@ -87,7 +87,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   passability/gating, and click-to-move via the existing `move_to_position`/
   `take_position` actions. `SceneTacticalMap` replaced the old `RoomPositionsPanel`
   text-list UI on the scene page; `CombatTacticalMap` mounts as a "Map" tab in
-  `CombatScenePage`'s right rail (default tab stays "Your Turn"). Both `SceneDetail`
+  `CombatRail`'s right rail (default tab stays "Your Turn") — `CombatRail` renders
+  in-scene on `/scenes/:id` (#2197; the dedicated `CombatScenePage` route is gone).
+  Both `SceneDetail`
   and `EncounterDetail` now serve the full node+edge graph (`position_nodes`/
   `position_edges`, via the new `position_graph(room)` service) — unlike the
   ADJACENT-reach-only `position_adjacency`, this keeps impassable/gated edges so

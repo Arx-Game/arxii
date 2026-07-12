@@ -1305,7 +1305,8 @@ canvas: `useBattleForSceneQuery` resolves the scene's one Battle, then
 `useBattleDetailQuery` fetches the aggregate `BattleMapCanvas` (places
 positioned by their `x`/`y`/`footprint_radius`) and `PlaceDetailPanel`
 (selected place's units/participants/fortifications, with a "View encounter"
-link to `/scenes/:id/combat` when `encounter_scene_id` is set) both read from.
+link to `/scenes/:id` when `encounter_scene_id` is set — combat renders
+in-scene, #2197) both read from.
 `hooks/handleBattleStatePayload.ts` handles the `BATTLE_STATE` WS message by
 calling `queryClient.invalidateQueries({ queryKey: battleKeys.all })` — no
 payload data is applied directly; invalidation alone triggers the refetch.

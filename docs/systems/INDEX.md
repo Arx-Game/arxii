@@ -834,7 +834,8 @@ consequence effects for graph mutation and flight).
   `frontend/src/areas/components/`) + `SceneTacticalMap` (scene wrapper, replaces the old
   `RoomPositionsPanel`, `frontend/src/scenes/components/`) + `CombatTacticalMap` (combat
   wrapper — occupants from `current_position` not `persona_positions` — mounted as a "Map"
-  tab in `CombatScenePage`'s right rail alongside "Your Turn"/`CombatTurnPanel`,
+  tab in `CombatRail`'s right rail alongside "Your Turn"/`CombatTurnPanel` (#2197: `CombatRail`
+  renders in-scene on `SceneDetailPage`'s `/scenes/:id`, not a dedicated route,
   `frontend/src/combat/components/`) + `MovementActions` (shared adjacent-position button
   list, `frontend/src/combat/components/`)
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
@@ -3494,7 +3495,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     drf-spectacular does not introspect them (pre-existing generator gap) — generated
     frontend types were not regenerated for this field, a known/documented degradation.
   - **Frontend:** a Positions picker in `ActionDeclarationCard` (single/pair, reach-greyed),
-    shape-aware `position_params` dispatch kwargs, state lifted to `CombatScenePage`, and
+    shape-aware `position_params` dispatch kwargs, state lifted to `CombatRail` (#2197: renders
+    in-scene on `/scenes/:id`, formerly the now-deleted `CombatScenePage`'s own route), and
     map-click picking via `TacticalMap.onPickPosition` (`frontend/src/areas/components/`).
   - **Telnet needed zero changes** — #2019's `position=`/`position_a=,position_b=` command
     grammar (`commands/combat.py`) already produced a `position_params` kwarg; #2206 is what

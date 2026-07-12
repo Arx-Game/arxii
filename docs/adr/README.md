@@ -55,6 +55,7 @@ treat those names as hints to confirm, not gospel.
 - [0006 — Scenes are provisional by default; never auto-persist RP](0006-scenes-are-provisional-never-auto-persist-rp.md)
 - [0091 — GANG_TURF resolves TIERED_PERIOD via a per-kind resolver registry, not a shared accessor](0091-gang-turf-tiered-period.md)
 - [0111 — One play surface — `/game` absorbs the scene toolset; `/scenes/:id` is the record page](0111-one-play-surface-game-absorbs-scene-toolset.md)
+- [0127 — Combat renders in-scene, not on a separate route](0127-combat-renders-in-scene-not-a-separate-route.md)
 
 ### Database & modeling
 - [0007 — No JSON fields; every setting is a typed, queryable column](0007-no-json-fields-typed-queryable-columns.md)
