@@ -2912,7 +2912,10 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 services, and equipment-modifier integration. Spec D PR2 (#1031) added the generic
-crafting framework and check-driven facet/style attachment.
+crafting framework and check-driven facet/style attachment. #2211 added the ITEM_CREATE
+mint pipeline; #2240 made it playable web-first: `ItemCreateCraftViewSet` serves
+`GET .../crafting/create/recipes/` (browse) + `.../quote/` (cost/quality) alongside the
+`POST` mint, and the React `CreateItemDialog` (Wardrobe "Craft item") drives them.
 
 - **Models:**
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,
@@ -2957,7 +2960,8 @@ crafting framework and check-driven facet/style attachment.
   accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
   `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
   provenance used by the lore-critical predicate); `CraftingRecipeKind` (FACET_ATTACH,
-  STYLE_ATTACH); `CostConsumption` (NONE, PARTIAL, FULL); `ContainerAccessPolicy` (#1909 —
+  STYLE_ATTACH, ITEM_CREATE — the mint pipeline, #2211); `CostConsumption` (NONE, PARTIAL,
+  FULL); `ContainerAccessPolicy` (#1909 —
   `OPEN` / `FRIENDS` / `OWNER_ONLY`, who may take contents out of a container; steal
   bypasses it with consequences); `StyleAudacity` (#2029 — UNDERSTATED/EXPRESSIVE/BOLD/
   OUTRAGEOUS ordinal tier on `Style`)
