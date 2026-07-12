@@ -276,6 +276,7 @@ class ActionRegistryTests(TestCase):
             "start_scene",
             "finish_scene",
             "grant_scene_gm",
+            "mark_decisive_check",
             "add_encounter_participant",
             "add_opponent",
             "begin_encounter_round",
@@ -377,6 +378,8 @@ class ActionRegistryTests(TestCase):
             "list_motif_styles",
             "start_room_feature_project",
             "repair_lab_station",
+            "start_defense_installation",
+            "fund_room_ward",
             "market_buy_stock",
             "market_buy_ware",
             "market_list_ware",
@@ -425,6 +428,10 @@ class ActionRegistryTests(TestCase):
             # #2222 — portal anchor install/dissolve.
             "portal_anchor_install",
             "portal_anchor_dissolve",
+            # #2178 — NPC guard assignment.
+            "assign_guard",
+            "unassign_guard",
+            "list_guard_assignments",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

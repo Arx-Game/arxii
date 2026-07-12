@@ -164,7 +164,19 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   standalone cast (not a combat round) can pick a curated consequence-pool flavor
   ("Brutal"/"Precise") off the "Melee Attack" `ActionTemplate`, mirroring magic's
   #1320 catalog — see `docs/systems/magic.md`. Deliberately **not** wired into combat
-  ROUND resolution, which never reads `ActionTemplate.consequence_pool` (ADR-0128).
+  ROUND resolution, which never reads `ActionTemplate.consequence_pool` (ADR-0130).
+- **Wind-as-mechanic combat consumer (#1555, ADR-0129).** The WIND exposure axis
+  (`world.locations.services.felt_exposure`, `StatKey.WIND`, provider #1522) gets its combat
+  reader: `wind_penalty(felt) -> int` (`world/combat/constants.py`) bands felt WIND —
+  CALM (<15) → 0, BREEZY (15-39) → -5, WINDY (40-69) → -10, GALE (70+) → -20 — into a
+  SCENE-sourced "Wind" `ModifierContribution`. Missile-classified attacks only: PC offense
+  (`CombatTechniqueResolver._roll_check`) applies the penalty when the attacker's strongest
+  equipped weapon is RANGED/THROWN (the same `_select_equipped_weapon` pick the damage path
+  uses); melee/lance skip the `felt_exposure` lookup entirely. Symmetric NPC side
+  (`resolve_npc_attack`) adds the same-magnitude positive bonus to the PC's defense roll when
+  the attacking `ThreatPoolEntry.delivery` is MISSILE; flat `base_damage` entries with no
+  defense roll are untouched. See `docs/systems/INDEX.md`'s "Combat" section for the full
+  wiring.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 

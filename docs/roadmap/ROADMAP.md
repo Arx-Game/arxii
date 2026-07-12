@@ -118,7 +118,13 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
     (`tech_health.py`: idmapper RAM, process RSS/CPU, open system errors, deploy SHA).
   - Superuser-only external content-repo load surface (`web/admin/content_load_views.py`,
     `CONTENT_REPO_PATH` env var) upserting into the DB via `core_management.content_fixtures`;
-    linked from the Game Setup hub alongside both new dashboards.
+    linked from the Game Setup hub alongside both new dashboards. Phase 2 (#2266, complete):
+    extended past `stats`/`skills` to `npc_roles`, `items`, `building_kinds`,
+    `decoration_kinds`; fixed `DecorationKind`/`ArchitecturalStyle` seeder rows that carried
+    `PLACEHOLDER` in the *name* (silently orphaning the seeded row instead of being
+    superseded by content); rooms/areas remain deferred (no natural key today). Game Setup
+    inventory now also tracks `Trait` (the #944 Phase-1 domain had none) and
+    `BuildingKind`/`DecorationKind`.
   - Built on the existing `ArxAdminSite` with `django-htmx` + vendored `htmx.min.js`, not
     `django-unfold` (deviation from the original #1221 spec — see ADR-0093, which narrows
     ADR-0022's admin-hosted-not-React decision). Details: [tuning.md](../systems/tuning.md).

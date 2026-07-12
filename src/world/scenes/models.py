@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -12,6 +14,7 @@ from core.managers import ArxSharedMemoryManager
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.magic.constants import LedgerOp, PowerStage
 from world.scenes.constants import (
+    DecisiveCheckMarkerStatus,
     InteractionMode,
     InteractionVisibility,
     PersonaType,
@@ -1593,6 +1596,67 @@ class PendingSuddenHarm(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"PendingSuddenHarm({self.amount} on {self.target_sheet_id})"
+
+
+class DecisiveCheckMarker(SharedMemoryModel):
+    """GM-declared marker: the next graded check in this scene resolves this beat.
+
+    Created before the decisive check resolves (pre-declared, #1748). When the
+    next social-template action or benign cast produces a CheckOutcome, the hook
+    in decisive_check_services calls record_outcome_tier_completion and marks
+    this RESOLVED.
+
+    Marker creation also activates stakes contracts on the scene's staked beats
+    (the freeform-scene equivalent of encounter creation or mission acceptance),
+    since scenes have no encounter-start/mission-issue seam to hang activation on.
+    """
+
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.CASCADE,
+        related_name="decisive_markers",
+    )
+    beat = models.ForeignKey(
+        "stories.Beat",
+        on_delete=models.CASCADE,
+        related_name="decisive_markers",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=DecisiveCheckMarkerStatus.choices,
+        default=DecisiveCheckMarkerStatus.PENDING,
+        db_index=True,
+    )
+    resolved_outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The CheckOutcome that resolved this marker (audit).",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scene"],
+                condition=Q(status="pending"),
+                name="one_pending_decisive_marker_per_scene",
+            ),
+        ]
+        indexes = [models.Index(fields=["scene", "status"])]
+
+    def __str__(self) -> str:
+        return f"DecisiveCheckMarker(scene={self.scene_id}, beat={self.beat_id}, {self.status})"
 
 
 # Import place_models, action_models, and reaction_models for Django model discovery

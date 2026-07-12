@@ -10,7 +10,7 @@ way a non-PHYSICAL technique resolves onto the magic "Technique Cast" catalog.
 This catalog applies ONLY to standalone technique casts. Combat ROUNDS deliberately
 do not consume ``ActionTemplate.consequence_pool`` at all — round resolution reads
 its own combat-specific pools (``on_hit_consequence_pool``, ``resolution_consequence_pool``,
-``per_round_consequence_pool``, etc. on combat models) instead. See ADR-0128.
+``per_round_consequence_pool``, etc. on combat models) instead. See ADR-0130.
 """
 
 from __future__ import annotations

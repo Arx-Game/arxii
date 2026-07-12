@@ -90,3 +90,23 @@ SOCIAL_HUB_PRESTIGE_BONUS_PCT_PER_LEVEL = 10
 #: ``LocationValueModifier.source`` tag for a hub's crowd-draw TRAFFIC bonus.
 #: One hub per room (RoomFeatureInstance is OneToOne), so this is unique per room.
 SOCIAL_HUB_TRAFFIC_SOURCE = "social_hub"
+
+
+class DefenseKind(models.TextChoices):
+    """Discriminator for DefenseProgressionDetails and its dispatch (#2177).
+
+    Fixed, code-owned mechanics -- not a GM-authored open catalog like
+    RoomFeatureKind, so no catalog table backs this; complete_defense_
+    installation's plain three-way branch is the only dispatcher (Decision 2).
+    """
+
+    EXIT_BARS = "EXIT_BARS", "Exit Bars"
+    ROOM_WARD = "ROOM_WARD", "Room Ward"
+    ROOM_ALARM = "ROOM_ALARM", "Room Alarm"
+
+
+#: Fixed level caps for defense kinds (#2177) -- not GM-authored max_level
+#: columns, since there's no catalog row backing these fixed mechanics.
+EXIT_BARS_MAX_LEVEL = 5
+ROOM_WARD_MAX_LEVEL = 5
+ROOM_ALARM_MAX_LEVEL = 5

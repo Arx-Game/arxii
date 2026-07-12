@@ -38,6 +38,24 @@ CustomActionResolver = Callable[["SceneActionRequest"], "EnhancedSceneActionResu
 CUSTOM_ACTION_RESOLVERS: dict[str, CustomActionResolver] = {}
 
 
+def _maybe_fire_decisive(
+    action_request: SceneActionRequest,
+    result: EnhancedSceneActionResult,
+) -> None:
+    """Fire any pending DecisiveCheckMarker after a social check resolves (#1748)."""
+    from world.scenes.decisive_check_services import maybe_fire_decisive_check  # noqa: PLC0415
+
+    main = result.action_resolution.main_result
+    if main is None:
+        return
+    maybe_fire_decisive_check(
+        scene=action_request.scene,
+        check_outcome=main.check_result.outcome,
+        initiator_sheet=action_request.initiator_persona.character_sheet,
+        target_persona=action_request.target_persona,
+    )
+
+
 def register_custom_action_resolver(action_key: str, resolver: CustomActionResolver) -> None:
     """Register a function that resolves a consent request bypassing the ActionTemplate path."""
     CUSTOM_ACTION_RESOLVERS[action_key] = resolver
@@ -894,6 +912,9 @@ def _resolve_action_against_persona(
             action_key=action_request.action_key,
             fury_committed=None,
         )
+
+    # #1748: fire any pending decisive-check marker after a social check resolves.
+    _maybe_fire_decisive(action_request, result)
 
     # Charge social fatigue once per target resolved. Multi-target casts charge
     # the initiator per-target — this is the intended per-target-independent model.

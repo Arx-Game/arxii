@@ -246,7 +246,7 @@ versa) raises `InvalidConsequencePoolChoice`. The catalog listing endpoint
 (the picker doesn't filter by `action_category` client-side, so the listing doesn't either).
 **This catalog applies to standalone casts only** — combat ROUND resolution never reads
 `ActionTemplate.consequence_pool` (see "Combat" doc's note on `wire_melee_attack_action_template`
-and ADR-0128).
+and ADR-0130).
 
 ### Targeting Model (#1321) [BUILT & WIRED]
 

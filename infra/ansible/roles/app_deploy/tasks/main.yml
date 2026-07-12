@@ -17,6 +17,29 @@
   become_user: "{{ app_user }}"
   register: app_checkout
 
+# #2236 Phase 5 (Sentry). app_checkout.after is the resolved commit SHA
+# ansible.builtin.git actually fetched/checked out for app_ref — the honest
+# "what got deployed" value, not an approximation from the operator/CI
+# controller's own HEAD (which could differ from what this checkout
+# actually fetched). secrets_vault's template (rendered earlier in this
+# same play — see site.yml's role order) always writes an empty
+# SENTRY_RELEASE= placeholder line specifically so this regexp target
+# exists on every run, which is what keeps this task's changed-state
+# idempotent (only "changed" when the deployed SHA actually differs from
+# the last converge, not on every run). No separate reload/handler is
+# needed: this value changes if and only if app_checkout changes, and the
+# "Reload Evennia" task below already keys its restart condition off
+# `app_checkout is changed`.
+- name: Stamp the deployed release SHA into the EnvironmentFile (SENTRY_RELEASE)
+  ansible.builtin.lineinfile:
+    path: "{{ secrets_env_file | default('/etc/arxii/arxii.env') }}"
+    regexp: '^SENTRY_RELEASE='
+    line: "SENTRY_RELEASE={{ app_checkout.after }}"
+    owner: "{{ secrets_owner | default('arxii') }}"
+    group: "{{ secrets_group | default('arxii') }}"
+    mode: "0600"
+  no_log: true
+
 # NOTE: the `current` symlink is intentionally NOT flipped yet. Everything
 # below through collectstatic runs against {{ app_release_dir }} (the
 # checked-out release), not `current` — a failure in uv sync / the frontend

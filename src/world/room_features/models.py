@@ -15,6 +15,7 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.room_features.constants import (
+    DefenseKind,
     RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
     RoomFeatureServiceStrategy,
@@ -391,3 +392,233 @@ class Trap(SharedMemoryModel):
     def __str__(self) -> str:
         state = "armed" if self.is_armed else "disarmed"
         return f"Trap '{self.name}' ({state}) @ room {self.room_profile_id}"
+
+
+class DefenseDetailsQuerySet(models.QuerySet):
+    """Shared soft-delete queryset for the three #2177 defense-details models."""
+
+    def active(self) -> DefenseDetailsQuerySet:
+        return self.filter(dissolved_at__isnull=True)
+
+
+class ExitBarsDetails(SharedMemoryModel):
+    """Bars installed on one specific exit (#2177).
+
+    OneToOne with ExitProfile -- independent of RoomFeatureInstance (which is
+    one-per-room, not one-per-exit) and of any other exit from the same room.
+    `level` scales durability; BreakExitAction (#2176) drops it by 1 per
+    successful break, dissolving the row at 0 rather than flooring it.
+    """
+
+    exit_profile = models.OneToOneField(
+        "evennia_extensions.ExitProfile",
+        on_delete=models.CASCADE,
+        related_name="bars_details",
+        primary_key=True,
+        help_text="The exit these bars are installed on.",
+    )
+    level = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Durability tier. Capped at EXIT_BARS_MAX_LEVEL.",
+    )
+    installed_at = models.DateTimeField(default=timezone.now)
+    last_upgraded_at = models.DateTimeField(null=True, blank=True)
+    dissolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the bars are broken to destruction; null = active.",
+    )
+
+    objects = DefenseDetailsQuerySet.as_manager()
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(level__gte=1),
+                name="exit_bars_details_level_gte_1",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Bars L{self.level} @ exit {self.exit_profile_id}"
+
+
+class RoomWardDetails(SharedMemoryModel):
+    """A magical ward installed on a room (#2177).
+
+    OneToOne with RoomProfile -- independent of RoomFeatureInstance (a room
+    may hold a LAB/SANCTUM AND a ward simultaneously). Reaction is
+    deterministic (no CheckType roll, Decision 5): apply `reaction_condition`
+    and/or deal `reaction_damage_amount` to an unauthorized entrant.
+    `resonance_reserve` is drained daily by `room_ward_upkeep_tick`;
+    depletion sets `lapsed_at` (the ward stops reacting but is never
+    dissolved by lapsing alone).
+    """
+
+    room_profile = models.OneToOneField(
+        ROOM_PROFILE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ward_details",
+        primary_key=True,
+        help_text="The room this ward protects.",
+    )
+    level = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Ward tier. Capped at ROOM_WARD_MAX_LEVEL.",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="wards",
+        help_text="The resonance flavor powering this ward's upkeep.",
+    )
+    resonance_reserve = models.PositiveIntegerField(
+        default=0,
+        help_text="Banked resonance the daily upkeep tick drains from.",
+    )
+    reaction_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ward_reactions",
+        help_text="Condition applied to an unauthorized entrant, if set.",
+    )
+    reaction_damage_amount = models.PositiveIntegerField(
+        default=0,
+        help_text="Damage dealt to an unauthorized entrant, if nonzero.",
+    )
+    installed_at = models.DateTimeField(default=timezone.now)
+    last_upgraded_at = models.DateTimeField(null=True, blank=True)
+    lapsed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when resonance_reserve hits 0; ward stops reacting. Null = active.",
+    )
+    dissolved_at = models.DateTimeField(null=True, blank=True)
+
+    objects = DefenseDetailsQuerySet.as_manager()
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(level__gte=1),
+                name="room_ward_details_level_gte_1",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Ward L{self.level} @ room {self.room_profile_id}"
+
+
+class RoomAlarmDetails(SharedMemoryModel):
+    """An alarm installed on a room (#2177).
+
+    OneToOne with RoomProfile -- independent of RoomFeatureInstance and of
+    RoomWardDetails (a room may hold both simultaneously). On an unauthorized
+    entry, echoes to the room (identity-transparent, ADR-0083) and notifies
+    the room's owner and/or tenant personas via send_narrative_message
+    (offline-safe -- covers tenant-only rooms, e.g. a new character's
+    starting residence, which have no LocationOwnership row). No resonance
+    upkeep -- only the ward is magical.
+    """
+
+    room_profile = models.OneToOneField(
+        ROOM_PROFILE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="alarm_details",
+        primary_key=True,
+        help_text="The room this alarm watches.",
+    )
+    level = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Alarm tier. Capped at ROOM_ALARM_MAX_LEVEL.",
+    )
+    installed_at = models.DateTimeField(default=timezone.now)
+    last_upgraded_at = models.DateTimeField(null=True, blank=True)
+    dissolved_at = models.DateTimeField(null=True, blank=True)
+
+    objects = DefenseDetailsQuerySet.as_manager()
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(level__gte=1),
+                name="room_alarm_details_level_gte_1",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Alarm L{self.level} @ room {self.room_profile_id}"
+
+
+class DefenseProgressionDetails(SharedMemoryModel):
+    """Per-(ROOM_DEFENSE_INSTALLATION Project) details payload (#2177).
+
+    Mirrors RoomFeatureProgressionDetails' shape but targets the independent
+    defense-details models instead of RoomFeatureKind/RoomFeatureInstance.
+    Exactly one of target_exit_profile/target_room_profile is set, matching
+    defense_kind (enforced by the CheckConstraint below).
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="defense_progression_details",
+        primary_key=True,
+    )
+    defense_kind = models.CharField(max_length=16, choices=DefenseKind.choices)
+    target_exit_profile = models.ForeignKey(
+        "evennia_extensions.ExitProfile",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="defense_progression_projects",
+        help_text="Set only for EXIT_BARS installs/upgrades.",
+    )
+    target_room_profile = models.ForeignKey(
+        ROOM_PROFILE_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="defense_progression_projects",
+        help_text="Set only for ROOM_WARD/ROOM_ALARM installs/upgrades.",
+    )
+    target_level = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="defense_progression_projects",
+        help_text="Required for ROOM_WARD installs only.",
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(target_level__gte=1),
+                name="defense_progression_target_level_gte_1",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        defense_kind=DefenseKind.EXIT_BARS,
+                        target_exit_profile__isnull=False,
+                        target_room_profile__isnull=True,
+                    )
+                    | models.Q(
+                        defense_kind__in=[DefenseKind.ROOM_WARD, DefenseKind.ROOM_ALARM],
+                        target_exit_profile__isnull=True,
+                        target_room_profile__isnull=False,
+                    )
+                ),
+                name="defense_progression_target_matches_kind",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"DefenseProgression#{self.project_id}: {self.defense_kind} L{self.target_level}"

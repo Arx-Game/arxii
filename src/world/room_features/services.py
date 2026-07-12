@@ -442,3 +442,237 @@ def handle_social_hub_progression(
         room_profile.is_social_hub = True
         room_profile.save(update_fields=["is_social_hub"])
     sync_social_hub_traffic(room_profile)
+
+
+# ---------------------------------------------------------------------------
+# ROOM_DEFENSE_INSTALLATION Project handler -- wired in apps.py (#2177)
+# ---------------------------------------------------------------------------
+
+
+def complete_defense_installation(
+    project: Project,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """Handle resolution of a ROOM_DEFENSE_INSTALLATION project (#2177).
+
+    Plain three-way branch on defense_kind -- no dict registry, unlike
+    ROOM_FEATURE_STRATEGIES, since all three kinds ship in this app and are
+    fixed mechanics, not a catalog other apps plug into (Decision 2).
+    """
+    from world.room_features.constants import DefenseKind  # noqa: PLC0415
+    from world.room_features.models import DefenseProgressionDetails  # noqa: PLC0415
+
+    details = (
+        DefenseProgressionDetails.objects.select_related(
+            "target_exit_profile", "target_room_profile", "resonance"
+        )
+        .filter(project=project)
+        .first()
+    )
+    if details is None:
+        msg = (
+            f"Project {project.pk} resolved as ROOM_DEFENSE_INSTALLATION but has "
+            "no DefenseProgressionDetails row."
+        )
+        raise RuntimeError(msg)
+
+    if details.defense_kind == DefenseKind.EXIT_BARS:
+        _install_or_level_bars(details.target_exit_profile, details.target_level)
+    elif details.defense_kind == DefenseKind.ROOM_WARD:
+        _install_or_level_ward(details.target_room_profile, details.target_level, details.resonance)
+    else:
+        _install_or_level_alarm(details.target_room_profile, details.target_level)
+
+
+def _install_or_level_bars(exit_profile, target_level: int) -> None:
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.room_features.models import ExitBarsDetails  # noqa: PLC0415
+
+    details = ExitBarsDetails.objects.filter(exit_profile=exit_profile).active().first()
+    if details is None:
+        ExitBarsDetails.objects.create(exit_profile=exit_profile, level=max(1, target_level))
+        return
+    if target_level > details.level:
+        details.level = target_level
+        details.last_upgraded_at = _tz.now()
+        details.save(update_fields=["level", "last_upgraded_at"])
+
+
+def _install_or_level_ward(room_profile: RoomProfile, target_level: int, resonance) -> None:
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.room_features.models import RoomWardDetails  # noqa: PLC0415
+
+    details = RoomWardDetails.objects.filter(room_profile=room_profile).active().first()
+    if details is None:
+        RoomWardDetails.objects.create(
+            room_profile=room_profile, level=max(1, target_level), resonance=resonance
+        )
+        return
+    if target_level > details.level:
+        details.level = target_level
+        details.last_upgraded_at = _tz.now()
+        details.save(update_fields=["level", "last_upgraded_at"])
+
+
+def _install_or_level_alarm(room_profile: RoomProfile, target_level: int) -> None:
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.room_features.models import RoomAlarmDetails  # noqa: PLC0415
+
+    details = RoomAlarmDetails.objects.filter(room_profile=room_profile).active().first()
+    if details is None:
+        RoomAlarmDetails.objects.create(room_profile=room_profile, level=max(1, target_level))
+        return
+    if target_level > details.level:
+        details.level = target_level
+        details.last_upgraded_at = _tz.now()
+        details.save(update_fields=["level", "last_upgraded_at"])
+
+
+# ---------------------------------------------------------------------------
+# Ward/alarm reaction to unauthorized traversal (#2177)
+# ---------------------------------------------------------------------------
+
+
+def react_to_unauthorized_entry(actor, room) -> None:
+    """React to `actor` entering `room` when an active ward/alarm is present
+    and the actor lacks owner/tenant standing (#2177).
+
+    Deterministic -- no CheckType roll, mirroring ExitState.can_traverse's
+    lock check (Decision 5). Called from
+    flows.service_functions.movement.traverse_exit after a successful move.
+    """
+    from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        return
+    persona = active_persona_for_sheet(sheet)
+    if is_owner(persona, room) or is_tenant(persona, room):
+        return
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    room_profile = RoomProfile.objects.filter(objectdb=room).first()
+    if room_profile is None:
+        return
+
+    _trigger_ward(actor, room_profile)
+    _trigger_alarm(actor, room, room_profile)
+
+
+def _trigger_ward(actor, room_profile: RoomProfile) -> None:
+    from world.room_features.models import RoomWardDetails  # noqa: PLC0415
+
+    ward = RoomWardDetails.objects.filter(room_profile=room_profile).active().first()
+    if ward is None or ward.lapsed_at is not None:
+        return
+
+    if ward.reaction_condition_id is not None:
+        from world.conditions.services import apply_condition  # noqa: PLC0415
+
+        apply_condition(
+            actor,
+            ward.reaction_condition,
+            source_description="A ward reacts to your intrusion.",
+        )
+    if ward.reaction_damage_amount:
+        from world.scenes.sudden_harm import arm_or_apply_sudden_harm  # noqa: PLC0415
+
+        arm_or_apply_sudden_harm(
+            actor,
+            ward.reaction_damage_amount,
+            None,
+            source_description="A ward lashes out at the intrusion.",
+        )
+
+
+def _trigger_alarm(actor, room, room_profile: RoomProfile) -> None:
+    from world.room_features.models import RoomAlarmDetails  # noqa: PLC0415
+
+    alarm = RoomAlarmDetails.objects.filter(room_profile=room_profile).active().first()
+    if alarm is None:
+        return
+
+    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+    from flows.service_functions.communication import message_location  # noqa: PLC0415
+
+    sdm = SceneDataManager()
+    actor_state = sdm.initialize_state_for_object(actor)
+    message_location(actor_state, "An alarm flares to life -- someone has entered uninvited!")
+
+    from world.locations.constants import HolderType  # noqa: PLC0415
+    from world.locations.services import current_tenants, effective_owner  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    # Notify every genuine standing-holder able to have installed this alarm in
+    # the first place -- can_modify_room_features gates install on
+    # is_owner(persona, room) OR is_tenant(persona, room), so notification must
+    # reach both an owner-persona (if any) AND active tenant-personas (if any),
+    # not just whichever resolves first (#2177 whole-branch review, Important #1:
+    # a tenant-only room -- e.g. a StartingArea.grants_residence_tenancy home,
+    # with no LocationOwnership row anywhere in the cascade -- was silently
+    # dropping this half of the reaction). Org-held ownership/tenancy is a
+    # narrower, separately-tested no-op (test_alarm_org_holder_does_not_crash_or_notify)
+    # -- fanning out to org membership is a deliberate non-goal here.
+    recipient_sheets: dict[int, object] = {}
+
+    ownership = effective_owner(room)
+    # LocationOwnership.get_active_target() (inherited from DiscriminatorMixin)
+    # resolves the PARENT discriminator (area/room_profile), not the holder --
+    # the holder is a second, independent discriminator on this model
+    # (holder_type/holder_persona/holder_organization). Read it directly.
+    if (
+        ownership is not None
+        and ownership.holder_type == HolderType.PERSONA
+        and ownership.holder_persona is not None
+    ):
+        sheet = ownership.holder_persona.character_sheet
+        recipient_sheets[sheet.pk] = sheet
+
+    for tenancy in current_tenants(room):
+        if tenancy.tenant_type != HolderType.PERSONA or tenancy.tenant_persona is None:
+            continue
+        sheet = tenancy.tenant_persona.character_sheet
+        recipient_sheets[sheet.pk] = sheet
+
+    if not recipient_sheets:
+        return
+    send_narrative_message(
+        recipients=list(recipient_sheets.values()),
+        body=f"Your alarm at {room.db_key} was triggered.",
+        category=NarrativeCategory.SYSTEM,
+    )
+
+
+#: Resonance drained per ward level per daily tick (#2177). Built from day
+#: one per the "ship upkeep/penalties immediately, never retrofit" ruling.
+_WARD_UPKEEP_PER_LEVEL = 5
+
+
+def room_ward_upkeep_tick() -> None:
+    """Drain each active ward's resonance_reserve; lapse it if depleted (#2177).
+
+    Registered as a daily task in world.game_clock.tasks, mirroring
+    sanctum.resonance_generation_tick's registration shape. Idempotent for an
+    already-lapsed ward (draining further past 0 is a no-op on the field, but
+    lapsed_at is only (re-)set, never cleared, here -- clearing happens only
+    via FundRoomWardAction).
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.room_features.models import RoomWardDetails  # noqa: PLC0415
+
+    for ward in RoomWardDetails.objects.filter(dissolved_at__isnull=True):
+        cost = ward.level * _WARD_UPKEEP_PER_LEVEL
+        if ward.resonance_reserve >= cost:
+            ward.resonance_reserve -= cost
+            ward.save(update_fields=["resonance_reserve"])
+        elif ward.lapsed_at is None:
+            ward.resonance_reserve = 0
+            ward.lapsed_at = timezone.now()
+            ward.save(update_fields=["resonance_reserve", "lapsed_at"])

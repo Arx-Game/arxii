@@ -15,14 +15,24 @@
     cache_valid_time: 3600
     lock_timeout: 600
 
+# The DNS-01 plugin is only needed for the real Caddyfile.j2's `acme_dns
+# cloudflare` directive. Rehearsal's Caddyfile.rehearsal.j2 uses `local_certs`
+# (Caddy's own internal CA) instead — no plugin, no outbound HTTPS to
+# caddyserver.com, no Cloudflare credential (the ephemeral-stage root has
+# none to give it, by the isolation doctrine). Skipping this block in
+# rehearsal isn't just an optimization: it would otherwise be a guaranteed
+# failure (no credential to succeed with).
 - name: Check installed Caddy modules
   ansible.builtin.command: caddy list-modules
   changed_when: false
   register: caddy_modules_before
+  when: not caddy_rehearsal_mode
 
 - name: Add the caddy-dns/cloudflare plugin (needs outbound HTTPS)
   ansible.builtin.command: caddy add-package github.com/caddy-dns/cloudflare
-  when: "'dns.providers.cloudflare' not in caddy_modules_before.stdout"
+  when:
+    - not caddy_rehearsal_mode
+    - "'dns.providers.cloudflare' not in caddy_modules_before.stdout"
   changed_when: true # gated by the `when` above: if it runs, it swapped the binary
   # TRAP: a later plain `apt upgrade` of the `caddy` package replaces this
   # binary with the plugin-less stock one, silently dropping DNS-01 — the
@@ -39,6 +49,7 @@
   ansible.builtin.command: caddy list-modules
   changed_when: false
   register: caddy_modules_after
+  when: not caddy_rehearsal_mode
 
 - name: Fail if the cloudflare DNS plugin is still missing
   ansible.builtin.assert:
@@ -49,10 +60,13 @@
       validate/adapt. Check outbound HTTPS to Caddy's build service
       (caddyserver.com) from this host and re-run the converge.
     quiet: true
+  when: not caddy_rehearsal_mode
 
 - name: Deploy Caddyfile (validated before reload)
   ansible.builtin.template:
-    src: Caddyfile.j2
+    # caddy_rehearsal_mode picks the internal-CA template (no DNS-01, no
+    # Cloudflare credential needed) — see both templates' "EDIT BOTH" header.
+    src: "{{ 'Caddyfile.rehearsal.j2' if caddy_rehearsal_mode else 'Caddyfile.j2' }}"
     dest: /etc/caddy/Caddyfile
     owner: root
     group: caddy

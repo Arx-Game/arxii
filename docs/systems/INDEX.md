@@ -893,7 +893,7 @@ Mechanical regional climate + transient weather feeding the #1514 comfort substr
 - **Constants:** `MONTH_TEMPERATURE_SHIFT` (12-value seasonal curve), `WEATHER_FADE_DAYS`, `WEATHER_SOURCE_PREFIX` — PLACEHOLDER magnitudes
 - **Integrates with:** locations (exposure axes + comfort cascade), areas (`Area.climate`, `RegionWeatherState.area`), game_clock (IC season/phase/month), codex (lore), battles (read-only `get_effective_weather(area)` via `Battle.region` to seed ambient weather; `Battle.weather_override`/`BattlePlace.weather_override` are battle-owned casts, not writes into `world.weather`, #1715 — see the "Battles" section)
 - **Feast days:** `special_weather_for_today()` — on an `ic_month`/`ic_day` match the tick forces the feast's special `WeatherType` (Eclipse / Moon Madness) world-wide, overriding the climate-gated roll (the GM-lever automation)
-- **Not yet wired:** re-seed-as-upsert for edited emits (loaddata duplicates keyless emit rows); wind-as-mechanic combat consumer (#1555, Tehom). Madness *mechanical* effects on characters are out of scope (Tehom)
+- **Not yet wired:** re-seed-as-upsert for edited emits (loaddata duplicates keyless emit rows). Madness *mechanical* effects on characters are out of scope (Tehom)
 - **Source:** `src/world/weather/` — see `world/weather/CLAUDE.md`
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
@@ -2084,6 +2084,29 @@ register as additional kinds.
   escalation), `core.mixins`.
 - **Source:** `src/world/npc_services/`
 
+### NPC Guard Assignment (#2178)
+Owner-gated NPC guard postings with post-arrival detection. A room owner
+assigns a Functionary or NPCAsset as a GUARD; when an unauthorized character
+enters, the intruder rolls Stealth vs. a difficulty constant.
+
+- **Model:** `NPCAssignment` (`world.npc_services.models`) — join model with
+  `DiscriminatorMixin` (Functionary XOR NPCAsset), `room` FK, `assignment_role`
+  (GUARD/DOORMAN/SERVANT), `assigned_by` persona FK, `is_active`/`ended_at`.
+  One active GUARD per room (partial unique constraint).
+- **Detection service:** `check_guard_detection(character, room)`
+  (`world.npc_services.guard_services`) — fires from
+  `Character.at_post_move` as a `run_safely` block. Resolves the room's active
+  GUARD; if the arriving character lacks owner/tenant standing, rolls the
+  existing `Stealth` CheckType against `GUARD_DETECTION_DIFFICULTY` (PLACEHOLDER
+  50). On failure: room echo + owner `.msg()` if online and co-located. On
+  success: no echo (intruder passes unnoticed).
+- **Actions:** `assign_guard` / `unassign_guard` / `list_guard_assignments`
+  (REGISTRY, `IsRoomOwnerPrerequisite`-gated, `target_type=SELF`).
+- **Telnet:** `guard` command (`guard assign <npc>` / `guard unassign` / `guard`).
+- **Deferred:** servant fetch (intercepts `NotReachable`), persistent security
+  log, doorman pre-traversal announcement.
+- **Source:** `src/world/npc_services/guard_services.py`
+
 ### Missions & Living Grid
 Branching narrative quest chains — a character receives a mission with broad objectives,
 makes decisions at branching points gated by skills/traits/predicates, and the consequences
@@ -2644,8 +2667,8 @@ registering a service strategy + per-kind details model.
     `feature_kind` + `target_level` + `existing_instance` (null for
     install; set for upgrade).
 - **Dispatch:** each `service_strategy` value resolves to a
-  `handle_progression(project, details) -> RoomFeatureInstance` strategy
-  function. SANCTUM strategy lives at
+  `handler(project, target_level, outcome_tier) -> None` strategy
+  function (`world/room_features/services.py`). SANCTUM strategy lives at
   `world.magic.services.sanctum.handle_progression`; future kinds
   register their own.
 - **Tests:** `src/world/room_features/tests/`. SANCTUM install and
@@ -2656,6 +2679,44 @@ registering a service strategy + per-kind details model.
   check/consequence-pool path — see `trap_services.py`'s `check_room_traps_on_entry` /
   `check_traps_at_position`. Not a `RoomFeatureInstance` kind; a plain FK to `RoomProfile`
   since a room may hold several.
+- **Installable exit/room defenses — bars/ward/alarm** (`world.room_features.models`,
+  #2177): three independent details models, siblings of `RoomFeatureInstance` (like
+  `Trap` above) — **NOT** `RoomFeatureKind` instances. A room can hold a
+  `RoomFeatureInstance` (e.g. LAB or SANCTUM) *and* a `RoomWardDetails` *and* a
+  `RoomAlarmDetails` simultaneously; an `ExitBarsDetails` hangs off a specific exit, not
+  a room, so one room's several exits can each carry their own bars independently.
+  - `ExitBarsDetails` — OneToOne to `evennia_extensions.ExitProfile`. `level` scales
+    durability; gates `flows.object_states.exit_state.ExitState.can_traverse`
+    **alongside** the pre-existing lock check (both must pass) rather than replacing it.
+    Bypassed by breaking through: `BreakExitAction` (#2176, key `break_exit`) always
+    succeeds and drops `level` by 1 per hit, dissolving the row (soft-delete via
+    `dissolved_at`) at 0 rather than flooring it — the same intruder path that bypasses
+    a locked exit.
+  - `RoomWardDetails` — OneToOne to `RoomProfile`. `level` scales the reaction;
+    `resonance` (FK to `magic.Resonance`) + `resonance_reserve` fund a daily upkeep
+    cost drained by the `room_ward_upkeep_tick` cron job (`world/room_features/
+    services.py`); reserve hitting 0 sets `lapsed_at` (ward stops reacting, but is
+    never dissolved by lapsing alone — a lapsed ward can be refunded). Reaction is
+    **deterministic, not a CheckType roll** (Decision 5): applies `reaction_condition`
+    (FK to `conditions.ConditionTemplate`) and/or `reaction_damage_amount` to an
+    unauthorized entrant.
+  - `RoomAlarmDetails` — OneToOne to `RoomProfile`, independent of `RoomWardDetails`
+    (a room may hold both). No resonance upkeep — only the ward is magical. On an
+    unauthorized entry, echoes to the room (identity-transparent, ADR-0083) and
+    notifies the room's owner persona via `send_narrative_message` (offline-safe).
+  - **Reaction dispatch:** both ward and alarm react from one shared entry point,
+    `react_to_unauthorized_entry(actor, room)` (`world/room_features/services.py`),
+    called by `flows.service_functions.movement.traverse_exit` immediately after a
+    successful unauthorized move (`_trigger_ward` / `_trigger_alarm`) — the same seam
+    every exit traversal already goes through, so no separate polling/trigger wiring
+    was needed.
+  - **Installation/upgrade** rides the pre-existing Project + Progression-details
+    pattern (`DefenseProgressionDetails`, mirroring `RoomFeatureProgressionDetails`)
+    via `StartDefenseInstallationAction` / `FundRoomWardAction`
+    (`actions/definitions/room_features.py`); dispatched by both the web
+    `DefenseInstallViewSet` (`world/room_features/views_defense.py`) and telnet
+    `CmdDefense` (`commands/defenses.py`, `defense install <bars|ward|alarm>` /
+    `defense upgrade` / `defense fund`) through the same seam.
 
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room
@@ -3445,13 +3506,26 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `Rampart`'s `integrity` — via the shared `damage_rampart` seam — at the top of both
   `apply_damage_to_participant` and `_resolve_opponent_pre_apply`, **before**
   `DAMAGE_PRE_APPLY` emits. Firing order: Rampart → personal reactive interceptors → Guardian
-  reactions. `ThreatPoolEntry.delivery` (`StrikeDelivery`: MELEE/MISSILE, shared with the
-  open wind-mechanic question #1555) plus `is_area` (`targeting_mode != SINGLE`) feed a Wind
+  reactions. `ThreatPoolEntry.delivery` (`StrikeDelivery`: MELEE/MISSILE — also the field the
+  wind-as-mechanic consumer below reads) plus `is_area` (`targeting_mode != SINGLE`) feed a Wind
   profile's `MISSILE_WARD` resist adjustment. `Clash.rampart` (nullable FK) binds a
   sustained-attack WARD clash to the covered position's Rampart; `_sync_rampart_progress`
   (`world/combat/clash.py`) mirrors each round's progress delta onto `rampart.integrity`
   through the same `damage_rampart` seam, so interception (paused while that clash is
   ACTIVE) and clash-progress never drift apart.
+- **Wind-as-mechanic (#1555, ADR-0129):** the combat consumer of the WIND exposure axis
+  (`world.locations.services.felt_exposure`, `StatKey.WIND`; provider is #1522).
+  `wind_penalty(felt: int) -> int` (`world/combat/constants.py`) bands felt WIND into a check
+  modifier — CALM (<15) → 0, BREEZY (15-39) → -5, WINDY (40-69) → -10, GALE (70+) → -20.
+  On the PC offense side, `CombatTechniqueResolver._roll_check` (`world/combat/services.py`)
+  appends a `ModifierContribution(source_kind=SCENE, label="Wind", ...)` when the attacker's
+  strongest equipped weapon (`_select_equipped_weapon`, the same pick the damage path uses)
+  has `gear_archetype` RANGED or THROWN and the encounter has a room; melee/lance attacks skip
+  the `felt_exposure` lookup entirely. On the NPC side, `resolve_npc_attack` adds the
+  same-magnitude *positive* contribution to the PC's defense roll when the attacking
+  `ThreatPoolEntry.delivery` is MISSILE — symmetric with the offense side ("the gale that
+  ruins your shot ruins theirs"); flat `base_damage` entries with no defense check
+  (`defense_check_type` unset) never reach this seam.
 - **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
   typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
   `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →
@@ -3768,7 +3842,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   "Magic: Technique Cast" catalog (#1320, see `docs/systems/magic.md`). **This catalog is
   standalone-cast only** — combat ROUND resolution never reads
   `ActionTemplate.consequence_pool` (it resolves its own `on_hit_consequence_pool` /
-  `resolution_consequence_pool` / `per_round_consequence_pool` rows instead); see ADR-0128.
+  `resolution_consequence_pool` / `per_round_consequence_pool` rows instead); see ADR-0130.
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
   conditions (`bulk_apply_conditions` — now installs reactive side-effects;
@@ -4404,7 +4478,11 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
 - **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
   maintainers' private content repository (`CONTENT_REPO_PATH` env var) via
   `core_management.content_fixtures.build_all` + `load_entries`; linked from the Game
-  Setup hub.
+  Setup hub. Domains (`DOMAIN_BUILDERS`, `core_management/content_fixtures.py`): `stats`/
+  `skills` → `traits.Trait` (#944); `npc_roles` → `npc_services.NPCRole`, `items` →
+  `items.ItemTemplate`, `building_kinds` → `buildings.BuildingKind`, `decoration_kinds` →
+  `buildings.DecorationKind` (#2266) — every domain upserts by a DB-unique `name`; rooms/
+  areas are deferred (no natural key on `Area`/`RoomProfile` today).
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,
