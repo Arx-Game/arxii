@@ -4,21 +4,21 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DuelChallengeNotifier } from '../DuelChallengeNotifier';
 
 const mockUseDuelChallengeInbox = vi.fn();
+const mockUseDispatchPlayerAction = vi.fn();
 const mockMutateAsync = vi.fn();
 vi.mock('@/combat/queries', () => ({
   useDuelChallengeInbox: (...args: unknown[]) => mockUseDuelChallengeInbox(...args),
-  useDispatchPlayerAction: () => ({ mutateAsync: mockMutateAsync, isPending: false }),
+  useDispatchPlayerAction: (characterId: number) => {
+    mockUseDispatchPlayerAction(characterId);
+    return { mutateAsync: mockMutateAsync, isPending: false };
+  },
 }));
 
+let mockRosterEntries: unknown[] = [
+  { id: 1, name: 'TestChar', character_id: 42, primary_persona_id: 77 },
+];
 vi.mock('@/roster/queries', () => ({
-  useMyRosterEntriesQuery: () => ({
-    data: [{ id: 1, name: 'TestChar', character_id: 42, primary_persona_id: 77 }],
-  }),
-}));
-
-vi.mock('@/store/hooks', () => ({
-  useAppSelector: (selector: (state: unknown) => unknown) =>
-    selector({ game: { active: 'TestChar' } }),
+  useMyRosterEntriesQuery: () => ({ data: mockRosterEntries }),
 }));
 
 const toastCustomMock = vi.fn();
@@ -46,6 +46,7 @@ describe('DuelChallengeNotifier', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseDuelChallengeInbox.mockReturnValue({ data: [], isLoading: false });
+    mockRosterEntries = [{ id: 1, name: 'TestChar', character_id: 42, primary_persona_id: 77 }];
   });
 
   it('fires a custom toast the first time a new incoming challenge appears', () => {
@@ -116,6 +117,47 @@ describe('DuelChallengeNotifier', () => {
     });
     await waitFor(() => {
       expect(toastDismissMock).toHaveBeenCalledWith('toast-1');
+    });
+  });
+
+  it('dispatches as the challenged (background) character, not the active one', async () => {
+    mockRosterEntries = [
+      { id: 1, name: 'CharA', character_id: 42, primary_persona_id: 77 },
+      { id: 2, name: 'CharB', character_id: 99, primary_persona_id: 88 },
+    ];
+    mockUseDuelChallengeInbox.mockReturnValue({
+      data: [
+        {
+          id: 7,
+          challenger: { id: 900, name: 'Rivalis' },
+          challenged: { id: 99, name: 'CharB' },
+          status: 'pending' as const,
+          created_at: '2026-07-11T00:00:00Z',
+          resolved_at: null,
+          resulting_encounter: null,
+        },
+      ],
+      isLoading: false,
+    });
+    mockMutateAsync.mockResolvedValue({});
+
+    render(<DuelChallengeNotifier />);
+
+    const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
+    const { getByTestId, getByText } = render(renderFn('toast-1'));
+
+    // Resolved against B's roster entry, never the active character (A, id 42).
+    expect(mockUseDispatchPlayerAction).toHaveBeenCalledWith(99);
+    expect(mockUseDispatchPlayerAction).not.toHaveBeenCalledWith(42);
+    expect(getByText(/Responding as/)).toHaveTextContent('Responding as CharB.');
+
+    fireEvent.click(getByTestId('duel-toast-accept-btn'));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        ref: { backend: 'registry', registry_key: 'accept' },
+        kwargs: { challenge_id: 7 },
+      });
     });
   });
 

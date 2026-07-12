@@ -192,6 +192,28 @@ export interface ActionRequest {
   created_at: string;
 }
 
+/**
+ * One row in the account-wide consent-request inbox
+ * (`GET /api/action-requests/?status=pending&role=incoming`, #2166).
+ *
+ * A narrower slice of SceneActionRequestSerializer's FLAT payload than
+ * `ActionRequest` above — this is used OUTSIDE a scene context (the
+ * app-root `ConsentAttentionNotifier`), so unlike `ActionRequest` it needs
+ * `scene` (to route navigation) and `target_persona`/`target_name` (the
+ * scene-scoped ConsentPrompt already knows the target is "me").
+ */
+export interface IncomingConsentRequest {
+  id: number;
+  scene: number;
+  /** Persona pk being addressed. Null only for area actions/standalone casts (never PENDING+targeted). */
+  target_persona: number | null;
+  target_name: string;
+  initiator_name: string;
+  action_key: string;
+  technique_name: string | null;
+  created_at: string;
+}
+
 export interface CheckResultData {
   outcome: string;
   success_level: number;

@@ -5,6 +5,7 @@ import type {
   PlayerActionsResponse,
   ActionRequest,
   ActionRequestResponse,
+  IncomingConsentRequest,
   Place,
   CastableTechnique,
   CastPullRequestBody,
@@ -129,6 +130,22 @@ export async function createActionRequest(
 export async function fetchPendingRequests(sceneId: string): Promise<{ results: ActionRequest[] }> {
   const res = await apiFetch(`/api/action-requests/?scene=${sceneId}&status=pending`);
   if (!res.ok) throw new Error('Failed to load pending requests');
+  return res.json();
+}
+
+/**
+ * Account-wide pending-consent inbox (#2166) — the `ConsentAttentionNotifier`
+ * counterpart to `fetchPendingRequests` above, but WITHOUT a `scene` filter:
+ * `role=incoming` (SceneActionRequestFilter, #2166) narrows to requests
+ * addressed to ANY of the requesting account's played characters, across
+ * every scene. Server-side scoping (`get_account_personas`) means this never
+ * returns another player's requests.
+ */
+export async function fetchIncomingConsentRequests(): Promise<{
+  results: IncomingConsentRequest[];
+}> {
+  const res = await apiFetch('/api/action-requests/?status=pending&role=incoming');
+  if (!res.ok) throw new Error('Failed to load incoming consent requests');
   return res.json();
 }
 

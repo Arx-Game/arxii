@@ -26,7 +26,14 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   `ConversationTabStrip` above the feed when `conversationTabs` is passed
   (#2165), and remembers each conversation tab's scroll offset (`Map<threadKey,
 scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
-  when the reader was already at the bottom for that tab.
+  when the reader was already at the bottom for that tab. The multi-puppet
+  session tab bar carries the same direct/ambient `AttentionBadge` as
+  `GameTopBar` (#2166), keyed per session name via each character's
+  `primary_persona_id` — with one guard `GameTopBar` doesn't need: the
+  **active** puppet's own tab never badges (`name !== active`), since its
+  attention already surfaces via `ConversationTabStrip`; badging it too would
+  double-count the active character's own unseen activity on its own
+  already-highlighted tab.
 - **`threadTabsStorage.ts`**: `loadThreadTabs`/`saveThreadTabs` (#2165) —
   client-local persistence of the open-tab layout (thread **keys** only, never
   message content) in `localStorage`, keyed per character+scene
@@ -34,11 +41,29 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   scene's entry, older entries for the same character are pruned on save.
   Best-effort: any storage error (unavailable, unparsable) is swallowed and
   treated as "nothing stored."
+- **`attention.ts`**: `sessionAttention(session, personaId)` (#2166) — pure,
+  selector-side two-tier attention derivation for one character's session, no
+  new Redux write path. Reuses `getThreadKey`/`countUnread` (exported from
+  `useThreading.ts`) against `threadLastSeen`/`sceneBaselineId`, the same
+  grouping #2165's tab strip badges use. `direct` = unread on `whisper:*`
+  threads plus `target:*` threads that include `personaId` (an @-target,
+  duel challenge, or consent request aimed at that persona specifically);
+  `ambient` = any other thread unread, or the legacy `session.unread` scalar.
+  Requires a resolved `personaId` to route to `direct` at all — before the
+  roster loads, whisper/target unread routes to `ambient` instead, so a
+  session's own echoed whisper never misreads as direct pre-roster-load.
 
 ### Layout (`components/`)
 
 - **`GameLayout.tsx`**: Three-column responsive grid (left sidebar, center, right sidebar)
-- **`GameTopBar.tsx`**: Character avatars, connection status, character switching
+- **`GameTopBar.tsx`**: Character avatars, connection status, character
+  switching. Each alt character's avatar carries a two-tier attention
+  indicator (#2166, `sessionAttention` from `attention.ts`): a red numeric
+  badge for _direct_ attention (an unseen whisper or @-target aimed at that
+  character), else a muted dot for _ambient_ (any other unseen activity in
+  that session), else nothing. The active character is structurally excluded
+  (this bar only ever renders alts) — its own attention lives in
+  `ConversationTabStrip`'s per-tab badges, not here.
 - **`ConversationSidebar.tsx`**: Left sidebar. Renders the scene's
   `ThreadSidebar` (room/place/whisper/target threads) when `GamePage` passes
   threading state for an active scene; otherwise falls back to a static
@@ -66,7 +91,16 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 - **`SystemLane.tsx`**: Muted, collapsible strip for system/channel/error
   chatter shown alongside the structured scene feed (#2156) — no
   `bg-black`/`font-mono`, just a quiet compact strip that expands on click.
-- **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for newline, command history
+- **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for
+  newline, command history. Optional `speakingAs?: { name, thumbnailUrl }`
+  prop (#2166) renders a compact `PersonaAvatar` + name chip at the start of
+  `leftSlot`, before `ModeSelector` — a standing "who am I talking as right
+  now" identity marker on the composer, shown even for single-character
+  players. Always renders when supplied; renders nothing when omitted
+  (legacy callers unaffected). `GamePage` supplies it from `activeEntry`;
+  `SceneDetailPage`'s record-page composer supplies the same shape from its
+  own roster lookup. `CombatScenePage`'s composer does not yet thread this
+  prop (out of scope for #2166).
 - **`EvenniaMessage.tsx`**: Game message display and formatting
 
 ### Room Panel (`components/room-panel/`)
@@ -105,6 +139,19 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 - **Conversation tabs (#2165)**: Keep several threads (room + place/whisper/target)
   open at once per session; the composer's audience locks to whichever tab is
   active
+- **Cross-character attention (#2166)**: Background characters badge
+  distinctly by tier (`attention.ts`) — direct (whisper/@-target/prompt, red
+  numeric) vs ambient (any other activity, muted dot) — on `GameTopBar` and
+  `GameWindow`'s puppet tabs. A background whisper also fires a switch-through
+  toast (`handleInteractionPayload.ts`, in `frontend/src/hooks/`) that jumps
+  to the right character and thread on click. Duel challenges and consent
+  requests addressed to ANY played character surface account-wide
+  (`DuelChallengeNotifier`, `ConsentAttentionNotifier`) and act/respond **as**
+  the addressed character, not the currently-active one. Every composer
+  carries a "speaking as" identity chip (see `CommandInput.tsx` below). All
+  routing is derived client-side from data already scoped to the account's own
+  personas — no new account-wide payload is rendered to other players ("Never
+  out alts").
 - **Dynamic commands**: Commands discovered from server with generated forms
 - **Real-time updates**: WebSocket integration for live game state
 - **Context menus**: Right-click actions on game entities

@@ -23,7 +23,11 @@ interface RoomData {
   hub: HubTidings | null;
 }
 
-interface Session {
+/**
+ * Exported (#2166) so selector-side derivations (e.g. `game/attention.ts`'s
+ * `sessionAttention`) can type against a session without duplicating its shape.
+ */
+export interface Session {
   isConnected: boolean;
   messages: Array<GameMessage & { id: string }>;
   unread: number;

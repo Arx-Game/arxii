@@ -43,20 +43,15 @@ export function SceneDetailPage() {
   // Also derives characterSheetId: CharacterSheet uses OneToOneField(primary_key=True)
   // to ObjectDB, so character_id === character_sheet pk.
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const personaId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacter)?.primary_persona_id ?? null,
+  const activeEntry = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacter) ?? null,
     [myRosterEntries, activeCharacter]
   );
-  const characterSheetId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacter)?.character_id ?? 0,
-    [myRosterEntries, activeCharacter]
-  );
+  const personaId = activeEntry?.primary_persona_id ?? null;
+  const characterSheetId = activeEntry?.character_id ?? 0;
   // The active character's own RosterEntry id (#2156 Task 7) — the FriendButton's
   // `viewerEntryId` inside the character-card drawer.
-  const viewerEntryId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacter)?.id ?? null,
-    [myRosterEntries, activeCharacter]
-  );
+  const viewerEntryId = activeEntry?.id ?? null;
 
   // Track IDs the user has detached from the auto-attach chip strip.
   const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
@@ -227,6 +222,11 @@ export function SceneDetailPage() {
                 detachedActionIds={detachedActionIds}
                 onPoseSubmitted={handlePoseSubmitted}
                 isAtPlace={isAtPlace}
+                speakingAs={
+                  activeEntry
+                    ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
+                    : undefined
+                }
               />
             </>
           )}
