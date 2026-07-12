@@ -36,3 +36,35 @@ class InvestigationCheckSeedTests(TestCase):
         search = CheckType.objects.get(name=SEARCH_CHECK_TYPE_NAME)
         # Authoritative re-seed leaves exactly the two composition rows (no duplicates).
         self.assertEqual(CheckTypeTrait.objects.filter(check_type=search).count(), 2)
+
+
+class LockpickingCheckSeedTests(TestCase):
+    """Lockpicking CheckType seed — wits + Larceny (#2176)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_check_resolution_tables()
+        seed_investigation_check_content()
+
+    def test_ensure_lockpicking_check_creates_check_type(self) -> None:
+        from world.seeds.investigation_checks import ensure_lockpicking_check
+
+        check_type = ensure_lockpicking_check()
+        self.assertEqual(check_type.name, "Lockpicking")
+        self.assertTrue(check_type.is_active)
+        trait_names = set(
+            CheckTypeTrait.objects.filter(check_type=check_type).values_list(
+                "trait__name", flat=True
+            )
+        )
+        self.assertEqual(trait_names, {"wits", "Larceny"})
+        self.assertEqual(Trait.objects.get(name="Larceny").trait_type, TraitType.SKILL)
+        self.assertEqual(Trait.objects.get(name="wits").trait_type, TraitType.STAT)
+
+    def test_ensure_lockpicking_check_is_idempotent(self) -> None:
+        from world.seeds.investigation_checks import ensure_lockpicking_check
+
+        first = ensure_lockpicking_check()
+        second = ensure_lockpicking_check()
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(CheckTypeTrait.objects.filter(check_type=first).count(), 2)
