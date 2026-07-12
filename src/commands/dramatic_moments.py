@@ -23,23 +23,30 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from world.scenes.models import Scene
 
 _SUBVERB_SUGGESTIONS = "suggestions"
 _SUBVERB_CONFIRM = "confirm"
 _SUBVERB_DISMISS = "dismiss"
-_USAGE = "Usage: moment suggestions|confirm <id>|dismiss <id>"
+_SUBVERB_TAG = "tag"
+_TAG_LIST_ARG = "list"
+_USAGE = "Usage: moment suggestions|confirm <id>|dismiss <id>|tag <character>=<type>|tag list"
 
 
 class CmdMoment(ArxCommand):
-    """List and resolve dramatic-moment suggestions surfaced by technique entrances.
+    """List and resolve dramatic-moment suggestions; tag dramatic moments.
 
     Usage:
         moment suggestions   — list PENDING suggestions for the active scene here
         moment confirm <id>  — confirm a suggestion (mints the dramatic-moment tag)
         moment dismiss <id>  — dismiss a suggestion
+        moment tag <char>=<type> — tag a character's dramatic moment (GM)
+        moment tag list      — list available dramatic-moment types (GM)
 
-    GM-gated: only the active scene's GM, owner, or staff may list, confirm, or dismiss.
+    GM-gated: only the active scene's GM, owner, or staff may list, confirm,
+    dismiss, or tag.
     """
 
     key = "moment"
@@ -66,6 +73,8 @@ class CmdMoment(ArxCommand):
             self._resolve(rest, confirm=True)
         elif subverb == _SUBVERB_DISMISS:
             self._resolve(rest, confirm=False)
+        elif subverb == _SUBVERB_TAG:
+            self._handle_tag(rest)
         else:
             raise CommandError(_USAGE)
 
@@ -80,7 +89,7 @@ class CmdMoment(ArxCommand):
             raise CommandError(msg)
         return scene
 
-    def _account(self) -> object:
+    def _account(self) -> AccountDB:
         """The caller's account (confirm/dismiss are account-authorized)."""
         account = self.caller.account
         if account is None:
@@ -140,3 +149,87 @@ class CmdMoment(ArxCommand):
         result = action_cls().run(actor=None, account=account, suggestion_id=suggestion_id)
         if result.message:
             self.msg(result.message)
+
+    # -- tag subverb -----------------------------------------------------------
+
+    def _handle_tag(self, rest: str) -> None:
+        """``moment tag <character>=<type label>`` or ``moment tag list``."""
+        if not rest:
+            raise CommandError(_USAGE)
+        if rest.lower() == _TAG_LIST_ARG:
+            self._handle_tag_list()
+            return
+        if "=" not in rest:
+            raise CommandError(_USAGE)
+        name, type_label = (part.strip() for part in rest.split("=", 1))
+        if not name or not type_label:
+            raise CommandError(_USAGE)
+
+        scene = self._active_scene()
+        account = self._account()
+        from actions.definitions.dramatic_moments import _account_can_gm_scene  # noqa: PLC0415
+
+        if not _account_can_gm_scene(account, scene):
+            msg = "Only the scene's GM, owner, or staff may tag dramatic moments."
+            raise CommandError(msg)
+
+        target = self.caller.search(name, global_search=True)
+        if target is None:
+            return
+
+        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL, STRING_LITERAL
+        if sheet is None:
+            self.msg("That is not a character.")
+            return
+
+        from world.magic.models.dramatic_moment import DramaticMomentType  # noqa: PLC0415
+        from world.magic.services.gain import create_dramatic_moment_tag  # noqa: PLC0415
+
+        moment_type = DramaticMomentType.objects.filter(label__iexact=type_label).first()
+        if moment_type is None:
+            available = ", ".join(
+                str(m.label) for m in DramaticMomentType.objects.order_by("label")
+            )
+            self.msg(f"No dramatic-moment type named '{type_label}'. Available: {available}")
+            return
+
+        from world.magic.exceptions import (  # noqa: PLC0415
+            DramaticMomentCapExceeded,
+            EndorsementValidationError,
+        )
+
+        try:
+            create_dramatic_moment_tag(
+                character_sheet=sheet,
+                moment_type=moment_type,
+                tagged_by=account,
+                scene=scene,
+            )
+        except (EndorsementValidationError, DramaticMomentCapExceeded) as exc:
+            self.msg(exc.user_message)
+            return
+
+        self.msg(
+            f"You tagged {target.db_key} with '{moment_type.label}'. Resonance and renown awarded."
+        )
+
+    def _handle_tag_list(self) -> None:
+        """``moment tag list`` — show available DramaticMomentType rows."""
+        scene = self._active_scene()
+        account = self._account()
+        from actions.definitions.dramatic_moments import _account_can_gm_scene  # noqa: PLC0415
+
+        if not _account_can_gm_scene(account, scene):
+            msg = "Only the scene's GM, owner, or staff may list dramatic-moment types."
+            raise CommandError(msg)
+
+        from world.magic.models.dramatic_moment import DramaticMomentType  # noqa: PLC0415
+
+        types = list(DramaticMomentType.objects.select_related("resonance").order_by("label"))
+        if not types:
+            self.msg("No dramatic-moment types are defined.")
+            return
+        lines = ["|wAvailable dramatic-moment types:|n"]
+        lines.extend(f"  {mt.label} — {mt.resonance.name} ({mt.resonance_amount})" for mt in types)
+        lines.append("\nUse: moment tag <character>=<type>")
+        self.msg("\n".join(lines))

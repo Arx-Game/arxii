@@ -170,3 +170,127 @@ class MomentTelnetE2ETest(TestCase):
         )
         msg = self.gm_character.msg.call_args[0][0]
         self.assertIn("already", msg.lower())
+
+    # ------------------------------------------------------------------
+    # tag list
+    # ------------------------------------------------------------------
+
+    def test_tag_list_shows_types_for_gm(self) -> None:
+        _run(self.gm_character, "tag list")
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn(self.moment_type.label, msg)
+
+    def test_non_gm_tag_list_refused(self) -> None:
+        _run(self.outsider_character, "tag list")
+
+        self.outsider_character.msg.assert_called()
+        msg = self.outsider_character.msg.call_args[0][0]
+        self.assertIn("gm", msg.lower())
+
+    # ------------------------------------------------------------------
+    # tag <character>=<type>
+    # ------------------------------------------------------------------
+
+    def test_gm_tag_creates_tag_and_grants_resonance(self) -> None:
+        """GM tags a character — tag row created, resonance granted."""
+        from world.magic.models import CharacterResonance
+
+        target_sheet = CharacterSheetFactory()
+        target_char = target_sheet.character
+        CharacterResonanceFactory(
+            character_sheet=target_sheet,
+            resonance=self.moment_type.resonance,
+        )
+
+        _run(self.gm_character, f"tag {target_char.db_key}={self.moment_type.label}")
+
+        from world.magic.models.dramatic_moment import DramaticMomentTag
+
+        tag = DramaticMomentTag.objects.get(
+            character_sheet=target_sheet, moment_type=self.moment_type
+        )
+        self.assertEqual(tag.tagged_by, self.gm_account)
+        self.assertEqual(tag.scene, self.scene)
+        cr = CharacterResonance.objects.get(
+            character_sheet=target_sheet, resonance=self.moment_type.resonance
+        )
+        self.assertEqual(cr.balance, self.moment_type.resonance_amount)
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn("tagged", msg.lower())
+
+    def test_non_gm_tag_refused(self) -> None:
+        target_sheet = CharacterSheetFactory()
+        target_char = target_sheet.character
+        CharacterResonanceFactory(
+            character_sheet=target_sheet,
+            resonance=self.moment_type.resonance,
+        )
+
+        _run(self.outsider_character, f"tag {target_char.db_key}={self.moment_type.label}")
+
+        from world.magic.models.dramatic_moment import DramaticMomentTag
+
+        self.assertFalse(DramaticMomentTag.objects.filter(moment_type=self.moment_type).exists())
+        self.outsider_character.msg.assert_called()
+        msg = self.outsider_character.msg.call_args[0][0]
+        self.assertIn("gm", msg.lower())
+
+    def test_tag_unknown_type_lists_available(self) -> None:
+        target_sheet = CharacterSheetFactory()
+        target_char = target_sheet.character
+        CharacterResonanceFactory(
+            character_sheet=target_sheet,
+            resonance=self.moment_type.resonance,
+        )
+
+        _run(self.gm_character, f"tag {target_char.db_key}=NonexistentType")
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn(self.moment_type.label, msg)
+
+    def test_tag_unclaimed_resonance_surfaces_error(self) -> None:
+        """Target hasn't claimed the type's resonance → EndorsementValidationError."""
+        target_sheet = CharacterSheetFactory()
+        target_char = target_sheet.character
+        # No CharacterResonance for this resonance on target_sheet
+
+        _run(self.gm_character, f"tag {target_char.db_key}={self.moment_type.label}")
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn("not claimed", msg.lower())
+
+    def test_tag_per_scene_cap_surfaces_error(self) -> None:
+        """Cap already reached → DramaticMomentCapExceeded surfaces."""
+        from world.magic.services.gain import create_dramatic_moment_tag
+
+        target_sheet = CharacterSheetFactory()
+        target_char = target_sheet.character
+        CharacterResonanceFactory(
+            character_sheet=target_sheet,
+            resonance=self.moment_type.resonance,
+        )
+        # moment_type has per_scene_cap=1 — tag once directly via the service
+        create_dramatic_moment_tag(
+            character_sheet=target_sheet,
+            moment_type=self.moment_type,
+            tagged_by=self.gm_account,
+            scene=self.scene,
+        )
+
+        _run(self.gm_character, f"tag {target_char.db_key}={self.moment_type.label}")
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn("maximum", msg.lower())
+
+    def test_tag_missing_equals_is_usage_error(self) -> None:
+        _run(self.gm_character, "tag SomeCharWithoutEquals")
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args_list[0][0][0]
+        self.assertIn("usage", msg.lower())

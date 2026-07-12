@@ -1103,6 +1103,15 @@ Raises `EndorsementValidationError` (unclaimed resonance) or `DramaticMomentCapE
 - `GET /api/magic/dramatic-moment-tags/` — list tags; filterable by `character_sheet`
   and `scene`; paginated.
 
+**Telnet (#2227):**
+
+- `moment tag <character>=<type>` — direct GM tagging from telnet; thin command
+  calling `create_dramatic_moment_tag` directly (the same service the web serializer
+  calls). Target resolved by name (`caller.search(global_search=True)`), type by
+  `label__iexact`. GM-gated via `_account_can_gm_scene` on the caller's active scene.
+- `moment tag list` — lists available `DramaticMomentType` rows (label + resonance +
+  amount), same GM gate.
+
 **Django admin (`admin.py`):**
 
 - `DramaticMomentTypeAdmin` — full CRUD for the authored catalog. Fields:
