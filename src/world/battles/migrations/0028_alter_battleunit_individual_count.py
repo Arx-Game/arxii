@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             name="individual_count",
             field=models.PositiveIntegerField(
                 blank=True,
-                help_text="Population data point mirroring CombatOpponent.swarm_count's naming/shape (#1794) — null means 'not a swarm-style unit'. Swarm math (#1841): a banded flat STRIKE bonus keyed off this count folds into the battle modifier stack, and STRIKE/ROUT attrition costs bodies off it proportionally (see world.battles.constants.swarm_strike_bonus and world.battles.resolution._apply_swarm_losses). Capital vessels stay on the separate per-hull Fortification integrity track (#1713) — see docs/adr/0122-swarm-math-is-derived-losses-not-a-second-health-pool.md.",
+                help_text="Population data point mirroring CombatOpponent.swarm_count's naming/shape (#1794) — null means 'not a swarm-style unit'. Swarm math (#1841): a banded check penalty for acting against the swarm folds into the battle modifier stack, and STRIKE/ROUT attrition costs bodies off it proportionally (see world.battles.constants.swarm_strike_modifier and world.battles.resolution._apply_swarm_losses). Capital vessels stay on the separate per-hull Fortification integrity track (#1713) — see docs/adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md.",
                 null=True,
             ),
         ),

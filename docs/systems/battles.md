@@ -403,7 +403,7 @@ BALANCED posture all contribute nothing:
 | Weather property effect | `_weather_property_modifier(unit.place, unit)` | Sums every `WeatherTypePropertyEffect` row matching one of `unit`'s `properties` for the effective weather at `unit.place` (#1715), read from `cached_all()`; 0 if no effective weather or no row matches |
 | Weather capability challenge | `_weather_capability_modifier(unit.place, unit)` | Sums every `WeatherTypeCapabilityChallenge` row where `unit`'s capability magnitude is strictly below the authored threshold, for the effective weather at `unit.place` (#1715), read from `cached_all()`; 0 if no effective weather or no row applies |
 | Unit quality | `_quality_modifier(unit.quality)` | `UNIT_QUALITY_STRIKE_MODIFIER` dict in `constants.py` — a flat ladder from MILITIA (+10, easier to hit) to ELITE (−20, harder to hit) |
-| Swarm-count band bonus | `swarm_strike_bonus(unit.individual_count)` | `SWARM_STRIKE_BONUS_BANDS` dict in `constants.py` (#1841) — a flat ladder keyed off `unit.individual_count`: <10 or `None` (not a swarm-style unit) → 0, 10-49 → +5, 50-199 → +10, 200+ → +15 |
+| Swarm-count band modifier | `swarm_strike_modifier(unit.individual_count)` | `SWARM_STRIKE_MODIFIER_BANDS` dict in `constants.py` (#1841) — a flat ladder keyed off `unit.individual_count`: <10 or `None` (not a swarm-style unit) → 0, 10-49 → −5, 50-199 → −10, 200+ → −15. Negative like ELITE quality: numbers resist breaking, and losses fade the penalty band by band |
 | Commander bonus | `commander_bonus_for_side_at_place(side, place)` | Max (not sum) `get_modifier_total` walk against the `"battle_command"` `ModifierTarget` (`ensure_battle_command_modifier_target`, seeded by `factories.py`) across every ACTIVE unit's `commander` on that side/place, read from `battle.state_cache` (#1846); 0 if none commanded |
 | Posture | `BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture)` | `constants.py` dict — AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10 |
 | Move cost | inline in `_battle_modifier_stack()` | `-target_place.movement_cost * MOVE_COST_DIFFICULTY_PER_POINT` (#2007) — only for `action_kind=MOVE` with a `target_place` set; 0 otherwise |
@@ -440,10 +440,14 @@ same posture-driven trade-off: AGGRESSIVE trades a −5 check penalty and +4 fai
 pieces of derived math once set — a unit with `individual_count=None` is "not
 swarm-style" and neither applies:
 
-- **STRIKE bonus** — `swarm_strike_bonus(unit.individual_count)` (`constants.py`)
-  folds a flat, banded bonus into the modifier stack above (see the Swarm-count
-  band bonus row) — a bigger formation is easier to land a hit on, mirroring
-  `UNIT_QUALITY_STRIKE_MODIFIER`'s ladder shape rather than a multiplier.
+- **STRIKE modifier** — `swarm_strike_modifier(unit.individual_count)` (`constants.py`)
+  folds a flat, banded *penalty to act against the swarm* into the modifier stack
+  above (see the Swarm-count band modifier row) — breaking a 200-strong formation
+  is harder than breaking a dozen skirmishers, mirroring
+  `UNIT_QUALITY_STRIKE_MODIFIER`'s ladder shape and sign convention (ELITE −20).
+  Units never roll their own offense, so target-side resilience is where a
+  swarm's mass expresses itself; proportional losses thin the count and the
+  penalty fades band by band.
 - **Proportional body loss** — `_apply_swarm_losses(unit, attrition)`
   (`resolution.py`) costs `ceil(individual_count * attrition / 100)` bodies,
   floored at 0 (strength/morale are both 0-100 scales, so `attrition` reads
@@ -455,7 +459,7 @@ swarm-style" and neither applies:
   body this round.
 
 Capital vessels (naval/aerial, #1714) stay on the separate per-hull
-`Fortification` integrity track — see [ADR-0122](../adr/0122-swarm-math-is-derived-losses-not-a-second-health-pool.md)
+`Fortification` integrity track — see [ADR-0123](../adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md)
 for why `individual_count` isn't a second per-unit health pool.
 
 ## Peril / Rescue (#1733)
@@ -786,9 +790,9 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
 - `SURROUNDED_ENTRY_ISOLATED_MODIFIER = -15` — entry-roll signal (#1733), isolated at a place
 - `SURROUNDED_ENTRY_MOBILITY_MODIFIER = 40` — entry-roll signal (#1733), unimpaired MOVEMENT capability
 - `UNIT_QUALITY_STRIKE_MODIFIER` — dict (#1711), flat attacker-facing STRIKE modifier per `UnitQuality`: MILITIA +10 … ELITE −20
-- `SWARM_STRIKE_BONUS_BANDS` — dict (#1841), inclusive `individual_count` threshold →
-  flat STRIKE bonus: 10 → +5, 50 → +10, 200 → +15 (below 10, or `None`, → 0). Read via
-  the `swarm_strike_bonus()` helper — see [Swarm math (#1841)](#swarm-math-1841) above.
+- `SWARM_STRIKE_MODIFIER_BANDS` — dict (#1841), inclusive `individual_count` threshold →
+  flat check modifier: 10 → −5, 50 → −10, 200 → −15 (below 10, or `None`, → 0). Read via
+  the `swarm_strike_modifier()` helper — see [Swarm math (#1841)](#swarm-math-1841) above.
 - `BATTLE_POSTURE_VP_MULTIPLIER` — dict (#1711), percent VP-gain scaling per `BattlePosture`: AGGRESSIVE 1.4, BALANCED 1.0, DEFENSIVE 0.7
 - `BATTLE_POSTURE_CHECK_MODIFIER` — dict (#1711), flat STRIKE-check modifier per `BattlePosture`: AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10
 - `BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER` — dict (#1711), flat failure-damage modifier per `BattlePosture`: AGGRESSIVE +4, BALANCED 0, DEFENSIVE −4
@@ -1294,7 +1298,7 @@ payload data is applied directly; invalidation alone triggers the refetch.
   #1794), `QualityModifierTests`, `CommanderBonusForSideAtPlaceTests`,
   `BattleTechniqueResolverModifierStackTests` (the full five-source stack), and
   `PostureVpScalingTests` (VP-gain and failure-damage posture scaling) (#1711)
-- `src/world/battles/tests/test_swarm_math.py` (#1841) — `swarm_strike_bonus` folded
+- `src/world/battles/tests/test_swarm_math.py` (#1841) — `swarm_strike_modifier` folded
   into the modifier stack for a swarm-count unit vs. a null-count unit
   (`SwarmStrikeBonusModifierStackTests`); proportional body loss through
   `resolve_battle_round` for STRIKE net attrition and ROUT's actual morale loss, plus

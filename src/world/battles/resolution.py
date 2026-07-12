@@ -52,7 +52,7 @@ from world.battles.constants import (
     BattleActionKind,
     BattleActionScope,
     BattleUnitStatus,
-    swarm_strike_bonus,
+    swarm_strike_modifier,
 )
 from world.battles.exceptions import BattleError
 from world.battles.models import BattleParticipant, BattleRound
@@ -381,7 +381,7 @@ class BattleTechniqueResolver:
             _weather_capability_modifier(unit.place, unit) if unit is not None else 0
         )
         quality = _quality_modifier(unit.quality) if unit is not None else 0
-        swarm_bonus = swarm_strike_bonus(unit.individual_count) if unit is not None else 0
+        swarm_modifier = swarm_strike_modifier(unit.individual_count) if unit is not None else 0
         commander = commander_bonus_for_side_at_place(participant.side, participant.place)
         posture = BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture, 0)
         move_cost = (
@@ -397,7 +397,7 @@ class BattleTechniqueResolver:
             + weather_property
             + weather_capability
             + quality
-            + swarm_bonus
+            + swarm_modifier
             + commander
             + posture
             + move_cost

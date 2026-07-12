@@ -3695,7 +3695,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   magnitude) replace #1711's single-select `composition`/`UnitComposition`, #1794;
   `individual_count` (nullable, mirrors `CombatOpponent.swarm_count`'s naming, #1794;
   drives a banded STRIKE bonus + proportional STRIKE/ROUT body loss via
-  `swarm_strike_bonus`/`_apply_swarm_losses`, #1841); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
+  `swarm_strike_modifier`/`_apply_swarm_losses`, #1841); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
   → `character_sheets.CharacterSheet`, #1711; `strength` attrited by STRIKE; `morale` — a
   second resource, starts well below its ceiling, damaged by ROUT / restored by RALLY,
   #1712; `status` always DERIVED jointly from `strength` + `morale` via

@@ -71,8 +71,9 @@ class SwarmStrikeBonusModifierStackTests(TestCase):
             target_unit=target_unit,
         )
 
-    def test_swarm_unit_strike_gets_band_bonus(self) -> None:
-        """A target unit with individual_count=60 (50-199 band) contributes +10 —
+    def test_swarm_unit_strike_gets_band_modifier(self) -> None:
+        """A target unit with individual_count=60 (50-199 band) contributes -10
+        (numbers resist breaking, matching ELITE quality's negative sign) —
         the only nonzero term here (default TRAINED quality, no place, no
         properties, BALANCED posture, no commander)."""
         unit = add_unit(
@@ -89,9 +90,9 @@ class SwarmStrikeBonusModifierStackTests(TestCase):
             resolver(power=0, ledger=None, extra_modifiers=0)
 
         mock_check.assert_called_once()
-        self.assertEqual(mock_check.call_args.kwargs["extra_modifiers"], 10)
+        self.assertEqual(mock_check.call_args.kwargs["extra_modifiers"], -10)
 
-    def test_null_count_unit_gets_no_swarm_bonus(self) -> None:
+    def test_null_count_unit_gets_no_swarm_modifier(self) -> None:
         """A target unit with individual_count=None (not swarm-style) contributes 0."""
         unit = add_unit(
             battle=self.battle, side=self.defender, name="Line Infantry", individual_count=None

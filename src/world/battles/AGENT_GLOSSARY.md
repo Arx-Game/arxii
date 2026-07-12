@@ -61,16 +61,17 @@ _Avoid_: squad, regiment, mob; composition (superseded term — use properties/c
 **Swarm-style unit**:
 A `BattleUnit` with `individual_count` set (not `None`) — a horde/pack/flock counted
 in bodies rather than resolved as a single formation. Drives two derived-math effects
-(#1841): a banded flat STRIKE bonus (`swarm_strike_bonus`, `SWARM_STRIKE_BONUS_BANDS`
-in `constants.py` — bigger swarm, easier to land a hit) folded into the same modifier
-stack as terrain/weather/quality, and proportional body loss off `individual_count`
+(#1841): a banded flat check penalty for acting against the swarm
+(`swarm_strike_modifier`, `SWARM_STRIKE_MODIFIER_BANDS` in `constants.py` — bigger swarm,
+harder to break, same negative sign convention as ELITE quality) folded into the same
+modifier stack as terrain/weather/quality, and proportional body loss off `individual_count`
 whenever the unit takes STRIKE attrition or ROUT morale damage (`_apply_swarm_losses`
 in `resolution.py` — `ceil(individual_count * attrition / 100)`, since `strength`/
 `morale` are both 0-100 scales). A unit with `individual_count=None` is never
 swarm-style — neither effect applies, and it's excluded from
 `BattleRoundResult.unit_losses`. Distinct from capital vessels (naval/aerial, #1714),
 which stay on the separate per-hull `Fortification` integrity track rather than a
-body count — see [ADR-0122](../../../docs/adr/0122-swarm-math-is-derived-losses-not-a-second-health-pool.md).
+body count — see [ADR-0123](../../../docs/adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md).
 _Avoid_: swarm count (use `individual_count`, the actual field name); horde health
 (this is not a second health pool — see the ADR).
 

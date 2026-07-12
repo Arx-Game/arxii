@@ -226,7 +226,7 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         individual_count: Optional population data point (#1794); mirrors
             CombatOpponent.swarm_count's naming. Drives banded STRIKE bonuses and
             proportional STRIKE/ROUT body loss (#1841) — see
-            world.battles.constants.swarm_strike_bonus and
+            world.battles.constants.swarm_strike_modifier and
             world.battles.resolution._apply_swarm_losses.
 
     Returns:
