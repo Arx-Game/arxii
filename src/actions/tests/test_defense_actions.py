@@ -95,3 +95,54 @@ class StartDefenseInstallationActionTests(TestCase):
             actor=actor, defense_kind=DefenseKind.ROOM_ALARM, target_level=99
         )
         assert not result.success
+
+    def test_install_alarm_not_an_upgrade_rejected(self):
+        from world.room_features.models import RoomAlarmDetails
+
+        actor, _room, room_profile = self._owner_actor_and_room()
+        RoomAlarmDetails.objects.create(room_profile=room_profile, level=1)
+
+        result = StartDefenseInstallationAction().run(
+            actor=actor, defense_kind=DefenseKind.ROOM_ALARM, target_level=1
+        )
+        assert result.success is False
+
+    def test_install_bars_not_an_upgrade_rejected(self):
+        from evennia_extensions.models import ExitProfile
+        from world.room_features.models import ExitBarsDetails
+
+        actor, room, _room_profile = self._owner_actor_and_room()
+        dest = ObjectDBFactory(db_key="SDIDest2", db_typeclass_path="typeclasses.rooms.Room")
+        exit_obj = ObjectDBFactory(db_key="west", db_typeclass_path="typeclasses.exits.Exit")
+        exit_obj.location = room
+        exit_obj.destination = dest
+        exit_obj.save()
+        exit_profile = ExitProfile.get_or_create_for_exit(exit_obj)
+        ExitBarsDetails.objects.create(exit_profile=exit_profile, level=1)
+
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.EXIT_BARS,
+            target_level=1,
+            exit=exit_obj,
+        )
+        assert result.success is False
+
+    def test_install_bars_via_exit_id_kwarg(self):
+        actor, room, _room_profile = self._owner_actor_and_room()
+        dest = ObjectDBFactory(db_key="SDIDest3", db_typeclass_path="typeclasses.rooms.Room")
+        exit_obj = ObjectDBFactory(db_key="up", db_typeclass_path="typeclasses.exits.Exit")
+        exit_obj.location = room
+        exit_obj.destination = dest
+        exit_obj.save()
+
+        result = StartDefenseInstallationAction().run(
+            actor=actor,
+            defense_kind=DefenseKind.EXIT_BARS,
+            target_level=1,
+            exit_id=exit_obj.pk,
+        )
+        assert result.success
+        from world.projects.models import Project
+
+        assert Project.objects.filter(pk=result.data["project_id"]).exists()
