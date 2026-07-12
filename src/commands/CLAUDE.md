@@ -876,7 +876,7 @@ actions, backends, and service functions.
   wrapper resolving a pending entry-flourish offer via `ResolveFlourishOfferAction`.
 
 ### Magic-Adjacent Commands (`commands/`)
-- **`dramatic_moments.py`** (#2183): `CmdMoment` (`moment`) — the GM-facing
+- **`dramatic_moments.py`** (#2183, #2227): `CmdMoment` (`moment`) — the GM-facing
   Dramatic Moment Suggestion inbox surfaced by technique entrances. `moment suggestions`
   lists PENDING suggestions for the active scene here; `moment confirm <id>` / `moment
   dismiss <id>` resolve one. Account-authorized (mirrors `CmdEvent`'s host-lifecycle
@@ -884,7 +884,12 @@ actions, backends, and service functions.
   `ConfirmDramaticMomentSuggestionAction` / `DismissDramaticMomentSuggestionAction`
   (`actions/definitions/dramatic_moments.py`) — the same seam the web
   `DramaticMomentSuggestionViewSet` uses. GM-gated (scene GM, owner, or staff) entirely in
-  the Actions; no business logic in the command.
+  the Actions; no business logic in the command. `moment tag <character>=<type>` (#2227)
+  is the direct-tagging telnet parity for the web `DramaticMomentTagDialog` — a thin
+  command calling `create_dramatic_moment_tag` directly (the same service the web
+  serializer calls, not via an Action). `moment tag list` browses the authored
+  `DramaticMomentType` catalog. Both GM-gated via `_account_can_gm_scene` on the caller's
+  active scene.
 
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)
