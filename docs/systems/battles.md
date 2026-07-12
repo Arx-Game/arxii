@@ -1014,6 +1014,20 @@ side's units at that place; DEFEAT routs the joiners' own side's units instead;
 FLED/ABANDONED have no automatic mechanical effect. `BattlePlace.controlled_by` is
 never touched by this wiring — front capture stays a deliberate HOLD declaration.
 
+A battle participant can also erupt into a front-bound encounter via a
+technique entrance (#2225): `enter <technique>[=<target>]` dispatches
+`EntranceAction._execute_technique_entrance`, which calls
+`_resolve_battle_context` to detect whether the actor is an active
+`BattleParticipant` stationed at a `BattlePlace` whose battle's scene matches
+the current scene. On the hostile-seeded path, `_maybe_bind_battle_encounter`
+binds the newly seeded encounter to the `BattlePlace` and installs the
+place-encounter-outcome trigger — the same binding + trigger as
+`open_place_encounter`, but driven by a dramatic technique cast rather than a
+GM verb. When the place already has an open encounter, the cast feeds it via
+`_feedable_encounter` (no binding needed). The stationing check stays in the
+action layer (ADR-0010); non-battle, unstationed, and scene-mismatch cases fall
+through to the normal entrance flow unchanged.
+
 A `Fortification`'s starting `max_integrity` can draw on a persistent, player-built
 investment: `world.buildings.Building.fortification_level` (raised by a
 `FORTIFICATION_UPGRADE` Project — see `world.buildings.fortification_services`,
