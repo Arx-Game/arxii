@@ -2,7 +2,7 @@
 namespace (#2177). Mirrors ``CmdLabStation``'s subverb-routing shape
 (``commands/crafting_station.py``). No business logic lives here — the
 command only parses telnet text and dispatches through
-``dispatch_player_action``, the same seam the web ``DefenseInstallationViewSet``
+``dispatch_player_action``, the same seam the web ``DefenseInstallViewSet``
 uses, reaching ``StartDefenseInstallationAction`` / ``FundRoomWardAction`` in
 ``actions/definitions/room_features.py``.
 """
