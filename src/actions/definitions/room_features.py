@@ -82,6 +82,42 @@ def _resolve_active_persona(actor: ObjectDB) -> Any:
         return None
 
 
+def _debit_resonance_and_credit_ward(cr: Any, ward: Any, amount: int) -> int | None:
+    """Atomically debit ``cr.balance`` and credit ``ward.resonance_reserve``.
+
+    Row-locked (``select_for_update``) + wrapped in ``transaction.atomic`` --
+    mirrors ``world.currency.services.transfer``'s established pattern
+    (#2177 whole-branch review, Important #3; a prior version did two
+    separate, unguarded ``.save()`` calls). The locked re-fetch + re-check
+    here is the guaranteed backstop against a concurrent debit racing this
+    one, and it also ensures the debit and the credit either both land or
+    neither does.
+
+    Returns the ward's new ``resonance_reserve``, or ``None`` if the
+    locked balance no longer covers ``amount``.
+    """
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
+    from world.room_features.models import RoomWardDetails  # noqa: PLC0415
+
+    with transaction.atomic():
+        cr = CharacterResonance.objects.select_for_update().get(pk=cr.pk)
+        if cr.balance < amount:
+            return None
+        cr.balance -= amount
+        cr.save(update_fields=["balance"])
+
+        ward = RoomWardDetails.objects.select_for_update().get(pk=ward.pk)
+        ward.resonance_reserve += amount
+        update_fields = ["resonance_reserve"]
+        if ward.lapsed_at is not None:
+            ward.lapsed_at = None
+            update_fields.append("lapsed_at")
+        ward.save(update_fields=update_fields)
+        return ward.resonance_reserve
+
+
 @dataclass
 class StartRoomFeatureProjectAction(Action):
     """Create a ROOM_FEATURE_PROGRESSION project to install or upgrade a feature.
@@ -438,20 +474,12 @@ class FundRoomWardAction(Action):
         cr = CharacterResonance.objects.filter(
             character_sheet=persona.character_sheet, resonance=ward.resonance
         ).first()
-        if cr is None or cr.balance < amount:
+        reserve = _debit_resonance_and_credit_ward(cr, ward, amount) if cr is not None else None
+        if reserve is None:
             return ActionResult(success=False, message=_MSG_INSUFFICIENT_RESONANCE)
-
-        cr.balance -= amount
-        cr.save(update_fields=["balance"])
-        ward.resonance_reserve += amount
-        update_fields = ["resonance_reserve"]
-        if ward.lapsed_at is not None:
-            ward.lapsed_at = None
-            update_fields.append("lapsed_at")
-        ward.save(update_fields=update_fields)
 
         return ActionResult(
             success=True,
             message=f"You channel {amount} resonance into the ward.",
-            data={"resonance_reserve": ward.resonance_reserve},
+            data={"resonance_reserve": reserve},
         )

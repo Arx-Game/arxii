@@ -177,7 +177,27 @@ class ExitBarsStatusTests(DefenseApiTestCase):
     def test_list_endpoint(self) -> None:
         response = self.client.get("/api/room-features/exit-bars/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        self.assertIn("count", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["count"], 1)
+
+    def test_list_filters_by_exit_profile(self) -> None:
+        other_dest = ObjectDBFactory(
+            db_key="OtherDefenseDest", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        other_exit = ObjectDBFactory(db_key="south", db_typeclass_path="typeclasses.exits.Exit")
+        other_exit.location = self.room_profile.objectdb
+        other_exit.destination = other_dest
+        other_exit.save()
+        other_exit_profile = ExitProfile.get_or_create_for_exit(other_exit)
+        other_bars = ExitBarsDetails.objects.create(exit_profile=other_exit_profile, level=1)
+
+        response = self.client.get(
+            "/api/room-features/exit-bars/", {"exit_profile": other_exit_profile.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["level"], other_bars.level)
 
 
 class RoomWardStatusTests(DefenseApiTestCase):
@@ -195,6 +215,26 @@ class RoomWardStatusTests(DefenseApiTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["level"], 1)
 
+    def test_list_is_paginated(self) -> None:
+        response = self.client.get("/api/room-features/room-wards/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("count", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["count"], 1)
+
+    def test_list_filters_by_room_profile(self) -> None:
+        other_room = RoomProfileFactory()
+        other_ward = RoomWardDetails.objects.create(
+            room_profile=other_room, resonance=self.resonance, level=3
+        )
+
+        response = self.client.get(
+            "/api/room-features/room-wards/", {"room_profile": other_room.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["level"], other_ward.level)
+
 
 class RoomAlarmStatusTests(DefenseApiTestCase):
     """GET /api/room-features/room-alarms/."""
@@ -207,6 +247,24 @@ class RoomAlarmStatusTests(DefenseApiTestCase):
         response = self.client.get(f"/api/room-features/room-alarms/{self.room_profile.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["level"], 1)
+
+    def test_list_is_paginated(self) -> None:
+        response = self.client.get("/api/room-features/room-alarms/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("count", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["count"], 1)
+
+    def test_list_filters_by_room_profile(self) -> None:
+        other_room = RoomProfileFactory()
+        other_alarm = RoomAlarmDetails.objects.create(room_profile=other_room, level=4)
+
+        response = self.client.get(
+            "/api/room-features/room-alarms/", {"room_profile": other_room.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["level"], other_alarm.level)
 
 
 class DefenseNoActiveCharacterTests(TestCase):

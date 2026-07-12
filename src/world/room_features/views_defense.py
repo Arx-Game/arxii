@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from http import HTTPMethod
 
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -15,7 +16,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from actions.definitions.room_features import FundRoomWardAction, StartDefenseInstallationAction
+from world.items.views import ItemTemplatePagination
 from world.magic.services.auth import _resolve_actor_sheet
+from world.room_features.filters import ExitBarsFilter, RoomAlarmFilter, RoomWardFilter
 from world.room_features.models import ExitBarsDetails, RoomAlarmDetails, RoomWardDetails
 from world.room_features.serializers_defense import (
     DefenseInstallResultSerializer,
@@ -29,27 +32,49 @@ from world.room_features.serializers_defense import (
 
 
 class ExitBarsViewSet(viewsets.ReadOnlyModelViewSet):
+    """Status endpoint for installed exit bars.
+
+    ``pagination_class``/``filter_backends`` (#2177 whole-branch review,
+    Important #4) mirror ``world.items.views_station.LabStationViewSet`` --
+    reuse the repo's shared page-size-50 convention (``ItemTemplatePagination``)
+    and let a caller scope the list to a single exit via ``ExitBarsFilter``
+    rather than listing every installation in the game unscoped.
+    """
+
     serializer_class = ExitBarsDetailsSerializer
     permission_classes = [IsAuthenticated]
     queryset = ExitBarsDetails.objects.active().order_by("exit_profile_id")
     lookup_field = "exit_profile_id"
     lookup_value_regex = r"\d+"
+    pagination_class = ItemTemplatePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ExitBarsFilter
 
 
 class RoomWardViewSet(viewsets.ReadOnlyModelViewSet):
+    """Status endpoint for installed room wards. See ``ExitBarsViewSet`` docstring."""
+
     serializer_class = RoomWardDetailsSerializer
     permission_classes = [IsAuthenticated]
     queryset = RoomWardDetails.objects.active().order_by("room_profile_id")
     lookup_field = "room_profile_id"
     lookup_value_regex = r"\d+"
+    pagination_class = ItemTemplatePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RoomWardFilter
 
 
 class RoomAlarmViewSet(viewsets.ReadOnlyModelViewSet):
+    """Status endpoint for installed room alarms. See ``ExitBarsViewSet`` docstring."""
+
     serializer_class = RoomAlarmDetailsSerializer
     permission_classes = [IsAuthenticated]
     queryset = RoomAlarmDetails.objects.active().order_by("room_profile_id")
     lookup_field = "room_profile_id"
     lookup_value_regex = r"\d+"
+    pagination_class = ItemTemplatePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RoomAlarmFilter
 
 
 class DefenseInstallViewSet(viewsets.ViewSet):
