@@ -191,6 +191,14 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   first time as check-difficulty. `WITHDRAWN` (`BattleParticipantStatus`) wired for
   the first time. Web click-to-move on the #2009 strategic map deferred — not yet
   scoped.
+  Fleet/swarm math shipped (#1841): `BattleUnit.individual_count` (a #1794 data
+  point, previously inert) now drives a banded flat check penalty against the swarm
+  (`swarm_strike_modifier`, negative like ELITE quality — numbers resist breaking)
+  folded into the modifier stack, plus proportional body
+  loss off `individual_count` on STRIKE/ROUT attrition (`_apply_swarm_losses`) —
+  see [battles.md](../systems/battles.md#swarm-math-1841) and ADR-0123. Capital
+  ships (#1714/#1832) stay on their own per-hull Fortification track — swarm math
+  is for hordes/packs/flocks, not vessels.
 - Mounts / charging / flying (P2, no-improv-flagged). Ranged / archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
 
 ## Reserved term: "clash"
