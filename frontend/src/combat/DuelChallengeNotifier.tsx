@@ -14,31 +14,56 @@
  * dispatch is never silently lost (the id was already added to toastedIds when the
  * toast first fired, so a dismissed-on-error toast would otherwise never resurface).
  *
+ * Right-character dispatch (#2166): `useDuelChallengeInbox` is already account-wide
+ * (server-scoped to `request.user.played_character_sheet_ids`, not the active
+ * character), so a challenge addressed to a *background* character can appear
+ * while a different character is active. Each toast resolves the challenged
+ * character's own roster entry (`challenge.challenged.id` is the CharacterSheet
+ * pk, matching `MyRosterEntry.character_id`) and dispatches Accept/Decline as
+ * THAT character — never the active one. Resolution + the `useDispatchPlayerAction`
+ * call both live in `DuelChallengeToastBody` (one component instance per toast, its
+ * own hook call bound to the resolved character id) rather than the notifier's
+ * top level, because a single top-level hook call can only bind one fixed
+ * character and multiple background challenges may target different characters
+ * concurrently. The dispatch is plain REST by character id
+ * (`POST /api/actions/characters/{characterId}/dispatch/`) — it works whether or
+ * not that character has a live session/tab open.
+ *
  * Renders nothing itself — `null` always, purely a side-effect component.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+import type { MyRosterEntry } from '@/roster/types';
 import { useDuelChallengeInbox, useDispatchPlayerAction } from './queries';
+import type { DuelChallenge } from './api';
 import { registryRef } from './duels/DuelChallengeControls';
 
 interface ToastBodyProps {
-  challengerName: string;
-  onAccept: () => Promise<void>;
-  onDecline: () => Promise<void>;
+  toastId: string | number;
+  challenge: DuelChallenge;
+  /** The challenged character's own sheet id — dispatch always uses this, never the active character. */
+  characterId: number;
+  characterName: string;
 }
 
-function DuelChallengeToastBody({ challengerName, onAccept, onDecline }: ToastBodyProps) {
+function DuelChallengeToastBody({
+  toastId,
+  challenge,
+  characterId,
+  characterName,
+}: ToastBodyProps) {
+  const { mutateAsync } = useDispatchPlayerAction(characterId);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handle(action: () => Promise<void>) {
+  async function handle(action: 'accept' | 'decline') {
     setIsPending(true);
     setError(null);
     try {
-      await action();
+      await mutateAsync(registryRef(action, { challenge_id: challenge.id }));
+      toast.dismiss(toastId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to respond to the challenge');
     } finally {
@@ -52,14 +77,18 @@ function DuelChallengeToastBody({ challengerName, onAccept, onDecline }: ToastBo
       data-testid="duel-challenge-toast"
     >
       <p className="text-sm text-foreground">
-        <span className="font-semibold">{challengerName}</span> has challenged you to a duel.
+        <span className="font-semibold">{challenge.challenger.name}</span> has challenged{' '}
+        <span className="font-semibold">{characterName}</span> to a duel.
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Responding as <span className="font-semibold">{characterName}</span>.
       </p>
       <div className="mt-2 flex gap-2">
         <button
           type="button"
           disabled={isPending}
           onClick={() => {
-            handle(onAccept).catch(() => {});
+            handle('accept').catch(() => {});
           }}
           data-testid="duel-toast-accept-btn"
           className="rounded border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
@@ -70,7 +99,7 @@ function DuelChallengeToastBody({ challengerName, onAccept, onDecline }: ToastBo
           type="button"
           disabled={isPending}
           onClick={() => {
-            handle(onDecline).catch(() => {});
+            handle('decline').catch(() => {});
           }}
           data-testid="duel-toast-decline-btn"
           className="rounded border border-destructive/60 bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive disabled:cursor-not-allowed disabled:opacity-50"
@@ -87,20 +116,25 @@ function DuelChallengeToastBody({ challengerName, onAccept, onDecline }: ToastBo
   );
 }
 
+/** Resolve the roster entry (if any) for the CharacterSheet id the challenge is addressed to. */
+function resolveChallenged(
+  challenge: DuelChallenge,
+  myRosterEntries: MyRosterEntry[]
+): { characterId: number; characterName: string } {
+  const entry = myRosterEntries.find((e) => e.character_id === challenge.challenged.id);
+  return {
+    characterId: entry?.character_id ?? challenge.challenged.id,
+    characterName: entry?.name ?? challenge.challenged.name,
+  };
+}
+
 export function DuelChallengeNotifier() {
-  const activeCharacter = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const activeEntry = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacter) ?? null,
-    [myRosterEntries, activeCharacter]
-  );
-  const characterId = activeEntry?.character_id ?? 0;
 
   const { data: incomingChallenges = [] } = useDuelChallengeInbox({
-    enabled: characterId > 0,
+    enabled: myRosterEntries.length > 0,
     role: 'incoming',
   });
-  const { mutateAsync } = useDispatchPlayerAction(characterId);
 
   const toastedIds = useRef<Set<number>>(new Set());
 
@@ -109,21 +143,18 @@ export function DuelChallengeNotifier() {
       if (toastedIds.current.has(challenge.id)) continue;
       toastedIds.current.add(challenge.id);
 
+      const { characterId, characterName } = resolveChallenged(challenge, myRosterEntries);
+
       toast.custom((toastId) => (
         <DuelChallengeToastBody
-          challengerName={challenge.challenger.name}
-          onAccept={async () => {
-            await mutateAsync(registryRef('accept', { challenge_id: challenge.id }));
-            toast.dismiss(toastId);
-          }}
-          onDecline={async () => {
-            await mutateAsync(registryRef('decline', { challenge_id: challenge.id }));
-            toast.dismiss(toastId);
-          }}
+          toastId={toastId}
+          challenge={challenge}
+          characterId={characterId}
+          characterName={characterName}
         />
       ));
     }
-  }, [incomingChallenges, mutateAsync]);
+  }, [incomingChallenges, myRosterEntries]);
 
   return null;
 }
