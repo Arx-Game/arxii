@@ -134,14 +134,19 @@ def apply_battle_legend_awards(battle: Battle) -> None:
     winning_side_role, decisive = mapping
 
     personas = _winning_personas(battle, winning_side_role)
-    base_value = BATTLE_LEGEND_DECISIVE_VALUE if decisive else BATTLE_LEGEND_MARGINAL_VALUE
-    create_legend_event(
-        f"Victory at {battle.name}",
-        source_type,
-        base_value,
-        personas,
-        scene=battle.scene,
-        story=battle.campaign_story,
-    )
+    if personas:
+        # A PC-less winning side mints no Victory event: create_legend_event
+        # with an empty persona list would leave a dangling LegendEvent with
+        # zero entries, and the entry-based idempotency guard above would not
+        # see it — every re-conclude would mint another empty event.
+        base_value = BATTLE_LEGEND_DECISIVE_VALUE if decisive else BATTLE_LEGEND_MARGINAL_VALUE
+        create_legend_event(
+            f"Victory at {battle.name}",
+            source_type,
+            base_value,
+            personas,
+            scene=battle.scene,
+            story=battle.campaign_story,
+        )
 
     _award_standout_deeds(battle, source_type)
