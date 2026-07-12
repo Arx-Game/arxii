@@ -276,6 +276,7 @@ class ActionRegistryTests(TestCase):
             "start_scene",
             "finish_scene",
             "grant_scene_gm",
+            "mark_decisive_check",
             "add_encounter_participant",
             "add_opponent",
             "begin_encounter_round",
