@@ -320,6 +320,22 @@ They do not use the command system, dispatchers, or handlers.
   `events.py`'s host-lifecycle actions) close the recognition loop a qualifying
   entrance opens.
 
+  **Battle-front composition (#2225):** `_execute_technique_entrance` calls
+  `_resolve_battle_context(actor_sheet, scene)` before dispatching. When the
+  actor is an active `BattleParticipant` stationed at a `BattlePlace` whose
+  battle's scene matches the current scene, the hostile-seeded encounter is
+  bound to that `BattlePlace` (via `_maybe_bind_battle_encounter`, called
+  inside `_dispatch_entrance_cast` where `cast.encounter` is in scope) and the
+  place-encounter-outcome trigger is installed — composing #2183's entrance
+  path with #2008's front-stationing gate. When the place already has an open
+  encounter, the cast feeds it (via `_feedable_encounter`); no binding needed.
+  The stationing check stays in the action layer (ADR-0010); `world.combat`
+  never imports from `world.battles`. Non-battle, unstationed, and
+  scene-mismatch cases fall through to the normal entrance flow unchanged. The
+  benign PENDING path does not get battle binding — the accept-time resolver
+  (`resolve_accepted_cast`) has no battle context; a benign intervention seats
+  in an existing encounter via `_feedable_encounter` if one exists.
+
   **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
   (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager
   excludes dissolved instances. SANCTUM-anchored threads are soft-retired (`retired_at`) on

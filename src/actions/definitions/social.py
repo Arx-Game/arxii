@@ -390,6 +390,8 @@ class EntranceAction(_SocialTemplateAction):
             except Persona.DoesNotExist:
                 return _ActionResult(success=False, message="Target persona not found.")
 
+        battle_context = self._resolve_battle_context(actor_sheet, scene)
+
         return self._dispatch_entrance_cast(
             actor,
             scene,
@@ -402,6 +404,7 @@ class EntranceAction(_SocialTemplateAction):
             confirm_soulfray_risk=confirm_soulfray_risk,
             entry_interaction_id=entry_interaction_id,
             entrance_kwargs=kwargs,
+            battle_context=battle_context,
         )
 
     def _dispatch_entrance_cast(  # noqa: PLR0913 - cohesive entrance-cast dispatch params
@@ -418,6 +421,7 @@ class EntranceAction(_SocialTemplateAction):
         confirm_soulfray_risk: bool,
         entry_interaction_id: int | None,
         entrance_kwargs: dict[str, Any],
+        battle_context: tuple[Any, Any] | None = None,
     ) -> ActionResult:
         """Call ``request_technique_cast`` and route the outcome per the #2183 deferral matrix.
 
@@ -470,6 +474,7 @@ class EntranceAction(_SocialTemplateAction):
             return _ActionResult(success=True, message="Your entrance hangs on their consent.")
 
         if cast.encounter is not None:
+            self._maybe_bind_battle_encounter(cast.encounter, battle_context)
             return self._resolve_hostile_entrance_result(
                 actor, scene, technique, target_persona_id, entry_interaction
             )
@@ -613,6 +618,85 @@ class EntranceAction(_SocialTemplateAction):
             )
 
         return _ActionResult(success=True, message=message)
+
+    @staticmethod
+    def _resolve_battle_context(
+        actor_sheet: CharacterSheet | None,
+        scene: Scene,
+    ) -> tuple[Any, Any] | None:
+        """Detect whether the actor is a stationed battle participant at this scene (#2225).
+
+        Returns ``(BattleParticipant, BattlePlace)`` when the actor is an active
+        ``BattleParticipant`` stationed at a ``BattlePlace`` whose battle's scene
+        matches *scene*. Returns None otherwise (not in a battle, not stationed,
+        or scene co-location mismatch — all fall through to the normal entrance flow).
+
+        The stationing check stays in the action layer (ADR-0010): ``world.combat``
+        never imports from ``world.battles``.
+        """
+        if actor_sheet is None:
+            return None
+
+        from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+        from world.battles.models import BattleParticipant  # noqa: PLC0415
+
+        participant = (
+            BattleParticipant.objects.select_related(
+                "place__battle__scene",
+            )
+            .filter(
+                character_sheet=actor_sheet,
+                status=BattleParticipantStatus.ACTIVE,
+            )
+            .first()
+        )
+        if participant is None or participant.place is None:
+            return None
+
+        battle_place = participant.place
+        if battle_place.battle.scene_id != scene.pk:
+            return None
+
+        return participant, battle_place
+
+    @staticmethod
+    def _maybe_bind_battle_encounter(
+        encounter: Any,
+        battle_context: tuple[Any, Any] | None,
+    ) -> None:
+        """Bind a hostile-seeded encounter to the actor's BattlePlace (#2225).
+
+        Called inside ``_dispatch_entrance_cast`` on the hostile-seeded branch,
+        where ``cast.encounter`` is in scope. When the actor's ``BattlePlace``
+        has no open encounter (FK is None or points at a COMPLETED encounter),
+        binds the new encounter to the place and installs the place-encounter
+        outcome trigger. When the place already has an open encounter, no-ops
+        (the cast fed it via ``_feedable_encounter``; it's already bound).
+
+        The ``BattlePlace.combat_encounter`` FK persists after completion
+        (``complete_encounter`` only sets ``status=COMPLETED``, never nulls the
+        FK), so the "open" check uses status filtering, not raw FK presence.
+        """
+        if battle_context is None:
+            return
+
+        from world.battles.place_encounter_wiring import (  # noqa: PLC0415
+            install_place_encounter_trigger,
+        )
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        _participant, battle_place = battle_context
+
+        existing = battle_place.combat_encounter
+        if existing is not None and existing.status in (
+            RoundStatus.DECLARING,
+            RoundStatus.BETWEEN_ROUNDS,
+        ):
+            return
+
+        battle_place.combat_encounter = encounter
+        battle_place.save(update_fields=["combat_encounter"])
+        install_place_encounter_trigger(encounter)
 
 
 @dataclass
