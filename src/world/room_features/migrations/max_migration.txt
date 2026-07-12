@@ -1,1 +1,1 @@
-0011_alter_roomfeaturekind_service_strategy
+0012_alter_roomfeaturekind_service_strategy
