@@ -5216,6 +5216,29 @@ def resolve_npc_attack(
         participant.character_sheet,
         participant.encounter,
     )
+
+    # Wind-as-mechanic (#1555) symmetry: the same gale that ruins a PC's
+    # missile shot ruins an NPC's. Only MISSILE-delivered threat entries with
+    # a defense roll are affected — flat base_damage entries (no defense_check_type,
+    # never reaching this function) stay untouched.
+    if (
+        opponent_action.threat_entry.delivery == StrikeDelivery.MISSILE
+        and participant.encounter.room is not None
+    ):
+        from world.locations.constants import StatKey  # noqa: PLC0415
+        from world.locations.services import felt_exposure  # noqa: PLC0415
+
+        wind_mod = wind_penalty(felt_exposure(participant.encounter.room, stat_key=StatKey.WIND))
+        if wind_mod:
+            bond_contributions = [
+                *bond_contributions,
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.SCENE,
+                    source_label="Wind",
+                    value=-wind_mod,
+                ),
+            ]
+
     breakdown = collect_check_modifiers(
         participant.character_sheet,
         check_type,
