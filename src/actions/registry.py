@@ -306,7 +306,12 @@ from actions.definitions.scene_reactions import (
     ToggleFavoriteAction,
     ToggleReactionAction,
 )
-from actions.definitions.scenes import FinishSceneAction, GrantSceneGMAction, StartSceneAction
+from actions.definitions.scenes import (
+    FinishSceneAction,
+    GrantSceneGMAction,
+    MarkDecisiveCheckAction,
+    StartSceneAction,
+)
 from actions.definitions.ships import (
     CommissionShipAction,
     RepairShipAction,
@@ -479,6 +484,7 @@ _ALL_ACTIONS: list[Action] = [
     StartSceneAction(),
     FinishSceneAction(),
     GrantSceneGMAction(),
+    MarkDecisiveCheckAction(),
     BeginEncounterRoundAction(),
     ResolveEncounterRoundAction(),
     AddOpponentAction(),

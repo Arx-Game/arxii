@@ -558,6 +558,9 @@ def resolve_accepted_cast(
             result=result,
         )
 
+    # #1748: fire any pending decisive-check marker after a benign cast resolves.
+    _maybe_fire_decisive_for_cast(action_request, result)
+
     return result  # result.power_ledger is already set from _resolve_cast
 
 
@@ -589,6 +592,26 @@ def _maybe_seat_after_consent_accept(
         caster_sheet=initiator_persona.character_sheet,
         target_sheets=[target_persona.character_sheet],
         scene=scene,
+    )
+
+
+def _maybe_fire_decisive_for_cast(
+    action_request: SceneActionRequest,
+    result: EnhancedSceneActionResult | None,
+) -> None:
+    """Fire any pending DecisiveCheckMarker after a benign cast resolves (#1748)."""
+    if result is None:
+        return
+    from world.scenes.decisive_check_services import maybe_fire_decisive_check  # noqa: PLC0415
+
+    main = result.action_resolution.main_result
+    if main is None:
+        return
+    maybe_fire_decisive_check(
+        scene=action_request.scene,
+        check_outcome=main.check_result.outcome,
+        initiator_sheet=action_request.initiator_persona.character_sheet,
+        target_persona=action_request.target_persona,
     )
 
 
