@@ -51,6 +51,7 @@ class IdentificationOdds:
     baseline: int
     familiarity_ease: int
     guess_ease: int
+    kit_quality_bonus: int
 
 
 class IdentificationOutcome(Enum):
