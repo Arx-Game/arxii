@@ -128,6 +128,19 @@ class FoodConfig(SharedMemoryModel):
         default=5,
         help_text="Prosperity subtracted per week of food shortage.",
     )
+    recovery_unrest_relief = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="Unrest relaxed per well-fed week (recovery drift, #2238).",
+    )
+    recovery_prosperity_gain = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="Prosperity recovered per well-fed week, up to the equilibrium.",
+    )
+    prosperity_equilibrium = models.PositiveSmallIntegerField(
+        default=50,
+        help_text="Baseline a well-fed domain's prosperity recovers toward (never past; "
+        "improvements above it are untouched).",
+    )
     granary_capacity_per_level = models.PositiveIntegerField(
         default=100,
         help_text="Max stored food per Granary level.",

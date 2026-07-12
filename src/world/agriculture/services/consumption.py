@@ -69,6 +69,7 @@ def _consume_domain(domain, config) -> bool:
     if stockpile.stored >= needed:
         stockpile.stored -= needed
         stockpile.save(update_fields=["stored"])
+        _apply_recovery(domain, config)
         return False
 
     # Shortage: consume what's available, apply penalties.
@@ -83,3 +84,22 @@ def _apply_shortage(domain, config) -> None:
     domain.unrest = min(100, domain.unrest + config.shortage_unrest_penalty)
     domain.prosperity = max(0, domain.prosperity - config.shortage_prosperity_penalty)
     domain.save(update_fields=["unrest", "prosperity"])
+
+
+def _apply_recovery(domain, config) -> None:
+    """A well-fed week relaxes unrest and recovers prosperity toward equilibrium (#2238).
+
+    Unrest always eases toward 0; prosperity only climbs back *up to* the
+    equilibrium, so a single missed harvest isn't permanently punitive — but
+    improvements that pushed prosperity above the equilibrium are left untouched.
+    """
+    unrest = max(0, domain.unrest - config.recovery_unrest_relief)
+    prosperity = domain.prosperity
+    if prosperity < config.prosperity_equilibrium:
+        prosperity = min(
+            config.prosperity_equilibrium, prosperity + config.recovery_prosperity_gain
+        )
+    if unrest != domain.unrest or prosperity != domain.prosperity:
+        domain.unrest = unrest
+        domain.prosperity = prosperity
+        domain.save(update_fields=["unrest", "prosperity"])
