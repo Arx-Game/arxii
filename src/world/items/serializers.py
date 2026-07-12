@@ -334,6 +334,9 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     access_policy = serializers.CharField(read_only=True)
     is_currency_instrument = serializers.SerializerMethodField()
     can_steal = serializers.SerializerMethodField()
+    # #2243: appraised worth (quality × base value + materials) — a pricing
+    # *suggestion* for the market, never an enforced price.
+    suggested_value = serializers.SerializerMethodField()
 
     class Meta:
         model = ItemInstance
@@ -342,6 +345,7 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
             "game_object_id",
             "template",
             "quality_tier",
+            "suggested_value",
             "display_name",
             "display_description",
             "display_image_url",
@@ -365,6 +369,12 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
         """True iff use_item would proceed: the template has an on-use pool.
         Delegates to the canonical ``ItemTemplate.is_usable`` predicate."""
         return obj.template.is_usable
+
+    def get_suggested_value(self, obj: ItemInstance) -> int:
+        """Appraised worth in coppers — a market pricing suggestion (#2243)."""
+        from world.items.services.pricing import appraise  # noqa: PLC0415
+
+        return appraise(obj)
 
     def get_is_currency_instrument(self, obj: ItemInstance) -> bool:
         """True iff ``obj`` is a minted coin (loose cache or grand coin, #1909).

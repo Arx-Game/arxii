@@ -41643,6 +41643,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/QualityTier'
           readOnly: true
+        suggested_value:
+          type: integer
+          description: Appraised worth in coppers — a market pricing suggestion (#2243).
+          readOnly: true
         display_name:
           type: string
           readOnly: true
@@ -41717,6 +41721,7 @@ components:
       - is_usable
       - quality_tier
       - quantity
+      - suggested_value
       - template
     ItemStyleRead:
       type: object

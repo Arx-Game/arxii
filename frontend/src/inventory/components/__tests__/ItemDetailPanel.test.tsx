@@ -112,6 +112,7 @@ function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
     game_object_id: 700,
     access_policy: 'open',
     is_currency_instrument: false,
+    suggested_value: 0,
     can_steal: false,
     template: {
       id: 70,

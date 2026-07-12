@@ -3003,7 +3003,14 @@ behind `CharacterRecipeKnowledge` (a character↔recipe join) — open recipes s
 gated ones need a learned row. Both the browse endpoint and `run_crafting_recipe` enforce
 it; `world.items.crafting.knowledge` carries `character_knows_recipe` / `grant_recipe_knowledge`
 / `teach_recipe` (teacher must know it), raising `RecipeNotKnown`. Discovery via the clue
-loop is a future hook.
+loop is a future hook. #2243 added the crafting **reward loop**:
+`world.items.services.pricing.appraise(instance)` (quality tier × `template.value` +
+material `lore_value` → suggested worth, surfaced as the read-only
+`ItemInstanceReadSerializer.suggested_value`) and **masterwork→renown**
+(`world.items.crafting.reward` — a craft whose tier's `stat_multiplier` meets
+`MASTERWORK_STAT_MULTIPLIER_THRESHOLD` mints a solo `LegendEntry` for the maker via
+`create_solo_deed`, from `run_crafting_recipe`). Mint self-provenance now stamps
+`designer_*` too (#2066/#2243). Magnitudes PLACEHOLDER.
 
 - **Models:**
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,

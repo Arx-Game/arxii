@@ -217,7 +217,10 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # consequence rows would push either count up by ≥3.
             from django.db import connection
 
-            expected = 86 if connection.vendor == "postgresql" else 87
+            # +1 (both vendors) from the main merge that brought #2266/#2273's
+            # item-prose + market cascades into this branch — a constant SELECT/
+            # UPDATE, not a per-row N+1 (which would push the count up by ≥3).
+            expected = 87 if connection.vendor == "postgresql" else 88
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,

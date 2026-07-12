@@ -1,6 +1,16 @@
 """Constants for the crafting submodule."""
 
+from decimal import Decimal
+
 from django.db import models
+
+#: A craft whose resolved quality tier's ``stat_multiplier`` meets this is a
+#: "masterwork" — it earns the maker renown (#2243). PLACEHOLDER magnitude.
+MASTERWORK_STAT_MULTIPLIER_THRESHOLD: Decimal = Decimal("1.5")
+
+#: Legend ``base_value`` for the solo deed a masterwork craft earns its maker.
+#: PLACEHOLDER — the tuning pass sets the real fame weight.
+MASTERWORK_DEED_BASE_VALUE: int = 10
 
 
 class CraftingRecipeKind(models.TextChoices):
