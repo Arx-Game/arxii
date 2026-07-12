@@ -22,6 +22,12 @@ Environment secrets and invokes the exact same script below (one source of truth
   It is *not* reachable from the button.
 - **Telnet:** TLS-only. A TLS-capable MUD client (Mudlet, TinTin++, etc.) is required; the bare
   `telnet` command-line binary is intentionally unsupported. Plaintext telnet is closed.
+- **Single entry point — state has no locking.** The S3-compatible backend (Linode Object
+  Storage) does not support Terraform state locking. Never run the local `standup.sh` fallback
+  while the CI button may be running (or vice versa) — a concurrent `tofu apply` against the
+  same state can corrupt it. Treat the GitHub Actions button as the one true entry point; use
+  the local fallback only when you know the button isn't running (its `concurrency` group
+  serializes runs of itself, but cannot see a local run).
 
 ## Human prerequisites checklist (do these once, before pressing the button)
 
@@ -111,6 +117,14 @@ repo/Environment **Variables**, not Secrets. The superuser username/email
 default to `arxii_admin` / `admin@example.invalid` if you leave the
 Variables unset — fine for a private playtest box, override for prod.
 
+- `ARXII_SSH_ADMIN_CIDRS` — **required**, maps to `TF_VAR_ssh_admin_cidrs`. A
+  JSON array of operator CIDRs, e.g. `["203.0.113.10/32"]`. `standup.sh`'s
+  preflight refuses to run at all if this is unset/empty — the SSH admin
+  allowlist is a conscious decision (see the checklist above), not a
+  default to leave unmade.
+- `ARXII_ACME_EMAIL` — optional; Caddy's ACME account email. Defaults to
+  `admin@<domain>` if unset.
+
 ## What the button actually does to game state (first run vs. re-run)
 
 The deploy is idempotent: re-runs are safe and mostly no-ops. Per release,
@@ -193,6 +207,26 @@ Two things that catch people out:
   the runner can't reach the host for any reason, that file is your only
   emergency way back in short of re-provisioning the box from a fresh
   Terraform apply.
+
+## Known gap: Object Lock
+
+Both backup copies (the Linode primary bucket and the Cloudflare R2 offsite bucket) have
+**versioning enabled but not Object Lock (immutability).** This is a known gap, not an oversight:
+
+- The Linode provider (pinned `~> 2.20`) exposes no Object Lock argument on
+  `linode_object_storage_bucket` at all — there is nothing to wire without fabricating a resource
+  the provider doesn't support.
+- Cloudflare's R2 lock resource (`cloudflare_r2_bucket_lock`) needs provider `>= 5.4`; this repo
+  pins `~> 4.40`.
+
+**Compensating posture in the meantime:** the on-box Linode writer key is bucket-scoped
+(read/write only to the primary backups bucket, cannot reach any other bucket or account) and
+the R2 offsite copy is a genuinely independent second copy — separate provider, separate
+account, separate out-of-band credential — so a compromise of one copy's credential cannot
+reach or delete the other. Neither backstop is immutability against a compromised credential
+with delete rights on *its own* bucket, which is the residual risk Object Lock would close.
+Tracked in #2236; revisit when either provider pin is deliberately bumped past the versions
+above.
 
 ## Layout
 

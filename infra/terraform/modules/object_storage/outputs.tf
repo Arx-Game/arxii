@@ -8,6 +8,14 @@ output "region" {
   description = "Primary backups bucket region."
 }
 
+output "s3_endpoint" {
+  # Verified attribute name against the pinned linode provider (2.41.2) — see
+  # the same note in terraform/bootstrap/outputs.tf. Bare hostname; prefixed
+  # with https:// here for direct use by the `backups` Ansible role/client.
+  value       = "https://${linode_object_storage_bucket.backups.s3_endpoint}"
+  description = "S3-compatible endpoint for the primary backups bucket."
+}
+
 # Keys are SECRET — emitted sensitive so the root can route them to the
 # ansible-vault EnvironmentFile path (writer = on-box backup job; dev reader
 # = handed to developers). Never logged; never committed.

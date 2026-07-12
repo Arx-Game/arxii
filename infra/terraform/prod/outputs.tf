@@ -14,11 +14,35 @@ output "telnet_fqdn" {
 output "backups_bucket" {
   value = module.object_storage.bucket
 }
+output "backups_s3_endpoint" {
+  value = module.object_storage.s3_endpoint
+}
 output "r2_offsite_bucket" {
   value = module.r2_offsite.bucket
 }
 output "r2_s3_endpoint" {
   value = module.r2_offsite.s3_endpoint
+}
+
+# Echoed operator inputs — group_vars wiring needs these as `tofu output`s
+# too (standup.sh has no other way to read a TF_VAR_* value back out).
+output "ssh_admin_cidrs" {
+  value = var.ssh_admin_cidrs
+}
+output "tls_telnet_port" {
+  value = var.tls_telnet_port
+}
+output "authorized_keys" {
+  value = var.authorized_keys # public keys — NOT sensitive
+}
+
+# Cloudflare's published IP ranges (data source already used by the firewall
+# module wiring above) — host_firewall mirrors the same allowlist.
+output "cloudflare_ipv4_cidrs" {
+  value = data.cloudflare_ip_ranges.cf.ipv4_cidr_blocks
+}
+output "cloudflare_ipv6_cidrs" {
+  value = data.cloudflare_ip_ranges.cf.ipv6_cidr_blocks
 }
 
 output "backup_writer_access_key" {

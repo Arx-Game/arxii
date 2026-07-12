@@ -1,4 +1,6 @@
 ---
 collections:
+  # Pinned to the 3.x major (open floor, capped ceiling); bump the ceiling
+  # deliberately after checking the 4.x changelog for breaking changes.
   - name: community.postgresql
-    version: ">=3.0.0"
+    version: ">=3.0.0,<4.0.0"

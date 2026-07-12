@@ -41,15 +41,13 @@ module "dns" {
 }
 
 module "object_storage" {
-  source                     = "../modules/object_storage"
-  region                     = var.region
-  label                      = var.state_bucket_label
-  object_lock_retention_days = 30
+  source = "../modules/object_storage"
+  region = var.region
+  label  = var.state_bucket_label
 }
 
 module "r2_offsite" {
-  source                     = "../modules/r2_offsite"
-  account_id                 = var.cloudflare_account_id
-  bucket_name                = var.r2_bucket_name
-  object_lock_retention_days = 30
+  source      = "../modules/r2_offsite"
+  account_id  = var.cloudflare_account_id
+  bucket_name = var.r2_bucket_name
 }

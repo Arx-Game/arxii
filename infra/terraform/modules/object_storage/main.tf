@@ -1,25 +1,23 @@
-# PRIMARY backups bucket (Linode). Versioning + Object Lock = the authoritative
-# backstop against an on-box writer-key compromise (NOT key permissions —
-# Linode S3 keys are only read-only/read-write; an RW key CAN delete; see
-# §4.9 / focused review). prevent_destroy: this IS the plan's stateful set.
+# PRIMARY backups bucket (Linode). Versioning IS implemented — the backstop
+# against accidental overwrite/delete via the on-box writer key. prevent_
+# destroy: this IS the plan's stateful set.
 #
-# §4.9 IMPLEMENTATION-VERIFY (do not guess): confirm against the pinned
-# Linode provider whether Object Lock is settable on the bucket resource and
-# its exact argument shape. Object Lock MUST be enabled at bucket creation;
-# if the provider does not expose it, it is set via the S3 API/console at
-# creation and Terraform manages the bucket + documents that step. CI
-# `tofu validate` + the focused review are the authority — flag, don't fake.
+# KNOWN GAP (tracked in #2236): Object Lock is NOT implemented. The pinned
+# linode provider (~> 2.20) exposes no Object Lock argument on this resource
+# (confirmed against the provider schema/docs at the pinned version — no
+# `object_lock` block exists), so there is nothing to wire without fabricating
+# a resource the provider doesn't support. Compensating posture until a
+# provider adds support: the on-box writer key is bucket-scoped (cannot reach
+# any other bucket or account), and the R2 offsite copy (r2_offsite module)
+# is a second, independent copy under a SEPARATE credential/provider/account
+# — a compromise of the Linode writer key cannot touch the R2 copy. See
+# infra/README.md "Known gap: Object Lock".
 
 resource "linode_object_storage_bucket" "backups" {
   region = var.region
   label  = var.label
 
   versioning = true
-
-  # Object Lock intent (compliance/governance, retention window). Exact
-  # argument name/block is the §4.9 verify item — confirm in CI against the
-  # pinned provider; this is the design contract the implementation must meet.
-  # object_lock { enabled = true, mode = "GOVERNANCE", retention_days = var.object_lock_retention_days }
 
   lifecycle {
     prevent_destroy = true

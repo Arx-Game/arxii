@@ -13,9 +13,3 @@ variable "location" {
   default     = "ENAM"
   description = "R2 location hint (e.g. ENAM/WNAM/EEUR). Confirm valid values against the pinned provider in CI."
 }
-
-variable "object_lock_retention_days" {
-  type        = number
-  default     = 30
-  description = "R2 object-lock retention for the offsite copy (its OWN immutability, independent of the Linode primary)."
-}
