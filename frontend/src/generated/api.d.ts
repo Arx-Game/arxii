@@ -9254,7 +9254,13 @@ export interface paths {
     };
     /**
      * @description Read-only catalog of curated consequence-pool flavors a technique author
-     *     may select (children of the shared base 'Magic: Technique Cast' pool).
+     *     may select — children of the shared base 'Magic: Technique Cast' pool AND
+     *     children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
+     *     list. The picker (TechniqueBuilderForm's "Outcome Flavor" select) does not
+     *     filter by action_category client-side today, so this listing stays flat
+     *     too rather than threading category through — resolve_cast_action_template
+     *     is still the seam that enforces a chosen flavor matches the technique's
+     *     action_category at submit time.
      */
     get: operations['magic_consequence_pool_catalog_list'];
     put?: never;
@@ -9274,7 +9280,13 @@ export interface paths {
     };
     /**
      * @description Read-only catalog of curated consequence-pool flavors a technique author
-     *     may select (children of the shared base 'Magic: Technique Cast' pool).
+     *     may select — children of the shared base 'Magic: Technique Cast' pool AND
+     *     children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
+     *     list. The picker (TechniqueBuilderForm's "Outcome Flavor" select) does not
+     *     filter by action_category client-side today, so this listing stays flat
+     *     too rather than threading category through — resolve_cast_action_template
+     *     is still the seam that enforces a chosen flavor matches the technique's
+     *     action_category at submit time.
      */
     get: operations['magic_consequence_pool_catalog_retrieve'];
     put?: never;
