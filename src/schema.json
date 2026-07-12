@@ -24116,6 +24116,25 @@ paths:
   /api/room-features/exit-bars/:
     get:
       operationId: room_features_exit_bars_list
+      description: |-
+        Status endpoint for installed exit bars.
+
+        ``pagination_class``/``filter_backends`` (#2177 whole-branch review,
+        Important #4) mirror ``world.items.views_station.LabStationViewSet`` --
+        reuse the repo's shared page-size-50 convention (``ItemTemplatePagination``)
+        and let a caller scope the list to a single exit via ``ExitBarsFilter``
+        rather than listing every installation in the game unscoped.
+      parameters:
+      - in: query
+        name: exit_profile
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
       tags:
       - room-features
       security:
@@ -24125,13 +24144,19 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ExitBarsDetails'
+                $ref: '#/components/schemas/PaginatedExitBarsDetailsList'
           description: ''
   /api/room-features/exit-bars/{exit_profile_id}/:
     get:
       operationId: room_features_exit_bars_retrieve
+      description: |-
+        Status endpoint for installed exit bars.
+
+        ``pagination_class``/``filter_backends`` (#2177 whole-branch review,
+        Important #4) mirror ``world.items.views_station.LabStationViewSet`` --
+        reuse the repo's shared page-size-50 convention (``ItemTemplatePagination``)
+        and let a caller scope the list to a single exit via ``ExitBarsFilter``
+        rather than listing every installation in the game unscoped.
       parameters:
       - in: path
         name: exit_profile_id
@@ -24153,6 +24178,19 @@ paths:
   /api/room-features/room-alarms/:
     get:
       operationId: room_features_room_alarms_list
+      description: Status endpoint for installed room alarms. See ``ExitBarsViewSet``
+        docstring.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: room_profile
+        schema:
+          type: number
       tags:
       - room-features
       security:
@@ -24162,13 +24200,13 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RoomAlarmDetails'
+                $ref: '#/components/schemas/PaginatedRoomAlarmDetailsList'
           description: ''
   /api/room-features/room-alarms/{room_profile_id}/:
     get:
       operationId: room_features_room_alarms_retrieve
+      description: Status endpoint for installed room alarms. See ``ExitBarsViewSet``
+        docstring.
       parameters:
       - in: path
         name: room_profile_id
@@ -24190,6 +24228,19 @@ paths:
   /api/room-features/room-wards/:
     get:
       operationId: room_features_room_wards_list
+      description: Status endpoint for installed room wards. See ``ExitBarsViewSet``
+        docstring.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: room_profile
+        schema:
+          type: number
       tags:
       - room-features
       security:
@@ -24199,13 +24250,13 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RoomWardDetails'
+                $ref: '#/components/schemas/PaginatedRoomWardDetailsList'
           description: ''
   /api/room-features/room-wards/{room_profile_id}/:
     get:
       operationId: room_features_room_wards_retrieve
+      description: Status endpoint for installed room wards. See ``ExitBarsViewSet``
+        docstring.
       parameters:
       - in: path
         name: room_profile_id
@@ -46488,6 +46539,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EventList'
+    PaginatedExitBarsDetailsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExitBarsDetails'
     PaginatedFashionPresentationList:
       type: object
       required:
@@ -48158,6 +48232,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ritual'
+    PaginatedRoomAlarmDetailsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomAlarmDetails'
     PaginatedRoomSizeTierList:
       type: object
       required:
@@ -48181,6 +48278,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RoomSizeTier'
+    PaginatedRoomWardDetailsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomWardDetails'
     PaginatedRosterEntryList:
       type: object
       required:

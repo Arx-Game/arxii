@@ -14783,6 +14783,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Status endpoint for installed exit bars.
+     *
+     *     ``pagination_class``/``filter_backends`` (#2177 whole-branch review,
+     *     Important #4) mirror ``world.items.views_station.LabStationViewSet`` --
+     *     reuse the repo's shared page-size-50 convention (``ItemTemplatePagination``)
+     *     and let a caller scope the list to a single exit via ``ExitBarsFilter``
+     *     rather than listing every installation in the game unscoped.
+     */
     get: operations['room_features_exit_bars_list'];
     put?: never;
     post?: never;
@@ -14799,6 +14808,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Status endpoint for installed exit bars.
+     *
+     *     ``pagination_class``/``filter_backends`` (#2177 whole-branch review,
+     *     Important #4) mirror ``world.items.views_station.LabStationViewSet`` --
+     *     reuse the repo's shared page-size-50 convention (``ItemTemplatePagination``)
+     *     and let a caller scope the list to a single exit via ``ExitBarsFilter``
+     *     rather than listing every installation in the game unscoped.
+     */
     get: operations['room_features_exit_bars_retrieve'];
     put?: never;
     post?: never;
@@ -14815,6 +14833,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /** @description Status endpoint for installed room alarms. See ``ExitBarsViewSet`` docstring. */
     get: operations['room_features_room_alarms_list'];
     put?: never;
     post?: never;
@@ -14831,6 +14850,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /** @description Status endpoint for installed room alarms. See ``ExitBarsViewSet`` docstring. */
     get: operations['room_features_room_alarms_retrieve'];
     put?: never;
     post?: never;
@@ -14847,6 +14867,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /** @description Status endpoint for installed room wards. See ``ExitBarsViewSet`` docstring. */
     get: operations['room_features_room_wards_list'];
     put?: never;
     post?: never;
@@ -14863,6 +14884,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /** @description Status endpoint for installed room wards. See ``ExitBarsViewSet`` docstring. */
     get: operations['room_features_room_wards_retrieve'];
     put?: never;
     post?: never;
@@ -26107,6 +26129,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['EventList'][];
     };
+    PaginatedExitBarsDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ExitBarsDetails'][];
+    };
     PaginatedFashionPresentationList: {
       /** @example 123 */
       count: number;
@@ -27165,6 +27202,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['Ritual'][];
     };
+    PaginatedRoomAlarmDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RoomAlarmDetails'][];
+    };
     PaginatedRoomSizeTierList: {
       /** @example 123 */
       count: number;
@@ -27179,6 +27231,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['RoomSizeTier'][];
+    };
+    PaginatedRoomWardDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RoomWardDetails'][];
     };
     PaginatedRosterEntryList: {
       /** @example 123 */
@@ -55102,7 +55169,11 @@ export interface operations {
   };
   room_features_exit_bars_list: {
     parameters: {
-      query?: never;
+      query?: {
+        exit_profile?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -55114,7 +55185,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ExitBarsDetails'][];
+          'application/json': components['schemas']['PaginatedExitBarsDetailsList'];
         };
       };
     };
@@ -55142,7 +55213,11 @@ export interface operations {
   };
   room_features_room_alarms_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        room_profile?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -55154,7 +55229,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['RoomAlarmDetails'][];
+          'application/json': components['schemas']['PaginatedRoomAlarmDetailsList'];
         };
       };
     };
@@ -55182,7 +55257,11 @@ export interface operations {
   };
   room_features_room_wards_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        room_profile?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -55194,7 +55273,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['RoomWardDetails'][];
+          'application/json': components['schemas']['PaginatedRoomWardDetailsList'];
         };
       };
     };
