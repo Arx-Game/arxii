@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet, Profile
     from world.forms.models import CharacterForm
+    from world.scenes.models import PersonaDiscovery
 
 ActionType = SceneAction
 
@@ -323,6 +324,59 @@ def has_unseen_observers(scene: Scene) -> bool:
     from world.scenes.models import SceneUnseenObserver  # noqa: PLC0415
 
     return SceneUnseenObserver.objects.filter(scene=scene).exists()
+
+
+def _normalized_persona_pair(
+    persona: Persona | None, linked: Persona | None
+) -> tuple[Persona, Persona] | None:
+    """Normalize a persona pair to ``(lower pk, higher pk)``, matching ``PersonaDiscovery``'s own
+    ``persona_discovery_normalized_order`` check constraint. ``None`` when the pair is degenerate
+    — either side missing, or they're literally the same persona (nothing to link)."""
+    if persona is None or linked is None or persona.pk == linked.pk:
+        return None
+    return (persona, linked) if persona.pk < linked.pk else (linked, persona)
+
+
+def persona_discovery_between(
+    persona: Persona | None, linked: Persona | None, discovered_by: CharacterSheet
+) -> PersonaDiscovery | None:
+    """The existing ``PersonaDiscovery`` row for this (unordered) persona pair + discoverer, if
+    any — a pure read, never writes. ``None`` for a degenerate pair (see
+    ``_normalized_persona_pair``) or when no such row exists yet."""
+    from world.scenes.models import PersonaDiscovery  # noqa: PLC0415
+
+    pair = _normalized_persona_pair(persona, linked)
+    if pair is None:
+        return None
+    lower, higher = pair
+    return PersonaDiscovery.objects.filter(
+        persona=lower, linked_to=higher, discovered_by=discovered_by
+    ).first()
+
+
+def record_persona_discovery(
+    persona: Persona | None, linked: Persona | None, discovered_by: CharacterSheet
+) -> PersonaDiscovery | None:
+    """Record that ``discovered_by`` learned ``persona`` and ``linked`` are the same person.
+
+    The single writer of ``PersonaDiscovery`` rows — shared by ``world.clues.services``'s
+    GM-authored clue-piercing path (``_grant_persona_link_target``, #2120) and
+    ``world.forms.services.identification.attempt_identification``'s rolled-check path (#1107
+    slice 5), so the normalization logic isn't duplicated between them. Idempotent
+    (``get_or_create``) — attempting the same pair again is a no-op, not a duplicate row. Returns
+    ``None`` without writing for a degenerate pair (see ``_normalized_persona_pair``) — e.g. the
+    presented persona already IS the true persona, so there's nothing to pierce.
+    """
+    from world.scenes.models import PersonaDiscovery  # noqa: PLC0415
+
+    pair = _normalized_persona_pair(persona, linked)
+    if pair is None:
+        return None
+    lower, higher = pair
+    discovery, _ = PersonaDiscovery.objects.get_or_create(
+        persona=lower, linked_to=higher, discovered_by=discovered_by
+    )
+    return discovery
 
 
 def _broadcast_unseen_observer_state(scene: Scene) -> None:

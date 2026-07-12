@@ -56,3 +56,30 @@ rows. Blocked while `not in_control` (`RevertBlockedError`). _Avoid_: shift back
 Player-facing verb for the revert action (registry key `"revert_form"`,
 `RevertFormAction`). The backend canonical term remains **Revert**. _Avoid_:
 shift back, return to normal.
+
+## PC-to-PC identification (#1107 slice 5)
+
+**Identification check**:
+The `CheckType` (intellect + Investigation) a viewer rolls to recognize who's really
+under a target's fake-name persona/overlay — `world/forms/services/identification.py`,
+seeded by `ensure_identification_check`. Distinct from `Search` (perception +
+Investigation) and from the illusion-*piercing* contest (perception vs. a MAGICAL
+overlay, still senior-dev/future work) — Identification answers "who," piercing
+answers "is this even fake." _Avoid_: recognize check, unmask roll.
+
+**Familiarity tier**:
+How much a viewer's prior connection to the target eases an Identification check's
+difficulty: an active `CharacterRelationship` toward the sheet under the mask ("knows
+personally"), and/or the target's TRUE persona `fame_tier` ("famous likeness"), each
+contributing its own ease (currently combined additively — a PLACEHOLDER combine
+rule, see `appearance_and_identity.md` §"Identification loop (slice 5)"); neither
+present is the "stranger" case (no ease). _Avoid_: recognition bonus, familiarity
+score.
+
+**Fake-ID botch**:
+An Identification check's worst outcome band (`success_level <= -2`): the viewer
+mistakenly and confidently names a random active `Functionary` NPC
+(`random_active_functionary()`, `world/npc_services/functionaries.py`) as who's under
+the mask — never a real PC (the spec's oracle rule against false-fingering another
+player). Degrades to a plain failure when no Functionary exists to blame. _Avoid_:
+false positive, misidentification.

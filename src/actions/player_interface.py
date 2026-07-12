@@ -23,7 +23,7 @@ Backend resolution:
   ``FOCUSED`` slot and one ``PASSIVE`` slot per clash, per the design spec (§4 —
   every PC in the encounter sees every active clash; POV-filter is post-positioning).
 - REGISTRY    -- ``get_actions_for_target_type`` returns registry ``Action`` singletons;
-  these have no ``ActionTemplate`` / ``check_type`` so ALL current registry actions are
+  these have no ``ActionTemplate`` / ``check_type`` so by default registry actions are
   excluded from ``get_player_actions``.  ``dispatch_player_action`` still handles REGISTRY
   refs for immediate execution (no declaration gating needed for utility actions).
 
@@ -33,7 +33,25 @@ Registry exclusion note:
   requires a resolved ``CheckType`` instance (the unifying resolution anchor), which
   cannot be provided for registry actions until they are backed by ``ActionTemplate``
   rows.  They are excluded rather than emitted with a placeholder to avoid confusing the
-  dispatch layer.
+  dispatch layer -- UNLESS a small per-action adapter hand-builds the ``PlayerAction``
+  itself with ``check_type=None``, the pattern ``_positioning_actions``/
+  ``_set_the_stage_actions``/``_battle_staging_actions`` use for REGISTRY actions that
+  need web-panel visibility but aren't (and don't want to become) ActionTemplate-backed.
+
+  ``identify`` (``actions/definitions/identification.py``) deliberately does NOT get one
+  of these adapters (#1107 Task 3 review, Critical finding): every generic-panel consumer
+  of ``get_player_actions`` (``ActionPanel.tsx``, ``PersonaContextMenu.tsx``) dispatches
+  its listed entries through ``createActionRequest`` -- the CONSENT pipeline
+  (``world.scenes.action_services.create_action_request`` /
+  ``_resolve_accepted_action_request``). Identify is a no-consent private perception roll
+  (ADR-0024 -- it doesn't act on the target's behavior) with no ``ActionTemplate`` and no
+  ``CUSTOM_ACTION_RESOLVERS`` entry, so a consent-pipeline dispatch would both hand the
+  masked target a veto it shouldn't have and crash on accept (``ValueError`` in
+  ``_resolve_standard_action``, no template/resolver to resolve against). Its only
+  correct web path is direct REGISTRY REST dispatch (``useDispatchPlayerAction`` ->
+  ``_dispatch_registry`` -> ``.run()``) from a dedicated ``PersonaContextMenu`` "Identify"
+  item (mirroring that menu's pre-existing ``challenge`` dispatch), never from a listing a
+  generic panel would render+fire through ``createActionRequest``.
 """
 
 from __future__ import annotations
@@ -396,9 +414,16 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_positioning_actions(character))
     actions.extend(_set_the_stage_actions(character))
     actions.extend(_battle_staging_actions(character))
-    # Registry backend: all current actions excluded (no ActionTemplate / check_type)
-    # — see module docstring.  When registry actions gain ActionTemplate backing,
-    # uncomment and implement _registry_actions(character).
+    # Registry backend: all remaining registry actions excluded (no ActionTemplate /
+    # check_type) — see module docstring.  When a registry action gains ActionTemplate
+    # backing, or needs web-panel visibility without one, add it to an adapter above
+    # (or a new one) rather than uncommenting a blanket _registry_actions(character).
+    # ``identify`` is deliberately NOT listed here (#1107 Task 3 review, Critical
+    # finding) — every consumer of this list dispatches through the CONSENT pipeline
+    # (createActionRequest), which identify must never enter. See the module docstring's
+    # "identify" paragraph. It's reached instead by a dedicated PersonaContextMenu
+    # "Identify" item that dispatches REGISTRY REST directly (useDispatchPlayerAction),
+    # plus telnet (CmdIdentify).
 
     # Single batched pass: attach enhancements/target_spec/strain to each
     # PlayerAction. All queries happen once for the whole character.
@@ -1110,6 +1135,11 @@ def _battle_staging_actions(character: ObjectDB) -> list[PlayerAction]:
         )
         for key, display_name in staging_keys
     ]
+
+
+# ``identify`` deliberately has no web-panel adapter here — see the module docstring's
+# "identify" paragraph (#1107 Task 3 review, Critical finding) and
+# ``PersonaContextMenu.tsx``'s dedicated "Identify" menu item.
 
 
 # ---------------------------------------------------------------------------

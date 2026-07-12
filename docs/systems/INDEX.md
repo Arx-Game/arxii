@@ -646,10 +646,14 @@ shapeshift lifecycle.
 - **Enums:** `TraitType` (color/style), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`
 - **Key Services:** `assume_alternate_self(sheet, alt)`, `revert_alternate_self(sheet)`,
   `switch_form(character, target_form)`, `revert_to_true_form(character)`,
-  `get_presented_appearance(character)`, `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604)
+  `get_presented_appearance(character)`, `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604),
+  `identification_difficulty(viewer_sheet, target_character)` / `attempt_identification(viewer, target, guess_name=None)` (`world/forms/services/identification.py`, #1107 slice 5 — the PC-to-PC "who's really under this mask" check; second `PersonaDiscovery` producer, see [appearance_and_identity.md](appearance_and_identity.md) §"Identification loop (slice 5)")
 - **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`
-- **Integrates with:** character_sheets (appearance, character anchor), scenes (Persona),
-  mechanics (ModifierSource / CharacterModifier), magic (CharacterTechnique)
+- **Integrates with:** character_sheets (appearance, character anchor), scenes (Persona,
+  `PersonaDiscovery`, `CharacterRelationship`-adjacent familiarity), mechanics
+  (ModifierSource / CharacterModifier), magic (CharacterTechnique), npc_services
+  (`random_active_functionary` botch picker), actions (`IdentifyAction`, registry key
+  `identify`)
 - **Source:** `src/world/forms/`
 - **Details:** [forms.md](forms.md)
 ### Appearance & Identity (architecture)
@@ -657,10 +661,15 @@ How Persona (identity), Form (real body), disguise/illusion (fake overlay), and 
 true-form/natural baseline compose into what a viewer sees — plus the per-persona
 descriptor overlay, cosmetic editing, and shapeshift slots.
 
-- **Spans:** forms (body), scenes (Persona), character_sheets (anchor)
+- **Spans:** forms (body), scenes (Persona), character_sheets (anchor), npc_services
+  (Functionary botch picker), actions (`IdentifyAction`)
 - **Key ideas:** four-question model; `(Persona × FormTrait)` descriptor; single
-  render composition (viewer-gated); real-vs-fake truth ledger; cosmetic vs disguise
-- **Status:** design (slices); depends on #1044
+  render composition (viewer-gated); real-vs-fake truth ledger; cosmetic vs disguise;
+  PC-to-PC identification loop (familiarity-staged intellect+Investigation check vs.
+  the illusion-piercing contest, kept distinct)
+- **Status:** design (slices 1-4); **slice 5 (PC-to-PC identification loop) BUILT,
+  #1107** — `identify` registry action + telnet `CmdIdentify` + `PersonaContextMenu`
+  web dispatch; depends on #1044
 - **Details:** [appearance_and_identity.md](appearance_and_identity.md)
 ### Classes (Paths)
 Character paths with evolution hierarchy through stages of power; also owns the

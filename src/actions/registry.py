@@ -145,6 +145,7 @@ from actions.definitions.gm_stories import (
     WithdrawGroupStoryRequestAction,
 )
 from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
+from actions.definitions.identification import IdentifyAction
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -333,6 +334,7 @@ _ALL_ACTIONS: list[Action] = [
     LookAtItemAction(),
     InventoryAction(),
     SearchAction(),
+    IdentifyAction(),
     SayAction(),
     PoseAction(),
     EmitAction(),
