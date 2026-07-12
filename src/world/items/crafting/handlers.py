@@ -220,6 +220,10 @@ class ItemCreateHandler(CraftingHandler):
             holder_character_sheet=crafter_sheet,
             crafter_character_sheet=crafter_sheet,
             crafter_persona_display=active_persona,
+            # The crafter authored the name/description, so they are also the
+            # designer — record it explicitly (#2066 dual provenance, #2243).
+            designer_character_sheet=crafter_sheet,
+            designer_persona_display=active_persona,
         )
         OwnershipEvent.objects.create(
             item_instance=instance,

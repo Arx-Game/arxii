@@ -23292,6 +23292,8 @@ export interface components {
       readonly game_object_id: number | null;
       readonly template: components['schemas']['ItemTemplateList'];
       readonly quality_tier: components['schemas']['QualityTier'];
+      /** @description Appraised worth in coppers — a market pricing suggestion (#2243). */
+      readonly suggested_value: number;
       readonly display_name: string;
       readonly display_description: string;
       /** @description Return the cloudinary URL for the item's display image, if any. */

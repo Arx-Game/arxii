@@ -2917,7 +2917,14 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 services, and equipment-modifier integration. Spec D PR2 (#1031) added the generic
-crafting framework and check-driven facet/style attachment.
+crafting framework and check-driven facet/style attachment. #2243 added the crafting
+**reward loop**: `world.items.services.pricing.appraise(instance)` (quality tier ×
+`template.value` + material `lore_value` → suggested worth, surfaced as the read-only
+`ItemInstanceReadSerializer.suggested_value`) and **masterwork→renown**
+(`world.items.crafting.reward` — a craft whose tier's `stat_multiplier` meets
+`MASTERWORK_STAT_MULTIPLIER_THRESHOLD` mints a solo `LegendEntry` for the maker via
+`create_solo_deed`, from `run_crafting_recipe`). Mint self-provenance now stamps
+`designer_*` too (#2066/#2243). Magnitudes PLACEHOLDER.
 
 - **Models:**
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,

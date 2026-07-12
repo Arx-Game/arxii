@@ -482,6 +482,21 @@ def run_crafting_recipe(  # noqa: C901, PLR0912, PLR0913, PLR0915
         for equipped in EquippedItem.objects.filter(item_instance=target_item):
             equipped.character.equipped_items.invalidate()
 
+        # A masterwork-quality craft makes its maker a little famous (#2243).
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.items.crafting.reward import (  # noqa: PLC0415
+            award_masterwork_renown,
+            is_masterwork,
+        )
+
+        crafter_sheet = CharacterSheet.objects.filter(character=crafter_character).first()
+        if is_masterwork(tier) and crafter_sheet is not None:
+            award_masterwork_renown(
+                crafter_character_sheet=crafter_sheet,
+                tier=tier,
+                item_label=str(target_item.template),
+            )
+
     return CraftRunResult(
         attached=attached,
         outcome=check_result.outcome,

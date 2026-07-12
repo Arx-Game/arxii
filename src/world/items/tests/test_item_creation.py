@@ -74,6 +74,8 @@ class ItemCreationCraftTests(TestCase):
         self.assertEqual(instance.custom_name, "My Sword")
         self.assertEqual(instance.custom_description, "A fine blade.")
         self.assertEqual(instance.crafter_character_sheet, self.sheet)
+        # #2243 — the crafter authored the name/description, so they're the designer too.
+        self.assertEqual(instance.designer_character_sheet, self.sheet)
         self.assertEqual(instance.holder_character_sheet, self.sheet)
         self.assertIsNotNone(instance.quality_tier)
         self.assertIsNotNone(instance.game_object)
