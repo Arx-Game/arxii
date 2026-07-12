@@ -174,14 +174,26 @@ sustained attack (`is_sustained_attack`) against a covered position instead open
 meter — interception no-ops while that Clash is ACTIVE (the no-double-drain rule).
 _Avoid_: ward, barrier, bulwark, shield wall (all already claimed elsewhere)
 
-**Strike delivery** (`StrikeDelivery`, #2209, shared with the open wind-mechanic question
-#1555):
+**Strike delivery** (`StrikeDelivery`, #2209):
 How a strike reaches its target — `MELEE` or `MISSILE` — carried on `ThreatPoolEntry.delivery`
 (NPC threat-pool entries; default `MELEE`) and passed through to
 `apply_damage_to_participant`/`apply_rampart_interception` alongside `is_area`
 (`targeting_mode != SINGLE`). A Wind-element Rampart's `MISSILE_WARD` signature reads
 `delivery`/`is_area` directly: bonus resist against `MISSILE`, penalty against area strikes.
+Also the field the Wind band (below) keys its symmetric NPC-side bonus on.
 _Avoid_: attack type, damage delivery, hit type
+
+**Wind band** (#1555, ADR-0129):
+The banded reading of a room's felt WIND exposure (`world.locations.services.felt_exposure`,
+`StatKey.WIND`) that a missile check consumes: CALM (<15) → 0, BREEZY (15-39) → -5, WINDY
+(40-69) → -10, GALE (70+) → -20 (`wind_penalty`, `world/combat/constants.py`). Authored as
+bands, not a raw per-point scale, so a player can reason about "it's windy" rather than a bare
+number. Applies as a SCENE `ModifierContribution` labeled "Wind": negative on a PC's missile
+(RANGED/THROWN-equipped) offense check, and the same magnitude positive on a PC's defense
+check against a `StrikeDelivery.MISSILE` NPC attack — the gale punishes both sides' aim
+equally. Melee/lance attacks and flat (no defense-roll) NPC damage never consult it.
+_Avoid_: wind penalty (that's `wind_penalty`, the function — "wind band" is the concept),
+weather modifier (too broad — this is WIND specifically, not the general exposure cascade)
 
 **BondCombatBonus**:
 The relationship co-combat passive (#2021, ADR-0109). While a PC and a bonded character (relationship above `BondCombatConfig.min_developed_absolute_value`) are co-combatants and the ally is `ParticipantStatus.ACTIVE`, the PC gains `int(mechanical_bonus)` (cube root of developed absolute value) as a `ModifierContribution(RELATIONSHIP)` on every combat check. Soul-tethered pairs get `soul_tether_multiplier × mechanical_bonus`. Directed (one-sided): only the character who invested gets the bonus. Drops when the ally falls (handing off to #2013's grief spike). Also scales INTERPOSE/SUCCOR capability checks via `bond_bonus(actor, protected)` → `extra_modifiers`.

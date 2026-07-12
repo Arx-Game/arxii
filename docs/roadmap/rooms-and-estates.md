@@ -243,8 +243,10 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   echoes are squelchable per-player (`narrative.UserCategoryMute`). The 7 types + 263 emits are
   seeded from the Arx-1 corpus. `FeastDay` forces special weather (Eclipse / Moon Madness)
   world-wide on recurring IC dates — the GM-lever automation.
+- **Wind-as-mechanic combat consumer (#1555, ADR-0129, done):** `wind_penalty(felt)` banded
+  SCENE check modifier (CALM/BREEZY/WINDY/GALE) on missile offense checks and the symmetric
+  PC defense bonus vs. a MISSILE NPC attack — see `docs/systems/INDEX.md`'s "Combat" section.
 - **Later slices:** comfort→**Conditions** ("Chilled/Soaked", Tehom-coordinated `comfort_penalty`),
-  the **wind-as-mechanic** combat consumer (**#1555**, Tehom — the WIND provider side is done),
   re-seed-as-upsert for edited emits, the web owner **build-HUD**, and inhabitant/owner surfacing.
 
 ## What's Needed for MVP

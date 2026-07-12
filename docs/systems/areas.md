@@ -406,10 +406,11 @@ a WARD-Clash meter subject, faction-blind coverage matching ADR-0109) rather tha
   pipeline. A melee strike against a MELEE_RETALIATION (Fire) profile burns the NPC striker
   back for `signature_value`; GRASPING (Thorn) is handled at the forced-move landing seam
   instead (`force_move_to_position`), not here.
-- **Strike delivery** (`StrikeDelivery`: MELEE/MISSILE, `world/combat/constants.py`,
-  shared with the open wind-mechanic question #1555) and `is_area`
-  (`targeting_mode != SINGLE`) feed a Wind (MISSILE_WARD) profile's resist adjustment:
-  bonus against MISSILE, penalty against area strikes.
+- **Strike delivery** (`StrikeDelivery`: MELEE/MISSILE, `world/combat/constants.py` — also
+  the field the wind-as-mechanic combat consumer reads, #1555/ADR-0129, see
+  `docs/systems/INDEX.md`'s "Combat" section) and `is_area` (`targeting_mode != SINGLE`) feed
+  a Wind (MISSILE_WARD) profile's resist adjustment: bonus against MISSILE, penalty against
+  area strikes.
 - **WARD Clash meter sync.** `Clash.rampart` (nullable FK) binds a sustained-attack WARD
   clash to the covered position's `Rampart`; `world.combat.clash._sync_rampart_progress`
   mirrors each round's progress delta onto `rampart.integrity` via the same

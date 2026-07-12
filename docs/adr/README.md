@@ -158,6 +158,7 @@ treat those names as hints to confirm, not gospel.
 - [0124 — Redirect destination is declared, not improvised](0124-redirect-destination-is-declared-not-improvised.md) (extends ADR-0032/0060; related ADR-0023)
 - [0125 — Rampart is a position-anchored entity, not per-bearer group conditions](0125-rampart-is-an-entity-not-group-conditions.md) (extends ADR-0109; epic #2040 decision 3)
 - [0126 — A mount is a companion plus a verb-gating condition; charge/joust ride the existing move/duel seams](0126-mounts-are-companions-with-a-verb-gating-condition.md) (extends ADR-0023/0060)
+- [0129 — Wind consumes as banded SCENE check modifiers on missile deliveries only](0129-wind-consumes-as-banded-scene-modifiers-on-missile-deliveries.md) (related #1522)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

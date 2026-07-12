@@ -96,6 +96,7 @@ from world.combat.constants import (
     StrikeDelivery,
     TargetingMode,
     TargetSelection,
+    wind_penalty,
 )
 from world.combat.damage_source import classify_source
 from world.combat.models import (
@@ -389,6 +390,28 @@ class CombatTechniqueResolver:
                         source_kind=ModifierSourceKind.CHARACTER,
                         source_label="Unmounted Lance",
                         value=LANCE_UNMOUNTED_PENALTY,
+                    )
+                )
+
+        # Wind-as-mechanic (#1555): a banded SCENE penalty on missile attacks
+        # only. Guarded cheaply — skip the felt_exposure room lookup entirely
+        # for melee/lance attacks, which stay untouched.
+        if (
+            weapon_archetype in (GearArchetype.RANGED, GearArchetype.THROWN)
+            and self.participant.encounter.room is not None
+        ):
+            from world.locations.constants import StatKey  # noqa: PLC0415
+            from world.locations.services import felt_exposure  # noqa: PLC0415
+
+            wind_mod = wind_penalty(
+                felt_exposure(self.participant.encounter.room, stat_key=StatKey.WIND)
+            )
+            if wind_mod:
+                extra_contributions.append(
+                    ModifierContribution(
+                        source_kind=ModifierSourceKind.SCENE,
+                        source_label="Wind",
+                        value=wind_mod,
                     )
                 )
 
@@ -5193,6 +5216,29 @@ def resolve_npc_attack(
         participant.character_sheet,
         participant.encounter,
     )
+
+    # Wind-as-mechanic (#1555) symmetry: the same gale that ruins a PC's
+    # missile shot ruins an NPC's. Only MISSILE-delivered threat entries with
+    # a defense roll are affected — flat base_damage entries (no defense_check_type,
+    # never reaching this function) stay untouched.
+    if (
+        opponent_action.threat_entry.delivery == StrikeDelivery.MISSILE
+        and participant.encounter.room is not None
+    ):
+        from world.locations.constants import StatKey  # noqa: PLC0415
+        from world.locations.services import felt_exposure  # noqa: PLC0415
+
+        wind_mod = wind_penalty(felt_exposure(participant.encounter.room, stat_key=StatKey.WIND))
+        if wind_mod:
+            bond_contributions = [
+                *bond_contributions,
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.SCENE,
+                    source_label="Wind",
+                    value=-wind_mod,
+                ),
+            ]
+
     breakdown = collect_check_modifiers(
         participant.character_sheet,
         check_type,
