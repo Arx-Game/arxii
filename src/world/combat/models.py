@@ -1203,6 +1203,31 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         related_name="+",
         help_text="Second endpoint of a declared position pair (Barricade). (#2206)",
     )
+    redirect_opponent_target = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Declared redirect destination — a chosen-enemy CombatOpponent (#2210). "
+            "Mutually exclusive with redirect_object_target; both null means 'away' "
+            "(the universal fallback)."
+        ),
+    )
+    redirect_object_target = models.ForeignKey(
+        OBJECTS_OBJECTDB_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Declared redirect destination — a volatile object in the encounter room "
+            "(#2210). ObjectDB is correct here (any object may be volatile), not a "
+            "narrower model. Mutually exclusive with redirect_opponent_target; both "
+            "null means 'away' (the universal fallback)."
+        ),
+    )
     interaction = models.ForeignKey(
         "scenes.Interaction",
         on_delete=models.SET_NULL,
@@ -1240,6 +1265,9 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         super().clean()
         if self.focused_opponent_target_id and self.focused_ally_target_id:
             msg = "Action cannot target both an opponent and an ally simultaneously."
+            raise ValidationError(msg)
+        if self.redirect_opponent_target_id and self.redirect_object_target_id:
+            msg = "A redirect declaration cannot target both an enemy and an object."
             raise ValidationError(msg)
 
     def __str__(self) -> str:
