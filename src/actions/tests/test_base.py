@@ -428,6 +428,10 @@ class ActionRegistryTests(TestCase):
             # #2222 — portal anchor install/dissolve.
             "portal_anchor_install",
             "portal_anchor_dissolve",
+            # #2179 — vault access-list management.
+            "vault_access_add",
+            "vault_access_remove",
+            "vault_access_list",
             # #2178 — NPC guard assignment.
             "assign_guard",
             "unassign_guard",

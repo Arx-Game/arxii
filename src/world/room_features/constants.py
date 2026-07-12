@@ -32,6 +32,7 @@ class RoomFeatureServiceStrategy(models.TextChoices):
     # its ``level`` scales crowd draw + the fame/prestige earned for actions here.
     SOCIAL_HUB = "SOCIAL_HUB", "Social Hub"
     STABLES = "STABLES", "Stables"
+    VAULT = "VAULT", "Vault"
 
 
 class RoomFeatureInstallMechanism(models.TextChoices):
@@ -90,6 +91,10 @@ SOCIAL_HUB_PRESTIGE_BONUS_PCT_PER_LEVEL = 10
 #: ``LocationValueModifier.source`` tag for a hub's crowd-draw TRAFFIC bonus.
 #: One hub per room (RoomFeatureInstance is OneToOne), so this is unique per room.
 SOCIAL_HUB_TRAFFIC_SOURCE = "social_hub"
+
+#: Per-level max-items capacity for a Vault room feature (#2179).
+#: ``max_items = instance.level * VAULT_MAX_ITEMS_PER_LEVEL``.
+VAULT_MAX_ITEMS_PER_LEVEL = 20
 
 
 class DefenseKind(models.TextChoices):

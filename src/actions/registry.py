@@ -344,6 +344,11 @@ from actions.definitions.social import (
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
+from actions.definitions.vault import (
+    VaultAccessAddAction,
+    VaultAccessListAction,
+    VaultAccessRemoveAction,
+)
 from actions.definitions.windows import CloseWindowAction, OpenWindowAction
 from actions.types import TargetType
 
@@ -643,6 +648,10 @@ _ALL_ACTIONS: list[Action] = [
     # itself dispatches through TravelAction, already registered above).
     InstallPortalAnchorAction(),
     DissolvePortalAnchorAction(),
+    # #2179 — vault access-list management.
+    VaultAccessAddAction(),
+    VaultAccessRemoveAction(),
+    VaultAccessListAction(),
     # #2178 — NPC guard assignment.
     AssignGuardAction(),
     UnassignGuardAction(),

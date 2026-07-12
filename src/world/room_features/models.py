@@ -11,10 +11,14 @@ from __future__ import annotations
 
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.mixins import DiscriminatorMixin
+from world.locations.constants import HolderType
 from world.room_features.constants import (
+    VAULT_MAX_ITEMS_PER_LEVEL,
     DefenseKind,
     RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
@@ -392,6 +396,116 @@ class Trap(SharedMemoryModel):
     def __str__(self) -> str:
         state = "armed" if self.is_armed else "disarmed"
         return f"Trap '{self.name}' ({state}) @ room {self.room_profile_id}"
+
+
+class VaultDetails(SharedMemoryModel):
+    """Per-(VAULT RoomFeatureInstance) details payload (#2179).
+
+    Created when a vault install Project resolves (L1). OneToOne back to
+    RoomFeatureInstance — the install/upgrade flow lives in
+    world.room_features; the per-kind state lives here.
+
+    The vault marks the room itself as a secure store. All unheld items
+    in the room (items with no holder_character_sheet) are
+    vault-protected: take is gated by the vault's access list,
+    steal bypasses with the existing consent-gated theft machinery.
+    """
+
+    feature_instance = models.OneToOneField(
+        "room_features.RoomFeatureInstance",
+        on_delete=models.CASCADE,
+        related_name="vault_details",
+        primary_key=True,
+    )
+    founder_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
+        related_name="founded_vaults",
+        help_text=(
+            "The persona who installed the vault. Has implicit owner "
+            "access — always on the access list regardless of "
+            "VaultAccessEntry rows. The founder's RosterTenure is the "
+            "consent source for steal_permitted when an unowned vault "
+            "item is stolen."
+        ),
+    )
+    max_items = models.PositiveSmallIntegerField(
+        default=VAULT_MAX_ITEMS_PER_LEVEL,
+        help_text=(
+            "Maximum loose items the vault room can hold. Scaled by "
+            "level at install: max_items = level * "
+            "VAULT_MAX_ITEMS_PER_LEVEL."
+        ),
+    )
+
+    def __str__(self) -> str:
+        return (
+            f"Vault L{self.feature_instance.level} @ room {self.feature_instance.room_profile_id}"
+        )
+
+
+class VaultAccessEntry(DiscriminatorMixin, SharedMemoryModel):
+    """A granted access right to a specific vault (#2179).
+
+    The vault owner adds entries for personas or organizations.
+    Organization entries grant access to all current members (any rank),
+    mirroring LocationTenancy's org-membership composition.
+    """
+
+    DISCRIMINATOR_FIELD = "holder_type"
+    DISCRIMINATOR_MAP = {
+        HolderType.PERSONA: "holder_persona",
+        HolderType.ORGANIZATION: "holder_organization",
+    }
+
+    vault_details = models.ForeignKey(
+        VaultDetails,
+        on_delete=models.CASCADE,
+        related_name="access_entries",
+    )
+    holder_type = models.CharField(
+        max_length=20,
+        choices=HolderType.choices,
+    )
+    holder_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="vault_access_entries",
+    )
+    holder_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="vault_access_entries",
+    )
+    added_by = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
+        related_name="vault_access_granted",
+    )
+    added_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=["vault_details", "holder_persona"],
+                condition=Q(holder_type="PERSONA"),
+                name="vault_access_persona_unique",
+            ),
+            UniqueConstraint(
+                fields=["vault_details", "holder_organization"],
+                condition=Q(holder_type="ORGANIZATION"),
+                name="vault_access_org_unique",
+            ),
+        ]
+        ordering = ["vault_details", "added_at"]
+
+    def __str__(self) -> str:
+        target = self.get_active_target_name()
+        return f"Vault access: {target} ({self.holder_type})"
 
 
 class DefenseDetailsQuerySet(models.QuerySet):
