@@ -36,3 +36,26 @@ secrets_map:
 secrets_forbidden_env:
   - LINODE_TOKEN
   - CLOUDFLARE_API_TOKEN
+
+# #2236 Phase 3 P1 (dress rehearsal). rehearsal_mode is the global gate the
+# assert below checks; rehearse.sh's generated group_vars is the only place
+# that ever sets it true. standup.sh never sets it, so prod always keeps the
+# full fail-closed behaviour below.
+rehearsal_mode: false
+
+# NAMES ARE secrets_map KEYS (the ARXII_* src names, not the on-box dest
+# names) that are ALLOWED to be empty/unset without tripping the fail-closed
+# assert — ONLY when rehearsal_mode is true (see the refusal assert in
+# tasks/main.yml). rehearse.sh sets this to the not-applicable-in-rehearsal
+# set: ARXII_RESEND_API_KEY (settings.py's own
+# `if env("RESEND_API_KEY", default=""):` block falls back to the console
+# email backend — verified against src/server/conf/settings.py, this is
+# correct, not a workaround), the Cloudinary trio, the R2 keys, and
+# ARXII_OFFBOX_ALERT_TOKEN (all prod-adjacent: real Cloudinary account, real
+# R2 bucket, real external dead-man's-switch — none of which the isolated
+# ephemeral-stage root can or should hold). ARXII_BACKUP_WRITER_* stays OFF
+# this list even in rehearsal — rehearse.sh supplies real stage-bucket writer
+# keys (see terraform/ephemeral-stage's object_storage_ephemeral module) so
+# the backup+restore rehearsal is honest, not stubbed. Prod NEVER sets this
+# var — see the refusal assert.
+vault_allow_empty: []

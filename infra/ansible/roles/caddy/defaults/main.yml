@@ -22,3 +22,11 @@ caddy_static_root: "/opt/arxii/current/src/server/.static"
 # DNS-edit-scoped Cloudflare token supplied via env (CADDY_CF_DNS_TOKEN),
 # which is a NEW on-box secret to add to the gated-Environment contract.
 caddy_acme_email: "ops@example"
+# #2236 Phase 3 P1 (dress rehearsal). When true: deploy Caddyfile.rehearsal.j2
+# (local_certs, no DNS-01) instead of Caddyfile.j2, and skip the
+# caddy-dns/cloudflare add-package steps below (not needed without acme_dns —
+# and the ephemeral-stage root has no Cloudflare credential to fail with
+# anyway, by the isolation doctrine). Set by the rehearsal group_vars
+# rehearse.sh generates; standup.sh never sets it, so prod always gets the
+# real DNS-01 path.
+caddy_rehearsal_mode: false

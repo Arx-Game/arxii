@@ -1,12 +1,31 @@
 ---
+# #2236 Phase 3 P1 (dress rehearsal). vault_allow_empty is a fail-closed
+# ESCAPE HATCH (see its own comment in defaults/main.yml) — refuse it outright
+# unless rehearsal_mode is also true, so a stray/copy-pasted vault_allow_empty
+# can never silently weaken prod's fail-closed posture on its own; BOTH vars
+# must agree.
+- name: Refuse vault_allow_empty outside rehearsal_mode
+  ansible.builtin.assert:
+    that:
+      - (vault_allow_empty | length == 0) or rehearsal_mode
+    fail_msg: >-
+      vault_allow_empty is set ({{ vault_allow_empty | join(', ') }}) but
+      rehearsal_mode is not true — this combination is refused. prod must
+      never set vault_allow_empty; it exists only for rehearse.sh's
+      generated rehearsal group_vars.
+    quiet: true
+
 # Two-step fail-closed: collect MISSING NAMES ONLY under no_log (values never
 # touch the log), then assert without no_log so the failure message actually
 # names which var(s) are missing instead of "result was suppressed".
+# vault_allow_empty-listed names are skipped — ONLY reachable when
+# rehearsal_mode is true (asserted above).
 - name: Collect names of missing required secret env vars (values never logged)
   ansible.builtin.set_fact:
     secrets_vault_missing_env: >-
       {{ secrets_vault_missing_env | default([]) +
-         ([item] if (lookup('env', item) | length == 0) else []) }}
+         ([item] if (item not in vault_allow_empty and
+                      (lookup('env', item) | length == 0)) else []) }}
   loop: "{{ secrets_map.keys() | list }}"
   no_log: true
 

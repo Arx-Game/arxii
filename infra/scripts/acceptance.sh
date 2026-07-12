@@ -234,6 +234,93 @@ chk   "settings.py guards the prod secret_settings overlay import" \
 chk   "secrets_vault's EnvironmentFile renders SECRET_KEY and DATABASE_URL (settings.py's actual env-read contract)" \
   "grep -q 'ARXII_DJANGO_SECRET_KEY: SECRET_KEY' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q '^DATABASE_URL=' infra/ansible/roles/secrets_vault/templates/arxii.env.j2"
 
+echo "== #2236 Phase 3 P1 (dress rehearsal) =="
+# (a) rehearse.sh must NEVER touch the prod terraform root — grep its own
+# STAGE_DIR wiring rather than trusting a comment.
+chk   "rehearse.sh's STAGE_DIR resolves under terraform/ephemeral-stage" \
+  "grep -q 'terraform/ephemeral-stage' infra/scripts/rehearse.sh"
+chkno "rehearse.sh never references terraform/prod in real code (comments-only mentions are fine)" \
+  "nc infra/scripts/rehearse.sh | grep -n 'terraform/prod'"
+chkno "rehearse.sh never runs tofu against a bare/unscoped -chdir (only \${STAGE_DIR})" \
+  "nc infra/scripts/rehearse.sh | grep -E 'tofu -chdir=\"\\\$\\{(TF_DIR|INFRA_DIR)\\}' "
+
+# (b) secrets_vault: vault_allow_empty is a fail-closed escape hatch, refused
+# outside rehearsal_mode — the exact pairing that keeps prod's posture
+# unweakenable by a stray/copy-pasted group_var.
+chk   "secrets_vault refuses vault_allow_empty unless rehearsal_mode" \
+  "grep -q 'vault_allow_empty | length == 0) or rehearsal_mode' infra/ansible/roles/secrets_vault/tasks/main.yml"
+chk   "secrets_vault's vault_allow_empty/rehearsal_mode both default false/empty (prod-safe out of the box)" \
+  "grep -q '^rehearsal_mode: false' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q '^vault_allow_empty: \\[\\]' infra/ansible/roles/secrets_vault/defaults/main.yml"
+
+# (c) validate.yml's caddy job must loop ALL Caddyfile* templates, not just
+# the first match (the #2236 review's actual finding: Caddyfile.rehearsal.j2
+# would otherwise silently never be checked).
+chkno "validate.yml's caddy job no longer uses '-print -quit' (first-match-only)" \
+  "grep -n \"iname 'Caddyfile\\*' -print -quit\" .github/workflows/validate.yml"
+chk   "validate.yml's caddy job iterates over all found Caddyfile* templates" \
+  "grep -q 'for cf in \"\${cfs\[@\]}\"' .github/workflows/validate.yml"
+
+# (d) both Caddyfile templates must carry the same site shape (ws + static
+# routes) — the "EDIT BOTH" contract enforced by grep, not just a comment.
+for cf in infra/ansible/roles/caddy/templates/Caddyfile.j2 \
+          infra/ansible/roles/caddy/templates/Caddyfile.rehearsal.j2; do
+  chk "${cf} carries the @ws websocket route"     "grep -q '@ws path /ws/\\*' ${cf}"
+  chk "${cf} carries the /static/* handle_path route" "grep -q 'handle_path /static/\\*' ${cf}"
+  chk "${cf} references caddy_backend/caddy_ws_backend/caddy_static_root" \
+    "grep -q 'caddy_backend' ${cf} && grep -q 'caddy_ws_backend' ${cf} && grep -q 'caddy_static_root' ${cf}"
+done
+chk   "Caddyfile.rehearsal.j2 uses local_certs (no DNS-01, no Cloudflare cred)" \
+  "grep -q 'local_certs' infra/ansible/roles/caddy/templates/Caddyfile.rehearsal.j2"
+chkno "Caddyfile.rehearsal.j2 never uses acme_dns (would need a credential rehearsal doesn't have)" \
+  "grep -n 'acme_dns' infra/ansible/roles/caddy/templates/Caddyfile.rehearsal.j2"
+
+# (e) caddy role: rehearsal must skip the DNS-01 plugin install (a
+# guaranteed failure without a Cloudflare credential) and select the
+# rehearsal template by caddy_rehearsal_mode.
+chk   "caddy role skips the add-package plugin steps when caddy_rehearsal_mode" \
+  "grep -q 'not caddy_rehearsal_mode' infra/ansible/roles/caddy/tasks/main.yml"
+chk   "caddy role selects Caddyfile.rehearsal.j2 via caddy_rehearsal_mode" \
+  "grep -q \"Caddyfile.rehearsal.j2' if caddy_rehearsal_mode\" infra/ansible/roles/caddy/tasks/main.yml"
+
+# (f) offsite_replication must be skippable (R2 is prod-adjacent; the
+# isolated ephemeral-stage root has no such credential).
+chk   "site.yml gates offsite_replication on offsite_enabled" \
+  "grep -q 'role: offsite_replication, when: offsite_enabled' infra/ansible/site.yml"
+chk   "offsite_replication defaults to enabled (prod: standup.sh never sets offsite_enabled)" \
+  "grep -q '^offsite_enabled: true' infra/ansible/roles/offsite_replication/defaults/main.yml"
+
+# (g) ephemeral terraform modules must NEVER carry prevent_destroy — the
+# whole reason they exist separately from the prod modules (verified
+# empirically during #2236 Phase 3 P1: prevent_destroy blocks `tofu destroy`
+# regardless of which root/state calls the module, not just "prod usage").
+for m in infra/terraform/modules/compute_ephemeral/main.tf \
+         infra/terraform/modules/object_storage_ephemeral/main.tf; do
+  chkno "${m} carries no real prevent_destroy (comments-only mentions are fine)" \
+    "nc ${m} | grep -n 'prevent_destroy'"
+done
+chk   "ephemeral-stage/main.tf uses compute_ephemeral, not the prod compute module" \
+  "grep -q 'source              = \"../modules/compute_ephemeral\"' infra/terraform/ephemeral-stage/main.tf"
+chkno "ephemeral-stage/main.tf never sources the prod compute module" \
+  "grep -n 'source *= *\"../modules/compute\"' infra/terraform/ephemeral-stage/main.tf"
+
+# (h) rehearse.sh must ALWAYS attempt teardown via a trap (not a
+# best-effort tail call that a mid-script `exit` could skip).
+chk   "rehearse.sh registers the teardown trap before provisioning" \
+  "grep -q 'trap teardown EXIT' infra/scripts/rehearse.sh"
+assert_before "rehearse.sh's teardown trap is registered BEFORE the first tofu apply" \
+  'trap teardown EXIT' 'tofu -chdir=.*STAGE_DIR.*apply' infra/scripts/rehearse.sh
+
+# (i) rehearse.sh must generate its OWN throwaway secrets, never accept an
+# operator-supplied one (the entire point of an unattended rehearsal box).
+chk   "rehearse.sh generates PG/Django/superuser secrets via openssl rand (never operator env)" \
+  "grep -q 'pg_password=\"\$(openssl rand -hex' infra/scripts/rehearse.sh && grep -q 'django_secret_key=\"\$(openssl rand -hex' infra/scripts/rehearse.sh && grep -q 'superuser_password=\"\$(openssl rand -hex' infra/scripts/rehearse.sh"
+
+# (j) rehearse.yml workflow shape (mirrors standup.yml's CI button checks).
+chk   "rehearse.yml is workflow_dispatch"      "grep -q 'workflow_dispatch' .github/workflows/rehearse.yml"
+chk   "rehearse.yml uses the gated stage env"  "grep -q 'environment: stage' .github/workflows/rehearse.yml"
+chk   "rehearse.yml invokes the shared script" "grep -q 'infra/scripts/rehearse.sh' .github/workflows/rehearse.yml"
+chk   "rehearse.yml sets a concurrency group"  "grep -q 'group: arxii-rehearse' .github/workflows/rehearse.yml"
+
 echo
 if [[ "${fails}" -gt 0 ]]; then
   echo "ACCEPTANCE: ${fails} FAILED"; exit 1
@@ -249,4 +336,8 @@ ACCOUNT-TIME checklist (run once real creds exist — cannot be static):
   [ ] external port scan: only SSH/80/443/TLS-telnet; NO plaintext telnet
   [ ] restore-rehearsal.sh passes from BOTH linode + r2 copies
   [ ] CI validate.yml (tofu/ansible-lint/caddy/gitleaks) green
+  [ ] rehearse.sh (#2236 Phase 3 P1) passes end-to-end: full site.yml
+      converge, smoke.sh all-PASS, backup object lands in the stage bucket,
+      restore rehearsal verifies — run this BEFORE the first real
+      standup.sh/"Stand up infra" button press
 EOF

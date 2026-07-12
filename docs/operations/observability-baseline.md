@@ -131,7 +131,7 @@ Devs need prod DB backups on local machines (local instances, realistic integrat
 
 - **Deploy:** tag → CI build/test/artifact → approval gate → Ansible (migrate with expand/contract + dry-run → unpack release → repoint `current` → `evennia reload`) → health gate → success or auto code-rollback.
 - **Metrics:** in-process sampler → `/metrics` → Prometheus scrape → Grafana dashboards + alert rules; off-box heartbeat independently alerts on total-box failure.
-- **Disaster recovery / clone:** `tofu apply` (provision) → Ansible restore-from-backup role (pull latest dump, restore, start) → a usable box, including the ephemeral-stage and migration-rehearsal use cases.
+- **Disaster recovery / clone:** `tofu apply` (provision) → Ansible restore-from-backup role (pull latest dump, restore, start) → a usable box, including the ephemeral-stage and migration-rehearsal use cases. **Built** (#2236 Phase 3 P1): `infra/scripts/rehearse.sh` (+ the gated `Dress rehearsal (stage)` workflow) is the full realization of this — apply → converge the real site.yml → smoke-test → backup → restore → destroy, all against the ephemeral-stage root. `infra/scripts/restore-rehearsal.sh` remains the narrower, faster, restore-ONLY drill (no full converge) for when that's all that's needed. See `infra/README.md`'s "Dress rehearsal" section.
 
 ## 6. Failure Modes & Handling
 

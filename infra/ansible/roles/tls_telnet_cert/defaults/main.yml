@@ -8,6 +8,23 @@
 ttc_game_dir: /opt/arxii/current/src
 ttc_web_fqdn: "play.example"           # the ACME cert domain
 # Caddy's on-disk cert store (default). Confirm the acme dir segment.
+#
+# #2236 Phase 3 P1 (dress rehearsal): this role runs UNCHANGED in rehearsal
+# (caddy_rehearsal_mode only swaps the Caddyfile template + skips the DNS-01
+# plugin install — see roles/caddy). certmagic (Caddy's cert-storage layer)
+# always lays certs out as `certificates/<issuer-key>/<domain>/<domain>.crt`
+# — for ACME that segment is the CA directory hostname (e.g.
+# `acme-v02.api.letsencrypt.org-directory`); for `local_certs` (Caddy's
+# internal CA, used by Caddyfile.rehearsal.j2) it is the fixed segment
+# `local`. The `*` wildcard below already spans that whole segment
+# regardless of which issuer wrote it, so THIS GLOB WORKS UNCHANGED for a
+# rehearsal-issued cert — verified by reading certmagic's storage-key
+# convention (`storageKeyCertsPrefix`/`normalizedName` -> `<issuer>/<name>/`
+# is the same shape for every issuer type); NOT verified by actually running
+# Caddy locally with local_certs (this sandbox has no outbound network to
+# fetch a caddy binary to test against — confirm on the first real rehearsal
+# run; if the segment name ever turns out different, adjust this var, not
+# the wildcard away).
 ttc_caddy_cert_glob: "/var/lib/caddy/.local/share/caddy/certificates/*/{{ ttc_web_fqdn }}/{{ ttc_web_fqdn }}.crt"
 ttc_caddy_key_glob: "/var/lib/caddy/.local/share/caddy/certificates/*/{{ ttc_web_fqdn }}/{{ ttc_web_fqdn }}.key"
 ttc_reboot_window: "04:30"             # align with the unattended-upgrades window

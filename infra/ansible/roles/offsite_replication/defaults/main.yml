@@ -3,6 +3,14 @@ offsite_staging_latest: /var/backups/arxii/latest.sql.gz   # produced by `backup
 offsite_r2_bucket: "arxii-offsite-REPLACE"                 # = tofu output r2_offsite_bucket
 offsite_r2_endpoint: "https://REPLACE.r2.cloudflarestorage.com"  # = tofu output r2_s3_endpoint
 offsite_window: "03:50"   # shortly AFTER backups_window so the dump exists
+# #2236 Phase 3 P1 (dress rehearsal). Set false by rehearse.sh's generated
+# group_vars; site.yml skips this role entirely in that case (see the role
+# list's `when: offsite_enabled`). The R2 credential pair is prod-adjacent
+# (real Cloudflare account, real bucket) — the ephemeral-stage root has no
+# such credential to give it, by the isolation doctrine, so this role would
+# otherwise be a guaranteed failure in rehearsal, not a meaningful skip.
+# standup.sh never sets this, so prod always runs offsite replication.
+offsite_enabled: true
 # Uses ONLY the SEPARATE R2 credential (R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY
 # from the EnvironmentFile) — distinct from Linode, which is what makes the
 # 3-2-1 genuinely independent. R2 Object Lock would be the immutability

@@ -1,0 +1,67 @@
+# EDIT BOTH: this file's site-block shape (ws/static/proxy routes, headers)
+# must stay in lockstep with Caddyfile.j2 — they are the same site, two
+# different ACME strategies. Managed by Ansible (caddy), rehearsal mode only
+# (caddy_rehearsal_mode: true).
+#
+# Rehearsal cannot do ACME/DNS-01: the ephemeral-stage root has NO Cloudflare
+# credential (isolation doctrine, #2236 §4.8 — a rehearsal stage box must
+# never hold a prod-adjacent token) and the fqdn is a fake, unroutable
+# hostname resolved via /etc/hosts on the box itself, so no real CA could
+# ever issue for it anyway. `local_certs` makes Caddy its own internal CA —
+# no network, no token, no real DNS required. Smoke tests run with curl's
+# `-k`/`--insecure` (or `--cacert` against Caddy's exported internal root,
+# if ever wired) to accept the internal-CA leaf. See infra/README.md's
+# "Dress rehearsal" section for the full list of what this deliberately does
+# NOT prove (real ACME issuance, real DNS, R2 offsite — all first-prod-run
+# residual risks).
+{
+	local_certs
+	email {{ caddy_acme_email }}
+}
+
+{{ caddy_web_fqdn }} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	@ws path /ws/*
+
+	# handle blocks are mutually exclusive and evaluated in the order
+	# written (unlike bare directives, which Caddy re-orders automatically —
+	# unsafe once a block mixes multiple reverse_proxy/file_server targets).
+	handle @ws {
+		# Evennia portal websocket, localhost-bound. Templated as a single
+		# whole-address token exactly like the plain-handle block's
+		# caddy_backend below — CI's validate.yml stubs each entire Jinja
+		# substitution with one hostname placeholder before running caddy
+		# adapt, and a bare hostname is a valid reverse_proxy upstream on its
+		# own, so this survives that stub.
+		reverse_proxy {{ caddy_ws_backend }} {
+			# No Cloudflare in front during rehearsal — smoke.sh runs ON the
+			# stage box itself (over SSH, host_firewall's Cloudflare-only
+			# 80/443 rule only exempts loopback), so {remote_host} here is
+			# always 127.0.0.1. Kept for parity with Caddyfile.j2 rather than
+			# hand-special-cased; harmless when it's always loopback.
+			header_up X-Real-IP {header.CF-Connecting-IP}
+		}
+	}
+
+	# STATIC_ROOT doesn't itself contain a "static/" subdirectory (collect
+	# static populates it flat), so handle_path strips the /static prefix
+	# before file_server resolves it against caddy_static_root.
+	handle_path /static/* {
+		root * {{ caddy_static_root }}
+		file_server
+	}
+
+	handle {
+		reverse_proxy {{ caddy_backend }} {
+			header_up X-Real-IP {header.CF-Connecting-IP}
+		}
+	}
+}

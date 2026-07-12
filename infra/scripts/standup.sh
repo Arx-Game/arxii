@@ -106,42 +106,9 @@ preflight() {
   done
 }
 
-# TF_OUTPUT_JSON: the FULL `tofu output -json` object, read ONCE by main()
-# below and cached here — jqr/jqc query it via jq instead of each output
-# name triggering its own separate `tofu output <name>` process (~15
-# individual tofu invocations before this — #2236 review; tofu's own
-# state-read/refresh overhead was paid once per name instead of once, total).
-TF_OUTPUT_JSON=""
-# jqr <name>: raw scalar string for output <name>.
-jqr() { jq -r ".${1}.value" <<<"${TF_OUTPUT_JSON}"; }
-# jqc <name>: compact JSON for output <name> — already a valid YAML flow
-# sequence/object, embedded directly into the generated group_vars file
-# below (same contract the old tf_out_json had).
-jqc() { jq -c ".${1}.value" <<<"${TF_OUTPUT_JSON}"; }
-
-# First run: Linode injects the admin keypair into ROOT (cloud-init has no
-# arxadmin user yet — the base role creates it). Later runs: the base role
-# has already created arxadmin+key and ssh_hardening has disabled root
-# login, so root no longer answers. Probe non-destructively and pick
-# whichever answers; site.yml's base role is idempotent either way.
-select_ssh_user() {
-  local ip="$1"
-  local -a key_args=()
-  # Not fatal: CI always sets this (standup.yml exports
-  # ANSIBLE_PRIVATE_KEY_FILE before invoking this script); a local operator
-  # run may instead rely on ssh-agent already holding the key, which this
-  # probe (and ansible-playbook itself) will happily use with no -i flag.
-  # Just a nudge in case that assumption is wrong.
-  [[ -n "${ANSIBLE_PRIVATE_KEY_FILE:-}" ]] || \
-    log "ANSIBLE_PRIVATE_KEY_FILE not set — relying on ssh-agent for the admin key (CI always sets this; set it locally if the probe below fails to authenticate)."
-  [[ -n "${ANSIBLE_PRIVATE_KEY_FILE:-}" ]] && key_args=(-i "${ANSIBLE_PRIVATE_KEY_FILE}")
-  if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
-      "${key_args[@]}" "arxadmin@${ip}" true 2>/dev/null; then
-    echo "arxadmin"
-  else
-    echo "root"
-  fi
-}
+# jqr/jqc/TF_OUTPUT_JSON/tf_read_outputs/select_ssh_user/gen_inventory/
+# validate_generated_yaml: shared with rehearse.sh — see lib.sh (#2236 Phase
+# 3 P1 review; previously standup.sh-only copies).
 
 main() {
   preflight
@@ -189,17 +156,26 @@ main() {
     -backend-config="skip_s3_checksum=true" \
     -backend-config="skip_metadata_api_check=true"
 
+  # AWS_* again here (#2236 Phase 3 P1 finding): the S3 backend needs live
+  # credentials on EVERY state-touching call, not just `init` — nothing
+  # about them is cached to disk, and a `VAR=val` command prefix scopes to
+  # that one command only. `apply` writes updated state back remotely at
+  # the end of the run, so it needs this exactly like `init` does; a prior
+  # version of this script omitted it here (and below, for the `tofu
+  # output` read) — undiscovered because CI's tofu validate never runs a
+  # real apply against a real backend. Found and fixed while building the
+  # dress-rehearsal ladder this same change adds specifically to catch
+  # exactly this class of bug before the first real prod run.
+  AWS_ACCESS_KEY_ID="${TF_STATE_S3_ACCESS_KEY}" \
+  AWS_SECRET_ACCESS_KEY="${TF_STATE_S3_SECRET_KEY}" \
   TF_VAR_linode_token="${LINODE_TOKEN}" \
   TF_VAR_cloudflare_api_token="${CLOUDFLARE_API_TOKEN}" \
   tofu -chdir="${TF_DIR}" apply -auto-approve -input=false   # APPLY-ONLY; no destroy path exists
 
   log "Reading tofu outputs (single 'tofu output -json' read)…"
-  # ONE `tofu output -json` call, cached in TF_OUTPUT_JSON — jqr/jqc (defined
-  # above) query it per-name below instead of each name spawning its own
-  # `tofu output <name>` process (~15 separate tofu invocations before this
-  # — #2236 review). Not `local`: main() is the only caller of jqr/jqc, but
-  # they're defined outside main(), so the var needs to reach them.
-  TF_OUTPUT_JSON="$(tofu -chdir="${TF_DIR}" output -json)"
+  AWS_ACCESS_KEY_ID="${TF_STATE_S3_ACCESS_KEY}" \
+  AWS_SECRET_ACCESS_KEY="${TF_STATE_S3_SECRET_KEY}" \
+  tf_read_outputs "${TF_DIR}"   # lib.sh — caches into TF_OUTPUT_JSON; jqr/jqc read it
 
   # Non-sensitive scalars.
   local ip web_fqdn telnet_fqdn backups_bucket backups_s3_endpoint backups_region
@@ -243,13 +219,7 @@ main() {
   # connect as root; the base role then creates arxadmin+key and
   # ssh_hardening disables root login, so every later run connects as
   # arxadmin instead.
-  cat > "${INVENTORY}" <<EOF
-arxii_prod:
-  hosts:
-    prod:
-      ansible_host: ${ip}
-      ansible_user: ${ssh_user}
-EOF
+  gen_inventory "${INVENTORY}" "${ip}" "${ssh_user}" prod   # lib.sh
 
   # dh_allowed_hosts includes both fqdns per django_hardening's own
   # defaults/main.yml contract ("= [web_fqdn, telnet_fqdn]").
@@ -291,12 +261,7 @@ offsite_r2_endpoint: "${r2_s3_endpoint}"
 admin_authorized_keys: ${authorized_keys_json}
 EOF
 
-  # A malformed heredoc substitution (an unescaped quote/bracket inside a
-  # tofu output value, say) would otherwise surface only much later as an
-  # opaque ansible-playbook parse error against a file the operator never
-  # looks at directly. Fail loudly here instead, against the actual file.
-  python3 -c "import yaml, sys; yaml.safe_load(open(sys.argv[1]))" "${GROUP_VARS_FILE}" \
-    || fail "generated ${GROUP_VARS_FILE} is not valid YAML — this is a bug in standup.sh's heredoc, not an operator error"
+  validate_generated_yaml "${GROUP_VARS_FILE}"   # lib.sh
 
   # Defense-in-depth: secrets_vault asserts these are absent from the
   # controller env. Captured into shell vars above (they need backend/
