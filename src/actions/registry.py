@@ -281,6 +281,7 @@ from actions.definitions.relationships import (
 )
 from actions.definitions.ritual import PerformRitualAction
 from actions.definitions.room_features import (
+    FundRoomWardAction,
     RepairLabStationAction,
     StartDefenseInstallationAction,
     StartRoomFeatureProjectAction,
@@ -589,6 +590,7 @@ _ALL_ACTIONS: list[Action] = [
     StartRoomFeatureProjectAction(),
     RepairLabStationAction(),
     StartDefenseInstallationAction(),
+    FundRoomWardAction(),
     BuyStockAction(),
     BuyWareAction(),
     ListWareAction(),

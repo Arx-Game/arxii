@@ -146,3 +146,60 @@ class StartDefenseInstallationActionTests(TestCase):
         from world.projects.models import Project
 
         assert Project.objects.filter(pk=result.data["project_id"]).exists()
+
+
+class FundRoomWardActionTests(TestCase):
+    def _owner_actor_with_ward(self, balance=50):
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models.aura import CharacterResonance
+        from world.room_features.models import RoomWardDetails
+
+        room = ObjectDBFactory(db_key="FundRoom", db_typeclass_path="typeclasses.rooms.Room")
+        account = AccountFactory(username="fund_account")
+        actor = CharacterFactory(db_key="FundCarol", location=room)
+        actor.db_account = account
+        actor.save()
+        sheet = CharacterSheetFactory(character=actor)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+        room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        transfer_ownership(room_profile=room_profile, to_persona=persona)
+        resonance = ResonanceFactory()
+        ward = RoomWardDetails.objects.create(room_profile=room_profile, resonance=resonance)
+        CharacterResonance.objects.create(
+            character_sheet=sheet, resonance=resonance, balance=balance
+        )
+        return actor, ward, sheet, resonance
+
+    def test_fund_ward_debits_resonance_and_credits_reserve(self):
+        from actions.definitions.room_features import FundRoomWardAction
+        from world.magic.models.aura import CharacterResonance
+
+        actor, ward, sheet, resonance = self._owner_actor_with_ward(balance=50)
+        result = FundRoomWardAction().run(actor=actor, amount=20)
+        assert result.success
+        ward.refresh_from_db()
+        assert ward.resonance_reserve == 20
+        cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+        assert cr.balance == 30
+
+    def test_fund_ward_insufficient_balance_fails(self):
+        from actions.definitions.room_features import FundRoomWardAction
+
+        actor, _ward, _sheet, _resonance = self._owner_actor_with_ward(balance=5)
+        result = FundRoomWardAction().run(actor=actor, amount=20)
+        assert not result.success
+
+    def test_fund_ward_clears_lapsed(self):
+        from django.utils import timezone
+
+        from actions.definitions.room_features import FundRoomWardAction
+
+        actor, ward, _sheet, _resonance = self._owner_actor_with_ward(balance=50)
+        ward.lapsed_at = timezone.now()
+        ward.save(update_fields=["lapsed_at"])
+        result = FundRoomWardAction().run(actor=actor, amount=10)
+        assert result.success
+        ward.refresh_from_db()
+        assert ward.lapsed_at is None

@@ -35,6 +35,8 @@ _TIME_LIMIT_DAYS = 14
 _MSG_LEVEL_EXCEEDS_MAX = "Level {level} exceeds the maximum of {max_level}."
 _MSG_NO_EXIT = "Install bars on which exit?"
 _MSG_WARD_NEEDS_RESONANCE = "A ward installation needs a resonance."
+_MSG_NO_WARD = "There is no ward here to fund."
+_MSG_INSUFFICIENT_RESONANCE = "You don't have enough resonance."
 
 _DEFENSE_THRESHOLD_PER_LEVEL = 500
 _DEFENSE_TIME_LIMIT_DAYS = 14
@@ -388,4 +390,65 @@ class StartDefenseInstallationAction(Action):
             success=True,
             message=f"A project to raise this defense to level {target_level} begins.",
             data={"project_id": project.pk},
+        )
+
+
+@dataclass
+class FundRoomWardAction(Action):
+    """Spend personal resonance into a room ward's upkeep reserve (#2177).
+
+    Decoupled from the Project-funded install (copper/effort) -- Project
+    funding is copper-only (world.projects has no arbitrary-resource funding
+    path), so the ward's ongoing resonance upkeep is a separate mechanic.
+    """
+
+    key: str = "fund_room_ward"
+    name: str = "Fund Room Ward"
+    icon: str = "sparkles"
+    category: str = "locations"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
+        from world.room_features.models import RoomWardDetails  # noqa: PLC0415
+        from world.room_features.services import can_modify_room_features  # noqa: PLC0415
+
+        amount = kwargs["amount"]
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+
+        room = actor.location
+        if not can_modify_room_features(persona, room):
+            return ActionResult(success=False, message=_MSG_NOT_STANDING)
+
+        room_profile = RoomProfile.objects.filter(objectdb=room).first()
+        ward = (
+            RoomWardDetails.objects.filter(room_profile=room_profile).active().first()
+            if room_profile is not None
+            else None
+        )
+        if ward is None:
+            return ActionResult(success=False, message=_MSG_NO_WARD)
+
+        cr = CharacterResonance.objects.filter(
+            character_sheet=persona.character_sheet, resonance=ward.resonance
+        ).first()
+        if cr is None or cr.balance < amount:
+            return ActionResult(success=False, message=_MSG_INSUFFICIENT_RESONANCE)
+
+        cr.balance -= amount
+        cr.save(update_fields=["balance"])
+        ward.resonance_reserve += amount
+        update_fields = ["resonance_reserve"]
+        if ward.lapsed_at is not None:
+            ward.lapsed_at = None
+            update_fields.append("lapsed_at")
+        ward.save(update_fields=update_fields)
+
+        return ActionResult(
+            success=True,
+            message=f"You channel {amount} resonance into the ward.",
+            data={"resonance_reserve": ward.resonance_reserve},
         )
