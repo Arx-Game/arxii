@@ -40,12 +40,8 @@ import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
 import { useEncounterForScene, useDuelChallengeInbox, combatKeys } from '@/combat/queries';
-import { CombatTurnPanel } from '@/combat/CombatTurnPanel';
-import { CombatTacticalMap } from '@/combat/components/CombatTacticalMap';
-import { DeepLinkModalHost } from '@/combat/modals/DeepLinkModalHost';
+import { CombatRail } from '@/combat/components/CombatRail';
 import { DuelChallengeControls } from '@/combat/duels/DuelChallengeControls';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { CastPosition, PositionTargetShape } from '@/actions/types';
 
 // ---------------------------------------------------------------------------
 // CombatScenePage
@@ -78,7 +74,6 @@ export function CombatScenePage() {
     [myRosterEntries, activeCharacter]
   );
   const characterId = activeEntry?.character_id ?? 0;
-  const characterSheetId = activeEntry?.character_id ?? 0; // same pk — see MyRosterEntry type
   const personaId = activeEntry?.primary_persona_id ?? null;
 
   // Incoming duel-challenge prompt (#1180). The inbox is scoped server-side to the
@@ -95,51 +90,6 @@ export function CombatScenePage() {
 
   // Detached action IDs for the chip strip
   const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
-
-  // Right-rail tab — "Your Turn" (CombatTurnPanel) vs "Map" (CombatTacticalMap, #2006).
-  // Defaults to 'turn' so existing behavior is unchanged for anyone not opting into the map.
-  const [rightRailTab, setRightRailTab] = useState<'turn' | 'map'>('turn');
-
-  // Cast-time position selection + the selected technique's position shape
-  // (#2206) — lifted here (above the tab switch) so both CombatTurnPanel's
-  // YourTurn section and the CombatTacticalMap tab share the same state; each
-  // rail tab's TabsContent unmounts when inactive, so this can't live inside
-  // either tab's own component. YourTurn reports `focusedPositionShape` via
-  // onPositionShapeChange whenever the focused technique/its shape changes;
-  // castPosition is the shared single-destination / pair A-B selection.
-  const [castPosition, setCastPosition] = useState<CastPosition>({});
-  const [focusedPositionShape, setFocusedPositionShape] = useState<PositionTargetShape>('none');
-
-  // Map-click handler for the tactical-map tab (#2206). Single-click UI needs
-  // its own fill/clear rules, distinct from ActionDeclarationCard's
-  // PositionPicker (which renders explicit, separately-clickable A/B slot
-  // pickers): single shape toggles the one destination on/off per click; pair
-  // shape fills whichever of A/B is still empty, and clicking a position
-  // already occupying a slot clears just that slot. Returns false (consumes
-  // nothing) unless a position-shaped technique is selected, so TacticalMap's
-  // move-dispatch logic runs unchanged otherwise.
-  const handlePickPosition = useCallback(
-    (positionId: number): boolean => {
-      if (focusedPositionShape === 'none') return false;
-      if (focusedPositionShape === 'single') {
-        setCastPosition((prev) =>
-          prev.destinationId === positionId
-            ? { ...prev, destinationId: undefined }
-            : { ...prev, destinationId: positionId }
-        );
-        return true;
-      }
-      // pair
-      setCastPosition((prev) => {
-        if (prev.pairA === positionId) return { ...prev, pairA: undefined };
-        if (prev.pairB === positionId) return { ...prev, pairB: undefined };
-        if (prev.pairA === undefined) return { ...prev, pairA: positionId };
-        return { ...prev, pairB: positionId };
-      });
-      return true;
-    },
-    [focusedPositionShape]
-  );
 
   const handleDetach = useCallback((actionId: number) => {
     setDetachedActionIds((prev) => (prev.includes(actionId) ? prev : [...prev, actionId]));
@@ -298,38 +248,7 @@ export function CombatScenePage() {
               Loading combat state…
             </div>
           ) : hasActiveEncounter ? (
-            <Tabs
-              value={rightRailTab}
-              onValueChange={(value) => setRightRailTab(value as 'turn' | 'map')}
-              className="flex h-full flex-col"
-            >
-              <TabsList className="grid w-full shrink-0 grid-cols-2">
-                <TabsTrigger value="turn" data-testid="rail-tab-turn" className="text-xs">
-                  Your Turn
-                </TabsTrigger>
-                <TabsTrigger value="map" data-testid="rail-tab-map" className="text-xs">
-                  Map
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="turn" className="mt-2 min-h-0 flex-1 overflow-y-auto">
-                <CombatTurnPanel
-                  encounterId={encounterId}
-                  characterId={characterId}
-                  characterSheetId={characterSheetId}
-                  castPosition={castPosition}
-                  onCastPositionChange={setCastPosition}
-                  onPositionShapeChange={setFocusedPositionShape}
-                />
-              </TabsContent>
-              <TabsContent value="map" className="mt-2 min-h-0 flex-1 overflow-y-auto">
-                <CombatTacticalMap
-                  encounterId={encounterId}
-                  characterId={characterId}
-                  positionShape={focusedPositionShape}
-                  onPickPosition={handlePickPosition}
-                />
-              </TabsContent>
-            </Tabs>
+            <CombatRail sceneId={sceneIdNum} encounterId={encounterId} />
           ) : (
             <div className="flex flex-col gap-3">
               {/* Duel challenge accept/decline prompt — shown when there is no active
@@ -354,11 +273,6 @@ export function CombatScenePage() {
           )}
         </div>
       </div>
-
-      {/* Deep-link modal host — single Redux-driven modal for condition / clash /
-       * opponent / participant / combo deep links (#551). Mounted once; reads
-       * the open-modal target from the deepLinkModal slice. */}
-      <DeepLinkModalHost encounterId={encounterId} />
     </div>
   );
 }
