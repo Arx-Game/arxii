@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
         ("items", "0031_craftingrecipe_output_item_template_and_more"),
