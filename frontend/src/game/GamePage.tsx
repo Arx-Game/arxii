@@ -481,6 +481,11 @@ export function GamePage() {
               onPoseSubmitted={handlePoseSubmitted}
               isAtPlace={isAtPlace}
               conversationTabs={conversationTabs}
+              speakingAs={
+                activeEntry
+                  ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
+                  : undefined
+              }
               placeBar={placesRoomId ? <PlaceBar sceneId={placesRoomId} /> : undefined}
               pendingAttachments={
                 sceneId ? (

@@ -660,6 +660,37 @@ tier (one `Battle` grades as one outcome, applied uniformly — per-front
 independent grading is **#1760**'s job, not duplicated here). No `withdrawal`
 path: `BattleOutcome` has no FLED/ABANDONED-equivalent value.
 
+## Legend Wiring (#2184)
+
+`world.battles.legend_wiring` registers `apply_battle_legend_awards` as a
+**battle-conclusion hook** (`world.battles.conclusion_hooks`, the same registry
+`world.ships.battle_wiring` uses) — `battles` importing `societies` is the
+ratified direction here, both being general/reusable systems (unlike the
+ships case, where the FK-direction rule points the other way, ADR-0010).
+Registered in `BattlesConfig.ready()` (`world/battles/apps.py`).
+
+**Idempotency:** no-ops if any `LegendEntry` tagged with the lazily-created
+`"Battle"` `LegendSourceType` already exists for `battle.scene` — covers a
+second `conclude_battle`/hook run without a duplicate-check flag.
+
+**Win-gated victory event:** `battle.outcome` maps to a winning
+`BattleSideRole` (`ATTACKER_DECISIVE`/`ATTACKER_MARGINAL` → attacker,
+`DEFENDER_DECISIVE`/`DEFENDER_MARGINAL` → defender; `UNRESOLVED` mints
+nothing). Every winning-side `BattleParticipant.character_sheet` plus every
+winning-side `BattleUnit.commander` (deduped by sheet, resolved to
+`active_persona_for_sheet(sheet)`) shares one `create_legend_event` titled
+`"Victory at {battle.name}"`, `base_value` `BATTLE_LEGEND_DECISIVE_VALUE` (25)
+or `BATTLE_LEGEND_MARGINAL_VALUE` (12), scoped to `battle.scene` and
+`battle.campaign_story`. The losing side earns nothing from the event.
+
+**Standout deeds (both sides):** independent of who won, any resolved
+`BattleActionDeclaration` with `success_level >= STANDOUT_SUCCESS_LEVEL` (2 —
+clearly above bare success) on a `DRAMATIC_KINDS` action
+(RESCUE/ROUT/BREACH) earns its actor a `create_solo_deed` worth
+`BATTLE_LEGEND_STANDOUT_VALUE` (15), scoped to `battle.scene`. A losing-side
+rescue is still legend-worthy; standout deeds stack with the victory event by
+design — see **ADR-0122**.
+
 ## Services (`src/world/battles/services.py`)
 
 All public functions are the only permitted entry points for battle state mutations.
@@ -821,6 +852,13 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
   mirrors `RALLY_MORALE_PER_LEVEL`'s scaling
 - `BREACH_VP_PER_LEVEL = 5` — BREACH's VP award per success level (#1713)
 - `FORTIFY_VP = 3` — FORTIFY's flat VP award (#1713)
+- `BATTLE_LEGEND_DECISIVE_VALUE = 25` / `BATTLE_LEGEND_MARGINAL_VALUE = 12` — win-gated
+  victory `LegendEvent` base value (#2184), decisive vs. marginal
+- `BATTLE_LEGEND_STANDOUT_VALUE = 15` — standout solo-deed base value (#2184), both sides
+- `STANDOUT_SUCCESS_LEVEL = 2` — success-level floor for a standout deed (#2184), clearly
+  above bare success (`success_level > 0`)
+- `DRAMATIC_KINDS` — tuple (#2184): the `BattleActionKind`s eligible for a standout deed —
+  RESCUE / ROUT / BREACH
 
 ## Exceptions (`src/world/battles/exceptions.py`)
 
@@ -874,9 +912,11 @@ metadata only, not used for beat resolution (see below). `conclude_battle` delib
 **does not** call `complete_story` — automatically closing the whole campaign story on
 one battle's conclusion would foreclose a war arc prematurely.
 
-Campaign-stakes propagation (battle outcome → Story + win-gated Legend) is wired via
+Campaign-stakes propagation (battle outcome → Story beat resolution) is wired via
 `world.battles.beat_wiring` (#1785) — see [Stakes / Beat Wiring](#stakes--beat-wiring-1785)
-below.
+below. Win-gated Legend propagation (battle outcome → `societies.LegendEntry`) is a
+separate seam, `world.battles.legend_wiring` (#2184) — see
+[Legend Wiring](#legend-wiring-2184) below.
 
 ## PR 1 Scope vs. Deferred
 
@@ -931,7 +971,7 @@ declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold 
 
 | What | Issue |
 |---|---|
-| Battle writeup / React page | **built** — the live strategic battle map (`/scenes/:id/battle`, [Web surface (#2009)](#web-surface-2009) below) shipped; post-conclusion narrative writeup page at `/battles/:id` reuses `BattleDetailSerializer`'s aggregate shape (#1735). `BattleDetailSerializer` was extended with `concluded_at`, `created_at`, `campaign_story_id`, `scene_id`, and `deeds` (a `SerializerMethodField` querying `LegendEntry` by the battle's scene). The deeds section is empty until battle→LegendEntry creation wiring is built (deferred — see follow-up). |
+| Battle writeup / React page | **built** — the live strategic battle map (`/scenes/:id/battle`, [Web surface (#2009)](#web-surface-2009) below) shipped; post-conclusion narrative writeup page at `/battles/:id` reuses `BattleDetailSerializer`'s aggregate shape (#1735). `BattleDetailSerializer` was extended with `concluded_at`, `created_at`, `campaign_story_id`, `scene_id`, and `deeds` (a `SerializerMethodField` querying `LegendEntry` by the battle's scene). The deeds section now populates — see [Legend Wiring (#2184)](#legend-wiring-2184) above. |
 | Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating + movement resolution, hull-breach/living-mount-defeat ejection + drowning/falling hazard, see below; REPOSITION's telnet `CmdBattle` subcommand shipped with #2007); a player-facing embark action still deferred (#1714) |
 | Siege variants | **built, see [Sieges (#1713)](#sieges-1713) below** |
 

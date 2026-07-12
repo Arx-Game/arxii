@@ -918,7 +918,7 @@ Social structures, organizations, reputation, and legend tracking.
 - **`Organization`/`Society` as `NpcRegard` target (#1717):** either can now be the *target* (not
   holder) of a notable NPC's external opinion — see the Regard bullet in the NPC Services
   section above.
-- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam)
+- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam), battles (consumer — `world.battles.legend_wiring` calls `create_legend_event`/`create_solo_deed` from a battle-conclusion hook, win-gated Legend, #2184; FK direction battles→societies, ADR-0010 — this app never imports `world.battles`)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
 
@@ -3764,8 +3764,19 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
     breach or living-mount defeat)
   - Conclusion: `check_victory` (graded outcome: decisive if margin ≥ 50, else marginal),
     `conclude_battle` (sets outcome + ends scene; resolves any linked story beat's stakes
-    contract via `resolve_battle_beats`, #1785; still never calls `complete_story`),
+    contract via `resolve_battle_beats`, #1785; runs every registered
+    `battles.conclusion_hooks` hook, including win-gated Legend wiring below; still never
+    calls `complete_story`),
     `maybe_conclude_on_timer` (timeout: defender holds unless attacker met threshold)
+- **Legend wiring (`world.battles.legend_wiring`, #2184):** `apply_battle_legend_awards`
+  — a `battles.conclusion_hooks` hook (`battles` importing `societies`, the ratified
+  direction, both general/reusable systems). Win-gated `create_legend_event` ("Victory at
+  {battle.name}") for the winning `BattleSideRole`'s participants + unit commanders (25
+  decisive / 12 marginal, `BattleOutcome`-driven); a separate standout pass
+  (`create_solo_deed`, 15) fires for *either* side on a resolved RESCUE/ROUT/BREACH
+  declaration with `success_level >= 2` — stacks with the victory event. Idempotent via a
+  lazy `"Battle"` `LegendSourceType` existence check on `battle.scene`. See
+  [battles.md](battles.md#legend-wiring-2184), ADR-0122.
 - **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
   `BattleRoundResult` — casts each declaration's `technique` via `resolve_battle_technique`
   (routes through the real `use_technique` magic envelope, not a generic shared check),
@@ -3962,8 +3973,12 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   (`BattlePlace.combat_encounter` bridge, now wired for Champion duels, #1710, and
   siege-engine skirmishes, #1713; shared `RoundStatus` / `AbstractRound`), covenants
   (`BattleSide.covenant`; `CovenantRole.command_tier`/`.is_champion_role`, #1710), stories
-  (`campaign_story` FK, informational; `world.battles.beat_wiring` resolves linked beats via
-  campaign-stakes propagation, #1785), buildings (`Fortification.building` FK, nullable,
+  (`campaign_story` FK — beat-resolution linkage via `world.battles.beat_wiring`'s
+  campaign-stakes propagation, #1785; also read directly as the `story=` arg to the
+  win-gated `create_legend_event` call, #2184), societies (`world.battles.legend_wiring`
+  imports `societies.services.create_legend_event`/`create_solo_deed` +
+  `societies.models.LegendEntry`/`LegendSourceType` — a battle-conclusion hook, `battles`
+  importing `societies`, #2184), buildings (`Fortification.building` FK, nullable,
   #1713 — `create_fortification` reads `Building.fortification_level` once at creation;
   this app does not import `world.buildings` beyond that FK),
   actions (REGISTRY + `get_active_round_context` seam), gm (`world.gm.permissions.HasGMTrust`

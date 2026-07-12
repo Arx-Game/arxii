@@ -167,7 +167,8 @@ export function useGameSocket() {
             handleInteractionPayload(
               character,
               kwargs as unknown as InteractionWsPayload,
-              dispatch
+              dispatch,
+              navigate
             );
             return;
           }

@@ -116,7 +116,9 @@ function getThreadLabel(
 // it's first observed (the old per-thread-key baseline's bug). With no entry
 // AND no baseline (e.g. `/scenes/:id` passing no opts at all) unread is 0,
 // exactly as before.
-function countUnread(
+// Exported (#2166) so `game/attention.ts`'s `sessionAttention` can reuse the
+// exact same threshold rule per thread key instead of duplicating it.
+export function countUnread(
   threadInteractions: Interaction[],
   threadKey: string,
   lastSeenByThread: Record<string, number> | undefined,

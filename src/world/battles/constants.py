@@ -255,3 +255,25 @@ SET_ENVIRONMENT_VP = 4
 # route through resolve_damage_type_resistance for immunity = high resistance.
 VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY = 30
 VEHICLE_HAZARD_BASE_DAMAGE = 20
+
+# Win-gated LegendEntry wiring (#2184). Only the winning side mints a Victory
+# LegendEvent — DECISIVE outweighs MARGINAL, mirroring DECISIVE_MARGIN's own
+# distinction. Standout deeds are a separate, smaller-value pass available to
+# BOTH sides (a losing-side rescue is still legend-worthy) — see
+# world.battles.legend_wiring.apply_battle_legend_awards.
+BATTLE_LEGEND_DECISIVE_VALUE = 25
+BATTLE_LEGEND_MARGINAL_VALUE = 12
+BATTLE_LEGEND_STANDOUT_VALUE = 15
+
+# success_level > 0 is already "success" (BattleActionDeclaration.success_level
+# help_text); STANDOUT_SUCCESS_LEVEL is set clearly above bare success (1) so a
+# routine hit doesn't also mint legend — only a standout margin does.
+STANDOUT_SUCCESS_LEVEL = 2
+
+# The action kinds dramatic enough to be worth a standout deed on their own,
+# independent of who won the battle.
+DRAMATIC_KINDS = (
+    BattleActionKind.RESCUE,
+    BattleActionKind.ROUT,
+    BattleActionKind.BREACH,
+)

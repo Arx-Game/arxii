@@ -144,7 +144,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   actions, `CmdBattle` telnet namespace, E2E `test_battle_telnet_e2e.py`. Peril/rescue +
   AFK override shipped (#1733). Resources/units/terrain/tactics + type-matchups shipped
   (#1711). Command hierarchy + the Champion shipped (#1710). Campaign-stakes propagation
-  + win-gated Legend shipped (#1785). Battle-flow actions (rout/rally/repel/hold, second
+  (battle outcome → Story beat resolution) shipped (#1785); win-gated Legend (battle
+  outcome → `societies.LegendEntry`, a separate `world.battles.legend_wiring` seam —
+  25/12 decisive/marginal victory event for the winning side, 15-value standout deeds
+  for either side) shipped (#2184, ADR-0122). Battle-flow actions (rout/rally/repel/hold, second
   BattleUnit.morale resource, BattlePlace.controlled_by objective) shipped (#1712). Siege
   warfare: Fortification objectives + BREACH/FORTIFY + persistent
   Building.fortification_level investment (#1713). Naval-ship vertical slice shipped

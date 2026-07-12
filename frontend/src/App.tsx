@@ -96,6 +96,7 @@ import { StaffGMApplicationDetailPage } from './staff/pages/StaffGMApplicationDe
 import { RouletteModal } from './components/roulette/RouletteModal';
 import { Toaster } from './components/ui/sonner';
 import { DuelChallengeNotifier } from './combat/DuelChallengeNotifier';
+import { ConsentAttentionNotifier } from './scenes/components/ConsentAttentionNotifier';
 
 // ---------------------------------------------------------------------------
 // Lazy-loaded stories pages (React.lazy for route-level code splitting)
@@ -976,6 +977,7 @@ function App() {
       <RouletteModal />
       <Toaster />
       <DuelChallengeNotifier />
+      <ConsentAttentionNotifier />
     </Layout>
   );
 }

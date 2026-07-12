@@ -34499,6 +34499,13 @@ export interface operations {
         initiator?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
+        /**
+         * @description Request direction relative to the requesting account's played characters.
+         *
+         *     * `incoming` - Incoming
+         *     * `outgoing` - Outgoing
+         */
+        role?: 'incoming' | 'outgoing';
         scene?: number;
         status?: string;
         target?: number;
@@ -34619,6 +34626,13 @@ export interface operations {
         initiator?: number;
         /** @description Persona id (owned by the requester) to list castable techniques for. */
         initiator_persona: number;
+        /**
+         * @description Request direction relative to the requesting account's played characters.
+         *
+         *     * `incoming` - Incoming
+         *     * `outgoing` - Outgoing
+         */
+        role?: 'incoming' | 'outgoing';
         scene?: number;
         status?: string;
         target?: number;

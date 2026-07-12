@@ -123,6 +123,50 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
 
+    def test_role_incoming_scopes_across_all_played_characters(self) -> None:
+        """#2166 — ConsentAttentionNotifier's account-wide poll: role=incoming must
+        return pending requests addressed to ANY of the account's played
+        characters (not just one persona), exclude the account's own outgoing
+        requests, and never leak another account's requests.
+        """
+        # A second character played by the SAME account (multi-character play) —
+        # the request below is addressed to this background character, not
+        # `self.persona`, so a single-persona filter would miss it.
+        second_character = CharacterFactory()
+        second_roster_entry = RosterEntryFactory(character_sheet__character=second_character)
+        RosterTenureFactory(player_data=self.player_data, roster_entry=second_roster_entry)
+        second_persona = CharacterSheetFactory(character=second_character).primary_persona
+
+        incoming_to_background_char = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.target_persona,
+            target_persona=second_persona,
+        )
+        # Outgoing (the account's own character initiated it) — must be excluded.
+        SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.persona,
+            target_persona=self.target_persona,
+        )
+        # Involves neither of the account's personas at all — must never leak.
+        other_account = AccountFactory()
+        other_character = CharacterFactory()
+        other_roster_entry = RosterEntryFactory(character_sheet__character=other_character)
+        other_player_data = PlayerDataFactory(account=other_account)
+        RosterTenureFactory(player_data=other_player_data, roster_entry=other_roster_entry)
+        other_persona = CharacterSheetFactory(character=other_character).primary_persona
+        SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.target_persona,
+            target_persona=other_persona,
+        )
+
+        url = reverse("sceneactionrequest-list")
+        response = self.client.get(url, {"status": ActionRequestStatus.PENDING, "role": "incoming"})
+        assert response.status_code == status.HTTP_200_OK
+        ids = {row["id"] for row in response.data["results"]}
+        assert ids == {incoming_to_background_char.pk}
+
 
 def _make_area_action_mock() -> MagicMock:
     """Return a mock action object with target_type = AREA."""

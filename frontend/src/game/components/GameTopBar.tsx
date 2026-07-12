@@ -7,12 +7,35 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { MyRosterEntry } from '@/roster/types';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
 import { ComfortWidget } from '@/comfort/components/ComfortWidget';
+import { sessionAttention } from '@/game/attention';
 
 import { FormSwitcher } from './FormSwitcher';
 import { PersonaSwitcher } from './PersonaSwitcher';
 
 interface GameTopBarProps {
   characters: MyRosterEntry[];
+}
+
+/**
+ * Two-tier attention indicator (#2166 Decision 4a) — direct (unseen
+ * whisper/@-target aimed at this character) badges a small red numeric
+ * count, mirroring `ConversationTabStrip`'s `UnreadBadge`; ambient (any
+ * other unread) shows a muted dot; neither renders nothing.
+ */
+function AttentionBadge({ direct, ambient }: { direct: number; ambient: boolean }) {
+  if (direct > 0) {
+    return (
+      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+        {direct}
+      </span>
+    );
+  }
+  if (ambient) {
+    return (
+      <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-muted-foreground/60" />
+    );
+  }
+  return null;
 }
 
 function getInitials(name: string): string {
@@ -82,22 +105,23 @@ export function GameTopBar({ characters }: GameTopBarProps) {
         </div>
       ) : null}
 
-      {altCharacters.map((char) => (
-        <button
-          key={char.id}
-          onClick={() => handleSelectCharacter(char.name)}
-          className="relative opacity-60 transition-opacity hover:opacity-100"
-          title={`Switch to ${char.name}`}
-        >
-          <Avatar className="h-7 w-7">
-            <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
-            <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
-          </Avatar>
-          {sessions[char.name]?.unread > 0 && (
-            <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500" />
-          )}
-        </button>
-      ))}
+      {altCharacters.map((char) => {
+        const attention = sessionAttention(sessions[char.name], char.primary_persona_id);
+        return (
+          <button
+            key={char.id}
+            onClick={() => handleSelectCharacter(char.name)}
+            className="relative opacity-60 transition-opacity hover:opacity-100"
+            title={`Switch to ${char.name}`}
+          >
+            <Avatar className="h-7 w-7">
+              <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
+              <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
+            </Avatar>
+            <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
+          </button>
+        );
+      })}
 
       {!active &&
         characters.map((char) => (

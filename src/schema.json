@@ -202,6 +202,18 @@ paths:
         schema:
           type: integer
       - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - incoming
+          - outgoing
+        description: |-
+          Request direction relative to the requesting account's played characters.
+
+          * `incoming` - Incoming
+          * `outgoing` - Outgoing
+      - in: query
         name: scene
         schema:
           type: number
@@ -350,6 +362,18 @@ paths:
         description: Persona id (owned by the requester) to list castable techniques
           for.
         required: true
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - incoming
+          - outgoing
+        description: |-
+          Request direction relative to the requesting account's played characters.
+
+          * `incoming` - Incoming
+          * `outgoing` - Outgoing
       - in: query
         name: scene
         schema:
