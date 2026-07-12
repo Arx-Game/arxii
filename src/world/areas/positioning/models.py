@@ -502,9 +502,7 @@ class Rampart(SharedMemoryModel):
     at 0.
     """
 
-    position = models.ForeignKey(
-        Position, on_delete=models.CASCADE, related_name="ramparts", unique=True
-    )
+    position = models.OneToOneField(Position, on_delete=models.CASCADE, related_name="rampart")
     element_profile = models.ForeignKey(RampartElementProfile, on_delete=models.PROTECT)
     integrity = models.PositiveSmallIntegerField()
     max_integrity = models.PositiveSmallIntegerField()

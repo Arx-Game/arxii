@@ -109,11 +109,10 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "position",
-                    models.ForeignKey(
+                    models.OneToOneField(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="ramparts",
+                        related_name="rampart",
                         to="areas.position",
-                        unique=True,
                     ),
                 ),
                 (
