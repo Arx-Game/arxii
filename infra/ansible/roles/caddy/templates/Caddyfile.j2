@@ -24,15 +24,16 @@
 	# written (unlike bare directives, which Caddy re-orders automatically —
 	# unsafe once a block mixes multiple reverse_proxy/file_server targets).
 	handle @ws {
-		# Evennia portal websocket, localhost-bound. The port is hardcoded
-		# rather than templated from a variable because CI's validate.yml
-		# stubs every Jinja substitution with a hostname placeholder before
-		# running `caddy adapt` — templating the port here would render an
-		# unparseable "host:placeholder-hostname" address. Keep this in sync
-		# with roles/caddy/defaults/main.yml's caddy_ws_backend_port
-		# (informational only). Caddy handles the Upgrade handshake
+		# Evennia portal websocket, localhost-bound. Templated as a single
+		# whole-address token (roles/caddy/defaults/main.yml's
+		# caddy_ws_backend) exactly like the plain-handle block's
+		# caddy_backend below — CI's validate.yml stubs each entire Jinja
+		# substitution with one hostname placeholder before running caddy
+		# adapt, and a bare hostname is a valid reverse_proxy upstream on its
+		# own, so this survives that stub (a split host-colon-templated-port
+		# form would not have). Caddy handles the Upgrade handshake
 		# automatically; no extra config needed for the WS proxy.
-		reverse_proxy 127.0.0.1:4002 {
+		reverse_proxy {{ caddy_ws_backend }} {
 			# Trust only Cloudflare (the firewall only admits Cloudflare to
 			# 80/443) — {remote_host} would always be the CF edge IP, never
 			# the player's; CF-Connecting-IP carries the real client IP.

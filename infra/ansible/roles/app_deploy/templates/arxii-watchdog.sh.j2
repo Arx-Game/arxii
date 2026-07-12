@@ -19,6 +19,21 @@
 #     both pidfiles — that write is not instantaneous. A GRACE_PERIOD_S
 #     window after the unit's ActiveEnterTimestamp tolerates a missing
 #     pidfile without restarting (which would just race the fresh start).
+#
+# DELIBERATE TRADEOFF (documented, not an oversight): the root cause this
+# whole script works around is that Evennia's `evennia start` CLI manages
+# BOTH daemons under ONE process tree with no per-daemon systemd unit of its
+# own — systemd can only supervise what it launched (the Server side, via
+# Type=forking/PIDFile). Splitting Server and Portal into two separate
+# systemd units (each independently supervised, each restartable on its
+# own) is the actual fix; it's nontrivial because Evennia doesn't expose a
+# "start only the Portal" / "start only the Server" CLI entrypoint. Until
+# that's built, this 1-minute poll-and-restart-the-whole-unit script is the
+# accepted interim. The SubState string match in the case statement below
+# is similarly best-effort — it's not an exhaustive enumeration of every
+# systemd sub-state that could mean "something is happening right now",
+# just the ones observed in practice; a sub-state this doesn't recognize as
+# "in flight" could still produce a false-positive restart.
 set -euo pipefail
 set +x
 
@@ -89,11 +104,17 @@ fi
 log "restarting ${SERVICE} (an Evennia daemon is dead while the unit reports active)"
 systemctl restart "${SERVICE}"
 
-# Off-box alert — same convention as offbox_alerting's heartbeat script
-# (base ping URL + token in OFFBOX_ALERT_TOKEN from the EnvironmentFile;
-# posting to "${base}/fail" signals the external dead-man's-switch to alert
-# immediately instead of waiting for the next missed heartbeat).
-if [ -n "${OFFBOX_ALERT_TOKEN:-}" ]; then
-  curl -fsS -m 10 "${OFFBOX_ALERT_TOKEN}/fail" \
-    -d "watchdog restarted ${SERVICE}: a dead Evennia daemon was detected" >/dev/null || true
+# Off-box alert via offbox_alerting's shared arxii-alert helper. The restart
+# above always happens regardless; only the alert is skipped here. Guarded
+# (not just `|| true`'d) because site.yml runs offbox_alerting AFTER
+# app_deploy — on a brand-new box's FIRST converge, this watchdog's own
+# timer (installed by app_deploy, checks every minute) could fire before
+# offbox_alerting has installed /usr/local/sbin/arxii-alert at all, and a
+# bare call to a not-yet-existing script would itself be a spurious
+# "watchdog is broken" failure, unrelated to the actual Evennia-daemon-dead
+# condition this script is trying to report.
+if [ -x /usr/local/sbin/arxii-alert ]; then
+  /usr/local/sbin/arxii-alert "watchdog restarted ${SERVICE}: a dead Evennia daemon was detected"
+else
+  log "arxii-alert helper not installed yet (offbox_alerting hasn't converged this run) — skipping off-box alert"
 fi

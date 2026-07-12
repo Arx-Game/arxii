@@ -94,15 +94,18 @@
       Suites: nodistro
       Components: main
       Signed-By: /usr/share/keyrings/nodesource.gpg
+  register: app_nodesource_sources
 
-# No cache_valid_time here (unlike other apt tasks in this repo): the
-# sources list may have JUST changed above, and a stale cache would miss
-# the new repo entirely on the very run that added it.
+# update_cache only fires when the sources file above actually changed (a
+# stale cache would miss a brand-new repo on the run that added it, but an
+# unconditional update_cache: true was paying the full `apt-get update`
+# cost on every single converge forever after, even once nodejs is already
+# installed and the sources file is untouched).
 - name: Install Node.js {{ app_frontend_node_major }}.x (NodeSource)
   ansible.builtin.apt:
     name: nodejs
     state: present
-    update_cache: true
+    update_cache: "{{ app_nodesource_sources is changed }}"
     lock_timeout: 600
 
 - name: Enable corepack shims (system-wide; bundled with Node.js)
@@ -121,11 +124,34 @@
 
 # Idempotency precheck: a converge where the checkout didn't change and a
 # built bundle already exists for this release needs no rebuild (pnpm
-# install + vite build are the slow part of every deploy otherwise).
+# install + vite build are the slow part of every deploy otherwise). The
+# toolchain marker (below) closes the gap where dist/ exists and the
+# checkout is unchanged, but app_frontend_node_major/app_frontend_
+# pnpm_version themselves were bumped since that bundle was built.
 - name: Check whether this release already has a built frontend bundle
   ansible.builtin.stat:
     path: "{{ app_frontend_dist_index }}"
   register: app_frontend_dist_stat
+
+- name: Check the frontend bundle's toolchain marker
+  ansible.builtin.stat:
+    path: "{{ app_frontend_toolchain_marker }}"
+  register: app_frontend_toolchain_marker_stat
+
+- name: Read the frontend bundle's toolchain marker, if present
+  ansible.builtin.slurp:
+    src: "{{ app_frontend_toolchain_marker }}"
+  register: app_frontend_toolchain_marker_content
+  when: app_frontend_toolchain_marker_stat.stat.exists
+
+- name: Decide whether the frontend needs a rebuild
+  ansible.builtin.set_fact:
+    app_frontend_needs_build: >-
+      {{ app_checkout is changed
+         or not app_frontend_dist_stat.stat.exists
+         or not app_frontend_toolchain_marker_stat.stat.exists
+         or (app_frontend_toolchain_marker_content | default({'content': ''})).content
+            | b64decode != (app_frontend_node_major ~ ' ' ~ app_frontend_pnpm_version) }}
 
 - name: Install frontend deps (pnpm install --frozen-lockfile)
   ansible.builtin.command: pnpm install --frozen-lockfile
@@ -133,22 +159,33 @@
     chdir: "{{ app_frontend_dir }}"
   become: true
   become_user: "{{ app_user }}"
-  when: app_checkout is changed or not app_frontend_dist_stat.stat.exists
+  when: app_frontend_needs_build
   register: app_frontend_pnpm_install
-  changed_when: app_checkout is changed or not app_frontend_dist_stat.stat.exists
+  changed_when: app_frontend_needs_build
 
 # vite always rewrites hashed assets, so "changed" here is really "did we
-# decide to build" (checkout changed, or no bundle exists yet for this
-# release) rather than anything vite itself reports.
+# decide to build" (see app_frontend_needs_build above) rather than
+# anything vite itself reports.
 - name: Build the frontend bundle (pnpm build; runs postbuild's collectstatic hook)
   ansible.builtin.command: pnpm build
   args:
     chdir: "{{ app_frontend_dir }}"
   become: true
   become_user: "{{ app_user }}"
-  when: app_checkout is changed or not app_frontend_dist_stat.stat.exists
+  when: app_frontend_needs_build
   register: app_frontend_build
-  changed_when: app_checkout is changed or not app_frontend_dist_stat.stat.exists
+  changed_when: app_frontend_needs_build
+
+- name: Record the frontend build's toolchain marker (node major + pnpm version)
+  ansible.builtin.copy:
+    content: "{{ app_frontend_node_major }} {{ app_frontend_pnpm_version }}"
+    dest: "{{ app_frontend_toolchain_marker }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0644"
+  become: true
+  become_user: "{{ app_user }}"
+  when: app_frontend_build is changed
 
 # Django/Evennia migrations are idempotent: re-running when up-to-date is a
 # no-op (output contains no "Applying" lines). Sourcing the rendered
@@ -175,7 +212,11 @@
 # (admin CSS/JS, Evennia static, anything Django's staticfiles knows about).
 # (The frontend build's postbuild hook already ran collectstatic once for
 # the hashed dist/ assets; this is Django/Evennia's own full collectstatic
-# pass and is idempotent to re-run.)
+# pass and is idempotent to re-run.) Guarded: skip entirely on a converge
+# where neither the checkout nor the frontend build changed — postbuild's
+# collectstatic already ran during THIS release's build (or a prior one,
+# if the frontend didn't need a rebuild either), so there is nothing new
+# to collect and the pass-over-every-static-file cost is pure waste.
 - name: Collect Django static files (idempotent)
   ansible.builtin.shell: |
     set -a
@@ -189,6 +230,7 @@
     executable: /bin/bash
   become: true
   become_user: "{{ app_user }}"
+  when: app_checkout is changed or app_frontend_build is changed
   register: app_collectstatic
   changed_when: "'0 static files copied' not in app_collectstatic.stdout"
 

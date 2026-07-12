@@ -41,6 +41,14 @@ app_frontend_pnpm_version: "9"
 app_frontend_dir: "{{ app_release_dir }}/frontend"
 # vite.config.ts `build.outDir` — see frontend/vite.config.ts.
 app_frontend_dist_index: "{{ app_release_dir }}/src/web/static/dist/index.html"
+# Rebuild-decision fingerprint (#2236 review): written next to dist/ after a
+# successful frontend build, recording the Node major + pnpm version used.
+# The skip check used to be "checkout changed OR dist missing" only — a
+# dist/ bundle built under an OLDER app_frontend_node_major/
+# app_frontend_pnpm_version pin would silently survive forever on an
+# unchanged checkout even after those defaults were bumped. This marker
+# makes a toolchain-pin bump also force a rebuild.
+app_frontend_toolchain_marker: "{{ app_release_dir }}/src/web/static/dist/.arxii-toolchain"
 
 # First-run Django/Evennia superuser. Username + email are operator choices
 # (set via Environment Variables on the workflow); the password comes from

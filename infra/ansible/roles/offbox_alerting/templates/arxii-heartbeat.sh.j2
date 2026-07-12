@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Managed by Ansible (offbox_alerting). Dead-man's-switch heartbeat + cert
 # expiry early warning + failed-backup-unit detection. OFFBOX_ALERT_TOKEN
-# (the check URL) from the EnvironmentFile; never echoed.
+# (the check URL) from the EnvironmentFile; never echoed. The three "found a
+# problem" paths below post via the shared arxii-alert helper (also
+# installed by this role, before this script — see tasks/main.yml); only
+# the final healthy ping at the bottom (a different endpoint, no "/fail"
+# suffix) stays as its own direct curl.
 set -euo pipefail
 set +x
 
@@ -24,9 +28,17 @@ for u in arxii-backup.service arxii-offsite.service arxii-telnet-cert.service; d
     failed_units+=("${u}")
   fi
 done
-if [ "${#failed_units[@]}" -gt 0 ]; then
-  msg="backup unit(s) in failed state: ${failed_units[*]}"
-  curl -fsS -m 10 "${base}/fail" -d "${msg}" >/dev/null || true
+# NOTE: the array-length substitution just below is deliberately NOT
+# written as literal dollar-brace-hash-name-bracket bash syntax — Ansible's
+# `template:` module runs this whole file through Jinja2, and that literal
+# substring opens what Jinja parses as an (unterminated, since nothing else
+# in this file closes it) comment, failing the ENTIRE template's rendering
+# with "Missing end of comment tag" (a real, pre-existing bug found while
+# validating #2236's other changes to this file — the whole offbox_alerting
+# role would fail to converge). The `{{ '{#' }}` below is Jinja's standard
+# escape for a literal dollar-brace-hash sequence.
+if [ "${{ '{#' }}failed_units[@]}" -gt 0 ]; then
+  /usr/local/sbin/arxii-alert "backup unit(s) in failed state: ${failed_units[*]}"
   exit 0
 fi
 
@@ -37,7 +49,7 @@ if [ -f "{{ offbox_cert_path }}" ]; then
   end_s="$(date -d "$end" +%s)"
   now_s="$(date +%s)"
   if [ $(( (end_s - now_s) / 86400 )) -lt {{ offbox_cert_warn_days }} ]; then
-    curl -fsS -m 10 "${base}/fail" -d "cert expiring <{{ offbox_cert_warn_days }}d" >/dev/null || true
+    /usr/local/sbin/arxii-alert "cert expiring <{{ offbox_cert_warn_days }}d"
     exit 0
   fi
 
@@ -52,8 +64,7 @@ if [ -f "{{ offbox_cert_path }}" ]; then
   issuer="$(openssl x509 -issuer -noout -in "{{ offbox_cert_path }}" 2>/dev/null || true)"
   subject="$(openssl x509 -subject -noout -in "{{ offbox_cert_path }}" 2>/dev/null || true)"
   if [ -n "${issuer}" ] && [ "${issuer#issuer=}" = "${subject#subject=}" ]; then
-    curl -fsS -m 10 "${base}/fail" \
-      -d "telnet cert is self-signed (Caddy cert never synced)" >/dev/null || true
+    /usr/local/sbin/arxii-alert "telnet cert is self-signed (Caddy cert never synced)"
     exit 0
   fi
 fi

@@ -2,13 +2,12 @@
 # Managed by Ansible (offbox_alerting). Invoked by arxii-alert-failure@<unit>
 # (OnFailure= on arxii-backup.service / arxii-offsite.service today; any
 # future unit can opt in the same way). Posts to the SAME off-box
-# dead-man's-switch endpoint the heartbeat uses (OFFBOX_ALERT_TOKEN from the
-# EnvironmentFile), so a failed backup surfaces THERE too — not just in the
-# journal on a box nobody is watching interactively.
+# dead-man's-switch endpoint the heartbeat uses (via the shared arxii-alert
+# helper, also installed by this role), so a failed backup surfaces THERE
+# too — not just in the journal on a box nobody is watching interactively.
 set -euo pipefail
 set +x
 
 unit="${1:?usage: arxii-alert-failure <failed-unit-name>}"
-base="${OFFBOX_ALERT_TOKEN}"
 
-curl -fsS -m 10 "${base}/fail" -d "unit failed: ${unit}" >/dev/null || true
+/usr/local/sbin/arxii-alert "unit failed: ${unit}"

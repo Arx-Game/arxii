@@ -34,6 +34,13 @@ readonly SSH_WAIT_INTERVAL_S=5
 
 DRY_RUN=0
 
+log()  { printf '[standup] %s\n' "$*"; }
+fail() { printf '[standup] REFUSING: %s\n' "$*" >&2; exit 1; }
+
+# shellcheck source=infra/scripts/lib.sh
+# wait_for_tcp() below; depends on log()/fail() above being defined first.
+. "${SCRIPT_DIR}/lib.sh"
+
 # Runtime app secrets that MUST be pre-supplied (operator env / gated GitHub
 # Environment). Mirrors the secrets_vault map. The backup-writer keys are NOT
 # here — they are produced by tofu and exported post-apply.
@@ -66,9 +73,6 @@ See infra/README.md for the full gated-Environment contract.
 EOF
 }
 
-log()  { printf '[standup] %s\n' "$*"; }
-fail() { printf '[standup] REFUSING: %s\n' "$*" >&2; exit 1; }
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
@@ -79,6 +83,12 @@ done
 
 # Presence checks only — never print values; do not add `set -x` here.
 preflight() {
+  # jq parses the single `tofu output -json` read below (replacing ~15
+  # individual `tofu output` invocations — #2236 review); python3 validates
+  # the generated group_vars YAML further down. Both are local-toolchain
+  # prerequisites now, not just tofu/ansible/ssh (see infra/README.md).
+  command -v jq      >/dev/null 2>&1 || fail "jq not found (required to parse 'tofu output -json')"
+  command -v python3 >/dev/null 2>&1 || fail "python3 not found (required to validate the generated group_vars YAML)"
   [[ -n "${LINODE_TOKEN:-}" ]]         || fail "LINODE_TOKEN not set (operator/CI-only; never on the box)"
   [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || fail "CLOUDFLARE_API_TOKEN not set"
   [[ "${TF_STATE_BOOTSTRAPPED:-}" == "1" ]] \
@@ -96,28 +106,18 @@ preflight() {
   done
 }
 
-# tofu output -raw "$1" against the prod root.
-tf_out() { tofu -chdir="${TF_DIR}" output -raw "$1"; }
-# tofu output -json "$1" against the prod root — already a valid YAML flow
-# sequence, embedded directly into the generated group_vars file below.
-tf_out_json() { tofu -chdir="${TF_DIR}" output -json "$1"; }
-
-# Bounded poll for the host's SSH port — brand-new host every run by design
-# (Terraform just created the Linode), so there is no "known reachable"
-# assumption to make; wait rather than let ansible-playbook's first task
-# fail-fast on connection refused.
-wait_for_ssh() {
-  local ip="$1" waited=0
-  log "Waiting for SSH (port 22) on ${ip} (up to ${SSH_WAIT_TIMEOUT_S}s)…"
-  until timeout 5 bash -c "true >/dev/tcp/${ip}/22" 2>/dev/null; do
-    waited=$((waited + SSH_WAIT_INTERVAL_S))
-    if [[ "${waited}" -ge "${SSH_WAIT_TIMEOUT_S}" ]]; then
-      fail "SSH port 22 on ${ip} did not open within ${SSH_WAIT_TIMEOUT_S}s"
-    fi
-    sleep "${SSH_WAIT_INTERVAL_S}"
-  done
-  log "SSH port open."
-}
+# TF_OUTPUT_JSON: the FULL `tofu output -json` object, read ONCE by main()
+# below and cached here — jqr/jqc query it via jq instead of each output
+# name triggering its own separate `tofu output <name>` process (~15
+# individual tofu invocations before this — #2236 review; tofu's own
+# state-read/refresh overhead was paid once per name instead of once, total).
+TF_OUTPUT_JSON=""
+# jqr <name>: raw scalar string for output <name>.
+jqr() { jq -r ".${1}.value" <<<"${TF_OUTPUT_JSON}"; }
+# jqc <name>: compact JSON for output <name> — already a valid YAML flow
+# sequence/object, embedded directly into the generated group_vars file
+# below (same contract the old tf_out_json had).
+jqc() { jq -c ".${1}.value" <<<"${TF_OUTPUT_JSON}"; }
 
 # First run: Linode injects the admin keypair into ROOT (cloud-init has no
 # arxadmin user yet — the base role creates it). Later runs: the base role
@@ -155,11 +155,11 @@ main() {
     log "DRY RUN — would run, in order (NO destroy, NO restore):"
     log "  1. tofu -chdir='${TF_DIR}' init  (S3 backend from TF_STATE_*, Linode-compatible flags)"
     log "  2. tofu -chdir='${TF_DIR}' apply -auto-approve   (APPLY-ONLY)"
-    log "  3. capture all tofu outputs (ip, fqdns, buckets, endpoints, ports, keys) into shell vars"
+    log "  3. one 'tofu output -json' read; jq-parse ip/fqdns/buckets/endpoints/ports/keys into shell vars"
     log "  4. wait for SSH (port 22) on the new host, up to ${SSH_WAIT_TIMEOUT_S}s"
     log "  5. probe ssh as arxadmin, else root -> resolved ansible_user"
     log "  6. generate ${INVENTORY} (0600)"
-    log "  7. generate ${GROUP_VARS_FILE} (0600) from tofu output + env"
+    log "  7. generate ${GROUP_VARS_FILE} (0600) from tofu output + env; validate it parses as YAML"
     log "  8. unset LINODE_TOKEN CLOUDFLARE_API_TOKEN TF_STATE_S3_ACCESS_KEY TF_STATE_S3_SECRET_KEY"
     log "  9. ansible-playbook -i '${INVENTORY}' '${ANSIBLE_DIR}/site.yml' (writer keys inline env)"
     log "No changes made."
@@ -193,31 +193,42 @@ main() {
   TF_VAR_cloudflare_api_token="${CLOUDFLARE_API_TOKEN}" \
   tofu -chdir="${TF_DIR}" apply -auto-approve -input=false   # APPLY-ONLY; no destroy path exists
 
-  log "Reading tofu outputs…"
+  log "Reading tofu outputs (single 'tofu output -json' read)…"
+  # ONE `tofu output -json` call, cached in TF_OUTPUT_JSON — jqr/jqc (defined
+  # above) query it per-name below instead of each name spawning its own
+  # `tofu output <name>` process (~15 separate tofu invocations before this
+  # — #2236 review). Not `local`: main() is the only caller of jqr/jqc, but
+  # they're defined outside main(), so the var needs to reach them.
+  TF_OUTPUT_JSON="$(tofu -chdir="${TF_DIR}" output -json)"
+
   # Non-sensitive scalars.
   local ip web_fqdn telnet_fqdn backups_bucket backups_s3_endpoint backups_region
   local r2_offsite_bucket r2_s3_endpoint tls_telnet_port
-  ip="$(tf_out instance_ipv4)"
-  web_fqdn="$(tf_out web_fqdn)"
-  telnet_fqdn="$(tf_out telnet_fqdn)"
-  backups_bucket="$(tf_out backups_bucket)"
-  backups_s3_endpoint="$(tf_out backups_s3_endpoint)"
-  backups_region="$(tf_out region)"
-  r2_offsite_bucket="$(tf_out r2_offsite_bucket)"
-  r2_s3_endpoint="$(tf_out r2_s3_endpoint)"
-  tls_telnet_port="$(tf_out tls_telnet_port)"
+  ip="$(jqr instance_ipv4)"
+  web_fqdn="$(jqr web_fqdn)"
+  telnet_fqdn="$(jqr telnet_fqdn)"
+  backups_bucket="$(jqr backups_bucket)"
+  backups_s3_endpoint="$(jqr backups_s3_endpoint)"
+  backups_region="$(jqr region)"
+  r2_offsite_bucket="$(jqr r2_offsite_bucket)"
+  r2_s3_endpoint="$(jqr r2_s3_endpoint)"
+  tls_telnet_port="$(jqr tls_telnet_port)"
   # Non-sensitive lists — already valid YAML flow sequences.
   local cf_ipv4_cidrs_json cf_ipv6_cidrs_json ssh_admin_cidrs_json authorized_keys_json
-  cf_ipv4_cidrs_json="$(tf_out_json cloudflare_ipv4_cidrs)"
-  cf_ipv6_cidrs_json="$(tf_out_json cloudflare_ipv6_cidrs)"
-  ssh_admin_cidrs_json="$(tf_out_json ssh_admin_cidrs)"
-  authorized_keys_json="$(tf_out_json authorized_keys)"
+  cf_ipv4_cidrs_json="$(jqc cloudflare_ipv4_cidrs)"
+  cf_ipv6_cidrs_json="$(jqc cloudflare_ipv6_cidrs)"
+  ssh_admin_cidrs_json="$(jqc ssh_admin_cidrs)"
+  authorized_keys_json="$(jqc authorized_keys)"
   # Sensitive — produced by tofu, handed to ansible via env in-memory only.
   local backup_writer_access_key backup_writer_secret_key
-  backup_writer_access_key="$(tf_out backup_writer_access_key)"
-  backup_writer_secret_key="$(tf_out backup_writer_secret_key)"
+  backup_writer_access_key="$(jqr backup_writer_access_key)"
+  backup_writer_secret_key="$(jqr backup_writer_secret_key)"
+  # Only scalars/lists reached local shell vars above (never echoed); the
+  # cached JSON blob itself also carries the same sensitive values — drop it
+  # now rather than let it linger in memory for the rest of the run.
+  TF_OUTPUT_JSON=""
 
-  wait_for_ssh "${ip}"
+  wait_for_tcp "${ip}" 22 "${SSH_WAIT_TIMEOUT_S}" "${SSH_WAIT_INTERVAL_S}"
 
   local ssh_user
   ssh_user="$(select_ssh_user "${ip}")"
@@ -279,6 +290,13 @@ offsite_r2_endpoint: "${r2_s3_endpoint}"
 # base-role task (Task B) that provisions the arxadmin login user.
 admin_authorized_keys: ${authorized_keys_json}
 EOF
+
+  # A malformed heredoc substitution (an unescaped quote/bracket inside a
+  # tofu output value, say) would otherwise surface only much later as an
+  # opaque ansible-playbook parse error against a file the operator never
+  # looks at directly. Fail loudly here instead, against the actual file.
+  python3 -c "import yaml, sys; yaml.safe_load(open(sys.argv[1]))" "${GROUP_VARS_FILE}" \
+    || fail "generated ${GROUP_VARS_FILE} is not valid YAML — this is a bug in standup.sh's heredoc, not an operator error"
 
   # Defense-in-depth: secrets_vault asserts these are absent from the
   # controller env. Captured into shell vars above (they need backend/

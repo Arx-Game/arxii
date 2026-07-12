@@ -7,6 +7,18 @@
     cache_valid_time: 3600
     lock_timeout: 600
 
+# Installed before the heartbeat/alert-failure scripts below, both of which
+# call it (app_deploy's arxii-watchdog, installed earlier in site.yml's role
+# order, guards its own call instead — its timer could fire on a first
+# converge before THIS role, and so this file, exists yet).
+- name: Install the shared off-box alert helper (arxii-alert <message>)
+  ansible.builtin.template:
+    src: arxii-alert.sh.j2
+    dest: /usr/local/sbin/arxii-alert
+    owner: root
+    group: root
+    mode: "0750"
+
 - name: Install heartbeat script
   ansible.builtin.template:
     src: arxii-heartbeat.sh.j2

@@ -1,14 +1,16 @@
 ---
 caddy_web_fqdn: "play.example"          # = tofu output web_fqdn
 caddy_backend: "127.0.0.1:4001"         # localhost-bound Django/web app backend
-# Evennia portal websocket, localhost-bound. INFORMATIONAL ONLY — the
-# Caddyfile hardcodes 127.0.0.1:4002 for the @ws route rather than templating
-# this var in, because CI's validate.yml stubs every `{{ ... }}` with a
+# Evennia portal websocket, localhost-bound. Templated into the Caddyfile's
+# @ws route exactly like caddy_backend above (a single whole-address token,
+# not "host:{{ var }}" split across a literal host and a templated port) —
+# CI's validate.yml stubs every WHOLE `{{ ... }}` substitution with one
 # hostname placeholder (`placeholder.example.com`) before running `caddy
-# adapt`; `reverse_proxy 127.0.0.1:placeholder.example.com` would not parse
-# as a host:port. Keep this default in sync with the Caddyfile's hardcoded
-# port if it ever changes.
-caddy_ws_backend_port: 4002
+# adapt`, and a bare hostname is itself a valid reverse_proxy upstream (no
+# port = Caddy's default), so this form survives that stub. The old
+# "port-only var, hardcoded host" split would NOT have survived it (that's
+# why it used to be informational-only) — keep this as a whole address.
+caddy_ws_backend: "127.0.0.1:4002"
 # STATIC_ROOT (verified against src/server/conf/settings.py + Evennia's
 # settings_default.py: STATIC_ROOT = GAME_DIR/server/.static, GAME_DIR =
 # os.getcwd() when Django commands run from src/). app_deploy's collectstatic

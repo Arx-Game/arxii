@@ -42,6 +42,10 @@ readonly SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking
 log()  { printf '[rehearsal] %s\n' "$*"; }
 fail() { printf '[rehearsal] REFUSING: %s\n' "$*" >&2; exit 1; }
 
+# shellcheck source=infra/scripts/lib.sh
+# wait_for_tcp() below; depends on log()/fail() above being defined first.
+. "${SCRIPT_DIR}/lib.sh"
+
 [[ "${REHEARSAL_CONFIRM:-}" == "1" ]] || fail "set REHEARSAL_CONFIRM=1 (spins up + destroys an ephemeral stage box)"
 : "${RUN_ID:?set RUN_ID (unique per-run suffix)}"
 [[ "$(basename "${STAGE_DIR}")" == "ephemeral-stage" ]] \
@@ -88,16 +92,7 @@ tofu -chdir="${STAGE_DIR}" state list | grep -q . \
 stage_ip="$(tofu -chdir="${STAGE_DIR}" output -raw stage_ipv4)"
 log "stage host: ${stage_ip}"
 
-log "Waiting for SSH (port 22) on ${stage_ip} (up to ${SSH_WAIT_TIMEOUT_S}s)…"
-waited=0
-until timeout 5 bash -c "true >/dev/tcp/${stage_ip}/22" 2>/dev/null; do
-  waited=$((waited + SSH_WAIT_INTERVAL_S))
-  if [[ "${waited}" -ge "${SSH_WAIT_TIMEOUT_S}" ]]; then
-    fail "SSH port 22 on ${stage_ip} did not open within ${SSH_WAIT_TIMEOUT_S}s"
-  fi
-  sleep "${SSH_WAIT_INTERVAL_S}"
-done
-log "SSH port open."
+wait_for_tcp "${stage_ip}" 22 "${SSH_WAIT_TIMEOUT_S}" "${SSH_WAIT_INTERVAL_S}"
 
 # Linode injects the stage-run keypair straight into root on this throwaway
 # box (terraform/modules/compute `authorized_keys` — same mechanism prod's

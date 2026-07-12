@@ -93,11 +93,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-is_local_target=0
-if [[ "${RESTORE_TARGET_HOST}" == "127.0.0.1" || "${RESTORE_TARGET_HOST}" == "localhost" ]]; then
-  is_local_target=1
-fi
-if [[ "${is_local_target}" -eq 1 ]] \
+if [[ "${RESTORE_TARGET_HOST}" == "127.0.0.1" || "${RESTORE_TARGET_HOST}" == "localhost" ]] \
     && command -v systemctl >/dev/null 2>&1 \
     && systemctl is-active --quiet arxii.service 2>/dev/null; then
   log "stopping arxii.service before restore (restoring into the live target —" \
@@ -149,12 +145,14 @@ gunzip -c "${tmp}/dump.sql.gz" \
 MIN_PUBLIC_TABLES=50
 
 log "verifying restore…"
-migrations_n="$(psql -tA -v ON_ERROR_STOP=1 -h "${RESTORE_TARGET_HOST}" \
+# One query, one round trip — psql -tA -F' ' (unaligned, tuples-only, space
+# field separator) renders a 2-column result as one space-separated line,
+# read directly into both vars below instead of two separate psql calls.
+counts="$(psql -tA -F' ' -v ON_ERROR_STOP=1 -h "${RESTORE_TARGET_HOST}" \
   -U "${RESTORE_DB_USER}" "${RESTORE_DB}" \
-  -c "select count(*) from django_migrations;")"
-tables_n="$(psql -tA -v ON_ERROR_STOP=1 -h "${RESTORE_TARGET_HOST}" \
-  -U "${RESTORE_DB_USER}" "${RESTORE_DB}" \
-  -c "select count(*) from information_schema.tables where table_schema='public';")"
+  -c "select (select count(*) from django_migrations),
+             (select count(*) from information_schema.tables where table_schema='public');")"
+read -r migrations_n tables_n <<<"${counts}"
 
 [[ "${migrations_n}" -gt 0 ]] \
   || fail "post-restore verification FAILED:" \

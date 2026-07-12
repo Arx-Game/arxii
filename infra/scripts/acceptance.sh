@@ -22,6 +22,19 @@ chkno(){ if eval "$2" >/dev/null 2>&1; then bad "$1"; else ok "$1"; fi }
 # that *describe* the safe behaviour (a test matched by its own explanation
 # is a broken test).
 nc(){ sed -E '/^[[:space:]]*#/d; s/[[:space:]]+#.*$//' "$1"; }
+# line_no <pattern> <file>: 1-based line number of the first match, or ""
+# if not found. Used by assert_before() below (previously two hand-rolled
+# grep+cut+head pipelines per ordering check).
+line_no(){ grep -nE "$1" "$2" | head -1 | cut -d: -f1; }
+# assert_before <name> <pattern_a> <pattern_b> <file>: pattern_a's first
+# match must exist AND appear at an earlier line than pattern_b's first
+# match, in the same file.
+assert_before(){
+  local name="$1" pat_a="$2" pat_b="$3" file="$4" la lb
+  la="$(line_no "${pat_a}" "${file}")"
+  lb="$(line_no "${pat_b}" "${file}")"
+  chk "${name}" "[[ -n '${la}' && -n '${lb}' && '${la}' -lt '${lb}' ]]"
+}
 
 echo "== non-destruction =="
 chkno "the button (standup.sh) never runs tofu destroy" \
@@ -126,10 +139,9 @@ chk "every secrets_vault secrets_map key (less the tofu-post-apply BACKUP_WRITER
 # (b) standup.sh must unset the provisioning tokens BEFORE invoking
 # ansible-playbook (order-sensitive — defense-in-depth so LINODE_TOKEN /
 # CLOUDFLARE_API_TOKEN can never reach the box even by accident).
-unset_line="$(grep -nE '^[[:space:]]*unset LINODE_TOKEN CLOUDFLARE_API_TOKEN' infra/scripts/standup.sh | head -1 | cut -d: -f1)"
-ansible_line="$(grep -nE '^[[:space:]]*ansible-playbook -i' infra/scripts/standup.sh | head -1 | cut -d: -f1)"
-chk "standup.sh unsets LINODE_TOKEN/CLOUDFLARE_API_TOKEN before invoking ansible-playbook" \
-  "[[ -n '${unset_line}' && -n '${ansible_line}' && '${unset_line}' -lt '${ansible_line}' ]]"
+assert_before "standup.sh unsets LINODE_TOKEN/CLOUDFLARE_API_TOKEN before invoking ansible-playbook" \
+  '^[[:space:]]*unset LINODE_TOKEN CLOUDFLARE_API_TOKEN' '^[[:space:]]*ansible-playbook -i' \
+  infra/scripts/standup.sh
 
 # (c) The caddy DNS-01 plugin install and the Caddyfile directive that
 # needs it are paired — if either half disappears the other is stale.
@@ -165,10 +177,9 @@ chk   "ARXII_DJANGO_SUPERUSER_PASSWORD is a standup.sh preflight-required secret
 # (g) app_deploy must flip `current` AFTER uv sync/migrate/collectstatic —
 # never before, or a mid-deploy failure leaves `current` pointing at a
 # half-prepared release.
-uv_sync_line="$(grep -n 'name: Build the project venv from uv.lock' infra/ansible/roles/app_deploy/tasks/main.yml | head -1 | cut -d: -f1)"
-symlink_line="$(grep -n 'name: Atomically point' infra/ansible/roles/app_deploy/tasks/main.yml | head -1 | cut -d: -f1)"
-chk "app_deploy flips the current symlink AFTER uv sync/migrate/collectstatic" \
-  "[[ -n '${uv_sync_line}' && -n '${symlink_line}' && '${symlink_line}' -gt '${uv_sync_line}' ]]"
+assert_before "app_deploy flips the current symlink AFTER uv sync/migrate/collectstatic" \
+  'name: Build the project venv from uv.lock' 'name: Atomically point' \
+  infra/ansible/roles/app_deploy/tasks/main.yml
 
 # (h) Backups: PGPASSWORD must be exported (pg_hba requires scram, not
 # trust, even on 127.0.0.1) and both the backup + offsite units must carry
@@ -193,11 +204,12 @@ chkno "restore-rehearsal.sh never reintroduces the split 'ssh_stage bash -c' arg
   "grep -q 'ssh_stage bash -c' infra/scripts/restore-rehearsal.sh"
 # Every mention of restore-rehearsal.sh's OWN local copy of restore.sh
 # (SCRIPT_DIR}/restore.sh) must be the scp_stage line that ships it to the
-# stage box — never a bare local bash-exec of that same path.
-local_restore_refs="$(grep -c 'SCRIPT_DIR}/restore.sh' infra/scripts/restore-rehearsal.sh || true)"
-scp_restore_refs="$(grep -c 'scp_stage.*SCRIPT_DIR}/restore.sh' infra/scripts/restore-rehearsal.sh || true)"
-chk "restore-rehearsal.sh's only local reference to restore.sh is the scp_stage copy (never exec'd against the invoking machine)" \
-  "[[ '${local_restore_refs}' -eq '${scp_restore_refs}' ]]"
+# stage box — never a bare local bash-exec of that same path. Direct
+# disallowed-shape check: any line mentioning the path that is NOT also a
+# scp_stage line is the bug (previously a count-comparison between two
+# separate greps, which passes vacuously if BOTH counts are zero).
+chkno "restore-rehearsal.sh's only local reference to restore.sh is the scp_stage copy (never exec'd against the invoking machine)" \
+  "grep -n 'SCRIPT_DIR}/restore.sh' infra/scripts/restore-rehearsal.sh | grep -v scp_stage"
 
 # (j) standup.sh generates the group_vars the fail-closed asserts below
 # depend on; host_firewall and django_hardening both refuse to converge on
@@ -209,6 +221,18 @@ chk   "host_firewall fails closed on empty allow-lists" \
   "grep -q 'Fail-closed' infra/ansible/roles/host_firewall/tasks/main.yml && grep -q 'length > 0' infra/ansible/roles/host_firewall/tasks/main.yml"
 chk   "django_hardening fails closed on empty ALLOWED_HOSTS" \
   "grep -q 'dh_allowed_hosts | length > 0' infra/ansible/roles/django_hardening/tasks/main.yml"
+
+# (k) #2236 F1 regression guard: settings.py's guarded prod-overlay import
+# and secrets_vault's EnvironmentFile rendering of the env vars settings.py
+# actually reads must both be present. This exact mismatch (an overlay
+# nothing ever imported; an EnvironmentFile providing names settings.py
+# never read — DJANGO_SECRET_KEY/CLOUDINARY_URL vs. the SECRET_KEY/
+# CLOUDINARY_CLOUD_NAME+API_KEY+API_SECRET settings.py's env() calls
+# actually use) was the #2236 review's headline finding.
+chk   "settings.py guards the prod secret_settings overlay import" \
+  "grep -q 'from server.conf.secret_settings import' src/server/conf/settings.py"
+chk   "secrets_vault's EnvironmentFile renders SECRET_KEY and DATABASE_URL (settings.py's actual env-read contract)" \
+  "grep -q 'ARXII_DJANGO_SECRET_KEY: SECRET_KEY' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q '^DATABASE_URL=' infra/ansible/roles/secrets_vault/templates/arxii.env.j2"
 
 echo
 if [[ "${fails}" -gt 0 ]]; then
