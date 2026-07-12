@@ -56,3 +56,63 @@
     enabled: true
     state: started
     daemon_reload: true
+
+# --- Weekly Cloudinary -> R2 media mirror (#2236 Phase 4) -------------------
+# Whole role is skipped in rehearsal via site.yml's `when: offsite_enabled`
+# (see defaults/main.yml) — no separate gate needed here.
+
+- name: Install the media-mirror script (python -- pages the Cloudinary API)
+  ansible.builtin.template:
+    src: arxii-media-mirror.py.j2
+    dest: /usr/local/sbin/arxii-media-mirror.py
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install media-mirror service (uv run against the app's own venv)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-media-mirror.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx II weekly Cloudinary media mirror -> Cloudflare R2 (backup, not sync)
+      After=network-online.target
+      # Same OnFailure= alerting convention as arxii-backup.service/arxii-offsite.service —
+      # see roles/offbox_alerting for the arxii-alert-failure@ template unit.
+      OnFailure=arxii-alert-failure@%n.service
+      [Service]
+      Type=oneshot
+      EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+      # uv run --project resolves the `cloudinary` package already in the
+      # app's locked venv (pyproject.toml dependency) -- no separate install.
+      # app_current/base_uv_bin are app_deploy/base role defaults, both of
+      # which already ran earlier in site.yml's role order (no | default()
+      # needed here, unlike secrets_env_file above which offsite_replication
+      # itself doesn't own).
+      ExecStart={{ base_uv_bin }} run --project {{ app_current }} python3 /usr/local/sbin/arxii-media-mirror.py
+  notify: Reload systemd
+
+- name: Install media-mirror timer (weekly)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-media-mirror.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Weekly Arx II Cloudinary media mirror ({{ media_mirror_day }} {{ media_mirror_window }})
+      [Timer]
+      OnCalendar={{ media_mirror_day }} *-*-* {{ media_mirror_window }}:00
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  notify: Reload systemd
+
+- name: Enable media-mirror timer
+  ansible.builtin.systemd_service:
+    name: arxii-media-mirror.timer
+    enabled: true
+    state: started
+    daemon_reload: true

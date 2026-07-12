@@ -13,6 +13,7 @@ already exists and is reused by the ``combat yield`` subverb.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -26,7 +27,12 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
+    from world.combat.models import (
+        CombatEncounter,
+        CombatOpponent,
+        CombatParticipant,
+        CombatRoundAction,
+    )
     from world.magic.models import Technique
 
 # Repeated ActionResult failure messages, extracted to satisfy S1192.
@@ -92,7 +98,7 @@ def _resolve_technique(technique_id: int | None) -> Technique | None:
 def _resolve_opponent(
     participant: CombatParticipant,
     opponent_id: int | None,
-) -> object | None:
+) -> CombatOpponent | None:
     """Resolve an opponent pk to a CombatOpponent scoped to *participant*'s encounter."""
     if opponent_id is None:
         return None
@@ -102,6 +108,41 @@ def _resolve_opponent(
         pk=opponent_id,
         encounter=participant.encounter,
     ).first()
+
+
+def _resolve_object(object_id: int | None) -> ObjectDB | None:
+    """Resolve an ObjectDB pk (#2210 redirect_object_target_id) to an instance.
+
+    The REST dispatch path passes raw ids straight to ``execute()`` (see
+    ``objectdb_target_kwargs`` note, actions/CLAUDE.md) — this is the id
+    resolver both the telnet command and web dispatch converge on.
+    """
+    if object_id is None:
+        return None
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    return ObjectDB.objects.filter(pk=object_id).first()
+
+
+def _resolve_redirect_targets(
+    participant: CombatParticipant,
+    redirect_opponent_target_id: int | None,
+    redirect_object_target_id: int | None,
+) -> tuple[CombatOpponent | None, ObjectDB | None, str | None]:
+    """Resolve interpose's two redirect-destination kwargs (#2210).
+
+    Returns ``(opponent, obj, error_message)`` — a non-``None`` error means the
+    supplied id didn't resolve; the caller returns a failure ``ActionResult``
+    with it. Extracted from ``InterposeAction.execute()`` to keep its branch
+    count in check.
+    """
+    redirect_opponent = _resolve_opponent(participant, redirect_opponent_target_id)
+    if redirect_opponent_target_id is not None and redirect_opponent is None:
+        return None, None, "No such opponent in this encounter."
+    redirect_object = _resolve_object(redirect_object_target_id)
+    if redirect_object_target_id is not None and redirect_object is None:
+        return None, None, "No such object."
+    return redirect_opponent, redirect_object, None
 
 
 def _current_round_action(participant: CombatParticipant) -> CombatRoundAction | None:
@@ -191,12 +232,14 @@ class InterposeAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
-    def execute(
+    def execute(  # noqa: PLR0913
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         ally_participant_id: int | None = None,
         technique_id: int | None = None,
+        redirect_opponent_target_id: int | None = None,
+        redirect_object_target_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         from world.combat.services import declare_interpose  # noqa: PLC0415
@@ -211,11 +254,103 @@ class InterposeAction(Action):
         technique = _resolve_technique(technique_id)
         if technique_id is not None and technique is None:
             return ActionResult(success=False, message="No such technique.")
+        redirect_opponent, redirect_object, redirect_error = _resolve_redirect_targets(
+            participant, redirect_opponent_target_id, redirect_object_target_id
+        )
+        if redirect_error is not None:
+            return ActionResult(success=False, message=redirect_error)
         try:
-            declare_interpose(participant, ally, technique=technique)
+            declare_interpose(
+                participant,
+                ally,
+                technique=technique,
+                redirect_opponent_target=redirect_opponent,
+                redirect_object_target=redirect_object,
+            )
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
         return ActionResult(success=True, message="You stand ready to interpose.")
+
+
+@dataclass
+class ChargeAction(Action):
+    """Declare a mounted charge — close distance to an opponent, then attack (#1843).
+
+    Requires a technique the way a normal attack declaration would (wraps
+    ``declare_charge``, which forwards it to the normal weapon-attack
+    pipeline with CHARGE bonuses folded in at resolution).
+    """
+
+    key: str = "combat_charge"
+    name: str = "Charge"
+    icon: str = "horse"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        opponent_id: int | None = None,
+        technique_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_charge  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        opponent = _resolve_opponent(participant, opponent_id)
+        if opponent is None:
+            return ActionResult(success=False, message="No such opponent in this encounter.")
+        technique = _resolve_technique(technique_id)
+        if technique is None:
+            return ActionResult(success=False, message="Charge with which technique?")
+        try:
+            declare_charge(participant, technique, opponent)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You spur your mount into a charge!")
+
+
+@dataclass
+class JoustAction(Action):
+    """Declare a joust — a mounted, lance-armed opposed pass (#1843).
+
+    Only declarable in a 2-participant DUEL where both duelists are Mounted
+    and wielding a LANCE (wraps ``declare_joust``, validated there).
+    """
+
+    key: str = "combat_joust"
+    name: str = "Joust"
+    icon: str = "horse"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        technique_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_joust  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        technique = _resolve_technique(technique_id)
+        if technique is None:
+            return ActionResult(success=False, message="Joust with which technique?")
+        try:
+            declare_joust(participant, technique)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You level your lance for the joust!")
 
 
 @dataclass
@@ -547,6 +682,15 @@ class LeaveEncounterAction(Action):
             leave_encounter(participant)
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
+
+        # Encounter exit is one of the three dismount triggers (#1843, alongside
+        # voluntary dismount and companion defeat) — a mount doesn't carry over
+        # into whatever the rider does next outside the fight.
+        from world.companions.services import MountError, dismount_companion  # noqa: PLC0415
+
+        with contextlib.suppress(MountError):
+            dismount_companion(participant.character_sheet)
+
         return ActionResult(success=True, message="You withdraw from the fight.")
 
 

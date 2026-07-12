@@ -31,13 +31,23 @@ if (typeof SVGElement !== 'undefined') {
   }
 }
 
-const node = (id: number, kind = 'feature', name = `Position ${id}`): PositionNodeLike => ({
+const node = (
+  id: number,
+  kind = 'feature',
+  name = `Position ${id}`,
+  overrides: Partial<PositionNodeLike> = {}
+): PositionNodeLike => ({
   id,
   name,
   kind,
   elevation_anchor_id: null,
   layout_x: null,
   layout_y: null,
+  rampart_element: null,
+  rampart_integrity: null,
+  rampart_max_integrity: null,
+  rampart_crack_state: null,
+  ...overrides,
 });
 
 const edge = (
@@ -131,5 +141,41 @@ describe('TacticalMap', () => {
       />
     );
     expect(screen.getByText('Cross the Chasm')).toBeInTheDocument();
+  });
+
+  it('renders a rampart ring with element + integrity tooltip on a covered node (#2209)', () => {
+    render(
+      <TacticalMap
+        nodes={[
+          node(1, 'primary', 'Position 1', {
+            rampart_element: 'Stone',
+            rampart_integrity: 18,
+            rampart_max_integrity: 24,
+            rampart_crack_state: 'intact',
+          }),
+        ]}
+        edges={[]}
+        occupantsByPosition={new Map()}
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+      />
+    );
+    const nodeEl = screen.getByTestId('tactical-map-node-1');
+    expect(nodeEl).toHaveAttribute('title', 'Stone Rampart 18/24');
+    expect(nodeEl.querySelector('[data-testid="rampart-ring"]')).toBeInTheDocument();
+  });
+
+  it('renders no rampart ring on an uncovered node', () => {
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary')]}
+        edges={[]}
+        occupantsByPosition={new Map()}
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+      />
+    );
+    const nodeEl = screen.getByTestId('tactical-map-node-1');
+    expect(nodeEl.querySelector('[data-testid="rampart-ring"]')).not.toBeInTheDocument();
   });
 });

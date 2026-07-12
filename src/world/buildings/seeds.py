@@ -186,7 +186,7 @@ def ensure_architectural_styles() -> None:
     from world.clues.models import Clue  # noqa: PLC0415
     from world.codex.models import CodexCategory, CodexEntry, CodexSubject  # noqa: PLC0415
 
-    for name in ("Vernacular Timberframe PLACEHOLDER", "Harborstone Classical PLACEHOLDER"):
+    for name in ("Vernacular Timberframe", "Harborstone Classical"):
         ArchitecturalStyle.objects.update_or_create(
             name=name,
             defaults={"is_default": True, "prestige_bonus": 0, "cost_multiplier": 1},
@@ -197,8 +197,8 @@ def ensure_architectural_styles() -> None:
         defaults={"description": "PLACEHOLDER — the built world's styles and lost arts."},
     )
     throwbacks = (
-        ("Antique Imperial PLACEHOLDER", 50, "1.500"),
-        ("Drowned Dynasty PLACEHOLDER", 80, "2.000"),
+        ("Antique Imperial", 50, "1.500"),
+        ("Drowned Dynasty", 80, "2.000"),
     )
     for style_name, prestige_bonus, cost_multiplier in throwbacks:
         subject, _ = CodexSubject.objects.get_or_create(
@@ -251,9 +251,9 @@ def ensure_decoration_kinds() -> None:
     from world.locations.constants import StatKey  # noqa: PLC0415
 
     kinds = (
-        ("Great Hearth PLACEHOLDER", 1, ((StatKey.COLD, -4),)),
-        ("Oiled Awning PLACEHOLDER", 0, ((StatKey.WET, -3),)),
-        ("Shade Colonnade PLACEHOLDER", 0, ((StatKey.HEAT, -3),)),
+        ("Great Hearth", 1, ((StatKey.COLD, -4),)),
+        ("Oiled Awning", 0, ((StatKey.WET, -3),)),
+        ("Shade Colonnade", 0, ((StatKey.HEAT, -3),)),
     )
     for name, amenity, affinities in kinds:
         kind, _ = DecorationKind.objects.update_or_create(

@@ -83,6 +83,7 @@ function makeEncounter(
     position_adjacency: [],
     position_nodes: [],
     position_edges: [],
+    volatile_objects: [],
     is_lethal: false,
     duel_winner: null,
     ...overrides,

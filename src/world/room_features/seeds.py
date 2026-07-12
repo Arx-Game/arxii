@@ -82,6 +82,37 @@ def ensure_plan_4_seeds() -> None:
     ensure_siege_deck_kind()
     ensure_captains_quarters_kind()
     ensure_social_hub_kind()
+    ensure_vault_kind()
+
+
+def ensure_vault_kind() -> RoomFeatureKind:
+    """Get-or-create the Vault ``RoomFeatureKind`` (#2179).
+
+    A secure storage room: the room itself is the vault. All unheld items
+    in the room are vault-protected by the access list. ``take`` is gated
+    by the access list; ``steal`` bypasses with the existing consent-gated
+    theft machinery. Level scales capacity (max_items = level *
+    VAULT_MAX_ITEMS_PER_LEVEL). Installs via PROJECT mechanism.
+    Restricted to PERSONA-owned buildings.
+    """
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.VAULT,
+        defaults={
+            "name": VAULT_KIND_NAME,
+            "max_level": VAULT_MAX_LEVEL,
+            "install_mechanism": RoomFeatureInstallMechanism.PROJECT,
+            "description": (
+                "A secure storage room. Items dropped here are protected "
+                "by an owner-editable access list. Unauthorized takers "
+                "must steal — with consequences."
+            ),
+        },
+    )
+    RoomFeatureKindOwnerType.objects.get_or_create(
+        feature_kind=kind,
+        owner_type=RoomFeatureOwnerType.PERSONA,
+    )
+    return kind
 
 
 COMMAND_CENTER_KIND_NAME = "Command Center"
@@ -358,3 +389,7 @@ def ensure_social_hub_kind() -> RoomFeatureKind:
             owner_type=owner_type,
         )
     return kind
+
+
+VAULT_KIND_NAME = "Vault"
+VAULT_MAX_LEVEL = 5

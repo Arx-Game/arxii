@@ -220,3 +220,108 @@ class GrantSceneGMAction(Action):
             success=True,
             message=f"{target_sheet.character} is now a GM of this scene.",
         )
+
+
+@dataclass
+class MarkDecisiveCheckAction(Action):
+    """Mark the next graded check in this scene as decisive for a beat (#1748).
+
+    Creates a DecisiveCheckMarker (PENDING) and activates stakes contracts.
+    When the next social check resolves, its CheckOutcome propagates to
+    record_outcome_tier_completion — the same seam combat and missions use.
+
+    Gated: the actor must administer the scene (actor_can_administer_scene).
+    """
+
+    key: str = "mark_decisive_check"
+    name: str = "Mark Decisive Check"
+    icon: str = "gavel"
+    category: str = "scenes"
+    target_type: TargetType = TargetType.SELF
+    costs_turn: bool = False
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.scene_admin_services import (  # noqa: PLC0415
+            actor_can_administer_scene,
+            resolve_actor_account,
+        )
+
+        room = actor.location
+        if room is None:
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
+
+        scene = _active_scene_for_room(room)
+        if scene is None:
+            return ActionResult(success=False, message="There is no active scene here.")
+
+        if not actor_can_administer_scene(actor, scene):
+            return ActionResult(
+                success=False,
+                message="Only the scene's GM or an owner can mark a decisive check.",
+            )
+
+        if kwargs.get("cancel", False):
+            return self._cancel_marker(scene)
+        return self._create_marker(scene, actor, kwargs.get("beat_id"), resolve_actor_account)
+
+    @staticmethod
+    def _cancel_marker(scene: Scene) -> ActionResult:
+        from world.scenes.decisive_check_services import (  # noqa: PLC0415
+            DecisiveCheckError,
+            cancel_decisive_check_marker,
+            get_pending_marker,
+        )
+
+        marker = get_pending_marker(scene)
+        if marker is None:
+            return ActionResult(
+                success=False,
+                message="There is no pending decisive-check marker to cancel.",
+            )
+        try:
+            cancel_decisive_check_marker(marker=marker)
+        except DecisiveCheckError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message="Decisive-check marker cancelled.")
+
+    @staticmethod
+    def _create_marker(
+        scene: Scene,
+        actor: ObjectDB,
+        beat_id: Any,
+        resolve_account: Any,
+    ) -> ActionResult:
+        from world.scenes.decisive_check_services import (  # noqa: PLC0415
+            DecisiveCheckError,
+            create_decisive_check_marker,
+        )
+        from world.stories.models import Beat  # noqa: PLC0415
+
+        if not beat_id:
+            return ActionResult(success=False, message="Usage: scene decisive <beat-id>")
+
+        try:
+            beat = Beat.objects.get(pk=int(beat_id))
+        except (Beat.DoesNotExist, ValueError, TypeError):
+            return ActionResult(success=False, message=f"No beat found with id {beat_id}.")
+
+        account = resolve_account(actor)
+        try:
+            create_decisive_check_marker(scene=scene, beat=beat, created_by=account)
+        except DecisiveCheckError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        risk_label = beat.get_risk_display() if hasattr(beat, "get_risk_display") else beat.risk
+        return ActionResult(
+            success=True,
+            message=(
+                f"Decisive check marked for beat #{beat.pk} "
+                f"(risk: {risk_label}). The next graded check in this scene "
+                f"will resolve it."
+            ),
+        )

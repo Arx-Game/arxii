@@ -48,7 +48,8 @@ from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
-from commands.door import CmdLock, CmdUnlock
+from commands.defenses import CmdDefense
+from commands.door import CmdBreak, CmdLock, CmdPick, CmdUnlock
 from commands.dramatic_moments import CmdMoment
 from commands.duels import CmdDuel
 from commands.durance import CmdDurance
@@ -88,6 +89,7 @@ from commands.gmtrust import CmdGMTrust
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.grant_distinction import CmdGrantDistinction
 from commands.grant_item import CmdGrantItem
+from commands.guard import CmdGuard  # #2178
 from commands.hire import CmdHire
 from commands.identification import CmdIdentify  # #1107
 from commands.imbue import CmdImbue
@@ -138,6 +140,7 @@ from commands.story import CmdStory
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
 from commands.travel import CmdTravel  # #2163
+from commands.vault import CmdVault
 from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
@@ -207,6 +210,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdTabletalk,
             CmdLock,
             CmdUnlock,
+            CmdPick,
+            CmdBreak,
             CmdOpenWindow,
             CmdCloseWindow,
             CmdRitual,
@@ -336,6 +341,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGrantDistinction,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdRoom,
+            # #2178 — NPC guard assignment (assign/unassign/list).
+            CmdGuard,
             # #1498 — staff set-the-stage: apply a position blueprint to the room.
             CmdSetStage,
             # #1895 — staff set-situation: instantiate a SituationTemplate into the room.
@@ -388,9 +395,13 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPortalAnchor,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
+            # #2177 — exit/room defense (bars/ward/alarm) install/upgrade/fund namespace.
+            CmdDefense,
             CmdMarket,
             # #1832 — ship commission/upgrade/repair/status namespace.
             CmdShip,
+            # #2179 — vault access-list management namespace.
+            CmdVault,
             # #2032 — spendable resonance balances + grant history (bare/history subverbs).
             CmdResonance,
         )

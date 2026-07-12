@@ -1,0 +1,71 @@
+name: Dress rehearsal (stage)
+
+# #2236 Phase 3 P1: proves the ENTIRE stack works — a throwaway stage box,
+# the FULL site.yml converge, end-to-end smoke tests, and a backup+restore
+# rehearsal against real (stage-scoped) object storage — before the first
+# real prod button press ("Stand up infra"). Targets the gated `stage`
+# Environment (separate from `prod`; required-reviewer approval before
+# anything runs). A thin wrapper: injects the gated Environment secrets and
+# invokes the SAME infra/scripts/rehearse.sh (DRY). NEVER touches prod state,
+# the prod Cloudflare zone, or prod credentials — see rehearse.sh's own
+# header + infra/README.md's "Dress rehearsal" section for the isolation
+# doctrine.
+#
+# SUPPLY CHAIN: every third-party action is pinned to a full commit SHA
+# (mirrors standup.yml's discipline — same repo, same threat model). The
+# trailing `# vX.Y.Z` is the human-readable version Dependabot bumps; only
+# the SHA is authoritative.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arxii-rehearse
+  cancel-in-progress: false
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-latest
+    environment: stage   # gated: required-reviewer approval before run
+    timeout-minutes: 60  # apply + full converge + smoke + backup/restore + teardown
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # Shared with standup.yml (#2236 review): OpenTofu + Python +
+      # ansible-core + collections + the 0600 SSH admin key write — mirrors
+      # standup.yml exactly (rehearsal converges the SAME site.yml, so it
+      # needs the SAME ansible-core/collection set). Must come AFTER
+      # checkout — see the action's own header comment.
+      - uses: ./.github/actions/infra-bootstrap
+        with:
+          ssh_private_key: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
+
+      - name: Run the dress rehearsal (same script as local)
+        run: |
+          set -euo pipefail; set +x
+          export ANSIBLE_PRIVATE_KEY_FILE=~/.ssh/arxii_admin
+          export ANSIBLE_HOST_KEY_CHECKING=False
+          bash infra/scripts/rehearse.sh
+        env:
+          REHEARSAL_CONFIRM: "1"
+          RUN_ID: ${{ github.run_id }}
+          # Stage-scoped provisioning (operator/CI-only; NEVER the prod
+          # LINODE_TOKEN — see infra/README.md's "Dress rehearsal" section
+          # for the minimal stage Environment secret contract):
+          STAGE_LINODE_TOKEN: ${{ secrets.STAGE_LINODE_TOKEN }}
+          STAGE_TF_STATE_BUCKET: ${{ vars.STAGE_TF_STATE_BUCKET }}
+          STAGE_TF_STATE_KEY: ${{ vars.STAGE_TF_STATE_KEY }}
+          STAGE_TF_STATE_REGION: ${{ vars.STAGE_TF_STATE_REGION }}
+          STAGE_TF_STATE_ENDPOINT: ${{ vars.STAGE_TF_STATE_ENDPOINT }}
+          STAGE_TF_STATE_S3_ACCESS_KEY: ${{ secrets.STAGE_TF_STATE_S3_ACCESS_KEY }}
+          STAGE_TF_STATE_S3_SECRET_KEY: ${{ secrets.STAGE_TF_STATE_S3_SECRET_KEY }}
+          # Same admin keypair as prod (public half — safe to reuse the var
+          # name; it is not secret by definition). Store it in the `stage`
+          # Environment too (a copy, not a share — GitHub Environments don't
+          # inherit).
+          ARXII_AUTHORIZED_KEYS: ${{ vars.ARXII_AUTHORIZED_KEYS }}
+          # Optional; rehearse.sh defaults to arxii_admin / admin@rehearsal.invalid.
+          ARXII_DJANGO_SUPERUSER_USERNAME: ${{ vars.ARXII_DJANGO_SUPERUSER_USERNAME }}
+          ARXII_DJANGO_SUPERUSER_EMAIL: ${{ vars.ARXII_DJANGO_SUPERUSER_EMAIL }}

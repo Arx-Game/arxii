@@ -199,6 +199,54 @@ class DetectClashOpportunitiesTests(TestCase):
         self.assertEqual(clash.progress, clash.pc_win_threshold)
         self.assertEqual(clash.resolution_consequence_pool, pool)
 
+    def test_ward_binds_rampart_when_target_covered(self):
+        """A sustained attack whose PC target stands at a rampart-covered position
+        binds clash.rampart and initializes progress from rampart.integrity, not
+        pc_win_threshold (#2209).
+        """
+        from world.areas.positioning.constants import RampartSignature
+        from world.areas.positioning.factories import (
+            PositionFactory,
+            RampartElementProfileFactory,
+            RampartFactory,
+        )
+        from world.areas.positioning.services import place_in_position
+        from world.combat.clash import detect_clash_opportunities
+
+        encounter = CombatEncounterFactory()
+        pool = ConsequencePoolFactory()
+
+        opponent = CombatOpponentFactory(encounter=encounter)
+        participant = CombatParticipantFactory(encounter=encounter)
+        character = participant.character_sheet.character
+        character.location = encounter.room
+        character.save()
+        pos = PositionFactory(room=encounter.room, name="behind_the_wall")
+        place_in_position(character, pos)
+        profile = RampartElementProfileFactory(signature_behavior=RampartSignature.SEAL_EDGES)
+        rampart = RampartFactory(
+            position=pos, element_profile=profile, integrity=17, max_integrity=30
+        )
+
+        npc_entry = ThreatPoolEntryFactory(
+            pool=opponent.threat_pool,
+            is_sustained_attack=True,
+            sustained_duration_rounds=3,
+            clash_npc_pressure=4,
+            clash_resolution_pool=pool,
+        )
+        self._npc_action(
+            opponent=opponent, threat_entry=npc_entry, round_number=1, targets=[participant]
+        )
+
+        clashes = detect_clash_opportunities(encounter=encounter, round_number=1)
+
+        self.assertEqual(len(clashes), 1)
+        clash = clashes[0]
+        self.assertEqual(clash.rampart_id, rampart.pk)
+        self.assertEqual(clash.progress, 17)  # rampart.integrity, not pc_win_threshold(12)
+        self.assertEqual(clash.pc_win_threshold, 12)  # duration(3) * pressure(4), unchanged
+
     def test_break_from_opponent_barrier(self):
         """Opponent with barrier_strength set → one BREAK formed."""
         from world.combat.clash import detect_clash_opportunities

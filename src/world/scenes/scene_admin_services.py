@@ -174,6 +174,19 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     participant_account_ids = set(scene.participations.values_list("account_id", flat=True))
     process_deferred_fatigue_resets(participant_account_ids)
 
+    # #2019/#2209: scene end tears down conjured obstacles and living-barrier
+    # ramparts in the scene's room — both are cast-for-the-scene constructs with
+    # no other teardown trigger (teardown_conjured_obstacles previously had no
+    # production call site; this closes that gap alongside wiring ramparts).
+    if scene.location is not None:
+        from world.areas.positioning.services import (  # noqa: PLC0415
+            teardown_conjured_obstacles,
+            teardown_ramparts,
+        )
+
+        teardown_conjured_obstacles(scene.location)
+        teardown_ramparts(scene.location)
+
     # #2051: when a scene ends, Durance vows tied to co-presence in that
     # scene's room may dim — can_engage_membership checks for an active scene,
     # which is now gone. Revalidate remaining occupants' engaged covenant roles.

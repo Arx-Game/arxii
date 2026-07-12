@@ -31,6 +31,7 @@ class TestClusterRegistry(TestCase):
                 "scandal",
                 "domain_dev",
                 "stealth",
+                "security",
                 "perception",
                 "civic_hubs",
                 "building_condition",
@@ -44,6 +45,7 @@ class TestClusterRegistry(TestCase):
                 "skills",
                 "project_resonance",
                 "agriculture",
+                "traits",
             },
         )
 

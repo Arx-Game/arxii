@@ -31,7 +31,10 @@ def _make_cmd(args: str) -> CmdCompanion:
 
 class CompanionCommandParsingTests(TestCase):
     def test_subverb_map_covers_all_ops(self) -> None:
-        self.assertEqual(set(_SUBVERBS), {"bind", "fight", "deploy", "release", "order"})
+        self.assertEqual(
+            set(_SUBVERBS),
+            {"bind", "fight", "deploy", "release", "order", "mount", "dismount"},
+        )
 
     def test_unknown_subverb_messages_and_does_not_dispatch(self) -> None:
         cmd = _make_cmd("frobnicate")
@@ -87,6 +90,14 @@ class CompanionCommandRefTests(TestCase):
     def test_release_ref(self) -> None:
         ref = self._cmd_with_subverb("release").resolve_action_ref()
         self.assertEqual(ref.registry_key, "release_companion")
+
+    def test_mount_ref(self) -> None:
+        ref = self._cmd_with_subverb("mount").resolve_action_ref()
+        self.assertEqual(ref.registry_key, "mount_companion")
+
+    def test_dismount_ref(self) -> None:
+        ref = self._cmd_with_subverb("dismount").resolve_action_ref()
+        self.assertEqual(ref.registry_key, "dismount_companion")
 
 
 class CompanionCommandKwargsTests(TestCase):
@@ -231,6 +242,31 @@ class CompanionCommandKwargsTests(TestCase):
 
             with self.assertRaises(CommandError):
                 cmd.resolve_action_args()
+
+    def test_mount_resolves_companion_id(self) -> None:
+        cmd = _make_cmd("mount 7")
+        cmd._subverb = "mount"
+        cmd._rest = "7"
+
+        cmd.caller.sheet_data = MagicMock()
+        mock_companion = MagicMock()
+        mock_companion.pk = 7
+
+        with patch("world.companions.models.Companion.objects") as comp_obj:
+            qs = MagicMock()
+            qs.filter.return_value.first.return_value = mock_companion
+            comp_obj.filter.return_value = qs
+
+            kwargs = cmd.resolve_action_args()
+
+        self.assertEqual(kwargs["companion_id"], 7)
+
+    def test_dismount_takes_no_kwargs(self) -> None:
+        cmd = _make_cmd("dismount")
+        cmd._subverb = "dismount"
+        cmd._rest = ""
+
+        self.assertEqual(cmd.resolve_action_args(), {})
 
     def test_fight_resolves_companion_id(self) -> None:
         cmd = _make_cmd("fight Skree")

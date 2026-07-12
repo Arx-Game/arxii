@@ -30,8 +30,8 @@ from world.locations.services import assign_room_tenant, set_primary_home
 from world.roster.factories import RosterEntryFactory
 from world.traits.factories import CheckOutcomeFactory
 
-THROWBACK = "Antique Imperial PLACEHOLDER"
-DEFAULT_STYLE = "Vernacular Timberframe PLACEHOLDER"
+THROWBACK = "Antique Imperial"
+DEFAULT_STYLE = "Vernacular Timberframe"
 
 
 def _room_in(area, *, name="A Room"):
@@ -79,7 +79,7 @@ class StyleDiscoveryBase(TestCase):
 class SeedTests(StyleDiscoveryBase):
     def test_seed_is_idempotent_and_wires_the_pipeline(self) -> None:
         ensure_architectural_styles()  # second call — no dupes
-        self.assertEqual(ArchitecturalStyle.objects.filter(name__endswith="PLACEHOLDER").count(), 4)
+        self.assertEqual(ArchitecturalStyle.objects.count(), 4)
         self.assertFalse(self.throwback.is_default)
         self.assertIsNotNone(self.throwback.codex_subject)
         self.assertGreater(self.throwback.prestige_bonus, 0)

@@ -89,3 +89,24 @@ class RoomFeaturesConfig(AppConfig):
             RoomFeatureServiceStrategy.SOCIAL_HUB,
             handle_social_hub_progression,
         )
+
+        # #2179 — Vault room feature (secure storage + access list).
+        from world.room_features.vault_services import (  # noqa: PLC0415
+            handle_vault_progression,
+        )
+
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.VAULT,
+            handle_vault_progression,
+        )
+
+        # Installable exit/room defenses (#2177) -- independent of
+        # RoomFeatureKind/RoomFeatureInstance (Decision 1); its own Project kind.
+        from world.room_features.services import (  # noqa: PLC0415
+            complete_defense_installation,
+        )
+
+        register_kind_handler(
+            ProjectKind.ROOM_DEFENSE_INSTALLATION,
+            complete_defense_installation,
+        )

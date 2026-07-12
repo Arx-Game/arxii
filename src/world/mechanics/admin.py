@@ -26,6 +26,7 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
     PropertyDamageModifier,
+    PropertyDetonation,
     SituationChallengeLink,
     SituationInstance,
     SituationTemplate,
@@ -147,6 +148,13 @@ class PropertyDamageModifierAdmin(admin.ModelAdmin):
     list_display = ["property", "damage_type", "modifier_value"]
     list_filter = ["damage_type"]
     list_select_related = ["property", "damage_type"]
+
+
+@admin.register(PropertyDetonation)
+class PropertyDetonationAdmin(admin.ModelAdmin):
+    list_display = ["property", "consequence_pool"]
+    search_fields = ["property__name"]
+    list_select_related = ["property", "consequence_pool"]
 
 
 # ---------------------------------------------------------------------------

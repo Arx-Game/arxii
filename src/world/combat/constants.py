@@ -110,6 +110,32 @@ class CombatManeuver(models.TextChoices):
     TAUNT = "taunt", "Taunt"
     PARLEY = "parley", "Parley"
     USE_ITEM = "use_item", "Use Item"
+    CHARGE = "charge", "Charge"
+    JOUST = "joust", "Joust"
+
+
+# ---------------------------------------------------------------------------
+# Mounted combat (#1843) — CHARGE/JOUST flat bonuses + JOUST margin bands.
+# ---------------------------------------------------------------------------
+
+# Flat check/damage bonuses for a CHARGE maneuver (doubled when the attacker's
+# equipped weapon is GearArchetype.LANCE).
+CHARGE_CHECK_BONUS: int = 10
+CHARGE_DAMAGE_BONUS: int = 5
+
+# Flat check penalty for attacking with a LANCE-archetype weapon while not
+# Mounted — applies to any attack, not just CHARGE/JOUST.
+LANCE_UNMOUNTED_PENALTY: int = -10
+
+# Max hops a CHARGE may cover — generous but bounded (mirrors technique
+# REACH_N's reach_hops parameter).
+CHARGE_MAX_HOPS: int = 5
+
+# success_level gap bands for a JOUST's opposed pass. A gap >= DECISIVE is a
+# clean unhorsing; a gap >= NARROW (but < DECISIVE) lands a lesser hit; a gap
+# of 0 is a tie (both jarred, no damage).
+JOUST_DECISIVE_MARGIN: int = 2
+JOUST_NARROW_MARGIN: int = 1
 
 
 class EngagementLockStatus(models.TextChoices):
@@ -192,6 +218,13 @@ class TargetingMode(models.TextChoices):
     SINGLE = "single", "Single"
     MULTI = "multi", "Multi"
     ALL = "all", "All"
+
+
+class StrikeDelivery(models.TextChoices):
+    """How a ThreatPoolEntry's strike reaches its target (#2209 rampart interception)."""
+
+    MELEE = "melee", "Melee"
+    MISSILE = "missile", "Missile"
 
 
 class TargetSelection(models.TextChoices):
@@ -510,3 +543,36 @@ DEFAULT_STAKES_REQUIREMENTS: dict[str, dict] = {
 SCALING_CONFIG_BASELINE_PARTY_SIZE: int = 4
 SCALING_CONFIG_PER_EXTRA_MEMBER_PCT: str = "0.15"
 SCALING_CONFIG_PER_AVG_LEVEL_PCT: str = "0.05"
+
+
+# ---------------------------------------------------------------------------
+# Wind-as-mechanic (#1555) — the combat consumer of the WIND exposure axis
+# (world.locations.services.felt_exposure, StatKey.WIND, #1522). Bands are
+# authored thresholds on felt WIND, not raw per-point scaling — raw scaling
+# was rejected as illegible (see ADR — docs/adr/).
+# ---------------------------------------------------------------------------
+
+WIND_BAND_BREEZY_THRESHOLD: int = 15
+WIND_BAND_WINDY_THRESHOLD: int = 40
+WIND_BAND_GALE_THRESHOLD: int = 70
+
+WIND_PENALTY_BREEZY: int = -5
+WIND_PENALTY_WINDY: int = -10
+WIND_PENALTY_GALE: int = -20
+
+
+def wind_penalty(felt: int) -> int:
+    """The missile check penalty for a room's felt WIND exposure (#1555).
+
+    Banded, not linear: CALM (<15) -> 0, BREEZY (15-39) -> -5, WINDY (40-69) -> -10,
+    GALE (70+) -> -20. Pure function of the already-resolved felt exposure value
+    (``world.locations.services.felt_exposure``) — no room/DB access here, so callers
+    control when the (enclosure-gated) exposure lookup happens.
+    """
+    if felt >= WIND_BAND_GALE_THRESHOLD:
+        return WIND_PENALTY_GALE
+    if felt >= WIND_BAND_WINDY_THRESHOLD:
+        return WIND_PENALTY_WINDY
+    if felt >= WIND_BAND_BREEZY_THRESHOLD:
+        return WIND_PENALTY_BREEZY
+    return 0

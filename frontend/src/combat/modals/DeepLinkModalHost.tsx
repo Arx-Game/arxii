@@ -2,7 +2,8 @@
  * DeepLinkModalHost — the single Redux-driven host that renders the deep-link
  * modal for all 5 DeepLinkKind values (#551).
  *
- * Mounted once per CombatScenePage. Reads `state.deepLinkModal.current` and,
+ * Mounted once per CombatRail (rendered in-scene on /scenes/:id — #2197,
+ * formerly per the now-deleted CombatScenePage). Reads `state.deepLinkModal.current` and,
  * when set, renders a Radix Dialog whose content is chosen by `current.modal`:
  *
  *   - condition   → <ConditionDetailModal /> (own React Query fetch)

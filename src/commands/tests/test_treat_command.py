@@ -85,12 +85,22 @@ class TreatCommandTests(TestCase):
         "world.mechanics.engagement.CharacterEngagement.objects.filter",
         return_value=MagicMock(exists=MagicMock(return_value=False)),
     )
-    def test_treat_creates_pending_request_with_fks(
+    @patch("world.conditions.services.perform_treatment")
+    def test_treat_creates_resolved_request_with_fks(
         self,
+        mock_perform_treatment: MagicMock,
         mock_engagement_filter: MagicMock,
         mock_scene_participant: MagicMock,
     ) -> None:
-        """treat <target> 1 creates a SceneActionRequest with treatment FKs set."""
+        """treat <target> 1 creates a SceneActionRequest with treatment FKs set.
+
+        #2214: the target is NPC (no db_account wired in this fixture), so the
+        request auto-resolves immediately instead of staying PENDING.
+        """
+        outcome = MagicMock()
+        outcome.target_resolved = False
+        mock_perform_treatment.return_value = outcome
+
         self._run(
             CmdTreatCondition,
             self.helper_char,
@@ -100,7 +110,7 @@ class TreatCommandTests(TestCase):
         request = SceneActionRequest.objects.get(
             initiator_persona=self.helper_sheet.primary_persona,
         )
-        self.assertEqual(request.status, ActionRequestStatus.PENDING)
+        self.assertEqual(request.status, ActionRequestStatus.RESOLVED)
         self.assertEqual(request.action_key, "treat_condition")
         self.assertEqual(request.target_persona, self.target_sheet.primary_persona)
         self.assertEqual(request.treatment, self.treatment)

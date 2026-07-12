@@ -68,7 +68,7 @@ export function PlaceDetailPanel({ place, sides, units, participants }: PlaceDet
         </p>
         {place.encounter_scene_id != null && (
           <Link
-            to={`/scenes/${place.encounter_scene_id}/combat`}
+            to={`/scenes/${place.encounter_scene_id}`}
             className="text-xs font-medium text-primary underline-offset-2 hover:underline"
             data-testid="battle-place-view-encounter"
           >

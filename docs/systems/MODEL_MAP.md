@@ -20,6 +20,7 @@
   - wound_pool_damage_types <- conditions.DamageType
   - death_pool_damage_types <- conditions.DamageType
   - condition_stages <- conditions.ConditionStage
+  - property_detonations <- mechanics.PropertyDetonation
   - situation_trap_links <- mechanics.SituationTrapLink
   - context_attachments <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
@@ -155,6 +156,8 @@
   - consequence_effects <- checks.ConsequenceEffect
   - position_shelters <- areas.PositionShelter
   - blueprint_position_shelters <- areas.BlueprintPositionShelter
+  - rampart_signature_profiles <- areas.RampartElementProfile
+  - rampart_resistances <- areas.RampartElementResistance
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
@@ -204,7 +207,9 @@
   - treatment_backlash_source <- conditions.TreatmentTemplate
   - consequence_effects <- checks.ConsequenceEffect
   - stat_rules_for <- achievements.ConditionStatRule
+  - rampart_signature_profiles <- areas.RampartElementProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
+  - ward_reactions <- room_features.RoomWardDetails
 
 ### ConditionStage
 **Foreign Keys:**
@@ -398,10 +403,16 @@
   - feature_instance <- room_features.RoomFeatureInstance
   - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
   - traps <- room_features.Trap
+  - ward_details <- room_features.RoomWardDetails
+  - alarm_details <- room_features.RoomAlarmDetails
+  - defense_progression_projects <- room_features.DefenseProgressionDetails
 
 ### ExitProfile
 **Foreign Keys:**
   - objectdb -> objects.ObjectDB [OneToOne]
+**Pointed to by:**
+  - bars_details <- room_features.ExitBarsDetails
+  - defense_progression_projects <- room_features.DefenseProgressionDetails
 
 
 ## flows
@@ -581,6 +592,7 @@
   - edges_as_b <- areas.PositionEdge
   - occupants <- areas.ObjectPosition
   - shelters <- areas.PositionShelter
+  - rampart <- areas.Rampart
   - traps <- room_features.Trap
 
 ### PositionEdge
@@ -625,6 +637,25 @@
 **Foreign Keys:**
   - blueprint_position -> areas.BlueprintPosition [FK]
   - damage_type -> conditions.DamageType [FK]
+
+### RampartElementProfile
+**Foreign Keys:**
+  - signature_damage_type -> conditions.DamageType [FK] (nullable)
+  - signature_condition -> conditions.ConditionTemplate [FK] (nullable)
+**Pointed to by:**
+  - resistances <- areas.RampartElementResistance
+  - rampart_set <- areas.Rampart
+
+### RampartElementResistance
+**Foreign Keys:**
+  - profile -> areas.RampartElementProfile [FK]
+  - damage_type -> conditions.DamageType [FK]
+
+### Rampart
+**Foreign Keys:**
+  - position -> areas.Position [OneToOne]
+  - element_profile -> areas.RampartElementProfile [FK]
+  - created_by_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### Service Functions
 - `area_for_scene(scene: 'Scene | None') -> 'Area | None' — Resolve the Area for a scene's location, or None.`
@@ -1285,6 +1316,7 @@
   - employments <- currency.CharacterEmployment
   - treasured_by <- boundaries.TreasuredSubject
   - companions <- companions.Companion
+  - ridden_companion <- companions.Companion
   - secrets <- secrets.Secret
   - secret_grievances <- secrets.SecretGrievance
   - leverage_held <- secrets.Leverage
@@ -1302,6 +1334,7 @@
   - achievements <- achievements.CharacterAchievement
   - titles <- achievements.CharacterTitle
   - conjured_obstacles <- areas.PositionEdge
+  - ramparts <- areas.Rampart
   - owned_instances <- instances.InstancedRoom
   - captivities <- captivity.Captivity
   - journal_entries <- journals.JournalEntry
@@ -1782,6 +1815,8 @@
   - cast_destination -> areas.Position [FK] (nullable)
   - cast_position_a -> areas.Position [FK] (nullable)
   - cast_position_b -> areas.Position [FK] (nullable)
+  - redirect_opponent_target -> combat.CombatOpponent [FK] (nullable)
+  - redirect_object_target -> objects.ObjectDB [FK] (nullable)
   - interaction -> scenes.Interaction [FK] (nullable)
 **Pointed to by:**
   - extra_targets <- combat.CombatRoundActionTarget
@@ -1891,6 +1926,7 @@
   - resolution_consequence_pool -> actions.ConsequencePool [FK]
   - per_round_consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - triggering_threat_entry -> combat.ThreatPoolEntry [FK] (nullable)
+  - rampart -> areas.Rampart [FK] (nullable)
 **Pointed to by:**
   - rounds <- combat.ClashRound
   - declarations <- combat.ClashContributionDeclaration
@@ -1963,11 +1999,12 @@
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Create a CombatParticipant linking a PC to an encounter.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
-- `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
+- `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' — Reduce ``damage`` by role-gated equipped-armor soak (#1174).`
 - `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' — Add fatigue to the pool.`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' — Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' — Subtract attack-cover from damage.`
+- `apply_rampart_interception(character_or_opponent: 'Character', damage: 'int', damage_type: 'DamageType | None', *, attacker_ref: 'object | None', delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'int' — Intercept a strike against a rampart-covered position (#2209).`
 - `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' — Assess break-bar damage for all boss opponents with a break bar.`
 - `begin_declaration_phase(encounter: 'CombatEncounter') -> 'None' — Advance round_number by 1 and set status to DECLARING.`
 - `check_and_advance_boss_phase(opponent: 'CombatOpponent') -> 'BossPhase | None' — Check whether a boss should advance to the next phase and apply it.`
@@ -1978,11 +2015,13 @@
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' — Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' — Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.`
 - `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' — Declare a PC's action for the current round.`
+- `declare_charge(participant: 'CombatParticipant', technique: 'Technique', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a mounted charge — closes distance to *opponent*, then attacks (#1843).`
 - `declare_clash_contribution(*, participant: 'CombatParticipant', clash: 'Clash', action_slot: 'str', technique: 'Technique', strain_commitment: 'int') -> 'ClashContributionDeclaration' — Write (or overwrite) a PC's clash contribution declaration for the current round.`
 - `declare_cover(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a covering maneuver for an ally -- passives-only, auto-ready.`
 - `declare_demoralize(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a demoralizing maneuver — break an opponent's nerve, auto-ready (#2015).`
 - `declare_flee(participant: 'CombatParticipant') -> 'CombatRoundAction' — Declare intent to flee -- passives-only maneuver, auto-ready.`
-- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None) -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
+- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None, redirect_opponent_target: 'CombatOpponent | None' = None, redirect_object_target: 'ObjectDB | None' = None) -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
+- `declare_joust(participant: 'CombatParticipant', technique: 'Technique') -> 'CombatRoundAction' — Declare a joust — a mounted, lance-armed opposed pass (#1843).`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
 - `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
@@ -2052,6 +2091,7 @@
   - archetype -> companions.CompanionArchetype [FK]
   - granting_gift -> magic.Gift [FK]
   - objectdb -> objects.ObjectDB [FK] (nullable)
+  - ridden_by -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
   - deployments <- companions.CompanionDeployment
   - orders <- companions.CompanionOrder
@@ -2080,10 +2120,12 @@
 ### Service Functions
 - `bind_companion(*, owner: 'CharacterSheet', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' — Create a bonded Companion + its live CompanionObject in owner's current room.`
 - `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Total Companion Capacity character_sheet has via gift's Thread level.`
+- `dismount_companion(sheet: 'CharacterSheet') -> 'Companion' — Dismount *sheet* from whichever companion it is currently riding.`
 - `get_pull_effects_for_thread(thread: 'Thread', **filters: 'object') -> 'list[ThreadPullEffect]' — Return ThreadPullEffect rows for ``thread`` with gift-specific preference.`
 - `handle_stables_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — STABLES strategy: row-only install/level + create StablesDetails (#1863).`
 - `materialize_companion_as_battle_vehicle(companion: 'Companion', battle: 'Battle', side: 'BattleSide') -> 'BattleVehicle' — Bridge a persistent Companion into a battle-scale BattleVehicle (#1873).`
 - `materialize_companion_as_combat_opponent(companion: 'Companion', encounter: 'CombatEncounter', *, threat_pool: 'ThreatPool | None' = None) -> 'CombatOpponent' — Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).`
+- `mount_companion(sheet: 'CharacterSheet', companion: 'Companion') -> 'Companion' — Mount *sheet* on *companion* — applies the Mounted condition to the rider.`
 - `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) — Validate and upsert a CompanionOrder directive (#1921).`
 - `release_companion(companion: 'Companion') -> 'None' — Release a bonded companion: destroy its live object, keep the row.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' — Resolve a bridged companion's defeat consequence (#1873).`
@@ -2142,6 +2184,8 @@
   - consequence_effects <- checks.ConsequenceEffect
   - position_shelters <- areas.PositionShelter
   - blueprint_position_shelters <- areas.BlueprintPositionShelter
+  - rampart_signature_profiles <- areas.RampartElementProfile
+  - rampart_resistances <- areas.RampartElementResistance
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
@@ -2191,7 +2235,9 @@
   - treatment_backlash_source <- conditions.TreatmentTemplate
   - consequence_effects <- checks.ConsequenceEffect
   - stat_rules_for <- achievements.ConditionStatRule
+  - rampart_signature_profiles <- areas.RampartElementProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
+  - ward_reactions <- room_features.RoomWardDetails
 
 ### ConditionStage
 **Foreign Keys:**
@@ -3489,6 +3535,8 @@
   - combat_pulls <- combat.CombatPull
   - mission_route_rewards <- missions.MissionOptionRouteReward
   - projects <- projects.Project
+  - wards <- room_features.RoomWardDetails
+  - defense_progression_projects <- room_features.DefenseProgressionDetails
 
 ### ResonanceTier
 
@@ -4423,6 +4471,7 @@
   - challenge_template_properties <- mechanics.ChallengeTemplateProperty
   - object_properties <- mechanics.ObjectProperty
   - damage_modifiers <- mechanics.PropertyDamageModifier
+  - detonation <- mechanics.PropertyDetonation
   - applications <- mechanics.Application
   - required_by_applications <- mechanics.Application
   - challenge_templates <- mechanics.ChallengeTemplate
@@ -4451,6 +4500,11 @@
 **Foreign Keys:**
   - property -> mechanics.Property [FK]
   - damage_type -> conditions.DamageType [FK] (nullable)
+
+### PropertyDetonation
+**Foreign Keys:**
+  - property -> mechanics.Property [OneToOne]
+  - consequence_pool -> actions.ConsequencePool [FK]
 
 ### Application
 **Foreign Keys:**
@@ -4609,6 +4663,7 @@
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' — Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — Authored covenant-role bonus for ``target``, scaled by character level (#985).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
+- `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' — Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
 - `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven equipment effectiveness bonus (#2022).`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven stat scaling across engaged roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
@@ -5284,6 +5339,7 @@
   - ship_construction_details <- ships.ShipConstructionDetails
   - ship_repair_details <- ships.ShipRepairDetails
   - room_feature_progression_details <- room_features.RoomFeatureProgressionDetails
+  - defense_progression_details <- room_features.DefenseProgressionDetails
 
 ### Contribution
 **Foreign Keys:**

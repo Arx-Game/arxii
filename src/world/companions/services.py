@@ -136,9 +136,13 @@ def release_companion(companion: Companion) -> None:
     """Release a bonded companion: destroy its live object, keep the row.
 
     The Companion row is never hard-deleted — released_at is set and
-    objectdb is cleared.
+    objectdb is cleared. If the companion was ridden, the rider is
+    force-dismounted first (#1843) — a released companion can't keep a rider.
     """
     from world.companions.models import Companion  # noqa: PLC0415 — avoid circular import
+
+    if companion.ridden_by_id is not None:
+        dismount_companion(companion.ridden_by)
 
     if companion.objectdb is not None:
         companion.objectdb.delete()
@@ -149,6 +153,85 @@ def release_companion(companion: Companion) -> None:
     # level, outside any single instance's .save() path — any other process-cached
     # Companion for this pk would otherwise keep reporting a stale non-null objectdb.
     Companion.flush_instance_cache()
+
+
+class MountError(Exception):
+    """Raised when a mount/dismount attempt is invalid (#1843)."""
+
+    def __init__(self, message: str, user_message: str | None = None):
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+def mount_companion(sheet: CharacterSheet, companion: Companion) -> Companion:
+    """Mount *sheet* on *companion* — applies the Mounted condition to the rider.
+
+    Validates: the companion's archetype is ridable (``is_mount``), the
+    companion belongs to *sheet* and is active/present, and *sheet* is not
+    already riding another mount. No mechanical check is rolled — mounting is
+    a free declarative action, gated purely on ownership + state.
+
+    Raises:
+        MountError: If any validation fails.
+    """
+    from world.companions.models import Companion  # noqa: PLC0415 — avoid circular import
+    from world.companions.mount_content import MOUNTED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    if companion.owner_id != sheet.pk:
+        msg = f"{companion.name} is not your companion."
+        raise MountError(msg, msg)
+    if not companion.is_active:
+        msg = f"{companion.name} is no longer active."
+        raise MountError(msg, msg)
+    if not companion.archetype.is_mount:
+        msg = f"{companion.name} cannot be ridden."
+        raise MountError(msg, msg)
+    if companion.objectdb is None:
+        msg = f"{companion.name} has no in-world presence to mount."
+        raise MountError(msg, msg)
+    if companion.ridden_by_id is not None:
+        msg = f"{companion.name} is already being ridden."
+        raise MountError(msg, msg)
+    if Companion.objects.filter(ridden_by=sheet).exists():
+        msg = "You are already mounted on another companion."
+        raise MountError(msg, msg)
+
+    companion.ridden_by = sheet
+    companion.save(update_fields=["ridden_by"])
+
+    mounted_template = ConditionTemplate.get_by_name(MOUNTED_CONDITION_NAME)
+    apply_condition(sheet.character, mounted_template)
+    return companion
+
+
+def dismount_companion(sheet: CharacterSheet) -> Companion:
+    """Dismount *sheet* from whichever companion it is currently riding.
+
+    Removes the Mounted condition from the rider. Called for voluntary
+    dismounts, encounter exit (``LeaveEncounterAction``), and companion
+    defeat (``release_companion``).
+
+    Raises:
+        MountError: If *sheet* is not currently mounted.
+    """
+    from world.companions.models import Companion  # noqa: PLC0415 — avoid circular import
+    from world.companions.mount_content import MOUNTED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import remove_condition  # noqa: PLC0415
+
+    companion = Companion.objects.filter(ridden_by=sheet).first()
+    if companion is None:
+        msg = "You are not mounted."
+        raise MountError(msg, msg)
+
+    companion.ridden_by = None
+    companion.save(update_fields=["ridden_by"])
+
+    mounted_template = ConditionTemplate.get_by_name(MOUNTED_CONDITION_NAME)
+    remove_condition(sheet.character, mounted_template)
+    return companion
 
 
 def materialize_companion_as_combat_opponent(

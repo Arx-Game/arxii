@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { SubmitButton } from '@/components/SubmitButton';
 import { RoundSettingsDialog } from './RoundSettingsDialog';
-import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { useEncounterForScene } from '@/combat/queries';
 
@@ -171,11 +170,16 @@ export function SceneHeader({ scene, onRefresh }: Props) {
     <div>
       <h1 className="mb-2 text-xl font-bold">{scene.name}</h1>
       {activeEncounter != null && (
-        <Link to={`/scenes/${scene.id}/combat`} className="mb-2 inline-block">
-          <Badge variant="destructive" className="text-xs" data-testid="scene-header-combat-badge">
-            In Combat
-          </Badge>
-        </Link>
+        // #2197: combat now renders in-scene (CombatRail on this same page),
+        // so this is a plain status indicator, not a navigation link — a
+        // link to this scene from this scene would be self-referential.
+        <Badge
+          variant="destructive"
+          className="mb-2 inline-block text-xs"
+          data-testid="scene-header-combat-badge"
+        >
+          In Combat
+        </Badge>
       )}
       <p className="mb-4">{scene.description}</p>
       {(scene.is_owner || scene.is_active) && (

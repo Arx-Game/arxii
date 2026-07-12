@@ -113,18 +113,20 @@ class TreatConditionConsentE2ETests(TestCase):
         """Full telnet consent chain runs perform_treatment REAL and reduces severity.
 
         Helper ``treat <target>`` lists candidates; helper ``treat <target> 1``
-        creates a PENDING request; target ``accept`` fires the custom resolver
-        → ``perform_treatment`` → ``decay_condition_severity`` (REAL). Asserts:
-        severity dropped by ``reduction_on_success`` (3) and the instance is
-        still open (resolved_at NULL), the request is RESOLVED, and the resolver
-        recorded a result interaction (the pose) on the scene.
+        auto-resolves immediately (#2214: the target is NPC, no db_account wired
+        in this fixture) via the custom resolver → ``perform_treatment`` →
+        ``decay_condition_severity`` (REAL). Asserts: severity dropped by
+        ``reduction_on_success`` (3) and the instance is still open (resolved_at
+        NULL), the request is RESOLVED, and the resolver recorded a result
+        interaction (the pose) on the scene. A later ``accept`` is a no-op —
+        the request already resolved at creation.
         """
         mock_perform_check.return_value = _make_check_result(success_level=1)
 
         # Helper lists candidates — confirms the candidate the selector will pick.
         self._run(CmdTreatCondition, self.helper_char, self.target_char.db_key)
 
-        # Helper selects candidate 1 → PENDING request with treatment FKs set.
+        # Helper selects candidate 1 -> the NPC target auto-resolves immediately (#2214).
         self._run(
             CmdTreatCondition,
             self.helper_char,
@@ -133,20 +135,17 @@ class TreatConditionConsentE2ETests(TestCase):
         request = SceneActionRequest.objects.get(
             initiator_persona=self.helper_sheet.primary_persona,
         )
-        assert request.status == ActionRequestStatus.PENDING
+        assert request.status == ActionRequestStatus.RESOLVED
         assert request.treatment_id == self.treatment.pk
         assert request.target_condition_instance_id == self.instance.pk
 
-        # Target accepts → custom resolver → perform_treatment → decay REAL.
-        self._run(CmdAccept, self.target_char)
-
-        # Severity dropped by reduction_on_success (3): 5 → 2, still open.
+        # Severity already dropped by reduction_on_success (3): 5 -> 2, still open.
         self.instance.refresh_from_db()
         assert self.instance.severity == 2, self.instance.severity
         assert self.instance.resolved_at is None, "partial reduction must leave the condition OPEN"
 
-        # Request flipped to RESOLVED; a result interaction (the pose) was
-        # recorded on the scene by _resolve_treatment_request.
+        # A later accept is a no-op — the request already resolved at creation.
+        self._run(CmdAccept, self.target_char)
         request.refresh_from_db()
         assert request.status == ActionRequestStatus.RESOLVED
         assert request.result_interaction_id is not None

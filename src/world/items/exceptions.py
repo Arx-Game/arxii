@@ -283,6 +283,24 @@ class TheftNotPermitted(InventoryError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"You can't bring yourself to take that."})
 
 
+class VaultAccessDenied(InventoryError):
+    """Raised when take is refused: item in a vault room, taker lacks access (#2179).
+
+    The vault access list gates ``take`` for unheld room items. ``steal``
+    bypasses this gate with the existing consent-gated theft machinery.
+    """
+
+    user_message = "You cannot take that from here."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"You cannot take that from here."})
+
+
+class VaultFull(InventoryError):
+    """Raised when dropping an item into a vault room that is at capacity (#2179)."""
+
+    user_message = "The vault is full."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"The vault is full."})
+
+
 # ---------------------------------------------------------------------------
 # Material consumption errors (services/materials.py)
 # ---------------------------------------------------------------------------

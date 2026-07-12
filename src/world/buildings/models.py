@@ -28,6 +28,7 @@ from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.buildings import room_constants
 from world.buildings.constants import ConditionTier
 from world.locations.constants import StatKey
@@ -44,7 +45,7 @@ _ARCHITECTURAL_STYLE_FK = "buildings.ArchitecturalStyle"
 _ROOM_PROFILE_FK = "evennia_extensions.RoomProfile"
 
 
-class BuildingKind(SharedMemoryModel):
+class BuildingKind(NaturalKeyMixin, SharedMemoryModel):
     """An authorable category of building.
 
     Open catalog — rows authored by staff, not an enum. Each row carries
@@ -54,6 +55,16 @@ class BuildingKind(SharedMemoryModel):
     Per the brainstorm, the flag set is NOT a taxonomy. Flags are
     sort/filter axes used by authoring NPCs to decide what they issue
     permits for. Multiple flags can be true on one row.
+
+    Carries `NaturalKeyMixin` (#2266 review fix) so the content pipeline's
+    emitted fixture JSON (natural-key format, no "pk" key) resolves an
+    existing same-name row on `loaddata` instead of blind-INSERTing into it
+    and raising `IntegrityError` on the unique `name` constraint. Per #946,
+    `loaddata` on a `SharedMemoryModel` can INSERT via a natural key but
+    cannot UPDATE — the identity map returns the cached instance before the
+    new field values land. `core_management.content_fixtures.load_entries`
+    (`update_or_create`) remains the only update-safe path; the emitted
+    fixture JSON is fresh-DB/insert-or-resolve only.
     """
 
     name = models.CharField(max_length=100, unique=True)
@@ -71,6 +82,11 @@ class BuildingKind(SharedMemoryModel):
     is_aerial = models.BooleanField(default=False)
     is_subterranean = models.BooleanField(default=False)
     is_secret = models.BooleanField(default=False)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     def __str__(self) -> str:
         return self.name
@@ -1244,7 +1260,7 @@ class StyleAffinity(SharedMemoryModel):
         return f"{self.style.name}: {self.stat_key} {self.value:+d}"
 
 
-class DecorationKind(SharedMemoryModel):
+class DecorationKind(NaturalKeyMixin, SharedMemoryModel):
     """A catalog decoration/furnishing that passively mods a room's comfort by presence (#1514).
 
     Lightweight + **stackable** — distinct from `RoomFeatureKind` (an *exclusive* capability you
@@ -1253,6 +1269,18 @@ class DecorationKind(SharedMemoryModel):
     via `DecorationAffinity`) and adds only a **small** `amenity`; luxury pieces are mostly
     amenity. Placement is cosmetic/instant (owner-gated, money/material cost). Magnitudes are a
     PLACEHOLDER author pass.
+
+    Carries `NaturalKeyMixin` (#2266 review fix) so the content pipeline's
+    emitted fixture JSON (natural-key format, no "pk" key) resolves an
+    existing same-name row on `loaddata` instead of blind-INSERTing into it
+    and raising `IntegrityError` on the unique `name` constraint — the exact
+    collision hit when content re-authors a decoration whose name a seeder
+    (`ensure_decoration_kinds()`) already created (e.g. "Great Hearth"). Per
+    #946, `loaddata` on a `SharedMemoryModel` can INSERT via a natural key
+    but cannot UPDATE — the identity map returns the cached instance before
+    the new field values land. `core_management.content_fixtures.load_entries`
+    (`update_or_create`) remains the only update-safe path; the emitted
+    fixture JSON is fresh-DB/insert-or-resolve only.
     """
 
     name = models.CharField(max_length=100, unique=True)
@@ -1267,6 +1295,11 @@ class DecorationKind(SharedMemoryModel):
             "pieces (a hearth is mostly mitigation); large for luxury/magical comfort."
         ),
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["name"]

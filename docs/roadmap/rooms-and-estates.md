@@ -95,6 +95,28 @@
   inhabitant surfacing shipped as #1522's REST widgets + weather echo);
   Chilled/Soaked threshold conditions (Tehom's integration, per the spec).
 
+## Built (2026-07-12, #2178 — guard assignment + detection)
+
+- **`NPCAssignment` model** (`world.npc_services`): a join model with
+  `DiscriminatorMixin` (Functionary XOR NPCAsset) that records which NPC is
+  posted to a room, in what role (GUARD/DOORMAN/SERVANT), by which owner
+  persona. One active guard per room (partial unique constraint). Retired
+  assignments stay as audit history (`is_active=False`, `ended_at`).
+- **Guard detection service** (`world.npc_services.guard_services`):
+  `check_guard_detection(character, room)` fires from
+  `Character.at_post_move` as a `run_safely` block. If the destination room
+  has an active GUARD and the arriving character lacks owner/tenant standing,
+  the intruder rolls their existing `Stealth` CheckType against
+  `GUARD_DETECTION_DIFFICULTY` (PLACEHOLDER 50). On failure: room echo +
+  owner alert (if online and co-located). On success: intruder passes
+  unnoticed.
+- **Assignment actions**: `assign_guard` / `unassign_guard` /
+  `list_guard_assignments` (REGISTRY actions, `IsRoomOwnerPrerequisite`-gated).
+- **Telnet**: `guard` command (`guard assign <npc>` / `guard unassign` /
+  `guard`).
+- **Servant fetch deferred** to a follow-up issue — it hooks into the
+  inventory `NotReachable` path, a different subsystem.
+
 ## Built (2026-07-10, #2036 — residence declaration + room aura tagging)
 
 - **Residence declaration widened:** `set_primary_home` now also writes
@@ -120,6 +142,39 @@
   declare→tag→tick mechanism, including the intentional emergent synergy where a
   Sanctum's Ritual of Homecoming writes the same `LocationValueModifier` row shape onto
   its own room.
+
+## Built (2026-07-12, #2177 — installable exit/room defenses: bars/ward/alarm)
+
+Builds the "guards/defenses" half of the security/access slice **#1515** split off #1514
+(see "Climate → comfort" below) — installable, upgradeable, non-`RoomFeatureKind`
+defenses:
+
+- **`ExitBarsDetails`** (OneToOne to `ExitProfile`) — a per-exit durability tier gating
+  `ExitState.can_traverse` **alongside** the pre-existing lock check (both must pass, not
+  a replacement). `BreakExitAction` (#2176) is the bypass: always succeeds, drops
+  `level` by 1 per hit, dissolves (soft-delete) at 0 — the same intruder path that
+  already bypasses a locked exit.
+- **`RoomWardDetails`** (OneToOne to `RoomProfile`) — a magical ward funded by a
+  `resonance` + `resonance_reserve`, drained by a daily `room_ward_upkeep_tick` cron;
+  depletion lapses the ward (`lapsed_at`) rather than dissolving it. Reaction to an
+  unauthorized entrant is **deterministic** (no check roll, Decision 5): applies a
+  `reaction_condition` and/or `reaction_damage_amount`.
+- **`RoomAlarmDetails`** (OneToOne to `RoomProfile`, independent of the ward — a room
+  may hold both) — no resonance upkeep; echoes an unauthorized entry to the room
+  (identity-transparent, ADR-0083) and notifies the owner persona offline-safe.
+- Ward/alarm both react from one shared entry point, `react_to_unauthorized_entry`
+  (`world/room_features/services.py`), called by
+  `flows.service_functions.movement.traverse_exit` right after a successful
+  unauthorized move — no new trigger/polling wiring needed.
+- Install/upgrade rides the existing Project + progression-details pattern
+  (`DefenseProgressionDetails`) via `StartDefenseInstallationAction` /
+  `FundRoomWardAction`; surfaced on both the web (`DefenseInstallViewSet`) and telnet
+  (`CmdDefense`, `defense install/upgrade/fund`).
+- See "Room Features" → "Installable exit/room defenses" in `docs/systems/INDEX.md`
+  for the full model/dispatch writeup.
+- **Not built here (remaining #1515 scope):** windows-as-egress, and any
+  ownership-role-gated *installation rights* beyond the existing owner/tenant Project
+  gate (see "Ownership design notes" below).
 
 ## Overview
 
@@ -243,8 +298,10 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   echoes are squelchable per-player (`narrative.UserCategoryMute`). The 7 types + 263 emits are
   seeded from the Arx-1 corpus. `FeastDay` forces special weather (Eclipse / Moon Madness)
   world-wide on recurring IC dates — the GM-lever automation.
+- **Wind-as-mechanic combat consumer (#1555, ADR-0129, done):** `wind_penalty(felt)` banded
+  SCENE check modifier (CALM/BREEZY/WINDY/GALE) on missile offense checks and the symmetric
+  PC defense bonus vs. a MISSILE NPC attack — see `docs/systems/INDEX.md`'s "Combat" section.
 - **Later slices:** comfort→**Conditions** ("Chilled/Soaked", Tehom-coordinated `comfort_penalty`),
-  the **wind-as-mechanic** combat consumer (**#1555**, Tehom — the WIND provider side is done),
   re-seed-as-upsert for edited emits, the web owner **build-HUD**, and inhabitant/owner surfacing.
 
 ## What's Needed for MVP

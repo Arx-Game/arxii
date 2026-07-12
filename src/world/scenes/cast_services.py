@@ -28,6 +28,7 @@ from actions.services import start_action_resolution
 from world.checks.types import ResolutionContext
 from world.combat.cast_seed import (
     encounter_requiring_risk_acknowledgement,
+    seat_caster_for_benign_intervention,
     seed_or_feed_encounter_from_cast,
 )
 from world.combat.services import acknowledge_encounter_risk
@@ -543,7 +544,75 @@ def resolve_accepted_cast(
     if action_request.originated_as_entrance and result is not None:
         _run_entrance_benign_accept_hooks(action_request, initiator, target, technique, result)
 
+    # #2226: Generalized benign-intervention seating — any benign cast accepted
+    # by the target seats the caster if the target is an embattled ally. This
+    # supersedes the entrance-only seating that used to live inside
+    # _run_entrance_benign_accept_hooks; entrance casts still get their hooks
+    # (flourish/disposition/suggestion) from the block above, but seating is
+    # now handled here for all benign casts.
+    if result is not None and not is_technique_hostile(technique):
+        _maybe_seat_after_consent_accept(
+            scene=action_request.scene,
+            initiator_persona=initiator,
+            target_persona=target,
+            result=result,
+        )
+
+    # #1748: fire any pending decisive-check marker after a benign cast resolves.
+    _maybe_fire_decisive_for_cast(action_request, result)
+
     return result  # result.power_ledger is already set from _resolve_cast
+
+
+def _maybe_seat_after_consent_accept(
+    *,
+    scene: Scene,
+    initiator_persona: Persona,
+    target_persona: Persona | None,
+    result: EnhancedSceneActionResult,
+) -> None:
+    """Seat the caster in combat when a benign consent-accept cast touched an
+    embattled ally (#2226).
+
+    The consent-accept benign path is always SINGLE-target (``_route_benign_cast``
+    creates requests with a single ``target_persona``; AREA/FILTERED_GROUP
+    behavior-altering casts raise ``InvalidCastTarget``), so the target sheet is
+    simply ``target_persona.character_sheet``.
+
+    Guarded by ``success_level > 0`` — a resolved-but-fizzled cast does not seat.
+    """
+    main = result.action_resolution.main_result
+    success_level = main.check_result.success_level if main is not None else 0
+    if success_level <= 0:
+        return
+    if target_persona is None:
+        return
+
+    seat_caster_for_benign_intervention(
+        caster_sheet=initiator_persona.character_sheet,
+        target_sheets=[target_persona.character_sheet],
+        scene=scene,
+    )
+
+
+def _maybe_fire_decisive_for_cast(
+    action_request: SceneActionRequest,
+    result: EnhancedSceneActionResult | None,
+) -> None:
+    """Fire any pending DecisiveCheckMarker after a benign cast resolves (#1748)."""
+    if result is None:
+        return
+    from world.scenes.decisive_check_services import maybe_fire_decisive_check  # noqa: PLC0415
+
+    main = result.action_resolution.main_result
+    if main is None:
+        return
+    maybe_fire_decisive_check(
+        scene=action_request.scene,
+        check_outcome=main.check_result.outcome,
+        initiator_sheet=action_request.initiator_persona.character_sheet,
+        target_persona=action_request.target_persona,
+    )
 
 
 def _run_entrance_benign_accept_hooks(
@@ -558,13 +627,13 @@ def _run_entrance_benign_accept_hooks(
     Mirrors ``EntranceAction._resolve_inline_entrance_result`` (the resolved-inline
     branch), but at accept-time resolution instead of request-time: disposition
     (non-hostile + target present, raw resolution), flourish + suggestion when the
-    resolved success level clears 0, and a benign-intervention combat join when the
-    target is another sheet's ACTIVE combatant.
+    resolved success level clears 0.
+
+    Combat seating (#2226) is no longer handled here — the generalized
+    ``_maybe_seat_after_consent_accept`` call in ``resolve_accepted_cast``
+    handles it for all benign casts (entrance and non-entrance alike).
     """
     from actions.definitions.social import run_entrance_success_hooks  # noqa: PLC0415
-    from world.combat.cast_seed import (  # noqa: PLC0415
-        seed_or_feed_encounter_from_benign_intervention,
-    )
     from world.npc_services.social_disposition import (  # noqa: PLC0415
         apply_social_disposition_delta,
     )
@@ -586,13 +655,6 @@ def _run_entrance_benign_accept_hooks(
         target_persona_id=target.pk if target is not None else None,
         technique=technique,
     )
-
-    if target is not None and target.character_sheet_id != initiator.character_sheet_id:
-        seed_or_feed_encounter_from_benign_intervention(
-            caster_sheet=initiator.character_sheet,
-            target_sheet=target.character_sheet,
-            scene=action_request.scene,
-        )
 
 
 def _guard_area_consent(technique: Technique, *, caster: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
@@ -973,6 +1035,66 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
     return CastResult(request=request)
 
 
+def _maybe_seat_caster_after_benign_cast(  # noqa: PLR0913 - cohesive seating params
+    *,
+    scene: Scene,
+    initiator_persona: Persona,
+    target_persona: Persona | None,
+    technique: Technique,
+    supplied_personas: list[Persona] | None,
+    result: EnhancedSceneActionResult | None,
+) -> bool:
+    """Seat the caster in combat when a benign cast touched an embattled ally (#2226).
+
+    Returns True if the caster was seated (newly or already). The cast must
+    have succeeded (success_level > 0) and the technique must be non-hostile
+    (hostile casts seed encounters via ``_route_hostile_cast``).
+
+    Enumerates the target sheets by targeting mode:
+    - SINGLE: the single ``target_persona``.
+    - FILTERED_GROUP: the ``supplied_personas`` list.
+    - AREA: ``resolve_targets`` (a pure query) to enumerate affected scene personas.
+    """
+    if result is None:
+        return False
+    main = result.action_resolution.main_result
+    success_level = main.check_result.success_level if main is not None else 0
+    if success_level <= 0:
+        return False
+    if is_technique_hostile(technique):
+        return False
+
+    caster_sheet = initiator_persona.character_sheet
+    target_sheets: list[CharacterSheet] = []
+
+    if supplied_personas is not None:
+        target_sheets = [p.character_sheet for p in supplied_personas]
+    elif target_persona is not None:
+        target_sheets = [target_persona.character_sheet]
+    else:
+        # AREA cast: enumerate affected personas via the pure query.
+        from actions.constants import ActionTargetType  # noqa: PLC0415
+
+        if technique.target_type == ActionTargetType.AREA:
+            resolved = resolve_targets(
+                technique=technique,
+                initiator_persona=initiator_persona,
+                scene=scene,
+                supplied_personas=[],
+            )
+            target_sheets = [p.character_sheet for p in resolved]
+
+    if not target_sheets:
+        return False
+
+    participant = seat_caster_for_benign_intervention(
+        caster_sheet=caster_sheet,
+        target_sheets=target_sheets,
+        scene=scene,
+    )
+    return participant is not None
+
+
 def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing params
     *,
     scene: Scene,
@@ -1036,4 +1158,12 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
         result=result,
         outcome_interaction=pose,
         power_ledger=power_ledger,
+        combat_seated=_maybe_seat_caster_after_benign_cast(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
+            technique=technique,
+            supplied_personas=supplied_personas,
+            result=result,
+        ),
     )

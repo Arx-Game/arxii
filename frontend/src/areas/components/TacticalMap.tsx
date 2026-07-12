@@ -18,6 +18,7 @@ import {
 import type { Edge, Node } from '@xyflow/react';
 import { toast } from 'sonner';
 
+import type { components } from '@/generated/api';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import { computeTacticalLayout } from '../tacticalLayout';
 import type { TacticalEdge, TacticalNode } from '../tacticalLayout';
@@ -52,10 +53,11 @@ function fallbackHandles() {
   ];
 }
 
-export interface PositionNodeLike extends TacticalNode {
-  id: number;
-  name: string;
-}
+// Sourced from the generated PositionNode schema (#2209) so the rampart
+// fields (rampart_element/rampart_integrity/rampart_max_integrity/
+// rampart_crack_state) flow automatically on the next `gen-api-types` run
+// instead of needing to be hand-mirrored here.
+export type PositionNodeLike = components['schemas']['PositionNode'] & TacticalNode;
 
 export interface PositionEdgeLike extends TacticalEdge {
   is_passable: boolean;
@@ -150,6 +152,10 @@ export function TacticalMap({
             // map), so the highlight is on whenever picking is active at all.
             canMoveHere: moveActionByPositionId.has(position.id) || onPickPosition !== undefined,
             onClick: handleClick,
+            rampartElement: position.rampart_element,
+            rampartIntegrity: position.rampart_integrity,
+            rampartMaxIntegrity: position.rampart_max_integrity,
+            rampartCrackState: position.rampart_crack_state,
           },
         })
       ),

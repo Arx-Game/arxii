@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Iterator
+import contextlib
 from dataclasses import dataclass
 from decimal import Decimal
 import logging
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePool
     from flows.events.payloads import DamageSource
     from typeclasses.characters import Character
-    from world.areas.positioning.models import Position
+    from world.areas.positioning.models import Position, RampartElementProfile
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
+    from world.mechanics.models import ObjectProperty
     from world.scenes.models import Interaction, Persona
     from world.stories.models import Story
 
@@ -62,6 +64,9 @@ from world.checks.constants import ModifierSourceKind
 from world.checks.services import collect_check_modifiers, perform_check
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
+    CHARGE_CHECK_BONUS,
+    CHARGE_DAMAGE_BONUS,
+    CHARGE_MAX_HOPS,
     COMBO_MIN_SLOTS,
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
@@ -73,6 +78,8 @@ from world.combat.constants import (
     ENTITY_TYPE_PC,
     FLEE_PARTIAL_SUCCESS_LEVEL,
     INTERPOSE_BASE_FATIGUE_COST,
+    JOUST_DECISIVE_MARGIN,
+    LANCE_UNMOUNTED_PENALTY,
     NO_ROLE_SPEED_RANK,
     NPC_SPEED_RANK,
     PENETRATION_CHECK_TYPE_NAME,
@@ -86,8 +93,10 @@ from world.combat.constants import (
     OpponentTier,
     PaceMode,
     ParticipantStatus,
+    StrikeDelivery,
     TargetingMode,
     TargetSelection,
+    wind_penalty,
 )
 from world.combat.damage_source import classify_source
 from world.combat.models import (
@@ -349,6 +358,63 @@ class CombatTechniqueResolver:
                 self.participant.encounter,
             )
         )
+
+        # Mounted-combat bonuses/penalties (#1843), composed at the same seam
+        # as every other check contribution — provenance stays exhaustive.
+        from world.items.constants import GearArchetype  # noqa: PLC0415
+
+        character = self.participant.character_sheet.character
+        weapon_archetype = _equipped_weapon_archetype(character)
+
+        if self.action.maneuver == CombatManeuver.CHARGE:
+            charge_bonus = CHARGE_CHECK_BONUS
+            if weapon_archetype == GearArchetype.LANCE:
+                charge_bonus *= 2
+            extra_contributions.append(
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.CHARACTER,
+                    source_label="Charge",
+                    value=charge_bonus,
+                )
+            )
+
+        if weapon_archetype == GearArchetype.LANCE:
+            from world.companions.mount_content import MOUNTED_CONDITION_NAME  # noqa: PLC0415
+            from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+            from world.conditions.services import has_condition  # noqa: PLC0415
+
+            mounted_template = ConditionTemplate.get_by_name(MOUNTED_CONDITION_NAME)
+            if not has_condition(character, mounted_template):
+                extra_contributions.append(
+                    ModifierContribution(
+                        source_kind=ModifierSourceKind.CHARACTER,
+                        source_label="Unmounted Lance",
+                        value=LANCE_UNMOUNTED_PENALTY,
+                    )
+                )
+
+        # Wind-as-mechanic (#1555): a banded SCENE penalty on missile attacks
+        # only. Guarded cheaply — skip the felt_exposure room lookup entirely
+        # for melee/lance attacks, which stay untouched.
+        if (
+            weapon_archetype in (GearArchetype.RANGED, GearArchetype.THROWN)
+            and self.participant.encounter.room is not None
+        ):
+            from world.locations.constants import StatKey  # noqa: PLC0415
+            from world.locations.services import felt_exposure  # noqa: PLC0415
+
+            wind_mod = wind_penalty(
+                felt_exposure(self.participant.encounter.room, stat_key=StatKey.WIND)
+            )
+            if wind_mod:
+                extra_contributions.append(
+                    ModifierContribution(
+                        source_kind=ModifierSourceKind.SCENE,
+                        source_label="Wind",
+                        value=wind_mod,
+                    )
+                )
+
         breakdown = collect_check_modifiers(
             self.participant.character_sheet,
             self.offense_check_type,
@@ -356,7 +422,6 @@ class CombatTechniqueResolver:
             extra_contributions=extra_contributions,
         )
         extra_modifiers = breakdown.total
-        character = self.participant.character_sheet.character
         return check_fn(
             character,
             self.offense_check_type,
@@ -584,10 +649,11 @@ class CombatTechniqueResolver:
         """Scaled damage + effective damage_type for one profile (0 if it skips).
 
         Returns ``(0, None)`` when the profile's minimum_success_level exceeds
-        ``sl``; otherwise folds the equipped weapon's contribution and the
-        target's Property-driven damage bonus (#1793) into the formula budget,
-        then applies the success-level multiplier. Budget is floored at 0
-        after the (possibly negative) property bonus is applied.
+        ``sl``; otherwise folds the equipped weapon's contribution, a CHARGE
+        maneuver's flat CHARGE_DAMAGE_BONUS (#1843, doubled for a LANCE), and
+        the target's Property-driven damage bonus (#1793) into the formula
+        budget, then applies the success-level multiplier. Budget is floored
+        at 0 after the (possibly negative) property bonus is applied.
         """
         from world.mechanics.services import property_damage_bonus  # noqa: PLC0415
 
@@ -600,6 +666,14 @@ class CombatTechniqueResolver:
         budget, profile_damage_type = _weapon_augmented_budget(
             profile, budget, weapon, self.participant.character_sheet
         )
+        if self.action.maneuver == CombatManeuver.CHARGE:
+            from world.items.constants import GearArchetype  # noqa: PLC0415
+
+            charge_damage_bonus = CHARGE_DAMAGE_BONUS
+            character = self.participant.character_sheet.character
+            if _equipped_weapon_archetype(character) == GearArchetype.LANCE:
+                charge_damage_bonus *= 2
+            budget += charge_damage_bonus
         budget = max(0, budget + property_damage_bonus(target.objectdb, profile_damage_type))
         return int(budget * multiplier), profile_damage_type
 
@@ -1638,10 +1712,46 @@ def resolve_cast_position_params(
     return resolved
 
 
+def _validate_redirect_declaration(
+    encounter: CombatEncounter,
+    redirect_opponent_target: CombatOpponent | None,
+    redirect_object_target: ObjectDB | None,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Validate a redirect declaration's destination kwargs (#2210).
+
+    Extracted from :func:`declare_interpose` to keep its complexity in check.
+    Mutually exclusive; each populated kwarg is validated against the
+    encounter it's being declared into. Both ``None`` ("away") needs no
+    validation.
+    """
+    from world.mechanics.services import volatile_object_property  # noqa: PLC0415
+
+    if redirect_opponent_target is not None and redirect_object_target is not None:
+        msg = "Cannot interpose: choose at most one redirect destination."
+        raise ValueError(msg)
+
+    if redirect_opponent_target is not None and (
+        redirect_opponent_target.encounter_id != encounter.pk
+        or redirect_opponent_target.status != OpponentStatus.ACTIVE
+    ):
+        msg = "Redirect target must be an active opponent in this encounter."
+        raise ValueError(msg)
+
+    if redirect_object_target is not None:
+        if redirect_object_target.db_location_id != encounter.room_id:
+            msg = "Redirect target must be an object in the encounter room."
+            raise ValueError(msg)
+        if volatile_object_property(redirect_object_target) is None:
+            msg = "Redirect target is not volatile."
+            raise ValueError(msg)
+
+
 def declare_interpose(
     participant: CombatParticipant,
     ally: CombatParticipant | None = None,
     technique: Technique | None = None,
+    redirect_opponent_target: CombatOpponent | None = None,
+    redirect_object_target: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
 ) -> CombatRoundAction:
     """Declare an interposing maneuver — passives-only, auto-ready.
 
@@ -1653,16 +1763,23 @@ def declare_interpose(
     carries a protective reactive-trigger technique into the declaration: the
     participant must know it (``CharacterTechnique``) and it must classify to a
     protective flavor via ``protective_flavor`` (barrier/blink/redirect,
-    `world/magic/services/targeting.py`). The ``redirect`` flavor (Mirror
-    Ward-style reflection) is rejected here — sub 5 lifts this restriction. A
-    valid technique is written to ``focused_action`` instead of the usual
-    zeroing; passives are still zeroed either way.
+    `world/magic/services/targeting.py`).
+
+    ``redirect_opponent_target``/``redirect_object_target`` (#2210) declare the
+    destination for saved damage when the guardian's technique resolves as a
+    REDIRECT flavor (Mirror Ward-style reflection) — declaration-time choice
+    per ADR-0032. Mutually exclusive; both ``None`` means "away," the universal
+    fallback destination. ``redirect_opponent_target`` must be an active
+    (not-defeated) opponent in this same encounter. ``redirect_object_target``
+    must be an ObjectDB located in the encounter's room AND "volatile" — it
+    carries an ``ObjectProperty`` whose ``Property`` has a ``PropertyDetonation``
+    row (see ``world.mechanics.services.volatile_object_property``). These
+    kwargs are accepted regardless of the declared technique's flavor (harmless
+    no-ops for non-REDIRECT declarations); resolution
+    (``_try_technique_interpose``) only reads them on the REDIRECT branch.
     """
     from world.magic.models import CharacterTechnique  # noqa: PLC0415
-    from world.magic.services.targeting import (  # noqa: PLC0415
-        PROTECTIVE_FLAVOR_REDIRECT,
-        protective_flavor,
-    )
+    from world.magic.services.targeting import protective_flavor  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
     encounter = participant.encounter
@@ -1698,9 +1815,11 @@ def declare_interpose(
             msg = "Cannot interpose: character does not know that technique."
             raise ValueError(msg)
         flavor = protective_flavor(technique)
-        if flavor is None or flavor == PROTECTIVE_FLAVOR_REDIRECT:
+        if flavor is None:
             msg = "Cannot interpose: that technique cannot guard yet."
             raise ValueError(msg)
+
+    _validate_redirect_declaration(encounter, redirect_opponent_target, redirect_object_target)
 
     action, _ = CombatRoundAction.objects.update_or_create(
         participant=participant,
@@ -1717,6 +1836,8 @@ def declare_interpose(
             "mental_passive": None,
             "combo_upgrade": None,
             "is_ready": True,
+            "redirect_opponent_target": redirect_opponent_target,
+            "redirect_object_target": redirect_object_target,
         },
     )
     return action
@@ -2904,6 +3025,177 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     return action
 
 
+def _equipped_weapon_archetype(character: Character) -> str | None:
+    """The ``gear_archetype`` of character's strongest equipped weapon, or None."""
+    inst = _select_equipped_weapon(character)
+    if inst is None:
+        return None
+    return inst.template.gear_archetype
+
+
+def declare_charge(
+    participant: CombatParticipant,
+    technique: Technique,
+    opponent: CombatOpponent,
+) -> CombatRoundAction:
+    """Declare a mounted charge — closes distance to *opponent*, then attacks (#1843).
+
+    Validations:
+    - Participant must be able to act and the encounter must be DECLARING.
+    - The rider must hold the Mounted condition
+      (``world.companions.mount_content.MOUNTED_CONDITION_NAME``).
+    - *opponent* must be ACTIVE.
+    - *opponent*'s position must be at least 1 hop from the rider's current
+      position AND reachable within ``CHARGE_MAX_HOPS``. Lenient (allowed)
+      when either combatant is unpositioned — mirrors
+      ``technique_can_reach``'s leniency (``world/combat/reach.py``).
+
+    Resolution (``_resolve_pc_action``) moves the rider onto *opponent*'s
+    position (``force_move_to_position``), then falls through to the normal
+    weapon-attack pipeline — ``CombatTechniqueResolver`` folds
+    ``CHARGE_CHECK_BONUS``/``CHARGE_DAMAGE_BONUS`` into the check/damage
+    (doubled when the equipped weapon is a LANCE). The attack always runs
+    through the normal (non-bypassing) damage pipeline — defenses, guardians,
+    and ramparts fire exactly as they would for any other attack.
+
+    Raises ValueError with clear messages for validation failures.
+    """
+    from world.areas.positioning.services import position_of, position_reachable  # noqa: PLC0415
+    from world.companions.mount_content import MOUNTED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import has_condition  # noqa: PLC0415
+    from world.magic.constants import TechniqueReach  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if not can_act(participant.character_sheet):
+        msg = "Cannot charge: character is dead or incapacitated."
+        raise ValueError(msg)
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot charge: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+    if opponent.status != OpponentStatus.ACTIVE:
+        msg = "Cannot charge a defeated opponent."
+        raise ValueError(msg)
+
+    mounted_template = ConditionTemplate.get_by_name(MOUNTED_CONDITION_NAME)
+    if not has_condition(participant.character_sheet.character, mounted_template):
+        msg = "Cannot charge: you must be mounted."
+        raise ValueError(msg)
+
+    rider_pos = position_of(participant.character_sheet.character)
+    target_pos = position_of(opponent.objectdb) if opponent.objectdb is not None else None
+    if rider_pos is not None and target_pos is not None:
+        if rider_pos.pk == target_pos.pk:
+            msg = "Cannot charge: the target is already within reach."
+            raise ValueError(msg)
+        if not position_reachable(
+            rider_pos, target_pos, TechniqueReach.REACH_N, reach_hops=CHARGE_MAX_HOPS
+        ):
+            msg = "Cannot charge: the target is not reachable."
+            raise ValueError(msg)
+
+    action, _created = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": technique,
+            "focused_category": technique.action_category,
+            "effort_level": EffortLevel.MEDIUM,
+            "focused_opponent_target": opponent,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.CHARGE,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": False,
+        },
+    )
+    return action
+
+
+_JOUST_PARTICIPANT_COUNT = 2  # jousts are strictly 1v1 DUEL encounters
+
+
+def declare_joust(
+    participant: CombatParticipant,
+    technique: Technique,
+) -> CombatRoundAction:
+    """Declare a joust — a mounted, lance-armed opposed pass (#1843).
+
+    Only declarable in a DUEL encounter with exactly two participants where
+    BOTH duelists currently hold the Mounted condition and have a
+    LANCE-archetype weapon equipped. Resolution
+    (``_resolve_joust_pass``, dispatched from ``_resolve_pc_action`` once both
+    sides have declared JOUST) rolls one opposed weapon-attack check per side
+    and grades the outcome by the success_level gap into
+    ``JOUST_DECISIVE_MARGIN``/``JOUST_NARROW_MARGIN`` bands.
+
+    Raises ValueError with clear messages for validation failures.
+    """
+    from world.companions.mount_content import MOUNTED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import has_condition  # noqa: PLC0415
+    from world.items.constants import GearArchetype  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if not can_act(participant.character_sheet):
+        msg = "Cannot joust: character is dead or incapacitated."
+        raise ValueError(msg)
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot joust: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+    if encounter.encounter_type != EncounterType.DUEL:
+        msg = "Cannot joust: only valid in a duel."
+        raise ValueError(msg)
+
+    other = (
+        CombatParticipant.objects.filter(encounter=encounter)
+        .exclude(pk=participant.pk)
+        .select_related("character_sheet")
+        .first()
+    )
+    if other is None or encounter.participants.count() != _JOUST_PARTICIPANT_COUNT:
+        msg = "Cannot joust: requires exactly two duelists."
+        raise ValueError(msg)
+
+    mounted_template = ConditionTemplate.get_by_name(MOUNTED_CONDITION_NAME)
+    for combatant in (participant, other):
+        if not has_condition(combatant.character_sheet.character, mounted_template):
+            msg = "Cannot joust: both duelists must be mounted."
+            raise ValueError(msg)
+        if _equipped_weapon_archetype(combatant.character_sheet.character) != GearArchetype.LANCE:
+            msg = "Cannot joust: both duelists must wield a lance."
+            raise ValueError(msg)
+
+    action, _created = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": technique,
+            "focused_category": technique.action_category,
+            "effort_level": EffortLevel.MEDIUM,
+            "focused_opponent_target": None,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.JOUST,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": False,
+        },
+    )
+    return action
+
+
 def _get_eligible_entries(
     opponent: CombatOpponent,
     entries: list[ThreatPoolEntry],
@@ -3642,7 +3934,19 @@ def _resolve_opponent_pre_apply(
     trigger band) still runs. Used by :func:`_try_companion_defend`'s redirect
     to avoid double-charging a guardian that already had a chance to interpose
     earlier in the same blow.
+
+    Rampart interception (#2209) runs first, before the DAMAGE_PRE_APPLY emit —
+    an opponent (e.g. an ALLY summon) standing at a rampart-covered position is
+    shielded exactly like a PC. No threat entry is available on this path, so
+    delivery/is_area default to MELEE/False.
     """
+    if opponent.objectdb is not None:
+        raw_damage = apply_rampart_interception(
+            opponent.objectdb,
+            raw_damage,
+            damage_type,
+            attacker_ref=source_sheet.character if source_sheet is not None else None,
+        )
     raw_damage, dropped = _emit_opponent_pre_apply(opponent, raw_damage, damage_type, source_sheet)
     if dropped:
         return raw_damage, True
@@ -4066,6 +4370,8 @@ def apply_damage_to_participant(  # noqa: PLR0913
     source: object | None = None,
     source_sheet: CharacterSheet | None = None,
     on_hit_pool: ConsequencePool | None = None,
+    delivery: str = StrikeDelivery.MELEE,
+    is_area: bool = False,
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
 
@@ -4075,6 +4381,12 @@ def apply_damage_to_participant(  # noqa: PLR0913
     When ``source_sheet`` is provided (e.g. PC vs PC damage), increments the
     source's ``damage_dealt`` counter. The target always gets a
     ``damage_received`` increment (regardless of source).
+
+    ``delivery``/``is_area`` (#2209) — NPC callers pass the striking
+    ``ThreatPoolEntry.delivery`` and ``targeting_mode != SINGLE``; other
+    callers default to MELEE/False. Rampart interception (see
+    ``apply_rampart_interception``) runs first, before any other reduction,
+    UNLESS ``bypass_pre_apply=True`` (the reflect/retaliation loop guard).
 
     Emits reactive events:
     - DAMAGE_PRE_APPLY (cancellable, mutable amount)
@@ -4091,6 +4403,17 @@ def apply_damage_to_participant(  # noqa: PLR0913
 
     character = participant.character_sheet.character
     room = character.location
+
+    if not bypass_pre_apply:
+        damage = apply_rampart_interception(
+            character,
+            damage,
+            damage_type,
+            attacker_ref=source,
+            delivery=delivery,
+            is_area=is_area,
+        )
+
     damage_source = classify_source(source)
 
     # --- DAMAGE_PRE_APPLY (cancellable, amount may be modified) ---
@@ -4893,6 +5216,29 @@ def resolve_npc_attack(
         participant.character_sheet,
         participant.encounter,
     )
+
+    # Wind-as-mechanic (#1555) symmetry: the same gale that ruins a PC's
+    # missile shot ruins an NPC's. Only MISSILE-delivered threat entries with
+    # a defense roll are affected — flat base_damage entries (no defense_check_type,
+    # never reaching this function) stay untouched.
+    if (
+        opponent_action.threat_entry.delivery == StrikeDelivery.MISSILE
+        and participant.encounter.room is not None
+    ):
+        from world.locations.constants import StatKey  # noqa: PLC0415
+        from world.locations.services import felt_exposure  # noqa: PLC0415
+
+        wind_mod = wind_penalty(felt_exposure(participant.encounter.room, stat_key=StatKey.WIND))
+        if wind_mod:
+            bond_contributions = [
+                *bond_contributions,
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.SCENE,
+                    source_label="Wind",
+                    value=-wind_mod,
+                ),
+            ]
+
     breakdown = collect_check_modifiers(
         participant.character_sheet,
         check_type,
@@ -4917,6 +5263,8 @@ def resolve_npc_attack(
         damage_type=opponent_action.threat_entry.damage_type,
         source=opponent_action.opponent,
         on_hit_pool=opponent_action.threat_entry.on_hit_consequence_pool,
+        delivery=opponent_action.threat_entry.delivery,
+        is_area=opponent_action.threat_entry.targeting_mode != TargetingMode.SINGLE,
     )
 
     return DefenseResult(
@@ -5362,6 +5710,160 @@ class _ParleyCheckResult:
     success_level: int
 
 
+def _resolve_charge_movement(participant: CombatParticipant, action: CombatRoundAction) -> None:
+    """Move *participant*'s character onto the CHARGE target's position (#1843).
+
+    Called unconditionally at resolution time — reachability was already
+    validated at declaration (``declare_charge``), but the round may have
+    moved other combatants since; force-moving unconditionally here mirrors
+    the existing Guardian blink-protect call site
+    (``world.areas.positioning.services.force_move_to_position``) rather than
+    re-validating and potentially fizzling a declared charge on a stale check.
+    No-ops when either side is unpositioned (lenient, matches declare-time).
+    """
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        force_move_to_position,
+        position_of,
+    )
+
+    target = action.focused_opponent_target
+    if target is None or target.objectdb is None:
+        return
+    dest = position_of(target.objectdb)
+    if dest is None:
+        return
+    rider = participant.character_sheet.character
+    if position_of(rider) is None:
+        return
+    force_move_to_position(rider, dest)
+
+
+def _joust_offense_check(participant: CombatParticipant, action: CombatRoundAction) -> CheckResult:
+    """Roll one side's JOUST offense check via the shared CombatTechniqueResolver seam.
+
+    Reuses ``CombatTechniqueResolver._roll_check`` so EFFORT/PULL/bond bonuses
+    and the LANCE_UNMOUNTED_PENALTY gate all compose exactly as they would for
+    a normal attack (both jousters are validated Mounted+LANCE at declare
+    time, so the unmounted-lance penalty never actually fires here).
+    """
+    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+
+    technique = action.focused_action
+    template = technique.action_template
+    if template is None:
+        raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
+    offense_check_type = resolve_cast_check_type(participant.character_sheet.character, template)
+    resolver = CombatTechniqueResolver(
+        participant=participant,
+        action=action,
+        pull_flat_bonus=0,
+        fatigue_category=action.focused_category or ActionCategory.PHYSICAL,
+        offense_check_type=offense_check_type,
+        offense_check_fn=None,
+    )
+    return resolver._roll_check()  # noqa: SLF001 - same-module reuse of the shared roll seam
+
+
+def _resolve_joust_pass(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    other: CombatParticipant,
+    other_action: CombatRoundAction,
+) -> None:
+    """Resolve a JOUST's single opposed pass — grades by the success_level gap (#1843).
+
+    decisive gap (>= JOUST_DECISIVE_MARGIN): loser takes the winner's lance
+    weapon damage x2 + the Unhorsed condition, which force-dismounts them.
+    narrow gap (>= JOUST_NARROW_MARGIN, < decisive): loser takes the winner's
+    lance weapon damage x1, keeps the saddle. Tie (gap 0): both jarred, no
+    damage. Damage is applied to the loser's mirror CombatOpponent via
+    ``apply_damage_to_opponent`` — the same non-bypassing pipeline every
+    normal duel attack already uses (defenses/soak/non-lethal PvP capping,
+    ADR-0023, all fire unchanged).
+    """
+    from world.companions.mount_content import UNHORSED_CONDITION_NAME  # noqa: PLC0415
+    from world.companions.services import MountError, dismount_companion  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    check_a = _joust_offense_check(participant, action)
+    check_b = _joust_offense_check(other, other_action)
+    gap = check_a.success_level - check_b.success_level
+
+    if gap == 0:
+        return  # tie — both jarred, no damage
+
+    winner, loser = (participant, other) if gap > 0 else (other, participant)
+    margin = abs(gap)
+
+    weapon = effective_weapon_profile(winner.character_sheet.character)
+    base_damage = weapon.damage if weapon is not None else 0
+
+    loser_mirror = CombatOpponent.objects.filter(
+        encounter=participant.encounter, mirrors_participant=loser
+    ).first()
+    if loser_mirror is None:
+        return
+
+    if margin >= JOUST_DECISIVE_MARGIN:
+        apply_damage_to_opponent(
+            loser_mirror,
+            base_damage * 2,
+            damage_type=weapon.damage_type if weapon is not None else None,
+            source_sheet=winner.character_sheet,
+        )
+        unhorsed = ConditionTemplate.get_by_name(UNHORSED_CONDITION_NAME)
+        apply_condition(
+            loser.character_sheet.character,
+            unhorsed,
+            source_character=winner.character_sheet.character,
+        )
+        with contextlib.suppress(MountError):
+            # Not actually mounted somehow — nothing to dismount.
+            dismount_companion(loser.character_sheet)
+    else:
+        apply_damage_to_opponent(
+            loser_mirror,
+            base_damage,
+            damage_type=weapon.damage_type if weapon is not None else None,
+            source_sheet=winner.character_sheet,
+        )
+
+
+def _resolve_joust(participant: CombatParticipant, action: CombatRoundAction) -> ActionOutcome:
+    """Dispatch a declared JOUST maneuver — resolves once both duelists have declared it.
+
+    Deterministic single-resolution: only the lower-pk participant's call
+    actually runs ``_resolve_joust_pass`` (avoids a schema field just to
+    memoize "already resolved this round" — the higher-pk participant's own
+    ``_resolve_pc_action`` pass is a no-op once its partner's pass already
+    applied both sides' outcomes).
+    """
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+    outcome.participant_id = participant.pk
+
+    other = (
+        CombatParticipant.objects.filter(encounter=participant.encounter)
+        .exclude(pk=participant.pk)
+        .select_related("character_sheet")
+        .first()
+    )
+    if other is None:
+        return outcome
+
+    other_action = CombatRoundAction.objects.filter(
+        participant=other, round_number=action.round_number
+    ).first()
+    if other_action is None or other_action.maneuver != CombatManeuver.JOUST:
+        return outcome  # partner didn't also declare joust this round — no-op
+
+    if participant.pk > other.pk:
+        return outcome  # partner (lower pk) already resolved this pass
+
+    _resolve_joust_pass(participant, action, other, other_action)
+    return outcome
+
+
 def _resolve_use_item(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -5651,7 +6153,7 @@ def _maybe_suggest_entrance_dramatic_moment(
         )
 
 
-def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
+def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912, PLR0915
     participant: CombatParticipant,
     action: CombatRoundAction,
     offense_check_fn: PerformCheckFn | None = None,
@@ -5691,6 +6193,20 @@ def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
     # round's focused action.
     if action.maneuver == CombatManeuver.USE_ITEM:
         return _resolve_use_item(participant, action)
+
+    # JOUST (#1843): a bilateral opposed pass between two mounted, lance-armed
+    # duelists — resolved directly against the loser's mirror CombatOpponent,
+    # not through the normal per-target technique pipeline below (there is no
+    # single "attacker vs one opponent" shape here). Returns immediately.
+    if action.maneuver == CombatManeuver.JOUST:
+        return _resolve_joust(participant, action)
+
+    # CHARGE (#1843): closes distance to the declared opponent, THEN falls
+    # through to the normal weapon-attack pipeline below (no early return) —
+    # CHARGE augments a normal attack via CombatTechniqueResolver's
+    # CHARGE_CHECK_BONUS/CHARGE_DAMAGE_BONUS injection, it doesn't replace it.
+    if action.maneuver == CombatManeuver.CHARGE:
+        _resolve_charge_movement(participant, action)
 
     # YIELD ends a duel immediately: the yielding PC loses. Passives-only outcome;
     # _resolve_duel_completion is a no-op afterwards because the encounter is now
@@ -5870,6 +6386,8 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
                 damage_type=npc_action.threat_entry.damage_type,
                 source=opponent,
                 on_hit_pool=npc_action.threat_entry.on_hit_consequence_pool,
+                delivery=npc_action.threat_entry.delivery,
+                is_area=npc_action.threat_entry.targeting_mode != TargetingMode.SINGLE,
             )
         outcome.damage_results.append(dmg_result)
 
@@ -7019,12 +7537,19 @@ def _try_technique_interpose(
     ``CombatRoundAction.cast_destination`` lands, queue-time reconciliation
     should prefer that declared destination over the guardian's own position.
     No-op (damage still zeroed) if the guardian isn't currently placed anywhere.
+
+    **REDIRECT flavor (#2210):** after grading, ``saved = amount_before -
+    pre_payload.amount`` (whatever the block prevented — full on a clean
+    block, half on a partial, zero on a failure) is sent to the declaration's
+    destination (``CombatRoundAction.redirect_opponent_target`` /
+    ``redirect_object_target`` — see :func:`_resolve_technique_redirect`).
     """
     from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
     from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
     from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
     from world.magic.services.targeting import (  # noqa: PLC0415
         PROTECTIVE_FLAVOR_BLINK,
+        PROTECTIVE_FLAVOR_REDIRECT,
         protective_condition_and_flavor,
     )
     from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
@@ -7074,6 +7599,7 @@ def _try_technique_interpose(
         anima.current -= cost
         anima.save(update_fields=["current"])
 
+    amount_before = pre_payload.amount
     is_clean_block = _grade_interpose_damage(
         pre_payload, check_result.success_level, interposer=interposer
     )
@@ -7084,6 +7610,144 @@ def _try_technique_interpose(
         dest = action.participant.current_position
         if dest is not None:
             force_move_to_position(protected, dest)
+
+    if flavor == PROTECTIVE_FLAVOR_REDIRECT:
+        saved = amount_before - pre_payload.amount
+        _resolve_technique_redirect(action, interposer, saved, damage_type=pre_payload.damage_type)
+
+
+def _resolve_technique_redirect(
+    action: CombatRoundAction,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    saved: int,
+    *,
+    damage_type: DamageType | None,
+) -> None:
+    """Resolve a REDIRECT-flavor guardian's saved damage into its destination (#2210).
+
+    ``saved`` is whatever :func:`_grade_interpose_damage` prevented from landing on
+    the ward — full amount on a clean block, half on a partial, zero on a failure.
+    ``saved <= 0`` means nothing redirects (a failed block has nothing to send
+    anywhere). Otherwise dispatches per the declaration
+    (``CombatRoundAction.redirect_opponent_target`` / ``redirect_object_target``,
+    set by :func:`declare_interpose`); both null (or a destination that's no
+    longer valid at resolution time — the target defeated, the object moved or
+    already consumed) degrades to "away," the universal fallback.
+    """
+    if saved <= 0:
+        return
+
+    encounter = action.participant.encounter
+    opponent = action.redirect_opponent_target
+    obj = action.redirect_object_target
+
+    if opponent is not None:
+        if opponent.status == OpponentStatus.ACTIVE:
+            _redirect_to_opponent(encounter, interposer, opponent, saved, damage_type=damage_type)
+        else:
+            _redirect_away(encounter, interposer)
+        return
+
+    if obj is not None:
+        from world.mechanics.services import volatile_object_property  # noqa: PLC0415
+
+        obj_property = volatile_object_property(obj)
+        if obj.db_location_id == encounter.room_id and obj_property is not None:
+            _redirect_to_object(encounter, interposer, obj, obj_property)
+        else:
+            _redirect_away(encounter, interposer)
+        return
+
+    _redirect_away(encounter, interposer)
+
+
+def _redirect_away(
+    encounter: CombatEncounter,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Broadcast the "away" redirect outcome — a silent deflection, no target hit."""
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    narration = f"{interposer.db_key} turns the blow aside — it goes wide, harming no one."
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
+def _redirect_to_opponent(
+    encounter: CombatEncounter,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    opponent: CombatOpponent,
+    saved: int,
+    *,
+    damage_type: DamageType | None,
+) -> None:
+    """Apply the saved damage to the declared chosen-enemy opponent and broadcast it."""
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    apply_damage_to_opponent(opponent, saved, bypass_pre_apply=True, damage_type=damage_type)
+    narration = f"{interposer.db_key} hurls the blow back — it slams into {opponent.name}!"
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
+def _redirect_to_object(
+    encounter: CombatEncounter,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    obj: ObjectDB,  # noqa: OBJECTDB_PARAM
+    obj_property: ObjectProperty,
+) -> None:
+    """Detonate the declared volatile object: fire its pool, consume it, broadcast it.
+
+    Position-anchored only — an object with no ``Position`` (shouldn't happen for
+    a volatile object placed in a room with staged positions, but a defensive
+    guard) degrades to "away" rather than firing at "everyone in the room."
+    """
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+    from world.room_features.trap_services import fire_pool_at_characters  # noqa: PLC0415
+
+    position = position_of(obj)
+    if position is None:
+        _redirect_away(encounter, interposer)
+        return
+
+    characters = _combatants_at_position(encounter, position)
+    fire_pool_at_characters(
+        obj_property.property.detonation.consequence_pool,
+        characters,
+        source_character=interposer,
+    )
+    obj_property.delete()
+
+    narration = f"{interposer.db_key} hurls the blow into {obj.db_key} — it detonates!"
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
+def _combatants_at_position(
+    encounter: CombatEncounter,
+    position: Position,
+) -> list[ObjectDB]:  # noqa: OBJECTDB_PARAM
+    """Every ACTIVE participant's character + ACTIVE opponent's objectdb at *position*.
+
+    Single query against ``position.occupants`` (the ``ObjectPosition`` reverse
+    relation) rather than calling ``current_position`` per combatant, to avoid a
+    query-in-a-loop over the encounter's roster.
+    """
+    occupant_ids = set(position.occupants.values_list("objectdb_id", flat=True))
+
+    characters: list[ObjectDB] = [
+        p.character_sheet.character
+        for p in CombatParticipant.objects.filter(
+            encounter=encounter, status=ParticipantStatus.ACTIVE
+        ).select_related("character_sheet__character")
+        if p.character_sheet.character_id in occupant_ids
+    ]
+    characters.extend(
+        opp.objectdb
+        for opp in CombatOpponent.objects.filter(
+            encounter=encounter, status=OpponentStatus.ACTIVE
+        ).select_related("objectdb")
+        if opp.objectdb_id is not None and opp.objectdb_id in occupant_ids
+    )
+    return characters
 
 
 def _try_companion_defend(
@@ -8252,6 +8916,130 @@ def apply_position_cover(character: Character, damage: int, damage_type: DamageT
         return damage
     cover = position_shelter_value(position, damage_type, attacks_only=True)
     return max(0, damage - cover)
+
+
+def _fire_rampart_retaliation(
+    profile: RampartElementProfile,
+    attacker_ref: object | None,
+) -> None:
+    """MELEE_RETALIATION signature: burn a melee striker's CombatOpponent back.
+
+    Mirrors ``reflect_damage`` (world/magic/services/effect_handlers.py) —
+    ``bypass_pre_apply=True`` terminates re-emission so the retaliation strike
+    cannot itself trigger another rampart interception or reflect loop. Never
+    retaliates against a PC (ADR-0023): a no-op unless ``attacker_ref``
+    resolves to a ``CombatOpponent``.
+    """
+    if not isinstance(attacker_ref, CombatOpponent):
+        return
+    if profile.signature_value <= 0:
+        return
+    apply_damage_to_opponent(
+        attacker_ref,
+        profile.signature_value,
+        bypass_pre_apply=True,
+        damage_type=profile.signature_damage_type,
+    )
+
+
+def _rampart_resist(
+    profile: RampartElementProfile,
+    damage_type: DamageType | None,
+    *,
+    delivery: str,
+    is_area: bool,
+) -> int:
+    """The resist term for one intercepted strike: base row + MISSILE_WARD adjustment."""
+    from world.areas.positioning.constants import RampartSignature  # noqa: PLC0415
+
+    resist = 0
+    if damage_type is not None:
+        resist = sum(
+            profile.resistances.filter(damage_type=damage_type).values_list("value", flat=True)
+        )
+    if profile.signature_behavior == RampartSignature.MISSILE_WARD:
+        if delivery == StrikeDelivery.MISSILE:
+            resist += profile.signature_value
+        if is_area:
+            resist -= profile.signature_value
+    return resist
+
+
+def apply_rampart_interception(  # noqa: PLR0913
+    character_or_opponent: Character,  # noqa: OBJECTDB_PARAM - ObjectDB target, mirrors apply_position_cover
+    damage: int,
+    damage_type: DamageType | None,
+    *,
+    attacker_ref: object | None,
+    delivery: str = StrikeDelivery.MELEE,
+    is_area: bool = False,
+) -> int:
+    """Intercept a strike against a rampart-covered position (#2209).
+
+    Resolves the target's Position via the same lookup ``apply_position_cover``
+    uses. No-op (damage passes through unchanged) when the target is
+    unpositioned, has no Rampart, or the strike is a sustained attack already
+    being drained by an active WARD Clash bound to this rampart — the
+    no-double-drain rule; the clash drains instead.
+
+    Math: resist is the profile's resistance row for ``damage_type`` (0 if
+    untyped or absent); a MISSILE_WARD profile additionally adds
+    ``signature_value`` against MISSILE delivery and subtracts it against area
+    strikes. ``chip = max(1, damage - resist)`` (a min-1 floor so barrages
+    always crack the rampart). A chip that doesn't clear the rampart's
+    remaining integrity fully absorbs the strike (returns 0); a chip that
+    clears it collapses the rampart and lets the overflow remainder through.
+
+    Fires MELEE_RETALIATION on interception for a melee strike. GRASPING is
+    handled at the forced-move landing seam (``force_move_to_position``), not
+    here.
+
+    Returns the damage that should continue through the normal pipeline.
+    """
+    if damage <= 0:
+        return damage
+    from world.areas.positioning.constants import RampartSignature  # noqa: PLC0415
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        damage_rampart,
+        position_of,
+        rampart_at,
+    )
+
+    position = position_of(character_or_opponent)
+    if position is None:
+        return damage
+    rampart = rampart_at(position)
+    if rampart is None:
+        return damage
+
+    # No-double-drain: a sustained attack already draining via an active WARD
+    # clash bound to this rampart skips interception entirely.
+    from world.combat.constants import ClashFlavor, ClashStatus  # noqa: PLC0415
+
+    active_ward = Clash.objects.filter(
+        rampart=rampart, flavor=ClashFlavor.WARD, status=ClashStatus.ACTIVE
+    ).exists()
+    if active_ward:
+        return damage
+
+    profile = rampart.element_profile
+    resist = _rampart_resist(profile, damage_type, delivery=delivery, is_area=is_area)
+    chip = max(1, damage - resist)
+
+    if chip < rampart.integrity:
+        damage_rampart(rampart, chip)
+        pass_through = 0
+    else:
+        overflow = chip - rampart.integrity
+        damage_rampart(rampart, chip)
+        pass_through = min(damage, overflow)
+
+    if delivery == StrikeDelivery.MELEE and profile.signature_behavior == (
+        RampartSignature.MELEE_RETALIATION
+    ):
+        _fire_rampart_retaliation(profile, attacker_ref)
+
+    return pass_through
 
 
 def elevation_bonus(

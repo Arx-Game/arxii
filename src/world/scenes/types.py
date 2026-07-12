@@ -83,6 +83,10 @@ class CastResult:
     ``soulfray_warning`` is set when ``use_technique`` returned ``confirmed=False``
     (the cast was halted for soulfray consent). The caller should prompt the actor
     to confirm or decline before re-dispatching with ``confirm_soulfray_risk=True``.
+
+    ``combat_seated`` is True when a benign cast at an embattled ally seated the
+    caster in that ally's encounter (#2226). Callers append a notification when
+    True so the caster knows they've been drawn into the fight.
     """
 
     request: SceneActionRequest | None = None
@@ -91,3 +95,4 @@ class CastResult:
     outcome_interaction: Interaction | None = None
     power_ledger: PowerLedger | None = None
     soulfray_warning: SoulfrayWarning | None = None
+    combat_seated: bool = False

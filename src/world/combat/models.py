@@ -48,6 +48,7 @@ from world.combat.constants import (
     ParticipantStatus,
     RiskLevel,
     StakesLevel,
+    StrikeDelivery,
     SurgeTriggerKind,
     TargetingMode,
     TargetSelection,
@@ -233,6 +234,12 @@ class ThreatPoolEntry(SharedMemoryModel):
         max_length=20,
         choices=TargetingMode.choices,
         default=TargetingMode.SINGLE,
+    )
+    delivery = models.CharField(
+        max_length=10,
+        choices=StrikeDelivery.choices,
+        default=StrikeDelivery.MELEE,
+        help_text="How this strike reaches its target — drives rampart interception (#2209).",
     )
     target_count = models.PositiveIntegerField(null=True, blank=True)
     target_selection = models.CharField(
@@ -1203,6 +1210,31 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         related_name="+",
         help_text="Second endpoint of a declared position pair (Barricade). (#2206)",
     )
+    redirect_opponent_target = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Declared redirect destination — a chosen-enemy CombatOpponent (#2210). "
+            "Mutually exclusive with redirect_object_target; both null means 'away' "
+            "(the universal fallback)."
+        ),
+    )
+    redirect_object_target = models.ForeignKey(
+        OBJECTS_OBJECTDB_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Declared redirect destination — a volatile object in the encounter room "
+            "(#2210). ObjectDB is correct here (any object may be volatile), not a "
+            "narrower model. Mutually exclusive with redirect_opponent_target; both "
+            "null means 'away' (the universal fallback)."
+        ),
+    )
     interaction = models.ForeignKey(
         "scenes.Interaction",
         on_delete=models.SET_NULL,
@@ -1240,6 +1272,9 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         super().clean()
         if self.focused_opponent_target_id and self.focused_ally_target_id:
             msg = "Action cannot target both an opponent and an ally simultaneously."
+            raise ValidationError(msg)
+        if self.redirect_opponent_target_id and self.redirect_object_target_id:
+            msg = "A redirect declaration cannot target both an enemy and an object."
             raise ValidationError(msg)
 
     def __str__(self) -> str:
@@ -2351,6 +2386,18 @@ class Clash(SharedMemoryModel):
             "big-attack entry for CLASH). Null for BREAK (NPC contributes nothing to the "
             "meter). Set at clash creation in Phase 5; Phase 3 reads it for the NPC "
             "per-round contribution."
+        ),
+    )
+    rampart = models.ForeignKey(
+        "areas.Rampart",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Set iff flavor=WARD and the sustained attack's PC target stands at a "
+            "rampart-covered position (#2209) — the rampart drains alongside progress "
+            "instead of the PC taking the strike directly."
         ),
     )
 

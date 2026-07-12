@@ -1,24 +1,94 @@
-"""Content pipeline core (#944): private authored content → fixture JSON.
+"""Content pipeline core (#944, #2266): private authored content → fixture JSON.
 
 The maintainers' content repository (never named in this repo — located via
 the ``CONTENT_REPO_PATH`` env var) holds one file per entry: YAML
 frontmatter for mechanical keys, markdown body for prose. This module
 parses, validates, and emits Django fixture JSON serialized with natural
-keys, so ``loaddata`` upserts by identity — idempotent across database
-wipes, pk churn, and migration rebuilds.
+keys (no "pk" key), identity-stable across database wipes, pk churn, and
+migration rebuilds.
+
+Honest ``loaddata`` semantics (#946, #2266 review fix): every domain's model
+now carries ``NaturalKeyMixin``, so ``loaddata`` on the emitted JSON
+correctly *resolves* an existing same-name row rather than raising
+``IntegrityError`` on a blind INSERT — but on a `SharedMemoryModel`,
+``loaddata`` still cannot **update** that resolved row. The identity map
+returns the cached instance, `loaddata` writes the incoming field values
+onto it, then Django's `save(force_insert=False)` path re-fetches from the
+cache and the new values never land in the DB (verified cross-process,
+#946). So the emitted fixture JSON is **fresh-DB / insert-or-resolve only**
+— safe to `loaddata` against an empty table or a table whose rows it
+already matches, but never a reliable way to push edited content onto rows
+that already exist with different values. ``load_entries`` (below), which
+drives both ``tools/build_content_fixtures.py --load`` and the admin "Load
+private content repo" button, calls ``update_or_create`` directly against
+the live model manager instead of going through ``loaddata`` — that is the
+**only** update-safe path for re-authored content.
 
 Import-safe without Django configured (the tools wrapper and tests use it
-standalone); only fixture WRITING touches the filesystem and nothing here
-touches the database.
+standalone). ``build_all()`` stays DB-free for every domain EXCEPT
+``npc_roles/``'s optional ``faction_affiliation`` field: resolving an
+org-by-name reference requires a live database, so that one builder does a
+deferred Django import and touches the DB — only when a file actually sets
+the key — to raise ``ContentError`` (naming the file + the missing org) at
+validate time, mirroring how a bad ``category`` is caught today. Every other
+builder (including the same domain's other fields) stays pure. Only
+``load_entries`` performs the actual upsert I/O.
 
-Phase 1 domains: ``stats/`` and ``skills/`` → ``traits.Trait`` rows
-(name, type, category, description). Wrapper models without natural keys
-(e.g. ``skills.Skill``) onboard in later phases once they grow them.
+Optional-field update semantics (#2266 Q1): a builder OMITS an optional key
+from the returned ``fields`` dict entirely when the frontmatter doesn't set
+it — it never fills in `None`/0/"" as a stand-in. This is deliberate:
+``load_entries`` upserts via ``update_or_create(name=..., defaults=fields)``,
+and Django only touches the fields present in ``defaults`` — on CREATE, an
+absent key falls through to the model field's own default; on UPDATE, an
+absent key leaves the existing row's value untouched. So "key omitted from
+frontmatter" already means "don't touch this field" for free, with no extra
+mechanism needed. This is the convention every scalar optional field in this
+module follows (``default_rapport_starting_value``,
+``default_description_template``, ``value``, ``weight``) — keep it when
+adding more.
+
+Three-state convention for clearable FK-by-name fields (``faction_affiliation``,
+#2266 review fix): a scalar field has only "omit" vs "set"; a nullable FK-by-name
+field genuinely needs a third state — "clear the existing value" — that "omit"
+can't express (omit already means "leave it alone"). So ``faction_affiliation``
+is handled distinctly from the scalar fields above:
+
+- key ABSENT from frontmatter → omitted from ``fields`` → untouched on UPDATE
+  (same as every scalar field).
+- key PRESENT but null/empty (``faction_affiliation:`` or ``faction_affiliation:
+  null``) → emitted as ``fields["faction_affiliation"] = None`` → UPDATE sets the
+  FK to null, clearing it. Requires the target field to be nullable
+  (``NPCRole.faction_affiliation`` is, per spec); a future clearable FK-by-name
+  field that ISN'T nullable must raise ``ContentError`` for the explicit-null
+  case instead of emitting ``None``.
+- key PRESENT with a non-empty string → resolved/validated as an Organization
+  name and emitted using Django's own natural-key fixture convention — a
+  one-element list (``["Org Name"]``) — rather than a resolved pk or model
+  instance, so the generated JSON stays plain-JSON-serializable
+  (``write_fixtures`` just calls ``json.dumps``) and also stays loadable by a
+  real ``loaddata`` against a fresh DB, since ``Organization`` already carries
+  ``NaturalKeyMixin`` (``world/societies/models.py``) — no new natural-key
+  infrastructure needed. ``_resolve_natural_key_fields`` (used by
+  ``load_entries``) resolves that list back into a real instance immediately
+  before the write; a bare ``None`` passes through untouched (not a list, so
+  the resolver skips it and ``update_or_create`` receives the null directly).
+
+Domains: ``stats``/``skills`` → ``traits.Trait`` rows (name, type, category,
+description); ``npc_roles`` → ``npc_services.NPCRole`` (name, description,
+optional faction/rapport/flavor-template); ``items`` →
+``items.ItemTemplate`` (name, description, optional value/weight);
+``building_kinds`` → ``buildings.BuildingKind`` and ``decoration_kinds`` →
+``buildings.DecorationKind`` (name, description only — mechanical flags stay
+admin/seeder-authored). Every domain's model has a DB-unique ``name``, so
+``load_entries``'s natural key stays a bare ``name`` for all of them; a
+future domain without one (e.g. Area — see #2266) needs a configurable
+natural-key field list before it can onboard.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import partial
 import json
 from pathlib import Path
 
@@ -44,6 +114,15 @@ TRAIT_CATEGORIES = {
     "war",
     "other",
 }
+
+# Optional frontmatter field names, factored out to module constants so a
+# repeated ``key in entry.meta`` membership check doesn't trip the
+# bare-string-literal-as-identifier lint (tools/lint_string_literal.py).
+FIELD_FACTION_AFFILIATION = "faction_affiliation"
+FIELD_DEFAULT_RAPPORT_STARTING_VALUE = "default_rapport_starting_value"
+FIELD_DEFAULT_DESCRIPTION_TEMPLATE = "default_description_template"
+FIELD_VALUE = "value"
+FIELD_WEIGHT = "weight"
 
 
 class ContentError(Exception):
@@ -73,6 +152,9 @@ class BuildResult:
     fixtures: dict[str, list[dict]] = field(default_factory=dict)  # output path -> objects
     entries: list[ContentEntry] = field(default_factory=list)
     placeholder_counts: dict[str, int] = field(default_factory=dict)  # domain -> count
+    # output path -> source file per object, same order as fixtures[output].
+    # Lets load_entries name the originating file in a resolution error.
+    source_paths: dict[str, list[Path]] = field(default_factory=dict)
 
 
 def parse_content_file(path: Path, domain: str) -> ContentEntry:
@@ -101,22 +183,33 @@ def parse_content_file(path: Path, domain: str) -> ContentEntry:
     return ContentEntry(path=path, domain=domain, meta=meta, body=body)
 
 
+def _require_name_and_body(entry: ContentEntry) -> str:
+    """Validate the two fields every domain requires; return ``name``.
+
+    Shared by every per-domain builder below — one non-empty string
+    ``name`` and one non-empty markdown body (PLACEHOLDER text satisfies
+    the body requirement, same as today).
+    """
+    name = entry.meta.get("name")
+    if not name or not isinstance(name, str):
+        msg = f"{entry.path}: 'name' (string) is required."
+        raise ContentError(msg)
+    if not entry.body:
+        msg = f"{entry.path}: description body is required (PLACEHOLDER is fine)."
+        raise ContentError(msg)
+    return name
+
+
 def _build_trait_fixture(entry: ContentEntry, *, trait_type: str) -> dict:
     """Map a stats/ or skills/ entry to a traits.Trait fixture object.
 
     No "pk" key: with NaturalKeyManager.get_by_natural_key on the model,
     loaddata resolves existing rows by name and UPDATES them.
     """
-    name = entry.meta.get("name")
-    if not name or not isinstance(name, str):
-        msg = f"{entry.path}: 'name' (string) is required."
-        raise ContentError(msg)
+    name = _require_name_and_body(entry)
     category = entry.meta.get("category")
     if category not in TRAIT_CATEGORIES:
         msg = f"{entry.path}: 'category' must be one of {sorted(TRAIT_CATEGORIES)}."
-        raise ContentError(msg)
-    if not entry.body:
-        msg = f"{entry.path}: description body is required (PLACEHOLDER is fine)."
         raise ContentError(msg)
     return {
         "model": "traits.trait",
@@ -129,10 +222,147 @@ def _build_trait_fixture(entry: ContentEntry, *, trait_type: str) -> dict:
     }
 
 
-# domain dir -> (builder callable kwargs, output fixture path relative to src/)
+def _build_npc_role_fixture(entry: ContentEntry) -> dict:
+    """Map an npc_roles/ entry to an npc_services.NPCRole fixture object.
+
+    Required: ``name``. Optional: ``faction_affiliation`` (an Organization
+    name, resolved eagerly below — raises ContentError if not found, same
+    error-collection shape as a bad ``category``), ``default_rapport_starting_value``
+    (int), ``default_description_template`` (string; the class-1 nameless-NPC
+    flavor line, distinct from ``description`` — ratified Q1: a second
+    optional key on the same file, body stays the full ``description``).
+
+    ``faction_affiliation`` is three-state (#2266 review fix; see the module
+    docstring): key ABSENT from frontmatter omits the field (UPDATE leaves the
+    existing value untouched); key PRESENT but null/empty emits ``None``
+    (UPDATE clears it — ``NPCRole.faction_affiliation`` is nullable); key
+    PRESENT with a non-empty string resolves/validates it as an Organization
+    name. Without this, a builder that only checked truthiness would make the
+    field one-way-sticky — content could set it but never clear it back out.
+    """
+    name = _require_name_and_body(entry)
+    fields: dict = {"name": name, "description": entry.body}
+
+    if FIELD_FACTION_AFFILIATION in entry.meta:
+        faction = entry.meta[FIELD_FACTION_AFFILIATION]
+        if not faction:
+            # Explicit null/empty: clear the FK on UPDATE. NPCRole.faction_affiliation
+            # is nullable (null=True, blank=True), so a bare None is a valid
+            # update_or_create default.
+            fields[FIELD_FACTION_AFFILIATION] = None
+        elif not isinstance(faction, str):
+            msg = f"{entry.path}: 'faction_affiliation' must be a string (org name)."
+            raise ContentError(msg)
+        else:
+            from world.societies.models import Organization  # noqa: PLC0415
+
+            try:
+                Organization.objects.get_by_natural_key(faction)
+            except Organization.DoesNotExist:
+                msg = f"{entry.path}: 'faction_affiliation' organization {faction!r} not found."
+                raise ContentError(msg) from None
+            # Django's own natural-key fixture convention (a 1-element list) —
+            # keeps this JSON-serializable; load_entries resolves it back to an
+            # instance right before the write.
+            fields[FIELD_FACTION_AFFILIATION] = [faction]
+
+    if FIELD_DEFAULT_RAPPORT_STARTING_VALUE in entry.meta:
+        value = entry.meta[FIELD_DEFAULT_RAPPORT_STARTING_VALUE]
+        if not isinstance(value, int) or isinstance(value, bool):
+            msg = f"{entry.path}: 'default_rapport_starting_value' must be an int."
+            raise ContentError(msg)
+        fields[FIELD_DEFAULT_RAPPORT_STARTING_VALUE] = value
+
+    if FIELD_DEFAULT_DESCRIPTION_TEMPLATE in entry.meta:
+        template = entry.meta[FIELD_DEFAULT_DESCRIPTION_TEMPLATE]
+        if not isinstance(template, str):
+            msg = f"{entry.path}: 'default_description_template' must be a string."
+            raise ContentError(msg)
+        fields[FIELD_DEFAULT_DESCRIPTION_TEMPLATE] = template
+
+    return {"model": "npc_services.npcrole", "fields": fields}
+
+
+def _build_item_template_fixture(entry: ContentEntry) -> dict:
+    """Map an items/ entry to an items.ItemTemplate fixture object.
+
+    Required: ``name``. Optional: ``value`` (int), ``weight`` (decimal).
+    Mechanical/balance flags (is_consumable, container sizing, etc.) stay
+    admin/seeder-authored — this pipeline is for prose + identity, not
+    tuning (matches the stats/skills precedent).
+    """
+    name = _require_name_and_body(entry)
+    fields: dict = {"name": name, "description": entry.body}
+
+    if FIELD_VALUE in entry.meta:
+        value = entry.meta[FIELD_VALUE]
+        if not isinstance(value, int) or isinstance(value, bool):
+            msg = f"{entry.path}: 'value' must be an int."
+            raise ContentError(msg)
+        fields[FIELD_VALUE] = value
+
+    if FIELD_WEIGHT in entry.meta:
+        weight = entry.meta[FIELD_WEIGHT]
+        if not isinstance(weight, int | float) or isinstance(weight, bool):
+            msg = f"{entry.path}: 'weight' must be a number."
+            raise ContentError(msg)
+        fields[FIELD_WEIGHT] = str(weight)
+
+    return {"model": "items.itemtemplate", "fields": fields}
+
+
+def _build_building_kind_fixture(entry: ContentEntry) -> dict:
+    """Map a building_kinds/ entry to a buildings.BuildingKind fixture object.
+
+    Required: ``name``. Body → ``description``. Descriptive flags
+    (is_residential, is_commercial, ...) stay admin/seeder-authored.
+    """
+    name = _require_name_and_body(entry)
+    return {
+        "model": "buildings.buildingkind",
+        "fields": {"name": name, "description": entry.body},
+    }
+
+
+def _build_decoration_kind_fixture(entry: ContentEntry) -> dict:
+    """Map a decoration_kinds/ entry to a buildings.DecorationKind fixture object.
+
+    Required: ``name``. Body → ``description``. ``amenity``/affinity
+    magnitudes stay admin/seeder-authored.
+    """
+    name = _require_name_and_body(entry)
+    return {
+        "model": "buildings.decorationkind",
+        "fields": {"name": name, "description": entry.body},
+    }
+
+
+# domain dir -> {builder callable, output fixture path relative to src/}
 DOMAIN_BUILDERS = {
-    "stats": {"trait_type": "stat", "output": "world/traits/fixtures/content_stats.json"},
-    "skills": {"trait_type": "skill", "output": "world/traits/fixtures/content_skills.json"},
+    "stats": {
+        "builder": partial(_build_trait_fixture, trait_type="stat"),
+        "output": "world/traits/fixtures/content_stats.json",
+    },
+    "skills": {
+        "builder": partial(_build_trait_fixture, trait_type="skill"),
+        "output": "world/traits/fixtures/content_skills.json",
+    },
+    "npc_roles": {
+        "builder": _build_npc_role_fixture,
+        "output": "world/npc_services/fixtures/content_npc_roles.json",
+    },
+    "items": {
+        "builder": _build_item_template_fixture,
+        "output": "world/items/fixtures/content_items.json",
+    },
+    "building_kinds": {
+        "builder": _build_building_kind_fixture,
+        "output": "world/buildings/fixtures/content_building_kinds.json",
+    },
+    "decoration_kinds": {
+        "builder": _build_decoration_kind_fixture,
+        "output": "world/buildings/fixtures/content_decoration_kinds.json",
+    },
 }
 
 
@@ -149,10 +379,12 @@ def build_all(content_root: Path) -> BuildResult:
         if not domain_dir.is_dir():
             continue
         objects: list[dict] = []
+        paths: list[Path] = []
         for path in sorted(domain_dir.rglob("*.md")):
             try:
                 entry = parse_content_file(path, domain)
-                objects.append(_build_trait_fixture(entry, trait_type=config["trait_type"]))
+                objects.append(config["builder"](entry))
+                paths.append(entry.path)
                 result.entries.append(entry)
                 if entry.has_placeholder:
                     result.placeholder_counts[domain] = result.placeholder_counts.get(domain, 0) + 1
@@ -160,10 +392,55 @@ def build_all(content_root: Path) -> BuildResult:
                 errors.append(str(exc))
         if objects:
             result.fixtures[config["output"]] = objects
+            result.source_paths[config["output"]] = paths
     if errors:
         msg = "Content validation failed:\n" + "\n".join(errors)
         raise ContentError(msg)
     return result
+
+
+def _resolve_natural_key_fields(model, fields: dict, source_path: Path | None) -> None:
+    """Swap any natural-key-list field values in *fields* for real instances.
+
+    A builder emits an FK-by-name value as a 1-element list (Django's own
+    fixture natural-key convention — see the module docstring); this
+    resolves it back into the related model's instance immediately before
+    the upsert, using that related model's own ``get_by_natural_key``
+    (``NaturalKeyMixin`` — no bespoke lookup table here). Raises
+    ContentError, naming the source file, if the target no longer exists
+    (build-time validation already checked this once; re-checking here is
+    the only way to guarantee correctness against a DB that may have
+    changed between build and load).
+
+    Guard (#2266 review fix): ``isinstance(value, list)`` alone only tells us
+    a builder emitted a list; it says nothing about whether the *field* is
+    relational. A plain (non-FK) model field that happened to be list-valued
+    would fall through to ``get_field(...).related_model`` and raise a bare
+    ``AttributeError`` (regular ``Field`` has no ``related_model`` attribute
+    — only relation fields do), crashing ``load_entries`` mid-batch instead
+    of failing cleanly. So this checks ``field.is_relation`` first and raises
+    a normal ``ContentError`` naming the field (and the source file, when
+    known) for a non-relational list value, matching every other validation
+    failure's error style in this module.
+    """
+    for field_name, value in list(fields.items()):
+        if not isinstance(value, list):
+            continue
+        field = model._meta.get_field(field_name)  # noqa: SLF001
+        location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+        if not field.is_relation:
+            msg = (
+                f"{location}: {field_name!r} on {model._meta.label} is a list-valued "  # noqa: SLF001
+                "field but not a relational one — natural-key resolution only "
+                "supports FK-by-name values (a 1-element list)."
+            )
+            raise ContentError(msg)
+        related_model = field.related_model
+        try:
+            fields[field_name] = related_model.objects.get_by_natural_key(*value)
+        except related_model.DoesNotExist:
+            msg = f"{location}: {field_name!r} {related_model.__name__} {value!r} not found."
+            raise ContentError(msg) from None
 
 
 def load_entries(result: BuildResult) -> tuple[int, int]:
@@ -184,12 +461,14 @@ def load_entries(result: BuildResult) -> tuple[int, int]:
 
     created_count = 0
     updated_count = 0
-    for objects in result.fixtures.values():
-        for obj in objects:
+    for output_path, objects in result.fixtures.items():
+        paths = result.source_paths.get(output_path, [])
+        for obj, source_path in zip(objects, paths, strict=False):
             app_label, model_name = obj["model"].split(".")
             model = apps.get_model(app_label, model_name)
             fields = dict(obj["fields"])
             name = fields.pop("name")
+            _resolve_natural_key_fields(model, fields, source_path)
             _, created = model.objects.update_or_create(name=name, defaults=fields)
             if created:
                 created_count += 1

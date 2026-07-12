@@ -27,6 +27,8 @@ _SUBVERBS: dict[str, str] = {
     "deploy": "deploy_companion",
     "release": "release_companion",
     "order": "order_companion",
+    "mount": "mount_companion",
+    "dismount": "dismount_companion",
 }
 # "list" and "status" are handled locally (status hub), not dispatched.
 
@@ -44,7 +46,8 @@ _MAX_NAME_LENGTH = 100
 _BIND_SUBVERB = "bind"
 
 # Subverbs that take a single bare companion identifier (positional, not key=value).
-_POSITIONAL_SUBVERBS = frozenset({"release", "fight", "deploy"})
+_POSITIONAL_SUBVERBS = frozenset({"release", "fight", "deploy", "mount"})
+# "dismount" takes no argument — it dismounts whatever the caller is riding.
 
 # The order subverb has its own multi-token parser.
 _ORDER_SUBVERB = "order"
@@ -58,7 +61,8 @@ _ORDER_WITH = "with"
 
 
 class CmdCompanion(DispatchCommand):
-    """Manage your bonded companions — bind, release, fight, deploy, order (#1918, #1921).
+    """Manage your bonded companions — bind, release, fight, deploy, order, mount (#1918,
+    #1921, #1843).
 
     Usage:
         companion                             — list active companions + capacity
@@ -73,6 +77,8 @@ class CmdCompanion(DispatchCommand):
                                               — direct a deployed companion
         companion order <name> hold           — tell a companion to hold
         companion order <name> defend <ally>  — tell a companion to defend an ally
+        companion mount <name|id>             — mount a ridable companion
+        companion dismount                    — dismount your current mount
 
     ``name=`` must be the final token on ``bind`` (it greedily consumes the rest
     of the line so names with spaces work).
@@ -313,7 +319,7 @@ class CmdCompanion(DispatchCommand):
 
     def _show_status_hub(self) -> None:
         """List the caller's active companions + remaining capacity per gift."""
-        lines = ["|wCompanion actions|n: bind, release, fight, deploy, order"]
+        lines = ["|wCompanion actions|n: bind, release, fight, deploy, order, mount, dismount"]
 
         sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:

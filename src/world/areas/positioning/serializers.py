@@ -37,6 +37,10 @@ class PositionNodeSerializer(serializers.Serializer):
     elevation_anchor_id = serializers.IntegerField(read_only=True, allow_null=True)
     layout_x = serializers.IntegerField(read_only=True, allow_null=True)
     layout_y = serializers.IntegerField(read_only=True, allow_null=True)
+    rampart_element = serializers.CharField(read_only=True, allow_null=True)
+    rampart_integrity = serializers.IntegerField(read_only=True, allow_null=True)
+    rampart_max_integrity = serializers.IntegerField(read_only=True, allow_null=True)
+    rampart_crack_state = serializers.CharField(read_only=True, allow_null=True)
 
 
 class PositionEdgeSerializer(serializers.Serializer):

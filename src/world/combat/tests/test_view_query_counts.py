@@ -127,10 +127,15 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         #      shape as ``current_round_actions`` (query 5 above). Bounded
         #      per request (filters on encounter + round_number); does not
         #      scale with participant count.
+        #   7. ObjectProperty lookup for ``volatile_objects`` (#2210) — one
+        #      flat query for detonatable objects in the encounter room
+        #      (select_related through the position link). Bounded per
+        #      request (filters on room + property__detonation__isnull);
+        #      does not scale with participant count.
         # The participants/opponents prefetches do not fire on the warm
         # call — they ran during warm-up and the identity-mapped encounter
         # retains the attribute.
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(7):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
