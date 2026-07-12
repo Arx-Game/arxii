@@ -377,6 +377,7 @@ class ActionRegistryTests(TestCase):
             "list_motif_styles",
             "start_room_feature_project",
             "repair_lab_station",
+            "start_defense_installation",
             "market_buy_stock",
             "market_buy_ware",
             "market_list_ware",

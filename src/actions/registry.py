@@ -280,7 +280,11 @@ from actions.definitions.relationships import (
     RelationshipBumpAction,
 )
 from actions.definitions.ritual import PerformRitualAction
-from actions.definitions.room_features import RepairLabStationAction, StartRoomFeatureProjectAction
+from actions.definitions.room_features import (
+    RepairLabStationAction,
+    StartDefenseInstallationAction,
+    StartRoomFeatureProjectAction,
+)
 from actions.definitions.rounds import (
     EndRoundAction,
     ForceResolveRoundAction,
@@ -584,6 +588,7 @@ _ALL_ACTIONS: list[Action] = [
     ListMotifStylesAction(),
     StartRoomFeatureProjectAction(),
     RepairLabStationAction(),
+    StartDefenseInstallationAction(),
     BuyStockAction(),
     BuyWareAction(),
     ListWareAction(),

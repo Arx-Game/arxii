@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from actions.base import Action
 from actions.types import ActionResult, TargetType
+from evennia_extensions.models import ExitProfile, RoomProfile
 from world.room_features.constants import RoomFeatureInstallMechanism
 from world.room_features.exceptions import RoomAlreadyHasFeatureError
 
@@ -30,6 +31,31 @@ _MSG_NOT_AN_UPGRADE = "That would not be an upgrade."
 #: Placeholder tuning — content pass owns real per-kind values later.
 _THRESHOLD_PER_LEVEL = 500
 _TIME_LIMIT_DAYS = 14
+
+_MSG_LEVEL_EXCEEDS_MAX = "Level {level} exceeds the maximum of {max_level}."
+_MSG_NO_EXIT = "Install bars on which exit?"
+_MSG_WARD_NEEDS_RESONANCE = "A ward installation needs a resonance."
+
+_DEFENSE_THRESHOLD_PER_LEVEL = 500
+_DEFENSE_TIME_LIMIT_DAYS = 14
+
+
+def _resolve_exit_obj_for_defense(actor: ObjectDB, kwargs: dict) -> ObjectDB | None:
+    """Resolve the `exit` kwarg -- ObjectDB (telnet) or exit_id int (web).
+
+    Mirrors `actions.definitions.doors._resolve_exit_obj` (#2176) -- a 6-line
+    dual-path resolver duplicated here rather than imported, since it's not
+    worth cross-module coupling two definitions files for.
+    """
+    exit_obj = kwargs.get("exit")
+    if exit_obj is not None and hasattr(exit_obj, "pk"):
+        return exit_obj
+    exit_id = kwargs.get("exit_id")
+    if exit_id is not None:
+        from evennia.objects.models import ObjectDB as _ObjectDB  # noqa: PLC0415
+
+        return _ObjectDB.objects.filter(pk=exit_id, db_location=actor.location).first()
+    return None
 
 
 def _resolve_active_persona(actor: ObjectDB) -> Any:
@@ -217,4 +243,149 @@ class RepairLabStationAction(Action):
             success=True,
             message=f"You repair the Lab station: {station.durability}/{station.max_durability}.",
             data={"durability": station.durability, "max_durability": station.max_durability},
+        )
+
+
+@dataclass
+class StartDefenseInstallationAction(Action):
+    """Create a ROOM_DEFENSE_INSTALLATION project to install/upgrade a defense (#2177).
+
+    Bars target a specific exit (ExitProfile); ward/alarm target the actor's
+    current room (RoomProfile). Independent of RoomFeatureKind/
+    RoomFeatureInstance (Decision 1) -- a room may hold a RoomFeatureInstance
+    AND a ward AND an alarm simultaneously; bars on one exit don't affect
+    another exit from the same room.
+    """
+
+    key: str = "start_defense_installation"
+    name: str = "Start Defense Installation"
+    icon: str = "shield"
+    category: str = "locations"
+    target_type: TargetType = TargetType.SELF
+
+    @staticmethod
+    def _max_level_for(defense_kind: str) -> int:
+        from world.room_features.constants import (  # noqa: PLC0415
+            EXIT_BARS_MAX_LEVEL,
+            ROOM_ALARM_MAX_LEVEL,
+            ROOM_WARD_MAX_LEVEL,
+            DefenseKind,
+        )
+
+        return {
+            DefenseKind.EXIT_BARS: EXIT_BARS_MAX_LEVEL,
+            DefenseKind.ROOM_WARD: ROOM_WARD_MAX_LEVEL,
+            DefenseKind.ROOM_ALARM: ROOM_ALARM_MAX_LEVEL,
+        }[defense_kind]
+
+    @staticmethod
+    def _resolve_bars_target(
+        actor: ObjectDB, persona: Any, target_level: int, kwargs: dict
+    ) -> tuple[Any, str | None]:
+        """Resolve the exit bars target; returns ``(target_exit_profile, rejection)``."""
+        from world.room_features.models import ExitBarsDetails  # noqa: PLC0415
+        from world.room_features.services import can_modify_room_features  # noqa: PLC0415
+
+        exit_obj = _resolve_exit_obj_for_defense(actor, kwargs)
+        if exit_obj is None:
+            return None, _MSG_NO_EXIT
+        if not can_modify_room_features(persona, exit_obj.location):
+            return None, _MSG_NOT_STANDING
+
+        target_exit_profile = ExitProfile.get_or_create_for_exit(exit_obj)
+        existing = ExitBarsDetails.objects.filter(exit_profile=target_exit_profile).active().first()
+        if existing is not None and target_level <= existing.level:
+            return None, _MSG_NOT_AN_UPGRADE
+        return target_exit_profile, None
+
+    @staticmethod
+    def _resolve_room_target(
+        actor: ObjectDB, persona: Any, defense_kind: str, target_level: int, kwargs: dict
+    ) -> tuple[Any, Any, str | None]:
+        """Resolve the ward/alarm target room.
+
+        Returns ``(target_room_profile, resonance, rejection)``.
+        """
+        from world.room_features.constants import DefenseKind  # noqa: PLC0415
+        from world.room_features.models import RoomAlarmDetails, RoomWardDetails  # noqa: PLC0415
+        from world.room_features.services import can_modify_room_features  # noqa: PLC0415
+
+        room = actor.location
+        if not can_modify_room_features(persona, room):
+            return None, None, _MSG_NOT_STANDING
+
+        target_room_profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+
+        resonance = None
+        if defense_kind == DefenseKind.ROOM_WARD:
+            resonance = kwargs.get("resonance")
+            if resonance is None:
+                return target_room_profile, None, _MSG_WARD_NEEDS_RESONANCE
+            existing = (
+                RoomWardDetails.objects.filter(room_profile=target_room_profile).active().first()
+            )
+        else:
+            existing = (
+                RoomAlarmDetails.objects.filter(room_profile=target_room_profile).active().first()
+            )
+        if existing is not None and target_level <= existing.level:
+            return target_room_profile, resonance, _MSG_NOT_AN_UPGRADE
+        return target_room_profile, resonance, None
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
+        from world.projects.models import Project  # noqa: PLC0415
+        from world.room_features.constants import DefenseKind  # noqa: PLC0415
+        from world.room_features.models import DefenseProgressionDetails  # noqa: PLC0415
+
+        defense_kind = kwargs["defense_kind"]
+        target_level = kwargs["target_level"]
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+
+        max_level = self._max_level_for(defense_kind)
+        if target_level > max_level:
+            return ActionResult(
+                success=False,
+                message=_MSG_LEVEL_EXCEEDS_MAX.format(level=target_level, max_level=max_level),
+            )
+
+        target_exit_profile = None
+        target_room_profile = None
+        resonance = None
+        if defense_kind == DefenseKind.EXIT_BARS:
+            target_exit_profile, rejection = self._resolve_bars_target(
+                actor, persona, target_level, kwargs
+            )
+        else:
+            target_room_profile, resonance, rejection = self._resolve_room_target(
+                actor, persona, defense_kind, target_level, kwargs
+            )
+        if rejection is not None:
+            return ActionResult(success=False, message=rejection)
+
+        now = timezone.now()
+        project = Project.objects.create(
+            kind=ProjectKind.ROOM_DEFENSE_INSTALLATION,
+            completion_mode=CompletionMode.SINGLE_THRESHOLD,
+            owner_persona=persona,
+            started_at=now,
+            time_limit=now + timedelta(days=_DEFENSE_TIME_LIMIT_DAYS),
+            threshold_target=_DEFENSE_THRESHOLD_PER_LEVEL * target_level,
+            description=f"Install/upgrade {defense_kind} to level {target_level}",
+        )
+        DefenseProgressionDetails.objects.create(
+            project=project,
+            defense_kind=defense_kind,
+            target_exit_profile=target_exit_profile,
+            target_room_profile=target_room_profile,
+            target_level=target_level,
+            resonance=resonance,
+        )
+        return ActionResult(
+            success=True,
+            message=f"A project to raise this defense to level {target_level} begins.",
+            data={"project_id": project.pk},
         )
