@@ -224,7 +224,10 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         capability_values: (CapabilityType, magnitude) pairs to attach (#1794) —
             each becomes a BattleUnitCapability row.
         individual_count: Optional population data point (#1794); mirrors
-            CombatOpponent.swarm_count's naming — no swarm-math wired against it yet.
+            CombatOpponent.swarm_count's naming. Drives banded STRIKE bonuses and
+            proportional STRIKE/ROUT body loss (#1841) — see
+            world.battles.constants.swarm_strike_bonus and
+            world.battles.resolution._apply_swarm_losses.
 
     Returns:
         The newly created ``BattleUnit``.

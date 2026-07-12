@@ -1,1 +1,1 @@
-0027_alter_battleactiondeclaration_action_kind
+0028_alter_battleunit_individual_count
