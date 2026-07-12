@@ -10,7 +10,8 @@ the result:
   ``process_damage_consequences`` (non-progressive, SQLite-safe).
 
 The ``BattleRoundResult`` dataclass carries per-side VP totals, routed/
-destroyed unit lists, and a casualty list for the caller to display or log.
+destroyed unit lists, a casualty list, and (#1841) a per-unit swarm-body-loss
+map for the caller to display or log.
 
 This module also provides ``BattleTechniqueResolver`` and
 ``resolve_battle_technique``, which cast a declaration's ``technique`` through
@@ -30,6 +31,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
+import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -50,6 +52,7 @@ from world.battles.constants import (
     BattleActionKind,
     BattleActionScope,
     BattleUnitStatus,
+    swarm_strike_bonus,
 )
 from world.battles.exceptions import BattleError
 from world.battles.models import BattleParticipant, BattleRound
@@ -340,9 +343,10 @@ class BattleTechniqueResolution:
 class BattleTechniqueResolver:
     """``resolve_fn`` passed to ``use_technique``: rolls the declared technique's
     own check, folding in the full battle modifier stack (Property affinity,
-    terrain, weather property/capability, unit quality, commander bonus, posture —
-    #1711/#1794/#1715). Battle has no damage-profile/condition application of its
-    own — that stays in ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
+    terrain, weather property/capability, unit quality, swarm-count band bonus,
+    commander bonus, posture — #1711/#1794/#1715/#1841). Battle has no
+    damage-profile/condition application of its own — that stays in
+    ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
     """
 
     character: ObjectDB
@@ -364,7 +368,7 @@ class BattleTechniqueResolver:
         return BattleTechniqueResolution(check_result=check_result)
 
     def _battle_modifier_stack(self) -> int:
-        """Sum every modifier source relevant to this declaration (#1711/#1794/#1715)."""
+        """Sum every modifier source relevant to this declaration (#1711/#1794/#1715/#1841)."""
         participant = self.declaration.participant
         unit = self.declaration.target_unit
 
@@ -377,6 +381,7 @@ class BattleTechniqueResolver:
             _weather_capability_modifier(unit.place, unit) if unit is not None else 0
         )
         quality = _quality_modifier(unit.quality) if unit is not None else 0
+        swarm_bonus = swarm_strike_bonus(unit.individual_count) if unit is not None else 0
         commander = commander_bonus_for_side_at_place(participant.side, participant.place)
         posture = BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture, 0)
         move_cost = (
@@ -392,6 +397,7 @@ class BattleTechniqueResolver:
             + weather_property
             + weather_capability
             + quality
+            + swarm_bonus
             + commander
             + posture
             + move_cost
@@ -454,6 +460,12 @@ class BattleRoundResult:
     units_routed: list[int] = field(default_factory=list)
     # Participant pks who took damage this round.
     casualties: list[int] = field(default_factory=list)
+    # BattleUnit pk -> swarm-style individual_count bodies lost this round (#1841).
+    # Only swarm-style units (individual_count not None) ever appear here — a
+    # non-swarm unit that takes STRIKE/ROUT attrition is never added, even with an
+    # entry of 0 (mirrors units_destroyed/units_routed only appending on a real
+    # status flip, not every attrited unit).
+    unit_losses: dict[int, int] = field(default_factory=dict)
 
 
 def _compute_unit_status(strength: int, morale: int) -> str:
@@ -516,6 +528,24 @@ def _scope_target_participants(declaration: BattleActionDeclaration) -> list:
     return [declaration.target_ally] if declaration.target_ally is not None else []
 
 
+def _apply_swarm_losses(unit: BattleUnit, attrition: int) -> int:
+    """Bodies a swarm-style unit loses proportional to this round's attrition (#1841).
+
+    Returns 0 untouched for a non-swarm unit (``individual_count`` is None) or
+    non-positive ``attrition`` — no save happens in either case. Otherwise loses
+    ``ceil(individual_count * attrition / 100)`` bodies (strength/morale are both
+    0-100 scales, so ``attrition`` reads directly as a percentage), floored at 0,
+    and persists the new ``individual_count``. Ceil-rounding means any nonzero
+    attrition against a swarm always costs at least one body.
+    """
+    if unit.individual_count is None or attrition <= 0:
+        return 0
+    lost = min(unit.individual_count, math.ceil(unit.individual_count * attrition / 100))
+    unit.individual_count = max(0, unit.individual_count - lost)
+    unit.save(update_fields=["individual_count"])
+    return lost
+
+
 def _resolve_strike_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
@@ -536,7 +566,9 @@ def _resolve_strike_success(
 
     Reads ``place_defense_bonus`` (#1712, populated by any REPEL declared this
     round at the unit's place) and subtracts it from the computed attrition
-    before applying, floored at 0.
+    before applying, floored at 0. That net attrition also drives
+    ``_apply_swarm_losses`` (#1841) — a swarm-style target loses bodies
+    proportional to the same net attrition strength took this round.
     """
     units = _scope_target_units(declaration)
     units = [u for u in units if u.side_id != declaration.participant.side_id]
@@ -555,6 +587,10 @@ def _resolve_strike_success(
         elif unit.status == BattleUnitStatus.ROUTED:
             result.units_routed.append(unit.pk)
         unit.save(update_fields=["strength", "status"])
+
+        bodies_lost = _apply_swarm_losses(unit, net_attrition)
+        if bodies_lost:
+            result.unit_losses[unit.pk] = result.unit_losses.get(unit.pk, 0) + bodies_lost
 
         if unit.status == BattleUnitStatus.DESTROYED:
             from world.battles.services import eject_vehicle_occupants  # noqa: PLC0415
@@ -607,6 +643,11 @@ def _resolve_rout_success(
     it down physically. Scales with success_level exactly like STRIKE's attrition.
     Only reaches ACTIVE enemy units (default ``_scope_target_units`` filter) —
     a unit that's already ROUTED has nothing further for ROUT to accomplish.
+
+    A swarm-style unit also loses bodies proportional to the *actual* morale
+    lost this round (#1841) — the morale floor at 0 can make that less than
+    ``morale_damage``, so ``_apply_swarm_losses`` is fed the real delta, not the
+    raw computed damage.
     """
     from world.battles.constants import ROUT_MORALE_PER_LEVEL, ROUT_VP_PER_LEVEL  # noqa: PLC0415
 
@@ -617,13 +658,19 @@ def _resolve_rout_success(
 
     morale_damage = success_level * ROUT_MORALE_PER_LEVEL
     for unit in units:
+        previous_morale = unit.morale
         unit.morale = max(0, unit.morale - morale_damage)
+        actual_morale_loss = previous_morale - unit.morale
         unit.status = _compute_unit_status(unit.strength, unit.morale)
         if unit.status == BattleUnitStatus.DESTROYED:
             result.units_destroyed.append(unit.pk)
         elif unit.status == BattleUnitStatus.ROUTED:
             result.units_routed.append(unit.pk)
         unit.save(update_fields=["morale", "status"])
+
+        bodies_lost = _apply_swarm_losses(unit, actual_morale_loss)
+        if bodies_lost:
+            result.unit_losses[unit.pk] = result.unit_losses.get(unit.pk, 0) + bodies_lost
 
     side = declaration.participant.side
     base_vp = success_level * ROUT_VP_PER_LEVEL

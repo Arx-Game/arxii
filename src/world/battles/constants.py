@@ -170,6 +170,35 @@ UNIT_QUALITY_STRIKE_MODIFIER: dict[str, int] = {
     UnitQuality.ELITE: -20,
 }
 
+# Attacker-facing flat STRIKE bonus keyed off a target unit's individual_count
+# (#1841) — a bigger swarm-style formation is more surface area to land a hit
+# on, mirroring UNIT_QUALITY_STRIKE_MODIFIER's flat-ladder shape rather than a
+# multiplier. Keys are inclusive count thresholds; swarm_strike_bonus() below
+# picks the highest threshold the count clears. Below the lowest threshold (or
+# individual_count is None, i.e. not a swarm-style unit) contributes 0.
+SWARM_STRIKE_BONUS_BANDS: dict[int, int] = {
+    10: 5,
+    50: 10,
+    200: 15,
+}
+
+
+def swarm_strike_bonus(count: int | None) -> int:
+    """Flat STRIKE bonus for a swarm-style unit's ``individual_count`` (#1841).
+
+    Returns 0 when ``count`` is None (not a swarm-style unit) or below the
+    lowest ``SWARM_STRIKE_BONUS_BANDS`` threshold (<10). Otherwise returns the
+    bonus for the highest threshold ``count`` meets or exceeds.
+    """
+    if count is None:
+        return 0
+    bonus = 0
+    for threshold, band_bonus in sorted(SWARM_STRIKE_BONUS_BANDS.items()):
+        if count >= threshold:
+            bonus = band_bonus
+    return bonus
+
+
 # Posture (#1711) trades VP-gain speed against check difficulty and failure
 # damage. Percent scaling applied to STRIKE_VP_PER_LEVEL / SUPPORT_VP gains;
 # flat modifiers applied to the STRIKE check and to BASE_FAILURE_DAMAGE.
