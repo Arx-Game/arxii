@@ -106,18 +106,20 @@ def add_vault_access(
     if holder_persona is None and holder_organization is None:
         raise ValueError(_msg_neither)
     if holder_persona is not None:
-        return VaultAccessEntry.objects.create(
+        entry, _ = VaultAccessEntry.objects.get_or_create(
             vault_details=vault_details,
             holder_type=HolderType.PERSONA,
             holder_persona=holder_persona,
-            added_by=added_by,
+            defaults={"added_by": added_by},
         )
-    return VaultAccessEntry.objects.create(
+        return entry
+    entry, _ = VaultAccessEntry.objects.get_or_create(
         vault_details=vault_details,
         holder_type=HolderType.ORGANIZATION,
         holder_organization=holder_organization,
-        added_by=added_by,
+        defaults={"added_by": added_by},
     )
+    return entry
 
 
 def remove_vault_access(
@@ -161,7 +163,7 @@ def vault_capacity_remaining(vault_details: VaultDetails) -> int:
     room_profile = vault_details.feature_instance.room_profile
     location = room_profile.objectdb
     current = ItemInstance.objects.filter(
-        game_object__location=location,
+        game_object__db_location=location,
         holder_character_sheet__isnull=True,
     ).count()
     return vault_details.max_items - current
