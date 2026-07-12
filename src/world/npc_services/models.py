@@ -23,6 +23,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.mixins import DiscriminatorMixin
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.npc_services.constants import (
     DrawMode,
     NpcRegardEventReason,
@@ -129,13 +130,23 @@ class NPCStanding(SharedMemoryModel):
         return f"{self.persona} ↔ {self.npc_persona} (affection={self.affection})"
 
 
-class NPCRole(SharedMemoryModel):
+class NPCRole(NaturalKeyMixin, SharedMemoryModel):
     """A kind of NPC role — a bundle of `NPCServiceOffer` rows.
 
     One role can be instantiated across the world as multiple class-1 NPCs
     (every Builders Guild Clerk in every guild hall) or attached to a
     specific class-2+ named NPC. Offers are authored on the role; per-NPC
     overrides are a follow-up.
+
+    Carries `NaturalKeyMixin` (#2266 review fix) so the content pipeline's
+    emitted fixture JSON (natural-key format, no "pk" key) resolves an
+    existing same-name row on `loaddata` instead of blind-INSERTing into it
+    and raising `IntegrityError` on the unique `name` constraint. Per #946,
+    `loaddata` on a `SharedMemoryModel` can INSERT via a natural key but
+    cannot UPDATE — the identity map returns the cached instance before the
+    new field values land. `core_management.content_fixtures.load_entries`
+    (`update_or_create`) remains the only update-safe path; the emitted
+    fixture JSON is fresh-DB/insert-or-resolve only.
     """
 
     name = models.CharField(
@@ -182,6 +193,11 @@ class NPCRole(SharedMemoryModel):
             "migrated value from the legacy `MissionGiver.is_active`."
         ),
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     def __str__(self) -> str:
         return self.name

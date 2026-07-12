@@ -23,10 +23,27 @@ SRC_ROOT = REPO_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
 
 from core_management.content_fixtures import (  # noqa: E402
+    BuildResult,
     ContentError,
     build_all,
     write_fixtures,
 )
+
+
+class _ExitEarly(Exception):
+    """Internal control-flow signal carrying an exit code.
+
+    Lets each validation/setup step below print its own clean stderr message
+    and bail out via a single ``raise``, instead of every caller up the chain
+    needing its own ``if error: return code`` branch — that branching is what
+    pushed ``main()`` over ruff's return-count/complexity limits (#2266
+    review fix) once environmental-error handling was added alongside the
+    original content-shape errors.
+    """
+
+    def __init__(self, code: int) -> None:
+        self.code = code
+        super().__init__(code)
 
 
 def _load_dotenv_path() -> str | None:
@@ -41,6 +58,112 @@ def _load_dotenv_path() -> str | None:
             if stripped.startswith("CONTENT_REPO_PATH="):
                 return stripped.split("=", 1)[1].strip().strip('"').strip("'")
     return None
+
+
+def _require_content_root(args: argparse.Namespace) -> Path:
+    """Resolve + validate the content checkout path, or raise ``_ExitEarly(2)``."""
+    content_path = args.content_path or _load_dotenv_path()
+    if not content_path:
+        print(
+            "CONTENT_REPO_PATH is not set. Add it to src/.env pointing at your "
+            "local checkout of the private content repository.",
+            file=sys.stderr,
+        )
+        raise _ExitEarly(2)
+    content_root = Path(content_path).expanduser()
+    if not content_root.is_dir():
+        print(f"Content path does not exist: {content_root}", file=sys.stderr)
+        raise _ExitEarly(2)
+    return content_root
+
+
+def _configure_django() -> None:
+    """Import + configure Django, or raise ``_ExitEarly(2)`` with a clean hint.
+
+    Needed even for --check (#2266): npc_roles/'s optional faction_affiliation
+    field is validated by an eager DB lookup, same as every other domain's
+    shape validation. Settings resolve .env relative to src/. Harmless for
+    domains that don't touch the DB.
+    """
+    import django  # noqa: PLC0415
+    from django.core.exceptions import ImproperlyConfigured  # noqa: PLC0415
+
+    os.chdir(SRC_ROOT)
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+    try:
+        django.setup()
+    except ImproperlyConfigured as exc:
+        print(
+            f"Django is not configured: {exc}\n"
+            "Hint: a content-only author still needs src/.env with SECRET_KEY/"
+            "DATABASE_URL set — the npc_roles/ domain's faction_affiliation "
+            "field validates by querying the dev DB, so Django must be able "
+            "to start even for --check.",
+            file=sys.stderr,
+        )
+        raise _ExitEarly(2) from exc
+
+
+def _build_content(content_root: Path) -> BuildResult:
+    """Run ``build_all``, or raise ``_ExitEarly`` with a clean stderr message."""
+    from django.db import Error as DjangoDbError  # noqa: PLC0415
+
+    try:
+        return build_all(content_root)
+    except ContentError as exc:
+        print(str(exc), file=sys.stderr)
+        raise _ExitEarly(1) from exc
+    except DjangoDbError as exc:
+        print(
+            f"Database error while validating content: {exc}\n"
+            "Hint: run `arx manage migrate` to bring the dev DB schema up to date.",
+            file=sys.stderr,
+        )
+        raise _ExitEarly(2) from exc
+
+
+def _load_content(result) -> tuple[int, int]:
+    """Run ``load_entries``, or raise ``_ExitEarly`` with a clean stderr message."""
+    from django.db import Error as DjangoDbError  # noqa: PLC0415
+
+    from core_management.content_fixtures import load_entries  # noqa: PLC0415
+
+    try:
+        return load_entries(result)
+    except ContentError as exc:
+        print(str(exc), file=sys.stderr)
+        raise _ExitEarly(1) from exc
+    except DjangoDbError as exc:
+        print(
+            f"Database error while loading content: {exc}\n"
+            "Hint: run `arx manage migrate` to bring the dev DB schema up to date.",
+            file=sys.stderr,
+        )
+        raise _ExitEarly(2) from exc
+
+
+def _run(args: argparse.Namespace) -> int:
+    content_root = _require_content_root(args)
+    _configure_django()
+    result = _build_content(content_root)
+
+    total = len(result.entries)
+    for domain, count in sorted(result.placeholder_counts.items()):
+        print(f"PLACEHOLDER remaining in {domain}/: {count}")
+    if args.check:
+        print(f"OK: {total} content files validated; nothing written (--check).")
+        return 0
+
+    written = write_fixtures(result, SRC_ROOT)
+    for path in written:
+        print(f"wrote {path.relative_to(REPO_ROOT)}")
+    print(f"OK: {total} content files -> {len(written)} fixture file(s).")
+
+    if args.load:
+        # Upsert path (NOT loaddata — see load_entries docstring).
+        created, updated = _load_content(result)
+        print(f"loaded: {created} created, {updated} updated.")
+    return 0
 
 
 def main() -> int:
@@ -58,50 +181,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    content_path = args.content_path or _load_dotenv_path()
-    if not content_path:
-        print(
-            "CONTENT_REPO_PATH is not set. Add it to src/.env pointing at your "
-            "local checkout of the private content repository.",
-            file=sys.stderr,
-        )
-        return 2
-    content_root = Path(content_path).expanduser()
-    if not content_root.is_dir():
-        print(f"Content path does not exist: {content_root}", file=sys.stderr)
-        return 2
-
     try:
-        result = build_all(content_root)
-    except ContentError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-
-    total = len(result.entries)
-    for domain, count in sorted(result.placeholder_counts.items()):
-        print(f"PLACEHOLDER remaining in {domain}/: {count}")
-    if args.check:
-        print(f"OK: {total} content files validated; nothing written (--check).")
-        return 0
-
-    written = write_fixtures(result, SRC_ROOT)
-    for path in written:
-        print(f"wrote {path.relative_to(REPO_ROOT)}")
-    print(f"OK: {total} content files -> {len(written)} fixture file(s).")
-
-    if args.load:
-        # Upsert path (NOT loaddata — see load_entries docstring). Needs the
-        # Django env; settings resolve .env relative to src/.
-        import django  # noqa: PLC0415
-
-        os.chdir(SRC_ROOT)
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
-        django.setup()
-        from core_management.content_fixtures import load_entries  # noqa: PLC0415
-
-        created, updated = load_entries(result)
-        print(f"loaded: {created} created, {updated} updated.")
-    return 0
+        return _run(args)
+    except _ExitEarly as exc:
+        return exc.code
 
 
 if __name__ == "__main__":
