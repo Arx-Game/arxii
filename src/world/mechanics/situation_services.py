@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from evennia.objects.models import ObjectDB
 
@@ -40,7 +41,12 @@ def instantiate_situation(template: SituationTemplate, location: ObjectDB) -> Si
 
         trap_links = list(template.trap_links.all())
         if trap_links:
-            room_profile = location.room_profile
+            from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+            room_profile = RoomProfile.objects.filter(objectdb=location).first()
+            if room_profile is None:
+                msg = "location has no RoomProfile"
+                raise ObjectDoesNotExist(msg)
             for trap_link in trap_links:
                 Trap.objects.create(
                     room_profile=room_profile,
