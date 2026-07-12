@@ -34,6 +34,33 @@ if TYPE_CHECKING:
     from world.scenes.types import CastResult
 
 
+def _maybe_fire_decisive_for_direct_action(
+    actor: ObjectDB,
+    resolution: PendingActionResolution,
+) -> None:
+    """Fire any pending DecisiveCheckMarker after a direct social check (#1748)."""
+    from world.scenes.decisive_check_services import maybe_fire_decisive_check  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    main = resolution.main_result
+    if main is None:
+        return
+    if actor.location is None:
+        return
+    scene = get_active_scene(actor.location)
+    if scene is None:
+        return
+    try:
+        sheet = actor.sheet_data
+    except AttributeError:
+        return
+    maybe_fire_decisive_check(
+        scene=scene,
+        check_outcome=main.check_result.outcome,
+        initiator_sheet=sheet,
+    )
+
+
 @dataclass
 class _SocialTemplateAction(Action):
     """Base for social ActionTemplate-driven actions.
@@ -96,6 +123,8 @@ class _SocialTemplateAction(Action):
         # template action (Persuade/Intimidate/Entrance/…) moves NPC affection
         # (#1591). The raw ``resolution`` carries the success tier (ADR-0019).
         self._apply_disposition_delta(actor, kwargs.get("target_persona_id"), resolution)
+        # #1748: fire any pending decisive-check marker after a direct social check.
+        _maybe_fire_decisive_for_direct_action(actor, resolution)
         return template, result
 
     @staticmethod
