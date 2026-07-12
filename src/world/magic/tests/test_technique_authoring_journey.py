@@ -260,13 +260,39 @@ class TechniqueAuthoringJourneyTests(TestCase):
     def test_catalog_pool_choice_flows_through_to_standalone_cast(self):
         """set consequence_pool=<catalog id> -> author -> the technique's
         standalone cast resolves through the catalog pool's ActionTemplate,
-        not the shared default."""
+        not the shared default. A magic catalog pool_id requires a
+        non-physical action_category (#1995) — see the combat-flavor sibling
+        test below for the physical/combat-catalog pairing."""
         from world.magic.seeds_cast import ensure_technique_catalog_content
 
         catalog_templates = ensure_technique_catalog_content()
         chosen = catalog_templates[0]
 
         self._run("draft Flavored Cast")
+        self._run(
+            f"set gift={self.gift.pk} style={self.style.pk} effect_type={self.effect_type.pk} "
+            "action_category=mental tier=1 intensity=1 control=1 anima_cost=1"
+        )
+        self._run(f"set consequence_pool={chosen.consequence_pool_id}")
+        self.character.msg.reset_mock()
+        self._run("author")
+
+        from world.magic.models import Technique
+
+        technique = Technique.objects.get(name="Flavored Cast")
+        assert technique.action_template_id == chosen.pk
+        assert technique.action_template.consequence_pool_id == chosen.consequence_pool_id
+
+    def test_combat_catalog_pool_choice_flows_through_to_standalone_cast(self):
+        """set consequence_pool=<combat catalog id> with action_category=physical
+        -> author -> the technique's standalone cast resolves through the
+        combat catalog pool's ActionTemplate (#1995)."""
+        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
+
+        combat_templates = ensure_combat_offense_catalog_content()
+        chosen = combat_templates[0]
+
+        self._run("draft Brutal Strike")
         self._run(
             f"set gift={self.gift.pk} style={self.style.pk} effect_type={self.effect_type.pk} "
             "action_category=physical tier=1 intensity=1 control=1 anima_cost=1"
@@ -277,7 +303,7 @@ class TechniqueAuthoringJourneyTests(TestCase):
 
         from world.magic.models import Technique
 
-        technique = Technique.objects.get(name="Flavored Cast")
+        technique = Technique.objects.get(name="Brutal Strike")
         assert technique.action_template_id == chosen.pk
         assert technique.action_template.consequence_pool_id == chosen.consequence_pool_id
 

@@ -565,3 +565,20 @@ class ConsequencePoolCatalogViewSetTests(APITestCase):
         names = {row["name"] for row in resp.data}
         self.assertEqual(len(resp.data), 2)
         self.assertTrue(all("Technique Cast" in n for n in names))
+
+    def test_list_includes_combat_offense_flavors(self):
+        """#1995 — the listing endpoint unions the magic and combat catalogs into
+        one flat list (the picker doesn't filter by action_category client-side)."""
+        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+
+        ensure_technique_catalog_content()
+        ensure_combat_offense_catalog_content()
+        resp = self.client.get("/api/magic/consequence-pool-catalog/")
+        self.assertEqual(resp.status_code, 200)
+        names = {row["name"] for row in resp.data}
+        self.assertEqual(len(resp.data), 4)
+        self.assertTrue(any("Melee Offense: Brutal" in n for n in names))
+        self.assertTrue(any("Melee Offense: Precise" in n for n in names))
+        self.assertTrue(any("Technique Cast: Wild Surge" in n for n in names))
+        self.assertTrue(any("Technique Cast: Precise Working" in n for n in names))
