@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 from evennia import create_object
+from evennia.utils.idmapper.models import flush_cache
 
 from actions.definitions.situations import SetSituationAction
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
@@ -19,6 +20,12 @@ def _make_room(key: str = "The Solar") -> object:
 
 
 class SetSituationActionTest(TestCase):
+    def setUp(self) -> None:
+        # Flush the idmapper cache so a bare ObjectDB from ObjectDBFactory
+        # doesn't pick up a stale RoomProfile from a prior test's cached
+        # instance (the known SharedMemoryModel idmapper isolation issue).
+        flush_cache()
+
     def _staff_character(self) -> object:
         account = AccountFactory(is_staff=True)
         character = CharacterFactory(db_key="stager", location=_make_room("Stager's Room"))
