@@ -108,6 +108,33 @@ describe('handleInteractionPayload', () => {
     expect(toastMock).toHaveBeenCalledTimes(1);
   });
 
+  it('toasts for BOTH characters when the same payload id is delivered to two background sessions', () => {
+    // A whisper addressed to two of the player's characters arrives on two
+    // separate sockets, each processing the same payload.id — the dedupe
+    // key must be scoped per receiving character or the second toast is
+    // silently dropped (#2166 review fix).
+    getStateMock.mockReturnValue({ game: { active: 'Dave' } });
+    const payload = makeWhisperPayload({
+      id: 493,
+      receiver_persona_ids: [22, 33],
+    });
+
+    handleInteractionPayload('Bob', payload, dispatch, navigate);
+    handleInteractionPayload('Carol', payload, dispatch, navigate);
+
+    expect(toastMock).toHaveBeenCalledTimes(2);
+    expect(toastMock).toHaveBeenNthCalledWith(
+      1,
+      'Whisper to Bob from Alice-Persona',
+      expect.objectContaining({ action: expect.objectContaining({ label: 'Switch' }) })
+    );
+    expect(toastMock).toHaveBeenNthCalledWith(
+      2,
+      'Whisper to Carol from Alice-Persona',
+      expect.objectContaining({ action: expect.objectContaining({ label: 'Switch' }) })
+    );
+  });
+
   it('does not toast when the receiving session is the active session', () => {
     getStateMock.mockReturnValue({ game: { active: 'Bob' } });
     const payload = makeWhisperPayload({ id: 502 });

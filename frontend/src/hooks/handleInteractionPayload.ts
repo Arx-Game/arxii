@@ -24,8 +24,17 @@ export function handleInteractionPayload(
  * `toastedIds` dedupe idiom, but module-level rather than a ref: this file has
  * no component instance, and `useGameSocket` opens one socket per character
  * (a fresh mount doesn't replay past frames), so a plain module `Set` is safe.
+ *
+ * Keyed by `${character}:${payload.id}` rather than bare `payload.id` — the
+ * same whisper is delivered once per receiving character's own socket (e.g.
+ * two of the player's characters both on the receiver list), and a bare-id
+ * key would let whichever character's frame processes first swallow the
+ * other's legitimate attention toast. A cap bounds unbounded growth for a
+ * long-lived session; this Set is best-effort spam protection, not a
+ * correctness-critical cache, so a blunt full clear at the cap is fine.
  */
-const toastedWhisperIds = new Set<number>();
+const toastedWhisperIds = new Set<string>();
+const MAX_TOASTED_WHISPER_IDS = 500;
 
 /**
  * Own-persona detection (#2166 Task 3 decision, documented per the plan's
@@ -63,8 +72,10 @@ function maybeToastWhisperAttention(
   const myPersonaId = ownPersonaId(character);
   if (myPersonaId != null && payload.persona.id === myPersonaId) return;
 
-  if (toastedWhisperIds.has(payload.id)) return;
-  toastedWhisperIds.add(payload.id);
+  const toastKey = `${character}:${payload.id}`;
+  if (toastedWhisperIds.has(toastKey)) return;
+  if (toastedWhisperIds.size > MAX_TOASTED_WHISPER_IDS) toastedWhisperIds.clear();
+  toastedWhisperIds.add(toastKey);
 
   const threadKey = getThreadKey(wsPayloadToInteraction(payload));
 
