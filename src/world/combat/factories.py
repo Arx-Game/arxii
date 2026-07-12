@@ -1121,13 +1121,17 @@ def wire_melee_attack_action_template():
     The combat-flavored sibling of the magic standalone cast template
     (``seeds_cast.ensure_technique_cast_content``). Carries the seeded
     'Melee Attack' CheckType so physical techniques roll a combat check
-    (strength + Melee Combat) instead of the magic fallback. Idempotent —
-    ``get_or_create`` on the name; FK re-wiring ensures the link lands even on
-    a pre-existing row.
+    (strength + Melee Combat) instead of the magic fallback. Also carries the
+    seeded 'Combat: Melee Offense' base ConsequencePool (#1995) — the combat
+    sibling of the magic 'Magic: Technique Cast' base pool — so a standalone
+    melee cast with no flavor chosen still resolves graded consequences rather
+    than short-circuiting to check-only. Idempotent — ``get_or_create`` on the
+    name; FK re-wiring ensures both links land even on a pre-existing row.
     """
     from actions.constants import ActionTargetType, Pipeline
     from actions.models import ActionTemplate
     from world.checks.models import CheckCategory, CheckType
+    from world.combat.seeds_offense import ensure_melee_offense_pool
 
     # Resolve the 'Melee Attack' CheckType: prefer the authored seed
     # (seed_combat_check_content writes the full composition); fall back to a
@@ -1140,20 +1144,27 @@ def wire_melee_attack_action_template():
         category=category,
         defaults={"description": "A melee attack roll: strength + Melee Combat."},
     )
+    pool = ensure_melee_offense_pool()
     template, _ = ActionTemplate.objects.get_or_create(
         name="Melee Attack",
         defaults={
             "check_type": check_type,
-            "consequence_pool": None,
+            "consequence_pool": pool,
             "category": "combat",
             "pipeline": Pipeline.SINGLE,
             "target_type": ActionTargetType.SINGLE,
             "description": "Standalone resolution spec for a melee attack.",
         },
     )
+    changed = []
     if template.check_type_id != check_type.pk:
         template.check_type = check_type
-        template.save(update_fields=["check_type"])
+        changed.append("check_type")
+    if template.consequence_pool_id != pool.pk:
+        template.consequence_pool = pool
+        changed.append("consequence_pool")
+    if changed:
+        template.save(update_fields=changed)
     return template
 
 

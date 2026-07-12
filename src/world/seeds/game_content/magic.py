@@ -2854,6 +2854,9 @@ def seed_magic_dev() -> MagicDevSeedResult:
 
     technique_cast_template = ensure_technique_cast_content()
     ensure_technique_catalog_content()
+    from world.combat.seeds_offense import ensure_combat_offense_catalog_content  # noqa: PLC0415
+
+    ensure_combat_offense_catalog_content()
     soul_tether_content = wire_soul_tether_content()
     covenant_lifecycle_content = wire_covenant_lifecycle_rituals()
     dramatic_entrance_content = ensure_dramatic_entrance_content()

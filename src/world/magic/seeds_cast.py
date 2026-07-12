@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from actions.models import ActionTemplate, ConsequencePool
 
 TECHNIQUE_CAST_TEMPLATE_NAME = "Technique Cast"
 TECHNIQUE_CAST_CHECK_TYPE_NAME = "Technique Cast"
@@ -86,27 +82,13 @@ def _ensure_fallback_check_type():
 
 
 def _ensure_cast_pool():
-    from actions.models import ConsequencePool, ConsequencePoolEntry  # noqa: PLC0415
-    from world.checks.models import Consequence  # noqa: PLC0415
-    from world.traits.factories import CheckOutcomeFactory  # noqa: PLC0415
+    from actions.catalog_seeding import ensure_base_pool  # noqa: PLC0415
 
-    pool, _ = ConsequencePool.objects.get_or_create(
+    return ensure_base_pool(
         name=TECHNIQUE_CAST_POOL_NAME,
-        defaults={"description": "Graded outcomes for a standalone technique cast."},
+        description="Graded outcomes for a standalone technique cast.",
+        consequences=_CAST_CONSEQUENCES,
     )
-    for outcome_name, label, weight in _CAST_CONSEQUENCES:
-        outcome = CheckOutcomeFactory(name=outcome_name)
-        consequence, _ = Consequence.objects.get_or_create(
-            outcome_tier=outcome,
-            label=label,
-            defaults={"weight": weight, "character_loss": False},
-        )
-        ConsequencePoolEntry.objects.get_or_create(
-            pool=pool,
-            consequence=consequence,
-            defaults={"weight_override": None, "is_excluded": False},
-        )
-    return pool
 
 
 def ensure_technique_cast_content():
@@ -157,117 +139,24 @@ def get_standalone_cast_pool():
     return get_standalone_cast_template().consequence_pool
 
 
-def _catalog_pool_name(flavor_name: str) -> str:
-    return f"{TECHNIQUE_CAST_POOL_NAME}: {flavor_name}"
-
-
-def _catalog_template_name(flavor_name: str) -> str:
-    return f"{TECHNIQUE_CAST_TEMPLATE_NAME}: {flavor_name}"
-
-
 def ensure_technique_catalog_content():
     """Idempotent: seed the curated catalog of technique-cast consequence-pool
     flavors as single-depth children of the base pool, each with a matching
     ActionTemplate (same check_type/pipeline/target_type as the base template;
-    only consequence_pool differs).
+    only consequence_pool differs). Machinery lives in
+    ``actions.catalog_seeding`` (shared with the combat offense catalog, #1995).
 
     Returns the list of catalog ActionTemplate rows (created or pre-existing),
     in `_CATALOG_POOLS` order.
     """
-    base_template = ensure_technique_cast_content()
-    base_pool = base_template.consequence_pool
-    check_type = base_template.check_type
+    from actions.catalog_seeding import ensure_catalog_content  # noqa: PLC0415
 
-    base_label_by_tier = {name: label for name, label, _weight in _CAST_CONSEQUENCES}
-
-    templates = []
-    for flavor in _CATALOG_POOLS:
-        pool = _ensure_catalog_pool(flavor, base_pool)
-        _ensure_catalog_extra_consequences(flavor, pool)
-        _apply_catalog_weight_overrides(flavor, pool, base_label_by_tier)
-        templates.append(_ensure_catalog_template(flavor, pool, base_template, check_type))
-    return templates
-
-
-def _ensure_catalog_pool(flavor: dict, base_pool: ConsequencePool) -> ConsequencePool:
-    """Get-or-create the per-flavor child ConsequencePool, reparenting if needed."""
-    from actions.models import ConsequencePool  # noqa: PLC0415
-
-    pool_name = _catalog_pool_name(flavor["name"])
-    pool, _ = ConsequencePool.objects.get_or_create(
-        name=pool_name,
-        defaults={"description": flavor["description"], "parent": base_pool},
+    return ensure_catalog_content(
+        base_template=ensure_technique_cast_content(),
+        base_consequences=_CAST_CONSEQUENCES,
+        catalog=_CATALOG_POOLS,
+        category="magic",
+        description_template=(
+            "Standalone resolution spec for casting a technique ({flavor_name} flavor)."
+        ),
     )
-    if pool.parent_id != base_pool.pk:
-        pool.parent = base_pool
-        pool.save(update_fields=["parent"])
-    return pool
-
-
-def _ensure_catalog_extra_consequences(flavor: dict, pool: ConsequencePool) -> None:
-    """Get-or-create the flavor's extra consequence entries on ``pool``."""
-    from actions.models import ConsequencePoolEntry  # noqa: PLC0415
-    from world.checks.models import Consequence  # noqa: PLC0415
-    from world.traits.factories import CheckOutcomeFactory  # noqa: PLC0415
-
-    for outcome_name, label, weight in flavor["extra_consequences"]:
-        outcome = CheckOutcomeFactory(name=outcome_name)
-        consequence, _ = Consequence.objects.get_or_create(
-            outcome_tier=outcome,
-            label=label,
-            defaults={"weight": weight, "character_loss": False},
-        )
-        ConsequencePoolEntry.objects.get_or_create(pool=pool, consequence=consequence)
-
-
-def _apply_catalog_weight_overrides(
-    flavor: dict, pool: ConsequencePool, base_label_by_tier: dict[str, str]
-) -> None:
-    """Apply the flavor's weight overrides onto shared base-tier consequences."""
-    from actions.models import ConsequencePoolEntry  # noqa: PLC0415
-    from world.checks.models import Consequence  # noqa: PLC0415
-
-    for outcome_name, override_weight in flavor["weight_overrides"].items():
-        consequence = Consequence.objects.get(
-            outcome_tier__name=outcome_name, label=base_label_by_tier[outcome_name]
-        )
-        entry, _ = ConsequencePoolEntry.objects.get_or_create(
-            pool=pool,
-            consequence=consequence,
-            defaults={"weight_override": override_weight},
-        )
-        if entry.weight_override != override_weight:
-            entry.weight_override = override_weight
-            entry.save(update_fields=["weight_override"])
-
-
-def _ensure_catalog_template(
-    flavor: dict, pool: ConsequencePool, base_template: ActionTemplate, check_type
-) -> ActionTemplate:
-    """Get-or-create the per-flavor ActionTemplate, reconciling divergent fields."""
-    from actions.models import ActionTemplate  # noqa: PLC0415
-
-    template_name = _catalog_template_name(flavor["name"])
-    template, _ = ActionTemplate.objects.get_or_create(
-        name=template_name,
-        defaults={
-            "check_type": check_type,
-            "consequence_pool": pool,
-            "category": "magic",
-            "pipeline": base_template.pipeline,
-            "target_type": base_template.target_type,
-            "description": (
-                f"Standalone resolution spec for casting a technique ({flavor['name']} flavor)."
-            ),
-        },
-    )
-    changed = []
-    if template.check_type_id != check_type.pk:
-        template.check_type = check_type
-        changed.append("check_type")
-    if template.consequence_pool_id != pool.pk:
-        template.consequence_pool = pool
-        changed.append("consequence_pool")
-    if changed:
-        template.save(update_fields=changed)
-    return template

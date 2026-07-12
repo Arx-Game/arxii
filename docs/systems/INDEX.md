@@ -3834,6 +3834,15 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   destination` resolves the name against an active opponent first, then a room
   object; `into away` (or omitting the clause) is the default. Works ally-less:
   `combat interpose with <technique> into <destination>`.
+- **Standalone-cast offense flavor catalog (#1995):** `world.combat.seeds_offense`
+  (`ensure_melee_offense_pool()` / `ensure_combat_offense_catalog_content()`) seeds a base
+  "Combat: Melee Offense" `ConsequencePool` + curated "Brutal"/"Precise" flavor children,
+  wired onto the "Melee Attack" `ActionTemplate` (`world.combat.factories
+  .wire_melee_attack_action_template`) — the PHYSICAL-category sibling of magic's
+  "Magic: Technique Cast" catalog (#1320, see `docs/systems/magic.md`). **This catalog is
+  standalone-cast only** — combat ROUND resolution never reads
+  `ActionTemplate.consequence_pool` (it resolves its own `on_hit_consequence_pool` /
+  `resolution_consequence_pool` / `per_round_consequence_pool` rows instead); see ADR-0130.
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
   conditions (`bulk_apply_conditions` — now installs reactive side-effects;

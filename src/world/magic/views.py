@@ -49,6 +49,7 @@ from world.magic.filters import (
     CharacterAuraFilter,
     CharacterGiftFilter,
     CharacterResonanceFilter,
+    ConsequencePoolCatalogFilter,
     ResonanceGrantFilterSet,
     RitualSessionFilterSet,
     ThreadFilter,
@@ -207,18 +208,29 @@ class EffectTypeViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only catalog of curated consequence-pool flavors a technique author
-    may select (children of the shared base 'Magic: Technique Cast' pool)."""
+    may select — children of the shared base 'Magic: Technique Cast' pool AND
+    children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
+    list by default. An optional ``?action_category=`` query param narrows to
+    the category-matching catalog (physical → combat flavors, anything else →
+    magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
+    path-derived category) only offer flavors the technique can legally keep —
+    resolve_cast_action_template enforces the same split at submit/finalize
+    time. The technique builder's category-agnostic picker keeps the flat
+    union by passing no param."""
 
     serializer_class = ConsequencePoolCatalogSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ConsequencePoolCatalogFilter
 
     def get_queryset(self):
-        from world.magic.services.technique_builder import (  # noqa: PLC0415
-            get_technique_cast_catalog,
-        )
+        from actions.models import ConsequencePool  # noqa: PLC0415
+        from world.combat.seeds_offense import get_melee_offense_pool  # noqa: PLC0415
+        from world.magic.seeds_cast import get_standalone_cast_pool  # noqa: PLC0415
 
-        return get_technique_cast_catalog()
+        base_pools = [get_standalone_cast_pool(), get_melee_offense_pool()]
+        return ConsequencePool.objects.filter(parent__in=base_pools).order_by("name")
 
 
 class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):

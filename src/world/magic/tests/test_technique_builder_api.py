@@ -379,7 +379,23 @@ class ConsequencePoolChoiceAPITests(APITestCase):
         return payload
 
     def test_author_with_catalog_pool_assigns_matching_template(self):
+        """A magic catalog pool_id requires a non-physical action_category (#1995)."""
         chosen = self.catalog_templates[0]
+        resp = self.client.post(
+            "/api/magic/techniques/author/",
+            self._payload(action_category="mental", consequence_pool_id=chosen.consequence_pool_id),
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.data)
+        technique = Technique.objects.get(pk=resp.data["id"])
+        self.assertEqual(technique.action_template_id, chosen.pk)
+
+    def test_author_with_combat_catalog_pool_assigns_matching_template(self):
+        """A combat catalog pool_id requires the physical action_category (#1995)."""
+        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
+
+        combat_templates = ensure_combat_offense_catalog_content()
+        chosen = combat_templates[0]
         resp = self.client.post(
             "/api/magic/techniques/author/",
             self._payload(consequence_pool_id=chosen.consequence_pool_id),

@@ -369,13 +369,24 @@ class CmdTechnique(ArxCommand):
         return fields
 
     def _resolve_consequence_pool_field(self, value: str) -> ConsequencePool:
-        """Resolve a `set consequence_pool=<name or id>` token to a catalog ConsequencePool."""
+        """Resolve a `set consequence_pool=<name or id>` token to a catalog ConsequencePool.
+
+        Matches against the union of the magic AND combat catalogs (#1995) — the
+        `set` command doesn't know the draft's action_category ordering (it may be
+        set before or after this call), so it mirrors the listing endpoint's flat,
+        category-agnostic list. `resolve_cast_action_template` is the seam that
+        enforces the chosen flavor matches the technique's action_category, at
+        `author` time.
+        """
         from actions.models import ConsequencePool  # noqa: PLC0415
         from world.magic.services.technique_builder import (  # noqa: PLC0415
+            get_combat_offense_catalog,
             get_technique_cast_catalog,
         )
 
-        catalog_ids = list(get_technique_cast_catalog().values_list("pk", flat=True))
+        magic_catalog_ids = list(get_technique_cast_catalog().values_list("pk", flat=True))
+        combat_catalog_ids = list(get_combat_offense_catalog().values_list("pk", flat=True))
+        catalog_ids = magic_catalog_ids + combat_catalog_ids
         return self.resolve_by_name_or_id(
             ConsequencePool,
             value,
