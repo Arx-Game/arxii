@@ -12,9 +12,16 @@ import { vi } from 'vitest';
 import { CrossoverInviteComposeDialog } from '../components/CrossoverInviteComposeDialog';
 
 // ---------------------------------------------------------------------------
-// Mocks — mock the crossover queries (our module) and the api layer that
-// @/stories/queries and @/events/queries call under the hood. This avoids
-// vitest mock-path resolution issues with aliased module paths.
+// Mocks
+//
+// The compose dialog imports from three query modules:
+// - ../queries (crossover) — our module
+// - @/stories/queries — stories hooks
+// - @/events/queries — events fetch
+//
+// We mock all three. The crossover queries mock must export everything the
+// dialog (and its child components) import. The stories/events mocks provide
+// empty data so the pickers render with no options.
 // ---------------------------------------------------------------------------
 
 vi.mock('../queries', () => ({
@@ -28,11 +35,25 @@ vi.mock('../queries', () => ({
   crossoverKeys: { all: ['crossover'] },
 }));
 
-// Mock apiFetch so all React Query hooks return empty/undefined data
-vi.mock('@/evennia_replacements/api', () => ({
-  apiFetch: vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve({ count: 0, next: null, previous: null, results: [] }),
+// Mock the stories/queries module with the hooks the dialog imports.
+// Using vi.mock with the alias path — vitest resolves this via the vite alias.
+vi.mock('@/stories/queries', () => ({
+  useStoryList: () => ({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+  }),
+  useEpisodeList: () => ({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+  }),
+}));
+
+vi.mock('@/events/queries', () => ({
+  fetchEvents: vi.fn().mockResolvedValue({
+    count: 0,
+    next: null,
+    previous: null,
+    results: [],
   }),
 }));
 

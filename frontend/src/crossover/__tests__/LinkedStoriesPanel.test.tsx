@@ -9,11 +9,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { LinkedStoriesPanel } from '../components/LinkedStoriesPanel';
-import type { EpisodeScene } from '../types';
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
+
+const mockEpisodeScenesData = {
+  count: 0,
+  next: null,
+  previous: null,
+  results: [] as unknown[],
+};
 
 vi.mock('../queries', () => ({
   useEpisodeScenesForScene: vi.fn(),
@@ -22,6 +28,14 @@ vi.mock('../queries', () => ({
     all: ['crossover'],
     episodeScenes: (id: number) => ['crossover', 'episode-scenes', id],
   },
+}));
+
+// Mock apiFetch so the beats query doesn't try to hit a real URL
+vi.mock('@/evennia_replacements/api', () => ({
+  apiFetch: vi.fn().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve({ count: 0, next: null, previous: null, results: [] }),
+  }),
 }));
 
 import { useEpisodeScenesForScene } from '../queries';
@@ -52,7 +66,7 @@ describe('LinkedStoriesPanel', () => {
 
   it('renders nothing when no episode scenes (non-crossover scene)', () => {
     mockUseEpisodeScenesForScene.mockReturnValue({
-      data: { count: 0, next: null, previous: null, results: [] },
+      data: mockEpisodeScenesData,
       isLoading: false,
     } as never);
     renderPanel(42);
@@ -69,18 +83,22 @@ describe('LinkedStoriesPanel', () => {
   });
 
   it('renders the panel when episode scenes exist', () => {
-    const mockEpisodeScenes: EpisodeScene[] = [
-      {
-        id: 1,
-        episode: 'Story Alpha - Ep 1: The Beginning',
-        scene: 'Scene 1',
-        episode_id: 100,
-        scene_id: 42,
-        order: 0,
-      },
-    ];
     mockUseEpisodeScenesForScene.mockReturnValue({
-      data: { count: 1, next: null, previous: null, results: mockEpisodeScenes },
+      data: {
+        count: 1,
+        next: null,
+        previous: null,
+        results: [
+          {
+            id: 1,
+            episode: 'Story Alpha - Ep 1: The Beginning',
+            scene: 'Scene 1',
+            episode_id: 100,
+            scene_id: 42,
+            order: 0,
+          },
+        ],
+      },
       isLoading: false,
     } as never);
     renderPanel(42);
