@@ -118,7 +118,9 @@ export function LinkedStoriesPanel({ sceneId }: LinkedStoriesPanelProps) {
                     className="flex items-center gap-2 text-xs"
                     data-testid={`linked-beat-${beat.id}`}
                   >
-                    <span className="font-medium">{beat.name ?? `Beat ${beat.order}`}</span>
+                    <span className="font-medium">
+                      {beat.predicate_type ?? `Beat ${beat.order ?? ''}`}
+                    </span>
                     {stakes && (
                       <>
                         <span className="rounded bg-muted px-1.5 py-0.5">

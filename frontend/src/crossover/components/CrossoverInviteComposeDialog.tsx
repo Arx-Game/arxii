@@ -231,7 +231,7 @@ export function CrossoverInviteComposeDialog({
                   <SelectContent>
                     {episodes.map((ep) => (
                       <SelectItem key={ep.id} value={ep.id.toString()}>
-                        {ep.name ?? `Episode ${ep.order}`}
+                        {ep.title ?? `Episode ${ep.order}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
