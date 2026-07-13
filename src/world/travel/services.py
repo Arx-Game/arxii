@@ -330,7 +330,7 @@ def advance_leg(voyage: Voyage, caller) -> None:  # noqa: C901, PLR0912, PLR0915
     from world.travel.models import TravelHub, Voyage  # noqa: PLC0415
 
     voyage = (
-        Voyage.objects.select_for_update()
+        Voyage.objects.select_for_update(of=("self",))
         .select_related("travel_method", "destination_hub")
         .get(pk=voyage.pk)
     )
@@ -429,7 +429,7 @@ def complete_voyage(voyage: Voyage, caller) -> None:
     """
     from world.travel.models import Voyage  # noqa: PLC0415
 
-    voyage = Voyage.objects.select_for_update().get(pk=voyage.pk)
+    voyage = Voyage.objects.select_for_update(of=("self",)).get(pk=voyage.pk)
 
     if voyage.status == VoyageStatus.DRAFT:
         raise VoyageError(user_message="You must depart first.")
@@ -463,7 +463,7 @@ def abandon_voyage(voyage: Voyage, caller) -> None:
     """
     from world.travel.models import Voyage  # noqa: PLC0415
 
-    voyage = Voyage.objects.select_for_update().get(pk=voyage.pk)
+    voyage = Voyage.objects.select_for_update(of=("self",)).get(pk=voyage.pk)
 
     if voyage.status not in (VoyageStatus.DRAFT, VoyageStatus.IN_TRANSIT):
         raise VoyageNotInTransitError
@@ -560,7 +560,7 @@ def depart_voyage(voyage: Voyage, caller) -> Voyage:
     )
 
     voyage = (
-        Voyage.objects.select_for_update()
+        Voyage.objects.select_for_update(of=("self",))
         .select_related("travel_method", "origin_hub", "destination_hub")
         .get(pk=voyage.pk)
     )
