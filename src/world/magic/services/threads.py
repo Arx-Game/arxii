@@ -503,8 +503,117 @@ def _has_weaving_unlock(
     return False
 
 
+def _validate_covenant_role_anchor(
+    character_sheet: CharacterSheet,
+    target: object,
+) -> None:
+    """Raise ``CovenantRoleNeverHeldError`` when the character never held the role."""
+    from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
+
+    if not character_sheet.character.covenant_roles.has_ever_held(target):
+        raise CovenantRoleNeverHeldError
+
+
+def _validate_mantle_anchor(
+    character_sheet: CharacterSheet,
+    target: object,
+) -> None:
+    """Record mantle clearances and raise ``MantleNotClearedError`` if uncleared."""
+    from world.items.services.mantle import (  # noqa: PLC0415
+        get_max_cleared_mantle_level,
+        record_mantle_clearances,
+    )
+
+    record_mantle_clearances(character_sheet, target)  # type: ignore[invalid-argument-type]
+    if get_max_cleared_mantle_level(character_sheet, target) < 1:  # type: ignore[invalid-argument-type]
+        raise MantleNotClearedError
+
+
+def _validate_organization_anchor(
+    character_sheet: CharacterSheet,
+    target: object,
+) -> None:
+    """Validate org membership + kind-level weaving unlock for ORGANIZATION threads."""
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+
+    # Gate 1: active membership — the character's persona must be an active
+    # member of the target org. Read through the persona's membership list.
+    persona = character_sheet.primary_persona
+    if persona is None:
+        msg = "Character has no primary persona; cannot verify org membership."
+        raise WeavingUnlockMissing(msg)
+    memberships = list(persona.organization_memberships.all())
+    is_member = any(
+        m.organization_id == target.pk  # type: ignore[union-attr]
+        and m.left_at is None
+        and m.exiled_at is None
+        for m in memberships
+    )
+    if not is_member:
+        msg = "Character is not an active member of this organization."
+        raise WeavingUnlockMissing(msg)
+    # Gate 2: kind-level weaving unlock.
+    if not character_sheet.character.weaving_unlocks.has_unlock_for_kind(TargetKind.ORGANIZATION):
+        msg = "Character lacks the ORGANIZATION weaving unlock."
+        raise WeavingUnlockMissing(msg)
+
+
+def _validate_relationship_ownership(
+    character_sheet: CharacterSheet,
+    target: object,
+) -> None:
+    """Raise ``RelationshipBondNotOwned`` when the target's relationship is foreign.
+
+    Both RelationshipTrackProgress and RelationshipCapstone expose
+    ``.relationship``; only the relationship's own source may weave a thread
+    on it. Checked AFTER the unlock gate (#2033 adversarial review): defense-
+    in-depth for direct service callers — the API and telnet resolvers are
+    already scoped, so neither can reach this branch with a foreign row.
+    Ordering it after the unlock check means an unlocked-but-unauthorized
+    caller sees WeavingUnlockMissing first, never learning whether the
+    foreign row even exists.
+    """
+    if target.relationship.source_id != character_sheet.pk:  # type: ignore[union-attr]
+        raise RelationshipBondNotOwned
+
+
+def _validate_technique_ownership(
+    character_sheet: CharacterSheet,
+    target: object,
+) -> None:
+    """Raise ``TechniqueNotOwned`` when the character doesn't know the technique (#1582)."""
+    from world.magic.exceptions import TechniqueNotOwned  # noqa: PLC0415
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+    if not CharacterTechnique.objects.filter(character=character_sheet, technique=target).exists():
+        raise TechniqueNotOwned
+
+
+def _validate_anchor(
+    character_sheet: CharacterSheet,
+    target_kind: str,
+    target: object,
+) -> None:
+    """Dispatch anchor-specific validation before thread creation.
+
+    COVENANT_ROLE, MANTLE, and ORGANIZATION have bespoke validation; all other
+    kinds fall through to the generic ``_has_weaving_unlock`` gate.
+    """
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+
+    if target_kind == TargetKind.COVENANT_ROLE:
+        _validate_covenant_role_anchor(character_sheet, target)
+    elif target_kind == TargetKind.MANTLE:
+        _validate_mantle_anchor(character_sheet, target)
+    elif target_kind == TargetKind.ORGANIZATION:
+        _validate_organization_anchor(character_sheet, target)
+    elif not _has_weaving_unlock(character_sheet, target_kind, target):
+        msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
+        raise WeavingUnlockMissing(msg)
+
+
 @transaction.atomic
-def weave_thread(  # noqa: PLR0913, PLR0912, PLR0915, C901
+def weave_thread(  # noqa: PLR0913
     character_sheet: CharacterSheet,
     target_kind: str,
     target: object,
@@ -546,73 +655,16 @@ def weave_thread(  # noqa: PLR0913, PLR0912, PLR0915, C901
         )
         _satisfy_thread_woven(character_sheet)
         return thread
-    if target_kind == TargetKind.COVENANT_ROLE:
-        from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
 
-        if not character_sheet.character.covenant_roles.has_ever_held(target):
-            raise CovenantRoleNeverHeldError
-    elif target_kind == TargetKind.MANTLE:
-        from world.items.services.mantle import (  # noqa: PLC0415
-            get_max_cleared_mantle_level,
-            record_mantle_clearances,
-        )
-
-        record_mantle_clearances(character_sheet, target)  # type: ignore[invalid-argument-type]
-        if get_max_cleared_mantle_level(character_sheet, target) < 1:  # type: ignore[invalid-argument-type]
-            raise MantleNotClearedError
-    elif target_kind == TargetKind.ORGANIZATION:
-        # Gate 1: active membership — the character's persona must be an active
-        # member of the target org. Read through the persona's membership list.
-        persona = character_sheet.primary_persona
-        if persona is None:
-            msg = "Character has no primary persona; cannot verify org membership."
-            raise WeavingUnlockMissing(msg)
-        memberships = list(persona.organization_memberships.all())
-        is_member = any(
-            m.organization_id == target.pk  # type: ignore[union-attr]
-            and m.left_at is None
-            and m.exiled_at is None
-            for m in memberships
-        )
-        if not is_member:
-            msg = "Character is not an active member of this organization."
-            raise WeavingUnlockMissing(msg)
-        # Gate 2: kind-level weaving unlock.
-        if not character_sheet.character.weaving_unlocks.has_unlock_for_kind(
-            TargetKind.ORGANIZATION
-        ):
-            msg = "Character lacks the ORGANIZATION weaving unlock."
-            raise WeavingUnlockMissing(msg)
-    elif not _has_weaving_unlock(character_sheet, target_kind, target):
-        msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
-        raise WeavingUnlockMissing(msg)
+    _validate_anchor(character_sheet, target_kind, target)
 
     if target_kind in (TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE):
-        # Both RelationshipTrackProgress and RelationshipCapstone expose
-        # ``.relationship``; only the relationship's own source may weave a
-        # thread on it. Checked AFTER the unlock gate above (#2033 adversarial
-        # review): this is defense-in-depth for direct service callers only —
-        # the API (ThreadSerializer._resolve_target) now scopes its lookup to
-        # the requester's own rows, and the telnet resolvers
-        # (_resolve_track_anchor/_resolve_capstone_anchor in commands/weave.py)
-        # are already scoped, so neither can reach this branch with a foreign
-        # row. Ordering it after the unlock check means an unlocked-but-
-        # unauthorized caller sees WeavingUnlockMissing first, never learning
-        # whether the foreign row even exists.
-        if target.relationship.source_id != character_sheet.pk:  # type: ignore[union-attr]
-            raise RelationshipBondNotOwned
+        _validate_relationship_ownership(character_sheet, target)
 
     # A signature (TECHNIQUE) thread requires that the character actually knows
     # the technique being signed (#1582).
     if target_kind == TargetKind.TECHNIQUE:
-        from world.magic.models import CharacterTechnique  # noqa: PLC0415
-
-        if not CharacterTechnique.objects.filter(
-            character=character_sheet, technique=target
-        ).exists():
-            from world.magic.exceptions import TechniqueNotOwned  # noqa: PLC0415
-
-            raise TechniqueNotOwned
+        _validate_technique_ownership(character_sheet, target)
 
     field_map: dict[str, str] = {
         TargetKind.TRAIT: "target_trait",

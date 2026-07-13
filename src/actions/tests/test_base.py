@@ -441,6 +441,15 @@ class ActionRegistryTests(TestCase):
             "assign_guard",
             "unassign_guard",
             "list_guard_assignments",
+            # #2287 — death & unconsciousness core slice.
+            "wake",
+            "retire",
+            "death_kudos",
+            # #1855 — overworld travel / voyages.
+            "start_voyage",
+            "advance_voyage_leg",
+            "complete_voyage",
+            "abandon_voyage",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

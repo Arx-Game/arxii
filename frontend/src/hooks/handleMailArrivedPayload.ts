@@ -11,5 +11,5 @@ import { queryClient } from '@/queryClient';
  */
 export function handleMailArrivedPayload(payload: MailArrivedPayload) {
   toast(`A letter from ${payload.sender_display}: ${payload.subject}`);
-  void queryClient.invalidateQueries({ queryKey: mailKeys.unreadCount() });
+  queryClient.invalidateQueries({ queryKey: mailKeys.unreadCount() });
 }

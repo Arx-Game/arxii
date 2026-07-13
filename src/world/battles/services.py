@@ -581,7 +581,92 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
 # ---------------------------------------------------------------------------
 
 
-def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + checks
+def _validate_action_kind_scope(
+    *,
+    action_kind: str,
+    scope: str,
+) -> None:
+    """Validate scope requirements keyed on ``action_kind``.
+
+    REPEL/HOLD/REPOSITION require PLACE scope; MOVE requires UNIT or PLACE.
+    """
+    if (
+        action_kind in (BattleActionKind.REPEL, BattleActionKind.HOLD, BattleActionKind.REPOSITION)
+        and scope != BattleActionScope.PLACE
+    ):
+        raise PlaceScopeRequiredError
+    if action_kind == BattleActionKind.MOVE and scope not in (
+        BattleActionScope.UNIT,
+        BattleActionScope.PLACE,
+    ):
+        raise InvalidMoveScopeError
+
+
+def _validate_command_and_environment(
+    *,
+    participant: BattleParticipant,
+    action_kind: str,
+    technique: Technique,
+    scope: str,
+    target_place: BattlePlace | None,
+) -> None:
+    """Dispatch SET_ENVIRONMENT, REPOSITION vehicle, and command-scope validation."""
+    if action_kind == BattleActionKind.SET_ENVIRONMENT:
+        _validate_environment_action(scope=scope, technique=technique)
+    if action_kind == BattleActionKind.REPOSITION:
+        _validate_vehicle_command(participant=participant, target_place=target_place)
+    elif scope in (BattleActionScope.PLACE, BattleActionScope.SIDE, BattleActionScope.BATTLE):
+        _validate_command_scope(participant=participant, scope=scope)
+
+
+def _validate_action_targets(  # noqa: PLR0913
+    *,
+    participant: BattleParticipant,
+    action_kind: str,
+    scope: str,
+    target_unit: BattleUnit | None,
+    target_side: BattleSide | None,
+    target_fortification: Fortification | None,
+) -> None:
+    """Validate target-specific rules: MOVE target-unit, STRIKE/ROUT own-side,
+    BREACH/FORTIFY fortification, and UNIT-scope place overlap.
+    """
+    if (
+        action_kind == BattleActionKind.MOVE
+        and scope == BattleActionScope.PLACE
+        and target_unit is None
+    ):
+        raise MoveOrderRequiresTargetUnitError
+
+    if (
+        action_kind in (BattleActionKind.STRIKE, BattleActionKind.ROUT)
+        and scope == BattleActionScope.SIDE
+        and target_side is not None
+        and target_side.pk == participant.side_id
+    ):
+        raise CannotStrikeOwnSideError
+
+    if (
+        scope == BattleActionScope.UNIT
+        and target_unit is not None
+        and participant.place_id is not None
+    ):
+        _validate_unit_place_overlap(participant=participant, target_unit=target_unit)
+
+    if action_kind in (BattleActionKind.BREACH, BattleActionKind.FORTIFY):
+        _validate_fortification_target(
+            participant=participant,
+            action_kind=action_kind,
+            target_fortification=target_fortification,
+        )
+        _validate_fortification_place_overlap(
+            participant=participant,
+            action_kind=action_kind,
+            target_fortification=target_fortification,
+        )
+
+
+def declare_battle_action(  # noqa: PLR0913 - many declaration facets + checks
     *,
     participant: BattleParticipant,
     action_kind: str,
@@ -667,61 +752,26 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + ch
     if not technique.action_template_id:
         raise TechniqueNotBattleReadyError
 
-    if (
-        action_kind in (BattleActionKind.REPEL, BattleActionKind.HOLD, BattleActionKind.REPOSITION)
-        and scope != BattleActionScope.PLACE
-    ):
-        raise PlaceScopeRequiredError
+    _validate_action_kind_scope(action_kind=action_kind, scope=scope)
 
-    if action_kind == BattleActionKind.MOVE and scope not in (
-        BattleActionScope.UNIT,
-        BattleActionScope.PLACE,
-    ):
-        raise InvalidMoveScopeError
-
-    if action_kind == BattleActionKind.SET_ENVIRONMENT:
-        _validate_environment_action(scope=scope, technique=technique)
-
-    if action_kind == BattleActionKind.REPOSITION:
-        _validate_vehicle_command(participant=participant, target_place=target_place)
-    elif scope in (BattleActionScope.PLACE, BattleActionScope.SIDE, BattleActionScope.BATTLE):
-        _validate_command_scope(participant=participant, scope=scope)
+    _validate_command_and_environment(
+        participant=participant,
+        action_kind=action_kind,
+        technique=technique,
+        scope=scope,
+        target_place=target_place,
+    )
 
     _validate_scope_target(scope=scope, target_place=target_place, target_side=target_side)
 
-    if (
-        action_kind == BattleActionKind.MOVE
-        and scope == BattleActionScope.PLACE
-        and target_unit is None
-    ):
-        raise MoveOrderRequiresTargetUnitError
-
-    if (
-        action_kind in (BattleActionKind.STRIKE, BattleActionKind.ROUT)
-        and scope == BattleActionScope.SIDE
-        and target_side is not None
-        and target_side.pk == participant.side_id
-    ):
-        raise CannotStrikeOwnSideError
-
-    if (
-        scope == BattleActionScope.UNIT
-        and target_unit is not None
-        and participant.place_id is not None
-    ):
-        _validate_unit_place_overlap(participant=participant, target_unit=target_unit)
-
-    if action_kind in (BattleActionKind.BREACH, BattleActionKind.FORTIFY):
-        _validate_fortification_target(
-            participant=participant,
-            action_kind=action_kind,
-            target_fortification=target_fortification,
-        )
-        _validate_fortification_place_overlap(
-            participant=participant,
-            action_kind=action_kind,
-            target_fortification=target_fortification,
-        )
+    _validate_action_targets(
+        participant=participant,
+        action_kind=action_kind,
+        scope=scope,
+        target_unit=target_unit,
+        target_side=target_side,
+        target_fortification=target_fortification,
+    )
 
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,

@@ -112,35 +112,79 @@ def _format_kind_guidance(kind: SituationKind, risk: str | None) -> list[str]:
     lines = [f"Kind: {kind.name} (min tier: {GMLevel(kind.minimum_gm_level).label})"]
     if kind.description:
         lines.append(f"  {kind.description}")
+    lines.extend(_format_check_fits(kind))
+    lines.extend(_format_difficulty_guides(kind, risk))
+    lines.extend(_format_pool_guides(kind))
+    return lines
 
+
+def _format_check_fits(kind: SituationKind) -> list[str]:
+    """Format the ``Checks that fit`` section for a SituationKind."""
     fits = list(kind.check_fits.select_related("check_type").order_by("check_type__name"))
-    if fits:
-        lines.append("  Checks that fit:")
-        for fit in fits:
-            row = f"    [{fit.check_type.pk}] {fit.check_type.name}"
-            lines.append(f"{row} -- {fit.fit_notes}" if fit.fit_notes else row)
+    if not fits:
+        return []
+    lines = ["  Checks that fit:"]
+    for fit in fits:
+        row = f"    [{fit.check_type.pk}] {fit.check_type.name}"
+        lines.append(f"{row} -- {fit.fit_notes}" if fit.fit_notes else row)
+    return lines
 
+
+def _format_difficulty_guides(kind: SituationKind, risk: str | None) -> list[str]:
+    """Format the ``Difficulty guide`` section, optionally filtered by *risk*."""
     guides = kind.difficulty_guides.all()
     if risk:
         guides = guides.filter(risk=risk)
     guides = list(guides.order_by("risk"))
-    if guides:
-        lines.append("  Difficulty guide:")
-        for guide in guides:
-            band_label = DifficultyChoice(guide.recommended_difficulty).label
-            risk_label = RenownRisk(guide.risk).label
-            row = f"    {risk_label} -> {band_label}"
-            lines.append(f"{row} -- {guide.guidance_text}" if guide.guidance_text else row)
+    if not guides:
+        return []
+    lines = ["  Difficulty guide:"]
+    for guide in guides:
+        band_label = DifficultyChoice(guide.recommended_difficulty).label
+        risk_label = RenownRisk(guide.risk).label
+        row = f"    {risk_label} -> {band_label}"
+        lines.append(f"{row} -- {guide.guidance_text}" if guide.guidance_text else row)
+    return lines
 
+
+def _format_pool_guides(kind: SituationKind) -> list[str]:
+    """Format the advisory consequence-pool guidance section."""
     pools = list(kind.pool_guides.select_related("pool").order_by("-is_default", "pool__name"))
-    if pools:
-        lines.append("  Consequence pool guidance (advisory only -- never auto-applied):")
-        for pool_guide in pools:
-            tag = " [default]" if pool_guide.is_default else ""
-            row = f"    {pool_guide.pool.name}{tag}"
-            criteria = pool_guide.selection_criteria
-            lines.append(f"{row} -- {criteria}" if criteria else row)
+    if not pools:
+        return []
+    lines = ["  Consequence pool guidance (advisory only -- never auto-applied):"]
+    for pool_guide in pools:
+        tag = " [default]" if pool_guide.is_default else ""
+        row = f"    {pool_guide.pool.name}{tag}"
+        criteria = pool_guide.selection_criteria
+        lines.append(f"{row} -- {criteria}" if criteria else row)
+    return lines
 
+
+def _format_kind_results(
+    kinds: list[SituationKind],
+    risk: str | None,
+    existing_lines: list[str],
+    query: str,
+) -> list[str]:
+    """Format the SituationKind results (or the no-match fallback) for the catalog.
+
+    Separates blank-line separators between sections from the per-kind guidance.
+    """
+    if not kinds:
+        if not query:
+            return []
+        lines = list(existing_lines)
+        if lines:
+            lines.append("")
+        lines.append(f"No situation kind matched {query!r} at your GM tier.")
+        # Return only the appended lines (the caller already has existing_lines).
+        return lines[len(existing_lines) :]
+    lines: list[str] = []
+    for kind in kinds:
+        if lines or existing_lines:
+            lines.append("")
+        lines.extend(_format_kind_guidance(kind, risk))
     return lines
 
 
@@ -198,15 +242,7 @@ class FindSituationAction(Action):
         elif query:
             lines.append(f"No situation templates matched {query!r}.")
 
-        if kinds:
-            for kind in kinds:
-                if lines:
-                    lines.append("")
-                lines.extend(_format_kind_guidance(kind, risk))
-        elif query:
-            if lines:
-                lines.append("")
-            lines.append(f"No situation kind matched {query!r} at your GM tier.")
+        lines.extend(_format_kind_results(kinds, risk, lines, query))
 
         if not lines:
             lines.append("The catalog is empty.")

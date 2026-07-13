@@ -55,6 +55,23 @@ const EMPTY_THREAD_LAST_SEEN: Record<string, number> = {};
 // Stable empty-array reference (#2165) — same reasoning as EMPTY_THREAD_LAST_SEEN.
 const EMPTY_OPEN_TABS: string[] = [];
 
+/**
+ * Derive the tab label from the current focus entry, falling back to the
+ * room name (or "Room" when there's no active session yet).
+ */
+function deriveRoomTabLabel(focus: FocusEntry, roomName: string | undefined): string {
+  switch (focus.kind) {
+    case 'room':
+      return focus.room?.name ?? roomName ?? 'Room';
+    case 'character':
+      return focus.character.name;
+    case 'item':
+      return focus.item.name;
+    default:
+      return 'Room';
+  }
+}
+
 export function GamePage() {
   const account = useAccount();
   const dispatch = useAppDispatch();
@@ -418,18 +435,7 @@ export function GamePage() {
   // The tab label mirrors whatever is currently focused. While focused
   // on the room, fall back to the room name; defaults to "Room" when
   // there's no active session yet.
-  let roomTabLabel = 'Room';
-  switch (focus.current.kind) {
-    case 'room':
-      roomTabLabel = focus.current.room?.name ?? roomData?.name ?? 'Room';
-      break;
-    case 'character':
-      roomTabLabel = focus.current.character.name;
-      break;
-    case 'item':
-      roomTabLabel = focus.current.item.name;
-      break;
-  }
+  const roomTabLabel = deriveRoomTabLabel(focus.current, roomData?.name);
 
   return (
     <>

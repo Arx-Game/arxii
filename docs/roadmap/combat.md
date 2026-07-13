@@ -178,6 +178,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   defense roll are untouched. See `docs/systems/INDEX.md`'s "Combat" section for the full
   wiring.
 
+- **Death & unconsciousness core slice (#2287, ADR-0131).** The survivability pipeline's
+  content + player experience: the `survivability` seed cluster makes knockout/death actually
+  fire in production (knockout/default-death/default-wound pools, Bleeding Out staged authoring,
+  Unconscious capability-zeroing, foundational awareness/movement/limb_use CapabilityTypes —
+  all previously test-factory-only, so combat could never KO or kill on a real DB); the wake
+  arc (`attempt_wake` — per-round Endurance checks easing over time/healing, guaranteed-wake
+  deadline, dreamside perception in the liminal dream room until #2290's dream realm); the
+  death moment (condolence delivery + death-scene stamp); the ghost interlude
+  (dead-action whitelist, scene/IC-day emit window); the retire off-ramp (player/staff/auto);
+  and capped death-kudos. Unit/service-tier proven (vitals/actions suites); no combat journey
+  test yet — a KO-to-wake / death-to-retire journey is fair game for the journeys list.
+
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
 - Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC

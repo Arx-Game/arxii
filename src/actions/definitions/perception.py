@@ -55,6 +55,23 @@ class LookAction(Action):
                 # target must be indistinguishable from a genuinely absent one.
                 return ActionResult(success=False, message=f"Could not find '{target.key}'.")
 
+        # #2287: an unconscious looker's perception is dreamside — looking at
+        # "the room" shows the liminal dream room, not the waking one.
+        if target == actor.location:
+            from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+            from world.vitals.services import (  # noqa: PLC0415
+                get_dream_room,
+                perceives_dreamside,
+            )
+
+            try:
+                sheet = actor.sheet_data
+            except (AttributeError, ObjectDoesNotExist):
+                sheet = None
+            if perceives_dreamside(sheet):
+                target = get_dream_room() or target
+
         sdm = context.scene_data if context else SceneDataManager()
         target_state = sdm.initialize_state_for_object(target)
         looker_state = sdm.initialize_state_for_object(actor)

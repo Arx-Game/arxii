@@ -336,6 +336,33 @@ def batch_relationship_temp_condition_cleanup() -> None:
     logger.info("Relationship temp-condition cleanup: %d expired rows deleted", count)
 
 
+def auto_retire_dead_characters() -> None:
+    """Auto-retire dead characters past the grace window (#2287).
+
+    The no-staff-needed backstop of the death off-ramp: a dead character whose
+    player never fires ``retire`` is released ``auto_retire_days`` after death.
+    """
+    from django.utils import timezone
+
+    from world.vitals.constants import CharacterLifeState
+    from world.vitals.models import CharacterVitals
+    from world.vitals.services import get_vitals_consequence_config, retire_character
+
+    config = get_vitals_consequence_config()
+    cutoff = timezone.now() - timedelta(days=config.auto_retire_days)
+    stale = CharacterVitals.objects.filter(
+        life_state=CharacterLifeState.DEAD,
+        retired_at__isnull=True,
+        died_at__lt=cutoff,
+    ).select_related("character_sheet")
+    count = 0
+    for vitals in stale:
+        retire_character(vitals.character_sheet)
+        count += 1
+    if count:
+        logger.info("Auto-retire: %d dead characters released", count)
+
+
 def register_all_tasks() -> None:
     """Register all periodic tasks with the scheduler."""
     register_task(
@@ -686,6 +713,14 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
             callable=roll_and_echo_weather,
             interval=timedelta(hours=2),
             description="Roll regional weather (every 2 real hrs ≈ 6 IC hrs) and echo to rooms.",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="vitals.auto_retire",
+            callable=auto_retire_dead_characters,
+            interval=timedelta(hours=6),
+            description="Auto-retire dead characters past the grace window (#2287).",
         )
     )
 

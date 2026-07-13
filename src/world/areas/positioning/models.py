@@ -8,6 +8,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.areas.positioning.constants import PositionKind, RampartCrackState, RampartSignature
 
+_DAMAGE_TYPE_MODEL = "conditions.DamageType"
+
 
 class PositionNodeBase(SharedMemoryModel):
     """Abstract base for position-node models (positioned tactical regions).
@@ -301,7 +303,7 @@ class PositionShelter(SharedMemoryModel):
 
     position = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="shelters")
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        _DAMAGE_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="position_shelters",
     )
@@ -380,7 +382,7 @@ class BlueprintPositionShelter(SharedMemoryModel):
         BlueprintPosition, on_delete=models.CASCADE, related_name="shelters"
     )
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        _DAMAGE_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="blueprint_position_shelters",
     )
@@ -437,7 +439,7 @@ class RampartElementProfile(SharedMemoryModel):
         ),
     )
     signature_damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        _DAMAGE_TYPE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -472,7 +474,7 @@ class RampartElementResistance(SharedMemoryModel):
         RampartElementProfile, on_delete=models.CASCADE, related_name="resistances"
     )
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        _DAMAGE_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="rampart_resistances",
     )

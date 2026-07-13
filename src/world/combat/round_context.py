@@ -62,6 +62,29 @@ _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
 )
 
 
+def _clear_colliding_passive(
+    technique: Any,
+    physical: Any,
+    social: Any,
+    mental: Any,
+) -> tuple[Any, Any, Any]:
+    """Clear the passive slot that collides with the focused action's category.
+
+    The focused action WINS over any previously-declared passive in the same
+    category (the XOR authority), regardless of dispatch arrival order.
+    """
+    from world.combat.constants import ActionCategory  # noqa: PLC0415
+
+    category = technique.action_category
+    if category == ActionCategory.PHYSICAL:
+        physical = None
+    elif category == ActionCategory.SOCIAL:
+        social = None
+    elif category == ActionCategory.MENTAL:
+        mental = None
+    return physical, social, mental
+
+
 def resolve_focused_target_objectdb(
     encounter: CombatEncounter,
     kwargs: dict[str, Any],
@@ -215,7 +238,6 @@ class CombatRoundContext(RoundContext):
         and are preserved across passive-only merges.
         """
         from actions.constants import CombatActionSlot  # noqa: PLC0415
-        from world.combat.constants import ActionCategory  # noqa: PLC0415
 
         focused = existing.focused_action if existing else None
         physical = existing.physical_passive if existing else None
@@ -241,13 +263,7 @@ class CombatRoundContext(RoundContext):
             # clear that colliding passive before declare_action validates. This
             # enforces the XOR regardless of dispatch arrival order (focused-first
             # OR passive-first).
-            category = technique.action_category
-            if category == ActionCategory.PHYSICAL:
-                physical = None
-            elif category == ActionCategory.SOCIAL:
-                social = None
-            elif category == ActionCategory.MENTAL:
-                mental = None
+            physical, social, mental = _clear_colliding_passive(technique, physical, social, mental)
         elif slot == CombatActionSlot.PASSIVE_PHYSICAL:
             physical = technique
         elif slot == CombatActionSlot.PASSIVE_SOCIAL:

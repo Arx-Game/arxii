@@ -69,6 +69,7 @@ TECHNIQUE_MODEL = "magic.Technique"
 COMBAT_PARTICIPANT_MODEL = "combat.CombatParticipant"
 COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
 OBJECTS_OBJECTDB_MODEL = "objects.ObjectDB"
+POSITION_MODEL = "areas.Position"
 
 
 class CombatEncounter(AbstractRound):
@@ -1183,7 +1184,7 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         help_text="If this action was upgraded to a combo, which combo.",
     )
     cast_destination = models.ForeignKey(
-        "areas.Position",
+        POSITION_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1195,7 +1196,7 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         ),
     )
     cast_position_a = models.ForeignKey(
-        "areas.Position",
+        POSITION_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1203,7 +1204,7 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         help_text="First endpoint of a declared position pair (Barricade). (#2206)",
     )
     cast_position_b = models.ForeignKey(
-        "areas.Position",
+        POSITION_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

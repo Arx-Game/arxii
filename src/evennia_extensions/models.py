@@ -21,6 +21,8 @@ from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplicat
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
 CallerType = Union[AccountDB, ObjectDB, ServerSession]
 
+_OBJECTDB_MODEL = "objects.ObjectDB"
+
 
 class MediaType(models.TextChoices):
     """Media type choices for player uploads."""
@@ -103,11 +105,19 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         return [tenure for tenure in self.cached_tenures if tenure.is_current]
 
     def get_available_characters(self):
-        """Return characters this player is actively playing using cached data."""
+        """Return characters this player is actively playing using cached data.
+
+        #2287: retired (released) dead characters are excluded — the ghost
+        interlude ends at retire, and the character can never be logged into
+        again. Dead-but-unretired characters stay available (spectator ghost).
+        """
+        from world.vitals.services import is_retired  # noqa: PLC0415
+
         return [
             tenure.roster_entry.character_sheet.character
             for tenure in self.cached_active_tenures
             if tenure.roster_entry.roster.is_active
+            and not is_retired(tenure.roster_entry.character_sheet)
         ]
 
     def get_current_character(self):
@@ -234,7 +244,7 @@ class ObjectDisplayData(SharedMemoryModel):
     """
 
     object = models.OneToOneField(
-        "objects.ObjectDB",
+        _OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         related_name="display_data",
         primary_key=True,
@@ -382,7 +392,7 @@ class RoomProfile(SharedMemoryModel):
     """
 
     objectdb = models.OneToOneField(
-        "objects.ObjectDB",
+        _OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="room_profile",
@@ -482,7 +492,7 @@ class ExitProfile(SharedMemoryModel):
     """
 
     objectdb = models.OneToOneField(
-        "objects.ObjectDB",
+        _OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="exit_profile",

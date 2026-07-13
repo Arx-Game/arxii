@@ -158,6 +158,21 @@ _BLINK_DPA_TRIGGER_NAME: str = "blink_damage_pre_apply"
 # --- Absorb buffer size seeded by the CONDITION_APPLIED init handler ---
 _FORCE_FIELD_INIT_BUFFER: int = 20
 
+# --- Shared gift/style/effect-type/description literals (duplicated across bundles) ---
+
+_WARDING_GIFT: str = "Warding"
+_WARDING_STANCE_STYLE: str = "Warding Stance"
+_FORCE_FIELD_EFFECT_TYPE: str = "Force Field"
+_BARRIER_DESCRIPTION: str = "Techniques that erect protective barriers."
+
+_EVASION_GIFT: str = "Evasion"
+_EVASION_STANCE_STYLE: str = "Evasion Stance"
+_BLINK_DODGE_EFFECT_TYPE: str = "Blink Dodge"
+_PHASE_STEP_DESCRIPTION: str = (
+    "Techniques that attune the body to phase-step through incoming attacks."
+)
+_DAMAGE_REFLECTION_EFFECT_TYPE: str = "Damage Reflection"
+
 # ---------------------------------------------------------------------------
 # Task 14c: Simple effect bundles (teleport / obstacle / incorporeal / sink / telekinesis)
 # ---------------------------------------------------------------------------
@@ -614,10 +629,10 @@ def ensure_force_field_content() -> None:
     # 5. Technique (self).
     _seed_technique(
         FORCE_FIELD_TECHNIQUE_NAME,
-        gift_name="Warding",
-        style_name="Warding Stance",
-        effect_type_name="Force Field",
-        description="Techniques that erect protective barriers.",
+        gift_name=_WARDING_GIFT,
+        style_name=_WARDING_STANCE_STYLE,
+        effect_type_name=_FORCE_FIELD_EFFECT_TYPE,
+        description=_BARRIER_DESCRIPTION,
         technique_description=(
             "Erect a shimmering force field that absorbs incoming damage.  "
             "The field persists until combat ends or its buffer is exhausted."
@@ -630,10 +645,10 @@ def ensure_force_field_content() -> None:
     # variant, so acquisition wiring is identical (zero new gate code).
     _seed_technique(
         FORCE_FIELD_ALLY_TECHNIQUE_NAME,
-        gift_name="Warding",
-        style_name="Warding Stance",
-        effect_type_name="Force Field",
-        description="Techniques that erect protective barriers.",
+        gift_name=_WARDING_GIFT,
+        style_name=_WARDING_STANCE_STYLE,
+        effect_type_name=_FORCE_FIELD_EFFECT_TYPE,
+        description=_BARRIER_DESCRIPTION,
         technique_description=(
             "Erect a shimmering force field around an ally that absorbs incoming damage.  "
             "The field persists until combat ends or its buffer is exhausted."
@@ -645,10 +660,10 @@ def ensure_force_field_content() -> None:
     )
     _seed_technique(
         FORCE_FIELD_PARTY_TECHNIQUE_NAME,
-        gift_name="Warding",
-        style_name="Warding Stance",
-        effect_type_name="Force Field",
-        description="Techniques that erect protective barriers.",
+        gift_name=_WARDING_GIFT,
+        style_name=_WARDING_STANCE_STYLE,
+        effect_type_name=_FORCE_FIELD_EFFECT_TYPE,
+        description=_BARRIER_DESCRIPTION,
         technique_description=(
             "Erect a shimmering force field around a whole party of allies that absorbs "
             "incoming damage.  Each field persists independently until combat ends or its "
@@ -715,10 +730,10 @@ def ensure_reflect_content() -> None:
     # 4. Technique (self).
     _seed_technique(
         REFLECT_TECHNIQUE_NAME,
-        gift_name="Warding",
-        style_name="Warding Stance",
-        effect_type_name="Damage Reflection",
-        description="Techniques that erect protective barriers.",
+        gift_name=_WARDING_GIFT,
+        style_name=_WARDING_STANCE_STYLE,
+        effect_type_name=_DAMAGE_REFLECTION_EFFECT_TYPE,
+        description=_BARRIER_DESCRIPTION,
         technique_description=(
             "Weave a mirror ward that reflects incoming damage back at your attacker, "
             "cancelling any active force-field absorption."
@@ -731,10 +746,10 @@ def ensure_reflect_content() -> None:
     # variant, so acquisition wiring is identical (zero new gate code).
     _seed_technique(
         REFLECT_ALLY_TECHNIQUE_NAME,
-        gift_name="Warding",
-        style_name="Warding Stance",
-        effect_type_name="Damage Reflection",
-        description="Techniques that erect protective barriers.",
+        gift_name=_WARDING_GIFT,
+        style_name=_WARDING_STANCE_STYLE,
+        effect_type_name=_DAMAGE_REFLECTION_EFFECT_TYPE,
+        description=_BARRIER_DESCRIPTION,
         technique_description=(
             "Weave a mirror ward onto an ally that reflects incoming damage back at "
             "their attacker, cancelling any active force-field absorption on that ally."
@@ -746,10 +761,10 @@ def ensure_reflect_content() -> None:
     )
     _seed_technique(
         REFLECT_PARTY_TECHNIQUE_NAME,
-        gift_name="Warding",
-        style_name="Warding Stance",
-        effect_type_name="Damage Reflection",
-        description="Techniques that erect protective barriers.",
+        gift_name=_WARDING_GIFT,
+        style_name=_WARDING_STANCE_STYLE,
+        effect_type_name=_DAMAGE_REFLECTION_EFFECT_TYPE,
+        description=_BARRIER_DESCRIPTION,
         technique_description=(
             "Weave a mirror ward onto a whole party of allies that reflects incoming "
             "damage back at each attacker, cancelling any active force-field absorption "
@@ -815,10 +830,10 @@ def ensure_blink_content() -> None:
     # 4. Technique (self).
     _seed_technique(
         BLINK_TECHNIQUE_NAME,
-        gift_name="Evasion",
-        style_name="Evasion Stance",
-        effect_type_name="Blink Dodge",
-        description="Techniques that attune the body to phase-step through incoming attacks.",
+        gift_name=_EVASION_GIFT,
+        style_name=_EVASION_STANCE_STYLE,
+        effect_type_name=_BLINK_DODGE_EFFECT_TYPE,
+        description=_PHASE_STEP_DESCRIPTION,
         technique_description=(
             "Phase-step out of the way of incoming damage, teleporting to an adjacent "
             "position and negating the hit entirely."
@@ -831,10 +846,10 @@ def ensure_blink_content() -> None:
     # variant, so acquisition wiring is identical (zero new gate code).
     _seed_technique(
         BLINK_ALLY_TECHNIQUE_NAME,
-        gift_name="Evasion",
-        style_name="Evasion Stance",
-        effect_type_name="Blink Dodge",
-        description="Techniques that attune the body to phase-step through incoming attacks.",
+        gift_name=_EVASION_GIFT,
+        style_name=_EVASION_STANCE_STYLE,
+        effect_type_name=_BLINK_DODGE_EFFECT_TYPE,
+        description=_PHASE_STEP_DESCRIPTION,
         technique_description=(
             "Attune an ally's body to phase-step out of the way of incoming damage, "
             "teleporting them to an adjacent position and negating the hit entirely."
@@ -846,10 +861,10 @@ def ensure_blink_content() -> None:
     )
     _seed_technique(
         BLINK_PARTY_TECHNIQUE_NAME,
-        gift_name="Evasion",
-        style_name="Evasion Stance",
-        effect_type_name="Blink Dodge",
-        description="Techniques that attune the body to phase-step through incoming attacks.",
+        gift_name=_EVASION_GIFT,
+        style_name=_EVASION_STANCE_STYLE,
+        effect_type_name=_BLINK_DODGE_EFFECT_TYPE,
+        description=_PHASE_STEP_DESCRIPTION,
         technique_description=(
             "Attune a whole party of allies to phase-step out of the way of incoming "
             "damage, teleporting each to an adjacent position and negating the hit "

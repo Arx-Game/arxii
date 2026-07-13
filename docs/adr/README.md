@@ -161,6 +161,7 @@ treat those names as hints to confirm, not gospel.
 - [0126 — A mount is a companion plus a verb-gating condition; charge/joust ride the existing move/duel seams](0126-mounts-are-companions-with-a-verb-gating-condition.md) (extends ADR-0023/0060)
 - [0129 — Wind consumes as banded SCENE check modifiers on missile deliveries only](0129-wind-consumes-as-banded-scene-modifiers-on-missile-deliveries.md) (related #1522)
 - [0130 — The combat offense flavor catalog applies to standalone casts; combat rounds deliberately do not consume ActionTemplate.consequence_pool](0130-combat-offense-catalog-is-standalone-cast-only.md) (extends the #1320 magic technique-cast catalog pattern; related ADR-0096)
+- [0131 — Death off-ramp is automated and bounded; no resurrection path exists](0131-death-offramp-is-automated-and-bounded.md) (extends ADR-0040/0049/0076; related ADR-0023, #2287)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

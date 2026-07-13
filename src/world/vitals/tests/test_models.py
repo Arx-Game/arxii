@@ -4,6 +4,11 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.vitals.constants import (
+    AUTO_RETIRE_DAYS,
+    WAKE_BASE_DIFFICULTY,
+    WAKE_EASE_PER_ROUND,
+    WAKE_GUARANTEED_ROUNDS,
+    WAKE_SCALING_PER_PERCENT,
     WOUND_DESCRIPTIONS,
     CharacterLifeState,
 )
@@ -121,3 +126,22 @@ class VitalsConsequenceConfigFieldTests(TestCase):
     def test_config_has_stamina_weight(self) -> None:
         cfg, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
         self.assertIsInstance(cfg.stamina_to_health_weight, int)
+
+    def test_config_wake_and_retire_knob_defaults(self) -> None:
+        cfg, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
+        self.assertEqual(cfg.wake_base_difficulty, WAKE_BASE_DIFFICULTY)
+        self.assertEqual(cfg.wake_scaling_per_percent, WAKE_SCALING_PER_PERCENT)
+        self.assertEqual(cfg.wake_ease_per_round, WAKE_EASE_PER_ROUND)
+        self.assertEqual(cfg.wake_guaranteed_rounds, WAKE_GUARANTEED_ROUNDS)
+        self.assertEqual(cfg.auto_retire_days, AUTO_RETIRE_DAYS)
+        self.assertEqual(cfg.death_condolence_body, "")
+
+
+class CharacterVitalsDeathOfframpFieldTests(TestCase):
+    """Tests for the retire/death-scene fields added for #2287."""
+
+    def test_retired_and_death_scene_fields_default_null(self) -> None:
+        vitals = CharacterVitalsFactory()
+        vitals.refresh_from_db()
+        self.assertIsNone(vitals.retired_at)
+        self.assertIsNone(vitals.died_in_scene)

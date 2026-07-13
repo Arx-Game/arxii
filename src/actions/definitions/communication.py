@@ -9,7 +9,11 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from actions.base import Action
 from actions.constants import ActionCategory, TargetKind
-from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
+from actions.prerequisites import (
+    GhostWindowPrerequisite,
+    MinimumGMLevelPrerequisite,
+    Prerequisite,
+)
 from actions.types import ActionContext, ActionResult, TargetFilters, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_message
@@ -152,6 +156,10 @@ class PoseAction(Action):
     intent_event: str | None = "before_pose"
     result_event: str | None = "pose"
 
+    def get_prerequisites(self) -> list[Prerequisite]:
+        # #2287 — a dead poser is bounded to the ghost emit window.
+        return [GhostWindowPrerequisite()]
+
     def execute(
         self,
         actor: ObjectDB,
@@ -211,6 +219,10 @@ class EmitAction(Action):
 
     intent_event: str | None = "before_emit"
     result_event: str | None = "emit"
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        # #2287 — a dead emitter is bounded to the ghost emit window.
+        return [GhostWindowPrerequisite()]
 
     def execute(
         self,

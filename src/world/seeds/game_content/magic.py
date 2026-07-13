@@ -63,6 +63,9 @@ ACTION_TECHNIQUE_MAP: dict[str, str] = {
     "entrance": "Commanding Presence",
 }
 
+# Evennia typeclass path repeated across room lookups; centralized for dedup.
+_ROOM_MODEL = "typeclasses.rooms.Room"
+
 _ELEMENTAL_TECHNIQUES: list[tuple[str, list[str], str]] = [
     ("Flame Lance", ["generation", "force", "projection"], "Fire"),
     ("Shadow Step", ["traversal", "perception"], "Shadow"),
@@ -1203,7 +1206,7 @@ def _seed_resonance_environment_rooms() -> None:
         # ObjectDB.db_key is not unique in Evennia — use filter().first() for idempotency.
         existing = ObjectDB.objects.filter(
             db_key=db_key,
-            db_typeclass_path="typeclasses.rooms.Room",
+            db_typeclass_path=_ROOM_MODEL,
         ).first()
         if existing is not None:
             room = existing
@@ -1211,7 +1214,7 @@ def _seed_resonance_environment_rooms() -> None:
             # Evennia's create_object fires at_object_creation, which auto-creates
             # the RoomProfile OneToOne extension for typeclasses.rooms.Room.
             room = evennia_create.create_object(
-                typeclass="typeclasses.rooms.Room",
+                typeclass=_ROOM_MODEL,
                 key=db_key,
                 nohome=True,
             )
@@ -2492,7 +2495,7 @@ def ensure_portal_travel_content() -> None:
     for room_key, anchor_name in _MIRROR_ANCHOR_ROOM_SPECS:
         room = ObjectDB.objects.filter(
             db_key=room_key,
-            db_typeclass_path="typeclasses.rooms.Room",
+            db_typeclass_path=_ROOM_MODEL,
         ).first()
         if room is None:
             continue

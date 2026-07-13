@@ -113,6 +113,7 @@ INSTALLED_APPS += [
     "world.npc_services.apps.NPCServicesConfig",
     "world.buildings.apps.BuildingsConfig",
     "world.ships.apps.ShipsConfig",
+    "world.travel.apps.TravelConfig",
     "world.room_features.apps.RoomFeaturesConfig",
     "world.tidings.apps.TidingsConfig",
     "behaviors.apps.BehaviorsConfig",
@@ -240,6 +241,11 @@ MAX_ESTABLISHED_PERSONAS_PER_SHEET = env.int("MAX_ESTABLISHED_PERSONAS_PER_SHEET
 # the exit graph alone is the connectivity, so this hop cap is the sole cost/reach
 # bound against a pathological/disconnected-but-still-searched graph.
 TRAVEL_MAX_HOPS = env.int("TRAVEL_MAX_HOPS", default=50)
+
+# Overworld travel (#1855) — AP cost per IC hour of travel.
+AP_PER_IC_HOUR = env.int("AP_PER_IC_HOUR", default=2)
+# Overworld travel (#1855) — max hubs in a computed route.
+OVERWORLD_MAX_HOPS = env.int("OVERWORLD_MAX_HOPS", default=20)
 
 # Flat copper cost to install a portal anchor (e.g. a magic mirror) in a room
 # the installer owns or has tenancy in (#2222). Deliberately cheap — a token
@@ -530,4 +536,7 @@ admin.sites.site = arx_admin_site
 # outside version control (see the module docstring) — it's an env-driven
 # overlay, same 12-factor contract as the rest of this file.
 with contextlib.suppress(ImportError):
-    from server.conf.secret_settings import *
+    import server.conf.secret_settings as _secret_settings
+
+    _public_names = (name for name in dir(_secret_settings) if not name.startswith("_"))
+    globals().update({name: getattr(_secret_settings, name) for name in _public_names})

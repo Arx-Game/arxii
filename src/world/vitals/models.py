@@ -5,10 +5,15 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from world.vitals.constants import (
+    AUTO_RETIRE_DAYS,
     DEATH_BASE_DIFFICULTY,
     DEATH_SCALING_PER_PERCENT,
     KNOCKOUT_BASE_DIFFICULTY,
     KNOCKOUT_SCALING_PER_PERCENT,
+    WAKE_BASE_DIFFICULTY,
+    WAKE_EASE_PER_ROUND,
+    WAKE_GUARANTEED_ROUNDS,
+    WAKE_SCALING_PER_PERCENT,
     WOUND_BASE_DIFFICULTY,
     WOUND_DESCRIPTIONS,
     WOUND_SCALING_PER_PERCENT,
@@ -39,6 +44,25 @@ class CharacterVitals(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="When the character died (permanent death).",
+    )
+    died_in_scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deaths",
+        help_text=(
+            "Scene active at the body's location when the character died; bounds the "
+            "ghost emit window and death-kudos eligibility. Null for offscreen deaths."
+        ),
+    )
+    retired_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the dead character was released (player retire, staff force, or "
+            "auto-retire). Set = the character can no longer be puppeted."
+        ),
     )
     health = models.IntegerField(
         default=0,
@@ -161,6 +185,47 @@ class VitalsConsequenceConfig(SharedMemoryModel):
     stamina_to_health_weight = models.PositiveSmallIntegerField(
         default=3,
         help_text="Health per point of Stamina contributed to base_max_health.",
+    )
+
+    # ------------------------------------------------------------------
+    # Wake arc (unconscious recovery) tuning (#2287)
+    # ------------------------------------------------------------------
+
+    wake_base_difficulty = models.PositiveIntegerField(
+        default=WAKE_BASE_DIFFICULTY,
+        help_text="Base difficulty of the per-round wake (Endurance) check at full health.",
+    )
+    wake_scaling_per_percent = models.PositiveIntegerField(
+        default=WAKE_SCALING_PER_PERCENT,
+        help_text="Additional wake difficulty per percentage point of missing health.",
+    )
+    wake_ease_per_round = models.PositiveIntegerField(
+        default=WAKE_EASE_PER_ROUND,
+        help_text="Wake difficulty eased per round spent unconscious.",
+    )
+    wake_guaranteed_rounds = models.PositiveIntegerField(
+        default=WAKE_GUARANTEED_ROUNDS,
+        help_text=(
+            "Rounds until an unconscious character is guaranteed to wake "
+            "(converted to a wall-clock deadline out of combat)."
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Death off-ramp tuning (#2287)
+    # ------------------------------------------------------------------
+
+    auto_retire_days = models.PositiveIntegerField(
+        default=AUTO_RETIRE_DAYS,
+        help_text="Days after death before a dead character is auto-retired.",
+    )
+    death_condolence_body = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "OOC message delivered to the player at the moment of death. "
+            "Admin-editable; seeded with a PLACEHOLDER paragraph."
+        ),
     )
 
     updated_at = models.DateTimeField(auto_now=True)

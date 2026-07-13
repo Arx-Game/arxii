@@ -748,3 +748,58 @@ class HasCompanionCapacityPrerequisite(Prerequisite):
         if remaining < archetype.capacity_cost:
             return False, f"You don't have enough Companion Capacity to bind a {archetype.name}."
         return True, ""
+
+
+@dataclass
+class GhostWindowPrerequisite(Prerequisite):
+    """Bound a dead character's emit/pose to recognized containers (#2287).
+
+    Alive actors always pass. A dead actor passes while either container is
+    open:
+
+    - the scene they died in is still active and they are at its location, or
+    - the current IC day matches the IC day of their death (real-day fallback
+      when no game clock exists).
+
+    Funeral and seance containers are the later issues' hooks (#2289/#2290).
+    """
+
+    def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.vitals.services import is_dead  # noqa: PLC0415
+
+        try:
+            sheet = actor.sheet_data
+            vitals = sheet.vitals
+        except (AttributeError, ObjectDoesNotExist):
+            return True, ""
+        if not is_dead(sheet):
+            return True, ""
+        scene = vitals.died_in_scene
+        if scene is not None and scene.is_active and actor.location == scene.location:
+            return True, ""
+        if _same_ic_day_as_now(vitals.died_at):
+            return True, ""
+        return False, "The scene of your death has closed; your voice is spent."
+
+
+def _same_ic_day_as_now(died_at: Any) -> bool:
+    """True when ``died_at`` falls on the current IC day (#2287).
+
+    Real-day comparison fallback when no game clock exists.
+    """
+    if died_at is None:
+        return False
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.game_clock.services import (  # noqa: PLC0415
+        get_ic_date_for_real_time,
+        get_ic_now,
+    )
+
+    ic_now = get_ic_now()
+    died_ic = get_ic_date_for_real_time(died_at)
+    if ic_now is not None and died_ic is not None:
+        return died_ic.date() == ic_now.date()
+    return died_at.date() == timezone.now().date()

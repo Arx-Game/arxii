@@ -7,6 +7,7 @@ or any damage source.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -27,10 +28,11 @@ from world.vitals.constants import (
     SURVIVABILITY_CHECK_CATEGORY,
     CharacterLifeState,
 )
-from world.vitals.types import DamageConsequenceResult
+from world.vitals.types import DamageConsequenceResult, WakeResult
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
+    from datetime import datetime
 
     from evennia.objects.models import ObjectDB
 
@@ -46,8 +48,10 @@ if TYPE_CHECKING:
         DamageType,
     )
     from world.conditions.types import RoundTickResult
-    from world.scenes.models import Interaction
+    from world.scenes.models import Interaction, Scene
     from world.vitals.models import VitalsConsequenceConfig
+
+logger = logging.getLogger(__name__)
 
 ROUND_TICK_START = "start"
 ROUND_TICK_END = "end"
@@ -518,6 +522,7 @@ def _apply_knockout_tier(  # noqa: PLR0913 - one keyword arg per resolved tier i
     if _applied_unconscious(pending):
         result.knocked_out = True
         result.message = "was knocked unconscious"
+        _stamp_unconscious_wake_deadline(character_sheet)
         _record_combat_outcome(
             character_sheet,
             ko_check_type,
@@ -681,13 +686,103 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
         return
     vitals.life_state = CharacterLifeState.DEAD
     vitals.died_at = timezone.now()
-    vitals.save(update_fields=["life_state", "died_at"])
+    vitals.died_in_scene = _active_scene_at_body(character_sheet)
+    vitals.save(update_fields=["life_state", "died_at", "died_in_scene"])
 
     # Lazy import per repo convention: vitals must not import roster at module level.
     from world.character_sheets.types import LifecycleState  # noqa: PLC0415
     from world.roster.services.activity import set_lifecycle_state  # noqa: PLC0415
 
     set_lifecycle_state(character_sheet, LifecycleState.DEAD)
+    _deliver_death_condolence(character_sheet)
+
+
+def _active_scene_at_body(character_sheet: CharacterSheet) -> Scene | None:
+    """The active scene at the body's location, if any (#2287).
+
+    Bounds the ghost emit window and death-kudos eligibility. None for
+    offscreen deaths (no location, no active scene there).
+    """
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    character = character_sheet.character
+    location = character.location
+    if location is None:
+        return None
+    return get_active_scene(location)
+
+
+def _deliver_death_condolence(character_sheet: CharacterSheet) -> None:
+    """Deliver the OOC condolence moment to the dead character's player (#2287).
+
+    Best-effort on every leg: the character text message (telnet + web log)
+    and a ``character_died`` frame to the bound account (web toast). A death
+    with nobody online loses nothing — the config text is also shown at next
+    login while the ghost interlude lasts (frontend concern).
+    """
+    config = get_vitals_consequence_config()
+    body = config.death_condolence_body
+    if not body:
+        return
+    character = character_sheet.character
+    try:
+        character.msg(body)
+    except Exception:
+        logger.exception("death condolence character.msg failed for sheet %s", character_sheet.pk)
+    account = character.db_account
+    if account is None:
+        return
+    payload = {"character": character.key, "body": body}
+    try:
+        account.msg(character_died=((), payload))
+    except Exception:
+        logger.exception("character_died push failed for account %s", account.pk)
+
+
+def is_retired(character_sheet: CharacterSheet | None) -> bool:
+    """True when the dead character has been released (retire fired, #2287)."""
+    if character_sheet is None:
+        return False
+    try:
+        return character_sheet.vitals.retired_at is not None
+    except (AttributeError, ObjectDoesNotExist):
+        return False
+
+
+def retire_character(character_sheet: CharacterSheet, *, forced_by: object | None = None) -> None:
+    """Release a dead character: the final lock of the ghost interlude (#2287).
+
+    Player-fired when ready, staff-forceable (``forced_by``), and auto-fired by
+    the ``vitals.auto_retire`` scheduler task after the grace window. Sets
+    ``retired_at`` (idempotent no-op when already set), which closes the
+    death-kudos window and blocks any further puppet/login of the character.
+    Raises ``ValueError`` for a living character — retire is a death off-ramp,
+    not a lifecycle verb (LifecycleState.RETIRED for living retirement is a
+    separate, undesigned flow).
+    """
+    if not is_dead(character_sheet):
+        msg = "Only dead characters can be retired."
+        raise ValueError(msg)
+    vitals = character_sheet.vitals
+    if vitals.retired_at is not None:
+        return
+    vitals.retired_at = timezone.now()
+    vitals.save(update_fields=["retired_at"])
+    if forced_by is not None:
+        logger.info(
+            "Character sheet %s retired by staff account %s",
+            character_sheet.pk,
+            forced_by,
+        )
+    character = character_sheet.character
+    account = character.db_account
+    if account is None:
+        return
+    for session in list(character.sessions.all()):
+        try:
+            account.unpuppet_object(session)
+        except Exception:
+            logger.exception("unpuppet on retire failed for sheet %s", character_sheet.pk)
 
 
 def _resolve_peril_via_pool(
@@ -964,6 +1059,175 @@ def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
 
     return _advance_staged_peril_condition(
         character_sheet, BLEED_OUT_CONDITION_NAME, _resolve_terminal_bleed_out
+    )
+
+
+# ---------------------------------------------------------------------------
+# Wake arc — unconscious recovery (#2287)
+# ---------------------------------------------------------------------------
+
+
+def unconscious_instance(character_sheet: CharacterSheet | None) -> ConditionInstance | None:
+    """Return the character's active Unconscious ConditionInstance, if any."""
+    from world.conditions.constants import UNCONSCIOUS_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+    if character_sheet is None:
+        return None
+    try:
+        template = ConditionTemplate.get_by_name(UNCONSCIOUS_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        return None
+    return get_active_conditions(character_sheet.character, condition=template).first()
+
+
+def get_dream_room() -> ObjectDB | None:  # noqa: OBJECTDB_PARAM - genuinely a room object
+    """Return the liminal dream room (seeded by the survivability cluster).
+
+    None on an unseeded database — callers fall back to normal perception.
+    """
+    from evennia.utils.search import search_tag  # noqa: PLC0415
+
+    from world.vitals.constants import (  # noqa: PLC0415
+        DREAM_ROOM_TAG,
+        DREAM_ROOM_TAG_CATEGORY,
+    )
+
+    rooms = search_tag(key=DREAM_ROOM_TAG, category=DREAM_ROOM_TAG_CATEGORY)
+    return rooms[0] if rooms else None
+
+
+def perceives_dreamside(character_sheet: CharacterSheet | None) -> bool:
+    """True when the character's perception is relocated to the dream side (#2287).
+
+    Unconscious characters dream; the dead do NOT — a ghost watches the waking
+    room (the ghost interlude), so death always wins over any lingering
+    Unconscious instance.
+    """
+    if character_sheet is None or is_dead(character_sheet):
+        return False
+    return unconscious_instance(character_sheet) is not None
+
+
+def calculate_wake_difficulty(*, health_pct: float, rounds_elapsed: int) -> int:
+    """Difficulty of the per-round wake check.
+
+    Scales up with missing health and eases per round spent unconscious (and
+    therefore eases as healing raises ``health_pct``), floored at 0 — an
+    untended character trends toward waking, never away from it.
+    """
+    config = get_vitals_consequence_config()
+    missing_pct = int((1.0 - max(0.0, min(1.0, health_pct))) * 100)
+    difficulty = (
+        config.wake_base_difficulty
+        + missing_pct * config.wake_scaling_per_percent
+        - rounds_elapsed * config.wake_ease_per_round
+    )
+    return max(0, difficulty)
+
+
+def _stamp_unconscious_wake_deadline(character_sheet: CharacterSheet | None) -> None:
+    """Set the guaranteed-wake deadline on a freshly applied Unconscious instance.
+
+    ``expires_at`` doubles as the force-wake backstop: the hourly
+    ``conditions.expiration_cleanup`` scheduler task deletes instances past
+    their deadline, so an untended character can never be stuck dreamside.
+    Only stamps when null (re-knockouts while already unconscious keep the
+    earliest deadline).
+    """
+    from datetime import timedelta  # noqa: PLC0415
+
+    from world.conditions.services import SECONDS_PER_ROUND  # noqa: PLC0415
+
+    instance = unconscious_instance(character_sheet)
+    if instance is None or instance.expires_at is not None:
+        return
+    config = get_vitals_consequence_config()
+    instance.expires_at = timezone.now() + timedelta(
+        seconds=config.wake_guaranteed_rounds * SECONDS_PER_ROUND
+    )
+    instance.save(update_fields=["expires_at"])
+
+
+def _wake_roll_blocked(
+    instance: ConditionInstance,
+    now: datetime,
+    *,
+    in_combat_tick: bool,
+) -> str | None:
+    """The pre-roll gates of attempt_wake: None = roll; a message = blocked.
+
+    Combat ticks: no same-tick roll for an Unconscious applied THIS round —
+    "one check per round" means per *elapsed* round. Out of combat: at most
+    one roll per wall-clock round-equivalent (stamps the attempt time).
+    """
+    from world.conditions.services import SECONDS_PER_ROUND  # noqa: PLC0415
+
+    if in_combat_tick:
+        if (now - instance.applied_at).total_seconds() < SECONDS_PER_ROUND:
+            return ""
+        return None
+    last = instance.last_resist_attempt_at
+    if last is not None and (now - last).total_seconds() < SECONDS_PER_ROUND:
+        return "You are still sunk too deep to try again."
+    instance.last_resist_attempt_at = now
+    instance.save(update_fields=["last_resist_attempt_at"])
+    return None
+
+
+def attempt_wake(
+    character_sheet: CharacterSheet | None,
+    *,
+    in_combat_tick: bool = False,
+) -> WakeResult:
+    """Attempt to wake from Unconscious: one Endurance check per round.
+
+    Difficulty scales with current injury and eases per round unconscious
+    (``calculate_wake_difficulty``); past the guaranteed-wake deadline the
+    character wakes without a roll. Out of combat the attempt is rate-limited
+    to one per ``SECONDS_PER_ROUND`` wall-clock round-equivalent; round ticks
+    (``in_combat_tick=True``) get one free roll per round instead. A character
+    who is actively Bleeding Out cannot wake — stabilising the dying comes
+    first.
+    """
+    from world.conditions.services import SECONDS_PER_ROUND, remove_condition  # noqa: PLC0415
+    from world.vitals.peril_resolution import acute_peril_instances  # noqa: PLC0415
+
+    instance = unconscious_instance(character_sheet)
+    if character_sheet is None or instance is None:
+        return WakeResult(attempted=False, woke=False, message="You are already awake.")
+    if acute_peril_instances(character_sheet).exists():
+        return WakeResult(
+            attempted=False,
+            woke=False,
+            message="You are dying; your body cannot find its way back yet.",
+        )
+    now = timezone.now()
+    character = character_sheet.character
+    if instance.expires_at is not None and now >= instance.expires_at:
+        remove_condition(character, instance.condition)
+        return WakeResult(
+            attempted=True, woke=True, message="You claw your way back to consciousness."
+        )
+    blocked = _wake_roll_blocked(instance, now, in_combat_tick=in_combat_tick)
+    if blocked is not None:
+        return WakeResult(attempted=False, woke=False, message=blocked)
+    rounds_elapsed = int((now - instance.applied_at).total_seconds() // SECONDS_PER_ROUND)
+    try:
+        health_pct = character_sheet.vitals.health_percentage
+    except (AttributeError, ObjectDoesNotExist):
+        health_pct = 0.0
+    difficulty = calculate_wake_difficulty(health_pct=health_pct, rounds_elapsed=rounds_elapsed)
+    check_type = _ensure_endurance_check_type()
+    result = perform_check(character, check_type, target_difficulty=difficulty)
+    if int(result.success_level) >= 0:
+        remove_condition(character, instance.condition)
+        return WakeResult(
+            attempted=True, woke=True, message="You claw your way back to consciousness."
+        )
+    return WakeResult(
+        attempted=True, woke=False, message="Consciousness slips away from your grasp."
     )
 
 
@@ -1274,6 +1538,8 @@ def tick_round_for_targets(
             except (AttributeError, ObjectDoesNotExist):
                 continue
             advance_bleed_out(sheet)
+            # #2287: unconscious characters get one free wake roll per round.
+            attempt_wake(sheet, in_combat_tick=True)
         # Non-cast over-capacity exhaustion collapse (acute tier, #520 Phase 5).
         tick_fatigue_collapse_for_targets(target_list)
         # Action-driven plummet descent + impact (#1228). Function-local import

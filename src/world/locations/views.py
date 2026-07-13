@@ -31,6 +31,9 @@ from world.locations.serializers import (
 )
 from world.roster.models import RosterEntry
 
+# Repeated failure detail, extracted to satisfy S1192 (duplicate string literals).
+_CHARACTER_NOT_FOUND_MSG = "Character not found."
+
 
 @extend_schema(tags=["comfort"])
 class ComfortViewSet(viewsets.ViewSet):
@@ -62,11 +65,11 @@ class ComfortViewSet(viewsets.ViewSet):
         # primary-key OneToOne to ObjectDB), so the tenure check doubles as the ownership gate.
         owned = RosterEntry.objects.for_account(user).filter(character_sheet_id=character_id)
         if not owned.exists():
-            return Response({"detail": "Character not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _CHARACTER_NOT_FOUND_MSG}, status=status.HTTP_404_NOT_FOUND)
 
         sheet = CharacterSheet.objects.filter(pk=character_id).first()
         if sheet is None:
-            return Response({"detail": "Character not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _CHARACTER_NOT_FOUND_MSG}, status=status.HTTP_404_NOT_FOUND)
 
         summary = character_comfort_summary(sheet.character)
         return Response(CharacterComfortSerializer(summary).data)
@@ -122,11 +125,11 @@ class PortalDestinationsViewSet(viewsets.ViewSet):
         # Personal like comfort: only serve a character the requesting account actually plays.
         owned = RosterEntry.objects.for_account(user).filter(character_sheet_id=character_id)
         if not owned.exists():
-            return Response({"detail": "Character not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _CHARACTER_NOT_FOUND_MSG}, status=status.HTTP_404_NOT_FOUND)
 
         sheet = CharacterSheet.objects.filter(pk=character_id).first()
         if sheet is None:
-            return Response({"detail": "Character not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _CHARACTER_NOT_FOUND_MSG}, status=status.HTTP_404_NOT_FOUND)
 
         from world.magic.services.portal_travel import portal_destinations  # noqa: PLC0415
 

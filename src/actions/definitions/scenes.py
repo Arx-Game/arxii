@@ -12,6 +12,9 @@ from commands.exceptions import CommandError
 # Re-use the same NOT_IN_A_ROOM_MESSAGE constant (defined in rounds.py and checked here).
 NOT_IN_A_ROOM_MESSAGE = "You are not in a room."
 
+# Repeated failure messages, extracted to satisfy S1192 (duplicate string literals).
+_NO_ACTIVE_SCENE_MSG = "There is no active scene here."
+
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
@@ -113,7 +116,7 @@ class FinishSceneAction(Action):
 
         scene = _active_scene_for_room(room)
         if scene is None:
-            return ActionResult(success=False, message="There is no active scene here.")
+            return ActionResult(success=False, message=_NO_ACTIVE_SCENE_MSG)
 
         if not actor_can_administer_scene(actor, scene):
             return ActionResult(
@@ -198,7 +201,7 @@ class GrantSceneGMAction(Action):
 
         scene = _active_scene_for_room(room)
         if scene is None:
-            return ActionResult(success=False, message="There is no active scene here.")
+            return ActionResult(success=False, message=_NO_ACTIVE_SCENE_MSG)
 
         if not actor_can_administer_scene(actor, scene):
             return ActionResult(
@@ -257,7 +260,7 @@ class MarkDecisiveCheckAction(Action):
 
         scene = _active_scene_for_room(room)
         if scene is None:
-            return ActionResult(success=False, message="There is no active scene here.")
+            return ActionResult(success=False, message=_NO_ACTIVE_SCENE_MSG)
 
         if not actor_can_administer_scene(actor, scene):
             return ActionResult(
