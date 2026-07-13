@@ -36,16 +36,9 @@ import {
 import { searchOrganizations, searchSocieties } from '@/events/queries';
 import type { SubjectKindEnum } from '../types';
 
-export const SUBJECT_KIND_LABELS: Record<SubjectKindEnum, string> = {
-  personal_jeopardy: 'Personal jeopardy',
-  npc_fate: 'NPC fate',
-  location: 'Location',
-  faction: 'Faction relationship',
-  item: 'Item',
-  campaign_track: 'Campaign track',
-  asset: 'Asset',
-  custom: 'Custom',
-};
+import { SUBJECT_KIND_LABELS } from '@/shared/subjectKinds';
+
+export { SUBJECT_KIND_LABELS };
 
 export interface SubjectRefValue {
   subject_kind: SubjectKindEnum;
