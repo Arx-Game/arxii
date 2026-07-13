@@ -2331,6 +2331,14 @@ class Stake(SharedMemoryModel):
         related_name="+",
         help_text="For FACTION subjects (organization-level). Nulls if the org is deleted.",
     )
+    subject_asset = models.ForeignKey(
+        "assets.NPCAsset",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="For ASSET subjects. Nulls if the asset is deleted.",
+    )
     subject_label = models.CharField(
         max_length=200,
         blank=True,
@@ -2448,6 +2456,18 @@ class StakeResolution(SharedMemoryModel):
             "ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only "
             "— blank means no machine-match, resolve via the plain column "
             "default or a GM's Constrained Pick."
+        ),
+    )
+    transitions_subject_asset = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text=(
+            "On fire, transition the stake's subject_asset to this "
+            "AssetStatus (COMPROMISED/LOST/DISMISSED). ASSET stakes only "
+            "— blank means no direct asset transition (use the "
+            "consequence_pool for check-gated transitions instead). "
+            "Mirrors sets_subject_lifecycle for NPC_FATE stakes."
         ),
     )
 
@@ -2723,6 +2743,14 @@ class StoryProtectedSubject(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="+",
         help_text="For FACTION subjects (organization-level). Nulls if the org is deleted.",
+    )
+    subject_asset = models.ForeignKey(
+        "assets.NPCAsset",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="For ASSET subjects. Nulls if the asset is deleted.",
     )
     subject_label = models.CharField(
         max_length=200,

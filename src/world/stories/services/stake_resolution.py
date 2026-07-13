@@ -666,30 +666,17 @@ def _custody_allows_fire_time_write(stake: Stake, scope: str) -> bool:
     return verdict.allowed
 
 
-def _apply_branch_writers(
+def _apply_remove_scope_writers(
     resolution: StakeResolution,
     stake: Stake,
-    participants: list[Persona] | None,
+    remove_allowed: bool,
 ) -> None:
-    """Apply a fired branch's structured world-state payloads (#1770 PR2).
+    """Apply the three REMOVE-scope world-state writers (#1770, #1905).
 
-    Each writer skips-and-logs when its subject is unresolvable rather than
-    raising — a half-applicable branch must not roll back the completion.
-    Captivity of a PC is deliberately NOT a branch write (pillar 12): capture
-    arrives via terminal consequence pools / EffectType.CAPTURE.
-
-    #2001 Task 4: before the lifecycle/forfeit (REMOVE) and standing (HARM)
-    writers fire, re-check custody for the RESOLVING context — a stake on
-    story A resolving writers against a subject protected by story B without
-    clearance skips-and-logs that writer (mirroring this same function's
-    unresolvable-subject skip-and-log posture); the StakeOutcome audit row is
-    still recorded by the caller regardless.
+    Extracted from _apply_branch_writers to keep that function's branch count
+    within ruff's limit. Each writer skips-and-logs when custody blocks the
+    write or the subject is unresolvable.
     """
-    needs_remove = resolution.sets_subject_lifecycle or resolution.forfeits_subject_item
-    remove_allowed = (
-        _custody_allows_fire_time_write(stake, CustodyScope.REMOVE) if needs_remove else True
-    )
-
     if resolution.sets_subject_lifecycle:
         if remove_allowed:
             _write_subject_lifecycle(resolution, stake)
@@ -711,6 +698,48 @@ def _apply_branch_writers(
                 resolution.pk,
                 stake.pk,
             )
+    if resolution.transitions_subject_asset:
+        if remove_allowed:
+            _write_asset_transition(resolution, stake)
+        else:
+            logger.warning(
+                "StakeResolution %s: transitions_subject_asset=%r blocked by cross-story "
+                "custody on stake %s's subject; skipping.",
+                resolution.pk,
+                resolution.transitions_subject_asset,
+                stake.pk,
+            )
+
+
+def _apply_branch_writers(
+    resolution: StakeResolution,
+    stake: Stake,
+    participants: list[Persona] | None,
+) -> None:
+    """Apply a fired branch's structured world-state payloads (#1770 PR2).
+
+    Each writer skips-and-logs when its subject is unresolvable rather than
+    raising — a half-applicable branch must not roll back the completion.
+    Captivity of a PC is deliberately NOT a branch write (pillar 12): capture
+    arrives via terminal consequence pools / EffectType.CAPTURE.
+
+    #2001 Task 4: before the lifecycle/forfeit (REMOVE) and standing (HARM)
+    writers fire, re-check custody for the RESOLVING context — a stake on
+    story A resolving writers against a subject protected by story B without
+    clearance skips-and-logs that writer (mirroring this same function's
+    unresolvable-subject skip-and-log posture); the StakeOutcome audit row is
+    still recorded by the caller regardless.
+    """
+    needs_remove = (
+        resolution.sets_subject_lifecycle
+        or resolution.forfeits_subject_item
+        or bool(resolution.transitions_subject_asset)
+    )
+    remove_allowed = (
+        _custody_allows_fire_time_write(stake, CustodyScope.REMOVE) if needs_remove else True
+    )
+
+    _apply_remove_scope_writers(resolution, stake, remove_allowed)
     if resolution.subject_standing_delta != 0:
         if _custody_allows_fire_time_write(stake, CustodyScope.HARM):
             _write_subject_standing(resolution, stake, participants)
@@ -733,6 +762,7 @@ def _apply_branch_writers(
                 resolution.npc_regard_delta,
                 stake.pk,
             )
+    # npc_regard_delta ends the HARM-scope writers.
 
 
 def _write_subject_lifecycle(resolution: StakeResolution, stake: Stake) -> None:
@@ -780,6 +810,34 @@ def _write_item_forfeit(resolution: StakeResolution, stake: Stake) -> None:
     forfeit_item_instance(
         item_instance=item,
         note=f"Forfeited — stake {stake.pk} resolved at {resolution.column}.",
+    )
+
+
+def _write_asset_transition(resolution: StakeResolution, stake: Stake) -> None:
+    """Transition the stake's subject_asset to the authored status (#1905).
+
+    Direct world-state writer mirroring sets_subject_lifecycle — fires when
+    the resolution column resolves, guaranteed (not check-gated within a pool).
+    For check-gated asset transitions, use the consequence_pool instead.
+    Custody check is handled by the caller (_apply_branch_writers).
+    """
+    from world.assets.constants import AssetTransitionReason  # noqa: PLC0415
+    from world.assets.services import transition_asset_status  # noqa: PLC0415
+
+    asset = stake.subject_asset
+    if asset is None:
+        logger.warning(
+            "StakeResolution %s: transitions_subject_asset=%r but stake %s has no "
+            "subject_asset; skipping.",
+            resolution.pk,
+            resolution.transitions_subject_asset,
+            stake.pk,
+        )
+        return
+    transition_asset_status(
+        asset,
+        resolution.transitions_subject_asset,
+        reason=AssetTransitionReason.CONSEQUENCE,
     )
 
 

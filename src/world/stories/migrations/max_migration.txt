@@ -1,1 +1,1 @@
-0025_stakeresolution_npc_regard_delta
+0026_stake_subject_asset
