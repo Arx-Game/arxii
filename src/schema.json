@@ -8830,10 +8830,6 @@ paths:
         schema:
           type: integer
       - in: query
-        name: scene
-        schema:
-          type: number
-      - in: query
         name: story
         schema:
           type: number
@@ -35682,9 +35678,6 @@ components:
           type: integer
           readOnly: true
           description: The GM inviting another story into this shared event.
-        from_gm_account:
-          type: integer
-          readOnly: true
         to_story:
           type: integer
           readOnly: true
@@ -35732,7 +35725,6 @@ components:
       - created_at
       - event
       - from_gm
-      - from_gm_account
       - id
       - message
       - proposed_episode
@@ -37775,23 +37767,15 @@ components:
         scene:
           type: string
           readOnly: true
-        episode_id:
-          type: integer
-          readOnly: true
-        scene_id:
-          type: integer
-          readOnly: true
         order:
           type: integer
           maximum: 2147483647
           minimum: 0
       required:
       - episode
-      - episode_id
       - id
       - order
       - scene
-      - scene_id
     EpisodeSceneRequest:
       type: object
       description: Serializer for episode-scene connections

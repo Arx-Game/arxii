@@ -17,11 +17,17 @@ import { CrossoverInviteComposeDialog } from '../components/CrossoverInviteCompo
 
 vi.mock('../queries', () => ({
   useCreateCrossoverInvite: () => ({ mutate: vi.fn(), isPending: false }),
+  useAcceptCrossoverInvite: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeclineCrossoverInvite: () => ({ mutate: vi.fn(), isPending: false }),
+  useWithdrawCrossoverInvite: () => ({ mutate: vi.fn(), isPending: false }),
+  useCrossoverInvites: () => ({ data: undefined, isLoading: false }),
+  useEpisodeScenesForScene: () => ({ data: undefined, isLoading: false }),
+  getStakesSummary: vi.fn(),
   crossoverKeys: { all: ['crossover'] },
 }));
 
 vi.mock('@/stories/queries', () => ({
-  useStoryList: () => ({
+  useStoryList: vi.fn(() => ({
     data: {
       count: 2,
       next: null,
@@ -32,8 +38,8 @@ vi.mock('@/stories/queries', () => ({
       ],
     },
     isLoading: false,
-  }),
-  useEpisodeList: () => ({
+  })),
+  useEpisodeList: vi.fn(() => ({
     data: {
       count: 1,
       next: null,
@@ -41,30 +47,16 @@ vi.mock('@/stories/queries', () => ({
       results: [{ id: 30, name: 'Episode 1', order: 1 }],
     },
     isLoading: false,
-  }),
+  })),
 }));
 
 vi.mock('@/events/queries', () => ({
   fetchEvents: vi.fn(),
 }));
 
-vi.mock('@tanstack/react-query', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@tanstack/react-query')>();
-  return {
-    ...actual,
-    useQuery: () => ({
-      data: {
-        count: 2,
-        next: null,
-        previous: null,
-        results: [
-          { id: 1, name: 'Event One', scheduled_real_time: '2026-08-01T00:00:00Z' },
-          { id: 2, name: 'Event Two', scheduled_real_time: null },
-        ],
-      },
-    }),
-  };
-});
+// No need to mock @tanstack/react-query globally — the dialog's useQuery
+// for events will just return undefined data when fetchEvents is mocked
+// and there's no query client. We provide a query client in renderDialog.
 
 function renderDialog(props?: { currentStoryId?: number }) {
   const queryClient = new QueryClient({
