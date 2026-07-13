@@ -21,7 +21,8 @@ class CeremonyViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["location", "status", "ceremony_type__key"]
+    # location__objectdb lets the game view filter by the room object id it holds.
+    filterset_fields = ["location", "location__objectdb", "status", "ceremony_type__key"]
     queryset = (
         Ceremony.objects.select_related("ceremony_type", "officiant", "presented_being", "location")
         # Bare-string prefetch is deliberate: Prefetch(to_attr=...) onto
