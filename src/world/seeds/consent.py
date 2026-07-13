@@ -71,6 +71,17 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         ConsentMode.FRIENDS_WHITELIST,
     ),
     (
+        "secret-investigation",
+        "Secret Investigation",
+        # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #2289):
+        "Whether others may uncover your character's secrets through play — twisted "
+        "rites, evidence trails, and similar investigation surfaces.",
+        27,
+        # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept opt-in so an
+        # orphaned row stays gated (mirrors blackmail, #2289).
+        ConsentMode.FRIENDS_WHITELIST,
+    ),
+    (
         "theft",
         "Theft & Antagonism",
         "Stealing from you and your belongings.",
@@ -108,6 +119,7 @@ _CATEGORY_PARENTS: dict[str, str] = {
     "blackmail": "antagonism",
     "manipulative": "antagonism",
     "theft": "antagonism",
+    "secret-investigation": "antagonism",
 }
 
 # ActionTemplate.name → category key

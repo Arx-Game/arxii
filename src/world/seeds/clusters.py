@@ -75,6 +75,12 @@ def _seed_investigation() -> None:
     seed_investigation_check_content()
 
 
+def _seed_worship() -> None:
+    from world.seeds.worship_content import seed_worship_content  # noqa: PLC0415
+
+    seed_worship_content()
+
+
 def _seed_social_relationships() -> None:
     from world.seeds.social_relationships import seed_social_relationship_content  # noqa: PLC0415
 
@@ -302,6 +308,11 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Investigation: the Search check (perception + Investigation) + the Investigation skill.
     # After "checks" for the resolution spine; authoritative (#1705).
     "investigation": _seed_investigation,
+    # Worship: the Rites skill + tradition specializations, the Ceremony Rites CheckType
+    # (+ Devotion aspect for Path of the Chosen), God's Favorite achievements, and
+    # PLACEHOLDER traditions/beings (#2355). After "social" so the check spine + social
+    # category exist.
+    "worship": _seed_worship,
     # Social relationships: the allure ModifierTarget + Attracted To / Very Attracted conditions
     # the directed-allure engine reads + Flirt/Seduce effects set (#1697).
     "social_relationships": _seed_social_relationships,
@@ -495,6 +506,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.societies.models import PropagandaCampaignTier  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
     from world.traits.models import ResultChart, Trait  # noqa: PLC0415
+    from world.worship.models import WorshippedBeing, WorshipTradition  # noqa: PLC0415
 
     return {
         "checks": [CheckType, ResultChart],
@@ -508,6 +520,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Investigation seeds the Search CheckType + Investigation skill (shared spine/skill
         # rows counted under "checks"); it still appears as a seeded cluster (#1705).
         "investigation": [],
+        # Worship: traditions + worshippable beings (Rites skill/specs ride the shared
+        # skills tables); represented by WorshipTradition and WorshippedBeing (#2355).
+        "worship": [WorshipTradition, WorshippedBeing],
         # Social relationships: the allure target + Attracted/Very-Attracted RelationshipConditions
         # (a shared lookup); represented by RelationshipCondition (#1697).
         "social_relationships": [RelationshipCondition],
