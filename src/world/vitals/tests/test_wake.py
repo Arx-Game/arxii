@@ -104,12 +104,29 @@ class AttemptWakeTests(TestCase):
         )
 
     def test_combat_tick_skips_rate_limit(self) -> None:
-        self._make_unconscious()
+        instance = self._make_unconscious()
+        # Backdate past the same-round guard: the KO landed a prior round.
+        # Instance-level save, not queryset update — the identity map would
+        # otherwise keep serving the stale applied_at.
+        instance.applied_at = timezone.now() - timedelta(seconds=2 * SECONDS_PER_ROUND)
+        instance.save(update_fields=["applied_at"])
         with force_check_outcome(self.failure_outcome):
             attempt_wake(self.sheet)
         with force_check_outcome(self.success_outcome):
             result = attempt_wake(self.sheet, in_combat_tick=True)
         self.assertTrue(result.woke)
+
+    def test_combat_tick_no_same_round_roll(self) -> None:
+        # Knocked out THIS round: the tick that applied Unconscious must not
+        # also roll a wake attempt (regression: same-tick instant wake-ups).
+        self._make_unconscious()
+        result = attempt_wake(self.sheet, in_combat_tick=True)
+        self.assertFalse(result.attempted)
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.character, condition=self.unconscious
+            ).exists()
+        )
 
     def test_guaranteed_deadline_wakes_without_roll(self) -> None:
         instance = self._make_unconscious()

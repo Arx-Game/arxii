@@ -32,6 +32,7 @@ from world.vitals.types import DamageConsequenceResult, WakeResult
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
+    from datetime import datetime
 
     from evennia.objects.models import ObjectDB
 
@@ -1149,6 +1150,32 @@ def _stamp_unconscious_wake_deadline(character_sheet: CharacterSheet | None) -> 
     instance.save(update_fields=["expires_at"])
 
 
+def _wake_roll_blocked(
+    instance: ConditionInstance,
+    now: datetime,
+    *,
+    in_combat_tick: bool,
+) -> str | None:
+    """The pre-roll gates of attempt_wake: None = roll; a message = blocked.
+
+    Combat ticks: no same-tick roll for an Unconscious applied THIS round —
+    "one check per round" means per *elapsed* round. Out of combat: at most
+    one roll per wall-clock round-equivalent (stamps the attempt time).
+    """
+    from world.conditions.services import SECONDS_PER_ROUND  # noqa: PLC0415
+
+    if in_combat_tick:
+        if (now - instance.applied_at).total_seconds() < SECONDS_PER_ROUND:
+            return ""
+        return None
+    last = instance.last_resist_attempt_at
+    if last is not None and (now - last).total_seconds() < SECONDS_PER_ROUND:
+        return "You are still sunk too deep to try again."
+    instance.last_resist_attempt_at = now
+    instance.save(update_fields=["last_resist_attempt_at"])
+    return None
+
+
 def attempt_wake(
     character_sheet: CharacterSheet | None,
     *,
@@ -1183,16 +1210,9 @@ def attempt_wake(
         return WakeResult(
             attempted=True, woke=True, message="You claw your way back to consciousness."
         )
-    if not in_combat_tick:
-        last = instance.last_resist_attempt_at
-        if last is not None and (now - last).total_seconds() < SECONDS_PER_ROUND:
-            return WakeResult(
-                attempted=False,
-                woke=False,
-                message="You are still sunk too deep to try again.",
-            )
-        instance.last_resist_attempt_at = now
-        instance.save(update_fields=["last_resist_attempt_at"])
+    blocked = _wake_roll_blocked(instance, now, in_combat_tick=in_combat_tick)
+    if blocked is not None:
+        return WakeResult(attempted=False, woke=False, message=blocked)
     rounds_elapsed = int((now - instance.applied_at).total_seconds() // SECONDS_PER_ROUND)
     try:
         health_pct = character_sheet.vitals.health_percentage
