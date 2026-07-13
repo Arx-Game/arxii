@@ -170,6 +170,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
                     "color_hex",
                     "display_priority",
                     "is_visible_to_others",
+                    "thumbnail",
                 ],
             },
         ),
@@ -194,10 +195,15 @@ class ConditionStageAdmin(admin.ModelAdmin):
         "name",
         "rounds_to_next",
         "severity_multiplier",
+        "has_thumbnail",
     ]
     list_filter = ["condition"]
     search_fields = ["name", "condition__name"]
     autocomplete_fields = ["condition", "resist_check_type"]
+
+    @admin.display(boolean=True, description="Has Thumbnail")
+    def has_thumbnail(self, obj):
+        return bool(obj.thumbnail)
 
 
 # =============================================================================
