@@ -53,5 +53,8 @@ class EventNameTests(TestCase):
             "engagement_lock_broken",
             "food_collected",
             "food_shortage",
+            "asset_compromised",
+            "asset_lost",
+            "asset_dismissed",
         }
         self.assertEqual(set(EventName.values), expected)

@@ -1974,6 +1974,7 @@ paths:
         schema:
           type: string
           enum:
+          - asset
           - campaign_track
           - custom
           - faction
@@ -1988,6 +1989,7 @@ paths:
           * `faction` - Faction relationship
           * `item` - Item
           * `campaign_track` - Campaign track
+          * `asset` - Asset
           * `custom` - Custom (trust-gated)
       tags:
       - boundaries
@@ -44341,6 +44343,9 @@ components:
           allOf:
           - $ref: '#/components/schemas/NPCAssetStatusEnum'
           readOnly: true
+        status_display:
+          type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -44351,11 +44356,19 @@ components:
       - id
       - role_context
       - status
+      - status_display
     NPCAssetStatusEnum:
       enum:
       - active
+      - compromised
+      - lost
+      - dismissed
       type: string
-      description: '* `active` - Active'
+      description: |-
+        * `active` - Active
+        * `compromised` - Compromised
+        * `lost` - Lost
+        * `dismissed` - Dismissed
     NPCRole:
       type: object
       properties:
@@ -44455,6 +44468,7 @@ components:
             * `guard` - Guard
             * `fan` - Fan
             * `minor_ally` - Minor Ally
+            * `asset_task_intel` - Asset Task: Intel
         label:
           type: string
           description: UI display text for the menu option.
@@ -44529,6 +44543,7 @@ components:
       - guard
       - fan
       - minor_ally
+      - asset_task_intel
       type: string
       description: |-
         * `permit` - Permit
@@ -44543,6 +44558,7 @@ components:
         * `guard` - Guard
         * `fan` - Fan
         * `minor_ally` - Minor Ally
+        * `asset_task_intel` - Asset Task: Intel
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -44566,6 +44582,7 @@ components:
             * `guard` - Guard
             * `fan` - Fan
             * `minor_ally` - Minor Ally
+            * `asset_task_intel` - Asset Task: Intel
         label:
           type: string
           minLength: 1
@@ -50841,6 +50858,7 @@ components:
             * `guard` - Guard
             * `fan` - Fan
             * `minor_ally` - Minor Ally
+            * `asset_task_intel` - Asset Task: Intel
         label:
           type: string
           minLength: 1
@@ -51564,8 +51582,7 @@ components:
             is deleted.
         subject_label:
           type: string
-          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION
-            fallback).
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
           maxLength: 200
         beat:
           type: integer
@@ -59511,8 +59528,7 @@ components:
             is deleted.
         subject_label:
           type: string
-          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION
-            fallback).
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
           maxLength: 200
         beat:
           type: integer
@@ -59572,8 +59588,7 @@ components:
             is deleted.
         subject_label:
           type: string
-          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION
-            fallback).
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
           maxLength: 200
         beat:
           type: integer
@@ -59745,6 +59760,7 @@ components:
       - faction
       - item
       - campaign_track
+      - asset
       - custom
       type: string
       description: |-
@@ -59754,6 +59770,7 @@ components:
         * `faction` - Faction relationship
         * `item` - Item
         * `campaign_track` - Campaign track
+        * `asset` - Asset
         * `custom` - Custom (trust-gated)
     SuitEnum:
       enum:

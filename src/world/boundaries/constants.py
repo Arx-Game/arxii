@@ -23,4 +23,5 @@ class TreasuredSubjectKind(models.TextChoices):
     FACTION = "faction", "Faction relationship"
     ITEM = "item", "Item"
     CAMPAIGN_TRACK = "campaign_track", "Campaign track"
+    ASSET = "asset", "Asset"
     CUSTOM = "custom", "Custom (trust-gated)"

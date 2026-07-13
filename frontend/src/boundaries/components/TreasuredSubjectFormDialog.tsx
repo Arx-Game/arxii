@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { TenureMultiSearch } from '@/components/TenureMultiSearch';
+import { SUBJECT_KIND_LABELS } from '@/shared/subjectKinds';
 import { useCreateTreasuredSubject, useUpdateTreasuredSubject } from '../queries';
 import type { SubjectKindEnum, TreasuredSubject, VisibilityModeEnum } from '../types';
 import type { Option } from '@/shared/types';
@@ -36,16 +37,6 @@ import type { Option } from '@/shared/types';
 function tenureOptionsFromIds(ids: number[] | undefined): Option<number>[] {
   return (ids ?? []).map((id) => ({ value: id, label: String(id) }));
 }
-
-const SUBJECT_KIND_LABELS: Record<SubjectKindEnum, string> = {
-  personal_jeopardy: 'Personal jeopardy',
-  npc_fate: 'NPC fate',
-  location: 'Location',
-  faction: 'Faction relationship',
-  item: 'Item',
-  campaign_track: 'Campaign track',
-  custom: 'Custom',
-};
 
 interface DRFFieldErrors {
   subject_label?: string[];

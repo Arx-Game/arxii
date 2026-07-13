@@ -9,8 +9,16 @@ from world.assets.models import NPCAsset
 
 class NPCAssetSerializer(serializers.ModelSerializer):
     asset_persona_name = serializers.CharField(source="asset_persona.name", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
         model = NPCAsset
-        fields = ["id", "asset_persona_name", "role_context", "status", "created_at"]
+        fields = [
+            "id",
+            "asset_persona_name",
+            "role_context",
+            "status",
+            "status_display",
+            "created_at",
+        ]
         read_only_fields = fields

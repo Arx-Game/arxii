@@ -6,6 +6,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.areas.positioning.constants import PositionKind
+from world.assets.constants import AssetStatus
 from world.checks.constants import EffectTarget, EffectType, PositionDestination
 
 # Import outcome models so migrations and admin discover them.
@@ -425,6 +426,19 @@ class ConsequenceEffect(SharedMemoryModel):
     position_connect_from_actor = models.BooleanField(default=True)
     position_place_occupant = models.BooleanField(default=False)
 
+    # Asset status effects (#1905). Transitions an NPCAsset to a new status
+    # (COMPROMISED/LOST/DISMISSED) as a consequence of a scene/stake/encounter.
+    asset_status_target = models.CharField(
+        max_length=20,
+        choices=AssetStatus.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Target status for ASSET_STATUS effects (COMPROMISED/LOST/DISMISSED). "
+            "Transitions all ACTIVE assets owned by the target character."
+        ),
+    )
+
     class Meta:
         ordering = ["execution_order"]
 
@@ -458,6 +472,7 @@ class ConsequenceEffect(SharedMemoryModel):
             ("position_name", "position_name"),
             ("position_name_b", "position_name_b"),
         ],
+        EffectType.ASSET_STATUS: [("asset_status_target", "asset_status_target")],
     }
 
     def clean(self) -> None:

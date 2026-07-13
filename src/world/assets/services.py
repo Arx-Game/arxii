@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from world.assets.constants import AssetStatus, AssetTransitionReason
+
 if TYPE_CHECKING:
     from world.assets.models import NPCAsset
     from world.distinctions.models import CharacterDistinction
@@ -135,3 +137,129 @@ def coerce_into_asset(
         role_context=role_context,
         acquisition_source=AssetAcquisitionSource.COERCION,
     )
+
+
+# ---------------------------------------------------------------------------
+# Asset compromise/loss lifecycle (#1905)
+# ---------------------------------------------------------------------------
+
+# Legal transitions: (from_status, to_status).
+# Only COMPROMISED is recoverable (back to ACTIVE); LOST and DISMISSED are terminal.
+_LEGAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        (AssetStatus.ACTIVE, AssetStatus.ACTIVE),  # no-op
+        (AssetStatus.ACTIVE, AssetStatus.COMPROMISED),
+        (AssetStatus.ACTIVE, AssetStatus.LOST),
+        (AssetStatus.ACTIVE, AssetStatus.DISMISSED),
+        (AssetStatus.COMPROMISED, AssetStatus.COMPROMISED),  # no-op
+        (AssetStatus.COMPROMISED, AssetStatus.ACTIVE),  # recovery
+        (AssetStatus.COMPROMISED, AssetStatus.LOST),
+        (AssetStatus.LOST, AssetStatus.LOST),  # no-op (terminal)
+        (AssetStatus.DISMISSED, AssetStatus.DISMISSED),  # no-op (terminal)
+    }
+)
+
+# Maps a target status to the EventName emitted on transition.
+_EVENT_FOR_STATUS: dict[str, str] = {
+    AssetStatus.COMPROMISED: "ASSET_COMPROMISED",
+    AssetStatus.LOST: "ASSET_LOST",
+    AssetStatus.DISMISSED: "ASSET_DISMISSED",
+}
+
+
+class IllegalAssetTransitionError(ValueError):
+    """Raised when an asset status transition is not in the legal matrix."""
+
+
+@transaction.atomic
+def transition_asset_status(
+    asset: NPCAsset,
+    new_status: str,
+    *,
+    reason: str = AssetTransitionReason.CONSEQUENCE,
+) -> None:
+    """Transition an NPCAsset's status, enforcing the legal-transition matrix.
+
+    Asset status transitions are never GM fiat — they flow exclusively through
+    the consequence pool system (the ``ASSET_STATUS`` EffectType on
+    ConsequenceEffect). This function is the single mutator of
+    ``NPCAsset.status`` beyond the initial ACTIVE default.
+
+    Only COMPROMISED is recoverable (back to ACTIVE); LOST and DISMISSED are
+    terminal. A no-op transition (same status → same status) is allowed.
+
+    After the status changes, the corresponding flow event
+    (``ASSET_COMPROMISED`` / ``ASSET_LOST`` / ``ASSET_DISMISSED``) is emitted
+    via ``emit_event()`` so designers can author reactive triggers.
+
+    Args:
+        asset: The NPCAsset to transition.
+        new_status: The target AssetStatus value.
+        reason: Structured reason (AssetTransitionReason) for trigger filtering.
+
+    Raises:
+        IllegalAssetTransitionError: If the (current, new) pair is not in
+            the legal matrix (e.g., LOST → ACTIVE).
+    """
+    from flows.constants import EventName  # noqa: PLC0415
+    from flows.emit import emit_event  # noqa: PLC0415
+
+    old_status = asset.status
+    if (old_status, new_status) not in _LEGAL_TRANSITIONS:
+        msg = (
+            f"Illegal asset transition: {old_status!r} → {new_status!r} "
+            f"(asset pk={asset.pk}). LOST and DISMISSED are terminal."
+        )
+        raise IllegalAssetTransitionError(msg)
+
+    if old_status == new_status:
+        return  # no-op — don't save or emit
+
+    asset.status = new_status
+    asset.save(update_fields=["status"])
+
+    # Emit the corresponding flow event for reactive triggers.
+    event_name_attr = _EVENT_FOR_STATUS.get(new_status)
+    if event_name_attr is not None:
+        from flows.events.payloads import AssetStatusPayload  # noqa: PLC0415
+
+        event_name = getattr(EventName, event_name_attr)
+        asset_character = asset.asset_persona.character_sheet.character
+        payload = AssetStatusPayload(
+            asset_pk=asset.pk,
+            promoter_persona_pk=asset.promoter_persona_id,
+            asset_persona_pk=asset.asset_persona_id,
+            old_status=old_status,
+            new_status=new_status,
+            reason=reason,
+        )
+        emit_event(
+            event_name,
+            payload,
+            asset_character.location,
+        )
+
+
+def transition_assets_for_dead_character(dead_character) -> None:
+    """Transition all ACTIVE assets belonging to a dead character to LOST.
+
+    Called reactively when a ``CHARACTER_KILLED`` flow event fires on a
+    character that is an asset's ``asset_persona``. The asset's underlying
+    NPC died, so the asset is permanently lost.
+
+    Args:
+        dead_character: The ObjectDB of the character whose death triggered
+            this call.
+    """
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+
+    active_assets = NPCAsset.objects.filter(
+        asset_persona__character_sheet__character=dead_character,
+        status=AssetStatus.ACTIVE,
+    )
+    for asset in active_assets:
+        transition_asset_status(
+            asset,
+            AssetStatus.LOST,
+            reason=AssetTransitionReason.CHARACTER_KILLED,
+        )

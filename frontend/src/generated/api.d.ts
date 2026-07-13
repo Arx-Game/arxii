@@ -24943,14 +24943,18 @@ export interface components {
        */
       readonly role_context: components['schemas']['RoleContextEnum'];
       readonly status: components['schemas']['NPCAssetStatusEnum'];
+      readonly status_display: string;
       /** Format: date-time */
       readonly created_at: string;
     };
     /**
      * @description * `active` - Active
+     *     * `compromised` - Compromised
+     *     * `lost` - Lost
+     *     * `dismissed` - Dismissed
      * @enum {string}
      */
-    NPCAssetStatusEnum: 'active';
+    NPCAssetStatusEnum: 'active' | 'compromised' | 'lost' | 'dismissed';
     NPCRole: {
       readonly id: number;
       /** @description Display name; e.g., 'Builders Guild Clerk', 'Town Guard'. */
@@ -24998,6 +25002,7 @@ export interface components {
        *     * `guard` - Guard
        *     * `fan` - Fan
        *     * `minor_ally` - Minor Ally
+       *     * `asset_task_intel` - Asset Task: Intel
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -25039,6 +25044,7 @@ export interface components {
      *     * `guard` - Guard
      *     * `fan` - Fan
      *     * `minor_ally` - Minor Ally
+     *     * `asset_task_intel` - Asset Task: Intel
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -25053,7 +25059,8 @@ export interface components {
       | 'personal_favor'
       | 'guard'
       | 'fan'
-      | 'minor_ally';
+      | 'minor_ally'
+      | 'asset_task_intel';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -25071,6 +25078,7 @@ export interface components {
        *     * `guard` - Guard
        *     * `fan` - Fan
        *     * `minor_ally` - Minor Ally
+       *     * `asset_task_intel` - Asset Task: Intel
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -28834,6 +28842,7 @@ export interface components {
        *     * `guard` - Guard
        *     * `fan` - Fan
        *     * `minor_ally` - Minor Ally
+       *     * `asset_task_intel` - Asset Task: Intel
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -29292,7 +29301,7 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
-      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
       beat?: number | null;
@@ -33210,7 +33219,7 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
-      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
       beat?: number | null;
@@ -33240,7 +33249,7 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
-      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
       beat?: number | null;
@@ -33322,6 +33331,7 @@ export interface components {
      *     * `faction` - Faction relationship
      *     * `item` - Item
      *     * `campaign_track` - Campaign track
+     *     * `asset` - Asset
      *     * `custom` - Custom (trust-gated)
      * @enum {string}
      */
@@ -33332,6 +33342,7 @@ export interface components {
       | 'faction'
       | 'item'
       | 'campaign_track'
+      | 'asset'
       | 'custom';
     /**
      * @description * `swords` - Swords
@@ -36497,9 +36508,11 @@ export interface operations {
          *     * `faction` - Faction relationship
          *     * `item` - Item
          *     * `campaign_track` - Campaign track
+         *     * `asset` - Asset
          *     * `custom` - Custom (trust-gated)
          */
         subject_kind?:
+          | 'asset'
           | 'campaign_track'
           | 'custom'
           | 'faction'

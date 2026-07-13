@@ -1,1 +1,1 @@
-0025_stakeresolution_npc_regard_delta
+0027_alter_storyprotectedsubject_subject_label

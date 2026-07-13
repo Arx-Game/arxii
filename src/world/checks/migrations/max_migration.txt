@@ -1,1 +1,1 @@
-0023_consequenceeffect_npc_regard_amount_and_more
+0024_consequenceeffect_asset_status_target

@@ -34,11 +34,29 @@ class AssetRoleContext(models.TextChoices):
 
 
 class AssetStatus(models.TextChoices):
-    """Lifecycle state of an NPCAsset. Only ACTIVE is wired in this PR.
+    """Lifecycle state of an NPCAsset (#1905).
 
-    COMPROMISED/LOST/DISMISSED are reserved names for the asset
-    compromise/loss-lifecycle follow-up — declaring them now would be dead
-    code with nothing to ever set them.
+    Transitions are never GM fiat — they flow exclusively through the
+    consequence pool system (ASSET_STATUS EffectType on ConsequenceEffect).
+    Only COMPROMISED is recoverable (back to ACTIVE); LOST and DISMISSED
+    are terminal.
     """
 
     ACTIVE = "active", "Active"
+    COMPROMISED = "compromised", "Compromised"
+    LOST = "lost", "Lost"
+    DISMISSED = "dismissed", "Dismissed"
+
+
+class AssetTransitionReason(models.TextChoices):
+    """Structured cause for an asset status transition (#1905).
+
+    Used as the ``reason`` parameter on ``transition_asset_status()`` so
+    trigger handlers can filter on structured reason values in
+    ``base_filter_condition`` rather than parsing free-form text.
+    """
+
+    CONSEQUENCE = "consequence", "Consequence pool fired"
+    CHARACTER_KILLED = "character_killed", "Asset's character killed"
+    PLAYER_DISMISSAL = "player_dismissal", "Player dismissed asset"
+    RECOVERY = "recovery", "Asset recovered/rescued"

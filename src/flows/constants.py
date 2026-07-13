@@ -64,3 +64,7 @@ class EventName(models.TextChoices):
     # Agriculture (crop/food system, #1864)
     FOOD_COLLECTED = "food_collected", "Food Collected"
     FOOD_SHORTAGE = "food_shortage", "Food Shortage"
+    # Asset lifecycle (#1905) — emitted post-transition by transition_asset_status().
+    ASSET_COMPROMISED = "asset_compromised", "Asset Compromised"
+    ASSET_LOST = "asset_lost", "Asset Lost"
+    ASSET_DISMISSED = "asset_dismissed", "Asset Dismissed"

@@ -725,7 +725,11 @@ def _apply_branch_writers(
     unresolvable-subject skip-and-log posture); the StakeOutcome audit row is
     still recorded by the caller regardless.
     """
-    needs_remove = resolution.sets_subject_lifecycle or resolution.forfeits_subject_item
+    needs_remove = (
+        resolution.sets_subject_lifecycle
+        or resolution.forfeits_subject_item
+        or bool(resolution.transitions_subject_asset)
+    )
     remove_allowed = (
         _custody_allows_fire_time_write(stake, CustodyScope.REMOVE) if needs_remove else True
     )
@@ -748,6 +752,15 @@ def _apply_branch_writers(
         write_fn=lambda: _write_item_forfeit(resolution, stake),
         field_label="forfeits_subject_item",
         blocked_value=resolution.forfeits_subject_item,
+    )
+    _fire_writer_or_skip(
+        resolution=resolution,
+        stake=stake,
+        should_fire=bool(resolution.transitions_subject_asset),
+        allowed=remove_allowed,
+        write_fn=lambda: _write_asset_transition(resolution, stake),
+        field_label="transitions_subject_asset",
+        blocked_value=resolution.transitions_subject_asset,
     )
     _fire_writer_or_skip(
         resolution=resolution,
@@ -814,6 +827,34 @@ def _write_item_forfeit(resolution: StakeResolution, stake: Stake) -> None:
     forfeit_item_instance(
         item_instance=item,
         note=f"Forfeited — stake {stake.pk} resolved at {resolution.column}.",
+    )
+
+
+def _write_asset_transition(resolution: StakeResolution, stake: Stake) -> None:
+    """Transition the stake's subject_asset to the authored status (#1905).
+
+    Direct world-state writer mirroring sets_subject_lifecycle — fires when
+    the resolution column resolves, guaranteed (not check-gated within a pool).
+    For check-gated asset transitions, use the consequence_pool instead.
+    Custody check is handled by the caller (_apply_branch_writers).
+    """
+    from world.assets.constants import AssetTransitionReason  # noqa: PLC0415
+    from world.assets.services import transition_asset_status  # noqa: PLC0415
+
+    asset = stake.subject_asset
+    if asset is None:
+        logger.warning(
+            "StakeResolution %s: transitions_subject_asset=%r but stake %s has no "
+            "subject_asset; skipping.",
+            resolution.pk,
+            resolution.transitions_subject_asset,
+            stake.pk,
+        )
+        return
+    transition_asset_status(
+        asset,
+        resolution.transitions_subject_asset,
+        reason=AssetTransitionReason.CONSEQUENCE,
     )
 
 

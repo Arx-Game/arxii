@@ -2274,31 +2274,19 @@ class StakeTemplate(SharedMemoryModel):
         return f"StakeTemplate({self.name})"
 
 
-class Stake(SharedMemoryModel):
-    """One named wager on a Beat's stakes contract (#1770 pillar 1).
+class SubjectMixin(models.Model):
+    """Abstract base for models with typed subject FKs (#1905 refactor).
 
-    Exactly one typed subject pointer (or subject_label for CUSTOM) names the
-    concrete thing wagered. severity/subject_kind denormalize from template at
-    creation (serializer) so a later template retune never rewrites live
-    contracts.
+    Shared by ``Stake`` and ``StoryProtectedSubject`` — both carry the same
+    set of nullable typed-subject pointers (sheet/item/society/organization/
+    asset) plus ``subject_kind`` and ``subject_label``. Extracted to eliminate
+    code duplication flagged by SonarCloud.
+
+    All subject FKs are SET_NULL (never CASCADE) — story-significant data
+    must outlive the deletion of its subject.
     """
 
-    beat = models.ForeignKey(STORY_BEAT_MODEL, on_delete=models.CASCADE, related_name="stakes")
-    template = models.ForeignKey(
-        "stories.StakeTemplate",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="stakes",
-        help_text="Null only for trust-gated custom stakes.",
-    )
     subject_kind = models.CharField(max_length=20, choices=StakeSubjectKind.choices)
-    severity = models.PositiveSmallIntegerField(choices=StakeSeverity.choices)
-    # A Stake is story-significant data: it must outlive the deletion of its
-    # subject. All four subject FKs are SET_NULL (never CASCADE) so a
-    # consumed/deleted subject doesn't erase the wager — subject_label and
-    # player_summary already carry the name for display after the pointer
-    # goes null.
     subject_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
         null=True,
@@ -2331,12 +2319,59 @@ class Stake(SharedMemoryModel):
         related_name="+",
         help_text="For FACTION subjects (organization-level). Nulls if the org is deleted.",
     )
+    subject_asset = models.ForeignKey(
+        "assets.NPCAsset",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="For ASSET subjects. Nulls if the asset is deleted.",
+    )
     subject_label = models.CharField(
         max_length=200,
         blank=True,
         default="",
         help_text="Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).",
     )
+
+    class Meta:
+        abstract = True
+
+    def _populated_subject_fields(self) -> list[str]:
+        """Return names of subject FKs/fields that are currently set."""
+        return [
+            name
+            for name, value in (
+                ("subject_sheet", self.subject_sheet_id),
+                ("subject_item", self.subject_item_id),
+                ("subject_society", self.subject_society_id),
+                ("subject_organization", self.subject_organization_id),
+                ("subject_asset", self.subject_asset_id),
+                ("subject_label", self.subject_label or None),
+            )
+            if value
+        ]
+
+
+class Stake(SubjectMixin, SharedMemoryModel):
+    """One named wager on a Beat's stakes contract (#1770 pillar 1).
+
+    Exactly one typed subject pointer (or subject_label for CUSTOM) names the
+    concrete thing wagered. severity/subject_kind denormalize from template at
+    creation (serializer) so a later template retune never rewrites live
+    contracts.
+    """
+
+    beat = models.ForeignKey(STORY_BEAT_MODEL, on_delete=models.CASCADE, related_name="stakes")
+    template = models.ForeignKey(
+        "stories.StakeTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stakes",
+        help_text="Null only for trust-gated custom stakes.",
+    )
+    severity = models.PositiveSmallIntegerField(choices=StakeSeverity.choices)
     player_summary = models.TextField(
         help_text="Player-facing line shown at opt-in: what is wagered, how badly."
     )
@@ -2448,6 +2483,18 @@ class StakeResolution(SharedMemoryModel):
             "ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only "
             "— blank means no machine-match, resolve via the plain column "
             "default or a GM's Constrained Pick."
+        ),
+    )
+    transitions_subject_asset = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text=(
+            "On fire, transition the stake's subject_asset to this "
+            "AssetStatus (COMPROMISED/LOST/DISMISSED). ASSET stakes only "
+            "— blank means no direct asset transition (use the "
+            "consequence_pool for check-gated transitions instead). "
+            "Mirrors sets_subject_lifecycle for NPC_FATE stakes."
         ),
     )
 
@@ -2671,15 +2718,15 @@ class TreasuredSignoff(SharedMemoryModel):
         return f"TreasuredSignoff(beat={self.beat_id}, player={self.player_data_id}, {status})"
 
 
-class StoryProtectedSubject(SharedMemoryModel):
+class StoryProtectedSubject(SubjectMixin, SharedMemoryModel):
     """Declares that a story asset (NPC, item, faction, or freeform subject) is
     load-bearing for a story and gets GM-authorable custody protection (#2001).
 
     Replaces ``StoryNPCDependency`` — generalizes beyond NPCs to the full
     ``StakeSubjectKind`` vocabulary (item/faction/location/campaign-track/custom),
-    reusing the same typed-subject-FK shape as ``Stake``. For the NPC case, when
-    active, the NPC is structurally protected from death by actors external to
-    the story. See ``is_death_prevented_by_story`` in
+    reusing the same typed-subject-FK shape as ``Stake`` (via ``SubjectMixin``).
+    For the NPC case, when active, the NPC is structurally protected from death
+    by actors external to the story. See ``is_death_prevented_by_story`` in
     ``world.stories.npc_protection``.
     """
 
@@ -2687,48 +2734,6 @@ class StoryProtectedSubject(SharedMemoryModel):
         Story,
         on_delete=models.CASCADE,
         related_name="protected_subjects",
-    )
-    subject_kind = models.CharField(max_length=20, choices=StakeSubjectKind.choices)
-    # Typed subject pointers mirror Stake field-for-field: a protected subject
-    # is story-significant data, so all four are SET_NULL (never CASCADE) —
-    # deleting the underlying subject must not erase the protection record.
-    subject_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-        help_text="For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted.",
-    )
-    subject_item = models.ForeignKey(
-        "items.ItemInstance",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-        help_text="For ITEM subjects. Nulls if the item instance is deleted/consumed.",
-    )
-    subject_society = models.ForeignKey(
-        "societies.Society",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-        help_text="For FACTION subjects (society-level). Nulls if the society is deleted.",
-    )
-    subject_organization = models.ForeignKey(
-        "societies.Organization",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-        help_text="For FACTION subjects (organization-level). Nulls if the org is deleted.",
-    )
-    subject_label = models.CharField(
-        max_length=200,
-        blank=True,
-        default="",
-        help_text="Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback).",
     )
     beat = models.ForeignKey(
         Beat,
@@ -2762,21 +2767,12 @@ class StoryProtectedSubject(SharedMemoryModel):
         """Light exactly-one-subject check; the serializer (future task) enforces the
         full rule the way ``Stake``'s serializer validates its subject fields."""
         super().clean()
-        populated = [
-            name
-            for name, value in (
-                ("subject_sheet", self.subject_sheet_id),
-                ("subject_item", self.subject_item_id),
-                ("subject_society", self.subject_society_id),
-                ("subject_organization", self.subject_organization_id),
-                ("subject_label", self.subject_label or None),
-            )
-            if value
-        ]
+        populated = self._populated_subject_fields()
         if len(populated) != 1:
             msg = (
                 "Exactly one of subject_sheet/subject_item/subject_society/"
-                f"subject_organization/subject_label must be set (found: {populated or 'none'})."
+                f"subject_organization/subject_asset/subject_label must be set "
+                f"(found: {populated or 'none'})."
             )
             raise ValidationError(msg)
 

@@ -253,6 +253,25 @@ class FallEvent:
     position: Position
 
 
+# ---- Asset lifecycle (#1905) ----
+
+
+@dataclass(frozen=True)
+class AssetStatusPayload:
+    """An NPCAsset's status has transitioned (#1905).
+
+    Emitted post-transition by ``transition_asset_status()`` so designers
+    can author reactive triggers (alert the promoter, spawn a rescue mission).
+    """
+
+    asset_pk: int
+    promoter_persona_pk: int
+    asset_persona_pk: int
+    old_status: str
+    new_status: str
+    reason: str
+
+
 PAYLOAD_FOR_EVENT: dict[str, type] = {
     "attack_pre_resolve": AttackPreResolvePayload,
     "attack_landed": AttackLandedPayload,
@@ -275,4 +294,7 @@ PAYLOAD_FOR_EVENT: dict[str, type] = {
     "technique_cast": TechniqueCastPayload,
     "technique_affected": TechniqueAffectedPayload,
     "fell": FallEvent,
+    "asset_compromised": AssetStatusPayload,
+    "asset_lost": AssetStatusPayload,
+    "asset_dismissed": AssetStatusPayload,
 }
