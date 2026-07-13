@@ -5,7 +5,9 @@ staff hand required (#2287): the moment of death delivers an admin-editable cond
 message; the dead character remains puppetable as a spectator ghost (full perception,
 OOC/channels, IC verbs whitelisted via `DEAD_ALLOWED_ACTION_KEYS`) whose emit/pose is
 bounded by system-recognized containers — the death scene while it stays active, the IC
-day of death, and (later issues) funerals and seances — never an open-ended timer; and
+day of death, an OPEN funeral honoring them at their location (#2289; itself bounded by
+the `ceremonies.auto_abandon` sweep), and (later) seances (#2290) — never an open-ended
+timer; and
 release is the player-fired `retire` action, staff-forceable for offscreen deaths, with
 a scheduler backstop (`vitals.auto_retire`) after a config grace window. Death-kudos
 lets witnesses honor a well-played death, aggregate-capped at the character's lifetime

@@ -4202,6 +4202,39 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Source:** `src/world/battles/`
 - **Details:** [battles.md](battles.md)
 
+### Worship & Ceremonies (#2355/#2289)
+Gods as authorable data with worship economies, and ceremonies (funerals first) as
+lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decision ADR-0132.
+
+- **Worship models** (`world/worship`): `WorshipTradition` (name, `rites_specialization` FK →
+  skills.Specialization), `WorshippedBeing` (tradition FK, `resonance_pool` + `lifetime_worship`
+  BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`), `WorshipGrant` (audit ledger),
+  `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
+  (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK).
+- **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
+  Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
+  `mint_worship_secret` (`worship/secrets.py`). CG: `CharacterDraft.public_worship`/
+  `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
+  (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
+  achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.
+- **Ceremony models** (`world/ceremonies`): `CeremonyType` (Funeral/Blessing/Sermon rows),
+  `Ceremony` (officiant Persona, TRUE `being` vs `presented_being` — player surfaces render
+  presented ONLY, one-OPEN-per-location constraint, nullable scene/event FKs, `quality_level`),
+  `CeremonyHonoree`, `CeremonyOffering` (item destroyed; snapshot), `CeremonySpeech`,
+  `CeremonyConfig` singleton (`get_ceremony_config`, PLACEHOLDER magnitudes).
+- **Ceremony services**: `open_ceremony` (twisted-rite being/presented mapping),
+  `record_offering` (pool → TRUE being; devotion follows belief), `record_speech`
+  (Performance/Oratory), `finish_ceremony` (Rites + tradition-spec quality roll; honoree deeds
+  via `create_solo_deed`; officiant cut; funeral → `execute_will` NO-OP seam for #1985),
+  `abandon_ceremony`, `open_funeral_for` (ghost container); `run_twisted_rite_leak`
+  (`ceremonies/leak.py` — consent-gated Search roll → clue on the worship Secret).
+  Exceptions: `CeremonyError` (user_message).
+- **Integration**: `GhostWindowPrerequisite` third container (open funeral at the ghost's
+  location); `_dead_owner_trusts` corpse-handler exemption (`flows/service_functions/
+  inventory.py`); `ceremonies.auto_abandon` hourly cron. Actions `ceremony_open`/`_offering`/
+  `_speech`/`_finish`/`_abandon`; telnet `ceremony` family; API `/api/worship/beings/` +
+  `/api/ceremonies/ceremonies/` (both paginated read-only); game-view `CeremonyRoomCard`.
+
 ### Vitals
 Character mortality, health tracking, and the acute-peril dying state. System-agnostic — called by
 combat, poison, spells, exhaustion, and any damage source.
