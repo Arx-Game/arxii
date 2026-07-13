@@ -44,6 +44,7 @@ const SUBJECT_KIND_LABELS: Record<SubjectKindEnum, string> = {
   faction: 'Faction relationship',
   item: 'Item',
   campaign_track: 'Campaign track',
+  asset: 'Asset',
   custom: 'Custom',
 };
 
