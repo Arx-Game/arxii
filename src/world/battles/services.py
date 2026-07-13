@@ -290,6 +290,15 @@ def create_fortification(
     if max_integrity is None:
         level = building.fortification_level if building is not None else 0
         max_integrity = BASE_INTEGRITY[kind] + level * FORTIFICATION_LEVEL_INTEGRITY_BONUS
+        # Apply city-defense preparation bonus if the battle has a region (#1892).
+        # The bonus comes from a completed CITY_DEFENSE project graded at its
+        # deadline; see world.battles.city_defense_services.
+        if place.battle.region_id is not None:
+            from world.battles.city_defense_services import (  # noqa: PLC0415
+                get_city_defense_integrity_bonus,
+            )
+
+            max_integrity += get_city_defense_integrity_bonus(place.battle.region)
     return Fortification.objects.create(
         place=place,
         defending_side=defending_side,

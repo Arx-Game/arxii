@@ -1478,3 +1478,38 @@ payload data is applied directly; invalidation alone triggers the refetch.
 `src/actions/definitions/battles.py` — nine REGISTRY actions (plus `ChallengeChampionDuelAction`)
 
 `src/commands/battle.py` — `CmdBattle` telnet namespace
+
+## City Defense Preparation (#1892)
+
+A `CITY_DEFENSE` project kind (`TIERED_PERIOD`) that models the preparation
+phase before a city siege. Staff create the project linked to an `Area` with a
+deadline; players contribute AP/money/items/checks during the window; at the
+deadline, accumulated progress is graded into a `CheckOutcome` tier via
+`CityDefenseTierThreshold` rows. The handler stores the tier on
+`CityDefenseDetails`. When a battle is later staged in that area,
+`create_fortification` reads the stored tier's `CityDefenseIntegrityBonus` and
+boosts `max_integrity` on the defending side's fortifications.
+
+Decoupled from the battle lifecycle — the project grades at its deadline
+regardless of whether a battle exists yet. The read seam is
+`get_city_defense_integrity_bonus(area)`, called by `create_fortification` when
+the battle has a `region`. Explicit `max_integrity` (blueprint staging) bypasses
+the bonus.
+
+**Models** (`world/battles/models.py`):
+- `CityDefenseDetails` — OneToOne→Project (PK): `area` FK, `outcome_tier` FK
+  (null until graded), `applied_at` (idempotency guard).
+- `CityDefenseTierThreshold` — progress band → CheckOutcome tier (mirrors
+  `GangTurfTierThreshold`).
+- `CityDefenseIntegrityBonus` — extends `OutcomeTierAward`; one
+  `integrity_bonus` (PositiveSmallIntegerField) per tier. Staff-tunable DB row;
+  missing row yields 0.
+
+**Services** (`world/battles/city_defense_services.py`):
+- `start_city_defense_project(*, area, owner_persona, period_days, tier_thresholds)`
+- `resolve_city_defense(project)` — tiered resolver
+- `complete_city_defense(project, outcome_tier)` — kind handler (idempotent)
+- `get_city_defense_integrity_bonus(area)` — read seam for `create_fortification`
+
+**Registration:** `battles/apps.py ready()` registers the kind handler +
+tiered resolver. Pattern mirrors GANG_TURF (`world/societies/gang_turf.py`).

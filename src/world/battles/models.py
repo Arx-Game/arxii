@@ -29,6 +29,7 @@ from world.battles.constants import (
     UnitQuality,
     VehicleKind,
 )
+from world.checks.models import OutcomeTierAward
 from world.combat.constants import RiskLevel
 from world.conditions.models import CapabilityType
 from world.mechanics.models import Property
@@ -1150,3 +1151,95 @@ class BattleUnitTemplateCapability(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.template.name} {self.capability.name}: {self.value}"
+
+
+class CityDefenseDetails(SharedMemoryModel):
+    """Per-(CITY_DEFENSE Project) details payload (#1892).
+
+    Staff create the project linked to an Area; players contribute during
+    the preparation window; at the deadline progress is graded into a
+    CheckOutcome tier via CityDefenseTierThreshold rows, and the handler
+    stores the tier here. When a battle is later staged in that area,
+    create_fortification reads the stored tier's integrity bonus and
+    boosts the defending side's fortifications.
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="city_defense_details",
+    )
+    area = models.ForeignKey(
+        "areas.Area",
+        on_delete=models.PROTECT,
+        related_name="city_defense_projects",
+        help_text="The defended region. PROTECT prevents deleting an area with a defense project.",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="city_defense_projects",
+        help_text="The graded outcome tier, set when the handler runs at deadline.",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the handler runs; idempotency guard (claim-filter pattern).",
+    )
+
+    def __str__(self) -> str:
+        return f"CityDefense#{self.project_id}: {self.area_id}"
+
+
+class CityDefenseTierThreshold(SharedMemoryModel):
+    """A progress band on a CityDefenseDetails that grants a CheckOutcome tier.
+
+    Tier reached at deadline = highest min_progress row whose
+    min_progress <= project.current_progress. Seeded rows always include a
+    baseline failure tier at min_progress=0 so every graded project maps to
+    exactly one tier.
+    """
+
+    details = models.ForeignKey(
+        CityDefenseDetails,
+        on_delete=models.CASCADE,
+        related_name="tier_thresholds",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="city_defense_thresholds",
+    )
+    min_progress = models.PositiveIntegerField(
+        help_text="Minimum progress at which this tier applies.",
+    )
+
+    class Meta:
+        ordering = ["-min_progress"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["details", "outcome_tier"],
+                name="uniq_city_defense_tier",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier} @ {self.min_progress}"
+
+
+class CityDefenseIntegrityBonus(OutcomeTierAward):
+    """Integrity bonus granted to defending fortifications for a CheckOutcome tier (#1892).
+
+    Read by get_city_defense_integrity_bonus; a missing row yields 0 (a content
+    gap, not a crash). Staff-tunable — no hardcoded bonuses in service code.
+    """
+
+    integrity_bonus = models.PositiveSmallIntegerField(
+        help_text="Bonus added to Fortification.max_integrity for this tier.",
+    )
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier}: +{self.integrity_bonus}"

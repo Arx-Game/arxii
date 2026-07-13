@@ -1,1 +1,1 @@
-0018_alter_contributionmethod_kind_alter_project_kind_and_more
+0019_add_city_defense_kind

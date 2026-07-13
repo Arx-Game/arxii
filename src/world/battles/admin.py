@@ -23,6 +23,9 @@ from world.battles.models import (
     BattleUnitTemplateCapability,
     BlueprintBattlePlace,
     BlueprintFortification,
+    CityDefenseDetails,
+    CityDefenseIntegrityBonus,
+    CityDefenseTierThreshold,
     Fortification,
     TechniquePropertyAffinity,
     TerrainPropertyEffect,
@@ -167,3 +170,28 @@ class BattleUnitTemplateAdmin(admin.ModelAdmin):
     search_fields = ("name", "descriptor")
     filter_horizontal = ("properties",)
     inlines = [BattleUnitTemplateCapabilityInline]
+
+
+class CityDefenseTierThresholdInline(admin.TabularInline):
+    model = CityDefenseTierThreshold
+    extra = 0
+    raw_id_fields = ("outcome_tier",)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("outcome_tier")
+
+
+@admin.register(CityDefenseDetails)
+class CityDefenseDetailsAdmin(admin.ModelAdmin):
+    list_display = ("project", "area", "outcome_tier", "applied_at")
+    raw_id_fields = ("project", "area", "outcome_tier")
+    search_fields = ("project__description",)
+    inlines = [CityDefenseTierThresholdInline]
+
+
+@admin.register(CityDefenseIntegrityBonus)
+class CityDefenseIntegrityBonusAdmin(admin.ModelAdmin):
+    list_display = ("outcome_tier", "integrity_bonus")
+    raw_id_fields = ("outcome_tier",)
+    ordering = ("-outcome_tier__success_level",)
