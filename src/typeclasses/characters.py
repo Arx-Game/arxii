@@ -329,11 +329,23 @@ class Character(ObjectParent, DefaultCharacter):
 
         Uses the scene_state properties to get current state information.
         Falls back to executing 'look' command if state retrieval fails.
+
+        #2287: while Unconscious, perception relocates to the liminal dream
+        room — the frontend renders the dream side, not the waking room.
         """
         if not (self.has_account and self.location):
             return
+        room = self.location
+        from world.vitals.services import get_dream_room, perceives_dreamside
+
+        try:
+            sheet = self.sheet_data
+        except ObjectDoesNotExist:
+            sheet = None
+        if perceives_dreamside(sheet):
+            room = get_dream_room() or room
         caller_state = self.scene_state
-        room_state = self.location.scene_state
+        room_state = room.scene_state
         if caller_state and room_state:
             payload = build_room_state_payload(caller_state, room_state)
             self.msg(room_state=((), payload))
