@@ -17,6 +17,9 @@ from django.core.validators import MaxValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+# App-qualified model path repeated across FK references; centralized for dedup.
+_DISTINCTION_MODEL = "distinctions.Distinction"
+
 
 class BeginningsRitualGrant(SharedMemoryModel):
     """Rituals granted by a Beginnings choice."""
@@ -136,7 +139,7 @@ class DistinctionRitualGrant(SharedMemoryModel):
     """Rituals granted by a Distinction."""
 
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        _DISTINCTION_MODEL,
         on_delete=models.CASCADE,
         related_name="ritual_grants",
     )
@@ -173,7 +176,7 @@ class DistinctionResonanceGrant(SharedMemoryModel):
     """
 
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        _DISTINCTION_MODEL,
         on_delete=models.CASCADE,
         related_name="resonance_grants",
     )
@@ -229,7 +232,7 @@ class DistinctionResonanceRankThreshold(SharedMemoryModel):
     """
 
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        _DISTINCTION_MODEL,
         on_delete=models.CASCADE,
         related_name="resonance_rank_thresholds",
     )

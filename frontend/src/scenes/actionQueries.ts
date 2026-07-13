@@ -35,6 +35,31 @@ export async function fetchAvailableActions(characterId: number): Promise<Player
 /** The treat-condition action key — a backend registry key, not a UI string. */
 export const TREAT_CONDITION_ACTION_KEY = 'treat_condition';
 
+/**
+ * Copy a scalar field onto the request body only when it is defined.
+ * Used by {@link createActionRequest} to map optional body fields onto the
+ * backend serializer payload without inflating the caller's branching.
+ */
+function copyDefinedField(
+  target: Record<string, unknown>,
+  requestKey: string,
+  value: unknown
+): void {
+  if (value !== undefined) target[requestKey] = value;
+}
+
+/**
+ * Copy an array field onto the request body only when it is a non-empty array.
+ * Mirrors the original `length > 0` guard so empty arrays are omitted.
+ */
+function copyDefinedNonEmptyArray(
+  target: Record<string, unknown>,
+  requestKey: string,
+  value: unknown[] | undefined
+): void {
+  if (value !== undefined && value.length > 0) target[requestKey] = value;
+}
+
 export async function createActionRequest(
   sceneId: string,
   body: {
@@ -81,45 +106,19 @@ export async function createActionRequest(
     scene: Number(sceneId),
     action_key: body.action_key,
   };
-  if (body.target_persona_id !== undefined) {
-    requestBody.target_persona = body.target_persona_id;
-  }
-  if (body.target_persona_ids !== undefined && body.target_persona_ids.length > 0) {
-    requestBody.target_persona_ids = body.target_persona_ids;
-  }
-  if (body.technique_id !== undefined) {
-    requestBody.technique_id = body.technique_id;
-  }
-  if (body.initiator_persona !== undefined) {
-    requestBody.initiator_persona = body.initiator_persona;
-  }
-  if (body.strain_commitment !== undefined) {
-    requestBody.strain_commitment = body.strain_commitment;
-  }
-  if (body.delivery !== undefined) {
-    requestBody.delivery = body.delivery;
-  }
-  if (body.delivery_receiver_ids !== undefined && body.delivery_receiver_ids.length > 0) {
-    requestBody.delivery_receiver_ids = body.delivery_receiver_ids;
-  }
-  if (body.effort_level !== undefined) {
-    requestBody.effort_level = body.effort_level;
-  }
-  if (body.treatment_id !== undefined) {
-    requestBody.treatment_id = body.treatment_id;
-  }
-  if (body.target_condition_instance_id !== undefined) {
-    requestBody.target_condition_instance_id = body.target_condition_instance_id;
-  }
-  if (body.target_pending_alteration_id !== undefined) {
-    requestBody.target_pending_alteration_id = body.target_pending_alteration_id;
-  }
-  if (body.bond_thread_id !== undefined) {
-    requestBody.bond_thread_id = body.bond_thread_id;
-  }
-  if (body.entry_interaction_id !== undefined) {
-    requestBody.entry_interaction_id = body.entry_interaction_id;
-  }
+  copyDefinedField(requestBody, 'target_persona', body.target_persona_id);
+  copyDefinedNonEmptyArray(requestBody, 'target_persona_ids', body.target_persona_ids);
+  copyDefinedField(requestBody, 'technique_id', body.technique_id);
+  copyDefinedField(requestBody, 'initiator_persona', body.initiator_persona);
+  copyDefinedField(requestBody, 'strain_commitment', body.strain_commitment);
+  copyDefinedField(requestBody, 'delivery', body.delivery);
+  copyDefinedNonEmptyArray(requestBody, 'delivery_receiver_ids', body.delivery_receiver_ids);
+  copyDefinedField(requestBody, 'effort_level', body.effort_level);
+  copyDefinedField(requestBody, 'treatment_id', body.treatment_id);
+  copyDefinedField(requestBody, 'target_condition_instance_id', body.target_condition_instance_id);
+  copyDefinedField(requestBody, 'target_pending_alteration_id', body.target_pending_alteration_id);
+  copyDefinedField(requestBody, 'bond_thread_id', body.bond_thread_id);
+  copyDefinedField(requestBody, 'entry_interaction_id', body.entry_interaction_id);
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',
     body: JSON.stringify(requestBody),

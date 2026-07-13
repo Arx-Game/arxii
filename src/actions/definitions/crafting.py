@@ -57,6 +57,8 @@ _CRAFT_EXCEPTIONS = (
     ItemError,
 )
 
+_NO_ACCOUNT_MSG = "No account plays this character."
+
 
 @dataclass
 class AttachFacetAction(Action):
@@ -83,7 +85,7 @@ class AttachFacetAction(Action):
             return ActionResult(success=False, message="Attach what facet, to what item?")
         crafter_account = get_account_for_character(actor)
         if crafter_account is None:
-            return ActionResult(success=False, message="No account plays this character.")
+            return ActionResult(success=False, message=_NO_ACCOUNT_MSG)
         try:
             result = craft_attach_facet(
                 crafter_account=crafter_account,
@@ -152,7 +154,7 @@ class AttachStyleAction(Action):
             return ActionResult(success=False, message="Attach what style, to what item?")
         crafter_account = get_account_for_character(actor)
         if crafter_account is None:
-            return ActionResult(success=False, message="No account plays this character.")
+            return ActionResult(success=False, message=_NO_ACCOUNT_MSG)
         try:
             result = craft_attach_style(
                 crafter_account=crafter_account,
@@ -196,7 +198,7 @@ class CreateItemAction(Action):
         custom_description = kwargs.get("custom_description", "")
         crafter_account = get_account_for_character(actor)
         if crafter_account is None:
-            return ActionResult(success=False, message="No account plays this character.")
+            return ActionResult(success=False, message=_NO_ACCOUNT_MSG)
         try:
             result = craft_create_item(
                 crafter_account=crafter_account,

@@ -16,6 +16,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.secrets.constants import SecretLevel, SecretProvenance
 
+# App-qualified model path repeated across FK references; centralized for dedup.
+_CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+
 
 class SecretCategory(SharedMemoryModel):
     """What a secret is *about* — gossip, scandal, magical, family, incriminating, …
@@ -56,7 +59,7 @@ class Secret(SharedMemoryModel):
     """
 
     subject_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="secrets",
         help_text="The character this secret is about — and its sole owner.",
@@ -278,7 +281,7 @@ class SecretGrievance(SharedMemoryModel):
         help_text="The secret that was answered.",
     )
     victim_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="secret_grievances",
         help_text="The wronged character who answered it.",
@@ -410,13 +413,13 @@ class Leverage(SharedMemoryModel):
     """
 
     holder_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="leverage_held",
         help_text="The character who holds this leverage (the blackmailer).",
     )
     subject_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="leverage_against",
         help_text="The character the leverage is over (PC or NPC).",

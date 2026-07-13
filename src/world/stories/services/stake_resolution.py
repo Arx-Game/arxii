@@ -8,6 +8,7 @@ writers, and writing the StakeOutcome audit/routing row.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 from typing import TYPE_CHECKING
 
@@ -65,6 +66,31 @@ def sheet_is_player_held(sheet: CharacterSheet) -> bool:
     return entry is not None and entry.current_tenure is not None
 
 
+def _subject_standing_delta_problems(
+    stake: Stake,
+    subject_standing_delta: int,
+) -> list[StakePayloadProblem]:
+    """Return problems for ``subject_standing_delta`` when the stake can't support it."""
+    if subject_standing_delta == 0:
+        return []
+    npc_ok = stake.subject_kind == StakeSubjectKind.NPC_FATE and stake.subject_sheet_id
+    faction_ok = stake.subject_kind == StakeSubjectKind.FACTION and (
+        stake.subject_society_id or stake.subject_organization_id
+    )
+    if npc_ok or faction_ok:
+        return []
+    return [
+        StakePayloadProblem(
+            field="subject_standing_delta",
+            message=(
+                "subject_standing_delta requires an NPC_FATE stake with "
+                "subject_sheet set, or a FACTION stake with subject_society "
+                "or subject_organization set."
+            ),
+        )
+    ]
+
+
 def stake_resolution_payload_problems(  # noqa: PLR0913
     *,
     stake: Stake,
@@ -109,22 +135,7 @@ def stake_resolution_payload_problems(  # noqa: PLR0913
             )
         )
 
-    if subject_standing_delta != 0:
-        npc_ok = stake.subject_kind == StakeSubjectKind.NPC_FATE and stake.subject_sheet_id
-        faction_ok = stake.subject_kind == StakeSubjectKind.FACTION and (
-            stake.subject_society_id or stake.subject_organization_id
-        )
-        if not (npc_ok or faction_ok):
-            problems.append(
-                StakePayloadProblem(
-                    field="subject_standing_delta",
-                    message=(
-                        "subject_standing_delta requires an NPC_FATE stake with "
-                        "subject_sheet set, or a FACTION stake with subject_society "
-                        "or subject_organization set."
-                    ),
-                )
-            )
+    problems.extend(_subject_standing_delta_problems(stake, subject_standing_delta))
 
     if npc_regard_delta != 0 and stake.subject_kind != StakeSubjectKind.NPC_FATE:
         problems.append(
@@ -666,6 +677,35 @@ def _custody_allows_fire_time_write(stake: Stake, scope: str) -> bool:
     return verdict.allowed
 
 
+def _fire_writer_or_skip(  # noqa: PLR0913
+    *,
+    resolution: StakeResolution,
+    stake: Stake,
+    should_fire: bool,
+    allowed: bool,
+    write_fn: Callable[[], None],
+    field_label: str,
+    blocked_value: object,
+) -> None:
+    """Fire a branch writer when custody allows it; otherwise log and skip.
+
+    Each writer skips-and-logs when blocked by cross-story custody rather than
+    raising — a half-applicable branch must not roll back the completion.
+    """
+    if not should_fire:
+        return
+    if allowed:
+        write_fn()
+        return
+    logger.warning(
+        "StakeResolution %s: %s=%s blocked by cross-story custody on stake %s's subject; skipping.",
+        resolution.pk,
+        field_label,
+        blocked_value,
+        stake.pk,
+    )
+
+
 def _apply_branch_writers(
     resolution: StakeResolution,
     stake: Stake,
@@ -689,50 +729,44 @@ def _apply_branch_writers(
     remove_allowed = (
         _custody_allows_fire_time_write(stake, CustodyScope.REMOVE) if needs_remove else True
     )
+    harm_allowed = _custody_allows_fire_time_write(stake, CustodyScope.HARM)
 
-    if resolution.sets_subject_lifecycle:
-        if remove_allowed:
-            _write_subject_lifecycle(resolution, stake)
-        else:
-            logger.warning(
-                "StakeResolution %s: sets_subject_lifecycle=%r blocked by cross-story "
-                "custody on stake %s's subject; skipping.",
-                resolution.pk,
-                resolution.sets_subject_lifecycle,
-                stake.pk,
-            )
-    if resolution.forfeits_subject_item:
-        if remove_allowed:
-            _write_item_forfeit(resolution, stake)
-        else:
-            logger.warning(
-                "StakeResolution %s: forfeits_subject_item blocked by cross-story custody "
-                "on stake %s's subject; skipping.",
-                resolution.pk,
-                stake.pk,
-            )
-    if resolution.subject_standing_delta != 0:
-        if _custody_allows_fire_time_write(stake, CustodyScope.HARM):
-            _write_subject_standing(resolution, stake, participants)
-        else:
-            logger.warning(
-                "StakeResolution %s: subject_standing_delta=%s blocked by cross-story "
-                "custody on stake %s's subject; skipping.",
-                resolution.pk,
-                resolution.subject_standing_delta,
-                stake.pk,
-            )
-    if resolution.npc_regard_delta != 0:
-        if _custody_allows_fire_time_write(stake, CustodyScope.HARM):
-            _write_npc_regard(resolution, stake, participants)
-        else:
-            logger.warning(
-                "StakeResolution %s: npc_regard_delta=%s blocked by cross-story "
-                "custody on stake %s's subject; skipping.",
-                resolution.pk,
-                resolution.npc_regard_delta,
-                stake.pk,
-            )
+    _fire_writer_or_skip(
+        resolution=resolution,
+        stake=stake,
+        should_fire=bool(resolution.sets_subject_lifecycle),
+        allowed=remove_allowed,
+        write_fn=lambda: _write_subject_lifecycle(resolution, stake),
+        field_label="sets_subject_lifecycle",
+        blocked_value=resolution.sets_subject_lifecycle,
+    )
+    _fire_writer_or_skip(
+        resolution=resolution,
+        stake=stake,
+        should_fire=resolution.forfeits_subject_item,
+        allowed=remove_allowed,
+        write_fn=lambda: _write_item_forfeit(resolution, stake),
+        field_label="forfeits_subject_item",
+        blocked_value=resolution.forfeits_subject_item,
+    )
+    _fire_writer_or_skip(
+        resolution=resolution,
+        stake=stake,
+        should_fire=resolution.subject_standing_delta != 0,
+        allowed=harm_allowed,
+        write_fn=lambda: _write_subject_standing(resolution, stake, participants),
+        field_label="subject_standing_delta",
+        blocked_value=resolution.subject_standing_delta,
+    )
+    _fire_writer_or_skip(
+        resolution=resolution,
+        stake=stake,
+        should_fire=resolution.npc_regard_delta != 0,
+        allowed=harm_allowed,
+        write_fn=lambda: _write_npc_regard(resolution, stake, participants),
+        field_label="npc_regard_delta",
+        blocked_value=resolution.npc_regard_delta,
+    )
 
 
 def _write_subject_lifecycle(resolution: StakeResolution, stake: Stake) -> None:

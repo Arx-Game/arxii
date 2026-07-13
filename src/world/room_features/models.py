@@ -26,6 +26,7 @@ from world.room_features.constants import (
 )
 
 ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
+_PERSONA_MODEL = "scenes.Persona"
 
 
 class RoomFeatureKind(SharedMemoryModel):
@@ -418,7 +419,7 @@ class VaultDetails(SharedMemoryModel):
         primary_key=True,
     )
     founder_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.PROTECT,
         related_name="founded_vaults",
         help_text=(
@@ -468,7 +469,7 @@ class VaultAccessEntry(DiscriminatorMixin, SharedMemoryModel):
         choices=HolderType.choices,
     )
     holder_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -482,7 +483,7 @@ class VaultAccessEntry(DiscriminatorMixin, SharedMemoryModel):
         related_name="vault_access_entries",
     )
     added_by = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.PROTECT,
         related_name="vault_access_granted",
     )

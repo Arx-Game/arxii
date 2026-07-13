@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
     from world.combat.models import ClashConfig, StrainConfig
     from world.combat.types import WeaponContribution
-    from world.conditions.models import ConditionTemplate, DamageType
+    from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
     from world.conditions.types import (
         AppliedConditionResult,
         DamageInteractionResult,
@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from world.mechanics.models import ObjectProperty
     from world.scenes.models import Interaction, Persona
     from world.stories.models import Story
+    from world.vitals.models import CharacterVitals
 
     PerformCheckFn = Callable[..., CheckResult]
 
@@ -720,20 +721,11 @@ class CombatTechniqueResolver:
                 targets_by_kind[kind] = [target]
 
         # ENEMY: expand to all resolved opponents for AoE; single for SINGLE/SELF
-        all_opponents = self._resolved_opponent_targets()
-        if all_opponents:
-            enemy_objectdbs = []
-            for opp in all_opponents:
-                opp.refresh_from_db()
-                if opp.status != OpponentStatus.DEFEATED and opp.objectdb is not None:
-                    enemy_objectdbs.append(opp.objectdb)
-            if enemy_objectdbs:
-                targets_by_kind[ConditionTargetKind.ENEMY] = enemy_objectdbs
-        else:
-            # No join-table opponents — fall back to the single focused target
-            target = _resolve_condition_target(ConditionTargetKind.ENEMY, self.action, caster_od)
-            if target is not None:
-                targets_by_kind[ConditionTargetKind.ENEMY] = [target]
+        enemy_objectdbs = _resolve_enemy_condition_targets(
+            self._resolved_opponent_targets(), self.action, caster_od
+        )
+        if enemy_objectdbs:
+            targets_by_kind[ConditionTargetKind.ENEMY] = enemy_objectdbs
 
         position_params: dict[str, int] = {}
         if self.action.cast_destination_id:
@@ -984,6 +976,31 @@ def _resolve_condition_target(
         active = opp is not None and opp.status != OpponentStatus.DEFEATED
         return opp.objectdb if active else None
     return None
+
+
+def _resolve_enemy_condition_targets(
+    all_opponents: list[CombatOpponent],
+    action: CombatRoundAction,
+    caster_od: ObjectDB,
+) -> list[ObjectDB]:
+    """Resolve the ENEMY condition target list for ``_apply_conditions``.
+
+    AREA / FILTERED_GROUP techniques expand ENEMY to ALL active (non-DEFEATED)
+    opponents in ``_resolved_opponent_targets()``; when there are no join-table
+    opponents, fall back to the single focused target.
+    """
+    from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+    if all_opponents:
+        enemy_objectdbs: list[ObjectDB] = []
+        for opp in all_opponents:
+            opp.refresh_from_db()
+            if opp.status != OpponentStatus.DEFEATED and opp.objectdb is not None:
+                enemy_objectdbs.append(opp.objectdb)
+        return enemy_objectdbs
+    # No join-table opponents — fall back to the single focused target
+    target = _resolve_condition_target(ConditionTargetKind.ENEMY, action, caster_od)
+    return [target] if target is not None else []
 
 
 def _build_affected_targets(
@@ -4360,6 +4377,53 @@ def _emit_post_damage_events(  # noqa: PLR0913
         _emit_death_gate(character, room)
 
 
+def _run_pre_apply_interceptors(
+    participant: CombatParticipant,
+    pre_payload: DamagePreApplyPayload,
+    room: ObjectDB | None,
+    vitals: CharacterVitals,
+) -> ParticipantDamageResult | None:
+    """Run the cancellable ``DAMAGE_PRE_APPLY`` event and reactive interceptors.
+
+    Returns a zero-damage ``ParticipantDamageResult`` when the event is
+    cancelled or the amount is fully zeroed by a reactive interceptor
+    (blink/reflect/force-field) — signalling an early exit. Returns ``None``
+    when the payload survives and interception (interpose/companion-defend)
+    has been applied.
+    """
+    if room is not None:
+        stack = emit_event(
+            EventName.DAMAGE_PRE_APPLY,
+            pre_payload,
+            location=room,
+        )
+        if stack.was_cancelled():
+            return ParticipantDamageResult(
+                damage_dealt=0,
+                health_after=vitals.health,
+                knockout_eligible=False,
+                death_eligible=False,
+                permanent_wound_eligible=False,
+            )
+
+    # A reactive interceptor (blink/reflect/force-field) that fully avoids the
+    # hit zeroes pre_payload.amount via mutation rather than CANCEL_EVENT (#1584).
+    # Short-circuit BEFORE _try_interpose so an ally is not charged interpose
+    # fatigue for blocking a hit that no longer exists.
+    if pre_payload.amount <= 0:
+        return ParticipantDamageResult(
+            damage_dealt=0,
+            health_after=vitals.health,
+            knockout_eligible=False,
+            death_eligible=False,
+            permanent_wound_eligible=False,
+        )
+
+    _try_interpose(participant, pre_payload)
+    _try_companion_defend(participant, pre_payload)
+    return None
+
+
 def apply_damage_to_participant(  # noqa: PLR0913
     participant: CombatParticipant,
     damage: int,
@@ -4427,36 +4491,9 @@ def apply_damage_to_participant(  # noqa: PLR0913
         source=damage_source,
     )
     if not bypass_pre_apply:
-        if room is not None:
-            stack = emit_event(
-                EventName.DAMAGE_PRE_APPLY,
-                pre_payload,
-                location=room,
-            )
-            if stack.was_cancelled():
-                return ParticipantDamageResult(
-                    damage_dealt=0,
-                    health_after=vitals.health,
-                    knockout_eligible=False,
-                    death_eligible=False,
-                    permanent_wound_eligible=False,
-                )
-
-        # A reactive interceptor (blink/reflect/force-field) that fully avoids the
-        # hit zeroes pre_payload.amount via mutation rather than CANCEL_EVENT (#1584).
-        # Short-circuit BEFORE _try_interpose so an ally is not charged interpose
-        # fatigue for blocking a hit that no longer exists.
-        if pre_payload.amount <= 0:
-            return ParticipantDamageResult(
-                damage_dealt=0,
-                health_after=vitals.health,
-                knockout_eligible=False,
-                death_eligible=False,
-                permanent_wound_eligible=False,
-            )
-
-        _try_interpose(participant, pre_payload)
-        _try_companion_defend(participant, pre_payload)
+        early = _run_pre_apply_interceptors(participant, pre_payload, room, vitals)
+        if early is not None:
+            return early
     if pre_payload.amount <= 0:
         return ParticipantDamageResult(
             damage_dealt=0,
@@ -5516,34 +5553,30 @@ def _resolve_rally(
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
     success_level = _resolve_social_check(participant, "Rally", RALLY_BASE_DIFFICULTY)
-    if success_level < 1:
-        return outcome
+    if success_level >= 1:
+        ally = action.focused_ally_target
+        if ally is not None:
+            # Apply Inspired condition to the ally.
+            inspired = ConditionTemplate.objects.filter(name=INSPIRED_CONDITION_NAME).first()
+            if inspired is not None:
+                apply_condition(
+                    ally.character_sheet.character,
+                    inspired,
+                    source_character=participant.character_sheet.character,
+                    source_description="Rallied in combat.",
+                )
 
-    ally = action.focused_ally_target
-    if ally is None:
-        return outcome
-
-    # Apply Inspired condition to the ally.
-    inspired = ConditionTemplate.objects.filter(name=INSPIRED_CONDITION_NAME).first()
-    if inspired is not None:
-        apply_condition(
-            ally.character_sheet.character,
-            inspired,
-            source_character=participant.character_sheet.character,
-            source_description="Rallied in combat.",
-        )
-
-    # Great success: restore morale to ally-side summon opponents.
-    if success_level >= RALLY_GREAT_SUCCESS_LEVEL:
-        restore = success_level * RALLY_MORALE_PER_LEVEL
-        ally_summons = CombatOpponent.objects.filter(
-            encounter=participant.encounter,
-            status=OpponentStatus.ACTIVE,
-            allegiance=CombatAllegiance.ALLY,
-        )
-        for opp in ally_summons:
-            opp.morale = min(opp.max_morale, opp.morale + restore)
-            opp.save(update_fields=["morale"])
+            # Great success: restore morale to ally-side summon opponents.
+            if success_level >= RALLY_GREAT_SUCCESS_LEVEL:
+                restore = success_level * RALLY_MORALE_PER_LEVEL
+                ally_summons = CombatOpponent.objects.filter(
+                    encounter=participant.encounter,
+                    status=OpponentStatus.ACTIVE,
+                    allegiance=CombatAllegiance.ALLY,
+                )
+                for opp in ally_summons:
+                    opp.morale = min(opp.max_morale, opp.morale + restore)
+                    opp.save(update_fields=["morale"])
 
     return outcome
 
@@ -5593,21 +5626,18 @@ def _resolve_taunt(
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
     target = action.focused_opponent_target
-    if target is None:
-        return outcome
+    if target is not None:
+        target_difficulty = _social_combat_difficulty(target)
+        success_level = _resolve_social_check(participant, "Taunt", target_difficulty)
 
-    target_difficulty = _social_combat_difficulty(target)
-    success_level = _resolve_social_check(participant, "Taunt", target_difficulty)
+        if success_level >= 1:
+            accumulate_threat(
+                participant.encounter,
+                target,
+                participant,
+                success_level * TAUNT_THREAT_PER_LEVEL,
+            )
 
-    if success_level < 1:
-        return outcome
-
-    accumulate_threat(
-        participant.encounter,
-        target,
-        participant,
-        success_level * TAUNT_THREAT_PER_LEVEL,
-    )
     return outcome
 
 
@@ -5848,19 +5878,17 @@ def _resolve_joust(participant: CombatParticipant, action: CombatRoundAction) ->
         .select_related("character_sheet")
         .first()
     )
-    if other is None:
-        return outcome
+    if other is not None:
+        other_action = CombatRoundAction.objects.filter(
+            participant=other, round_number=action.round_number
+        ).first()
+        if (
+            other_action is not None
+            and other_action.maneuver == CombatManeuver.JOUST
+            and participant.pk <= other.pk
+        ):
+            _resolve_joust_pass(participant, action, other, other_action)
 
-    other_action = CombatRoundAction.objects.filter(
-        participant=other, round_number=action.round_number
-    ).first()
-    if other_action is None or other_action.maneuver != CombatManeuver.JOUST:
-        return outcome  # partner didn't also declare joust this round — no-op
-
-    if participant.pk > other.pk:
-        return outcome  # partner (lower pk) already resolved this pass
-
-    _resolve_joust_pass(participant, action, other, other_action)
     return outcome
 
 
@@ -5893,23 +5921,20 @@ def _resolve_use_item(
     )
     outcome.participant_id = participant.pk
 
-    if action.item_instance is None:
-        return outcome
+    if action.item_instance is not None:
+        item_object = action.item_instance.game_object
+        if item_object is not None:
+            character = participant.character_sheet.character
+            target: ObjectDB | None = None
+            if action.focused_ally_target is not None:
+                target = action.focused_ally_target.character_sheet.character
+            elif action.focused_opponent_target is not None:
+                target = action.focused_opponent_target.objectdb
 
-    item_object = action.item_instance.game_object
-    if item_object is None:
-        return outcome
+            UseItemAction().run(actor=character, item=item_object, target=target)
+            # UseItemAction's effects (healing, conditions) are applied by the action
+            # itself; the combat round just needs to know the maneuver resolved.
 
-    character = participant.character_sheet.character
-    target: ObjectDB | None = None
-    if action.focused_ally_target is not None:
-        target = action.focused_ally_target.character_sheet.character
-    elif action.focused_opponent_target is not None:
-        target = action.focused_opponent_target.objectdb
-
-    UseItemAction().run(actor=character, item=item_object, target=target)
-    # UseItemAction's effects (healing, conditions) are applied by the action
-    # itself; the combat round just needs to know the maneuver resolved.
     return outcome
 
 
@@ -6153,7 +6178,102 @@ def _maybe_suggest_entrance_dramatic_moment(
         )
 
 
-def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912, PLR0915
+def _run_combat_technique_pipeline(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    technique: Technique,
+    fatigue_category: str,
+    offense_check_fn: PerformCheckFn | None,
+) -> CombatTechniqueResult:
+    """Run the magic combat-technique pipeline for a single focused action.
+
+    Derives the ``offense_check_type`` from the technique's action_template
+    and resolves it via ``resolve_combat_technique``. Raises
+    ``ActionDispatchError(TECHNIQUE_NOT_COMBAT_READY)`` if the technique has
+    no action_template (not configured for combat use).
+    """
+    template = technique.action_template
+    if template is None:
+        raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
+    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+
+    return resolve_combat_technique(
+        participant=participant,
+        action=action,
+        fatigue_category=fatigue_category,
+        offense_check_type=resolve_cast_check_type(participant.character_sheet.character, template),
+        offense_check_fn=offense_check_fn,
+    )
+
+
+def _apply_combo_rider(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    target: CombatOpponent,
+    outcome: ActionOutcome,
+) -> None:
+    """Append combo-upgraded bonus damage when the target is still alive.
+
+    The combo rider is applied in addition to the pipeline result. It is
+    skipped when the target has been defeated (by the pipeline or earlier).
+    """
+    target.refresh_from_db()
+    if target.status == OpponentStatus.DEFEATED:
+        return
+    combo = action.combo_upgrade
+    dmg_result = apply_damage_to_opponent(
+        target,
+        combo.bonus_damage,
+        bypass_soak=combo.bypass_soak,
+        source_sheet=participant.character_sheet,
+    )
+    outcome.combo_used = combo
+    outcome.damage_results.append(dmg_result)
+
+
+def _maybe_record_npc_regard_on_defeat(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    target: CombatOpponent | None,
+    outcome: ActionOutcome,
+) -> None:
+    """Record a PC_FOILED_NPC_PLAN regard event when a PC defeats a notable NPC.
+
+    #2039 — a persona-backed NPC opponent defeated by a PC records a regard
+    event. A mook/persona-less opponent's defeat is deliberately a no-op.
+    """
+    if target is None or target.persona_id is None:
+        return
+    defeated = any(
+        dr.opponent_id == target.pk and dr.defeated
+        for dr in outcome.damage_results
+        if hasattr(dr, "opponent_id")
+    )
+    if not defeated:
+        return
+    from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
+    from world.npc_services.regard import (  # noqa: PLC0415
+        get_regard_event_config,
+        record_npc_regard_event,
+    )
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    try:
+        pc_persona = participant.character_sheet.primary_persona
+    except Persona.DoesNotExist:
+        pc_persona = None
+    if pc_persona is not None:
+        cfg = get_regard_event_config()
+        record_npc_regard_event(
+            holder_persona=target.persona,
+            target=pc_persona,
+            amount=cfg.combat_defeat_amount,
+            reason=NpcRegardEventReason.PC_FOILED_NPC_PLAN,
+            source_pc_combat_action=action,
+        )
+
+
+def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
     participant: CombatParticipant,
     action: CombatRoundAction,
     offense_check_fn: PerformCheckFn | None = None,
@@ -6245,19 +6365,8 @@ def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912, PLR0915
     # pipeline is skipped: combo-upgraded with no target (defeated opponent).
     run_pipeline = not action.combo_upgrade or target is not None
     if run_pipeline:
-        template = technique.action_template
-        if template is None:
-            raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
-        from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
-
-        combat_result = resolve_combat_technique(
-            participant=participant,
-            action=action,
-            fatigue_category=fatigue_category,
-            offense_check_type=resolve_cast_check_type(
-                participant.character_sheet.character, template
-            ),
-            offense_check_fn=offense_check_fn,
+        combat_result = _run_combat_technique_pipeline(
+            participant, action, technique, fatigue_category, offense_check_fn
         )
         outcome.damage_results.extend(combat_result.damage_results)
         if action.from_entrance:
@@ -6266,17 +6375,7 @@ def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912, PLR0915
     # Combo rider: appended in addition to the pipeline result when the
     # action is combo-upgraded and the target is alive.
     if action.combo_upgrade and target is not None:
-        target.refresh_from_db()
-        if target.status != OpponentStatus.DEFEATED:
-            combo = action.combo_upgrade
-            dmg_result = apply_damage_to_opponent(
-                target,
-                combo.bonus_damage,
-                bypass_soak=combo.bypass_soak,
-                source_sheet=participant.character_sheet,
-            )
-            outcome.combo_used = combo
-            outcome.damage_results.append(dmg_result)
+        _apply_combo_rider(participant, action, target, outcome)
 
     # Apply fatigue after action resolves
     apply_fatigue(
@@ -6299,33 +6398,7 @@ def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912, PLR0915
     # (persona-backed) NPC opponent records a PC_FOILED_NPC_PLAN regard event.
     # A mook/persona-less opponent's defeat is deliberately a no-op — no
     # NpcRegard row is ever created for it.
-    if target is not None and target.persona_id is not None:
-        defeated = any(
-            dr.opponent_id == target.pk and dr.defeated
-            for dr in outcome.damage_results
-            if hasattr(dr, "opponent_id")
-        )
-        if defeated:
-            from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
-            from world.npc_services.regard import (  # noqa: PLC0415
-                get_regard_event_config,
-                record_npc_regard_event,
-            )
-            from world.scenes.models import Persona  # noqa: PLC0415
-
-            try:
-                pc_persona = participant.character_sheet.primary_persona
-            except Persona.DoesNotExist:
-                pc_persona = None
-            if pc_persona is not None:
-                cfg = get_regard_event_config()
-                record_npc_regard_event(
-                    holder_persona=target.persona,
-                    target=pc_persona,
-                    amount=cfg.combat_defeat_amount,
-                    reason=NpcRegardEventReason.PC_FOILED_NPC_PLAN,
-                    source_pc_combat_action=action,
-                )
+    _maybe_record_npc_regard_on_defeat(participant, action, target, outcome)
 
     return outcome
 
@@ -8244,6 +8317,22 @@ def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[Available
     return detect_available_combos(enc, round_number)
 
 
+def _debit_ally_paid_upkeep(inst: ConditionInstance, cost: int) -> None:
+    """Debit a condition's upkeep from its ally ``source_character`` payer.
+
+    The payer is the condition's ``source_character`` — distinct from the
+    bearer. If the payer cannot pay in full, the condition lapses (its
+    ``ConditionInstance`` row is deleted and any ``Trigger`` rows on it
+    cascade). Otherwise the payer's anima pool is debited immediately.
+    """
+    payer_anima = _get_anima(inst.source_character)
+    if payer_anima is None or payer_anima.current < cost:
+        inst.delete()  # lapse — Trigger rows cascade via source_condition FK
+    else:
+        payer_anima.current -= cost
+        payer_anima.save(update_fields=["current"])
+
+
 def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     """Debit per-round upkeep from each active participant's sustained conditions.
 
@@ -8289,12 +8378,7 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
         for inst in instances:
             cost = inst.condition.upkeep_anima_per_round
             if inst.source_character_id and inst.source_character_id != char.id:
-                payer_anima = _get_anima(inst.source_character)
-                if payer_anima is None or payer_anima.current < cost:
-                    inst.delete()  # lapse — Trigger rows cascade via source_condition FK
-                else:
-                    payer_anima.current -= cost
-                    payer_anima.save(update_fields=["current"])
+                _debit_ally_paid_upkeep(inst, cost)
                 continue
             if remaining >= cost:
                 remaining -= cost

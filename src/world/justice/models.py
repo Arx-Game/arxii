@@ -13,6 +13,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.justice.constants import DEFAULT_HEAT_WEIGHT
 
+# App-qualified model path repeated across FK references; centralized for dedup.
+_LEGEND_ENTRY_MODEL = "societies.LegendEntry"
+
 
 class CrimeKind(SharedMemoryModel):
     """A normalized crime category ("murder", "theft", …) that laws reference.
@@ -93,7 +96,7 @@ class DeedCrimeTag(SharedMemoryModel):
     """
 
     deed = models.ForeignKey(
-        "societies.LegendEntry",
+        _LEGEND_ENTRY_MODEL,
         on_delete=models.CASCADE,
         related_name="crime_tags",
     )
@@ -174,7 +177,7 @@ class HeatSource(SharedMemoryModel):
         related_name="sources",
     )
     deed = models.ForeignKey(
-        "societies.LegendEntry",
+        _LEGEND_ENTRY_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -224,7 +227,7 @@ class AccusationCrimeClaim(SharedMemoryModel):
         related_name="accusation_claims",
     )
     real_deed = models.ForeignKey(
-        "societies.LegendEntry",
+        _LEGEND_ENTRY_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

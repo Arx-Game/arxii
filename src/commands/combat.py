@@ -384,9 +384,9 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         val = self._position_str
 
         # Barricade-style: position_a=<name>,position_b=<name>
-        if val.startswith("position_a="):
+        if val.startswith(_POSITION_PAIR_PREFIX):
             # Strip the inner prefix and split on comma
-            inner = val[len("position_a=") :]
+            inner = val[len(_POSITION_PAIR_PREFIX) :]
             if "," not in inner:
                 msg = "Usage: position_a=<name>,position_b=<name>"
                 raise CommandError(msg)

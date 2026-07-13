@@ -21,6 +21,8 @@ from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplicat
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
 CallerType = Union[AccountDB, ObjectDB, ServerSession]
 
+_OBJECTDB_MODEL = "objects.ObjectDB"
+
 
 class MediaType(models.TextChoices):
     """Media type choices for player uploads."""
@@ -242,7 +244,7 @@ class ObjectDisplayData(SharedMemoryModel):
     """
 
     object = models.OneToOneField(
-        "objects.ObjectDB",
+        _OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         related_name="display_data",
         primary_key=True,
@@ -390,7 +392,7 @@ class RoomProfile(SharedMemoryModel):
     """
 
     objectdb = models.OneToOneField(
-        "objects.ObjectDB",
+        _OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="room_profile",
@@ -490,7 +492,7 @@ class ExitProfile(SharedMemoryModel):
     """
 
     objectdb = models.OneToOneField(
-        "objects.ObjectDB",
+        _OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="exit_profile",

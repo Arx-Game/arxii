@@ -606,40 +606,44 @@ class PoseSubmitSerializer(serializers.Serializer):
 
         persona's character must be co-located with a located scene (#2156).
         """
+        self._validate_action_link_ownership(attrs)
+        self._validate_actor_co_located(attrs)
+        return attrs
+
+    def _validate_action_link_ownership(self, attrs: dict) -> None:
+        """All action_link_ids must belong to the same persona as this pose."""
         action_link_ids = attrs.get("action_link_ids")
         persona_id = attrs.get("persona_id")
-
-        if action_link_ids and persona_id is not None:
-            try:
-                persona = Persona.objects.get(pk=persona_id)
-            except Persona.DoesNotExist:
-                persona = None  # surfaced by validate_persona_id
-
-            if persona is not None:
-                # All action interactions must belong to the same persona as this pose.
-                wrong_persona = Interaction.objects.filter(
-                    pk__in=action_link_ids,
-                ).exclude(persona=persona)
-                if wrong_persona.exists():
-                    raise serializers.ValidationError(
-                        {
-                            "action_link_ids": (
-                                "All action_link_ids must belong to the same persona as the pose."
-                            )
-                        }
-                    )
-
-        scene_id = attrs.get("scene_id")
-        if scene_id is not None and persona_id is not None:
-            # Field validators (validate_scene_id / validate_persona_id) already guarantee
-            # these rows exist by the time cross-field validation runs.
-            scene = Scene.objects.get(pk=scene_id)
+        if not action_link_ids or persona_id is None:
+            return
+        try:
             persona = Persona.objects.get(pk=persona_id)
-            if scene.location is not None:
-                actor_room = persona.character_sheet.character.location
-                if actor_room is None or actor_room.pk != scene.location.pk:
-                    raise serializers.ValidationError(
-                        {"scene_id": "Your character is not present in this scene's room."}
+        except Persona.DoesNotExist:
+            return  # surfaced by validate_persona_id
+        wrong_persona = Interaction.objects.filter(pk__in=action_link_ids).exclude(persona=persona)
+        if wrong_persona.exists():
+            raise serializers.ValidationError(
+                {
+                    "action_link_ids": (
+                        "All action_link_ids must belong to the same persona as the pose."
                     )
+                }
+            )
 
-        return attrs
+    def _validate_actor_co_located(self, attrs: dict) -> None:
+        """Persona's character must be co-located with a located scene (#2156)."""
+        scene_id = attrs.get("scene_id")
+        persona_id = attrs.get("persona_id")
+        if scene_id is None or persona_id is None:
+            return
+        # Field validators (validate_scene_id / validate_persona_id) already guarantee
+        # these rows exist by the time cross-field validation runs.
+        scene = Scene.objects.get(pk=scene_id)
+        persona = Persona.objects.get(pk=persona_id)
+        if scene.location is None:
+            return
+        actor_room = persona.character_sheet.character.location
+        if actor_room is None or actor_room.pk != scene.location.pk:
+            raise serializers.ValidationError(
+                {"scene_id": "Your character is not present in this scene's room."}
+            )

@@ -36,6 +36,10 @@ _ROLE_DESTINATION = "destination"
 _ROLE_NAMED = "named"
 _ROLE_NAMED_B = "named_b"
 
+# Skip-reason descriptions repeated across relationship/affection/regard handlers.
+_NO_SHEET_MSG = "Actor or target has no character sheet; skipped."
+_SAME_CHAR_MSG = "Actor and target are the same character; skipped."
+
 
 def apply_effect(
     effect: "ConsequenceEffect",
@@ -142,14 +146,14 @@ def _set_relationship_condition(
     except ObjectDoesNotExist:
         return AppliedEffect(
             effect_type=EffectType.SET_RELATIONSHIP_CONDITION,
-            description="Actor or target has no character sheet; skipped.",
+            description=_NO_SHEET_MSG,
             applied=False,
             skip_reason="missing_sheet",
         )
     if recipient_sheet.pk == actor_sheet.pk:
         return AppliedEffect(
             effect_type=EffectType.SET_RELATIONSHIP_CONDITION,
-            description="Actor and target are the same character; skipped.",
+            description=_SAME_CHAR_MSG,
             applied=False,
             skip_reason="self_target",
         )
@@ -198,14 +202,14 @@ def _shift_affection(
     except ObjectDoesNotExist:
         return AppliedEffect(
             effect_type=EffectType.SHIFT_AFFECTION,
-            description="Actor or target has no character sheet; skipped.",
+            description=_NO_SHEET_MSG,
             applied=False,
             skip_reason="missing_sheet",
         )
     if recipient_sheet.pk == actor_sheet.pk:
         return AppliedEffect(
             effect_type=EffectType.SHIFT_AFFECTION,
-            description="Actor and target are the same character; skipped.",
+            description=_SAME_CHAR_MSG,
             applied=False,
             skip_reason="self_target",
         )
@@ -269,14 +273,14 @@ def _shift_npc_regard(
     except ObjectDoesNotExist:
         return AppliedEffect(
             effect_type=EffectType.SHIFT_NPC_REGARD,
-            description="Actor or target has no character sheet; skipped.",
+            description=_NO_SHEET_MSG,
             applied=False,
             skip_reason="missing_sheet",
         )
     if recipient_sheet.pk == actor_sheet.pk:
         return AppliedEffect(
             effect_type=EffectType.SHIFT_NPC_REGARD,
-            description="Actor and target are the same character; skipped.",
+            description=_SAME_CHAR_MSG,
             applied=False,
             skip_reason="self_target",
         )
