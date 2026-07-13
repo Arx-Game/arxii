@@ -134,3 +134,109 @@ class AffectionTierLadderTests(TestCase):
         apply_condition(self.target_sheet.character, smitten, severity=1)
         # Neutral base (Normal) − 2 exploitable tiers → Trivial.
         self.assertEqual(self._value(), DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL])
+
+
+class NonSocialExploitableEasingTests(TestCase):
+    """#2241: exploitable_tiers easing extends beyond social-category checks."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.seeds.relationship_scale import seed_relationship_scale_content
+
+        seed_relationship_scale_content()
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        flush_cache()
+        self.actor_sheet = CharacterSheetFactory()
+        self.target_sheet = CharacterSheetFactory()
+
+    def _non_social_request(self):
+        template = SimpleNamespace(category="items", difficulty_tier_modifier=0)
+        persona = SimpleNamespace(character_sheet=self.actor_sheet)
+        return SimpleNamespace(action_template=template, initiator_persona=persona)
+
+    def test_non_social_no_target_uses_absolute_choice(self) -> None:
+        """Non-social with no target → raw difficulty choice (no easing)."""
+        req = self._non_social_request()
+        value = resolved_base_difficulty(
+            action_request=req,
+            difficulty_choice=DifficultyChoice.HARD,
+            target_sheet=None,
+        )
+        self.assertEqual(value, DIFFICULTY_VALUES[DifficultyChoice.HARD])
+
+    def test_non_social_no_exploitable_condition_is_unaffected(self) -> None:
+        """Non-social with a target but no exploitable condition → raw difficulty."""
+        req = self._non_social_request()
+        value = resolved_base_difficulty(
+            action_request=req,
+            difficulty_choice=DifficultyChoice.HARD,
+            target_sheet=self.target_sheet,
+        )
+        self.assertEqual(value, DIFFICULTY_VALUES[DifficultyChoice.HARD])
+
+    def test_non_social_with_exploitable_condition_eases_tiers(self) -> None:
+        """Non-social with a Smitten target → eased by exploitable_tiers."""
+        from world.conditions.services import apply_condition
+        from world.seeds.social_actions import ensure_smitten_condition
+
+        smitten = ensure_smitten_condition()
+        apply_condition(self.target_sheet.character, smitten, severity=1)
+        req = self._non_social_request()
+        # HARD (index 3) − 2 exploitable tiers → EASY (index 1).
+        value = resolved_base_difficulty(
+            action_request=req,
+            difficulty_choice=DifficultyChoice.HARD,
+            target_sheet=self.target_sheet,
+        )
+        self.assertEqual(value, DIFFICULTY_VALUES[DifficultyChoice.EASY])
+
+    def test_non_social_exploitable_easing_clamps_at_trivial(self) -> None:
+        """Easing clamps at the bottom of the tier ladder (Trivial)."""
+        from world.conditions.services import apply_condition
+        from world.seeds.social_actions import ensure_smitten_condition
+
+        smitten = ensure_smitten_condition()
+        apply_condition(self.target_sheet.character, smitten, severity=1)
+        req = self._non_social_request()
+        # NORMAL (index 2) − 2 exploitable tiers → TRIVIAL (index 0).
+        value = resolved_base_difficulty(
+            action_request=req,
+            difficulty_choice=DifficultyChoice.NORMAL,
+            target_sheet=self.target_sheet,
+        )
+        self.assertEqual(value, DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL])
+
+    def test_non_social_exploitable_easing_no_affection_base(self) -> None:
+        """Non-social easing does NOT apply affection-derived base (social-only)."""
+        from world.relationships.constants import TrackSystemKey
+        from world.relationships.models import (
+            CharacterRelationship,
+            RelationshipTrack,
+            RelationshipTrackProgress,
+        )
+
+        # Give the target high affection for the actor — should NOT ease a
+        # non-social check (affection base is social-only).
+        track = RelationshipTrack.objects.get(system_key=TrackSystemKey.REGARD)
+        relationship, _ = CharacterRelationship.objects.get_or_create(
+            source=self.target_sheet, target=self.actor_sheet
+        )
+        RelationshipTrackProgress.objects.create(
+            relationship=relationship,
+            track=track,
+            capacity=2000,
+            developed_points=2000,
+        )
+        req = self._non_social_request()
+        value = resolved_base_difficulty(
+            action_request=req,
+            difficulty_choice=DifficultyChoice.NORMAL,
+            target_sheet=self.target_sheet,
+        )
+        # No exploitable condition → raw difficulty, despite high affection.
+        self.assertEqual(value, DIFFICULTY_VALUES[DifficultyChoice.NORMAL])

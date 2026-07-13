@@ -186,9 +186,11 @@ def ensure_smitten_condition():
     - A ``ConditionCheckModifier`` penalizing the bearer's Melee Defense — they
       defend worse while captivated.
     - A ``ConditionDamageInteraction`` boosting Force damage against the bearer
-      (rides the #2018 wiring). PLACEHOLDER: keyed to Force until a generic
-      physical DamageType exists; full surprise-attack semantics are a combat
-      design question (TehomCD), deliberately not built here.
+      (rides the #2018 wiring), keyed to Force (the physical damage type).
+
+    The condition-scoped modifier package (defense penalty + damage amplification
+    + tier easing) IS the surprise-attack mechanic — no separate combat primitive
+    is needed. Ratified in #2241: the shipped shape is the final shape.
 
     Applied by Seduce, not Flirt. Field updates are explicit writes / upserts so
     re-seeding applies edits (#946).
