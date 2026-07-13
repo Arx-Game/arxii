@@ -63,3 +63,64 @@ class LifeStateTests(TestCase):
         _mark_dead(sheet)
         sheet.refresh_from_db()
         self.assertEqual(sheet.lifecycle_state, LifecycleState.ALIVE)
+
+
+class DeathMomentTests(TestCase):
+    """#2287: _mark_dead stamps the death scene and delivers the condolence."""
+
+    def test_mark_dead_stamps_active_scene_at_body(self) -> None:
+        from evennia.utils import create as evennia_create
+
+        from world.scenes.factories import SceneFactory
+        from world.scenes.interaction_services import invalidate_active_scene_cache
+
+        vitals = CharacterVitalsFactory(life_state=CharacterLifeState.ALIVE)
+        sheet = vitals.character_sheet
+        room = evennia_create.create_object(
+            typeclass="typeclasses.rooms.Room", key="Death Room", nohome=True
+        )
+        sheet.character.location = room
+        scene = SceneFactory(location=room)
+        invalidate_active_scene_cache(room)
+
+        _mark_dead(sheet)
+
+        vitals.refresh_from_db()
+        self.assertEqual(vitals.died_in_scene_id, scene.pk)
+
+    def test_mark_dead_offscreen_leaves_scene_null(self) -> None:
+        vitals = CharacterVitalsFactory(life_state=CharacterLifeState.ALIVE)
+        _mark_dead(vitals.character_sheet)
+        vitals.refresh_from_db()
+        self.assertIsNone(vitals.died_in_scene)
+
+    def test_condolence_text_delivered_to_character(self) -> None:
+        from unittest.mock import patch
+
+        from world.vitals.models import VitalsConsequenceConfig
+
+        config, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
+        config.death_condolence_body = "PLACEHOLDER condolence."
+        config.save(update_fields=["death_condolence_body"])
+
+        vitals = CharacterVitalsFactory(life_state=CharacterLifeState.ALIVE)
+        sheet = vitals.character_sheet
+        with patch.object(type(sheet.character), "msg") as mock_msg:
+            _mark_dead(sheet)
+        delivered = [call.args[0] for call in mock_msg.call_args_list if call.args]
+        self.assertIn("PLACEHOLDER condolence.", delivered)
+
+    def test_empty_condolence_sends_nothing(self) -> None:
+        from unittest.mock import patch
+
+        from world.vitals.models import VitalsConsequenceConfig
+
+        config, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
+        config.death_condolence_body = ""
+        config.save(update_fields=["death_condolence_body"])
+
+        vitals = CharacterVitalsFactory(life_state=CharacterLifeState.ALIVE)
+        sheet = vitals.character_sheet
+        with patch.object(type(sheet.character), "msg") as mock_msg:
+            _mark_dead(sheet)
+        self.assertEqual(mock_msg.call_count, 0)

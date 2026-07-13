@@ -7,6 +7,7 @@ or any damage source.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -46,8 +47,10 @@ if TYPE_CHECKING:
         DamageType,
     )
     from world.conditions.types import RoundTickResult
-    from world.scenes.models import Interaction
+    from world.scenes.models import Interaction, Scene
     from world.vitals.models import VitalsConsequenceConfig
+
+logger = logging.getLogger(__name__)
 
 ROUND_TICK_START = "start"
 ROUND_TICK_END = "end"
@@ -682,13 +685,57 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
         return
     vitals.life_state = CharacterLifeState.DEAD
     vitals.died_at = timezone.now()
-    vitals.save(update_fields=["life_state", "died_at"])
+    vitals.died_in_scene = _active_scene_at_body(character_sheet)
+    vitals.save(update_fields=["life_state", "died_at", "died_in_scene"])
 
     # Lazy import per repo convention: vitals must not import roster at module level.
     from world.character_sheets.types import LifecycleState  # noqa: PLC0415
     from world.roster.services.activity import set_lifecycle_state  # noqa: PLC0415
 
     set_lifecycle_state(character_sheet, LifecycleState.DEAD)
+    _deliver_death_condolence(character_sheet)
+
+
+def _active_scene_at_body(character_sheet: CharacterSheet) -> Scene | None:
+    """The active scene at the body's location, if any (#2287).
+
+    Bounds the ghost emit window and death-kudos eligibility. None for
+    offscreen deaths (no location, no active scene there).
+    """
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    character = character_sheet.character
+    location = character.location
+    if location is None:
+        return None
+    return get_active_scene(location)
+
+
+def _deliver_death_condolence(character_sheet: CharacterSheet) -> None:
+    """Deliver the OOC condolence moment to the dead character's player (#2287).
+
+    Best-effort on every leg: the character text message (telnet + web log)
+    and a ``character_died`` frame to the bound account (web toast). A death
+    with nobody online loses nothing — the config text is also shown at next
+    login while the ghost interlude lasts (frontend concern).
+    """
+    config = get_vitals_consequence_config()
+    body = config.death_condolence_body
+    if not body:
+        return
+    character = character_sheet.character
+    try:
+        character.msg(body)
+    except Exception:
+        logger.exception("death condolence character.msg failed for sheet %s", character_sheet.pk)
+    account = character.db_account
+    if account is None:
+        return
+    payload = {"character": character.key, "body": body}
+    try:
+        account.msg(character_died=((), payload))
+    except Exception:
+        logger.exception("character_died push failed for account %s", account.pk)
 
 
 def _resolve_peril_via_pool(
