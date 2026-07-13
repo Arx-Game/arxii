@@ -51436,8 +51436,7 @@ components:
             is deleted.
         subject_label:
           type: string
-          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION
-            fallback).
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
           maxLength: 200
         beat:
           type: integer
@@ -59373,8 +59372,7 @@ components:
             is deleted.
         subject_label:
           type: string
-          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION
-            fallback).
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
           maxLength: 200
         beat:
           type: integer
@@ -59434,8 +59432,7 @@ components:
             is deleted.
         subject_label:
           type: string
-          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION
-            fallback).
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
           maxLength: 200
         beat:
           type: integer

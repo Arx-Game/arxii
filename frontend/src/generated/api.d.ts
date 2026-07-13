@@ -29172,7 +29172,7 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
-      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
       beat?: number | null;
@@ -33083,7 +33083,7 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
-      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
       beat?: number | null;
@@ -33113,7 +33113,7 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
-      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
       beat?: number | null;
