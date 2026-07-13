@@ -142,6 +142,7 @@ from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
 from commands.travel import CmdTravel  # #2163
 from commands.vault import CmdVault
+from commands.wake import CmdWake  # #2287
 from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
@@ -294,6 +295,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdHide,
             # #1491 — telnet face of RestAction; spend AP to become Well-Rested.
             CmdRest,
+            # #2287 — telnet face of WakeAction; attempt to wake from unconsciousness.
+            CmdWake,
             # #2237 — telnet face of CollectFoodAction; harvest a field's food.
             CmdHarvest,
             # #1866 — telnet face of SearchAction; search for clues in a room.

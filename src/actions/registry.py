@@ -355,6 +355,7 @@ from actions.definitions.vault import (
     VaultAccessListAction,
     VaultAccessRemoveAction,
 )
+from actions.definitions.vitals import WakeAction
 from actions.definitions.windows import CloseWindowAction, OpenWindowAction
 from actions.types import TargetType
 
@@ -667,6 +668,8 @@ _ALL_ACTIONS: list[Action] = [
     AssignGuardAction(),
     UnassignGuardAction(),
     ListGuardAssignmentsAction(),
+    # #2287 — death & unconsciousness core slice.
+    WakeAction(),
 ]
 
 # Lookup by key
