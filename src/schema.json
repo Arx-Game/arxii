@@ -2587,6 +2587,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/CanonReview'
           description: ''
+  /api/ceremonies/ceremonies/:
+    get:
+      operationId: ceremonies_ceremonies_list
+      description: List/detail ceremonies, filterable by location and status.
+      parameters:
+      - in: query
+        name: ceremony_type__key
+        schema:
+          type: string
+          enum:
+          - blessing
+          - funeral
+          - sermon
+        description: |-
+          * `funeral` - Funeral
+          * `blessing` - Blessing
+          * `sermon` - Sermon
+      - in: query
+        name: location
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - abandoned
+          - completed
+          - open
+        description: |-
+          * `open` - Open
+          * `completed` - Completed
+          * `abandoned` - Abandoned
+      tags:
+      - ceremonies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCeremonyList'
+          description: ''
+  /api/ceremonies/ceremonies/{id}/:
+    get:
+      operationId: ceremonies_ceremonies_retrieve
+      description: List/detail ceremonies, filterable by location and status.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this ceremony.
+        required: true
+      tags:
+      - ceremonies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ceremony'
+          description: ''
   /api/chapters/:
     get:
       operationId: chapters_list
@@ -29991,6 +30069,74 @@ paths:
               schema:
                 $ref: '#/components/schemas/Conditions'
           description: ''
+  /api/worship/beings/:
+    get:
+      operationId: worship_beings_list
+      description: |-
+        Public catalog of active worshippable beings (the CG picker source).
+
+        Exposes only the reference shape (id, name, tradition name) — pools,
+        avatars, and worshipper lists never leave this endpoint.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: tradition
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorshippedBeingRefList'
+          description: ''
+  /api/worship/beings/{id}/:
+    get:
+      operationId: worship_beings_retrieve
+      description: |-
+        Public catalog of active worshippable beings (the CG picker source).
+
+        Exposes only the reference shape (id, name, tradition name) — pools,
+        avatars, and worshipper lists never leave this endpoint.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorshippedBeingRef'
+          description: ''
 components:
   schemas:
     AcceptSoulTetherRequest:
@@ -32636,6 +32782,105 @@ components:
       - average_rating
       - category_name
       - rating_count
+    Ceremony:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        ceremony_type_name:
+          type: string
+          readOnly: true
+        ceremony_type_key:
+          type: string
+          readOnly: true
+        officiant_name:
+          type: string
+          readOnly: true
+        presented_being_name:
+          type: string
+          readOnly: true
+        location:
+          type: integer
+        status:
+          $ref: '#/components/schemas/CeremonyStatusEnum'
+        opened_at:
+          type: string
+          format: date-time
+          readOnly: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        honorees:
+          type: array
+          items:
+            $ref: '#/components/schemas/CeremonyHonoree'
+          readOnly: true
+        speeches:
+          type: array
+          items:
+            $ref: '#/components/schemas/CeremonySpeech'
+          readOnly: true
+        offering_count:
+          type: integer
+          readOnly: true
+      required:
+      - ceremony_type_key
+      - ceremony_type_name
+      - honorees
+      - id
+      - location
+      - offering_count
+      - officiant_name
+      - opened_at
+      - presented_being_name
+      - speeches
+    CeremonyHonoree:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        honoree_name:
+          type: string
+          readOnly: true
+        prestige_awarded:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+      required:
+      - honoree_name
+      - id
+    CeremonySpeech:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        speaker_name:
+          type: string
+          readOnly: true
+        success_level:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: Speech check success level (null if unrolled).
+      required:
+      - id
+      - speaker_name
+    CeremonyStatusEnum:
+      enum:
+      - open
+      - completed
+      - abandoned
+      type: string
+      description: |-
+        * `open` - Open
+        * `completed` - Completed
+        * `abandoned` - Abandoned
     ChallengeApproach:
       type: object
       description: Nested serializer for challenge approaches.
@@ -33488,6 +33733,14 @@ components:
             state directly, so we inject ``beginning_id`` into a per-draft context
             rather than relying on the list endpoint's pre-built map.
           readOnly: true
+        public_worship:
+          allOf:
+          - $ref: '#/components/schemas/WorshippedBeingRef'
+          readOnly: true
+        secret_worship:
+          allOf:
+          - $ref: '#/components/schemas/WorshippedBeingRef'
+          readOnly: true
         draft_data:
           description: 'Staged data: stats, skills, traits, identity, etc.'
         has_existing_characters:
@@ -33541,6 +33794,8 @@ components:
       - has_existing_characters
       - height_band
       - id
+      - public_worship
+      - secret_worship
       - selected_area
       - selected_beginnings
       - selected_gender
@@ -33636,6 +33891,14 @@ components:
           writeOnly: true
           nullable: true
         selected_tradition_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        public_worship_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        secret_worship_id:
           type: integer
           writeOnly: true
           nullable: true
@@ -46123,6 +46386,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CatalogSuggestionDetail'
+    PaginatedCeremonyList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ceremony'
     PaginatedChallengeInstanceList:
       type: object
       required:
@@ -49494,6 +49780,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserStoryMute'
+    PaginatedWorshippedBeingRefList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorshippedBeingRef'
     Participant:
       type: object
       description: |-
@@ -49998,6 +50307,14 @@ components:
           writeOnly: true
           nullable: true
         selected_tradition_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        public_worship_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        secret_worship_id:
           type: integer
           writeOnly: true
           nullable: true
@@ -62381,6 +62698,31 @@ components:
       required:
       - choice
       - persona_id
+    WorshippedBeingRef:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        tradition_name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+      - tradition_name
+    WorshippedBeingRefRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+      required:
+      - name
     WriteupComplaintWrite:
       type: object
       description: |-

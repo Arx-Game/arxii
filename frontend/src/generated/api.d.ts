@@ -1654,6 +1654,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/ceremonies/ceremonies/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/detail ceremonies, filterable by location and status. */
+    get: operations['ceremonies_ceremonies_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/ceremonies/ceremonies/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/detail ceremonies, filterable by location and status. */
+    get: operations['ceremonies_ceremonies_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/chapters/': {
     parameters: {
       query?: never;
@@ -18169,6 +18203,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/beings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Public catalog of active worshippable beings (the CG picker source).
+     *
+     *     Exposes only the reference shape (id, name, tradition name) — pools,
+     *     avatars, and worshipper lists never leave this endpoint.
+     */
+    get: operations['worship_beings_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/beings/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Public catalog of active worshippable beings (the CG picker source).
+     *
+     *     Exposes only the reference shape (id, name, tradition name) — pools,
+     *     avatars, and worshipper lists never leave this endpoint.
+     */
+    get: operations['worship_beings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -19420,6 +19498,41 @@ export interface components {
       average_rating: number;
       rating_count: number;
     };
+    Ceremony: {
+      readonly id: number;
+      readonly ceremony_type_name: string;
+      readonly ceremony_type_key: string;
+      readonly officiant_name: string;
+      readonly presented_being_name: string;
+      location: number;
+      status?: components['schemas']['CeremonyStatusEnum'];
+      /** Format: date-time */
+      readonly opened_at: string;
+      /** Format: date-time */
+      finished_at?: string | null;
+      readonly honorees: components['schemas']['CeremonyHonoree'][];
+      readonly speeches: components['schemas']['CeremonySpeech'][];
+      readonly offering_count: number;
+    };
+    CeremonyHonoree: {
+      readonly id: number;
+      readonly honoree_name: string;
+      /** Format: int64 */
+      prestige_awarded?: number;
+    };
+    CeremonySpeech: {
+      readonly id: number;
+      readonly speaker_name: string;
+      /** @description Speech check success level (null if unrolled). */
+      success_level?: number | null;
+    };
+    /**
+     * @description * `open` - Open
+     *     * `completed` - Completed
+     *     * `abandoned` - Abandoned
+     * @enum {string}
+     */
+    CeremonyStatusEnum: 'open' | 'completed' | 'abandoned';
     /** @description Nested serializer for challenge approaches. */
     ChallengeApproach: {
       readonly id: number;
@@ -19792,6 +19905,8 @@ export interface components {
       readonly selected_tradition: {
         [key: string]: unknown;
       } | null;
+      readonly public_worship: components['schemas']['WorshippedBeingRef'];
+      readonly secret_worship: components['schemas']['WorshippedBeingRef'];
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
       /** @description True if account has any active roster tenure (for advanced CG options). */
@@ -19854,6 +19969,8 @@ export interface components {
       build_id?: number | null;
       selected_path_id?: number | null;
       selected_tradition_id?: number | null;
+      public_worship_id?: number | null;
+      secret_worship_id?: number | null;
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
     };
@@ -25888,6 +26005,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['CatalogSuggestionDetail'][];
     };
+    PaginatedCeremonyList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Ceremony'][];
+    };
     PaginatedChallengeInstanceList: {
       /** @example 123 */
       count: number;
@@ -28049,6 +28181,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['UserStoryMute'][];
     };
+    PaginatedWorshippedBeingRefList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['WorshippedBeingRef'][];
+    };
     /**
      * @description Read serializer for combat participants.
      *
@@ -28346,6 +28493,8 @@ export interface components {
       build_id?: number | null;
       selected_path_id?: number | null;
       selected_tradition_id?: number | null;
+      public_worship_id?: number | null;
+      secret_worship_id?: number | null;
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
     };
@@ -34745,6 +34894,14 @@ export interface components {
       /** @description Slug from the window's choices payload. */
       choice: string;
     };
+    WorshippedBeingRef: {
+      readonly id: number;
+      name: string;
+      readonly tradition_name: string;
+    };
+    WorshippedBeingRefRequest: {
+      name: string;
+    };
     /**
      * @description Validate input for the complaint endpoint.
      *
@@ -37011,6 +37168,65 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CanonReview'];
+        };
+      };
+    };
+  };
+  ceremonies_ceremonies_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `funeral` - Funeral
+         *     * `blessing` - Blessing
+         *     * `sermon` - Sermon
+         */
+        ceremony_type__key?: 'blessing' | 'funeral' | 'sermon';
+        location?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `open` - Open
+         *     * `completed` - Completed
+         *     * `abandoned` - Abandoned
+         */
+        status?: 'abandoned' | 'completed' | 'open';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCeremonyList'];
+        };
+      };
+    };
+  };
+  ceremonies_ceremonies_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this ceremony. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Ceremony'];
         };
       };
     };
@@ -60345,6 +60561,55 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Conditions'];
+        };
+      };
+    };
+  };
+  worship_beings_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description A search term. */
+        search?: string;
+        tradition?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWorshippedBeingRefList'];
+        };
+      };
+    };
+  };
+  worship_beings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorshippedBeingRef'];
         };
       };
     };

@@ -51,6 +51,7 @@ import {
   getTarotCards,
   getTechniqueStyles,
   getTraditions,
+  getWorshippedBeings,
   resubmitDraft,
   selectTradition,
   submitDraftForReview,
@@ -67,6 +68,7 @@ export const characterCreationKeys = {
   startingAreas: () => [...characterCreationKeys.all, 'starting-areas'] as const,
   beginnings: (areaId: number) => [...characterCreationKeys.all, 'beginnings', areaId] as const,
   genders: () => [...characterCreationKeys.all, 'genders'] as const,
+  worshippedBeings: () => [...characterCreationKeys.all, 'worshipped-beings'] as const,
   species: () => [...characterCreationKeys.all, 'species'] as const,
   paths: () => [...characterCreationKeys.all, 'paths'] as const,
   cgBudget: () => [...characterCreationKeys.all, 'cg-budget'] as const,
@@ -144,6 +146,13 @@ export function useGenders() {
   return useQuery({
     queryKey: characterCreationKeys.genders(),
     queryFn: getGenders,
+  });
+}
+
+export function useWorshippedBeings() {
+  return useQuery({
+    queryKey: characterCreationKeys.worshippedBeings(),
+    queryFn: getWorshippedBeings,
   });
 }
 

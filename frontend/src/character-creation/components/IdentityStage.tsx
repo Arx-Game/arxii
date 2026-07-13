@@ -6,12 +6,21 @@
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { motion } from 'framer-motion';
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { useCGExplanations, useUpdateDraft } from '../queries';
+import { useCGExplanations, useUpdateDraft, useWorshippedBeings } from '../queries';
 import type { CharacterDraft } from '../types';
+
+const NONE_VALUE = 'none';
 
 interface IdentityStageProps {
   draft: CharacterDraft;
@@ -29,7 +38,18 @@ interface IdentityFormValues {
 export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
+  const { data: beings } = useWorshippedBeings();
   const draftData = draft.draft_data;
+
+  const handleWorshipChange = (
+    field: 'public_worship_id' | 'secret_worship_id',
+    value: number | null
+  ) => {
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: { [field]: value },
+    });
+  };
 
   const { register, watch, getValues, formState } = useForm<IdentityFormValues>({
     defaultValues: {
@@ -176,6 +196,59 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
           />
           <p className="text-xs text-muted-foreground">
             Your character's history, motivations, and what brought them here.
+          </p>
+        </div>
+      </section>
+
+      {/* Worship (#2355) */}
+      <section className="space-y-4">
+        <h3 className="theme-heading text-lg font-semibold">Worship</h3>
+        <div className="max-w-md space-y-2">
+          <Label htmlFor="public-worship">Public Worship</Label>
+          <Select
+            value={draft.public_worship ? String(draft.public_worship.id) : NONE_VALUE}
+            onValueChange={(value) =>
+              handleWorshipChange('public_worship_id', value === NONE_VALUE ? null : Number(value))
+            }
+          >
+            <SelectTrigger id="public-worship">
+              <SelectValue placeholder="Choose a being (optional)" />
+            </SelectTrigger>
+            <SelectContent className="max-h-60 overflow-y-auto">
+              <SelectItem value={NONE_VALUE}>Unaffiliated</SelectItem>
+              {(beings ?? []).map((being) => (
+                <SelectItem key={being.id} value={String(being.id)}>
+                  {being.name} ({being.tradition_name})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            The god, spirit, or power your character openly worships. Optional.
+          </p>
+        </div>
+        <div className="max-w-md space-y-2">
+          <Label htmlFor="secret-worship">Secret Worship</Label>
+          <Select
+            value={draft.secret_worship ? String(draft.secret_worship.id) : NONE_VALUE}
+            onValueChange={(value) =>
+              handleWorshipChange('secret_worship_id', value === NONE_VALUE ? null : Number(value))
+            }
+          >
+            <SelectTrigger id="secret-worship">
+              <SelectValue placeholder="None — my faith is what it appears" />
+            </SelectTrigger>
+            <SelectContent className="max-h-60 overflow-y-auto">
+              <SelectItem value={NONE_VALUE}>None</SelectItem>
+              {(beings ?? []).map((being) => (
+                <SelectItem key={being.id} value={String(being.id)}>
+                  {being.name} ({being.tradition_name})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            The truth behind the front. Choosing one mints a Secret others might uncover.
           </p>
         </div>
       </section>

@@ -316,6 +316,13 @@ export const STAGE_LABELS: Record<Stage, string> = {
   [Stage.REVIEW]: 'Review',
 };
 
+/** Reference shape from /api/worship/beings/ — never carries pools/avatars (#2355). */
+export interface WorshippedBeingRef {
+  id: number;
+  name: string;
+  tradition_name: string;
+}
+
 export interface CharacterDraft {
   id: number;
   current_stage: Stage;
@@ -333,6 +340,8 @@ export interface CharacterDraft {
   build: Build | null;
   selected_path: Path | null;
   selected_tradition: Tradition | null;
+  public_worship: WorshippedBeingRef | null;
+  secret_worship: WorshippedBeingRef | null;
   cg_points_spent: number;
   cg_points_remaining: number;
   stat_bonuses: Record<string, number>;
@@ -707,6 +716,8 @@ export interface CharacterDraftUpdate {
   build_id?: number | null;
   selected_path_id?: number | null;
   selected_tradition_id?: number | null;
+  public_worship_id?: number | null;
+  secret_worship_id?: number | null;
   draft_data?: Partial<DraftData>;
 }
 

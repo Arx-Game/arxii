@@ -46,6 +46,8 @@ function makeDraft(selectedCantripId?: number): CharacterDraft {
     selected_beginnings: null,
     selected_species: null,
     selected_gender: null,
+    public_worship: null,
+    secret_worship: null,
     age: null,
     family: null,
     claimed_kin_slot: null,
