@@ -47,6 +47,7 @@ urlpatterns = [
     path("api/gm/", include("world.gm.urls")),
     path("api/narrative/", include("world.narrative.urls")),
     path("api/ships/", include("world.ships.urls")),
+    path("api/travel/", include("world.travel.urls")),
     path("api/companions/", include("world.companions.urls")),
     path("api/assets/", include("world.assets.urls")),
     path("", include("world.scenes.urls")),
