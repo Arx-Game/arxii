@@ -17905,6 +17905,142 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/travel/hubs/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List active travel hubs — public infrastructure (no per-char filtering). */
+    get: operations['travel_hubs_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/travel/hubs/{room_profile}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List active travel hubs — public infrastructure (no per-char filtering). */
+    get: operations['travel_hubs_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/travel/invites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List PENDING voyage invites targeting the requesting user's personas. */
+    get: operations['travel_invites_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/travel/invites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List PENDING voyage invites targeting the requesting user's personas. */
+    get: operations['travel_invites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/travel/methods/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List all travel methods. */
+    get: operations['travel_methods_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/travel/methods/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List all travel methods. */
+    get: operations['travel_methods_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/travel/voyages/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List voyages the requesting user's personas participate in. */
+    get: operations['travel_voyages_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/travel/voyages/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List voyages the requesting user's personas participate in. */
+    get: operations['travel_voyages_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/treasured-signoffs/': {
     parameters: {
       query?: never;
@@ -21896,7 +22032,7 @@ export interface components {
       target_society?: number | null;
       readonly target_name: string | null;
       can_bring_guests?: boolean;
-      readonly response: components['schemas']['EventInvitationResponseEnum'];
+      readonly response: components['schemas']['Response7baEnum'];
       /** Format: date-time */
       readonly responded_at: string | null;
       /** Format: date-time */
@@ -21909,13 +22045,6 @@ export interface components {
       target_society?: number | null;
       can_bring_guests?: boolean;
     };
-    /**
-     * @description * `pending` - Pending
-     *     * `accepted` - Accepted
-     *     * `declined` - Declined
-     * @enum {string}
-     */
-    EventInvitationResponseEnum: 'pending' | 'accepted' | 'declined';
     /** @description Serializer for creating invitations. */
     EventInvite: {
       target_type: components['schemas']['TargetTypeFedEnum'];
@@ -30915,6 +31044,13 @@ export interface components {
       readonly source_pose_endorsement: number | null;
       readonly source_scene_entry_endorsement: number | null;
     };
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     * @enum {string}
+     */
+    Response7baEnum: 'pending' | 'accepted' | 'declined';
     /** @description Serializer for Restriction lookup records. */
     Restriction: {
       readonly id: number;
@@ -34064,6 +34200,40 @@ export interface components {
         | components['schemas']['RequiredStakeColumnEnum']
         | components['schemas']['BlankEnum'];
     };
+    /** @description Serializer for TravelHub — public infrastructure. */
+    TravelHub: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description List of TravelMode values that can use this hub (e.g. ["LAND", "SEA"]). A pier serves SEA; a city gate serves LAND. */
+      travel_modes?: unknown;
+      /** @description If True, this hub appears as a waypoint in route BFS. If False, it's an embarkation/disembarkation point only. */
+      is_transit_stop?: boolean;
+      is_active?: boolean;
+    };
+    /** @description Serializer for TravelMethod. */
+    TravelMethod: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      travel_mode: components['schemas']['TravelModeEnum'];
+      /**
+       * Format: double
+       * @description Distance units per IC hour.
+       */
+      base_speed: number;
+      /** @description If set, this method is for a specific ship type. Speed overridden by effective_handling(). */
+      readonly ship_type_id: number | null;
+      /** @description The method every character has by default (On Foot). */
+      is_default?: boolean;
+    };
+    /**
+     * @description * `LAND` - Land
+     *     * `SEA` - Sea
+     *     * `AIR` - Air
+     * @enum {string}
+     */
+    TravelModeEnum: 'LAND' | 'SEA' | 'AIR';
     /**
      * @description A player's pre-scene sign-off to stake one of their treasured subjects.
      *
@@ -34475,6 +34645,59 @@ export interface components {
       readonly position_id: number | null;
       readonly position_name: string | null;
     };
+    /** @description Serializer for Voyage — includes nested participants and invites. */
+    Voyage: {
+      readonly id: number;
+      readonly leader_id: number;
+      readonly leader_name: string;
+      status?: components['schemas']['VoyageStatusEnum'];
+      readonly origin_name: string;
+      readonly destination_name: string;
+      readonly travel_method_id: number;
+      readonly travel_method_name: string;
+      current_leg_index?: number;
+      /** @description Ordered list of hub PKs forming the computed route. To compute per-leg travel time/AP, re-query the TravelRoute edge between consecutive hub PKs (handling bidirectional lookup). */
+      route_hubs?: unknown;
+      readonly participants: components['schemas']['VoyageParticipant'][];
+      /** Format: date-time */
+      readonly started_at: string;
+      /** Format: date-time */
+      completed_at?: string | null;
+    };
+    /** @description Serializer for VoyageInvite — the RSVP invitation. */
+    VoyageInvite: {
+      readonly id: number;
+      readonly voyage_id: number;
+      readonly target_persona_id: number;
+      readonly target_persona_name: string;
+      readonly invited_by_id: number | null;
+      readonly invited_by_name: string;
+      response?: components['schemas']['Response7baEnum'];
+      /** Format: date-time */
+      readonly invited_at: string;
+      /** Format: date-time */
+      responded_at?: string | null;
+      readonly voyage_destination: string;
+    };
+    /** @description Serializer for VoyageParticipant. */
+    VoyageParticipant: {
+      readonly id: number;
+      readonly persona_id: number;
+      readonly persona_name: string;
+      /** Format: date-time */
+      readonly joined_at: string;
+      /** Format: date-time */
+      left_at?: string | null;
+      legs_traveled?: number;
+    };
+    /**
+     * @description * `DRAFT` - Draft
+     *     * `IN_TRANSIT` - In Transit
+     *     * `ARRIVED` - Arrived
+     *     * `ABANDONED` - Abandoned
+     * @enum {string}
+     */
+    VoyageStatusEnum: 'DRAFT' | 'IN_TRANSIT' | 'ARRIVED' | 'ABANDONED';
     /** @description Read serializer for WeeklyVote instances. */
     WeeklyVote: {
       readonly id: number;
@@ -59785,6 +60008,170 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Transition'];
+        };
+      };
+    };
+  };
+  travel_hubs_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TravelHub'][];
+        };
+      };
+    };
+  };
+  travel_hubs_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique value identifying this Travel Hub. */
+        room_profile: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TravelHub'];
+        };
+      };
+    };
+  };
+  travel_invites_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VoyageInvite'][];
+        };
+      };
+    };
+  };
+  travel_invites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Voyage Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VoyageInvite'];
+        };
+      };
+    };
+  };
+  travel_methods_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TravelMethod'][];
+        };
+      };
+    };
+  };
+  travel_methods_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Travel Method. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TravelMethod'];
+        };
+      };
+    };
+  };
+  travel_voyages_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Voyage'][];
+        };
+      };
+    };
+  };
+  travel_voyages_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Voyage. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Voyage'];
         };
       };
     };
