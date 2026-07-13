@@ -25,6 +25,7 @@ import { characterCreationKeys } from '../../queries';
 vi.mock('../../api', () => ({
   updateDraft: vi.fn(),
   getCGExplanations: vi.fn(),
+  getWorshippedBeings: vi.fn().mockResolvedValue([]),
 }));
 
 describe('IdentityStage', () => {
