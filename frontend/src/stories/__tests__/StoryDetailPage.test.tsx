@@ -62,6 +62,15 @@ vi.mock('../queries', () => ({
   useDetachStoryFromTable: vi.fn(),
   useOfferStoryToGM: vi.fn(),
   useGMProfiles: vi.fn(),
+  // #2075: CrossoverInviteComposeDialog imports useStoryList + useEpisodeList
+  useStoryList: vi.fn(() => ({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+  })),
+  useEpisodeList: vi.fn(() => ({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+  })),
 }));
 
 import * as queries from '../queries';
