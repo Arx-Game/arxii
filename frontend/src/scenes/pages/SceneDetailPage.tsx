@@ -28,6 +28,7 @@ import { useBattleForSceneQuery } from '@/battles/queries';
 import { RitualProposedChip } from '@/rituals/components/RitualProposedChip';
 import { useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
+import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -205,6 +206,7 @@ export function SceneDetailPage() {
         {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
         <SceneTacticalMap sceneId={id} />
         <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
+        {scene && <LinkedStoriesPanel sceneId={id} />}
       </div>
 
       {/* Combat rail fold-in (#2197): a two-column C-frame grid (mirroring the
