@@ -273,6 +273,12 @@ vi.mock('@/rituals/components/RitualProposedChip', () => ({
   RitualProposedChip: () => <div data-testid="ritual-proposed-chip">RitualProposedChip</div>,
 }));
 
+// #2075: LinkedStoriesPanel calls apiFetch for episode-scenes; mock the crossover
+// module so the scene test doesn't hit real fetch.
+vi.mock('@/crossover/components/LinkedStoriesPanel', () => ({
+  LinkedStoriesPanel: () => <div data-testid="linked-stories-panel" />,
+}));
+
 vi.mock('@/game/components/CommandInput', () => ({
   CommandInput: () => <div data-testid="command-input">CommandInput</div>,
 }));

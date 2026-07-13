@@ -20708,6 +20708,7 @@ export interface components {
       readonly event: number;
       /** @description The GM inviting another story into this shared event. */
       readonly from_gm: number;
+      readonly from_gm_account: number;
       /** @description The story being invited into this shared event. */
       readonly to_story: number;
       /** @description Optional specific episode to link; null lets the Lead GM pick on accept. */
@@ -21696,6 +21697,8 @@ export interface components {
       readonly id: number;
       readonly episode: string;
       readonly scene: string;
+      readonly episode_id: number;
+      readonly scene_id: number;
       order: number;
     };
     /** @description Serializer for episode-scene connections */
@@ -42085,6 +42088,7 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        scene?: number;
         story?: number;
       };
       header?: never;

@@ -23,6 +23,7 @@ import { SessionRequestStatusCard } from '../components/SessionRequestStatusCard
 import { ChangeMyGMDialog } from '../components/ChangeMyGMDialog';
 import { SendStoryOOCDialog } from '../components/SendStoryOOCDialog';
 import { MuteStoryToggle } from '../../narrative/components/MuteStoryToggle';
+import { CrossoverInviteComposeDialog } from '@/crossover/components/CrossoverInviteComposeDialog';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton for the header area
@@ -132,6 +133,9 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
 
         {/* "Send OOC notice" CTA — optimistic render; API 403s for non-Lead-GMs */}
         {canSendOOC && <SendStoryOOCDialog story={story} />}
+
+        {/* "Invite Story to Crossover" CTA — visible to any GM viewing the story */}
+        <CrossoverInviteComposeDialog currentStoryId={storyId} />
       </header>
 
       {/* Current episode panel */}

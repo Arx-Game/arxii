@@ -19,6 +19,7 @@ const links = [
   { to: '/roster', label: 'Roster' },
   { to: '/scenes', label: 'Scenes' },
   { to: '/events', label: 'Events' },
+  { to: '/crossover/inbox', label: 'Crossover' },
   { to: '/codex', label: 'Codex' },
   { to: '/tidings', label: 'Tidings' },
   { to: '/threads', label: 'Threads' },

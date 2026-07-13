@@ -147,6 +147,11 @@ const BrowseStoriesPage = lazy(() =>
 const MyStoryOffersPage = lazy(() =>
   import('@/stories/pages/MyStoryOffersPage').then((m) => ({ default: m.MyStoryOffersPage }))
 );
+const CrossoverInboxPage = lazy(() =>
+  import('@/crossover/pages/CrossoverInboxPage').then((m) => ({
+    default: m.CrossoverInboxPage,
+  }))
+);
 const MuteSettingsPage = lazy(() =>
   import('@/narrative/pages/MuteSettingsPage').then((m) => ({ default: m.MuteSettingsPage }))
 );
@@ -785,6 +790,16 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <MyStoryOffersPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/crossover/inbox"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <CrossoverInboxPage />
               </ProtectedRoute>
             </Suspense>
           }
