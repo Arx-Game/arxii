@@ -450,6 +450,10 @@ class ActionRegistryTests(TestCase):
             "advance_voyage_leg",
             "complete_voyage",
             "abandon_voyage",
+            # #2352 — voyage party formation.
+            "invite_to_voyage",
+            "respond_voyage_invite",
+            "depart_voyage",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

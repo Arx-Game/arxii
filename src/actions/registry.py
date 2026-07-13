@@ -364,6 +364,9 @@ from actions.definitions.voyages import (
     AbandonVoyageAction,
     AdvanceLegAction,
     CompleteVoyageAction,
+    DepartVoyageAction,
+    InviteToVoyageAction,
+    RespondVoyageInviteAction,
     StartVoyageAction,
 )
 from actions.definitions.windows import CloseWindowAction, OpenWindowAction
@@ -675,6 +678,10 @@ _ALL_ACTIONS: list[Action] = [
     AdvanceLegAction(),
     CompleteVoyageAction(),
     AbandonVoyageAction(),
+    # #2352 — voyage party formation.
+    InviteToVoyageAction(),
+    RespondVoyageInviteAction(),
+    DepartVoyageAction(),
     # #2179 — vault access-list management.
     VaultAccessAddAction(),
     VaultAccessRemoveAction(),
