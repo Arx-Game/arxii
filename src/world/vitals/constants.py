@@ -118,3 +118,29 @@ POOL_ABANDONMENT_ENVIRONMENTAL: str = "abandonment_environmental"
 POOL_SURROUNDED_ENTRY: str = "surrounded_entry"
 POOL_SURROUNDED_TERMINAL_ENEMY: str = "surrounded_terminal_enemy"
 POOL_SURROUNDED_TERMINAL_PVP: str = "surrounded_terminal_pvp"
+
+# Global tier pools wired onto VitalsConsequenceConfig by the survivability
+# seed cluster (#2287). Names are natural keys.
+POOL_KNOCKOUT: str = "knockout"
+POOL_DEFAULT_DEATH: str = "default_death"
+POOL_DEFAULT_WOUND: str = "default_wound"
+
+# ---------------------------------------------------------------------------
+# Bleeding Out stage authoring (#2287) — (stage_order, name, resist_difficulty,
+# rounds_to_next). Terminal stage has rounds_to_next=None; its resolution goes
+# through the guarded bleed_out_terminal pool, never an unconditional death.
+# ---------------------------------------------------------------------------
+
+BLEED_OUT_STAGE_SPECS: list[tuple[int, str, int, int | None]] = [
+    (1, "Failing", 15, 2),
+    (2, "Slipping Away", 25, 2),
+    (3, "At Death's Door", 35, None),
+]
+
+# ---------------------------------------------------------------------------
+# Liminal dream room (#2287; replaced by the dream realm proper, #2290)
+# ---------------------------------------------------------------------------
+
+DREAM_ROOM_KEY: str = "The Threshold of Dreams"
+DREAM_ROOM_TAG: str = "dream_liminal"
+DREAM_ROOM_TAG_CATEGORY: str = "system"

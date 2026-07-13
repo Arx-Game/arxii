@@ -227,6 +227,12 @@ def _seed_kudos() -> None:
     seed_kudos_content()
 
 
+def _seed_survivability() -> None:
+    from world.vitals.seeds import seed_survivability_content  # noqa: PLC0415
+
+    seed_survivability_content()
+
+
 def _seed_gm() -> None:
     from world.gm.factories import (  # noqa: PLC0415
         seed_catalog_starter_content,
@@ -371,6 +377,13 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
     # any other cluster.
     "kudos": _seed_kudos,
+    # Survivability: the knockout/default-death/default-wound pools + Bleeding
+    # Out staged condition + Unconscious capability zeroing + foundational
+    # CapabilityTypes + the liminal dream room + the death KudosSourceCategory
+    # (#2287). Without this cluster the damage pipeline never KOs or kills.
+    # After "kudos" (shares the KudosSourceCategory model) and "checks" (the
+    # outcome spine); both idempotent either way.
+    "survivability": _seed_survivability,
     # Market: the PLACEHOLDER capital square + NPC stock stall (#2066).
     "market": _seed_market,
     # Kinship: the PLACEHOLDER ducal demo tree + slots/pool + truth-pair (#2062).
@@ -444,7 +457,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     content row). Keys are ordered to match :data:`CLUSTER_SEEDERS` insertion
     order so the admin hub lists clusters in their seed sequence.
     """
-    from actions.models import ActionTemplate  # noqa: PLC0415
+    from actions.models import ActionTemplate, ConsequencePool  # noqa: PLC0415
     from world.agriculture.models import CropType  # noqa: PLC0415
     from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
     from world.buildings.models import BuildingKind, DecorationKind  # noqa: PLC0415
@@ -562,6 +575,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # relationship_writeup) + the "xp" KudosClaimCategory; represented by
         # KudosSourceCategory (#2026).
         "kudos": [KudosSourceCategory],
+        # Survivability: knockout/default-death/default-wound pools + Bleeding Out
+        # staged condition + foundational CapabilityTypes + dream room (#2287).
+        # Represented by ConsequencePool (the tier pools).
+        "survivability": [ConsequencePool],
         # Market: the PLACEHOLDER capital square (#2066).
         "market": [MarketSquare],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
