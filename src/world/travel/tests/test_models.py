@@ -52,10 +52,18 @@ class TravelMethodModelTests(TestCase):
 
 
 class VoyageModelTests(TestCase):
-    def test_default_status_is_in_transit(self):
+    def test_default_status_is_draft(self):
         voyage = Voyage(route_hubs=[])
-        self.assertEqual(voyage.status, VoyageStatus.IN_TRANSIT)
+        self.assertEqual(voyage.status, VoyageStatus.DRAFT)
 
     def test_default_current_leg_index(self):
         voyage = Voyage(route_hubs=[])
         self.assertEqual(voyage.current_leg_index, 0)
+
+
+class VoyageInviteModelTests(TestCase):
+    def test_default_response_is_pending(self):
+        from world.travel.models import VoyageInvite
+
+        invite = VoyageInvite()
+        self.assertEqual(invite.response, VoyageInvite.Response.PENDING)

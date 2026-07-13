@@ -14,6 +14,7 @@ class TravelMode(models.TextChoices):
 class VoyageStatus(models.TextChoices):
     """Status of a voyage."""
 
+    DRAFT = "DRAFT", "Draft"
     IN_TRANSIT = "IN_TRANSIT", "In Transit"
     ARRIVED = "ARRIVED", "Arrived"
     ABANDONED = "ABANDONED", "Abandoned"

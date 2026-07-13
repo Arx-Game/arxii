@@ -196,7 +196,7 @@ class Voyage(SharedMemoryModel):
     status = models.CharField(
         max_length=20,
         choices=VoyageStatus.choices,
-        default=VoyageStatus.IN_TRANSIT,
+        default=VoyageStatus.DRAFT,
     )
     ship = models.OneToOneField(
         _SHIPDETAILS_FK,
@@ -239,3 +239,55 @@ class VoyageParticipant(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.persona} on {self.voyage}"
+
+
+class VoyageInvite(SharedMemoryModel):
+    """An RSVP invitation to join a :class:`Voyage` (#2352).
+
+    Mirrors ``MissionInvite`` — PENDING/ACCEPTED/DECLINED. On ``depart``,
+    accepted invitees who are still co-located at the origin hub become
+    ``VoyageParticipant`` rows. Consent is opt-in participation (ADR-0024).
+    """
+
+    class Response(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        DECLINED = "declined", "Declined"
+
+    voyage = models.ForeignKey(
+        Voyage,
+        on_delete=models.CASCADE,
+        related_name="invites",
+    )
+    target_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.CASCADE,
+        related_name="voyage_invites_received",
+    )
+    invited_by = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="voyage_invites_sent",
+    )
+    response = models.CharField(
+        max_length=10,
+        choices=Response.choices,
+        default=Response.PENDING,
+        db_index=True,
+    )
+    invited_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Voyage Invite"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["voyage", "target_persona"],
+                name="unique_voyageinvite_voyage_target_persona",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"invite {self.target_persona} -> {self.voyage} ({self.response})"
