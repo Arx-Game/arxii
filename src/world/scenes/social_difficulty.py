@@ -114,10 +114,25 @@ def resolved_base_difficulty(
 
     For a social action it is ``affection_base + (difficulty_choice relative to NORMAL) +
     difficulty_tier_modifier`` in tier space, clamped. Callers add the resist-effort increment.
+
+    For a non-social targeted action, only ``exploitable_tiers`` easing applies (a
+    Smitten target is easier to exploit in ALL ways, not just socially) — the
+    affection-derived base and ``difficulty_tier_modifier`` remain social-only.
     """
     template = action_request.action_template
-    if template is None or template.category != _SOCIAL_CATEGORY:
+    if template is None:
         return DIFFICULTY_VALUES[difficulty_choice]
+    if template.category != _SOCIAL_CATEGORY:
+        # Non-social: apply only exploitable easing (a Smitten target is easier to
+        # exploit in ALL ways), not affection base or tier modifier (#2241).
+        if target_sheet is None:
+            return DIFFICULTY_VALUES[difficulty_choice]
+        easing = _exploitable_easing(target_sheet)
+        if easing == 0:
+            return DIFFICULTY_VALUES[difficulty_choice]
+        choice_index = _TIER_ORDER.index(DifficultyChoice(difficulty_choice))
+        eased_index = max(0, choice_index - easing)
+        return DIFFICULTY_VALUES[_TIER_ORDER[eased_index]]
 
     affection = 0
     exploitable_easing = 0

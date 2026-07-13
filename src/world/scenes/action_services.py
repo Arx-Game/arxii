@@ -829,7 +829,7 @@ def _resolve_action_against_persona(
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
     from world.fatigue.constants import EFFORT_CHECK_MODIFIER  # noqa: PLC0415
-    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+    from world.fatigue.services import apply_fatigue, get_fatigue_penalty  # noqa: PLC0415
     from world.npc_services.social_disposition import (  # noqa: PLC0415
         apply_social_disposition_delta,
     )
@@ -855,6 +855,16 @@ def _resolve_action_against_persona(
     # technique's anima/intensity/fury levers, which scale cast power; the effort
     # cost axis is charged separately by apply_fatigue below.
     check_modifiers = EFFORT_CHECK_MODIFIER.get(action_request.effort_level, 0)
+    # Read the initiator's accumulated social fatigue penalty back into the check
+    # roll (#2241). Combat already does this (combat/services.py:323-329); social
+    # actions charged fatigue but never read it back, so repeated flirting had no
+    # diminishing-returns teeth. The penalty is 0 when FRESH, −1 through −4 as
+    # fatigue accumulates — the "getting tired of this" effect.
+    fatigue_penalty = get_fatigue_penalty(
+        action_request.initiator_persona.character_sheet,
+        ActionCategory.SOCIAL,
+    )
+    check_modifiers += fatigue_penalty
     if action_request.technique is not None:
         result = _resolve_enhanced_action(
             character=character,

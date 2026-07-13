@@ -1053,6 +1053,56 @@ class TestEffortAndFatigueOnTargetedResolution(TestCase):
         )
         self.assertEqual(difficulty, DIFFICULTY_VALUES[DifficultyChoice.NORMAL])
 
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_social_fatigue_penalty_applied_to_check_roll(self, mock_resolve: MagicMock) -> None:
+        """#2241: accumulated social fatigue penalizes the initiator's check roll."""
+        from world.fatigue.services import get_or_create_fatigue_pool
+        from world.scenes.action_services import _resolve_action_against_persona
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request(effort_level="medium")
+
+        # Accumulate enough social fatigue to enter a penalized zone.
+        # We add a large amount directly to guarantee we're past TIRED.
+        sheet = self.initiator.character_sheet
+        pool = get_or_create_fatigue_pool(sheet)
+        pool.social_current = 1000
+        pool.save(update_fields=["social_current"])
+
+        _resolve_action_against_persona(request, self.target, difficulty_override=None)
+
+        # The mock's call kwargs should include extra_modifiers with a negative
+        # fatigue penalty folded in. EFFORT_CHECK_MODIFIER[MEDIUM] = 0, so the
+        # only non-zero contribution to check_modifiers is the fatigue penalty.
+        call_kwargs = mock_resolve.call_args.kwargs
+        extra_modifiers = call_kwargs.get("extra_modifiers", 0)
+        # The fatigue penalty is negative (−2 for TIRED, −3 for OVEREXERTED, etc.).
+        self.assertLess(extra_modifiers, 0)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_no_fatigue_penalty_when_fresh(self, mock_resolve: MagicMock) -> None:
+        """#2241: FRESH fatigue zone → zero penalty, check_modifiers unaffected."""
+        from world.fatigue.services import get_or_create_fatigue_pool
+        from world.scenes.action_services import _resolve_action_against_persona
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request(effort_level="medium")
+
+        # Ensure the pool exists and is at 0 (FRESH).
+        pool = get_or_create_fatigue_pool(self.initiator.character_sheet)
+        pool.social_current = 0
+        pool.save(update_fields=["social_current"])
+
+        _resolve_action_against_persona(request, self.target, difficulty_override=None)
+
+        # MEDIUM effort modifier = 0, FRESH fatigue penalty = 0, so extra_modifiers
+        # should be 0 (plus any breakdown contributions, which are 0 for a bare
+        # test character with no conditions/modifiers).
+        call_kwargs = mock_resolve.call_args.kwargs
+        extra_modifiers = call_kwargs.get("extra_modifiers", 0)
+        # Allow for breakdown.total being 0 in a bare test setup.
+        self.assertEqual(extra_modifiers, 0)
+
 
 class TestDefenderSetsPlausibilityBandAtConsent(TestCase):
     """Task 4 (A4): defender supplies difficulty at consent; diverges per-target.

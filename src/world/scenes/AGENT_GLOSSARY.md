@@ -26,7 +26,7 @@ A single IC contribution recorded within a scene — the atomic unit of RP (pose
 _Avoid_: message, post, line, Interaction (at player surfaces)
 
 **Effort Level**:
-The initiator's declared exertion on a social action (`EffortLevel`: very low / low / medium / high / extreme), forwarded at dispatch. It is a check-roll modifier and charges the initiator social fatigue — orthogonal to a technique's power levers.
+The initiator's declared exertion on a social action (`EffortLevel`: very low / low / medium / high / extreme), forwarded at dispatch. It is a check-roll modifier and charges the initiator social fatigue — orthogonal to a technique's power levers. Accumulated social fatigue feeds back as a penalty on subsequent social check rolls (#2241): a character who has flirted several times in a scene sees their composure fatigue rise, penalizing later rolls.
 _Avoid_: intensity, difficulty (effort is the initiator's input, not the target's)
 
 **Difficulty Choice**:
