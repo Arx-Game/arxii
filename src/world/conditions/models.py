@@ -1188,6 +1188,15 @@ class ConditionInstance(SharedMemoryModel):
         blank=True,
         help_text="Rounds until expiration, if duration is rounds",
     )
+    last_resist_attempt_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the bearer last manually attempted to shake this condition off "
+            "(e.g. the wake check, #2287). Rate-limits out-of-combat attempts to "
+            "one per round-equivalent (SECONDS_PER_ROUND)."
+        ),
+    )
     stage_rounds_remaining = models.PositiveIntegerField(
         null=True,
         blank=True,

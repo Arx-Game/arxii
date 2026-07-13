@@ -76,6 +76,21 @@ WOUND_BASE_DIFFICULTY: int = 15
 WOUND_SCALING_PER_PERCENT: int = 2
 
 # ---------------------------------------------------------------------------
+# Wake arc (unconscious recovery) + death off-ramp tuning (#2287)
+# ---------------------------------------------------------------------------
+
+# Base difficulty of the per-round wake (Endurance) check at full health
+WAKE_BASE_DIFFICULTY: int = 20
+# Additional difficulty per percentage point of missing health
+WAKE_SCALING_PER_PERCENT: int = 1
+# Difficulty eased per round spent unconscious
+WAKE_EASE_PER_ROUND: int = 2
+# PLACEHOLDER: rounds until guaranteed wake (~10 real minutes at 6s/round)
+WAKE_GUARANTEED_ROUNDS: int = 100
+# PLACEHOLDER: days after death before a dead character auto-retires
+AUTO_RETIRE_DAYS: int = 14
+
+# ---------------------------------------------------------------------------
 # Survivability resistance checks (seeded on first use, like fatigue endurance)
 # ---------------------------------------------------------------------------
 
