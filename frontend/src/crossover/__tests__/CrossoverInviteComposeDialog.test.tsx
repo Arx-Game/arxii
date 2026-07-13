@@ -12,7 +12,9 @@ import { vi } from 'vitest';
 import { CrossoverInviteComposeDialog } from '../components/CrossoverInviteComposeDialog';
 
 // ---------------------------------------------------------------------------
-// Mocks
+// Mocks — mock the crossover queries (our module) and the api layer that
+// @/stories/queries and @/events/queries call under the hood. This avoids
+// vitest mock-path resolution issues with aliased module paths.
 // ---------------------------------------------------------------------------
 
 vi.mock('../queries', () => ({
@@ -26,37 +28,13 @@ vi.mock('../queries', () => ({
   crossoverKeys: { all: ['crossover'] },
 }));
 
-vi.mock('@/stories/queries', () => ({
-  useStoryList: vi.fn(() => ({
-    data: {
-      count: 2,
-      next: null,
-      previous: null,
-      results: [
-        { id: 10, title: 'Story Alpha' },
-        { id: 20, title: 'Story Beta' },
-      ],
-    },
-    isLoading: false,
-  })),
-  useEpisodeList: vi.fn(() => ({
-    data: {
-      count: 1,
-      next: null,
-      previous: null,
-      results: [{ id: 30, name: 'Episode 1', order: 1 }],
-    },
-    isLoading: false,
-  })),
+// Mock apiFetch so all React Query hooks return empty/undefined data
+vi.mock('@/evennia_replacements/api', () => ({
+  apiFetch: vi.fn().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve({ count: 0, next: null, previous: null, results: [] }),
+  }),
 }));
-
-vi.mock('@/events/queries', () => ({
-  fetchEvents: vi.fn(),
-}));
-
-// No need to mock @tanstack/react-query globally — the dialog's useQuery
-// for events will just return undefined data when fetchEvents is mocked
-// and there's no query client. We provide a query client in renderDialog.
 
 function renderDialog(props?: { currentStoryId?: number }) {
   const queryClient = new QueryClient({

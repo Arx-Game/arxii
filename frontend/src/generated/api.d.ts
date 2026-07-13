@@ -42088,6 +42088,7 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        scene?: number;
         story?: number;
       };
       header?: never;
