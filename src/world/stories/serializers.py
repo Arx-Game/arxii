@@ -549,6 +549,8 @@ class EpisodeSceneSerializer(serializers.ModelSerializer):
 
     episode = serializers.StringRelatedField(read_only=True)
     scene = serializers.StringRelatedField(read_only=True)
+    episode_id = serializers.ReadOnlyField(source="episode_id")
+    scene_id = serializers.ReadOnlyField(source="scene_id")
 
     class Meta:
         model = EpisodeScene
@@ -556,6 +558,8 @@ class EpisodeSceneSerializer(serializers.ModelSerializer):
             "id",
             "episode",
             "scene",
+            "episode_id",
+            "scene_id",
             "order",
         ]
 
@@ -2221,12 +2225,15 @@ class WithdrawOfferInputSerializer(serializers.Serializer):
 class CrossoverInviteSerializer(serializers.ModelSerializer):
     """Read serializer for CrossoverInvite records (#2002)."""
 
+    from_gm_account = serializers.ReadOnlyField(source="from_gm.account_id")
+
     class Meta:
         model = CrossoverInvite
         fields = [
             "id",
             "event",
             "from_gm",
+            "from_gm_account",
             "to_story",
             "proposed_episode",
             "accepted_episode",

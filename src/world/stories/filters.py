@@ -174,6 +174,7 @@ class EpisodeSceneFilter(django_filters.FilterSet):
 
     episode = django_filters.NumberFilter(field_name="episode_id")
     story = django_filters.NumberFilter(field_name="episode__chapter__story_id")
+    scene = django_filters.NumberFilter(field_name="scene_id")
 
     class Meta:
         model = EpisodeScene
