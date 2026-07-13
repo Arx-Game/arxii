@@ -29,6 +29,7 @@ class EffectType(models.TextChoices):
     CONNECT_EDGE = "connect_edge", "Connect Edge"
     GRANT_FLIGHT = "grant_flight", "Grant Flight"
     REMOVE_FLIGHT = "remove_flight", "Remove Flight"
+    ASSET_STATUS = "asset_status", "Asset Status"
 
 
 class PositionDestination(models.TextChoices):

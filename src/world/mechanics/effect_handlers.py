@@ -1227,6 +1227,76 @@ def _apply_rescue_captive(
     )
 
 
+def _apply_asset_status(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Transition the target character's ACTIVE assets to a new status (#1905).
+
+    Asset status transitions are never GM fiat — they flow through consequence
+    pools. This handler resolves the target character (per EffectTarget),
+    bridges ObjectDB → Persona via ``persona_for_character``, queries the
+    character's ACTIVE NPCAssets, and transitions each via
+    ``transition_asset_status()``.
+    """
+    from world.assets.constants import AssetTransitionReason  # noqa: PLC0415
+    from world.assets.services import transition_asset_status  # noqa: PLC0415
+    from world.scenes.services import (  # noqa: PLC0415
+        MissingPrimaryPersonaError,
+        persona_for_character,
+    )
+
+    target = _resolve_target(effect, context)
+    target_status = effect.asset_status_target
+    if not target_status:
+        return AppliedEffect(
+            effect_type=EffectType.ASSET_STATUS,
+            description="",
+            applied=False,
+            skip_reason="ASSET_STATUS effect has no asset_status_target set",
+        )
+
+    try:
+        promoter_persona = persona_for_character(target)
+    except MissingPrimaryPersonaError:
+        return AppliedEffect(
+            effect_type=EffectType.ASSET_STATUS,
+            description="",
+            applied=False,
+            skip_reason=_NO_SHEET_SKIP_REASON,
+        )
+
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+
+    active_assets = NPCAsset.objects.filter(
+        promoter_persona=promoter_persona,
+        status="active",
+    )
+    if not active_assets:
+        return AppliedEffect(
+            effect_type=EffectType.ASSET_STATUS,
+            description="",
+            applied=False,
+            skip_reason="Target character owns no active assets",
+        )
+
+    transitioned: list[str] = []
+    for asset in active_assets:
+        transition_asset_status(
+            asset,
+            target_status,
+            reason=AssetTransitionReason.CONSEQUENCE,
+        )
+        transitioned.append(str(asset.asset_persona))
+
+    label = ", ".join(transitioned)
+    return AppliedEffect(
+        effect_type=EffectType.ASSET_STATUS,
+        description=f"Transitioned assets to {target_status}: {label}",
+        applied=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Handler registry
 # ---------------------------------------------------------------------------
@@ -1255,4 +1325,5 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.CONNECT_EDGE: _connect_edge,
     EffectType.GRANT_FLIGHT: _grant_flight,
     EffectType.REMOVE_FLIGHT: _remove_flight,
+    EffectType.ASSET_STATUS: _apply_asset_status,
 }
