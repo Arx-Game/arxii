@@ -15,6 +15,7 @@ import { StoryTray } from '@/missions/components/StoryTray';
 import { JournalTab } from '@/journals/components/JournalTab';
 import { StatusPanel } from '@/status/components/StatusPanel';
 import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
+import { VoyagePanel } from '@/travel/components/VoyagePanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
 import { Link } from 'react-router-dom';
@@ -535,6 +536,9 @@ export function GamePage() {
               ) : undefined
             }
             journalPanel={<JournalTab />}
+            travelPanel={
+              activeCharacterId ? <VoyagePanel characterId={activeCharacterId} /> : undefined
+            }
           />
         }
       />

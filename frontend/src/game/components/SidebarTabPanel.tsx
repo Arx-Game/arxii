@@ -7,6 +7,7 @@ import {
   MapPin,
   PenLine,
   Scroll,
+  Ship,
   Users,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,6 +26,8 @@ interface SidebarTabPanelProps {
   inventoryPanel?: ReactNode;
   /** #2160 journal tab — compose + the player's 5 most recent entries. */
   journalPanel?: ReactNode;
+  /** #2352 voyage panel — plan, depart, and track overworld travel. */
+  travelPanel?: ReactNode;
   /**
    * Label for the room tab. Defaults to ``"Room"`` but the parent can
    * pass the currently-focused subject (a character or item name) so the
@@ -44,6 +47,7 @@ export function SidebarTabPanel({
   statusPanel,
   inventoryPanel,
   journalPanel,
+  travelPanel,
   roomTabLabel,
 }: SidebarTabPanelProps) {
   const [activeTab, setActiveTab] = useState('room');
@@ -63,7 +67,7 @@ export function SidebarTabPanel({
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col">
-      <TabsList className="mx-2 mt-2 grid w-auto grid-cols-8">
+      <TabsList className="mx-2 mt-2 grid w-auto grid-cols-9">
         <TabsTrigger value="room" className="gap-1 text-xs" title={label}>
           <MapPin className="h-3 w-3 shrink-0" />
           <span className="inline-block max-w-[8rem] truncate">{label}</span>
@@ -95,6 +99,10 @@ export function SidebarTabPanel({
         <TabsTrigger value="journal" className="gap-1 text-xs">
           <PenLine className="h-3 w-3" />
           Journal
+        </TabsTrigger>
+        <TabsTrigger value="travel" className="gap-1 text-xs">
+          <Ship className="h-3 w-3" />
+          Travel
         </TabsTrigger>
       </TabsList>
       <TabsContent value="room" className="mt-0 flex-1 overflow-y-auto">
@@ -137,6 +145,11 @@ export function SidebarTabPanel({
           ? (journalPanel ?? (
               <p className="p-3 text-sm text-muted-foreground">No journal to show.</p>
             ))
+          : null}
+      </TabsContent>
+      <TabsContent value="travel" className="mt-0 flex-1 overflow-y-auto">
+        {activatedTabs.has('travel')
+          ? (travelPanel ?? <p className="p-3 text-sm text-muted-foreground">No travel to show.</p>)
           : null}
       </TabsContent>
     </Tabs>

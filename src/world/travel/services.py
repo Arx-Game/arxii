@@ -21,7 +21,7 @@ from world.travel.constants import VoyageStatus
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.ships.models import ShipDetails
-    from world.travel.models import TravelHub, TravelMethod, TravelRoute, Voyage
+    from world.travel.models import TravelHub, TravelMethod, TravelRoute, Voyage, VoyageInvite
 
 
 def find_overworld_route(
@@ -264,12 +264,12 @@ def start_voyage(
     travel_method: TravelMethod,
     ship: ShipDetails | None = None,
 ) -> Voyage:
-    """Create a Voyage, compute route, enroll leader as participant.
+    """Create a DRAFT Voyage, enroll leader as participant.
 
-    The leader is auto-enrolled as a VoyageParticipant — they pay AP
-    for each leg like every other participant. The leader's current
-    room must be a TravelHub whose travel_modes include the method's
-    travel_mode (the embarkation constraint).
+    The voyage starts in DRAFT — route is not computed until ``depart_voyage``.
+    The leader is auto-enrolled as a VoyageParticipant. Embarkation validation
+    (leader at hub, hub active, mode compatibility) runs here; route computation
+    is deferred to departure.
     """
     from world.travel.models import TravelHub, Voyage, VoyageParticipant  # noqa: PLC0415
 
@@ -298,21 +298,14 @@ def start_voyage(
             user_message=f"The destination doesn't support {travel_method.travel_mode} travel."
         )
 
-    route = find_overworld_route(origin_hub, destination_hub, travel_method.travel_mode)
-    if route is None:
-        raise VoyageError(user_message="There's no route from here to that destination.")
-
-    # Build the list of hub PKs: origin + all intermediate + destination
-    hub_pks = [origin_hub.pk, *(edge.destination_hub_id for edge in route)]
-
     voyage = Voyage.objects.create(
         leader=leader,
         travel_method=travel_method,
         origin_hub=origin_hub,
         destination_hub=destination_hub,
-        route_hubs=hub_pks,
+        route_hubs=[],
         current_leg_index=0,
-        status=VoyageStatus.IN_TRANSIT,
+        status=VoyageStatus.DRAFT,
         ship=ship,
     )
 
@@ -337,11 +330,13 @@ def advance_leg(voyage: Voyage, caller) -> None:  # noqa: C901, PLR0912, PLR0915
     from world.travel.models import TravelHub, Voyage  # noqa: PLC0415
 
     voyage = (
-        Voyage.objects.select_for_update()
+        Voyage.objects.select_for_update(of=("self",))
         .select_related("travel_method", "destination_hub")
         .get(pk=voyage.pk)
     )
 
+    if voyage.status == VoyageStatus.DRAFT:
+        raise VoyageError(user_message="You must depart first.")
     if voyage.status != VoyageStatus.IN_TRANSIT:
         raise VoyageNotInTransitError
 
@@ -434,8 +429,10 @@ def complete_voyage(voyage: Voyage, caller) -> None:
     """
     from world.travel.models import Voyage  # noqa: PLC0415
 
-    voyage = Voyage.objects.select_for_update().get(pk=voyage.pk)
+    voyage = Voyage.objects.select_for_update(of=("self",)).get(pk=voyage.pk)
 
+    if voyage.status == VoyageStatus.DRAFT:
+        raise VoyageError(user_message="You must depart first.")
     if voyage.status != VoyageStatus.IN_TRANSIT:
         raise VoyageNotInTransitError
 
@@ -466,9 +463,9 @@ def abandon_voyage(voyage: Voyage, caller) -> None:
     """
     from world.travel.models import Voyage  # noqa: PLC0415
 
-    voyage = Voyage.objects.select_for_update().get(pk=voyage.pk)
+    voyage = Voyage.objects.select_for_update(of=("self",)).get(pk=voyage.pk)
 
-    if voyage.status != VoyageStatus.IN_TRANSIT:
+    if voyage.status not in (VoyageStatus.DRAFT, VoyageStatus.IN_TRANSIT):
         raise VoyageNotInTransitError
 
     caller_participant = voyage.participants.filter(
@@ -486,3 +483,130 @@ def abandon_voyage(voyage: Voyage, caller) -> None:
     else:
         caller_participant.left_at = timezone.now()
         caller_participant.save()
+
+
+# ---- Party formation (#2352) ----
+
+
+def _check_colocated(persona_a, persona_b) -> bool:
+    """Check if two personas' characters are in the same room."""
+    obj_a = _resolve_character_object(persona_a)
+    obj_b = _resolve_character_object(persona_b)
+    if obj_a is None or obj_b is None:
+        return False
+    return obj_a.location is not None and obj_a.location == obj_b.location
+
+
+def invite_to_voyage(
+    voyage: Voyage,
+    leader_persona,
+    invitee_persona,
+) -> VoyageInvite:
+    """Create a PENDING invite for ``invitee_persona`` to join ``voyage``.
+
+    Validates the caller is the voyage leader, the voyage is in DRAFT status,
+    and the invitee is co-located (same room). Rejects if the invitee is
+    already invited or already a participant.
+    """
+    from world.travel.models import VoyageInvite, VoyageParticipant  # noqa: PLC0415
+
+    if voyage.status != VoyageStatus.DRAFT:
+        raise VoyageError(user_message="You can only invite people before departing.")
+    if voyage.leader_id != leader_persona.pk:
+        raise NotVoyageLeaderError
+    if not _check_colocated(leader_persona, invitee_persona):
+        raise VoyageError(user_message="They aren't here with you.")
+    if VoyageInvite.objects.filter(voyage=voyage, target_persona=invitee_persona).exists():
+        raise VoyageError(user_message="You've already invited them.")
+    if VoyageParticipant.objects.filter(voyage=voyage, persona=invitee_persona).exists():
+        raise VoyageError(user_message="They're already part of this voyage.")
+    return VoyageInvite.objects.create(
+        voyage=voyage,
+        target_persona=invitee_persona,
+        invited_by=leader_persona,
+    )
+
+
+def respond_to_voyage_invite(invite: VoyageInvite, decision: VoyageInvite.Response) -> None:
+    """Resolve a PENDING invite. Sets response + responded_at.
+
+    No participant row is created on ACCEPT — that happens in ``depart_voyage``.
+    """
+    from world.travel.models import VoyageInvite  # noqa: PLC0415
+
+    if invite.response != VoyageInvite.Response.PENDING:
+        raise VoyageError(user_message="You've already responded to that invite.")
+    if invite.voyage.status != VoyageStatus.DRAFT:
+        raise VoyageError(user_message="That voyage has already departed.")
+    invite.response = decision
+    invite.responded_at = timezone.now()
+    invite.save(update_fields=["response", "responded_at"])
+
+
+@transaction.atomic
+def depart_voyage(voyage: Voyage, caller) -> Voyage:
+    """Transition a DRAFT voyage to IN_TRANSIT.
+
+    Validates the caller is the leader, the voyage is DRAFT, and the leader
+    is still at the origin hub. Computes the route via ``find_overworld_route``.
+    Enrolls accepted invitees who are co-located at the origin hub as
+    ``VoyageParticipant`` rows. Invitees who moved away are silently skipped.
+    Unresolved (PENDING) invites are left as-is.
+    """
+    from world.travel.models import (  # noqa: PLC0415
+        Voyage,
+        VoyageInvite,
+        VoyageParticipant,
+    )
+
+    voyage = (
+        Voyage.objects.select_for_update(of=("self",))
+        .select_related("travel_method", "origin_hub", "destination_hub")
+        .get(pk=voyage.pk)
+    )
+
+    if voyage.status != VoyageStatus.DRAFT:
+        raise VoyageError(user_message="That voyage has already departed.")
+    if voyage.leader_id != caller.pk:
+        raise NotVoyageLeaderError
+
+    # Re-validate leader is still at origin hub
+    if voyage.origin_hub is not None:
+        leader_obj = _resolve_character_object(caller)
+        if leader_obj is not None and leader_obj.location is not None:
+            origin_room = voyage.origin_hub.room_profile.objectdb
+            if leader_obj.location != origin_room:
+                raise VoyageError(
+                    user_message=f"You must be at {voyage.origin_hub.name} to depart."
+                )
+
+    # Compute route
+    route = find_overworld_route(
+        voyage.origin_hub,
+        voyage.destination_hub,
+        voyage.travel_method.travel_mode,
+    )
+    if route is None:
+        raise VoyageError(user_message="There's no route from here to that destination.")
+
+    hub_pks = [voyage.origin_hub.pk, *(edge.destination_hub_id for edge in route)]
+    voyage.route_hubs = hub_pks
+
+    # Enroll accepted invitees who are still co-located
+    accepted_invites = VoyageInvite.objects.filter(
+        voyage=voyage,
+        response=VoyageInvite.Response.ACCEPTED,
+    ).select_related("target_persona")
+
+    for invite in accepted_invites:
+        # Skip if already a participant (leader was auto-enrolled at start)
+        if VoyageParticipant.objects.filter(voyage=voyage, persona=invite.target_persona).exists():
+            continue
+        # Skip if invitee moved away from origin hub
+        if not _check_colocated(caller, invite.target_persona):
+            continue
+        VoyageParticipant.objects.create(voyage=voyage, persona=invite.target_persona)
+
+    voyage.status = VoyageStatus.IN_TRANSIT
+    voyage.save()
+    return voyage

@@ -7,6 +7,7 @@ from world.travel.models import (
     TravelMethod,
     TravelRoute,
     Voyage,
+    VoyageInvite,
     VoyageParticipant,
 )
 
@@ -67,3 +68,10 @@ class VoyageAdmin(admin.ModelAdmin):
 class VoyageParticipantAdmin(admin.ModelAdmin):
     list_display = ("persona", "voyage", "joined_at", "left_at", "legs_traveled")
     raw_id_fields = ("voyage", "persona")
+
+
+@admin.register(VoyageInvite)
+class VoyageInviteAdmin(admin.ModelAdmin):
+    list_display = ("target_persona", "voyage", "response", "invited_at", "responded_at")
+    list_filter = ("response",)
+    raw_id_fields = ("voyage", "target_persona", "invited_by")

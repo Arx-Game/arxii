@@ -29643,6 +29643,162 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transition'
           description: ''
+  /api/travel/hubs/:
+    get:
+      operationId: travel_hubs_list
+      description: List active travel hubs — public infrastructure (no per-char filtering).
+      tags:
+      - travel
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TravelHub'
+          description: ''
+  /api/travel/hubs/{room_profile}/:
+    get:
+      operationId: travel_hubs_retrieve
+      description: List active travel hubs — public infrastructure (no per-char filtering).
+      parameters:
+      - in: path
+        name: room_profile
+        schema:
+          type: integer
+        description: A unique value identifying this Travel Hub.
+        required: true
+      tags:
+      - travel
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TravelHub'
+          description: ''
+  /api/travel/invites/:
+    get:
+      operationId: travel_invites_list
+      description: List PENDING voyage invites targeting the requesting user's personas.
+      tags:
+      - travel
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VoyageInvite'
+          description: ''
+  /api/travel/invites/{id}/:
+    get:
+      operationId: travel_invites_retrieve
+      description: List PENDING voyage invites targeting the requesting user's personas.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Voyage Invite.
+        required: true
+      tags:
+      - travel
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoyageInvite'
+          description: ''
+  /api/travel/methods/:
+    get:
+      operationId: travel_methods_list
+      description: List all travel methods.
+      tags:
+      - travel
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TravelMethod'
+          description: ''
+  /api/travel/methods/{id}/:
+    get:
+      operationId: travel_methods_retrieve
+      description: List all travel methods.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Travel Method.
+        required: true
+      tags:
+      - travel
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TravelMethod'
+          description: ''
+  /api/travel/voyages/:
+    get:
+      operationId: travel_voyages_list
+      description: List voyages the requesting user's personas participate in.
+      tags:
+      - travel
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Voyage'
+          description: ''
+  /api/travel/voyages/{id}/:
+    get:
+      operationId: travel_voyages_retrieve
+      description: List voyages the requesting user's personas participate in.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Voyage.
+        required: true
+      tags:
+      - travel
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Voyage'
+          description: ''
   /api/treasured-signoffs/:
     get:
       operationId: treasured_signoffs_list
@@ -38202,7 +38358,7 @@ components:
           type: boolean
         response:
           allOf:
-          - $ref: '#/components/schemas/EventInvitationResponseEnum'
+          - $ref: '#/components/schemas/Response7baEnum'
           readOnly: true
         responded_at:
           type: string
@@ -38238,16 +38394,6 @@ components:
           type: boolean
       required:
       - target_type
-    EventInvitationResponseEnum:
-      enum:
-      - pending
-      - accepted
-      - declined
-      type: string
-      description: |-
-        * `pending` - Pending
-        * `accepted` - Accepted
-        * `declined` - Declined
     EventInvite:
       type: object
       description: Serializer for creating invitations.
@@ -54980,6 +55126,16 @@ components:
       - source_room_profile
       - source_scene_entry_endorsement
       - source_staff_account
+    Response7baEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
     Restriction:
       type: object
       description: Serializer for Restriction lookup records.
@@ -61157,6 +61313,74 @@ components:
       required:
       - beat
       - transition
+    TravelHub:
+      type: object
+      description: Serializer for TravelHub — public infrastructure.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        travel_modes:
+          description: List of TravelMode values that can use this hub (e.g. ["LAND",
+            "SEA"]). A pier serves SEA; a city gate serves LAND.
+        is_transit_stop:
+          type: boolean
+          description: If True, this hub appears as a waypoint in route BFS. If False,
+            it's an embarkation/disembarkation point only.
+        is_active:
+          type: boolean
+      required:
+      - id
+      - name
+    TravelMethod:
+      type: object
+      description: Serializer for TravelMethod.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        travel_mode:
+          $ref: '#/components/schemas/TravelModeEnum'
+        base_speed:
+          type: number
+          format: double
+          minimum: 0
+          description: Distance units per IC hour.
+        ship_type_id:
+          type: integer
+          nullable: true
+          description: If set, this method is for a specific ship type. Speed overridden
+            by effective_handling().
+          readOnly: true
+        is_default:
+          type: boolean
+          description: The method every character has by default (On Foot).
+      required:
+      - base_speed
+      - id
+      - name
+      - ship_type_id
+      - travel_mode
+    TravelModeEnum:
+      enum:
+      - LAND
+      - SEA
+      - AIR
+      type: string
+      description: |-
+        * `LAND` - Land
+        * `SEA` - Sea
+        * `AIR` - Air
     TreasuredSignoff:
       type: object
       description: |-
@@ -61916,6 +62140,151 @@ components:
       - name
       - position_id
       - position_name
+    Voyage:
+      type: object
+      description: Serializer for Voyage — includes nested participants and invites.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        leader_id:
+          type: integer
+          readOnly: true
+        leader_name:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/VoyageStatusEnum'
+        origin_name:
+          type: string
+          readOnly: true
+        destination_name:
+          type: string
+          readOnly: true
+        travel_method_id:
+          type: integer
+          readOnly: true
+        travel_method_name:
+          type: string
+          readOnly: true
+        current_leg_index:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        route_hubs:
+          description: Ordered list of hub PKs forming the computed route. To compute
+            per-leg travel time/AP, re-query the TravelRoute edge between consecutive
+            hub PKs (handling bidirectional lookup).
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoyageParticipant'
+          readOnly: true
+        started_at:
+          type: string
+          format: date-time
+          readOnly: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - destination_name
+      - id
+      - leader_id
+      - leader_name
+      - origin_name
+      - participants
+      - started_at
+      - travel_method_id
+      - travel_method_name
+    VoyageInvite:
+      type: object
+      description: Serializer for VoyageInvite — the RSVP invitation.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        voyage_id:
+          type: integer
+          readOnly: true
+        target_persona_id:
+          type: integer
+          readOnly: true
+        target_persona_name:
+          type: string
+          readOnly: true
+        invited_by_id:
+          type: integer
+          nullable: true
+          readOnly: true
+        invited_by_name:
+          type: string
+          readOnly: true
+        response:
+          $ref: '#/components/schemas/Response7baEnum'
+        invited_at:
+          type: string
+          format: date-time
+          readOnly: true
+        responded_at:
+          type: string
+          format: date-time
+          nullable: true
+        voyage_destination:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - invited_at
+      - invited_by_id
+      - invited_by_name
+      - target_persona_id
+      - target_persona_name
+      - voyage_destination
+      - voyage_id
+    VoyageParticipant:
+      type: object
+      description: Serializer for VoyageParticipant.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        persona_id:
+          type: integer
+          readOnly: true
+        persona_name:
+          type: string
+          readOnly: true
+        joined_at:
+          type: string
+          format: date-time
+          readOnly: true
+        left_at:
+          type: string
+          format: date-time
+          nullable: true
+        legs_traveled:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - id
+      - joined_at
+      - persona_id
+      - persona_name
+    VoyageStatusEnum:
+      enum:
+      - DRAFT
+      - IN_TRANSIT
+      - ARRIVED
+      - ABANDONED
+      type: string
+      description: |-
+        * `DRAFT` - Draft
+        * `IN_TRANSIT` - In Transit
+        * `ARRIVED` - Arrived
+        * `ABANDONED` - Abandoned
     WeeklyVote:
       type: object
       description: Read serializer for WeeklyVote instances.

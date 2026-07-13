@@ -40,12 +40,12 @@ def _resolve_active_persona(actor: Any):
 
 
 def _get_active_voyage(persona) -> Voyage | None:
-    """Find the active voyage for a persona."""
+    """Find the active voyage (DRAFT or IN_TRANSIT) for a persona."""
     participant = (
         VoyageParticipant.objects.filter(
             persona=persona,
             left_at__isnull=True,
-            voyage__status=VoyageStatus.IN_TRANSIT,
+            voyage__status__in=[VoyageStatus.DRAFT, VoyageStatus.IN_TRANSIT],
         )
         .select_related("voyage")
         .first()
@@ -234,3 +234,127 @@ class AbandonVoyageAction(Action):
             return ActionResult(success=False, message=exc.user_message)
 
         return ActionResult(success=True, message="You end your journey here.")
+
+
+@dataclass
+class InviteToVoyageAction(Action):
+    """Invite a co-located character to join your voyage."""
+
+    key: str = "invite_to_voyage"
+    name: str = "Invite to Voyage"
+    icon: str = "user-plus"
+    category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: Any,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.travel.services import invite_to_voyage  # noqa: PLC0415
+
+        target_persona_id = kwargs.get("target_persona_id")
+        if target_persona_id is None:
+            return ActionResult(success=False, message="Invite whom?")
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message="You need an active persona to travel.")
+
+        voyage = _get_active_voyage(persona)
+        if voyage is None:
+            return ActionResult(success=False, message="You aren't on a voyage.")
+
+        invitee = Persona.objects.filter(pk=target_persona_id).first()
+        if invitee is None:
+            return ActionResult(success=False, message="That person doesn't exist.")
+
+        try:
+            invite_to_voyage(voyage, persona, invitee)
+        except VoyageError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(success=True, message=f"You invite {invitee} to join your voyage.")
+
+
+@dataclass
+class RespondVoyageInviteAction(Action):
+    """Accept or decline a voyage invitation."""
+
+    key: str = "respond_voyage_invite"
+    name: str = "Respond to Voyage Invite"
+    icon: str = "check"
+    category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: Any,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.travel.models import VoyageInvite  # noqa: PLC0415
+        from world.travel.services import respond_to_voyage_invite  # noqa: PLC0415
+
+        invite_id = kwargs.get("invite_id")
+        accept = kwargs.get("accept", False)
+
+        if invite_id is None:
+            return ActionResult(success=False, message="Which invitation?")
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message="You need an active persona.")
+
+        invite = VoyageInvite.objects.filter(pk=invite_id, target_persona=persona).first()
+        if invite is None:
+            return ActionResult(success=False, message="You have no such invitation.")
+
+        decision = VoyageInvite.Response.ACCEPTED if accept else VoyageInvite.Response.DECLINED
+
+        try:
+            respond_to_voyage_invite(invite, decision)
+        except VoyageError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        verb = "accepted" if accept else "declined"
+        return ActionResult(success=True, message=f"You {verb} the voyage invitation.")
+
+
+@dataclass
+class DepartVoyageAction(Action):
+    """Depart on your voyage with accepted party members."""
+
+    key: str = "depart_voyage"
+    name: str = "Depart Voyage"
+    icon: str = "ship"
+    category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: Any,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.travel.services import depart_voyage  # noqa: PLC0415
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message="You need an active persona to travel.")
+
+        voyage = _get_active_voyage(persona)
+        if voyage is None:
+            return ActionResult(success=False, message="You aren't on a voyage.")
+
+        try:
+            depart_voyage(voyage, caller=persona)
+        except VoyageError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(success=True, message="You set out on your voyage.")

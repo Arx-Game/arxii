@@ -8,6 +8,9 @@ from actions.definitions.voyages import (
     AbandonVoyageAction,
     AdvanceLegAction,
     CompleteVoyageAction,
+    DepartVoyageAction,
+    InviteToVoyageAction,
+    RespondVoyageInviteAction,
     StartVoyageAction,
 )
 
@@ -53,4 +56,30 @@ class AbandonVoyageActionTests(TestCase):
             patch("actions.definitions.voyages._get_active_voyage", return_value=None),
         ):
             result = AbandonVoyageAction().execute(actor)
+        self.assertFalse(result.success)
+
+
+class InviteToVoyageActionTests(TestCase):
+    def test_returns_failure_without_target(self):
+        actor = MagicMock()
+        result = InviteToVoyageAction().execute(actor)
+        self.assertFalse(result.success)
+
+
+class RespondVoyageInviteActionTests(TestCase):
+    def test_returns_failure_without_invite(self):
+        actor = MagicMock()
+        result = RespondVoyageInviteAction().execute(actor)
+        self.assertFalse(result.success)
+
+
+class DepartVoyageActionTests(TestCase):
+    def test_returns_failure_without_voyage(self):
+        actor = MagicMock()
+        persona = MagicMock()
+        with (
+            patch("actions.definitions.voyages._resolve_active_persona", return_value=persona),
+            patch("actions.definitions.voyages._get_active_voyage", return_value=None),
+        ):
+            result = DepartVoyageAction().execute(actor)
         self.assertFalse(result.success)
