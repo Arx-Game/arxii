@@ -41,7 +41,7 @@ class InviteToVoyageTests(TestCase):
         )
 
     @patch("world.travel.services._check_colocated", return_value=True)
-    def test_invites_colocated_character(self):
+    def test_invites_colocated_character(self, _mock):  # noqa: PT019
         """Leader can invite a co-located character to a DRAFT voyage."""
         invite = invite_to_voyage(self.voyage, self.leader, self.invitee)
         self.assertEqual(invite.response, VoyageInvite.Response.PENDING)
@@ -49,7 +49,7 @@ class InviteToVoyageTests(TestCase):
         self.assertEqual(invite.invited_by_id, self.leader.pk)
 
     @patch("world.travel.services._check_colocated", return_value=True)
-    def test_rejects_non_leader(self):
+    def test_rejects_non_leader(self, _mock):  # noqa: PT019
         """Non-leader cannot invite."""
         non_leader = _make_persona()
         with self.assertRaises(NotVoyageLeaderError):
@@ -63,13 +63,13 @@ class InviteToVoyageTests(TestCase):
             invite_to_voyage(self.voyage, self.leader, self.invitee)
 
     @patch("world.travel.services._check_colocated", return_value=False)
-    def test_rejects_not_colocated(self):
+    def test_rejects_not_colocated(self, _mock):  # noqa: PT019
         """Cannot invite someone who isn't in the same room."""
         with self.assertRaises(VoyageError):
             invite_to_voyage(self.voyage, self.leader, self.invitee)
 
     @patch("world.travel.services._check_colocated", return_value=True)
-    def test_rejects_duplicate_invite(self):
+    def test_rejects_duplicate_invite(self, _mock):  # noqa: PT019
         """Cannot invite someone who's already invited."""
         VoyageInvite.objects.create(
             voyage=self.voyage, target_persona=self.invitee, invited_by=self.leader
@@ -78,7 +78,7 @@ class InviteToVoyageTests(TestCase):
             invite_to_voyage(self.voyage, self.leader, self.invitee)
 
     @patch("world.travel.services._check_colocated", return_value=True)
-    def test_rejects_existing_participant(self):
+    def test_rejects_existing_participant(self, _mock):  # noqa: PT019
         """Cannot invite someone who's already a participant."""
         VoyageParticipant.objects.create(voyage=self.voyage, persona=self.invitee)
         with self.assertRaises(VoyageError):
@@ -213,7 +213,7 @@ class DepartVoyageTests(TestCase):
 
     @patch("world.travel.services._check_colocated", return_value=True)
     @patch("world.travel.services._resolve_character_object")
-    def test_depart_enrolls_accepted_invitee(self, mock_resolve):
+    def test_depart_enrolls_accepted_invitee(self, mock_resolve, _mock_colocated):  # noqa: PT019
         """Depart enrolls accepted invitees who are co-located."""
         TravelRouteFactory(
             origin_hub=self.hub_a,
@@ -240,7 +240,7 @@ class DepartVoyageTests(TestCase):
 
     @patch("world.travel.services._check_colocated", return_value=False)
     @patch("world.travel.services._resolve_character_object")
-    def test_depart_skips_moved_invitee(self, mock_resolve):
+    def test_depart_skips_moved_invitee(self, mock_resolve, _mock_colocated):  # noqa: PT019
         """Depart silently skips accepted invitees who moved away."""
         TravelRouteFactory(
             origin_hub=self.hub_a,
@@ -266,7 +266,7 @@ class DepartVoyageTests(TestCase):
 
     @patch("world.travel.services._check_colocated", return_value=True)
     @patch("world.travel.services._resolve_character_object")
-    def test_depart_leaves_pending_invitee(self, mock_resolve):
+    def test_depart_leaves_pending_invitee(self, mock_resolve, _mock_colocated):  # noqa: PT019
         """Depart does not enroll pending (unresolved) invitees."""
         TravelRouteFactory(
             origin_hub=self.hub_a,
