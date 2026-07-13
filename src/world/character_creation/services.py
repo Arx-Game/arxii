@@ -474,6 +474,9 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
     # Create distinction records and their modifiers
     _create_distinctions(character, draft)
 
+    # Create the worship declaration (+ secret-worship Secret) (#2355)
+    _create_worship_declaration(character, draft)
+
     # Create path history record
     if draft.selected_path:
         from world.progression.models import CharacterPathHistory  # noqa: PLC0415
@@ -496,6 +499,29 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
             if trait_value:
                 trait_value.value += int(bonus)
                 trait_value.save()
+
+
+def _create_worship_declaration(character: ObjectDB, draft: CharacterDraft) -> None:
+    """Create the WorshipDeclaration from the draft's picks; mint the Secret (#2355).
+
+    Both picks are optional (an unaffiliated character has no declaration row).
+    A secret pick equal to the public pick is stored public-only — there is
+    nothing to hide.
+    """
+    if draft.public_worship_id is None and draft.secret_worship_id is None:
+        return
+    from world.worship.models import WorshipDeclaration  # noqa: PLC0415
+    from world.worship.secrets import mint_worship_secret  # noqa: PLC0415
+
+    secret_being = draft.secret_worship
+    if secret_being is not None and secret_being.pk == draft.public_worship_id:
+        secret_being = None
+    declaration, _ = WorshipDeclaration.objects.get_or_create(
+        character_sheet=character.sheet_data,
+        defaults={"public_being": draft.public_worship, "secret_being": secret_being},
+    )
+    if declaration.secret_being is not None:
+        mint_worship_secret(declaration)
 
 
 def _convert_remaining_cg_points_to_xp(draft: CharacterDraft, character: ObjectDB) -> None:

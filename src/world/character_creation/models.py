@@ -556,6 +556,29 @@ class CharacterDraft(SharedMemoryModel):
         help_text=f"Character age in years ({AGE_MIN}-{AGE_MAX})",
     )
 
+    # Stage 9: Identity — worship declarations (#2355)
+    public_worship = models.ForeignKey(
+        "worship.WorshippedBeing",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={"is_active": True},
+        related_name="+",
+        help_text="The being this character publicly worships (optional).",
+    )
+    secret_worship = models.ForeignKey(
+        "worship.WorshippedBeing",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={"is_active": True},
+        related_name="+",
+        help_text=(
+            "The being this character SECRETLY worships — the public faith is a front; "
+            "finalization mints a Secret."
+        ),
+    )
+
     # Stage 3: Lineage (merged into Heritage in new flow)
     family = models.ForeignKey(
         "roster.Family",

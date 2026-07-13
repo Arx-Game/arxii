@@ -39,6 +39,8 @@ from world.societies.houses.models import (
     Title,
 )
 from world.species.models import Language, Species
+from world.worship.models import WorshippedBeing
+from world.worship.serializers import WorshippedBeingRefSerializer
 
 
 class BeginningsSerializer(serializers.ModelSerializer):
@@ -294,6 +296,24 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Worship declarations (#2355) — the draft is owner-facing, so the secret pick
+    # is visible here; it never leaves the draft/owner surfaces post-finalization.
+    public_worship = WorshippedBeingRefSerializer(read_only=True)
+    public_worship_id = serializers.PrimaryKeyRelatedField(
+        queryset=WorshippedBeing.objects.filter(is_active=True),
+        source="public_worship",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    secret_worship = WorshippedBeingRefSerializer(read_only=True)
+    secret_worship_id = serializers.PrimaryKeyRelatedField(
+        queryset=WorshippedBeing.objects.filter(is_active=True),
+        source="secret_worship",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     # Kinship slot claim (#2062)
     claimed_kin_slot_id = serializers.PrimaryKeyRelatedField(
         queryset=Kinsperson.objects.filter(is_appable=True, sheet__isnull=True),
@@ -393,6 +413,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_path_id",
             "selected_tradition",
             "selected_tradition_id",
+            "public_worship",
+            "public_worship_id",
+            "secret_worship",
+            "secret_worship_id",
             "draft_data",
             "has_existing_characters",
             "cg_points_spent",

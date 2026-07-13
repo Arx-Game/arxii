@@ -274,6 +274,7 @@ class TestIdentitySection(TestCase):
             "tarot_card",
             "origin",
             "path",
+            "worship",
         }
         assert set(identity.keys()) == expected_keys
 
