@@ -1,1 +1,1 @@
-0017_add_position_targeting_fields
+0018_conditioninstance_last_resist_attempt_at

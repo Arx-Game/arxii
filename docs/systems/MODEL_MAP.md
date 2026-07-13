@@ -397,6 +397,7 @@
   - crafting_service_offers <- items.CraftingServiceOffer
   - events <- events.Event
   - functionaries <- npc_services.Functionary
+  - npc_assignments <- npc_services.NPCAssignment
   - entry_for_buildings <- buildings.Building
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.RoomPolish
@@ -683,6 +684,8 @@
   - asset_persona -> scenes.Persona [OneToOne]
   - source_functionary -> npc_services.Functionary [FK] (nullable)
   - source_distinction_grant -> assets.DistinctionAssetGrant [FK] (nullable)
+**Pointed to by:**
+  - assignments <- npc_services.NPCAssignment
 
 ### DistinctionAssetGrant
 **Foreign Keys:**
@@ -1349,6 +1352,7 @@
   - outfits <- items.Outfit
   - fashion_presentations <- items.FashionPresentation
   - mantle_clearances <- items.MantleLevelClearance
+  - recipe_knowledge <- items.CharacterRecipeKnowledge
   - fatigue <- fatigue.FatiguePool
   - led_courts <- covenants.Covenant
   - covenant_role_assignments <- covenants.CharacterCovenantRole
@@ -2066,6 +2070,7 @@
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' — Bodies a single landing attack clears from a swarm (#875).`
 - `toggle_action_ready(action: 'CombatRoundAction') -> 'CombatRoundAction' — Flip the ready flag on a round action and persist it.`
 - `upgrade_action_to_combo(action: 'CombatRoundAction', combo: 'ComboDefinition') -> 'None' — Mark a PC's round action as upgraded to a combo.`
+- `wind_penalty(felt: int) -> int — The missile check penalty for a room's felt WIND exposure (#1555).`
 
 
 ## world.companions
@@ -2836,6 +2841,7 @@
   - character -> objects.ObjectDB [OneToOne]
   - active_form -> forms.CharacterForm [FK] (nullable)
   - active_fake_overlay -> forms.CharacterForm [FK] (nullable)
+  - applied_kit_instance -> items.ItemInstance [FK] (nullable)
 
 ### FormCombatProfile
 **Foreign Keys:**
@@ -2888,7 +2894,7 @@
   - actor_persona -> scenes.Persona [FK] (nullable)
 
 ### Service Functions
-- `apply_disguise(character, disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE) -> 'CharacterFormState' — Paint a fake overlay over the character's real form (#1110).`
+- `apply_disguise(character, disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance=None) -> 'CharacterFormState' — Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' — Assume an alternate self — swap in form/persona facets, create the`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
 - `change_appearance(character, trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
@@ -3099,6 +3105,7 @@
   - instances <- items.ItemInstance
   - interaction_bindings <- items.TemplateInteraction
   - appearance_effects <- items.ItemTemplateAppearanceEffect
+  - disguise_kit_effects <- items.DisguiseKitEffect
   - check_modifiers <- items.ItemCheckModifier
   - garment_mitigations <- items.GarmentMitigation
   - stock_listings <- items.StockListing
@@ -3123,6 +3130,7 @@
   - contained_in -> items.ItemInstance [FK] (nullable)
   - image -> evennia_extensions.PlayerMedia [FK] (nullable)
 **Pointed to by:**
+  - applied_disguise_overlays <- forms.CharacterFormState
   - currency_instrument <- currency.CurrencyInstrumentDetails
   - contents <- items.ItemInstance
   - equipped_slots <- items.EquippedItem
@@ -3149,6 +3157,10 @@
   - item_template -> items.ItemTemplate [FK]
   - trait -> forms.FormTrait [FK]
   - target_option -> forms.FormTraitOption [FK]
+
+### DisguiseKitEffect
+**Foreign Keys:**
+  - item_template -> items.ItemTemplate [FK]
 
 ### EquippedItem
 **Foreign Keys:**
@@ -3282,6 +3294,7 @@
   - consequence_rows <- items.CraftingRecipeConsequence
   - modifier_outcomes <- items.CraftingRecipeModifier
   - crafted_items <- items.CraftedItemRecipe
+  - known_by <- items.CharacterRecipeKnowledge
 
 ### CraftingMaterialRequirement
 **Foreign Keys:**
@@ -3313,6 +3326,11 @@
 ### LabStationDetails
 **Foreign Keys:**
   - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+
+### CharacterRecipeKnowledge
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - recipe -> items.CraftingRecipe [FK]
 
 ### MarketSquare
 **Foreign Keys:**
@@ -4962,6 +4980,7 @@
 **Pointed to by:**
   - kinspeople <- roster.Kinsperson
   - promotions <- assets.NPCAsset
+  - assignments <- npc_services.NPCAssignment
 
 ### NPCServiceOffer
 **Foreign Keys:**
@@ -5039,6 +5058,13 @@
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [FK]
   - npc_persona -> scenes.Persona [FK]
+
+### NPCAssignment
+**Foreign Keys:**
+  - functionary -> npc_services.Functionary [FK] (nullable)
+  - npc_asset -> assets.NPCAsset [FK] (nullable)
+  - room -> evennia_extensions.RoomProfile [FK]
+  - assigned_by -> scenes.Persona [FK]
 
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
@@ -5767,6 +5793,7 @@
   - summary_revisions <- scenes.SceneSummaryRevision
   - check_modifiers <- scenes.SceneCheckModifier
   - scene_rounds <- scenes.SceneRound
+  - decisive_markers <- scenes.DecisiveCheckMarker
   - action_requests <- scenes.SceneActionRequest
   - reaction_windows <- scenes.ReactionWindow
   - story_episodes <- stories.EpisodeScene
@@ -5781,6 +5808,7 @@
   - relationshipcapstone_set <- relationships.RelationshipCapstone
   - affection_shifts <- relationships.AffectionShift
   - covenant_rite_instances <- covenants.CovenantRiteInstance
+  - deaths <- vitals.CharacterVitals
   - combat_encounters <- combat.CombatEncounter
   - battle <- battles.Battle
   - npc_regard_events <- npc_services.NpcRegardEvent
@@ -5885,12 +5913,16 @@
   - regards_as_target <- npc_services.NpcRegard
   - summonses_received <- npc_services.OfferSummons
   - regard_seeds_from_distinctions <- npc_services.DistinctionRegardSeed
+  - npc_assignments_made <- npc_services.NPCAssignment
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - materials_contributed <- buildings.BuildingMaterial
   - permits_consumed <- buildings.BuildingPermitDetails
   - construction_projects_led <- buildings.BuildingConstructionDetails
   - constructed_ships <- ships.ShipConstructionDetails
+  - founded_vaults <- room_features.VaultDetails
+  - vault_access_entries <- room_features.VaultAccessEntry
+  - vault_access_granted <- room_features.VaultAccessEntry
 
 ### PersonaDiscovery
 **Foreign Keys:**
@@ -6030,6 +6062,13 @@
   - target_sheet -> character_sheets.CharacterSheet [FK]
   - scene_round -> scenes.SceneRound [FK]
   - damage_type -> conditions.DamageType [FK] (nullable)
+
+### DecisiveCheckMarker
+**Foreign Keys:**
+  - scene -> scenes.Scene [FK]
+  - beat -> stories.Beat [FK]
+  - created_by -> accounts.AccountDB [FK] (nullable)
+  - resolved_outcome_tier -> traits.CheckOutcome [FK] (nullable)
 
 ### SceneActionRequest
 **Foreign Keys:**
@@ -6386,6 +6425,7 @@
   - npc_roles <- npc_services.NPCRole
   - loan_offers <- npc_services.LoanOfferDetails
   - regards_as_target <- npc_services.NpcRegard
+  - vault_access_entries <- room_features.VaultAccessEntry
 
 ### OrganizationRank
 **Foreign Keys:**
@@ -6858,6 +6898,7 @@
   - failure_consequences -> actions.ConsequencePool [FK] (nullable)
   - expired_consequences -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
+  - decisive_markers <- scenes.DecisiveCheckMarker
   - gating_for_episodes <- stories.EpisodeProgressionRequirement
   - routing_for_transitions <- stories.TransitionRequiredOutcome
   - aggregate_contributions <- stories.AggregateBeatContribution
