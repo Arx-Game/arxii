@@ -71,7 +71,6 @@ def resolve_city_defense(project: Project) -> None:
     resolve_project(project, outcome_tier=tier.outcome_tier)
 
 
-@transaction.atomic
 def complete_city_defense(project: Project, outcome_tier: CheckOutcome | None) -> None:
     """Kind handler: store the graded tier on the details, exactly once.
 
@@ -87,11 +86,19 @@ def complete_city_defense(project: Project, outcome_tier: CheckOutcome | None) -
     """
     from world.battles.models import CityDefenseDetails  # noqa: PLC0415
 
+    # The claim filter hits the DB, so a second call sees the non-null
+    # applied_at and no-ops even though the cached instance is stale.
     claimed = CityDefenseDetails.objects.filter(project=project, applied_at__isnull=True).update(
-        applied_at=timezone.now(), outcome_tier=outcome_tier
+        applied_at=timezone.now()
     )
     if not claimed:
         return
+    # Instance mutation, not queryset .update(): SharedMemoryModel keeps one
+    # live instance per row — see the same pattern in
+    # complete_fortification_upgrade.
+    details = CityDefenseDetails.objects.get(project=project)
+    details.outcome_tier = outcome_tier
+    details.save(update_fields=["outcome_tier"])
 
 
 def get_city_defense_integrity_bonus(area: Area) -> int:
@@ -117,6 +124,7 @@ def get_city_defense_integrity_bonus(area: Area) -> int:
 
     details = (
         CityDefenseDetails.objects.filter(area=area, applied_at__isnull=False)
+        .select_related("outcome_tier")
         .order_by("-applied_at")
         .first()
     )
@@ -160,12 +168,14 @@ def start_city_defense_project(
         CityDefenseDetails,
         CityDefenseTierThreshold,
     )
+    from world.projects.constants import ProjectStatus  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
 
     now = timezone.now()
     project = Project.objects.create(
         kind=ProjectKind.CITY_DEFENSE,
         completion_mode=CompletionMode.TIERED_PERIOD,
+        status=ProjectStatus.ACTIVE,
         owner_persona=owner_persona,
         started_at=now,
         time_limit=now + timedelta(days=period_days),
