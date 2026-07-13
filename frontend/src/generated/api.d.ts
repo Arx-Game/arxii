@@ -20837,7 +20837,7 @@ export interface components {
     CustodyClearanceRequestRequest: {
       protected_subject?: number | null;
       subject_kind?:
-        | (components['schemas']['SubjectKind90fEnum'] | components['schemas']['NullEnum'])
+        | (components['schemas']['SubjectKindEnum'] | components['schemas']['NullEnum'])
         | null;
       /** @description The character this sheet belongs to */
       subject_sheet?: number | null;
@@ -28994,7 +28994,7 @@ export interface components {
       beat?: number;
       /** @description Null only for trust-gated custom stakes. */
       template?: number | null;
-      subject_kind?: components['schemas']['SubjectKind90fEnum'];
+      subject_kind?: components['schemas']['SubjectKindEnum'];
       severity?: components['schemas']['SeverityEnum'];
       /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
@@ -29101,7 +29101,7 @@ export interface components {
      */
     PatchedStakeTemplateRequest: {
       name?: string;
-      subject_kind?: components['schemas']['SubjectKind90fEnum'];
+      subject_kind?: components['schemas']['SubjectKindEnum'];
       severity?: components['schemas']['SeverityEnum'];
       min_risk?: components['schemas']['MinRiskEnum'];
       max_risk?: components['schemas']['MaxRiskEnum'];
@@ -29163,7 +29163,7 @@ export interface components {
      */
     PatchedStoryProtectedSubjectRequest: {
       story?: number;
-      subject_kind?: components['schemas']['SubjectKind90fEnum'];
+      subject_kind?: components['schemas']['SubjectKindEnum'];
       /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
       /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
@@ -29353,7 +29353,7 @@ export interface components {
      */
     PatchedTreasuredSubjectRequest: {
       owner?: number;
-      subject_kind?: components['schemas']['TreasuredSubjectSubjectKindEnum'];
+      subject_kind?: components['schemas']['SubjectKindEnum'];
       /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
       /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
@@ -32349,7 +32349,7 @@ export interface components {
       beat: number;
       /** @description Null only for trust-gated custom stakes. */
       template?: number | null;
-      subject_kind?: components['schemas']['SubjectKind90fEnum'];
+      subject_kind?: components['schemas']['SubjectKindEnum'];
       severity?: components['schemas']['SeverityEnum'];
       /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
@@ -32432,7 +32432,7 @@ export interface components {
       beat: number;
       /** @description Null only for trust-gated custom stakes. */
       template?: number | null;
-      subject_kind?: components['schemas']['SubjectKind90fEnum'];
+      subject_kind?: components['schemas']['SubjectKindEnum'];
       severity?: components['schemas']['SeverityEnum'];
       /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
@@ -32647,7 +32647,7 @@ export interface components {
     StakeTemplate: {
       readonly id: number;
       name: string;
-      subject_kind: components['schemas']['SubjectKind90fEnum'];
+      subject_kind: components['schemas']['SubjectKindEnum'];
       severity: components['schemas']['SeverityEnum'];
       min_risk?: components['schemas']['MinRiskEnum'];
       max_risk?: components['schemas']['MaxRiskEnum'];
@@ -32664,7 +32664,7 @@ export interface components {
      */
     StakeTemplateRequest: {
       name: string;
-      subject_kind: components['schemas']['SubjectKind90fEnum'];
+      subject_kind: components['schemas']['SubjectKindEnum'];
       severity: components['schemas']['SeverityEnum'];
       min_risk?: components['schemas']['MinRiskEnum'];
       max_risk?: components['schemas']['MaxRiskEnum'];
@@ -33074,7 +33074,7 @@ export interface components {
     StoryProtectedSubject: {
       readonly id: number;
       story: number;
-      subject_kind: components['schemas']['SubjectKind90fEnum'];
+      subject_kind: components['schemas']['SubjectKindEnum'];
       /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
       /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
@@ -33104,7 +33104,7 @@ export interface components {
      */
     StoryProtectedSubjectRequest: {
       story: number;
-      subject_kind: components['schemas']['SubjectKind90fEnum'];
+      subject_kind: components['schemas']['SubjectKindEnum'];
       /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
       /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
@@ -33199,7 +33199,7 @@ export interface components {
      *     * `custom` - Custom (trust-gated)
      * @enum {string}
      */
-    SubjectKind90fEnum:
+    SubjectKindEnum:
       | 'personal_jeopardy'
       | 'npc_fate'
       | 'location'
@@ -34119,7 +34119,7 @@ export interface components {
     TreasuredSubject: {
       readonly id: number;
       owner: number;
-      subject_kind: components['schemas']['TreasuredSubjectSubjectKindEnum'];
+      subject_kind: components['schemas']['SubjectKindEnum'];
       /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
       /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
@@ -34159,7 +34159,7 @@ export interface components {
      */
     TreasuredSubjectRequest: {
       owner: number;
-      subject_kind: components['schemas']['TreasuredSubjectSubjectKindEnum'];
+      subject_kind: components['schemas']['SubjectKindEnum'];
       /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
       /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
@@ -34187,24 +34187,6 @@ export interface components {
       /** @description Tenures explicitly excluded even if otherwise visible. */
       excluded_tenures?: number[];
     };
-    /**
-     * @description * `personal_jeopardy` - Personal jeopardy
-     *     * `npc_fate` - NPC fate
-     *     * `location` - Location
-     *     * `faction` - Faction relationship
-     *     * `item` - Item
-     *     * `campaign_track` - Campaign track
-     *     * `custom` - Custom (trust-gated)
-     * @enum {string}
-     */
-    TreasuredSubjectSubjectKindEnum:
-      | 'personal_jeopardy'
-      | 'npc_fate'
-      | 'location'
-      | 'faction'
-      | 'item'
-      | 'campaign_track'
-      | 'custom';
     /**
      * @description One candidate treatment a helper may offer a target persona (#1486).
      *
@@ -36303,9 +36285,11 @@ export interface operations {
          *     * `faction` - Faction relationship
          *     * `item` - Item
          *     * `campaign_track` - Campaign track
+         *     * `asset` - Asset
          *     * `custom` - Custom (trust-gated)
          */
         subject_kind?:
+          | 'asset'
           | 'campaign_track'
           | 'custom'
           | 'faction'

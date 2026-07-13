@@ -1,1 +1,1 @@
-0001_initial
+0002_alter_treasuredsubject_subject_kind

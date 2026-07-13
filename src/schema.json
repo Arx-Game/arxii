@@ -1974,6 +1974,7 @@ paths:
         schema:
           type: string
           enum:
+          - asset
           - campaign_track
           - custom
           - faction
@@ -1988,6 +1989,7 @@ paths:
           * `faction` - Faction relationship
           * `item` - Item
           * `campaign_track` - Campaign track
+          * `asset` - Asset
           * `custom` - Custom (trust-gated)
       tags:
       - boundaries
@@ -35920,7 +35922,7 @@ components:
         subject_kind:
           nullable: true
           oneOf:
-          - $ref: '#/components/schemas/SubjectKind90fEnum'
+          - $ref: '#/components/schemas/SubjectKindEnum'
           - $ref: '#/components/schemas/NullEnum'
         subject_sheet:
           type: integer
@@ -51154,7 +51156,7 @@ components:
           nullable: true
           description: Null only for trust-gated custom stakes.
         subject_kind:
-          $ref: '#/components/schemas/SubjectKind90fEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         severity:
           allOf:
           - $ref: '#/components/schemas/SeverityEnum'
@@ -51312,7 +51314,7 @@ components:
           minLength: 1
           maxLength: 100
         subject_kind:
-          $ref: '#/components/schemas/SubjectKind90fEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         severity:
           allOf:
           - $ref: '#/components/schemas/SeverityEnum'
@@ -51412,7 +51414,7 @@ components:
         story:
           type: integer
         subject_kind:
-          $ref: '#/components/schemas/SubjectKind90fEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         subject_sheet:
           type: integer
           description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
@@ -51691,7 +51693,7 @@ components:
         owner:
           type: integer
         subject_kind:
-          $ref: '#/components/schemas/TreasuredSubjectSubjectKindEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         subject_sheet:
           type: integer
           description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
@@ -57990,7 +57992,7 @@ components:
           nullable: true
           description: Null only for trust-gated custom stakes.
         subject_kind:
-          $ref: '#/components/schemas/SubjectKind90fEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         severity:
           allOf:
           - $ref: '#/components/schemas/SeverityEnum'
@@ -58179,7 +58181,7 @@ components:
           nullable: true
           description: Null only for trust-gated custom stakes.
         subject_kind:
-          $ref: '#/components/schemas/SubjectKind90fEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         severity:
           allOf:
           - $ref: '#/components/schemas/SeverityEnum'
@@ -58518,7 +58520,7 @@ components:
           type: string
           maxLength: 100
         subject_kind:
-          $ref: '#/components/schemas/SubjectKind90fEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         severity:
           allOf:
           - $ref: '#/components/schemas/SeverityEnum'
@@ -58554,7 +58556,7 @@ components:
           minLength: 1
           maxLength: 100
         subject_kind:
-          $ref: '#/components/schemas/SubjectKind90fEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         severity:
           allOf:
           - $ref: '#/components/schemas/SeverityEnum'
@@ -59349,7 +59351,7 @@ components:
         story:
           type: integer
         subject_kind:
-          $ref: '#/components/schemas/SubjectKind90fEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         subject_sheet:
           type: integer
           description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
@@ -59410,7 +59412,7 @@ components:
         story:
           type: integer
         subject_kind:
-          $ref: '#/components/schemas/SubjectKind90fEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         subject_sheet:
           type: integer
           description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
@@ -59597,7 +59599,7 @@ components:
       - endorsee_sheet
       - resonance
       - scene
-    SubjectKind90fEnum:
+    SubjectKindEnum:
       enum:
       - personal_jeopardy
       - npc_fate
@@ -61250,7 +61252,7 @@ components:
         owner:
           type: integer
         subject_kind:
-          $ref: '#/components/schemas/TreasuredSubjectSubjectKindEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         subject_sheet:
           type: integer
           description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
@@ -61324,7 +61326,7 @@ components:
         owner:
           type: integer
         subject_kind:
-          $ref: '#/components/schemas/TreasuredSubjectSubjectKindEnum'
+          $ref: '#/components/schemas/SubjectKindEnum'
         subject_sheet:
           type: integer
           description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
@@ -61379,24 +61381,6 @@ components:
       required:
       - owner
       - subject_kind
-    TreasuredSubjectSubjectKindEnum:
-      enum:
-      - personal_jeopardy
-      - npc_fate
-      - location
-      - faction
-      - item
-      - campaign_track
-      - custom
-      type: string
-      description: |-
-        * `personal_jeopardy` - Personal jeopardy
-        * `npc_fate` - NPC fate
-        * `location` - Location
-        * `faction` - Faction relationship
-        * `item` - Item
-        * `campaign_track` - Campaign track
-        * `custom` - Custom (trust-gated)
     TreatmentCandidate:
       type: object
       description: |-
