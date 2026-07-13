@@ -200,7 +200,28 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         persona = self._primary_persona(obj)
         if persona is None:
             return None
-        thumbnail_media_url = persona.thumbnail.cloudinary_url if persona.thumbnail_id else None
+        from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
+
+        try:
+            character = persona.character_sheet.character
+        except AttributeError:
+            character = None
+        # #2196: use prefetched conditions if available (battles view prefetches
+        # them on the character to avoid per-participant N+1).
+        cached_conditions = (
+            getattr(character, "cached_active_conditions", None)  # noqa: GETATTR_LITERAL
+            if character is not None
+            else None
+        )
+        thumbnail_media_url = (
+            resolve_thumbnail(
+                character,
+                persona=persona,
+                cached_conditions=cached_conditions,
+            )
+            if character is not None
+            else (persona.thumbnail.cloudinary_url if persona.thumbnail_id else None)
+        )
         return {
             "id": persona.id,
             "name": persona.name,

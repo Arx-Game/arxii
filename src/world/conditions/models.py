@@ -352,6 +352,16 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Can other characters see this condition?",
     )
 
+    # === Dynamic Thumbnail (#2196) ===
+    thumbnail = models.ForeignKey(
+        "evennia_extensions.PlayerMedia",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="condition_template_thumbnails",
+        help_text="Thumbnail shown when a character has this condition (overrides persona default)",
+    )
+
     # === Property Grants ===
     properties = models.ManyToManyField(
         "mechanics.Property",
@@ -581,6 +591,19 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         related_name="condition_stages",
         help_text="Consequence pool that fires per action while at this stage.",
+    )
+
+    # === Dynamic Thumbnail (#2196) ===
+    thumbnail = models.ForeignKey(
+        "evennia_extensions.PlayerMedia",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="condition_stage_thumbnails",
+        help_text=(
+            "Thumbnail shown when a progressive condition is at this stage "
+            "(overrides template thumbnail)"
+        ),
     )
 
     # === Stage-level tags / on-entry hooks (Scope 6 §4.1) ===

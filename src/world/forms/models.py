@@ -474,6 +474,16 @@ class AlternateSelf(SharedMemoryModel):
     )
     tuning_value = models.IntegerField(null=True, blank=True)
     display_name = models.CharField(max_length=100, blank=True)
+    thumbnail = models.ForeignKey(
+        "evennia_extensions.PlayerMedia",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="alternate_self_thumbnails",
+        help_text=(
+            "Thumbnail shown when this alternate self is active (overrides persona default)"
+        ),
+    )
 
     class Meta:
         ordering = ["character", "display_name"]

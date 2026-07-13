@@ -63,9 +63,13 @@ class PersonaSerializer(serializers.ModelSerializer):
         return obj.profile.background if obj.profile_id else ""
 
     def get_thumbnail_media_url(self, obj: Persona) -> str | None:
-        if obj.thumbnail_id is None:
+        from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
+
+        try:
+            character = obj.character_sheet.character
+        except AttributeError:
             return None
-        return obj.thumbnail.cloudinary_url
+        return resolve_thumbnail(character, persona=obj)
 
     def get_allow_social_actions(self, obj: Persona) -> bool:
         """Whether this persona's character may be targeted by social actions.

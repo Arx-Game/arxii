@@ -190,15 +190,29 @@ class OpponentSerializer(serializers.ModelSerializer):
         return obj.persona.thumbnail_url
 
     def get_thumbnail_media_url(self, obj: CombatOpponent) -> str | None:
-        """PlayerMedia portrait URL.
+        """PlayerMedia portrait URL, dynamically resolved (#2196).
 
-        Resolved through the opponent's persona when present (mirrors
-        ``PersonaSerializer.get_thumbnail_media_url``); for persona-less
-        (generic/ephemeral) NPCs, falls back to the opponent's own ``portrait``
-        FK. ``None`` when neither supplies a thumbnail.
+        Uses ``resolve_thumbnail()`` when the opponent has a persona (character).
+        For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
+        own ``portrait`` FK via ``fallback_media``.
         """
-        if obj.persona_id is not None and obj.persona.thumbnail_id is not None:
-            return obj.persona.thumbnail.cloudinary_url
+        from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
+
+        if obj.persona_id is not None:
+            try:
+                character = obj.persona.character_sheet.character
+            except AttributeError:
+                character = None
+            target = character or obj.objectdb
+            # #2196: use prefetched conditions from the view (on objectdb)
+            cached_conditions = getattr(obj.objectdb, "active_condition_instances", None)  # noqa: GETATTR_LITERAL
+            return resolve_thumbnail(
+                target,
+                persona=obj.persona,
+                fallback_media=obj.portrait,
+                cached_conditions=cached_conditions,
+            )
+        # Persona-less NPC — use portrait FK directly
         if obj.portrait_id is not None:
             return obj.portrait.cloudinary_url
         return None
@@ -456,14 +470,24 @@ class ParticipantSerializer(serializers.ModelSerializer):
         return None if persona is None else persona.thumbnail_url
 
     def get_thumbnail_media_url(self, obj: CombatParticipant) -> str | None:
-        """PlayerMedia portrait URL via the primary persona's thumbnail.
+        """PlayerMedia portrait URL, dynamically resolved (#2196).
 
-        ``None`` when there is no primary persona or it has no thumbnail.
+        Uses ``resolve_thumbnail()`` via the primary persona's character.
+        ``None`` when there is no primary persona.
         """
+        from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
+
         persona = self._primary_persona(obj)
-        if persona is None or persona.thumbnail_id is None:
+        if persona is None:
             return None
-        return persona.thumbnail.cloudinary_url
+        try:
+            character = persona.character_sheet.character
+        except AttributeError:
+            return None
+        # #2196: use the view's prefetched conditions (ACTIVE_CONDITIONS_CACHE_ATTR)
+        # to avoid N+1 when serializing multiple participants.
+        cached_conditions = getattr(character, "active_condition_instances", None)  # noqa: GETATTR_LITERAL
+        return resolve_thumbnail(character, persona=persona, cached_conditions=cached_conditions)
 
 
 class RoundActionSerializer(serializers.ModelSerializer):

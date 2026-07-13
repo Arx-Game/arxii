@@ -1,1 +1,1 @@
-0008_characterformstate_applied_kit_instance
+0009_alternateself_thumbnail
