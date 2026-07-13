@@ -131,3 +131,82 @@ def promote_as_fan(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
 
 def promote_as_minor_ally(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     return _promote_functionary(offer, persona, role_context=AssetRoleContext.MINOR_ALLY)
+
+
+@transaction.atomic
+def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """ASSET_TASK_INTEL effect handler (#1905).
+
+    Resolves the active NPCAsset owned by the interacting persona, rolls
+    the offer's check, and on success grants a CharacterClue to the
+    promoter's roster entry. The PC rolls the check (they're directing the
+    task; the check models how well they've cultivated the asset's cooperation).
+
+    Requires the offer to have an AssetTaskIntelDetails row pointing at the
+    Clue to grant. Returns a failure EffectResult if the asset is not ACTIVE,
+    the check fails, or the details row is missing.
+    """
+    from world.assets.constants import AssetStatus  # noqa: PLC0415
+
+    # Resolve the details row (the clue to grant).
+    from world.assets.models import (  # noqa: PLC0415
+        AssetTaskIntelDetails,
+        NPCAsset,
+    )
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.clues.models import CharacterClue  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    try:
+        details = offer.asset_task_intel_details
+    except AssetTaskIntelDetails.DoesNotExist:
+        return EffectResult(
+            kind=offer.kind,
+            message="This task has no intel target configured. (Authoring error.)",
+        )
+
+    # Resolve the promoter's active asset. The eligibility_rule predicate on
+    # the offer gates which offers appear for which NPC, so any active asset
+    # owned by this persona is valid for this task.
+    asset = NPCAsset.objects.filter(
+        promoter_persona=persona,
+        status=AssetStatus.ACTIVE,
+    ).first()
+    if asset is None:
+        return EffectResult(
+            kind=offer.kind,
+            message="This asset is not available for tasking.",
+        )
+
+    # Roll the check — the PC rolls (they're directing the task).
+    character = persona.character_sheet.character
+    if offer.check_type_id is not None:
+        check_result = perform_check(
+            character, offer.check_type, target_difficulty=offer.check_difficulty
+        )
+        if check_result.success_level <= 0:
+            return EffectResult(
+                kind=offer.kind,
+                message="Your asset has nothing useful to report this time.",
+            )
+
+    # Grant the clue to the promoter's roster entry.
+    roster_entry = RosterEntry.objects.filter(character_sheet=persona.character_sheet).first()
+    if roster_entry is None:
+        return EffectResult(
+            kind=offer.kind,
+            message="Your asset brings back word, but there's nowhere to record it.",
+        )
+
+    CharacterClue.objects.get_or_create(
+        roster_entry=roster_entry,
+        clue=details.clue,
+    )
+
+    return EffectResult(
+        kind=offer.kind,
+        object_pk=details.clue.pk,
+        object_label=details.clue.name,
+        message=f"Your asset brings back word: {details.clue.name}.",
+        payload={"clue_pk": details.clue.pk, "asset_pk": asset.pk},
+    )

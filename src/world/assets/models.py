@@ -170,3 +170,32 @@ class DistinctionAssetGrant(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.distinction} grants {self.asset_display_name} ({self.role_context})"
+
+
+class AssetTaskIntelDetails(SharedMemoryModel):
+    """Per-kind details for ASSET_TASK_INTEL offers (#1905).
+
+    Mirrors the existing per-kind details pattern (PermitOfferDetails,
+    LoanOfferDetails, CourtGrantOfferDetails) — a 1:1 reverse from
+    NPCServiceOffer carrying the kind-specific parameters. For intel tasks,
+    the parameter is the Clue granted on a successful check.
+    """
+
+    offer = models.OneToOneField(
+        "npc_services.NPCServiceOffer",
+        on_delete=models.CASCADE,
+        related_name="asset_task_intel_details",
+    )
+    clue = models.ForeignKey(
+        "clues.Clue",
+        on_delete=models.PROTECT,
+        related_name="asset_task_offers",
+        help_text="The clue granted on a successful intel task.",
+    )
+
+    class Meta:
+        verbose_name = "Asset Task Intel Details"
+        verbose_name_plural = "Asset Task Intel Details"
+
+    def __str__(self) -> str:
+        return f"Intel task: {self.clue.name}"

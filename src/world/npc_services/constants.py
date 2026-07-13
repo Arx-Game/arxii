@@ -21,6 +21,8 @@ class OfferKind(models.TextChoices):
     GUARD = "guard", "Guard"
     FAN = "fan", "Fan"
     MINOR_ALLY = "minor_ally", "Minor Ally"
+    # #1905 — asset tasking: PC directs an owned asset to gather intel.
+    ASSET_TASK_INTEL = "asset_task_intel", "Asset Task: Intel"
     # Future kinds: training/marriage/attunement.
 
 
