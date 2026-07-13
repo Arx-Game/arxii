@@ -738,6 +738,52 @@ def _deliver_death_condolence(character_sheet: CharacterSheet) -> None:
         logger.exception("character_died push failed for account %s", account.pk)
 
 
+def is_retired(character_sheet: CharacterSheet | None) -> bool:
+    """True when the dead character has been released (retire fired, #2287)."""
+    if character_sheet is None:
+        return False
+    try:
+        return character_sheet.vitals.retired_at is not None
+    except (AttributeError, ObjectDoesNotExist):
+        return False
+
+
+def retire_character(character_sheet: CharacterSheet, *, forced_by: object | None = None) -> None:
+    """Release a dead character: the final lock of the ghost interlude (#2287).
+
+    Player-fired when ready, staff-forceable (``forced_by``), and auto-fired by
+    the ``vitals.auto_retire`` scheduler task after the grace window. Sets
+    ``retired_at`` (idempotent no-op when already set), which closes the
+    death-kudos window and blocks any further puppet/login of the character.
+    Raises ``ValueError`` for a living character — retire is a death off-ramp,
+    not a lifecycle verb (LifecycleState.RETIRED for living retirement is a
+    separate, undesigned flow).
+    """
+    if not is_dead(character_sheet):
+        msg = "Only dead characters can be retired."
+        raise ValueError(msg)
+    vitals = character_sheet.vitals
+    if vitals.retired_at is not None:
+        return
+    vitals.retired_at = timezone.now()
+    vitals.save(update_fields=["retired_at"])
+    if forced_by is not None:
+        logger.info(
+            "Character sheet %s retired by staff account %s",
+            character_sheet.pk,
+            forced_by,
+        )
+    character = character_sheet.character
+    account = character.db_account
+    if account is None:
+        return
+    for session in list(character.sessions.all()):
+        try:
+            account.unpuppet_object(session)
+        except Exception:
+            logger.exception("unpuppet on retire failed for sheet %s", character_sheet.pk)
+
+
 def _resolve_peril_via_pool(
     character_sheet: CharacterSheet,
     instance: ConditionInstance,

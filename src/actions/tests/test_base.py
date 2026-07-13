@@ -443,6 +443,8 @@ class ActionRegistryTests(TestCase):
             "list_guard_assignments",
             # #2287 — death & unconsciousness core slice.
             "wake",
+            "retire",
+            "death_kudos",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

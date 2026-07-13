@@ -39,11 +39,12 @@ _NO_ACTIVE_CHARACTER_MSG = "You have no active character on the roster."
 
 
 class CmdKudos(ArxCommand):
-    """Claim kudos for XP.
+    """Claim kudos for XP, or honor a death.
 
     Usage:
       kudos                       - show your kudos balance and claim categories
       kudos claim <category> <n>  - claim <n> kudos via category id for XP
+      kudos death <character>     - honor how a player handled their death (#2287)
     """
 
     key = "kudos"
@@ -64,6 +65,13 @@ class CmdKudos(ArxCommand):
             self._show_balance()
             return
         parts = raw.split()
+        if parts[0].lower() == "death":  # noqa: STRING_LITERAL
+            from actions.definitions.vitals import GiveDeathKudosAction  # noqa: PLC0415
+
+            target_name = " ".join(parts[1:]).strip()
+            result = GiveDeathKudosAction().run(actor=self.caller, target_name=target_name)
+            self.msg(result.message)
+            return
         if parts[0].lower() != "claim" or len(parts) != _KUDOS_CLAIM_ARGC:  # noqa: STRING_LITERAL
             msg = "Usage: kudos claim <category_id> <amount>"
             raise CommandError(msg)

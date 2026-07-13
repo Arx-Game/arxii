@@ -201,6 +201,19 @@ class Account(DefaultAccount):
 
     def can_puppet_character(self, character):
         """Check if this account can puppet the given character."""
+        # #2287 — a retired (released) dead character can never be puppeted
+        # again. Checked before availability for the specific, gentler message.
+        from django.core.exceptions import ObjectDoesNotExist
+
+        from world.vitals.services import is_retired
+
+        try:
+            sheet = character.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            sheet = None
+        if is_retired(sheet):
+            return False, "That character has been laid to rest."
+
         # Must be one of their available characters
         if character not in self.get_available_characters():
             return False, "You don't have access to that character."

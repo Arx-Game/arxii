@@ -103,11 +103,19 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         return [tenure for tenure in self.cached_tenures if tenure.is_current]
 
     def get_available_characters(self):
-        """Return characters this player is actively playing using cached data."""
+        """Return characters this player is actively playing using cached data.
+
+        #2287: retired (released) dead characters are excluded — the ghost
+        interlude ends at retire, and the character can never be logged into
+        again. Dead-but-unretired characters stay available (spectator ghost).
+        """
+        from world.vitals.services import is_retired  # noqa: PLC0415
+
         return [
             tenure.roster_entry.character_sheet.character
             for tenure in self.cached_active_tenures
             if tenure.roster_entry.roster.is_active
+            and not is_retired(tenure.roster_entry.character_sheet)
         ]
 
     def get_current_character(self):

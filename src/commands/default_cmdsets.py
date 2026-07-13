@@ -114,6 +114,7 @@ from commands.projects import CmdProject
 from commands.react import CmdReact
 from commands.relationships import CmdRelationship
 from commands.resonance import CmdResonance
+from commands.retire import CmdRetire  # #2287
 from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
@@ -297,6 +298,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRest,
             # #2287 — telnet face of WakeAction; attempt to wake from unconsciousness.
             CmdWake,
+            # #2287 — telnet face of RetireCharacterAction; lay a dead character to rest.
+            CmdRetire,
             # #2237 — telnet face of CollectFoodAction; harvest a field's food.
             CmdHarvest,
             # #1866 — telnet face of SearchAction; search for clues in a room.
