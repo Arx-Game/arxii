@@ -37182,6 +37182,7 @@ export interface operations {
          */
         ceremony_type__key?: 'blessing' | 'funeral' | 'sermon';
         location?: number;
+        location__objectdb?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */

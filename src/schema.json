@@ -2608,6 +2608,10 @@ paths:
         name: location
         schema:
           type: integer
+      - in: query
+        name: location__objectdb
+        schema:
+          type: integer
       - name: page
         required: false
         in: query
