@@ -27,6 +27,7 @@ from world.battles.serializers import (
     BattleMapBlueprintSerializer,
     BattleUnitTemplateSerializer,
 )
+from world.conditions.models import ConditionInstance
 from world.gm.permissions import HasGMTrust
 from world.mechanics.models import Property
 from world.scenes.constants import PersonaType
@@ -89,7 +90,11 @@ class BattleViewSet(ReadOnlyModelViewSet):
             Prefetch(
                 "participants",
                 queryset=BattleParticipant.objects.select_related(
-                    "character_sheet"
+                    "character_sheet",
+                    "character_sheet__character",
+                    "character_sheet__character__display_data",
+                    "character_sheet__active_alternate_self",
+                    "character_sheet__active_alternate_self__alternate_self",
                 ).prefetch_related(
                     # Pre-fill CharacterSheet.cached_payload_personas (a
                     # @cached_property doubling as this to_attr target) so
@@ -106,6 +111,17 @@ class BattleViewSet(ReadOnlyModelViewSet):
                         .order_by("-persona_type", "created_at", "id")
                         .select_related("thumbnail"),
                         to_attr="cached_payload_personas",
+                    ),
+                    # #2196: prefetch the character's active condition instances so
+                    # resolve_thumbnail() doesn't fire per-participant queries.
+                    Prefetch(
+                        "character_sheet__character__condition_instances",
+                        queryset=ConditionInstance.objects.select_related(
+                            "condition", "current_stage"
+                        ).filter(
+                            is_suppressed=False,
+                        ),
+                        to_attr="cached_active_conditions",
                     ),
                 ),
                 to_attr="cached_participants",

@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("conditions", "0017_add_position_targeting_fields"),
+        ("conditions", "0018_thumbnail_fields"),
     ]
 
     operations = [

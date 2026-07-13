@@ -50,10 +50,20 @@ class BaseState:
         self.name_prefix_map: dict[int, str] = {}
         self.name_suffix_map: dict[int, str] = {}
         self.packages: list[BehaviorPackageInstance] = []
-        try:
-            self.thumbnail_url = obj.display_data.thumbnail.cloudinary_url
-        except AttributeError:
-            self.thumbnail_url = None
+        from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        sheet = getattr(self.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is not None:
+            try:
+                persona = active_persona_for_sheet(sheet)
+            except Persona.DoesNotExist:
+                persona = None
+        else:
+            persona = None
+        self._resolved_persona = persona
+        self.thumbnail_url = resolve_thumbnail(self.obj, persona=persona)
         self.dispatcher_tags: list[str] = []
 
     # ------------------------------------------------------------------

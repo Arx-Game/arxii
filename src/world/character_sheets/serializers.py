@@ -48,6 +48,7 @@ from world.character_sheets.types import (
     ThemingSection,
 )
 from world.classes.models import PathStage
+from world.conditions.models import ConditionInstance
 from world.distinctions.models import CharacterDistinction
 from world.forms.models import (
     CharacterForm,
@@ -836,6 +837,35 @@ _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
+def _resolve_persona_thumbnail(
+    persona,
+    cached_conditions=None,
+) -> str | None:
+    """Resolve a persona's thumbnail dynamically (#2196).
+
+    Uses ``resolve_thumbnail()`` to check condition/alt-self overrides.
+    Falls back to the persona's own thumbnail when the character can't
+    be resolved (edge case for detached personas).
+
+    Args:
+        persona: The persona to resolve a thumbnail for.
+        cached_conditions: Prefetched active conditions for the character
+            (avoids N+1 when iterating multiple personas). When None,
+            ``resolve_thumbnail`` queries fresh.
+    """
+    from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
+
+    try:
+        character = persona.character_sheet.character
+    except AttributeError:
+        return persona.thumbnail.cloudinary_url if persona.thumbnail_id else None
+    return resolve_thumbnail(
+        character,
+        persona=persona,
+        cached_conditions=cached_conditions,
+    )
+
+
 def _build_personas(
     sheet: CharacterSheet,
     *,
@@ -852,12 +882,14 @@ def _build_personas(
     or a hidden-link alt) exposes just that name, with no description or thumbnail.
     """
     if privileged:
+        # #2196: use prefetched conditions from the character (avoids N+1 per persona).
+        cached_conditions = getattr(sheet.character, "cached_active_conditions", None)  # noqa: GETATTR_LITERAL
         return [
             PersonaEntry(
                 id=persona.pk,
                 name=persona.name,
                 description=persona.description,
-                thumbnail=persona.thumbnail.cloudinary_url if persona.thumbnail else None,
+                thumbnail=_resolve_persona_thumbnail(persona, cached_conditions=cached_conditions),
             )
             for persona in sheet.cached_personas
         ]
@@ -869,9 +901,7 @@ def _build_personas(
             id=active.pk,
             name=active_display_name if active_display_name is not None else active.name,
             description=active.description if active_revealed else "",
-            thumbnail=(active.thumbnail.cloudinary_url if active.thumbnail else None)
-            if active_revealed
-            else None,
+            thumbnail=(_resolve_persona_thumbnail(active) if active_revealed else None),
         )
     ]
 
@@ -977,8 +1007,30 @@ def get_character_sheet_queryset() -> QuerySet[CharacterSheet]:
                 seen_prefetch.add(key)
                 all_prefetch.append(pr)
 
-    return CharacterSheet.objects.select_related("character", *all_select).prefetch_related(
-        *all_prefetch
+    return (
+        CharacterSheet.objects.select_related(
+            "character",
+            *all_select,
+            # #2196: prefetch the character's display data and active alternate
+            # self so resolve_thumbnail() doesn't fire extra queries.
+            "character__display_data",
+            "active_alternate_self",
+            "active_alternate_self__alternate_self",
+        )
+        .prefetch_related(*all_prefetch)
+        .prefetch_related(
+            # #2196: prefetch the character's active condition instances so
+            # resolve_thumbnail() doesn't fire per-persona queries in _build_personas.
+            Prefetch(
+                "character__condition_instances",
+                queryset=ConditionInstance.objects.select_related(
+                    "condition", "current_stage"
+                ).filter(
+                    is_suppressed=False,
+                ),
+                to_attr="cached_active_conditions",
+            )
+        )
     )
 
 

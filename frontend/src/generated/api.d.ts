@@ -25224,12 +25224,11 @@ export interface components {
        */
       readonly thumbnail_url: string | null;
       /**
-       * @description PlayerMedia portrait URL.
+       * @description PlayerMedia portrait URL, dynamically resolved (#2196).
        *
-       *     Resolved through the opponent's persona when present (mirrors
-       *     ``PersonaSerializer.get_thumbnail_media_url``); for persona-less
-       *     (generic/ephemeral) NPCs, falls back to the opponent's own ``portrait``
-       *     FK. ``None`` when neither supplies a thumbnail.
+       *     Uses ``resolve_thumbnail()`` when the opponent has a persona (character).
+       *     For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
+       *     own ``portrait`` FK via ``fallback_media``.
        */
       readonly thumbnail_media_url: string | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
@@ -27979,9 +27978,10 @@ export interface components {
        */
       readonly thumbnail_url: string | null;
       /**
-       * @description PlayerMedia portrait URL via the primary persona's thumbnail.
+       * @description PlayerMedia portrait URL, dynamically resolved (#2196).
        *
-       *     ``None`` when there is no primary persona or it has no thumbnail.
+       *     Uses ``resolve_thumbnail()`` via the primary persona's character.
+       *     ``None`` when there is no primary persona.
        */
       readonly thumbnail_media_url: string | null;
       /** @description Escalation pressure on this combatant — public dramatic state. */

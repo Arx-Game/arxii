@@ -44919,12 +44919,11 @@ components:
           type: string
           nullable: true
           description: |-
-            PlayerMedia portrait URL.
+            PlayerMedia portrait URL, dynamically resolved (#2196).
 
-            Resolved through the opponent's persona when present (mirrors
-            ``PersonaSerializer.get_thumbnail_media_url``); for persona-less
-            (generic/ephemeral) NPCs, falls back to the opponent's own ``portrait``
-            FK. ``None`` when neither supplies a thumbnail.
+            Uses ``resolve_thumbnail()`` when the opponent has a persona (character).
+            For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
+            own ``portrait`` FK via ``fallback_media``.
           readOnly: true
         current_position:
           allOf:
@@ -49412,9 +49411,10 @@ components:
           type: string
           nullable: true
           description: |-
-            PlayerMedia portrait URL via the primary persona's thumbnail.
+            PlayerMedia portrait URL, dynamically resolved (#2196).
 
-            ``None`` when there is no primary persona or it has no thumbnail.
+            Uses ``resolve_thumbnail()`` via the primary persona's character.
+            ``None`` when there is no primary persona.
           readOnly: true
         escalation_level:
           type: integer

@@ -192,10 +192,21 @@ class FormCombatProfileAdmin(admin.ModelAdmin):
 
 @admin.register(AlternateSelf)
 class AlternateSelfAdmin(admin.ModelAdmin):
-    list_display = ["character", "display_name", "form", "persona", "combat_profile"]
+    list_display = [
+        "character",
+        "display_name",
+        "form",
+        "persona",
+        "combat_profile",
+        "has_thumbnail",
+    ]
     list_filter = ["form__form_type"]
     search_fields = ["character__character__db_key", "display_name"]
     autocomplete_fields = ["character", "form", "persona", "combat_profile", "techniques"]
+
+    @admin.display(boolean=True, description="Has Thumbnail")
+    def has_thumbnail(self, obj):
+        return bool(obj.thumbnail)
 
 
 @admin.register(ActiveAlternateSelf)
