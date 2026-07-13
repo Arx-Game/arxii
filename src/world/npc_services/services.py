@@ -217,7 +217,7 @@ def _build_eligibility_cache(
     )
 
 
-def _is_offer_eligible(  # noqa: PLR0913
+def _is_offer_eligible(  # noqa: PLR0911, PLR0913
     offer: NPCServiceOffer,
     *,
     persona: Persona,
@@ -274,8 +274,38 @@ def _is_offer_eligible(  # noqa: PLR0913
         offer=offer, persona=persona, character=character, cache=cache
     ):
         return False
+    if offer.kind == OfferKind.ASSET_TASK_INTEL.value and not _intel_pool_has_unheld_clues(
+        offer=offer, persona=persona
+    ):
+        return False
     ctx = CharacterPredicateContext(character, presented_persona=persona)
     return evaluate(offer.eligibility_rule or {}, ctx)
+
+
+def _intel_pool_has_unheld_clues(*, offer: NPCServiceOffer, persona: Persona) -> bool:
+    """Check whether the offer's clue pool has at least one unheld clue (#2293).
+
+    Returns False (offer ineligible) when the persona's roster entry already
+    holds every clue in the pool — the intel source is exhausted. Also returns
+    False on authoring errors (missing details row, missing roster entry) to
+    fail closed, consistent with ``_mission_gates_pass``.
+    """
+    from world.assets.models import AssetTaskIntelDetails  # noqa: PLC0415
+    from world.clues.models import CharacterClue  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    try:
+        details = offer.asset_task_intel_details
+    except AssetTaskIntelDetails.DoesNotExist:
+        return False
+    roster_entry = RosterEntry.objects.filter(character_sheet=persona.character_sheet).first()
+    if roster_entry is None:
+        return False
+    held_clue_ids = set(
+        CharacterClue.objects.filter(roster_entry=roster_entry).values_list("clue_id", flat=True)
+    )
+    pool_clue_ids = set(details.clue_pool.entries.values_list("clue_id", flat=True))
+    return bool(pool_clue_ids - held_clue_ids)
 
 
 def _mission_gates_pass(  # noqa: PLR0911

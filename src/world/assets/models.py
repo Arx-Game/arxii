@@ -7,6 +7,7 @@ check or room placement required.
 
 from __future__ import annotations
 
+from django.core.validators import MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -173,12 +174,14 @@ class DistinctionAssetGrant(SharedMemoryModel):
 
 
 class AssetTaskIntelDetails(SharedMemoryModel):
-    """Per-kind details for ASSET_TASK_INTEL offers (#1905).
+    """Per-kind details for ASSET_TASK_INTEL offers (#1905, #2293).
 
     Mirrors the existing per-kind details pattern (PermitOfferDetails,
     LoanOfferDetails, CourtGrantOfferDetails) — a 1:1 reverse from
     NPCServiceOffer carrying the kind-specific parameters. For intel tasks,
-    the parameter is the Clue granted on a successful check.
+    the parameter is the CluePool the task draws from (#2293: replaced the
+    single ``clue`` FK with a ``clue_pool`` FK so repeated tasking yields
+    different intel over time).
     """
 
     offer = models.OneToOneField(
@@ -186,11 +189,11 @@ class AssetTaskIntelDetails(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="asset_task_intel_details",
     )
-    clue = models.ForeignKey(
-        "clues.Clue",
+    clue_pool = models.ForeignKey(
+        "assets.CluePool",
         on_delete=models.PROTECT,
-        related_name="asset_task_offers",
-        help_text="The clue granted on a successful intel task.",
+        related_name="intel_task_offers",
+        help_text="The pool of clues this intel task draws from.",
     )
 
     class Meta:
@@ -198,4 +201,73 @@ class AssetTaskIntelDetails(SharedMemoryModel):
         verbose_name_plural = "Asset Task Intel Details"
 
     def __str__(self) -> str:
-        return f"Intel task: {self.clue.name}"
+        return f"Intel task: {self.clue_pool.name}"
+
+
+class CluePool(SharedMemoryModel):
+    """Named, reusable collection of clues for asset intel task draws (#2293).
+
+    Staff-authored pool of clues that an ASSET_TASK_INTEL offer draws from.
+    Each draw selects a weighted random clue, excluding clues the promoter's
+    roster entry already holds. When all clues are held, the offer becomes
+    ineligible (hidden from the interaction menu) until staff adds new clues.
+
+    Mirrors ConsequencePool's shape (named pool + weighted entries) but is
+    purpose-built for clues — no inheritance, no exclusions, no consequence-
+    specific fields.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Human-readable pool name (e.g., 'Rumors of Arx').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="GM authoring context for this pool.",
+    )
+
+    class Meta:
+        verbose_name = "Clue Pool"
+        verbose_name_plural = "Clue Pools"
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CluePoolEntry(SharedMemoryModel):
+    """Links a Clue to a CluePool with a draw weight (#2293).
+
+    Mirrors ConsequencePoolEntry's shape but with a non-nullable weight
+    (default 1, minimum 1) instead of an optional weight_override — clues
+    have no natural default weight to fall back to.
+    """
+
+    pool = models.ForeignKey(
+        CluePool,
+        on_delete=models.CASCADE,
+        related_name="entries",
+    )
+    clue = models.ForeignKey(
+        "clues.Clue",
+        on_delete=models.PROTECT,
+        related_name="pool_entries",
+    )
+    weight = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Draw weight. Higher = more likely to be drawn. Default 1 = uniform. Minimum 1.",
+    )
+
+    class Meta:
+        verbose_name = "Clue Pool Entry"
+        verbose_name_plural = "Clue Pool Entries"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pool", "clue"],
+                name="unique_clue_pool_entry",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.pool.name}: {self.clue.name} (weight {self.weight})"

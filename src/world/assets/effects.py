@@ -16,7 +16,10 @@ from world.assets.constants import AssetRoleContext
 from world.npc_services.effects import EffectResult
 
 if TYPE_CHECKING:
+    from world.assets.models import CluePool
+    from world.clues.models import Clue
     from world.npc_services.models import NPCServiceOffer
+    from world.roster.models import RosterEntry
     from world.scenes.models import Persona
 
 _FUNCTIONARY_GONE_MESSAGE = "They're no longer here."
@@ -133,22 +136,45 @@ def promote_as_minor_ally(offer: NPCServiceOffer, persona: Persona) -> EffectRes
     return _promote_functionary(offer, persona, role_context=AssetRoleContext.MINOR_ALLY)
 
 
+def _draw_clue_from_pool(pool: CluePool, roster_entry: RosterEntry) -> Clue | None:
+    """Draw a weighted random clue from the pool, excluding held clues (#2293).
+
+    Returns the drawn Clue, or None if the promoter holds every clue in
+    the pool (pool exhausted for this persona).
+    """
+    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
+    from world.clues.models import CharacterClue  # noqa: PLC0415
+
+    held_clue_ids = set(
+        CharacterClue.objects.filter(roster_entry=roster_entry).values_list("clue_id", flat=True)
+    )
+    available_entries = [
+        e for e in pool.entries.select_related("clue") if e.clue_id not in held_clue_ids
+    ]
+    if not available_entries:
+        return None
+    drawn = select_weighted(available_entries)
+    return drawn.clue
+
+
 @transaction.atomic
 def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
-    """ASSET_TASK_INTEL effect handler (#1905).
+    """ASSET_TASK_INTEL effect handler (#1905, #2293).
 
     Resolves the active NPCAsset owned by the interacting persona, rolls
-    the offer's check, and on success grants a CharacterClue to the
-    promoter's roster entry. The PC rolls the check (they're directing the
-    task; the check models how well they've cultivated the asset's cooperation).
+    the offer's check, and on success draws a clue from the pool (excluding
+    clues the promoter already holds) and grants a CharacterClue. The PC
+    rolls the check (they're directing the task; the check models how well
+    they've cultivated the asset's cooperation).
 
     Requires the offer to have an AssetTaskIntelDetails row pointing at the
-    Clue to grant. Returns a failure EffectResult if the asset is not ACTIVE,
-    the check fails, or the details row is missing.
+    CluePool to draw from. Returns a failure EffectResult if the asset is
+    not ACTIVE, the check fails, the details row is missing, or the pool
+    is exhausted (all clues already held).
     """
     from world.assets.constants import AssetStatus  # noqa: PLC0415
 
-    # Resolve the details row (the clue to grant).
+    # Resolve the details row (the clue pool to draw from).
     from world.assets.models import (  # noqa: PLC0415
         AssetTaskIntelDetails,
         NPCAsset,
@@ -190,7 +216,7 @@ def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResu
                 message="Your asset has nothing useful to report this time.",
             )
 
-    # Grant the clue to the promoter's roster entry.
+    # Resolve the promoter's roster entry for the clue grant.
     roster_entry = RosterEntry.objects.filter(character_sheet=persona.character_sheet).first()
     if roster_entry is None:
         return EffectResult(
@@ -198,15 +224,23 @@ def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResu
             message="Your asset brings back word, but there's nowhere to record it.",
         )
 
+    # Draw a clue from the pool, excluding clues the promoter already holds.
+    drawn_clue = _draw_clue_from_pool(details.clue_pool, roster_entry)
+    if drawn_clue is None:
+        return EffectResult(
+            kind=offer.kind,
+            message="Your asset has nothing new to report. They've told you everything they know.",
+        )
+
     CharacterClue.objects.get_or_create(
         roster_entry=roster_entry,
-        clue=details.clue,
+        clue=drawn_clue,
     )
 
     return EffectResult(
         kind=offer.kind,
-        object_pk=details.clue.pk,
-        object_label=details.clue.name,
-        message=f"Your asset brings back word: {details.clue.name}.",
-        payload={"clue_pk": details.clue.pk, "asset_pk": asset.pk},
+        object_pk=drawn_clue.pk,
+        object_label=drawn_clue.name,
+        message=f"Your asset brings back word: {drawn_clue.name}.",
+        payload={"clue_pk": drawn_clue.pk, "asset_pk": asset.pk},
     )
