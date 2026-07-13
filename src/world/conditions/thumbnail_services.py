@@ -93,6 +93,13 @@ def _resolve_condition_thumbnail(
     if cached_conditions is not None:
         instances = cached_conditions
     else:
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+        # Only ObjectDB instances can have ConditionInstance rows (the target
+        # FK is to ObjectDB). Non-ObjectDB objects (e.g. ItemInstance) skip
+        # condition overrides entirely.
+        if not isinstance(obj, ObjectDB):
+            return None
         from world.conditions.services import get_active_conditions  # noqa: PLC0415
 
         instances = list(get_active_conditions(obj))
