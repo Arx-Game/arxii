@@ -44,6 +44,7 @@ import type {
   Technique,
   TechniqueStyle,
   Tradition,
+  WorshippedBeingRef,
 } from './types';
 
 const BASE_URL = '/api/character-creation';
@@ -81,6 +82,16 @@ export async function getGenders(): Promise<GenderOption[]> {
     throw new Error('Failed to load gender options');
   }
   return res.json();
+}
+
+export async function getWorshippedBeings(): Promise<WorshippedBeingRef[]> {
+  // Paginated endpoint (#2355); the catalog is small, one page suffices for CG.
+  const res = await apiFetch('/api/worship/beings/?page_size=100');
+  if (!res.ok) {
+    throw new Error('Failed to load worshipped beings');
+  }
+  const data = await res.json();
+  return data.results;
 }
 
 export async function getSpecies(): Promise<Species[]> {

@@ -336,6 +336,37 @@ def batch_relationship_temp_condition_cleanup() -> None:
     logger.info("Relationship temp-condition cleanup: %d expired rows deleted", count)
 
 
+def abandon_stale_ceremonies() -> None:
+    """Auto-abandon OPEN ceremonies whose container has closed (#2289, Decision 12).
+
+    Bounded per ADR-0131's no-open-ended-timers: an OPEN ceremony is abandoned
+    when its linked scene has finished, its linked event has completed or been
+    cancelled, or a real day has passed since it opened (the IC-day-rollover
+    proxy) — whichever comes first. Abandonment awards nothing and closes the
+    funeral ghost container.
+    """
+    from django.db.models import Q
+    from django.utils import timezone
+
+    from world.ceremonies.constants import CeremonyStatus
+    from world.ceremonies.models import Ceremony
+    from world.ceremonies.services import abandon_ceremony
+    from world.events.constants import EventStatus
+
+    cutoff = timezone.now() - timedelta(days=1)
+    stale = Ceremony.objects.filter(status=CeremonyStatus.OPEN).filter(
+        Q(scene__isnull=False, scene__date_finished__isnull=False)
+        | Q(event__isnull=False, event__status__in=[EventStatus.COMPLETED, EventStatus.CANCELLED])
+        | Q(opened_at__lt=cutoff)
+    )
+    count = 0
+    for ceremony in stale:
+        abandon_ceremony(ceremony=ceremony)
+        count += 1
+    if count:
+        logger.info("Ceremony auto-abandon: %d stale rites closed", count)
+
+
 def auto_retire_dead_characters() -> None:
     """Auto-retire dead characters past the grace window (#2287).
 
@@ -721,6 +752,14 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
             callable=auto_retire_dead_characters,
             interval=timedelta(hours=6),
             description="Auto-retire dead characters past the grace window (#2287).",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="ceremonies.auto_abandon",
+            callable=abandon_stale_ceremonies,
+            interval=timedelta(hours=1),
+            description="Auto-abandon OPEN ceremonies whose container closed (#2289).",
         )
     )
 

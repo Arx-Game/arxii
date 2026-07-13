@@ -1,1 +1,1 @@
-0007_alter_startingarea_default_starting_room
+0008_characterdraft_public_worship_and_more

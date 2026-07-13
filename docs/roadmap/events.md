@@ -83,7 +83,9 @@ and from GM sessions (which are narrative-driven, handled by Stories/GM system).
 - **IC permission to host** — society reputation checks, bribery/permission gameplay loops
 - **IC costs** — currency/supplies for hosting, scaling with prestige
 - **Full EventModification** — security levels, prestige/wealth investment, access permeability
-  (open/guests/hard locked), interactive objects, guard NPCs. Needs dedicated brainstorm
+  (open/guests/hard locked), interactive objects, guard NPCs. Needs dedicated brainstorm —
+  #2357 is that brainstorm's placeholder (event grandeur for weddings/coronations; #2289's
+  ceremony quality is a planned multiplier input)
 - **Prestige/fame system** — noble politics reputation distinct from Legend, affected by event
   quality and noble house investment
 - **Domain effects** — event quality affecting noble house domain strength

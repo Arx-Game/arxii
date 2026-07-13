@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Model, QuerySet
 from django.db.models.query import Prefetch
 from evennia.objects.models import ObjectDB
@@ -122,6 +123,8 @@ _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
     "true_profile__family",
     "true_profile__tarot_card",
     "true_profile__origin_realm",
+    # #2355 — public worship on the identity section (reverse OneToOne + its being).
+    "worship_declaration__public_being",
 )
 _IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
@@ -175,6 +178,12 @@ def _build_identity(
         path_history: list = character.cached_path_history
         path_value = _id_name(path_history[0].path) if path_history else None
 
+    # Public worship only (#2355) — the secret side never leaves owner surfaces.
+    try:
+        worship = _id_name_or_null(sheet.worship_declaration.public_being)
+    except ObjectDoesNotExist:
+        worship = None
+
     return IdentitySection(
         name=name,
         fullname=fullname,
@@ -189,6 +198,7 @@ def _build_identity(
         tarot_card=tarot_card,
         origin=origin,
         path=path_value,
+        worship=worship,
     )
 
 

@@ -757,16 +757,18 @@ class GhostWindowPrerequisite(Prerequisite):
     Alive actors always pass. A dead actor passes while either container is
     open:
 
-    - the scene they died in is still active and they are at its location, or
+    - the scene they died in is still active and they are at its location,
+    - an OPEN funeral honoring them is underway at their location (#2289), or
     - the current IC day matches the IC day of their death (real-day fallback
       when no game clock exists).
 
-    Funeral and seance containers are the later issues' hooks (#2289/#2290).
+    The seance container is the later issue's hook (#2290).
     """
 
     def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
+        from world.ceremonies.services import open_funeral_for  # noqa: PLC0415
         from world.vitals.services import is_dead  # noqa: PLC0415
 
         try:
@@ -778,6 +780,9 @@ class GhostWindowPrerequisite(Prerequisite):
             return True, ""
         scene = vitals.died_in_scene
         if scene is not None and scene.is_active and actor.location == scene.location:
+            return True, ""
+        funeral = open_funeral_for(sheet)
+        if funeral is not None and actor.location == funeral.location.objectdb:
             return True, ""
         if _same_ic_day_as_now(vitals.died_at):
             return True, ""

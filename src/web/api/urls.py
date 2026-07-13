@@ -81,4 +81,7 @@ urlpatterns = [
     path("societies/", include("world.societies.urls", namespace="societies")),
     # Building-manager API (#670)
     path("buildings/", include("world.buildings.urls", namespace="buildings")),
+    # Worship + ceremonies (#2355/#2289)
+    path("worship/", include("world.worship.urls", namespace="worship")),
+    path("ceremonies/", include("world.ceremonies.urls", namespace="ceremonies")),
 ]

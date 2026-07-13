@@ -136,13 +136,14 @@ jobs:
           #                   + world.character_sheets (253) + web (72) + web.admin (48) + web.api (24)
           #                   + world.game_clock (109) + world.skills (97) + world.consent (67)
           #                   + world.player_submissions (59) + world.clues (54) + world.seeds (31)
-          #                   + world.instances (21)
+          #                   + world.instances (21) + world.worship (new, #2355)
+          #                   + world.ceremonies (new, #2289)
           - name: shard-5
             apps: >-
               actions world.covenants world.societies world.character_sheets
               web web.admin web.api
               world.game_clock world.skills world.consent world.player_submissions
-              world.clues world.seeds world.instances
+              world.clues world.seeds world.instances world.worship world.ceremonies
           # shard-6 (~2,579): commands (660) + world.missions (636) + world.progression (366)
           #                   + world.locations (256) + world.relationships (160) + world.gm (122)
           #                   + world.npc_services (108) + world.codex (79) + world.weather (57)

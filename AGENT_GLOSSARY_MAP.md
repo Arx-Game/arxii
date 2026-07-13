@@ -15,6 +15,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md)
 - [vitals](src/world/vitals/AGENT_GLOSSARY.md)
+- [worship](src/world/worship/AGENT_GLOSSARY.md)
+- [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md)
 - [mechanics](src/world/mechanics/AGENT_GLOSSARY.md)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)

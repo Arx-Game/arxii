@@ -43,6 +43,7 @@ class IdentitySection(TypedDict):
     tarot_card: IdNameRef | None
     origin: IdNameRef | None
     path: IdNameRef | None
+    worship: IdNameRef | None
 
 
 class FormTraitEntry(TypedDict):

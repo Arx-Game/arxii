@@ -8,6 +8,7 @@ import { ConversationSidebar } from './components/ConversationSidebar';
 import { FocusPanel } from './components/FocusPanel';
 import { SidebarTabPanel } from './components/SidebarTabPanel';
 import { PresencePanel } from './components/PresencePanel';
+import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { useEncounterForScene } from '@/combat/queries';
 import { useBattleForSceneQuery } from '@/battles/queries';
@@ -523,7 +524,12 @@ export function GamePage() {
               />
             }
             storiesPanel={<StoryTray roomKey={roomData?.name ?? 'nowhere'} />}
-            eventsPanel={<EventsSidebarPanel />}
+            eventsPanel={
+              <>
+                <CeremonyRoomCard roomId={roomData ? String(roomData.id) : undefined} />
+                <EventsSidebarPanel />
+              </>
+            }
             presencePanel={<PresencePanel />}
             statusPanel={
               activeCharacterId ? (

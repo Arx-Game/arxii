@@ -169,6 +169,7 @@
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
+  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -217,6 +218,7 @@
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
   - properties -> mechanics.Property [M2M]
   - on_entry_conditions -> conditions.ConditionTemplate [M2M]
 **Pointed to by:**
@@ -354,6 +356,9 @@
 **Pointed to by:**
   - tenure_links <- roster.TenureMedia
   - persona_thumbnails <- scenes.Persona
+  - alternate_self_thumbnails <- forms.AlternateSelf
+  - condition_template_thumbnails <- conditions.ConditionTemplate
+  - condition_stage_thumbnails <- conditions.ConditionStage
   - item_templates <- items.ItemTemplate
   - item_instances <- items.ItemInstance
   - combat_opponent_portraits <- combat.CombatOpponent
@@ -396,12 +401,14 @@
   - placed_items <- items.RoomItem
   - crafting_service_offers <- items.CraftingServiceOffer
   - events <- events.Event
+  - ceremonies <- ceremonies.Ceremony
   - functionaries <- npc_services.Functionary
   - npc_assignments <- npc_services.NPCAssignment
   - entry_for_buildings <- buildings.Building
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.RoomPolish
   - decorations <- buildings.RoomDecoration
+  - travel_hub <- travel.TravelHub
   - feature_instance <- room_features.RoomFeatureInstance
   - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
   - traps <- room_features.Trap
@@ -1175,6 +1182,8 @@
   - selected_beginnings -> character_creation.Beginnings [FK] (nullable)
   - selected_species -> species.Species [FK] (nullable)
   - selected_gender -> character_sheets.Gender [FK] (nullable)
+  - public_worship -> worship.WorshippedBeing [FK] (nullable)
+  - secret_worship -> worship.WorshippedBeing [FK] (nullable)
   - family -> roster.Family [FK] (nullable)
   - claimed_kin_slot -> roster.Kinsperson [FK] (nullable)
   - claimed_kin_pool -> roster.KinSlotPool [FK] (nullable)
@@ -1361,6 +1370,11 @@
   - mentor_bonds_as_sidekick <- covenants.MentorBond
   - court_pacts <- covenants.CourtPact
   - vitals <- vitals.CharacterVitals
+  - avatar_of_being <- worship.WorshippedBeing
+  - worship_grants <- worship.WorshipGrant
+  - devotion_standings <- worship.DevotionStanding
+  - worship_declaration <- worship.WorshipDeclaration
+  - ceremony_honors <- ceremonies.CeremonyHonoree
   - duels_won <- combat.CombatEncounter
   - summoned_combatants <- combat.CombatOpponent
   - combo_learnings <- combat.ComboLearning
@@ -2203,6 +2217,7 @@
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
+  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -2251,6 +2266,7 @@
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
   - properties -> mechanics.Property [M2M]
   - on_entry_conditions -> conditions.ConditionTemplate [M2M]
 **Pointed to by:**
@@ -2862,6 +2878,7 @@
   - form -> forms.CharacterForm [FK] (nullable)
   - persona -> scenes.Persona [FK] (nullable)
   - combat_profile -> forms.FormCombatProfile [FK] (nullable)
+  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
   - techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - active_for <- forms.ActiveAlternateSelf
@@ -5809,6 +5826,7 @@
   - affection_shifts <- relationships.AffectionShift
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - deaths <- vitals.CharacterVitals
+  - ceremonies <- ceremonies.Ceremony
   - combat_encounters <- combat.CombatEncounter
   - battle <- battles.Battle
   - npc_regard_events <- npc_services.NpcRegardEvent
@@ -5898,6 +5916,9 @@
   - hosted_events <- events.EventHost
   - event_invitations <- events.EventInvitation
   - invitations_sent <- events.EventInvitation
+  - ceremonies_officiated <- ceremonies.Ceremony
+  - ceremony_offerings <- ceremonies.CeremonyOffering
+  - ceremony_speeches <- ceremonies.CeremonySpeech
   - combat_opponents <- combat.CombatOpponent
   - gm_table_memberships <- gm.GMTableMembership
   - mission_invites_received <- missions.MissionInvite
@@ -5920,6 +5941,8 @@
   - permits_consumed <- buildings.BuildingPermitDetails
   - construction_projects_led <- buildings.BuildingConstructionDetails
   - constructed_ships <- ships.ShipConstructionDetails
+  - led_voyages <- travel.Voyage
+  - voyage_participations <- travel.VoyageParticipant
   - founded_vaults <- room_features.VaultDetails
   - vault_access_entries <- room_features.VaultAccessEntry
   - vault_access_granted <- room_features.VaultAccessEntry
@@ -6236,6 +6259,7 @@
 **Pointed to by:**
   - ships <- ships.ShipDetails
   - construction_details <- ships.ShipConstructionDetails
+  - travel_methods <- travel.TravelMethod
 
 ### ShipDetails
 **Foreign Keys:**
@@ -6246,6 +6270,7 @@
   - upgrade_details <- ships.ShipUpgradeDetails
   - source_construction <- ships.ShipConstructionDetails
   - repair_details <- ships.ShipRepairDetails
+  - voyage <- travel.Voyage
 
 ### ShipDeployment
 **Foreign Keys:**
@@ -6301,6 +6326,7 @@
   - character_values <- skills.CharacterSpecializationValue
   - training_allocations <- skills.TrainingAllocation
   - check_type_specializations <- checks.CheckTypeSpecialization
+  - worship_traditions <- worship.WorshipTradition
 
 ### CharacterSkillValue
 **Foreign Keys:**

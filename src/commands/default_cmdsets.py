@@ -25,6 +25,7 @@ from commands.alterations import CmdMageScar
 from commands.battle import CmdBattle
 from commands.canon_review import CmdCanonReview
 from commands.captivity import CmdDemandRansom
+from commands.ceremonies import CmdCeremony
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
 from commands.comfort import CmdComfort
@@ -378,6 +379,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1499 — event lifecycle + invitee RSVP namespace: create/schedule/start/
             # complete/cancel/invite/rsvp verbs + list/show read surfaces.
             CmdEvent,
+            # #2289 — ceremony rites: funeral/blessing/sermon open, offering,
+            # speech, finish/abandon + the show read surface.
+            CmdCeremony,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.
