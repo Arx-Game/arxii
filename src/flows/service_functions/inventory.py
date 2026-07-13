@@ -110,6 +110,33 @@ def _vault_denies(taker_sheet: CharacterSheet | None, item_instance: ItemInstanc
     return not has_vault_access(persona, vault)
 
 
+def _dead_owner_trusts(owner: CharacterSheet, taker_sheet: CharacterSheet) -> bool:
+    """#2289: a dead owner's OOC friends may take from the corpse without steal.
+
+    The trusted-handler rule: the corpse keeps its gear and removal routes
+    through ``steal`` — unless the dead player's tenure friended the taker's
+    (the friends-list dovetail ratified on the issue). Living owners are never
+    exempted here.
+    """
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+    from world.scenes.friend_services import is_friend  # noqa: PLC0415
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    if not is_dead(owner):
+        return False
+
+    def _active_tenure(sheet: CharacterSheet) -> RosterTenure | None:
+        return RosterTenure.objects.filter(
+            roster_entry__character_sheet=sheet, end_date__isnull=True
+        ).first()
+
+    owner_tenure = _active_tenure(owner)
+    taker_tenure = _active_tenure(taker_sheet)
+    if owner_tenure is None or taker_tenure is None:
+        return False
+    return is_friend(owner_tenure=owner_tenure, friend_tenure=taker_tenure)
+
+
 def _take_denial(  # noqa: PLR0911
     taker_sheet: CharacterSheet | None, item_instance: ItemInstance
 ) -> type[InventoryError] | None:
@@ -147,6 +174,8 @@ def _take_denial(  # noqa: PLR0911
             return OwnedByAnother
         return None
     if owner is not None and owner.pk != taker_sheet.pk:
+        if _dead_owner_trusts(owner, taker_sheet):
+            return None
         return OwnedByAnother
     return None
 
