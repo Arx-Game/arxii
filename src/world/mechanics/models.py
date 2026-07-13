@@ -36,6 +36,7 @@ from world.mechanics.constants import (
 )
 
 _DAMAGE_TYPE_MODEL_PATH = "conditions.DamageType"
+_CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
 
 
 class ModifierCategoryManager(NaturalKeyManager):
@@ -693,7 +694,7 @@ class PropertyDetonation(SharedMemoryModel):
         related_name="detonation",
     )
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        _CONSEQUENCE_POOL_MODEL,
         on_delete=models.PROTECT,
         related_name="property_detonations",
         help_text="Graded/deterministic payload fired against everyone at the object's position.",
@@ -1156,7 +1157,7 @@ class SituationTrapLink(SharedMemoryModel):
     )
     name = models.CharField(max_length=100)
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        _CONSEQUENCE_POOL_MODEL,
         on_delete=models.PROTECT,
         related_name="situation_trap_links",
     )
@@ -1308,7 +1309,7 @@ class ContextConsequencePool(SharedMemoryModel):
         related_name="context_consequence_pools",
     )
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        _CONSEQUENCE_POOL_MODEL,
         on_delete=models.PROTECT,
         related_name="context_attachments",
     )

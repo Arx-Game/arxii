@@ -416,6 +416,80 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     return result, power_ledger, pose
 
 
+def _resolve_hostile_accepted_cast(
+    action_request: SceneActionRequest,
+    initiator: Persona,
+    target: Persona,
+    technique: Technique,
+) -> None:
+    """Resolve a PENDING hostile cast on consent acceptance into combat.
+
+    Seeds (or feeds) the combat encounter, records the target's risk
+    acknowledgement, marks the request RESOLVED, and — for entrance-sourced
+    casts — fires flourish-only entrance success hooks (the real success level
+    becomes known later at combat round resolution, #2183).
+    """
+    with transaction.atomic():
+        encounter = seed_or_feed_encounter_from_cast(
+            caster_sheet=initiator.character_sheet,
+            target_sheet=target.character_sheet,
+            technique=technique,
+            scene=action_request.scene,
+            room=action_request.scene.location,
+            from_entrance=action_request.originated_as_entrance,
+        )
+        acknowledge_encounter_risk(encounter, target.character_sheet)
+        action_request.status = ActionRequestStatus.RESOLVED
+        action_request.resolved_at = timezone.now()
+        action_request.save(update_fields=["status", "resolved_at"])
+    if action_request.originated_as_entrance:
+        from actions.definitions.social import run_entrance_success_hooks  # noqa: PLC0415
+
+        run_entrance_success_hooks(
+            initiator.character_sheet.character,
+            action_request.scene,
+            success_level=None,
+            target_persona_id=target.pk,
+            technique=technique,
+        )
+
+
+def _resolve_cast_pull(
+    declaration: SceneActionPullDeclaration | None,
+    initiator_persona: Persona,
+) -> tuple[CastPullDeclaration | None, str | None]:
+    """Resolve a committed pull declaration into a payable cast pull.
+
+    Returns ``(cast_pull, fizzle_note)``: when the committed pull's preview is
+    still affordable it is charged with the cast; otherwise the cast resolves
+    pull-less and the OUTCOME pose carries a fizzle note.
+    """
+    from world.magic.services.resonance import preview_resonance_pull  # noqa: PLC0415
+    from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
+
+    if declaration is None:
+        return None, None
+    threads = list(declaration.threads.filter(retired_at__isnull=True))
+    preview = (
+        preview_resonance_pull(
+            initiator_persona.character_sheet,
+            declaration.resonance,
+            declaration.tier,
+            threads,
+        )
+        if threads
+        else None
+    )
+    if preview is not None and preview.affordable:
+        cast_pull = CastPullDeclaration(
+            resonance=declaration.resonance,
+            tier=declaration.tier,
+            threads=tuple(threads),
+        )
+        return cast_pull, None
+    return None, _PULL_FIZZLE_NOTE
+
+
 def resolve_accepted_cast(
     action_request: SceneActionRequest,
 ) -> EnhancedSceneActionResult | None:
@@ -447,8 +521,6 @@ def resolve_accepted_cast(
         charging the pull is caught and the cast degrades to the fizzle path
         rather than surfacing as an error to the consent accepter.
     """
-    from world.magic.services.resonance import preview_resonance_pull  # noqa: PLC0415
-    from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
 
     initiator = action_request.initiator_persona
     target = action_request.target_persona
@@ -458,58 +530,11 @@ def resolve_accepted_cast(
         and target.character_sheet_id != initiator.character_sheet_id
         and is_technique_hostile(technique)
     ):
-        with transaction.atomic():
-            encounter = seed_or_feed_encounter_from_cast(
-                caster_sheet=initiator.character_sheet,
-                target_sheet=target.character_sheet,
-                technique=technique,
-                scene=action_request.scene,
-                room=action_request.scene.location,
-                from_entrance=action_request.originated_as_entrance,
-            )
-            acknowledge_encounter_risk(encounter, target.character_sheet)
-            action_request.status = ActionRequestStatus.RESOLVED
-            action_request.resolved_at = timezone.now()
-            action_request.save(update_fields=["status", "resolved_at"])
-        if action_request.originated_as_entrance:
-            # The declared cast hasn't resolved yet — flourish only (mirrors
-            # EntranceAction._resolve_hostile_entrance_result); Task 5's combat
-            # round-resolution hook fires the suggestion once the real success
-            # level is known (#2183).
-            from actions.definitions.social import run_entrance_success_hooks  # noqa: PLC0415
-
-            run_entrance_success_hooks(
-                initiator.character_sheet.character,
-                action_request.scene,
-                success_level=None,
-                target_persona_id=target.pk,
-                technique=technique,
-            )
+        _resolve_hostile_accepted_cast(action_request, initiator, target, technique)
         return None
 
     declaration = SceneActionPullDeclaration.objects.filter(request=action_request).first()
-    cast_pull = None
-    fizzle_note = None
-    if declaration is not None:
-        threads = list(declaration.threads.filter(retired_at__isnull=True))
-        preview = (
-            preview_resonance_pull(
-                action_request.initiator_persona.character_sheet,
-                declaration.resonance,
-                declaration.tier,
-                threads,
-            )
-            if threads
-            else None
-        )
-        if preview is not None and preview.affordable:
-            cast_pull = CastPullDeclaration(
-                resonance=declaration.resonance,
-                tier=declaration.tier,
-                threads=tuple(threads),
-            )
-        else:
-            fizzle_note = _PULL_FIZZLE_NOTE
+    cast_pull, fizzle_note = _resolve_cast_pull(declaration, action_request.initiator_persona)
 
     from world.magic.exceptions import MagicError  # noqa: PLC0415
 

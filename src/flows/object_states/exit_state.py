@@ -43,6 +43,20 @@ class ExitState(BaseState):
         persona = active_persona_for_sheet(sheet)
         return not (is_owner(persona, room) or is_tenant(persona, room))
 
+    def _bars_block_actor(self, profile: "ExitProfile", actor: "BaseState") -> bool:
+        """True when an active ``ExitBarsDetails`` gate blocks ``actor``.
+
+        #2177 — bars block traversal for anyone who isn't the source room's
+        owner or tenant, independent of the ``db.locked`` gate.
+        """
+        from world.room_features.models import ExitBarsDetails  # noqa: PLC0415
+
+        bars = ExitBarsDetails.objects.filter(exit_profile=profile).active().first()
+        if bars is None:
+            return False
+        room = self.obj.location
+        return room is not None and self._actor_lacks_room_standing(actor, room)
+
     def can_traverse(self, actor: "BaseState | None" = None) -> bool:
         """Return ``True`` if ``actor`` may traverse this exit.
 
@@ -70,14 +84,8 @@ class ExitState(BaseState):
             if room is not None and self._actor_lacks_room_standing(actor, room):
                 return False
 
-        if profile is not None and actor is not None:
-            from world.room_features.models import ExitBarsDetails  # noqa: PLC0415
-
-            bars = ExitBarsDetails.objects.filter(exit_profile=profile).active().first()
-            if bars is not None:
-                room = self.obj.location
-                if room is not None and self._actor_lacks_room_standing(actor, room):
-                    return False
+        if profile is not None and actor is not None and self._bars_block_actor(profile, actor):
+            return False
 
         result = self._run_package_hook("can_traverse", actor)
         if result is not None:

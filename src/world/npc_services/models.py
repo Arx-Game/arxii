@@ -37,6 +37,7 @@ from world.npc_services.constants import (
 _PERSONA_FK = "scenes.Persona"
 _ORG_MODEL_PATH = "societies.Organization"
 _NPC_OFFER_DETAILS_HELP_TEXT = "The NPCServiceOffer row this details model decorates."
+_REGARD_EVENT_CONFIG_LABEL = "Regard Event Config"
 
 
 class NPCStanding(SharedMemoryModel):
@@ -935,11 +936,11 @@ class RegardEventConfig(SharedMemoryModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Regard Event Config"
-        verbose_name_plural = "Regard Event Config"
+        verbose_name = _REGARD_EVENT_CONFIG_LABEL
+        verbose_name_plural = _REGARD_EVENT_CONFIG_LABEL
 
     def __str__(self) -> str:
-        return "Regard Event Config"
+        return _REGARD_EVENT_CONFIG_LABEL
 
 
 class NpcRegardEvent(SharedMemoryModel):

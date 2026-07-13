@@ -14,6 +14,9 @@ from typing import Any
 from actions.definitions.doors import BreakExitAction, LockAction, PickLockAction, UnlockAction
 from commands.command import ArxCommand
 
+# Repeated Evennia lock string, extracted to satisfy S1192 (duplicate string literals).
+_CMD_ALL = "cmd:all()"
+
 
 class CmdLock(ArxCommand):
     """Lock an exit in your current room.
@@ -23,7 +26,7 @@ class CmdLock(ArxCommand):
     """
 
     key = "lock"
-    locks = "cmd:all()"
+    locks = _CMD_ALL
     action = LockAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -44,7 +47,7 @@ class CmdUnlock(ArxCommand):
     """
 
     key = "unlock"
-    locks = "cmd:all()"
+    locks = _CMD_ALL
     action = UnlockAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -65,7 +68,7 @@ class CmdPick(ArxCommand):
     """
 
     key = "pick"
-    locks = "cmd:all()"
+    locks = _CMD_ALL
     action = PickLockAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -86,7 +89,7 @@ class CmdBreak(ArxCommand):
     """
 
     key = "break"
-    locks = "cmd:all()"
+    locks = _CMD_ALL
     action = BreakExitAction()
 
     def resolve_action_args(self) -> dict[str, Any]:

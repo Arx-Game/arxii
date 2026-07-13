@@ -241,10 +241,36 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             )
         return treatment, target_effect, target_effect_type, matched_candidate
 
+    def _build_treat_condition_kwargs(
+        self,
+        *,
+        action_key: str,
+        matched_candidate: dict | None,
+        target_effect: object | None,
+        target_effect_type: str | None,
+    ) -> dict[str, Any]:
+        """Build kwargs for ``create_action_request`` when action is treat-condition.
+
+        Returns an empty dict for non-treat actions or when no matching
+        candidate was found. Otherwise, maps the matched candidate's bond
+        thread and resolved target effect into the appropriate kwarg.
+        """
+        if action_key != TREAT_CONDITION_KEY or matched_candidate is None:
+            return {}
+        kwargs: dict[str, Any] = {
+            "treatment": matched_candidate["treatment"],
+            "thread_used": matched_candidate["bond_thread"],
+        }
+        if target_effect_type == TARGET_EFFECT_CONDITION:
+            kwargs["target_condition_instance"] = target_effect
+        else:
+            kwargs["target_pending_alteration"] = target_effect
+        return kwargs
+
     @extend_schema(
         request=SceneActionRequestCreateSerializer, responses=SceneActionRequestSerializer
     )
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: C901, PLR0911
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: PLR0911
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -319,7 +345,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        treatment, target_effect, target_effect_type, matched_candidate = self._resolve_treatment(
+        _treatment, target_effect, target_effect_type, matched_candidate = self._resolve_treatment(
             serializer,
             action_key=action_key,
             initiator_persona=initiator_persona,
@@ -327,16 +353,12 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             scene=scene,
         )
 
-        treat_condition_kwargs: dict[str, Any] = {}
-        if action_key == TREAT_CONDITION_KEY and matched_candidate is not None:
-            treat_condition_kwargs = {
-                "treatment": treatment,
-                "thread_used": matched_candidate["bond_thread"],
-            }
-            if target_effect_type == TARGET_EFFECT_CONDITION:
-                treat_condition_kwargs["target_condition_instance"] = target_effect
-            else:
-                treat_condition_kwargs["target_pending_alteration"] = target_effect
+        treat_condition_kwargs = self._build_treat_condition_kwargs(
+            action_key=action_key,
+            matched_candidate=matched_candidate,
+            target_effect=target_effect,
+            target_effect_type=target_effect_type,
+        )
 
         try:
             action_request = create_action_request(
@@ -536,7 +558,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         responses={201: SceneActionRequestSerializer},
     )
     @action(detail=False, methods=[HTTPMethod.POST], url_path="cast")
-    def cast(self, request: Request) -> Response:  # noqa: C901, PLR0911
+    def cast(self, request: Request) -> Response:  # noqa: PLR0911
         """Submit a standalone technique cast.
 
         Routes per the consent/combat/immediate matrix:
@@ -630,7 +652,14 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             )
 
         response_data = SceneActionRequestSerializer(cast_result.request).data
+        self._populate_cast_response_extras(response_data, cast_result, request)
 
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
+    def _populate_cast_response_extras(
+        self, response_data: dict, cast_result: object, request: Request
+    ) -> None:
+        """Populate optional result/encounter/interaction fields on a cast response."""
         if cast_result.result is not None:
             response_data["result"] = EnhancedSceneActionResultSerializer(
                 cast_result.result,
@@ -648,8 +677,6 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
 
         if cast_result.combat_seated:
             response_data["combat_seated"] = True
-
-        return Response(response_data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
         parameters=[

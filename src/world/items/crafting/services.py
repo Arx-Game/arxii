@@ -168,6 +168,28 @@ def _station_status_snapshot(station: object | None) -> tuple[StationStatus, boo
     )
 
 
+def _resolve_recipe_for_quote(
+    *,
+    kind: CraftingRecipeKind,
+    output_template: object = None,
+) -> CraftingRecipe:
+    """Resolve the recipe for a quote, raising ``CraftingNotConfigured`` if missing.
+
+    For ``ITEM_CREATE`` with an ``output_template``, the recipe is resolved by
+    ``(kind, output_item_template)``; otherwise by ``kind`` alone.
+    """
+    try:
+        if kind == CraftingRecipeKind.ITEM_CREATE and output_template is not None:
+            recipe = CraftingRecipe.objects.get(kind=kind, output_item_template=output_template)
+        else:
+            recipe = CraftingRecipe.objects.get(kind=kind)
+    except CraftingRecipe.DoesNotExist as exc:
+        raise CraftingNotConfigured from exc
+    if recipe.check_type is None:
+        raise CraftingNotConfigured
+    return recipe
+
+
 def build_crafting_quote(
     *,
     kind: CraftingRecipeKind,
@@ -207,15 +229,7 @@ def build_crafting_quote(
     from world.magic.models import CharacterAnima  # noqa: PLC0415
 
     # 1. Resolve recipe ---
-    try:
-        if kind == CraftingRecipeKind.ITEM_CREATE and output_template is not None:
-            recipe = CraftingRecipe.objects.get(kind=kind, output_item_template=output_template)
-        else:
-            recipe = CraftingRecipe.objects.get(kind=kind)
-    except CraftingRecipe.DoesNotExist as exc:
-        raise CraftingNotConfigured from exc
-    if recipe.check_type is None:
-        raise CraftingNotConfigured
+    recipe = _resolve_recipe_for_quote(kind=kind, output_template=output_template)
 
     # 2. AP availability ---
     ap_cost = recipe.action_point_cost
@@ -306,8 +320,135 @@ def build_crafting_quote(
     )
 
 
+def _resolve_recipe_for_run(
+    *,
+    kind: CraftingRecipeKind,
+    output_overrides: dict | None = None,
+) -> CraftingRecipe:
+    """Resolve the recipe for ``kind`` for a crafting run.
+
+    For ``ITEM_CREATE``, the output template is pulled from ``output_overrides``.
+    Raises ``CraftingNotConfigured`` when no recipe exists or it lacks a check_type.
+    """
+    try:
+        if kind == CraftingRecipeKind.ITEM_CREATE:
+            output_template = (output_overrides or {}).get("output_template")
+            recipe = CraftingRecipe.objects.get(kind=kind, output_item_template=output_template)
+        else:
+            recipe = CraftingRecipe.objects.get(kind=kind)
+    except CraftingRecipe.DoesNotExist as exc:
+        raise CraftingNotConfigured from exc
+    if recipe.check_type is None:
+        raise CraftingNotConfigured
+    return recipe
+
+
+def _check_recipe_knowledge(
+    recipe: CraftingRecipe,
+    crafter_character: ObjectDB,
+) -> None:
+    """Enforce the recipe-knowledge gate (#2242).
+
+    A gated recipe needs a learned pattern; raises ``RecipeNotKnown`` when the
+    crafter has no sheet or does not know the recipe.
+    """
+    if not recipe.requires_knowledge:
+        return
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.items.crafting.knowledge import character_knows_recipe  # noqa: PLC0415
+    from world.items.exceptions import RecipeNotKnown  # noqa: PLC0415
+
+    crafter_sheet = CharacterSheet.objects.filter(character=crafter_character).first()
+    if crafter_sheet is None or not character_knows_recipe(crafter_sheet, recipe):
+        raise RecipeNotKnown
+
+
+def _gate_station(
+    recipe: CraftingRecipe,
+    crafter_character: ObjectDB,
+) -> LabStationDetails | None:
+    """Resolve and validate the Lab station when ``recipe.requires_station`` (#1234).
+
+    Raises ``CraftingStationRequired`` if none is installed, or
+    ``CraftingStationBroken`` if at 0 durability. Returns the resolved station
+    (or None when no station is required).
+    """
+    if not recipe.requires_station:
+        return None
+    station = _resolve_active_lab_station(crafter_character)
+    if station is None:
+        raise CraftingStationRequired
+    if station.is_broken:
+        raise CraftingStationBroken
+    return station
+
+
+def _resolve_crafter_sheet(
+    crafter_character: ObjectDB,
+    item_instance: ItemInstance | None,
+) -> CharacterSheet:
+    """Return the crafter's CharacterSheet from the item or the character."""
+    if item_instance is not None:
+        return item_instance.holder_character_sheet
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    return CharacterSheet.objects.get(character=crafter_character)
+
+
+def _apply_station_wear(station: LabStationDetails | None) -> None:
+    """Decrement the station's durability by 1, unconditionally (#1234)."""
+    if station is None:
+        return
+    station.durability = max(0, station.durability - 1)
+    station.save(update_fields=["durability"])
+
+
+def _record_crafted_recipe(
+    *,
+    recipe: CraftingRecipe,
+    crafter_character: ObjectDB,
+    item_instance: ItemInstance | None,
+    row: object | None,
+    tier: QualityTier | None,
+) -> CraftedItemRecipe | None:
+    """Record the recipe on the item (#1567) and award masterwork renown (#2243).
+
+    For ``ITEM_CREATE``, ``row`` is the newly created ItemInstance; for attach
+    kinds, ``row`` is the attachment and ``item_instance`` is the item it was
+    attached to.
+    """
+    if row is None:
+        return None
+    target_item = item_instance if item_instance is not None else row
+    crafted_recipe, _ = CraftedItemRecipe.objects.update_or_create(
+        item_instance=target_item,
+        recipe=recipe,
+        defaults={"quality_tier": tier},
+    )
+    # Invalidate the wearer's equipped_items handler cache if the item is
+    # currently equipped — same pattern as attach_facet_to_item.
+    for equipped in EquippedItem.objects.filter(item_instance=target_item):
+        equipped.character.equipped_items.invalidate()
+
+    # A masterwork-quality craft makes its maker a little famous (#2243).
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.items.crafting.reward import (  # noqa: PLC0415
+        award_masterwork_renown,
+        is_masterwork,
+    )
+
+    crafter_sheet = CharacterSheet.objects.filter(character=crafter_character).first()
+    if tier is not None and is_masterwork(tier) and crafter_sheet is not None:
+        award_masterwork_renown(
+            crafter_character_sheet=crafter_sheet,
+            tier=tier,
+            item_label=str(target_item.template),
+        )
+    return crafted_recipe
+
+
 @transaction.atomic
-def run_crafting_recipe(  # noqa: C901, PLR0912, PLR0913, PLR0915
+def run_crafting_recipe(  # noqa: PLR0913
     *,
     kind: CraftingRecipeKind,
     crafter_account: AccountDB,
@@ -361,26 +502,10 @@ def run_crafting_recipe(  # noqa: C901, PLR0912, PLR0913, PLR0915
         CraftingCostUnaffordable: The crafter cannot afford the recipe cost.
     """
     # --- 1. Resolve the recipe ---
-    try:
-        if kind == CraftingRecipeKind.ITEM_CREATE:
-            output_template = (output_overrides or {}).get("output_template")
-            recipe = CraftingRecipe.objects.get(kind=kind, output_item_template=output_template)
-        else:
-            recipe = CraftingRecipe.objects.get(kind=kind)
-    except CraftingRecipe.DoesNotExist as exc:
-        raise CraftingNotConfigured from exc
-    if recipe.check_type is None:
-        raise CraftingNotConfigured
+    recipe = _resolve_recipe_for_run(kind=kind, output_overrides=output_overrides)
 
     # Recipe-knowledge gate (#2242) — a gated recipe needs a learned pattern.
-    if recipe.requires_knowledge:
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-        from world.items.crafting.knowledge import character_knows_recipe  # noqa: PLC0415
-        from world.items.exceptions import RecipeNotKnown  # noqa: PLC0415
-
-        crafter_sheet = CharacterSheet.objects.filter(character=crafter_character).first()
-        if crafter_sheet is None or not character_knows_recipe(crafter_sheet, recipe):
-            raise RecipeNotKnown
+    _check_recipe_knowledge(recipe, crafter_character)
 
     # --- 2. Pre-validate (never waste a roll) ---
     handler = get_handler(kind)
@@ -389,21 +514,10 @@ def run_crafting_recipe(  # noqa: C901, PLR0912, PLR0913, PLR0915
     )
 
     # --- 3. Station gate (#1234) — before affordability-staging ---
-    station = None
-    if recipe.requires_station:
-        station = _resolve_active_lab_station(crafter_character)
-        if station is None:
-            raise CraftingStationRequired
-        if station.is_broken:
-            raise CraftingStationBroken
+    station = _gate_station(recipe, crafter_character)
 
     # --- 4. Stage + assert affordability (before rolling) ---
-    if item_instance is not None:
-        crafter_sheet = item_instance.holder_character_sheet
-    else:
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-
-        crafter_sheet = CharacterSheet.objects.get(character=crafter_character)
+    crafter_sheet = _resolve_crafter_sheet(crafter_character, item_instance)
     staged = stage_and_assert_affordable(
         recipe=recipe,
         crafter_character=crafter_character,
@@ -414,9 +528,7 @@ def run_crafting_recipe(  # noqa: C901, PLR0912, PLR0913, PLR0915
     check_result = perform_check(crafter_character, recipe.check_type, recipe.base_difficulty)
 
     # --- 6. Station wear (#1234) — unconditional, regardless of roll outcome ---
-    if station is not None:
-        station.durability = max(0, station.durability - 1)
-        station.save(update_fields=["durability"])
+    _apply_station_wear(station)
 
     # --- 7. Select a weighted consequence for the rolled tier ---
     rows = list(
@@ -476,36 +588,17 @@ def run_crafting_recipe(  # noqa: C901, PLR0912, PLR0913, PLR0915
         attached = False
 
     # --- 10b. Record the recipe on the item (#1567) ---
-    crafted_recipe = None
-    if attached:
-        # For ITEM_CREATE, `row` is the newly created ItemInstance; for attach
-        # kinds, `row` is the attachment (ItemFacet/ItemStyle) and
-        # `item_instance` is the item it was attached to.
-        target_item = item_instance if item_instance is not None else row
-        crafted_recipe, _ = CraftedItemRecipe.objects.update_or_create(
-            item_instance=target_item,
+    crafted_recipe = (
+        _record_crafted_recipe(
             recipe=recipe,
-            defaults={"quality_tier": tier},
+            crafter_character=crafter_character,
+            item_instance=item_instance,
+            row=row,
+            tier=tier,
         )
-        # Invalidate the wearer's equipped_items handler cache if the item is
-        # currently equipped — same pattern as attach_facet_to_item.
-        for equipped in EquippedItem.objects.filter(item_instance=target_item):
-            equipped.character.equipped_items.invalidate()
-
-        # A masterwork-quality craft makes its maker a little famous (#2243).
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-        from world.items.crafting.reward import (  # noqa: PLC0415
-            award_masterwork_renown,
-            is_masterwork,
-        )
-
-        crafter_sheet = CharacterSheet.objects.filter(character=crafter_character).first()
-        if tier is not None and is_masterwork(tier) and crafter_sheet is not None:
-            award_masterwork_renown(
-                crafter_character_sheet=crafter_sheet,
-                tier=tier,
-                item_label=str(target_item.template),
-            )
+        if attached
+        else None
+    )
 
     return CraftRunResult(
         attached=attached,

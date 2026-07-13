@@ -530,4 +530,7 @@ admin.sites.site = arx_admin_site
 # outside version control (see the module docstring) — it's an env-driven
 # overlay, same 12-factor contract as the rest of this file.
 with contextlib.suppress(ImportError):
-    from server.conf.secret_settings import *
+    import server.conf.secret_settings as _secret_settings
+
+    _public_names = (name for name in dir(_secret_settings) if not name.startswith("_"))
+    globals().update({name: getattr(_secret_settings, name) for name in _public_names})

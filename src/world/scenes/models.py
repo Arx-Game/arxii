@@ -43,6 +43,7 @@ CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 INTERACTION_MODEL = "scenes.Interaction"
 PLAYER_DATA_MODEL = "evennia_extensions.PlayerData"
 SCENE_ROUND_PARTICIPANT_MODEL = "scenes.SceneRoundParticipant"
+ROSTER_TENURE_MODEL = "roster.RosterTenure"
 
 
 class Scene(CachedPropertiesMixin, SharedMemoryModel):
@@ -673,13 +674,13 @@ class Friendship(SharedMemoryModel):
     """
 
     friender_tenure = models.ForeignKey(
-        "roster.RosterTenure",
+        ROSTER_TENURE_MODEL,
         on_delete=models.CASCADE,
         related_name="friendships_made",
         help_text="The friender's tenure (this player's run of the character that friended).",
     )
     friend_tenure = models.ForeignKey(
-        "roster.RosterTenure",
+        ROSTER_TENURE_MODEL,
         on_delete=models.CASCADE,
         related_name="friendships_received",
         help_text="The friended character's tenure (a specific player's run of that character).",
@@ -713,13 +714,13 @@ class Rivalry(SharedMemoryModel):
     """
 
     rivaler_tenure = models.ForeignKey(
-        "roster.RosterTenure",
+        ROSTER_TENURE_MODEL,
         on_delete=models.CASCADE,
         related_name="rivalries_made",
         help_text="The declarer's tenure (this player's run of the character that named a rival).",
     )
     rival_tenure = models.ForeignKey(
-        "roster.RosterTenure",
+        ROSTER_TENURE_MODEL,
         on_delete=models.CASCADE,
         related_name="rivalries_received",
         help_text="The named rival's tenure (a specific player's run of that character).",

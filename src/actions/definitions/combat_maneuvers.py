@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 # Repeated ActionResult failure messages, extracted to satisfy S1192.
 NOT_IN_ACTIVE_ROUND_MESSAGE = "You are not in an active combat round."
 NO_ACTION_DECLARED_MESSAGE = "You have not declared an action yet."
+_NO_SUCH_OPPONENT_MSG = "No such opponent in this encounter."
 
 
 def _sheet(actor: ObjectDB) -> CharacterSheet | None:
@@ -138,7 +139,7 @@ def _resolve_redirect_targets(
     """
     redirect_opponent = _resolve_opponent(participant, redirect_opponent_target_id)
     if redirect_opponent_target_id is not None and redirect_opponent is None:
-        return None, None, "No such opponent in this encounter."
+        return None, None, _NO_SUCH_OPPONENT_MSG
     redirect_object = _resolve_object(redirect_object_target_id)
     if redirect_object_target_id is not None and redirect_object is None:
         return None, None, "No such object."
@@ -304,7 +305,7 @@ class ChargeAction(Action):
             return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         opponent = _resolve_opponent(participant, opponent_id)
         if opponent is None:
-            return ActionResult(success=False, message="No such opponent in this encounter.")
+            return ActionResult(success=False, message=_NO_SUCH_OPPONENT_MSG)
         technique = _resolve_technique(technique_id)
         if technique is None:
             return ActionResult(success=False, message="Charge with which technique?")
@@ -466,7 +467,7 @@ class UseItemManeuverAction(Action):
         elif opponent_id is not None:
             target = _resolve_opponent(participant, opponent_id)
             if target is None:
-                return ActionResult(success=False, message="No such opponent in this encounter.")
+                return ActionResult(success=False, message=_NO_SUCH_OPPONENT_MSG)
 
         try:
             declare_use_item(participant, item_instance, target=target)
@@ -837,7 +838,7 @@ class DemoralizeAction(Action):
             return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         opponent = _resolve_opponent(participant, opponent_id)
         if opponent is None:
-            return ActionResult(success=False, message="No such opponent in this encounter.")
+            return ActionResult(success=False, message=_NO_SUCH_OPPONENT_MSG)
         try:
             declare_demoralize(participant, opponent)
         except ValueError as err:
@@ -871,7 +872,7 @@ class TauntAction(Action):
             return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         opponent = _resolve_opponent(participant, opponent_id)
         if opponent is None:
-            return ActionResult(success=False, message="No such opponent in this encounter.")
+            return ActionResult(success=False, message=_NO_SUCH_OPPONENT_MSG)
         try:
             declare_taunt(participant, opponent)
         except ValueError as err:
@@ -905,7 +906,7 @@ class ParleyAction(Action):
             return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         opponent = _resolve_opponent(participant, opponent_id)
         if opponent is None:
-            return ActionResult(success=False, message="No such opponent in this encounter.")
+            return ActionResult(success=False, message=_NO_SUCH_OPPONENT_MSG)
         try:
             declare_parley(participant, opponent)
         except ValueError as err:
