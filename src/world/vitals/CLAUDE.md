@@ -14,10 +14,16 @@ combat, poison, spells, exhaustion, and any other damage source.
 - **`CharacterVitals`** (SharedMemoryModel, OneToOne on `CharacterSheet`): mortality marker
   (`life_state`: `ALIVE` / `DEAD`) + health (`health`, `max_health`, `base_max_health` — null means
   derive from level/stamina/role). `died_at` timestamp set on death. Consciousness and dying are
-  conditions, not fields.
+  conditions, not fields. #2287 adds `died_in_scene` (FK `scenes.Scene`, the active scene at the
+  body's location when `_mark_dead` fired — bounds the ghost emit window and death-kudos
+  eligibility; null for offscreen deaths) and `retired_at` (set by `retire_character`; the final
+  puppet lock — see "Death off-ramp" below).
 - **`VitalsConsequenceConfig`** (singleton pk=1): tunable difficulty scaling (`knockout_base_difficulty`,
   `death_base_difficulty`, `wound_base_difficulty` + per-percent scalars) and the global
-  `knockout_pool`, `default_wound_pool`, `default_death_pool`.
+  `knockout_pool`, `default_wound_pool`, `default_death_pool`. #2287 adds the wake-arc knobs
+  (`wake_base_difficulty`, `wake_scaling_per_percent`, `wake_ease_per_round`,
+  `wake_guaranteed_rounds`), `auto_retire_days`, and the admin-editable `death_condolence_body`
+  (PLACEHOLDER text seeded; final wording is ApostateCD's).
 
 ### `constants.py`
 - **`CharacterLifeState`** (`TextChoices`): `ALIVE` / `DEAD` — the binary mortality axis.
@@ -87,13 +93,62 @@ Involved-party classification and death-permission helpers used by both `service
 - `clear_abandoned(victim_sheet)` — clears the stamp when a hostile party drives again.
 
 ### `factories.py`
-- `create_bleed_out_condition()` — idempotent seed for the Bleeding-Out `ConditionTemplate` +
-  stages + resist-check types.
 - `create_bleed_out_terminal_pool()` — seeds the `bleed_out_terminal` `ConsequencePool` (recover /
-  stay_incapacitated / die).
+  stay_incapacitated / die). (A prior version of this doc listed a `create_bleed_out_condition()`
+  here — it never existed; the Bleeding-Out template + stages are authored by
+  `seeds.ensure_bleeding_out_condition()`, #2287.)
 - `create_abandonment_pools()` — seeds all three abandonment pools (enemy / pvp / environmental);
   the `abandonment_enemy` pool includes a `captured_alive` outcome (CAPTURE effect, `EffectType.CAPTURE`)
   that creates a `HELD` `Captivity` — the merciful non-lethal alternative to death with no consent gate.
+
+### `seeds.py` — production content (#2287)
+
+`seed_survivability_content()` (cluster `"survivability"` in `world/seeds/clusters.py`) is what
+makes the pipeline fire on a real database — before #2287 every pool lived only in test factories
+and `process_damage_consequences` no-op'd each tier. Idempotent (get_or_create / fill-only-when-
+null so staff edits survive re-seeding). Seeds: the foundational `CapabilityType` rows
+(awareness/movement/limb_use — without the awareness row `can_act` degrades to always-True), the
+`Unconscious` condition + capability-zeroing effects, the `Bleeding Out` staged condition
+(3 stages, Mortal Resolve resists), the `knockout`/`default_death`/`default_wound` pools wired
+onto `VitalsConsequenceConfig`, the peril pools via the factories above, the `death`
+KudosSourceCategory, the liminal dream room (tag `dream_liminal`, category `system`), and the
+PLACEHOLDER condolence text.
+
+### Wake arc — unconscious recovery (#2287)
+
+`attempt_wake(sheet, *, in_combat_tick=False)` is Bleeding Out inverted: one Endurance roll per
+round, difficulty `calculate_wake_difficulty` (scales with missing health, eases per round
+unconscious and with healing), guaranteed wake at the `expires_at` deadline stamped by the
+knockout tier (`wake_guaranteed_rounds × SECONDS_PER_ROUND`; the hourly
+`conditions.expiration_cleanup` task is the force-wake backstop). Out of combat the attempt is
+rate-limited via `ConditionInstance.last_resist_attempt_at`; `tick_round_for_targets` grants one
+free roll per combat round. Dying (active Bleeding Out) blocks waking. Surface: `WakeAction`
+(key `wake`) / telnet `wake`.
+
+**Dreamside perception:** while Unconscious, `perceives_dreamside` is True and the player's view
+relocates to the liminal dream room (`get_dream_room`) — web room-state push, room-target look,
+and `message_location` broadcasts all honor it. The dead are never dreamside (ghosts watch the
+waking room). The dream realm proper replaces the placeholder room (#2290).
+
+### Death off-ramp (#2287, ADR-0131)
+
+`_mark_dead` additionally stamps `died_in_scene` and delivers the condolence
+(`death_condolence_body`: character text + `character_died` WS frame, best-effort). The ghost
+interlude: dead characters stay puppetable as spectators — `DEAD_ALLOWED_ACTION_KEYS`
+(`actions/constants.py`) whitelists their verbs; `GhostWindowPrerequisite` bounds emit/pose to
+the death scene while active or the IC day of death. Release: `retire_character` (player
+`RetireCharacterAction`/`retire`, staff-forceable, `vitals.auto_retire` scheduler backstop after
+`auto_retire_days`) sets `retired_at`, enforced at `Account.can_puppet_character` and
+`PlayerData.get_available_characters`. **No resurrection path exists.**
+
+### `death_kudos.py` (#2287)
+
+`award_death_kudos(giver_account, dead_character)` — the capped graceful-death channel on the
+existing account kudos (ADR-0115): death-scene GM/staff `max(20, 50% of lifetime XP spend)`,
+participants `max(1, 5%)`, scaled grants aggregate-capped at 100% of lifetime spend
+(`CharacterXP.total_spent` sum), post-cap trickle floors (1 player / 20 staff). Window:
+death → retire. Offscreen deaths staff-only. Surfaces: `GiveDeathKudosAction` (key
+`death_kudos`) / telnet `kudos death <name>`.
 
 ---
 

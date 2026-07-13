@@ -150,6 +150,19 @@ class KudosReceivedPayload:
 
 
 @dataclass
+class CharacterDiedPayload:
+    """Payload for ``character_died`` messages (#2287).
+
+    The death-moment OOC condolence delivered to the dead character's player.
+    ``body`` is the staff-authored condolence paragraph from
+    ``VitalsConsequenceConfig.death_condolence_body``.
+    """
+
+    character: str
+    body: str
+
+
+@dataclass
 class MailArrivedPayload:
     """Payload for ``mail_arrived`` messages.
 

@@ -1,1 +1,1 @@
-0018_thumbnail_fields
+0019_conditioninstance_last_resist_attempt_at

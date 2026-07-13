@@ -4208,9 +4208,12 @@ combat, poison, spells, exhaustion, and any damage source.
 
 - **Models:** `CharacterVitals` (OneToOne on CharacterSheet; fields: `life_state`
   (`CharacterLifeState`: ALIVE/DEAD — the binary mortality axis), `health`, `max_health`,
-  `base_max_health` — null = derive from level/stamina/role; `died_at`),
-  `VitalsConsequenceConfig` (singleton pk=1; tunable difficulty scaling + pool FKs:
-  `knockout_pool`, `default_wound_pool`, `default_death_pool`)
+  `base_max_health` — null = derive from level/stamina/role; `died_at`; #2287: `died_in_scene`
+  FK scenes.Scene — bounds the ghost emit window + death-kudos eligibility — and `retired_at`,
+  the final puppet lock), `VitalsConsequenceConfig` (singleton pk=1; tunable difficulty scaling +
+  pool FKs: `knockout_pool`, `default_wound_pool`, `default_death_pool`; #2287: wake-arc knobs
+  `wake_base_difficulty`/`wake_scaling_per_percent`/`wake_ease_per_round`/`wake_guaranteed_rounds`,
+  `auto_retire_days`, admin-editable `death_condolence_body`)
 - **Key Services (`world/vitals/services.py`):**
   - `is_dead(sheet)`, `is_alive(sheet)`, `can_act(sheet)` — mortality/agency gates.
   - `derive_character_status(sheet) -> str` — compute dead/dying/incapacitated/alive at read time.
@@ -4239,9 +4242,32 @@ combat, poison, spells, exhaustion, and any damage source.
     when any conscious non-hostile non-victim is in the room.
   - `mark_abandoned(victim_sheet, scene_round)`, `clear_abandoned(victim_sheet)` — stamp/clear
     `ConditionInstance.abandoned_since_round`.
+- **Wake arc + death off-ramp (#2287, ADR-0131; `services.py`, `death_kudos.py`, `seeds.py`):**
+  - `attempt_wake(sheet, *, in_combat_tick=False) -> WakeResult` — one Endurance roll per round
+    (wall-clock round-equivalent out of combat via `last_resist_attempt_at`; free roll on the
+    combat tick), difficulty `calculate_wake_difficulty(health_pct, rounds_elapsed)`, guaranteed
+    wake at the knockout-stamped `expires_at` deadline. Dying blocks waking. Surfaces:
+    `WakeAction`/`wake`.
+  - `perceives_dreamside(sheet)`, `get_dream_room()` — unconscious perception relocates to the
+    liminal dream room (web room-state, look, `message_location` skip); dead ghosts stay waking-side.
+  - `_mark_dead` stamps `died_in_scene` + delivers `death_condolence_body` (character msg +
+    `character_died` WS frame). Ghost interlude: `DEAD_ALLOWED_ACTION_KEYS` whitelist in
+    `Action.check_availability`; `GhostWindowPrerequisite` bounds emit/pose (death scene / IC day).
+  - `retire_character(sheet, *, forced_by=None)`, `is_retired(sheet)` — the release lock, enforced
+    at `Account.can_puppet_character` + `PlayerData.get_available_characters`;
+    `vitals.auto_retire` game_clock task is the backstop. No resurrection path exists.
+  - `award_death_kudos(giver_account, dead_character) -> DeathKudosResult` (`death_kudos.py`) —
+    capped graceful-death channel on account kudos: GM/staff max(20, 50% lifetime spend),
+    participants max(1, 5%), aggregate cap 100% of spend, post-cap floors 1/20; window
+    death→retire; offscreen = staff-only. Surfaces: `GiveDeathKudosAction`/`kudos death <name>`.
+  - `seed_survivability_content()` (`seeds.py`, cluster `survivability`) — the production seeding
+    that makes every tier fire: foundational CapabilityTypes, Unconscious effects, Bleeding Out
+    stages, knockout/default-death/default-wound pools, dream room, death KudosSourceCategory.
 - **Pool constants (`world/vitals/constants.py`):** `POOL_BLEED_OUT_TERMINAL`,
   `POOL_ABANDONMENT_ENEMY`, `POOL_ABANDONMENT_PVP`, `POOL_ABANDONMENT_ENVIRONMENTAL` (seeded via
-  `world.vitals.factories`; `abandonment_enemy` includes a `captured_alive` CAPTURE outcome).
+  `world.vitals.factories`; `abandonment_enemy` includes a `captured_alive` CAPTURE outcome);
+  #2287: `POOL_KNOCKOUT`, `POOL_DEFAULT_DEATH`, `POOL_DEFAULT_WOUND`, `BLEED_OUT_STAGE_SPECS`,
+  `DREAM_ROOM_KEY`/`DREAM_ROOM_TAG`.
 - **Design invariants:** ADR-0049 (guarded pool, no unconditional death); ADR-0023 extended to the
   death layer (PC source can never produce death); ADR-0004 extended to dying state (grace window
   counts round_number beats, not wall-clock); plummet exempt from hold/abandonment.

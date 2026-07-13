@@ -76,6 +76,21 @@ WOUND_BASE_DIFFICULTY: int = 15
 WOUND_SCALING_PER_PERCENT: int = 2
 
 # ---------------------------------------------------------------------------
+# Wake arc (unconscious recovery) + death off-ramp tuning (#2287)
+# ---------------------------------------------------------------------------
+
+# Base difficulty of the per-round wake (Endurance) check at full health
+WAKE_BASE_DIFFICULTY: int = 20
+# Additional difficulty per percentage point of missing health
+WAKE_SCALING_PER_PERCENT: int = 1
+# Difficulty eased per round spent unconscious
+WAKE_EASE_PER_ROUND: int = 2
+# PLACEHOLDER: rounds until guaranteed wake (~10 real minutes at 6s/round)
+WAKE_GUARANTEED_ROUNDS: int = 100
+# PLACEHOLDER: days after death before a dead character auto-retires
+AUTO_RETIRE_DAYS: int = 14
+
+# ---------------------------------------------------------------------------
 # Survivability resistance checks (seeded on first use, like fatigue endurance)
 # ---------------------------------------------------------------------------
 
@@ -103,3 +118,29 @@ POOL_ABANDONMENT_ENVIRONMENTAL: str = "abandonment_environmental"
 POOL_SURROUNDED_ENTRY: str = "surrounded_entry"
 POOL_SURROUNDED_TERMINAL_ENEMY: str = "surrounded_terminal_enemy"
 POOL_SURROUNDED_TERMINAL_PVP: str = "surrounded_terminal_pvp"
+
+# Global tier pools wired onto VitalsConsequenceConfig by the survivability
+# seed cluster (#2287). Names are natural keys.
+POOL_KNOCKOUT: str = "knockout"
+POOL_DEFAULT_DEATH: str = "default_death"
+POOL_DEFAULT_WOUND: str = "default_wound"
+
+# ---------------------------------------------------------------------------
+# Bleeding Out stage authoring (#2287) — (stage_order, name, resist_difficulty,
+# rounds_to_next). Terminal stage has rounds_to_next=None; its resolution goes
+# through the guarded bleed_out_terminal pool, never an unconditional death.
+# ---------------------------------------------------------------------------
+
+BLEED_OUT_STAGE_SPECS: list[tuple[int, str, int, int | None]] = [
+    (1, "Failing", 15, 2),
+    (2, "Slipping Away", 25, 2),
+    (3, "At Death's Door", 35, None),
+]
+
+# ---------------------------------------------------------------------------
+# Liminal dream room (#2287; replaced by the dream realm proper, #2290)
+# ---------------------------------------------------------------------------
+
+DREAM_ROOM_KEY: str = "The Threshold of Dreams"
+DREAM_ROOM_TAG: str = "dream_liminal"
+DREAM_ROOM_TAG_CATEGORY: str = "system"

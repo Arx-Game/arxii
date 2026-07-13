@@ -1,10 +1,15 @@
 """Communication-related service functions."""
 
+from typing import TYPE_CHECKING
+
 from evennia.utils import funcparser
 
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.serializers.room_state import build_room_state_payload
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 _PARSER = funcparser.FuncParser(funcparser.ACTOR_STANCE_CALLABLES)
 
@@ -97,7 +102,30 @@ def message_location(
         text,
         from_obj=caller.obj,
         mapping=resolved_mapping,
+        exclude=_dreamside_occupants(location) or None,
     )
+
+
+def _dreamside_occupants(location: "ObjectDB") -> list["ObjectDB"]:
+    """Occupants whose perception is dreamside (#2287) — they miss room chatter.
+
+    Dead characters are NOT excluded: a ghost still watches and hears the
+    waking room. Direct ``character.msg`` (system/vitals messages) is
+    unaffected — only room broadcasts are gated.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.vitals.services import perceives_dreamside  # noqa: PLC0415
+
+    excluded = []
+    for obj in location.contents:
+        try:
+            sheet = obj.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        if perceives_dreamside(sheet):
+            excluded.append(obj)
+    return excluded
 
 
 def send_room_state(

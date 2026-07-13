@@ -162,6 +162,12 @@ class Action:
             context: Optional situational context (combat, scene, etc.).
         """
         failures = []
+        # #2287 — ghost interlude: dead actors are whitelisted to spectator
+        # verbs (bounded emit/pose + the off-ramp actions). A central
+        # whitelist beats auditing every IC action for a dead-gate.
+        dead_reason = self._dead_gate_reason(actor)
+        if dead_reason:
+            failures.append(dead_reason)
         for prereq in self.get_prerequisites():
             met, reason = prereq.is_met(actor, target, context)
             if not met:
@@ -201,6 +207,27 @@ class Action:
             if sheet is not None:
                 apply_fatigue(sheet, self.fatigue_category, self.fatigue_cost, EffortLevel.MEDIUM)
         return None
+
+    def _dead_gate_reason(self, actor: ObjectDB | None) -> str:
+        """Refusal reason for dead actors on non-whitelisted actions (#2287).
+
+        Empty string when the action is allowed (alive actor, whitelisted key,
+        no sheet, or an account-authorized call with ``actor is None``).
+        """
+        if actor is None:
+            return ""
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from actions.constants import DEAD_ALLOWED_ACTION_KEYS  # noqa: PLC0415
+        from world.vitals.services import is_dead  # noqa: PLC0415
+
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return ""
+        if is_dead(sheet) and self.key not in DEAD_ALLOWED_ACTION_KEYS:
+            return "The dead cannot do that."
+        return ""
 
     def run(
         self,
