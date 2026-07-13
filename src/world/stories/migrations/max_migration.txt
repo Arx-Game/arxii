@@ -1,1 +1,1 @@
-0026_stake_subject_asset
+0027_alter_storyprotectedsubject_subject_label
