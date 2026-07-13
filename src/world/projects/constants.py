@@ -38,6 +38,7 @@ class ProjectKind(models.TextChoices):
     # (#1621). Details model + handler live in world.societies (mirroring how
     # captivity owns RANSOM); instant-completion like RANSOM.
     PROPAGANDA = "PROPAGANDA", "Propaganda Campaign"
+    CITY_DEFENSE = "CITY_DEFENSE", "City Defense"
 
 
 class ProjectStatus(models.TextChoices):
