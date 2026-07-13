@@ -533,7 +533,7 @@ export interface EraCreateBody {
 // ---------------------------------------------------------------------------
 
 /** Shared with world.boundaries's TreasuredSubject — same StakeSubjectKind vocabulary. */
-export type SubjectKindEnum = components['schemas']['SubjectKind90fEnum'];
+export type SubjectKindEnum = components['schemas']['SubjectKindEnum'];
 
 export type ProtectedSubject = components['schemas']['StoryProtectedSubject'];
 export type PaginatedProtectedSubjectList =

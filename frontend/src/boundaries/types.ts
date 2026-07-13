@@ -17,7 +17,7 @@ export type TreasuredSubject = components['schemas']['TreasuredSubject'];
 export type TreasuredSubjectRequest = components['schemas']['TreasuredSubjectRequest'];
 export type PatchedTreasuredSubjectRequest =
   components['schemas']['PatchedTreasuredSubjectRequest'];
-export type SubjectKindEnum = components['schemas']['SubjectKind90fEnum'];
+export type SubjectKindEnum = components['schemas']['SubjectKindEnum'];
 export type PaginatedTreasuredSubjectList = components['schemas']['PaginatedTreasuredSubjectList'];
 
 export type TreasuredSignoff = components['schemas']['TreasuredSignoff'];
