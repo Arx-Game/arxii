@@ -337,3 +337,23 @@ All models registered with comprehensive admin interfaces:
 - `ConditionInstanceAdmin` - Runtime debugging with state/timing/source fieldsets
 - Lookup table admins for categories, capabilities, check types, damage types
 - Standalone interaction admins for damage and condition interactions
+
+---
+
+## Dynamic Thumbnails (#2196)
+
+`ConditionTemplate`, `ConditionStage`, and `AlternateSelf` each have an optional
+`thumbnail` FK to `PlayerMedia`. When set, the thumbnail overrides the persona's
+default in all serialization surfaces (room state, combat, character sheet).
+
+Resolution is handled by `world.conditions.thumbnail_services.resolve_thumbnail()`,
+which checks in priority order:
+1. Active condition's stage thumbnail (highest `display_priority` visible condition)
+2. Active condition's template thumbnail
+3. Active alternate self's thumbnail
+4. Persona's `thumbnail` FK
+5. `ObjectDisplayData.thumbnail` fallback
+6. `fallback_media` (e.g. `CombatOpponent.portrait` for persona-less NPCs)
+
+Hidden conditions (`is_visible_to_others=False`) do not override the thumbnail
+for non-privileged viewers — the same visibility gate as condition serialization.
