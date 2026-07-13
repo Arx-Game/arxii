@@ -360,6 +360,12 @@ from actions.definitions.vitals import (
     RetireCharacterAction,
     WakeAction,
 )
+from actions.definitions.voyages import (
+    AbandonVoyageAction,
+    AdvanceLegAction,
+    CompleteVoyageAction,
+    StartVoyageAction,
+)
 from actions.definitions.windows import CloseWindowAction, OpenWindowAction
 from actions.types import TargetType
 
@@ -664,6 +670,11 @@ _ALL_ACTIONS: list[Action] = [
     # itself dispatches through TravelAction, already registered above).
     InstallPortalAnchorAction(),
     DissolvePortalAnchorAction(),
+    # #1855 — overworld travel / voyages.
+    StartVoyageAction(),
+    AdvanceLegAction(),
+    CompleteVoyageAction(),
+    AbandonVoyageAction(),
     # #2179 — vault access-list management.
     VaultAccessAddAction(),
     VaultAccessRemoveAction(),

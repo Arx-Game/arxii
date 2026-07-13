@@ -143,6 +143,7 @@ from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
 from commands.travel import CmdTravel  # #2163
 from commands.vault import CmdVault
+from commands.voyages import CmdVoyage  # #1855
 from commands.wake import CmdWake  # #2287
 from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
@@ -400,6 +401,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPosition,
             # #2163 — "go there" travel: auto-walk to a character's location.
             CmdTravel,
+            CmdVoyage,
             # #2222 — portal anchor install/dissolve namespace.
             CmdPortalAnchor,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
