@@ -445,6 +445,12 @@ class ActionRegistryTests(TestCase):
             "wake",
             "retire",
             "death_kudos",
+            # #2289 — ceremonies.
+            "ceremony_open",
+            "ceremony_offering",
+            "ceremony_speech",
+            "ceremony_finish",
+            "ceremony_abandon",
             # #1855 — overworld travel / voyages.
             "start_voyage",
             "advance_voyage_leg",

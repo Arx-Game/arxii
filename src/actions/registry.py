@@ -20,6 +20,13 @@ from actions.definitions.battles import (
     StageBattleMapAction,
 )
 from actions.definitions.cast import CastTechniqueAction
+from actions.definitions.ceremonies import (
+    AbandonCeremonyAction,
+    CeremonyOfferingAction,
+    CeremonySpeechAction,
+    FinishCeremonyAction,
+    OpenCeremonyAction,
+)
 from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.collect_food import CollectFoodAction
 from actions.definitions.combat_maneuvers import (
@@ -694,6 +701,12 @@ _ALL_ACTIONS: list[Action] = [
     WakeAction(),
     RetireCharacterAction(),
     GiveDeathKudosAction(),
+    # #2289 — ceremonies (worship rites over the events/scenes chassis).
+    OpenCeremonyAction(),
+    CeremonyOfferingAction(),
+    CeremonySpeechAction(),
+    FinishCeremonyAction(),
+    AbandonCeremonyAction(),
 ]
 
 # Lookup by key
