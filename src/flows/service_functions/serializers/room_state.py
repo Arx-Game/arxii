@@ -33,9 +33,29 @@ class ObjectStateSerializer(serializers.Serializer):
         return {
             "dbref": instance.obj.dbref,
             "name": instance.get_display_name(looker=looker),
-            "thumbnail_url": instance.thumbnail_url,
+            "thumbnail_url": self._resolve_thumbnail_for_viewer(instance, looker),
             "commands": [key for key in command_keys if key in dispatcher_tags],
         }
+
+    def _resolve_thumbnail_for_viewer(
+        self,
+        instance: BaseState,
+        looker: BaseState | None,
+    ) -> str | None:
+        """Re-resolve thumbnail with viewer-aware condition visibility (#2196).
+
+        ``BaseState.__init__`` resolves the thumbnail without knowing who's
+        looking. Here, when we have a looker, we re-check hidden conditions
+        only if the looker owns the character (sees their own conditions).
+        """
+        from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
+
+        viewer_can_see_hidden = looker is not None and looker.obj == instance.obj
+        return resolve_thumbnail(
+            instance.obj,
+            persona=getattr(instance, "_resolved_persona", None),  # noqa: GETATTR_LITERAL
+            viewer_can_see_hidden=viewer_can_see_hidden,
+        )
 
     def _collect_command_keys(self, caller: BaseState | None) -> list[str]:
         """Return command keys available to caller."""

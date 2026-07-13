@@ -233,6 +233,9 @@ class CombatEncounterViewSet(ModelViewSet):
                 "participants",
                 queryset=CombatParticipant.objects.select_related(
                     "character_sheet__character",
+                    "character_sheet__character__display_data",
+                    "character_sheet__active_alternate_self",
+                    "character_sheet__active_alternate_self__alternate_self",
                     "character_sheet__character__object_position__position",
                     "character_sheet__vitals",
                     "character_sheet__fatigue",

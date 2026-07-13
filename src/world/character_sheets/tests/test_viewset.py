@@ -2009,9 +2009,12 @@ class TestCharacterSheetQueryCount(TestCase):
          30.   form_state + active_fake_overlay (#1272 — the disguise concealment
                 prefetch; one select_related join, no extra round-trip when no
                 overlay is set)
+         31.   character condition_instances prefetch (#2196 — dynamic thumbnail
+                resolution; prefetched so resolve_thumbnail() doesn't fire
+                per-persona queries in _build_personas)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(30):
+        with self.assertNumQueries(31):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
