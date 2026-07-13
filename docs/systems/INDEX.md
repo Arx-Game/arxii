@@ -2623,13 +2623,35 @@ ADR-0091.
   than inventing new Trait rows — framework-proving only. The #1907 variants
   gate on Persuasion (GUARD, FAN) and Scholarship (MINOR_ALLY), rolling
   Intimidation/Gossip/Domain Investment checks respectively.
+- **Intel tasking** (#1905, #2293): `ASSET_TASK_INTEL` `OfferKind` +
+  `run_asset_intel_task` effect handler. The PC directs an owned asset to
+  gather intel — a `perform_check` gates success (failure = "nothing useful
+  to report"), and on success a `Clue` is drawn from a weighted `CluePool`
+  (#2293: replaced the single fixed `clue` FK with a `clue_pool` FK on
+  `AssetTaskIntelDetails`). The draw excludes clues the promoter's
+  `RosterEntry` already holds (via `CharacterClue`), and when the pool is
+  exhausted (all clues held) the offer becomes ineligible — hidden from
+  `available_offers` via `_intel_pool_has_unheld_clues` in
+  `world.npc_services.services`. Per-(offer, persona) `OfferCooldown` still
+  gates recurrence. The asset itself can be lost (`AssetStatus.COMPROMISED`/
+  `LOST`/`DISMISSED`), removing the intel source entirely. This embodies
+  ADR-0081: no dependable, entirely passive generation — the pool is finite,
+  the check can fail, the cooldown gates recurrence, and the asset can be
+  lost. Staff must add new clues to replenish an exhausted pool.
+  - **`CluePool`** (`world.assets.models`): named, reusable collection of
+    clues with weighted `CluePoolEntry` rows (default weight 1, min 1).
+    Mirrors `ConsequencePool`'s shape but purpose-built for clues — no
+    inheritance/exclusion machinery.
+  - **`CluePoolEntry`**: links a `Clue` to a `CluePool` with a draw weight.
+    Unique per (pool, clue). Drawn via the shared `select_weighted` utility
+    (`world.checks.outcome_utils`).
 - **REST API:** `world.assets.views.NPCAssetViewSet` — read-only, mounted
   at `/api/assets/`, scoped to the requesting user's own promoted assets.
 - **Source:** `src/world/assets/`
 
 Deferred follow-ups: distinction-granted starting assets (`needs-design`),
-asset gameplay loops (tasking/intel/income), compromise/loss lifecycle,
-voluntary asset sharing.
+money streams (asset-generated income — ADR-0081 constrains to active
+collection), voluntary asset sharing.
 
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from world.assets.models import DistinctionAssetGrant, NPCAsset
+from world.assets.models import CluePool, CluePoolEntry, DistinctionAssetGrant, NPCAsset
 
 
 @admin.register(NPCAsset)
@@ -36,3 +36,16 @@ class DistinctionAssetGrantAdmin(admin.ModelAdmin):
     # for NPCRole in world.npc_services, and autocomplete_fields requires the
     # target model's admin to declare search_fields (admin.E039).
     autocomplete_fields = ["distinction"]
+
+
+class CluePoolEntryInline(admin.TabularInline):
+    model = CluePoolEntry
+    extra = 1
+    autocomplete_fields = ["clue"]
+
+
+@admin.register(CluePool)
+class CluePoolAdmin(admin.ModelAdmin):
+    list_display = ["name", "description"]
+    search_fields = ["name"]
+    inlines = [CluePoolEntryInline]
