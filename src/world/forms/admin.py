@@ -198,11 +198,19 @@ class AlternateSelfAdmin(admin.ModelAdmin):
         "form",
         "persona",
         "combat_profile",
+        "resonance",
         "has_thumbnail",
     ]
-    list_filter = ["form__form_type"]
+    list_filter = ["form__form_type", "resonance__affinity"]
     search_fields = ["character__character__db_key", "display_name"]
-    autocomplete_fields = ["character", "form", "persona", "combat_profile", "techniques"]
+    autocomplete_fields = [
+        "character",
+        "form",
+        "persona",
+        "combat_profile",
+        "techniques",
+        "resonance",
+    ]
 
     @admin.display(boolean=True, description="Has Thumbnail")
     def has_thumbnail(self, obj):

@@ -50,7 +50,7 @@ class CastTechniqueAction(Action):
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
 
-    def execute(  # noqa: PLR0913
+    def execute(  # noqa: PLR0913, C901, PLR0911
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -61,6 +61,7 @@ class CastTechniqueAction(Action):
         cast_pull: CastPullDeclaration | None = None,
         use_base_form: bool = False,
         position_params: dict[str, int] | None = None,
+        preferred_resonance_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         """Resolve or gate the cast.
@@ -104,6 +105,18 @@ class CastTechniqueAction(Action):
             except Persona.DoesNotExist:
                 return ActionResult(success=False, message="Target persona not found.")
 
+        # #1619: Resolve the preferred resonance for multi-resonance variant
+        # selection. When the character holds multiple GIFT threads at different
+        # resonances, this lets the player choose which variant to manifest.
+        preferred_resonance = None
+        if preferred_resonance_id is not None:
+            from world.magic.models import Resonance  # noqa: PLC0415
+
+            try:
+                preferred_resonance = Resonance.objects.get(pk=preferred_resonance_id)
+            except Resonance.DoesNotExist:
+                return ActionResult(success=False, message="Resonance not found.")
+
         try:
             cast = request_technique_cast(
                 scene=scene,
@@ -114,6 +127,7 @@ class CastTechniqueAction(Action):
                 cast_pull=cast_pull,
                 use_base_form=use_base_form,
                 position_params=position_params,
+                preferred_resonance=preferred_resonance,
             )
         except Exception as exc:
             # Surface magic-layer exceptions (e.g. MagicError subclasses for
@@ -153,7 +167,7 @@ class CastTechniqueAction(Action):
             )
         return ActionResult(success=True, message=message)
 
-    def round_declaration(
+    def round_declaration(  # noqa: C901
         self,
         ctx: Any,
         *,
@@ -238,6 +252,10 @@ class CastTechniqueAction(Action):
         position_params = kwargs.get("position_params")
         if position_params:
             decl_kwargs["position_params"] = position_params
+        # #1619: Forward variant resonance selection for multi-resonance casts.
+        preferred_resonance_id = kwargs.get("preferred_resonance_id")
+        if preferred_resonance_id is not None:
+            decl_kwargs["preferred_resonance_id"] = preferred_resonance_id
         # cast_pull is deliberately excluded from decl_kwargs: the CombatPull read-path
         # supplies the bonus during resolution; forwarding it here would double-charge.
         return pa, decl_kwargs

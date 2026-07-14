@@ -22,19 +22,24 @@ class WeaveGiftThreadTests(TestCase):
         provision_latent_gift_thread(cls.sheet, cls.gift, resonance=cls.res_a)
 
     def test_weave_commits_resonance_onto_latent_thread(self) -> None:
+        # #1619: Weaving at a different resonance creates a NEW thread at that
+        # resonance rather than mutating the existing one. Each resonance gets
+        # its own thread; the existing res_a thread is left in place.
         thread = weave_thread(
             self.sheet,
             target_kind=TargetKind.GIFT,
             target=self.gift,
             resonance=self.res_b,
         )
-        # The latent thread is reused (not a new row), resonance updated to res_b.
+        # The new thread is at res_b.
         self.assertEqual(thread.resonance, self.res_b)
+        self.assertEqual(thread.level, 0)
+        # Both threads now exist (res_a from setup, res_b from weave).
         self.assertEqual(
             Thread.objects.filter(
                 owner=self.sheet,
                 target_kind=TargetKind.GIFT,
                 target_gift=self.gift,
             ).count(),
-            1,
+            2,
         )

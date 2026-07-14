@@ -30612,6 +30612,10 @@ components:
         has_techniques:
           type: boolean
           readOnly: true
+        resonance_name:
+          type: string
+          nullable: true
+          readOnly: true
         is_active:
           type: boolean
           readOnly: true
@@ -30622,6 +30626,7 @@ components:
       - id
       - is_active
       - persona_name
+      - resonance_name
     AlternateSelfRequest:
       type: object
       description: |-
