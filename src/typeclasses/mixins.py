@@ -218,13 +218,16 @@ def _maybe_render_captivity_status(obj) -> str | None:
     # Only rooms hold captives — skip the query for characters/items/exits.
     if getattr(obj, "location", None) is not None:  # noqa: GETATTR_LITERAL
         return None
+    from django.db.models import Q
+
     from world.captivity.constants import CaptivityStatus
     from world.captivity.models import Captivity
 
     held = list(
-        Captivity.objects.filter(cell__room=obj, status=CaptivityStatus.HELD).select_related(
-            "captive", "ransom_project"
-        )
+        Captivity.objects.filter(
+            Q(cell__room=obj) | Q(holding_room=obj),
+            status=CaptivityStatus.HELD,
+        ).select_related("captive", "ransom_project")
     )
     if not held:
         return None

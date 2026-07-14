@@ -52,6 +52,7 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
     group_key: str | None = None,
     cell_name: str | None = None,
     cell_description: str | None = None,
+    holding_room: ObjectDB | None = None,
 ) -> Captivity:
     """Take one character into a cell and record the captivity.
 
@@ -61,12 +62,37 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
     consequence-effect path can't pass a cell object, so it passes a key).
     Flips the captive's lifecycle to CAPTURED and moves their body inside.
 
+    When ``holding_room`` is provided (the Brig path, #1862), no instanced cell
+    is spawned: the captive is moved to the persistent holding room and the
+    captivity records ``holding_room`` + ``return_location`` instead of ``cell``.
+
     Raises ``AlreadyCapturedError`` if the character is already held.
     """
     if Captivity.objects.filter(captive=captive, status=CaptivityStatus.HELD).exists():
         raise AlreadyCapturedError
 
     with transaction.atomic():
+        if holding_room is not None:
+            captive.lifecycle_state = LifecycleState.CAPTURED
+            captive.lifecycle_state_at = timezone.now()
+            captive.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
+
+            try:
+                captivity = Captivity.objects.create(
+                    captive=captive,
+                    holding_room=holding_room,
+                    return_location=return_location,
+                    captor_organization=captor_organization,
+                    offscreen_loss_allowed=offscreen_loss_allowed,
+                )
+            except IntegrityError as exc:
+                raise AlreadyCapturedError from exc
+
+            character = captive.character
+            if character is not None:
+                character.move_to(holding_room, quiet=True)
+            return captivity
+
         if cell is None and group_key is not None:
             cell = _active_group_cell(group_key)
         if cell is None:
@@ -184,7 +210,7 @@ def resolve_captivity(captivity: Captivity, *, status: str) -> None:
     # whether or not they are puppeted. complete_instanced_room only moves
     # online occupants and would otherwise leave an offline freed captive in a
     # cell that is about to be deleted (the off-screen ransom case).
-    _relocate_freed_captive(captivity.captive, cell)
+    _relocate_freed_captive(captivity.captive, captivity, cell)
 
     if cell is None:
         return
@@ -285,17 +311,22 @@ def _active_group_cell(group_key: str) -> InstancedRoom | None:
     )
 
 
-def _relocate_freed_captive(captive: CharacterSheet, cell: InstancedRoom | None) -> None:
-    """Move a freed captive out of the cell to where they belong.
+def _relocate_freed_captive(
+    captive: CharacterSheet,
+    captivity: Captivity,
+    cell: InstancedRoom | None,
+) -> None:
+    """Move a freed captive out of their holding to where they belong.
 
-    Destination: the cell's return location, falling back to the captive's
-    home (the same fallback ``complete_instanced_room`` uses). No-op if neither
-    exists or the character is gone.
+    Destination priority: captivity.return_location (set for Brig-path
+    captures), then cell.return_location (instanced path), then character.home.
     """
     character = captive.character
     if character is None:
         return
-    destination = cell.return_location if cell is not None else None
+    destination = captivity.return_location
+    if destination is None and cell is not None:
+        destination = cell.return_location
     if destination is None:
         destination = character.home
     if destination is not None:

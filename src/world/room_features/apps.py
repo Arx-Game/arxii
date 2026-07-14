@@ -100,6 +100,16 @@ class RoomFeaturesConfig(AppConfig):
             handle_vault_progression,
         )
 
+        # #1862 — Brig room feature (ship holding cell for captured characters).
+        from world.room_features.brig_services import (  # noqa: PLC0415
+            handle_brig_progression,
+        )
+
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.BRIG,
+            handle_brig_progression,
+        )
+
         # Installable exit/room defenses (#2177) -- independent of
         # RoomFeatureKind/RoomFeatureInstance (Decision 1); its own Project kind.
         from world.room_features.services import (  # noqa: PLC0415

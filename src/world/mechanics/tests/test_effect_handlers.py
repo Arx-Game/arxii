@@ -421,6 +421,114 @@ class CaptureGroupingTests(TestCase):
         assert first.cell_id != second.cell_id
 
 
+class CaptureBrigRoutingTests(TestCase):
+    """Tests for CAPTURE effect routing to a ship's Brig (#1862)."""
+
+    @staticmethod
+    def _capture_effect():
+        return ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.CAPTURE,
+        )
+
+    def _make_brig_in_building(self):
+        """Create a building with a Brig room feature; return (brig_room, building)."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.areas.factories import AreaFactory
+        from world.buildings.factories import BuildingFactory
+        from world.room_features.constants import (
+            BRIG_CAPACITY_PER_LEVEL,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.factories import RoomFeatureKindFactory
+        from world.room_features.models import BrigDetails
+
+        area = AreaFactory(level=10)
+        building = BuildingFactory(area=area)
+        brig_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        brig_profile = RoomProfileFactory(objectdb=brig_room, area=area)
+        kind = RoomFeatureKindFactory(
+            service_strategy=RoomFeatureServiceStrategy.BRIG,
+        )
+        from world.room_features.models import RoomFeatureInstance
+
+        instance = RoomFeatureInstance.objects.create(
+            room_profile=brig_profile,
+            feature_kind=kind,
+            level=1,
+        )
+        BrigDetails.objects.create(
+            feature_instance=instance,
+            max_prisoners=BRIG_CAPACITY_PER_LEVEL,
+        )
+        return brig_room, building
+
+    def test_capture_routes_to_brig_when_available(self) -> None:
+        brig_room, building = self._make_brig_in_building()
+        # The captor stands in a room of the same building.
+        captor_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        from evennia_extensions.factories import RoomProfileFactory
+
+        RoomProfileFactory(objectdb=captor_room, area=building.area)
+        character = CharacterFactory(db_key="brig_captive")
+        sheet = CharacterSheetFactory(character=character)
+        character.move_to(captor_room, quiet=True)
+
+        result = apply_effect(self._capture_effect(), ResolutionContext(character=character))
+
+        assert result.applied
+        sheet.refresh_from_db()
+        assert sheet.lifecycle_state == LifecycleState.CAPTURED
+        captivity = Captivity.objects.get(captive=sheet)
+        assert captivity.cell is None
+        assert captivity.holding_room == brig_room
+        assert character.location == brig_room
+
+    def test_capture_falls_back_to_instanced_cell_when_no_brig(self) -> None:
+        # No Brig in the building — falls back to the instanced-cell path.
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.areas.factories import AreaFactory
+        from world.buildings.factories import BuildingFactory
+
+        area = AreaFactory(level=10)
+        BuildingFactory(area=area)
+        captor_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        RoomProfileFactory(objectdb=captor_room, area=area)
+        character = CharacterFactory(db_key="no_brig_captive")
+        sheet = CharacterSheetFactory(character=character)
+        character.move_to(captor_room, quiet=True)
+
+        result = apply_effect(self._capture_effect(), ResolutionContext(character=character))
+
+        assert result.applied
+        captivity = Captivity.objects.get(captive=sheet)
+        assert captivity.cell is not None
+        assert captivity.holding_room is None
+
+    def test_capture_skipped_when_brig_at_capacity(self) -> None:
+        brig_room, building = self._make_brig_in_building()
+        # Fill the Brig to capacity (BRIG_CAPACITY_PER_LEVEL = 2).
+        from evennia_extensions.factories import RoomProfileFactory
+
+        for i in range(2):
+            c = CharacterFactory(db_key=f"filler_{i}")
+            s = CharacterSheetFactory(character=c)
+            capture_character(captive=s, holding_room=brig_room)
+
+        # Now try to capture a third.
+        captor_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        RoomProfileFactory(objectdb=captor_room, area=building.area)
+        character = CharacterFactory(db_key="overflow_captive")
+        sheet = CharacterSheetFactory(character=character)
+        character.move_to(captor_room, quiet=True)
+
+        result = apply_effect(self._capture_effect(), ResolutionContext(character=character))
+
+        assert result.applied is False
+        assert result.skip_reason == "Brig at capacity"
+        assert not Captivity.objects.filter(captive=sheet).exists()
+
+
 class GrantDistinctionHandlerTests(TestCase):
     """Tests for the GRANT_DISTINCTION effect handler (#2037 Decision 7).
 

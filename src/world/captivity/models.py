@@ -47,6 +47,29 @@ class Captivity(SharedMemoryModel):
             "The instanced cell this captive is held in (shared by a captured"
             " party). Goes null when the cell is torn down on resolution — a"
             " resolved captivity outlives its cell so its history survives."
+            " Also null for Brig-path captures (holding_room is set instead)."
+        ),
+    )
+    holding_room = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="held_captivities",
+        help_text=(
+            "The persistent room the captive is held in (e.g. a ship's Brig)."
+            " Null for instanced-cell captures — set when cell is null."
+        ),
+    )
+    return_location = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="return_captivities",
+        help_text=(
+            "Where the captive returns on resolution. Used when cell is null"
+            " (Brig path); falls back to cell.return_location for instanced cells."
         ),
     )
     captor_organization = models.ForeignKey(

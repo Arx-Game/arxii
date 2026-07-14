@@ -18,6 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.mixins import DiscriminatorMixin
 from world.locations.constants import HolderType
 from world.room_features.constants import (
+    BRIG_CAPACITY_PER_LEVEL,
     VAULT_MAX_ITEMS_PER_LEVEL,
     DefenseKind,
     RoomFeatureInstallMechanism,
@@ -754,3 +755,32 @@ class DefenseProgressionDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"DefenseProgression#{self.project_id}: {self.defense_kind} L{self.target_level}"
+
+
+class BrigDetails(SharedMemoryModel):
+    """Per-(BRIG RoomFeatureInstance) details payload (#1862).
+
+    Created when a brig install Project resolves (L1). OneToOne back to
+    RoomFeatureInstance — the install/upgrade flow lives in
+    world.room_features; the per-kind state lives here.
+
+    The brig marks the room as a holding cell for captured characters.
+    Capacity scales by level: max_prisoners = level * BRIG_CAPACITY_PER_LEVEL.
+    """
+
+    feature_instance = models.OneToOneField(
+        "room_features.RoomFeatureInstance",
+        on_delete=models.CASCADE,
+        related_name="brig_details",
+        primary_key=True,
+    )
+    max_prisoners = models.PositiveSmallIntegerField(
+        default=BRIG_CAPACITY_PER_LEVEL,
+        help_text=(
+            "Maximum captives the brig can hold. Scaled by level at install:"
+            " max_prisoners = level * BRIG_CAPACITY_PER_LEVEL."
+        ),
+    )
+
+    def __str__(self) -> str:
+        return f"Brig L{self.feature_instance.level} @ room {self.feature_instance.room_profile_id}"

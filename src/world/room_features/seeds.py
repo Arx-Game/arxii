@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.room_features.constants import (
+    BRIG_MAX_LEVEL,
     SOCIAL_HUB_MAX_LEVEL,
     RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
@@ -393,3 +394,33 @@ def ensure_social_hub_kind() -> RoomFeatureKind:
 
 VAULT_KIND_NAME = "Vault"
 VAULT_MAX_LEVEL = 5
+
+
+BRIG_KIND_NAME = "Brig"
+
+
+def ensure_brig_kind() -> RoomFeatureKind:
+    """Get-or-create the Brig ``RoomFeatureKind`` (#1862).
+
+    A ship's holding cell for captured enemies. Installed via PROJECT
+    mechanism; capacity scales by level. Restricted to Vessel (maritime)
+    buildings — the one ship ``BuildingKind`` today.
+    """
+    from world.ships.seeds import ensure_ship_kind  # noqa: PLC0415
+
+    ship_kind = ensure_ship_kind()
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.BRIG,
+        defaults={
+            "name": BRIG_KIND_NAME,
+            "max_level": BRIG_MAX_LEVEL,
+            "install_mechanism": RoomFeatureInstallMechanism.PROJECT,
+            "description": (
+                "A holding cell for captured enemies. Prisoners are held"
+                " in this room and may be visited by crew. Level scales"
+                " prisoner capacity."
+            ),
+        },
+    )
+    kind.allowed_building_kinds.add(ship_kind)
+    return kind
