@@ -744,7 +744,7 @@ def register_all_tasks() -> None:
 
 
 def _register_late_tasks(roll_and_echo_weather: object) -> None:
-    """Register summons expiry + weather cron tasks (#2050).
+    """Register summons expiry, weather, and area quality cron tasks.
 
     Extracted from ``register_all_tasks`` to keep that function under the
     ruff PLR0915 statement limit.
@@ -795,6 +795,7 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
             description="Settle estates past the window deadline (#1985).",
         )
     )
+    _register_area_quality_decay_task()
 
 
 def _register_room_ward_upkeep_task() -> None:
@@ -845,6 +846,24 @@ def _register_agriculture_tasks() -> None:
                 "Weekly inactivity-detection sweep (#671). Flips activity_state"
                 " ACTIVE↔INACTIVE based on decay_tier and expires HIATUS when"
                 " activity_state_until has passed."
+            ),
+        )
+    )
+
+
+def _register_area_quality_decay_task() -> None:
+    """Register the weekly area quality decay/regain tick (#1889)."""
+    from world.areas.cleanup_services import cleanup_quality_decay_tick
+
+    register_task(
+        CronDefinition(
+            task_key="areas.quality_decay",
+            callable=cleanup_quality_decay_tick,
+            interval=timedelta(days=7),
+            description=(
+                "Weekly area quality sweep: decay above-normal quality "
+                "after CLEANUP_DWELL_DAYS; regain below-normal quality "
+                "after CLEANUP_REGAIN_WEEKS. #1889."
             ),
         )
     )

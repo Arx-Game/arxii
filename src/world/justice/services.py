@@ -138,6 +138,11 @@ def accrue_heat(
         row.value = row.value + amount
         row.save(update_fields=["value", "updated_date"])
         HeatSource.objects.create(heat=row, deed=deed, amount=amount)
+    # #1889 — crime erodes area quality (deferred import to avoid circular).
+    if area is not None:
+        from world.areas.cleanup_services import erode_area_quality  # noqa: PLC0415
+
+        erode_area_quality(area)
     return row
 
 

@@ -718,6 +718,15 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   See [areas.md](areas.md) "Presence & Travel" and "Coordinates" sections.
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
+- **Area Quality (#1889):** `AreaQuality` sidecar (per-Area quality 0-5, 3=Ordinary).
+  Raised by `CLEANUP` TIERED_PERIOD projects (players contribute AP/money/items;
+  graded at deadline into quality-delta tiers). Eroded by crime heat (`accrue_heat`
+  calls `erode_area_quality`) and `OPEN_ENCOUNTER` combat (via `ENCOUNTER_COMPLETED`
+  trigger). Weekly decay sweep (`cleanup_quality_decay_tick`) decays above-normal
+  quality after `CLEANUP_DWELL_DAYS` and regains below-normal after
+  `CLEANUP_REGAIN_WEEKS`. Room descriptions get quality-based suffixes at display
+  time. Contributors earn celestial resonance (via `ProjectKindResonanceAward`) and
+  society reputation (via `bump_society_reputation` with `area.dominant_society`).
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
