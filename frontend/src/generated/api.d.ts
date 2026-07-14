@@ -6220,6 +6220,188 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/estates/bequests/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description CRUD on bequest lines of my own wills. */
+    get: operations['estates_bequests_list'];
+    put?: never;
+    /** @description CRUD on bequest lines of my own wills. */
+    post: operations['estates_bequests_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/estates/bequests/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description CRUD on bequest lines of my own wills. */
+    get: operations['estates_bequests_retrieve'];
+    /** @description CRUD on bequest lines of my own wills. */
+    put: operations['estates_bequests_update'];
+    post?: never;
+    /** @description CRUD on bequest lines of my own wills. */
+    delete: operations['estates_bequests_destroy'];
+    options?: never;
+    head?: never;
+    /** @description CRUD on bequest lines of my own wills. */
+    patch: operations['estates_bequests_partial_update'];
+    trace?: never;
+  };
+  '/api/estates/claims/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Inherited grievances, claimant-only (the holder is never notified). */
+    get: operations['estates_claims_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/estates/claims/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Inherited grievances, claimant-only (the holder is never notified). */
+    get: operations['estates_claims_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/estates/executors/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Tag/untag executors on my own wills. */
+    get: operations['estates_executors_list'];
+    put?: never;
+    /** @description Tag/untag executors on my own wills. */
+    post: operations['estates_executors_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/estates/executors/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Tag/untag executors on my own wills. */
+    get: operations['estates_executors_retrieve'];
+    /** @description Tag/untag executors on my own wills. */
+    put: operations['estates_executors_update'];
+    post?: never;
+    /** @description Tag/untag executors on my own wills. */
+    delete: operations['estates_executors_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Tag/untag executors on my own wills. */
+    patch: operations['estates_executors_partial_update'];
+    trace?: never;
+  };
+  '/api/estates/settlements/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Settlement status for executors (and staff) — feeds the settlement card. */
+    get: operations['estates_settlements_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/estates/settlements/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Settlement status for executors (and staff) — feeds the settlement card. */
+    get: operations['estates_settlements_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/estates/wills/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description CRUD on my own characters' wills; frozen once a settlement opens. */
+    get: operations['estates_wills_list'];
+    put?: never;
+    /** @description CRUD on my own characters' wills; frozen once a settlement opens. */
+    post: operations['estates_wills_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/estates/wills/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description CRUD on my own characters' wills; frozen once a settlement opens. */
+    get: operations['estates_wills_retrieve'];
+    /** @description CRUD on my own characters' wills; frozen once a settlement opens. */
+    put: operations['estates_wills_update'];
+    post?: never;
+    /** @description CRUD on my own characters' wills; frozen once a settlement opens. */
+    delete: operations['estates_wills_destroy'];
+    options?: never;
+    head?: never;
+    /** @description CRUD on my own characters' wills; frozen once a settlement opens. */
+    patch: operations['estates_wills_partial_update'];
+    trace?: never;
+  };
   '/api/events/': {
     parameters: {
       query?: never;
@@ -19102,6 +19284,57 @@ export interface components {
       /** @description CG point cost for selecting this option (added to species cost) */
       cg_point_cost?: number;
     };
+    Bequest: {
+      readonly id: number;
+      will: number;
+      /** @description Execution order within this bequest's kind. */
+      order?: number;
+      kind: components['schemas']['BequestKindEnum'];
+      item?: number | null;
+      /** @description The Area row this Building decorates. Must be level BUILDING. */
+      building?: number | null;
+      business?: number | null;
+      /**
+       * Format: int64
+       * @description Coppers; COIN_AMOUNT bequests only.
+       */
+      amount?: number;
+      recipient_persona?: number | null;
+      recipient_organization?: number | null;
+    };
+    /**
+     * @description * `specific_item` - Specific Item
+     *     * `coin_amount` - Coin Amount
+     *     * `all_coin` - All Remaining Coin
+     *     * `building` - Building
+     *     * `business` - Business
+     *     * `residuary` - Residuary (everything else)
+     * @enum {string}
+     */
+    BequestKindEnum:
+      | 'specific_item'
+      | 'coin_amount'
+      | 'all_coin'
+      | 'building'
+      | 'business'
+      | 'residuary';
+    BequestRequest: {
+      will: number;
+      /** @description Execution order within this bequest's kind. */
+      order?: number;
+      kind: components['schemas']['BequestKindEnum'];
+      item?: number | null;
+      /** @description The Area row this Building decorates. Must be level BUILDING. */
+      building?: number | null;
+      business?: number | null;
+      /**
+       * Format: int64
+       * @description Coppers; COIN_AMOUNT bequests only.
+       */
+      amount?: number;
+      recipient_persona?: number | null;
+      recipient_organization?: number | null;
+    };
     /** @enum {unknown} */
     BlankEnum: '';
     /** @description A block the requesting player owns. */
@@ -22029,6 +22262,38 @@ export interface components {
      * @enum {string}
      */
     EscalatesToRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    EstateClaim: {
+      readonly id: number;
+      settlement: number;
+      item: number;
+      readonly item_name: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    EstateSettlement: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      readonly deceased_name: string;
+      /** Format: date-time */
+      readonly opened_at: string;
+      /**
+       * Format: date-time
+       * @description When the sweeper door auto-settles (opened_at + config window).
+       */
+      deadline: string;
+      status?: components['schemas']['EstateSettlementStatusEnum'];
+      settled_via?: components['schemas']['SettledViaEnum'] | components['schemas']['BlankEnum'];
+      /** Format: date-time */
+      settled_at?: string | null;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `settled` - Settled
+     *     * `parked` - Parked (staff attention)
+     * @enum {string}
+     */
+    EstateSettlementStatusEnum: 'pending' | 'settled' | 'parked';
     /** @description Serializer for creating events. Host is derived from the request. */
     EventCreate: {
       name: string;
@@ -25942,6 +26207,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['Beat'][];
     };
+    PaginatedBequestList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Bequest'][];
+    };
     PaginatedBlockList: {
       /** @example 123 */
       count: number;
@@ -26388,6 +26668,36 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Era'][];
+    };
+    PaginatedEstateClaimList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['EstateClaim'][];
+    };
+    PaginatedEstateSettlementList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['EstateSettlement'][];
     };
     PaginatedEventInvitationList: {
       /** @example 123 */
@@ -28182,6 +28492,36 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['UserStoryMute'][];
     };
+    PaginatedWillExecutorList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['WillExecutor'][];
+    };
+    PaginatedWillList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Will'][];
+    };
     PaginatedWorshippedBeingRefList: {
       /** @example 123 */
       count: number;
@@ -28397,6 +28737,23 @@ export interface components {
       expired_consequences?: number | null;
       /** @description Optional: a MissionTemplate this beat requires (Phase 5b.3 data shape only; engine deferred). SET_NULL on template delete. */
       required_mission?: number | null;
+    };
+    PatchedBequestRequest: {
+      will?: number;
+      /** @description Execution order within this bequest's kind. */
+      order?: number;
+      kind?: components['schemas']['BequestKindEnum'];
+      item?: number | null;
+      /** @description The Area row this Building decorates. Must be level BUILDING. */
+      building?: number | null;
+      business?: number | null;
+      /**
+       * Format: int64
+       * @description Coppers; COIN_AMOUNT bequests only.
+       */
+      amount?: number;
+      recipient_persona?: number | null;
+      recipient_organization?: number | null;
     };
     PatchedBugReportDetailRequest: {
       reporter_persona?: number;
@@ -29688,6 +30045,16 @@ export interface components {
      */
     PatchedVisibilitySettingsRequest: {
       appear_offline?: boolean;
+    };
+    PatchedWillExecutorRequest: {
+      will?: number;
+      persona?: number;
+    };
+    PatchedWillRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet?: number;
+      /** @description Player-authored prose an executor reads aloud at the will-reading. */
+      testament_text?: string;
     };
     /** @description Serializer for Path in CG context. */
     Path: {
@@ -32068,6 +32435,13 @@ export interface components {
      * @enum {string}
      */
     SetsSubjectLifecycleEnum: 'ALIVE' | 'CAPTURED' | 'COMA' | 'RETIRED' | 'DEAD';
+    /**
+     * @description * `funeral` - Funeral
+     *     * `reading` - Will Reading
+     *     * `auto` - Deadline Sweeper
+     * @enum {string}
+     */
+    SettledViaEnum: 'funeral' | 'reading' | 'auto';
     /**
      * @description * `1` - Setback
      *     * `2` - Costly
@@ -34883,6 +35257,34 @@ export interface components {
      * @enum {string}
      */
     WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
+    Will: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      /** @description Player-authored prose an executor reads aloud at the will-reading. */
+      testament_text?: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+      readonly bequests: components['schemas']['Bequest'][];
+      readonly executors: components['schemas']['WillExecutor'][];
+      readonly is_frozen: boolean;
+    };
+    WillExecutor: {
+      readonly id: number;
+      will: number;
+      persona: number;
+      readonly persona_name: string;
+    };
+    WillExecutorRequest: {
+      will: number;
+      persona: number;
+    };
+    WillRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      /** @description Player-authored prose an executor reads aloud at the will-reading. */
+      testament_text?: string;
+    };
     WindowReactInput: {
       /** @description PK of the Persona reacting (must belong to the requester). */
       persona_id: number;
@@ -43104,6 +43506,544 @@ export interface operations {
       };
     };
   };
+  estates_bequests_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `specific_item` - Specific Item
+         *     * `coin_amount` - Coin Amount
+         *     * `all_coin` - All Remaining Coin
+         *     * `building` - Building
+         *     * `business` - Business
+         *     * `residuary` - Residuary (everything else)
+         */
+        kind?: 'all_coin' | 'building' | 'business' | 'coin_amount' | 'residuary' | 'specific_item';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        will?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBequestList'];
+        };
+      };
+    };
+  };
+  estates_bequests_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Bequest'];
+        };
+      };
+    };
+  };
+  estates_bequests_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this bequest. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Bequest'];
+        };
+      };
+    };
+  };
+  estates_bequests_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this bequest. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Bequest'];
+        };
+      };
+    };
+  };
+  estates_bequests_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this bequest. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  estates_bequests_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this bequest. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedBequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Bequest'];
+        };
+      };
+    };
+  };
+  estates_claims_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        settlement?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEstateClaimList'];
+        };
+      };
+    };
+  };
+  estates_claims_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this estate claim. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EstateClaim'];
+        };
+      };
+    };
+  };
+  estates_executors_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        will?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWillExecutorList'];
+        };
+      };
+    };
+  };
+  estates_executors_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WillExecutorRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WillExecutor'];
+        };
+      };
+    };
+  };
+  estates_executors_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this will executor. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WillExecutor'];
+        };
+      };
+    };
+  };
+  estates_executors_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this will executor. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WillExecutorRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WillExecutor'];
+        };
+      };
+    };
+  };
+  estates_executors_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this will executor. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  estates_executors_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this will executor. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedWillExecutorRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WillExecutor'];
+        };
+      };
+    };
+  };
+  estates_settlements_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `pending` - Pending
+         *     * `settled` - Settled
+         *     * `parked` - Parked (staff attention)
+         */
+        status?: 'parked' | 'pending' | 'settled';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEstateSettlementList'];
+        };
+      };
+    };
+  };
+  estates_settlements_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this estate settlement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EstateSettlement'];
+        };
+      };
+    };
+  };
+  estates_wills_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWillList'];
+        };
+      };
+    };
+  };
+  estates_wills_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WillRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Will'];
+        };
+      };
+    };
+  };
+  estates_wills_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this will. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Will'];
+        };
+      };
+    };
+  };
+  estates_wills_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this will. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WillRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Will'];
+        };
+      };
+    };
+  };
+  estates_wills_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this will. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  estates_wills_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this will. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedWillRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Will'];
+        };
+      };
+    };
+  };
   events_list: {
     parameters: {
       query?: {
@@ -47397,9 +48337,7 @@ export interface operations {
   };
   magic_consequence_pool_catalog_list: {
     parameters: {
-      query?: {
-        action_category?: string;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
