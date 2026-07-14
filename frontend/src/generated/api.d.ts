@@ -48337,7 +48337,9 @@ export interface operations {
   };
   magic_consequence_pool_catalog_list: {
     parameters: {
-      query?: never;
+      query?: {
+        action_category?: string;
+      };
       header?: never;
       path?: never;
       cookie?: never;

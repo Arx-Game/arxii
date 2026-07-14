@@ -15167,6 +15167,11 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
+      parameters:
+      - in: query
+        name: action_category
+        schema:
+          type: string
       tags:
       - magic
       security:
