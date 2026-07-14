@@ -229,4 +229,61 @@ class SmearAction(Action):
         )
 
 
+@dataclass
+class RefuteAccusationAction(Action):
+    """Attack an accusation's credibility at a hub — the consentless defense (#1825).
+
+    Thin over ``world.secrets.gossip.refute_accusation``: hub gating, the knowledge
+    requirement, the one-attempt rule, and the partial reputation reversal all live in
+    the service. No consent gate — defending the accused is open (the Tom/Bob/Fred rule).
+    """
+
+    key: str = "refute_accusation"
+    name: str = "Refute"
+    icon: str = "scale-balanced"
+    category: str = "social"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    # PLACEHOLDER cost magnitudes — tuned in a later author pass.
+    ap_cost: int = 1
+    fatigue_cost: int = 1
+    fatigue_category: str = ActionCategory.SOCIAL
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.secrets.gossip import GossipError, refute_accusation  # noqa: PLC0415
+        from world.secrets.models import Secret  # noqa: PLC0415
+
+        secret_id = kwargs.get("secret_id")
+        secret = Secret.objects.filter(pk=secret_id).first() if isinstance(secret_id, int) else None
+        if secret is None:
+            return _ActionResult(success=False, message="There's no such rumor to refute.")
+        room = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        if room is None:
+            return _ActionResult(success=False, message="There's no one here to argue to.")
+        try:
+            result = refute_accusation(actor, secret, room=room)
+        except GossipError as exc:
+            return _ActionResult(success=False, message=exc.user_message)
+        if not result.success:
+            return _ActionResult(
+                success=True,
+                message="PLACEHOLDER Your case fails to land — the rumor keeps its teeth.",
+            )
+        return _ActionResult(
+            success=True,
+            message=(
+                "PLACEHOLDER You pick the story apart in front of everyone. "
+                "Some of the mud washes off its subject."
+            ),
+            data={"secret_id": secret.pk},
+        )
+
+
 mint_accusation = MintAccusationAction()

@@ -52,6 +52,9 @@ _SMEAR_CONSENT_BLOCKED = (
     "They have not opened themselves to being antagonised. "
     "You can't manufacture a scandal against them."
 )
+_NOT_AN_ACCUSATION = "That's not a manufactured scandal — there's nothing to refute."
+_REFUTE_NOT_KNOWN = "You can only dispute a rumor you've actually come into."
+_ALREADY_REFUTED = "You have already made your case against this rumor."
 
 
 class GossipError(Exception):
@@ -258,6 +261,52 @@ def plant_smear(
         went_public=row.went_public,
         surfaced_secret_id=secret.pk,
     )
+
+
+def refute_accusation(character: ObjectDB, secret: Secret, *, room: ObjectDB) -> GossipResult:
+    """Attack an accusation's credibility at a hub — the consentless defense (#1825).
+
+    Anyone holding knowledge of an ACCUSATION secret (or its subject) may make the
+    case against it: a Gossip-composition check vs a level-scaled difficulty. Success
+    applies a **partial** compensating reputation reversal (nullification via the
+    investigation project is the full clear). One attempt per refuter, success or
+    failure — the case has been made. **No consent gate and no skill floor** — the
+    Tom/Bob/Fred rule: defending the accused is open; only naming-and-attacking the
+    author (denounce) needs the author's hostile-consent opt-in.
+    """
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.secrets.constants import (  # noqa: PLC0415
+        REFUTE_BASE_DIFFICULTY,
+        REFUTE_DIFFICULTY_PER_LEVEL,
+        REFUTE_REVERSAL_DENOMINATOR,
+        REFUTE_REVERSAL_NUMERATOR,
+        SecretProvenance,
+    )
+    from world.secrets.models import AccusationRebuttal  # noqa: PLC0415
+    from world.secrets.services import reverse_secret_exposure  # noqa: PLC0415
+
+    _require_hub_region(room)
+    if secret.provenance != SecretProvenance.ACCUSATION:
+        raise GossipError(_NOT_AN_ACCUSATION)
+    if not _can_spread(character, secret):
+        raise GossipError(_REFUTE_NOT_KNOWN)
+    refuter_sheet = character.sheet_data  # type: ignore[attr-defined] — typeclass extension
+    if AccusationRebuttal.objects.filter(secret=secret, refuter_sheet=refuter_sheet).exists():
+        raise GossipError(_ALREADY_REFUTED)
+
+    difficulty = REFUTE_BASE_DIFFICULTY + secret.level * REFUTE_DIFFICULTY_PER_LEVEL
+    result = perform_check(character, _gossip_check_type(), target_difficulty=difficulty)
+    succeeded = result.success_level >= 1
+    AccusationRebuttal.objects.create(
+        secret=secret, refuter_sheet=refuter_sheet, succeeded=succeeded
+    )
+    if succeeded:
+        reverse_secret_exposure(
+            secret,
+            numerator=REFUTE_REVERSAL_NUMERATOR,
+            denominator=REFUTE_REVERSAL_DENOMINATOR,
+        )
+    return GossipResult(success=succeeded, surfaced_secret_id=secret.pk)
 
 
 def seek_gossip(character: ObjectDB, *, room: ObjectDB) -> GossipResult:

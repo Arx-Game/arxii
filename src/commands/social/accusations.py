@@ -16,10 +16,12 @@ from commands.exceptions import CommandError
 
 # The switch that routes a bare accusation into the criminal (heat-bearing) path.
 CRIME_SWITCH = "crime"
+# The switch that attacks an existing accusation's credibility (the defense, #1825).
+REFUTE_SWITCH = "refute"
 
 
 class CmdAccuse(ArxCommand):
-    """Manufacture a false scandal against another character.
+    """Manufacture a false scandal against another character — or pick one apart.
 
     Only works against someone who has opened themselves to antagonism (their consent
     settings). Falsity is emergent — a leaked accusation mints heat and reputation like a
@@ -30,14 +32,65 @@ class CmdAccuse(ArxCommand):
     This files a *wild* accusation — a claim with no real crime underneath, so it's the
     fragile, easily-refuted kind.
 
+    With ``/refute`` you attack a manufactured scandal you've come into, at a social
+    hub — anyone may defend the accused; no consent needed. Bare ``accuse/refute``
+    lists the scandals you could dispute. One attempt each.
+
     Usage:
         accuse <character> = <the claim>
         accuse/crime <character> = <crime-kind> : <the claim>
+        accuse/refute [<#>]
     """
 
     key = "accuse"
     locks = "cmd:all()"
     action = MintAccusationAction()
+
+    def _execute(self) -> None:
+        if REFUTE_SWITCH in self.switches:
+            self._refute((self.args or "").strip())
+            return
+        super()._execute()
+
+    def _refutable_secrets(self) -> list[Any]:
+        """The ACCUSATION secrets this character has come into (recent first)."""
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+        from world.secrets.constants import SecretProvenance  # noqa: PLC0415
+        from world.secrets.services import known_secrets_for  # noqa: PLC0415
+
+        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            return []
+        try:
+            entry = sheet.roster_entry
+        except RosterEntry.DoesNotExist:
+            return []
+        held = known_secrets_for(entry).filter(secret__provenance=SecretProvenance.ACCUSATION)
+        return [knowledge.secret for knowledge in held]
+
+    def _refute(self, arg: str) -> None:
+        from actions.definitions.accusations import RefuteAccusationAction  # noqa: PLC0415
+
+        secrets = self._refutable_secrets()
+        if not arg:
+            if not secrets:
+                self.msg("You hold no manufactured scandals worth disputing.")
+                return
+            lines = ["|wScandals you could refute:|n"]
+            lines += [f"  {index}. {secret.content}" for index, secret in enumerate(secrets, 1)]
+            lines.append("Use |waccuse/refute <#>|n at a social hub to make your case.")
+            self.msg("\n".join(lines))
+            return
+        try:
+            position = int(arg) - 1
+        except (ValueError, TypeError):
+            usage = "Usage: accuse/refute [<#>]"
+            raise CommandError(usage) from None
+        if not 0 <= position < len(secrets):
+            self.msg(f"No scandal #{arg}. See |waccuse/refute|n for the list.")
+            return
+        result = RefuteAccusationAction().run(self.caller, secret_id=secrets[position].pk)
+        self.msg(result.message)
 
     def resolve_action_args(self) -> dict[str, Any]:
         raw = (self.args or "").strip()

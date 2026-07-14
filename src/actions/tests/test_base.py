@@ -464,10 +464,12 @@ class ActionRegistryTests(TestCase):
             "depart_voyage",
             # #2295 — voluntary asset sharing: introduce an owned asset to an ally.
             "introduce_asset",
-            # #1825 — accusation counter-play: evidence moves + the one-move smear.
+            # #1825 — accusation counter-play: evidence moves, the one-move smear,
+            # and the consentless defense.
             "gather_evidence",
             "dispose_evidence",
             "smear_accusation",
+            "refute_accusation",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

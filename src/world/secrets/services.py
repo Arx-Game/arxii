@@ -432,6 +432,45 @@ def expose_secret(secret: Secret, *, societies: Iterable[Society]) -> SecretExpo
     )
 
 
+def reverse_secret_exposure(secret: Secret, *, numerator: int = 1, denominator: int = 1) -> None:
+    """Apply compensating reputation bumps for a secret's prior exposure (#1825).
+
+    The disprove seam refutation (partial) and nullification (full) share: re-derives
+    what ``expose_secret`` applied — the diffuse archetype deltas against every society
+    in ``societies_exposed`` and the relational hits on organization victims — and bumps
+    the negation, scaled by ``numerator/denominator`` (integer floor). ``societies_exposed``
+    is left untouched: the secret *was* exposed; the world just stops believing it.
+
+    NOT idempotent — a re-run compensates again. Callers own the once-only guard
+    (``AccusationRebuttal`` uniqueness; the nullification record).
+    """
+    from world.societies.renown import (  # noqa: PLC0415 — cross-app, avoid cycle at load
+        bump_organization_reputation,
+        bump_society_reputation,
+        compute_archetype_society_delta,
+    )
+
+    persona = secret.subject_sheet.primary_persona
+    if persona is None:
+        return
+    societies = list(secret.societies_exposed.all())
+    if not societies:
+        return
+    archetypes = list(secret.archetypes.all())
+    if archetypes:
+        for society in societies:
+            delta = compute_archetype_society_delta(archetypes, society)
+            if delta:
+                bump_society_reputation(persona, society, -(delta * numerator // denominator))
+    default_severity = DEFAULT_VICTIM_SEVERITY_BY_LEVEL.get(secret.level, 0)
+    for victim in secret.victims.select_related("organization"):
+        if victim.organization_id:
+            severity = victim.severity if victim.severity is not None else default_severity
+            bump_organization_reputation(
+                persona, victim.organization, severity * numerator // denominator
+            )
+
+
 # --- Listing (shared by the web viewset + the telnet +secrets command) -------------------
 # Sort keys, mapped to ordering tuples. Same keys for both shelves; the field paths differ
 # because "your own" lists Secret rows and "known about others" lists SecretKnowledge rows.

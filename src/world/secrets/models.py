@@ -445,3 +445,43 @@ class Leverage(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"leverage {self.holder_sheet_id} over {self.subject_sheet_id}"
+
+
+class AccusationRebuttal(SharedMemoryModel):
+    """One character's public case against an accusation's credibility (#1825).
+
+    Refuting at a hub is the consentless *defense* of the accused (the Tom/Bob/Fred
+    rule: anyone may clear the subject's name; only turning it back on the author is
+    consent-gated). One attempt per refuter per accusation — success or failure, the
+    case has been made. A successful rebuttal applies a partial compensating
+    reputation reversal; the full clear is nullification via investigation.
+    """
+
+    secret = models.ForeignKey(
+        Secret,
+        on_delete=models.CASCADE,
+        related_name="rebuttals",
+        help_text="The ACCUSATION secret whose credibility was attacked.",
+    )
+    refuter_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="accusation_rebuttals",
+    )
+    succeeded = models.BooleanField()
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["secret", "refuter_sheet"],
+                name="uniq_rebuttal_secret_refuter",
+            ),
+        ]
+        ordering = ["-created_date"]
+        verbose_name = "Accusation rebuttal"
+        verbose_name_plural = "Accusation rebuttals"
+
+    def __str__(self) -> str:
+        outcome = "succeeded" if self.succeeded else "failed"
+        return f"rebuttal of secret {self.secret_id} by sheet {self.refuter_sheet_id} ({outcome})"
