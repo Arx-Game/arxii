@@ -142,6 +142,16 @@ class Covenant(SharedMemoryModel):
             "ensure_court_grant_role()."
         ),
     )
+    provisioning_ratio = models.FloatField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Army food provisioning ratio at mobilization (0.0-1.0). "
+            "Null when not provisioned or stood down. Set by provision_army(), "
+            "cleared by stand_down_battle_covenant(). (#2375)"
+        ),
+    )
 
     def save(self, *args: object, **kwargs: object) -> None:
         if self.organization_id is None:

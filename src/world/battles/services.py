@@ -248,6 +248,20 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         strength += bonus.strength_bonus
         morale += bonus.morale_bonus
 
+    # Apply provisioning penalty if the side's covenant has a shortfall (#2375).
+    if side.covenant_id is not None:
+        covenant = side.covenant
+        if covenant.provisioning_ratio is not None and covenant.provisioning_ratio < 1.0:
+            from world.agriculture.services import get_food_config  # noqa: PLC0415
+
+            config = get_food_config()
+            shortfall = 1.0 - covenant.provisioning_ratio
+            morale = max(1, morale - round(shortfall * config.max_provisioning_morale_penalty))
+            strength = max(
+                1,
+                strength - round(shortfall * config.max_provisioning_strength_penalty),
+            )
+
     mu = MilitaryUnit.objects.create(
         name=name,
         descriptor=descriptor,

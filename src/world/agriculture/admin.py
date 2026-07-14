@@ -41,4 +41,7 @@ class FoodConfigAdmin(admin.ModelAdmin):
         "shortage_unrest_penalty",
         "shortage_prosperity_penalty",
         "granary_capacity_per_level",
+        "army_food_per_member",
+        "max_provisioning_morale_penalty",
+        "max_provisioning_strength_penalty",
     ]
