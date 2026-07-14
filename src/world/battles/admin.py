@@ -25,9 +25,14 @@ from world.battles.models import (
     CityDefenseDetails,
     CityDefenseIntegrityBonus,
     CityDefenseTierThreshold,
+    CovenantMilitaryReadiness,
     Fortification,
+    ReadinessThreshold,
     TechniquePropertyAffinity,
     TerrainPropertyEffect,
+    WarFundingDetails,
+    WarFundingTierBonus,
+    WarFundingTierThreshold,
     WeatherTypeCapabilityChallenge,
     WeatherTypePropertyEffect,
 )
@@ -182,3 +187,46 @@ class CityDefenseIntegrityBonusAdmin(admin.ModelAdmin):
     list_display = ("outcome_tier", "integrity_bonus")
     raw_id_fields = ("outcome_tier",)
     ordering = ("-outcome_tier__success_level",)
+
+
+class WarFundingTierThresholdInline(admin.TabularInline):
+    model = WarFundingTierThreshold
+    extra = 0
+    raw_id_fields = ("outcome_tier",)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("outcome_tier")
+
+
+@admin.register(WarFundingDetails)
+class WarFundingDetailsAdmin(admin.ModelAdmin):
+    list_display = ("project", "covenant", "outcome_tier", "applied_at")
+    raw_id_fields = ("project", "covenant", "outcome_tier")
+    search_fields = ("project__description",)
+    inlines = [WarFundingTierThresholdInline]
+
+
+@admin.register(WarFundingTierBonus)
+class WarFundingTierBonusAdmin(admin.ModelAdmin):
+    list_display = (
+        "outcome_tier",
+        "quality_steps",
+        "strength_bonus",
+        "morale_bonus",
+        "training_xp",
+    )
+    raw_id_fields = ("outcome_tier",)
+    ordering = ("-outcome_tier__success_level",)
+
+
+@admin.register(CovenantMilitaryReadiness)
+class CovenantMilitaryReadinessAdmin(admin.ModelAdmin):
+    list_display = ("covenant", "training_level", "updated_at")
+    raw_id_fields = ("covenant",)
+
+
+@admin.register(ReadinessThreshold)
+class ReadinessThresholdAdmin(admin.ModelAdmin):
+    list_display = ("min_training_level", "bonus_quality_steps")
+    ordering = ("-min_training_level",)
