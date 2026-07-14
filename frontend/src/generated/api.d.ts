@@ -18470,6 +18470,7 @@ export interface components {
       readonly form_name: string | null;
       readonly has_combat_profile: boolean;
       readonly has_techniques: boolean;
+      readonly resonance_name: string | null;
       readonly is_active: boolean;
     };
     /**
