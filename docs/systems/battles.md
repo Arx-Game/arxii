@@ -1488,3 +1488,48 @@ the bonus.
 
 **Registration:** `battles/apps.py ready()` registers the kind handler +
 tiered resolver. Pattern mirrors GANG_TURF (`world/societies/gang_turf.py`).
+
+## War Funding Preparation (#1890)
+
+A `WAR_FUNDING` project kind (`TIERED_PERIOD`) that models a covenant's
+military preparation drive before mustering troops. A covenant leader opens the
+project; members contribute AP/money/checks during the window; at the deadline,
+accumulated progress is graded into a `CheckOutcome` tier via
+`WarFundingTierThreshold` rows. The handler stores the tier on
+`WarFundingDetails` and adds training XP to `CovenantMilitaryReadiness`. When
+units are later mustered into a battle for that covenant, `add_unit` reads the
+combined bonus via `get_war_funding_bonus` and upgrades the `MilitaryUnit`'s
+quality/strength/morale.
+
+Decoupled from the battle lifecycle — the project grades at its deadline
+regardless of whether a battle exists yet. The read seam is
+`get_war_funding_bonus(covenant)`, called by `add_unit` when
+`side.covenant` is set.
+
+**Models** (`world/battles/models.py`):
+- `WarFundingDetails` — OneToOne→Project (PK): `covenant` FK, `outcome_tier` FK
+  (null until graded), `applied_at` (idempotency guard).
+- `WarFundingTierThreshold` — progress band → CheckOutcome tier (mirrors
+  `CityDefenseTierThreshold`).
+- `WarFundingTierBonus` — extends `OutcomeTierAward`; four fields per tier:
+  `quality_steps` (0-2), `strength_bonus`, `morale_bonus`, `training_xp`.
+  Staff-tunable DB row; missing row yields zeros.
+- `CovenantMilitaryReadiness` — OneToOne→Covenant; `training_level`
+  (accumulated across projects). Persistent covenant military training state.
+- `ReadinessThreshold` — global (not per-covenant) training-level band →
+  `bonus_quality_steps`. Staff-tunable; seeded with 0→0, 75→1, 200→2 defaults.
+
+**Services** (`world/battles/war_funding_services.py`):
+- `start_war_funding_project(*, covenant, owner_persona, period_days, tier_thresholds)`
+  — gated on `CharacterCovenantRole` with `rank.can_lead_rituals=True`,
+  `engaged=True`, `left_at__isnull=True`.
+- `resolve_war_funding(project)` — tiered resolver
+- `complete_war_funding(project, outcome_tier)` — kind handler (idempotent,
+  updates `CovenantMilitaryReadiness.training_level`)
+- `get_war_funding_bonus(covenant)` → `WarFundingBonus` dataclass — read seam
+  for `add_unit`. Combines per-tier bonus + readiness-gated quality steps.
+- `_apply_quality_steps(base_quality, steps)` — walks UnitQuality ordering,
+  clamps at ELITE.
+
+**Registration:** `battles/apps.py ready()` registers the kind handler +
+tiered resolver. Pattern mirrors CITY_DEFENSE.
