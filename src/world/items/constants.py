@@ -52,6 +52,7 @@ class OwnershipEventType(models.TextChoices):
     GIVEN = "given", "Given"
     STOLEN = "stolen", "Stolen"
     TRANSFERRED = "transferred", "Transferred"
+    INHERITED = "inherited", "Inherited"  # estate settlement moved it to an heir (#1985)
     ACTIVATED = "activated", "Activated"  # consumable used (e.g. permit redeemed)
     CONSUMED = "consumed", "Consumed"  # item destroyed by use (e.g. permit absorbed into project)
 
@@ -65,6 +66,7 @@ PROVENANCE_EVENT_TYPES = frozenset(
         OwnershipEventType.GIVEN,
         OwnershipEventType.STOLEN,
         OwnershipEventType.TRANSFERRED,
+        OwnershipEventType.INHERITED,
     }
 )
 
