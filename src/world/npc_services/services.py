@@ -278,6 +278,10 @@ def _is_offer_eligible(  # noqa: PLR0911, PLR0913
         offer=offer, persona=persona
     ):
         return False
+    if offer.kind == OfferKind.ASSET_TASK_COLLECT.value and not _asset_has_collectable_income(
+        persona=persona
+    ):
+        return False
     ctx = CharacterPredicateContext(character, presented_persona=persona)
     return evaluate(offer.eligibility_rule or {}, ctx)
 
@@ -306,6 +310,23 @@ def _intel_pool_has_unheld_clues(*, offer: NPCServiceOffer, persona: Persona) ->
     )
     pool_clue_ids = set(details.clue_pool.entries.values_list("clue_id", flat=True))
     return bool(pool_clue_ids - held_clue_ids)
+
+
+def _asset_has_collectable_income(*, persona: Persona) -> bool:
+    """Check whether the promoter has an active asset with uncollected_pool > 0 (#2294).
+
+    Returns False (offer ineligible) when no active asset exists or the pool
+    is empty. Fails closed on missing data, consistent with
+    ``_intel_pool_has_unheld_clues``.
+    """
+    from world.assets.constants import AssetStatus  # noqa: PLC0415
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+
+    return NPCAsset.objects.filter(
+        promoter_persona=persona,
+        status=AssetStatus.ACTIVE,
+        uncollected_pool__gt=0,
+    ).exists()
 
 
 def _mission_gates_pass(  # noqa: PLR0911

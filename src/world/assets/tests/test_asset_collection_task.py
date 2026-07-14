@@ -92,3 +92,30 @@ class AssetTaskCollectHandlerTests(EvenniaTestCase):
         result = dispatch_offer_effect(self.offer, self.promoter)
 
         self.assertIn("nothing", result.message.lower())
+
+    def test_collect_offer_hidden_when_pool_empty(self) -> None:
+        """When uncollected_pool is 0, the offer is ineligible (hidden)."""
+        from world.npc_services.services import available_offers, start_interaction
+
+        self.asset.uncollected_pool = 0
+        self.asset.save(update_fields=["uncollected_pool"])
+
+        session = start_interaction(
+            role=self.role,
+            persona=self.promoter,
+            character=self.character,
+        )
+        offers = available_offers(session)
+        self.assertNotIn(self.offer, offers)
+
+    def test_collect_offer_shown_when_pool_has_money(self) -> None:
+        """When uncollected_pool > 0, the offer is eligible (shown)."""
+        from world.npc_services.services import available_offers, start_interaction
+
+        session = start_interaction(
+            role=self.role,
+            persona=self.promoter,
+            character=self.character,
+        )
+        offers = available_offers(session)
+        self.assertIn(self.offer, offers)
