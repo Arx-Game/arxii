@@ -39,7 +39,7 @@ class InvestigationCheckSeedTests(TestCase):
 
 
 class LockpickingCheckSeedTests(TestCase):
-    """Lockpicking CheckType seed — wits + Larceny (#2176)."""
+    """Lockpicking CheckType seed — wits + Skulduggery (#2176)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -57,8 +57,8 @@ class LockpickingCheckSeedTests(TestCase):
                 "trait__name", flat=True
             )
         )
-        self.assertEqual(trait_names, {"wits", "Larceny"})
-        self.assertEqual(Trait.objects.get(name="Larceny").trait_type, TraitType.SKILL)
+        self.assertEqual(trait_names, {"wits", "Skulduggery"})
+        self.assertEqual(Trait.objects.get(name="Skulduggery").trait_type, TraitType.SKILL)
         self.assertEqual(Trait.objects.get(name="wits").trait_type, TraitType.STAT)
 
     def test_ensure_lockpicking_check_is_idempotent(self) -> None:

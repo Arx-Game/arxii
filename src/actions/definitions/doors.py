@@ -6,7 +6,7 @@ key-item gated (user decision, spec #1866): the simplest option reusing the
 existing room-ownership substrate.
 
 ``PickLockAction`` and ``BreakExitAction`` (#2176) are the intruder path past
-those locks: pick is quiet and check-gated (Wits + Larceny), break is loud
+those locks: pick is quiet and check-gated (Wits + Skulduggery), break is loud
 and always succeeds but damages building condition. Both leave crime-tagged
 Legend deeds.
 """
@@ -170,7 +170,7 @@ def _record_breakin_deed(
 
 @dataclass
 class PickLockAction(Action):
-    """Pick a locked exit — quiet, check-gated (Wits + Larceny).
+    """Pick a locked exit — quiet, check-gated (Wits + Skulduggery).
 
     On success, unlocks the exit (``db.locked = False``). Either way,
     creates a concealed Legend deed tagged with the ``burglary`` CrimeKind

@@ -1,10 +1,15 @@
 """Security check content seed (#2180) — stealth, intrusion, and escape checks.
 
-Seeds two new skills (Larceny, Athletics) with their specializations
-(Lockpicking, Climbing) and four new CheckType compositions. The existing
-"Stealth" CheckType (seeded by stealth_checks.py) is reused for SNEAK —
-this seed ensures its composition is correct but does not create a
-duplicate.
+Seeds two skills (Skulduggery, Athletics) with their specializations and the
+security + criminal CheckType compositions. The existing "Stealth" CheckType
+(seeded by stealth_checks.py) is reused for SNEAK — this seed ensures its
+composition is correct but does not create a duplicate.
+
+Skulduggery was born "Larceny" (#2180) and renamed with its criminal
+specializations for the accusation counter-play (#1825);
+:func:`rename_larceny_to_skulduggery` converges pre-rename DBs in place so
+every FK (specializations, check compositions, character trait values)
+survives the rename.
 
 Authoritative + idempotent: each CheckType's composition is rewritten on
 each run (delete + recreate CheckTypeTrait / CheckTypeSpecialization) so a
@@ -17,25 +22,36 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+_SKULDUGGERY_TOOLTIP = "Surreptitious manipulation — locks, pockets, and mechanisms."
+
 # (skill name, tooltip) — the two physical skills the security checks roll through.
 _SECURITY_SKILLS: list[tuple[str, str]] = [
-    ("Larceny", "Surreptitious manipulation — locks, pockets, and mechanisms."),
+    ("Skulduggery", _SKULDUGGERY_TOOLTIP),
     ("Athletics", "Running, climbing, jumping, and feats of physical force."),
 ]
 
-# (specialization name, parent skill name)
+# (specialization name, parent skill name) — the criminal five joined in #1825.
 _SECURITY_SPECIALIZATIONS: list[tuple[str, str]] = [
-    ("Lockpicking", "Larceny"),
+    ("Lockpicking", "Skulduggery"),
+    ("Pickpocketing", "Skulduggery"),
+    ("Streetwise", "Skulduggery"),
+    ("Disguise", "Skulduggery"),
+    ("Forgery", "Skulduggery"),
+    ("Sleight of Hand", "Skulduggery"),
     ("Climbing", "Athletics"),
 ]
 
 # CheckType name -> (stat trait name, parent skill name, specialization | None, category name).
 # Stat categories: wits=MENTAL, strength=PHYSICAL, agility=PHYSICAL, perception=META.
 _SECURITY_CHECK_COMPOSITION: dict[str, tuple[str, str, str | None, str]] = {
-    "Lockpick": ("wits", "Larceny", "Lockpicking", "Physical"),
+    "Lockpick": ("wits", "Skulduggery", "Lockpicking", "Physical"),
     "Break and Enter": ("strength", "Athletics", None, "Physical"),
     "Escape Through Window": ("agility", "Athletics", "Climbing", "Physical"),
     "Guard Detection": ("perception", "Investigation", None, "Exploration"),
+    # #1825 accusation counter-play — the evidence pipeline's three checks.
+    "Forge Evidence": ("wits", "Skulduggery", "Forgery", "Physical"),
+    "Gather Evidence": ("wits", "Skulduggery", None, "Physical"),
+    "Scrutinize Evidence": ("perception", "Investigation", None, "Exploration"),
 }
 
 # Stat name -> TraitCategory (matches canonical stat seeds).
@@ -107,12 +123,38 @@ def _ensure_stat_trait(name: str) -> object:
     return trait
 
 
+def rename_larceny_to_skulduggery() -> None:
+    """Converge a pre-#1825 DB: rename the Larceny trait to Skulduggery in place.
+
+    An in-place ``update`` preserves the trait's pk, so every FK (specializations,
+    check compositions, character trait values) survives. No-op once a Skulduggery
+    trait exists (fresh DBs, already-renamed DBs).
+    """
+    from world.traits.models import Trait  # noqa: PLC0415
+
+    if Trait.objects.filter(name="Skulduggery").exists():
+        return
+    # Instance-level save, NOT queryset .update(): Trait is a SharedMemoryModel, and a
+    # queryset update would leave the identity-mapped instance holding the old name in
+    # memory (a later .save() on it would write "Larceny" back over the rename).
+    for trait in Trait.objects.filter(name="Larceny"):
+        trait.name = "Skulduggery"
+        trait.save(update_fields=["name"])
+
+
+def ensure_skulduggery_skill() -> object:
+    """Seed (or converge) the Skulduggery Skill — the shared entry other seeds call."""
+    rename_larceny_to_skulduggery()
+    return _ensure_skill("Skulduggery", _SKULDUGGERY_TOOLTIP)
+
+
 def ensure_security_skills() -> dict[str, object]:
-    """Seed the Larceny + Athletics Skill rows (+ their backing SKILL Traits).
+    """Seed the Skulduggery + Athletics Skill rows (+ their backing SKILL Traits).
 
     Also ensures the Investigation skill exists (seeded by investigation_checks.py,
     but we call get_or_create so this seed is self-sufficient in test setups).
     """
+    rename_larceny_to_skulduggery()
     skills: dict[str, object] = {}
     for name, tooltip in _SECURITY_SKILLS:
         skills[name] = _ensure_skill(name, tooltip)
@@ -176,7 +218,7 @@ def ensure_security_check_compositions(
 
 
 def seed_security_check_content() -> None:
-    """Cluster entry — seed Larceny/Athletics skills + security check compositions (#2180)."""
+    """Cluster entry — Skulduggery/Athletics skills + security/criminal checks (#2180, #1825)."""
     skills = ensure_security_skills()
     specs = ensure_security_specializations(skills)
     ensure_security_check_compositions(skills, specs)

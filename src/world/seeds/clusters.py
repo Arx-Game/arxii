@@ -369,7 +369,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "domain_dev": _seed_domain_dev,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,
-    # Security: Larceny/Athletics skills + lockpick/break/escape/guard-detection
+    # Security: Skulduggery(né Larceny)/Athletics skills + lockpick/break/escape/guard-detection
     # CheckTypes (#2180). After "stealth" (reuses its Stealth skill for SNEAK)
     # and "investigation" (reuses its Investigation skill for Guard Detection).
     "security": _seed_security,
