@@ -2769,6 +2769,7 @@
 - `accrue_monthly_interest(organization: 'Organization') -> 'int' — One month's interest lands in arrears (#927). Returns total accrued.`
 - `can_spend_treasury(treasury: 'OrganizationTreasury', persona: 'Persona') -> 'bool' — Spend authority: an active membership at tier <= spend_rank_max.`
 - `collect_org_income(*, organization: 'Organization', character) -> 'CollectionResult' — One active collection dispatch across every pooled stream of ``organization`` (#930).`
+- `collect_asset_income(*, asset, character_sheet) -> 'CollectionResult' — One active collection of a personal asset's accumulated income (#2294).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' — Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
 - `extend_loan(*, creditor: 'Organization', debtor: 'Organization', principal: 'int', interest_bps_monthly: 'int' = 50, fiat: 'bool' = False) -> 'DebtInstrument' — Create a loan: principal moves creditor→debtor, instrument records it (#927).`
 - `format_coppers(amount: int) -> str — Canonical mixed display: ``1234`` → ``"12g 3s 4c"``.`

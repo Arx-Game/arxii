@@ -19,6 +19,7 @@ class AssetsConfig(AppConfig):
             promote_as_informant,
             promote_as_minor_ally,
             promote_as_personal_favor,
+            run_asset_collect_task,
             run_asset_intel_task,
         )
         from world.npc_services.constants import OfferKind  # noqa: PLC0415
@@ -33,3 +34,6 @@ class AssetsConfig(AppConfig):
         register_offer_effect_handler(str(OfferKind.FAN.value), promote_as_fan)
         register_offer_effect_handler(str(OfferKind.MINOR_ALLY.value), promote_as_minor_ally)
         register_offer_effect_handler(str(OfferKind.ASSET_TASK_INTEL.value), run_asset_intel_task)
+        register_offer_effect_handler(
+            str(OfferKind.ASSET_TASK_COLLECT.value), run_asset_collect_task
+        )

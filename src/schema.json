@@ -44761,6 +44761,7 @@ components:
             * `fan` - Fan
             * `minor_ally` - Minor Ally
             * `asset_task_intel` - Asset Task: Intel
+            * `asset_task_collect` - Asset Task: Collect
         label:
           type: string
           description: UI display text for the menu option.
@@ -44836,6 +44837,7 @@ components:
       - fan
       - minor_ally
       - asset_task_intel
+      - asset_task_collect
       type: string
       description: |-
         * `permit` - Permit
@@ -44851,6 +44853,7 @@ components:
         * `fan` - Fan
         * `minor_ally` - Minor Ally
         * `asset_task_intel` - Asset Task: Intel
+        * `asset_task_collect` - Asset Task: Collect
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -44875,6 +44878,7 @@ components:
             * `fan` - Fan
             * `minor_ally` - Minor Ally
             * `asset_task_intel` - Asset Task: Intel
+            * `asset_task_collect` - Asset Task: Collect
         label:
           type: string
           minLength: 1
@@ -51205,6 +51209,7 @@ components:
             * `fan` - Fan
             * `minor_ally` - Minor Ally
             * `asset_task_intel` - Asset Task: Intel
+            * `asset_task_collect` - Asset Task: Collect
         label:
           type: string
           minLength: 1

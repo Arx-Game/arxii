@@ -10,7 +10,7 @@ from world.npc_services.models import NPCServiceOffer
 
 
 class EnsureAssetPromotionContentTests(TestCase):
-    def test_seeds_six_offers_on_one_role(self) -> None:
+    def test_seeds_seven_offers_on_one_role(self) -> None:
         role = ensure_asset_promotion_content()
         offers = NPCServiceOffer.objects.filter(role=role)
         kinds = set(offers.values_list("kind", flat=True))
@@ -23,13 +23,14 @@ class EnsureAssetPromotionContentTests(TestCase):
                 OfferKind.GUARD.value,
                 OfferKind.FAN.value,
                 OfferKind.MINOR_ALLY.value,
+                OfferKind.ASSET_TASK_COLLECT.value,
             },
         )
 
     def test_idempotent(self) -> None:
         ensure_asset_promotion_content()
         role = ensure_asset_promotion_content()
-        self.assertEqual(NPCServiceOffer.objects.filter(role=role).count(), 6)
+        self.assertEqual(NPCServiceOffer.objects.filter(role=role).count(), 7)
 
     def test_offers_reuse_existing_check_types_not_new_ones(self) -> None:
         ensure_asset_promotion_content()
@@ -51,5 +52,18 @@ class EnsureAssetPromotionContentTests(TestCase):
                 OfferKind.GUARD.value: "Intimidation",
                 OfferKind.FAN.value: "Gossip",
                 OfferKind.MINOR_ALLY.value: "Domain Investment",
+                OfferKind.ASSET_TASK_COLLECT.value: "Tax Collection",
             },
         )
+
+    def test_collect_offer_seeded_with_tax_collection_check(self) -> None:
+        """The collect offer is seeded with the Tax Collection check type."""
+        ensure_asset_promotion_content()
+        collect_offer = NPCServiceOffer.objects.filter(
+            kind=OfferKind.ASSET_TASK_COLLECT.value
+        ).first()
+        self.assertIsNotNone(collect_offer)
+        self.assertEqual(collect_offer.draw_mode, "menu")
+        self.assertTrue(collect_offer.is_final)
+        self.assertIsNotNone(collect_offer.check_type)
+        self.assertEqual(collect_offer.check_type.name, "Tax Collection")

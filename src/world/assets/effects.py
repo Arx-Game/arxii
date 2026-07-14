@@ -244,3 +244,68 @@ def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResu
         message=f"Your asset brings back word: {drawn_clue.name}.",
         payload={"clue_pk": drawn_clue.pk, "asset_pk": asset.pk},
     )
+
+
+@transaction.atomic
+def run_asset_collect_task(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """ASSET_TASK_COLLECT effect handler (#2294).
+
+    Resolves the active NPCAsset owned by the interacting persona, then
+    collects its accumulated income via ``collect_asset_income``. The check
+    outcome band decides how much of the pooled money arrives — catastrophe
+    loses the entire pool. Money lands in the PC's CharacterPurse via
+    ``transfer`` with a CurrencyTransfer audit row.
+
+    Catches ``ValidationError`` from a zero-pool race (the eligibility gate
+    checks ``uncollected_pool > 0`` at menu-display time, but a concurrent
+    collection could zero it before dispatch) and returns a graceful
+    failure EffectResult, mirroring the org ``run_collection`` handler.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.assets.constants import AssetStatus  # noqa: PLC0415
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+    from world.currency.constants import format_coppers  # noqa: PLC0415
+    from world.currency.services import collect_asset_income  # noqa: PLC0415
+
+    asset = NPCAsset.objects.filter(
+        promoter_persona=persona,
+        status=AssetStatus.ACTIVE,
+    ).first()
+    if asset is None:
+        return EffectResult(
+            kind=offer.kind,
+            message="This asset is not available for tasking.",
+        )
+
+    try:
+        result = collect_asset_income(asset=asset, character_sheet=persona.character_sheet)
+    except ValidationError:
+        return EffectResult(
+            kind=offer.kind,
+            message="Your asset has nothing to collect right now.",
+            payload={"asset_pk": asset.pk},
+        )
+
+    if result.catastrophe:
+        message = (
+            "Word comes back ugly: the collection was set upon and "
+            f"the take is gone. {format_coppers(result.gathered)} lost."
+        )
+    elif result.stolen > 0:
+        message = (
+            f"Your asset returns light: {format_coppers(result.landed)} "
+            f"banked of {format_coppers(result.gathered)} gathered; the rest went missing."
+        )
+    else:
+        message = f"The collection went smoothly: {format_coppers(result.landed)} banked."
+    return EffectResult(
+        kind=offer.kind,
+        message=message,
+        payload={
+            "asset_pk": asset.pk,
+            "gathered": result.gathered,
+            "landed": result.landed,
+            "catastrophe": result.catastrophe,
+        },
+    )
