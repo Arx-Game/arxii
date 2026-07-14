@@ -294,3 +294,116 @@ class ResolveCaptureSetupTests(TestCase):
         assert setup.rescue_template is None
         assert setup.cell_name == ""
         assert setup.cell_description == ""
+
+
+class BrigHoldingRoomCaptureTests(TestCase):
+    """Tests for the Brig holding_room capture path (#1862)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.brig_room = ObjectDB.objects.create(
+            db_key="Ship Brig",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        cls.return_room = ObjectDB.objects.create(
+            db_key="Capture Site",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+    def test_capture_to_holding_room_sets_holding_room_and_skips_instance(self) -> None:
+        captive = CharacterSheetFactory()
+
+        captivity = capture_character(
+            captive=captive,
+            holding_room=self.brig_room,
+            return_location=self.return_room,
+        )
+
+        assert captivity.status == CaptivityStatus.HELD
+        assert captivity.cell is None
+        assert captivity.holding_room == self.brig_room
+        assert captivity.return_location == self.return_room
+        captive.refresh_from_db()
+        assert captive.lifecycle_state == LifecycleState.CAPTURED
+        assert captive.character.location == self.brig_room
+        assert not InstancedRoom.objects.exists()
+
+    def test_resolve_captivity_from_holding_room_relocates_to_return_location(self) -> None:
+        captive = CharacterSheetFactory()
+        captivity = capture_character(
+            captive=captive,
+            holding_room=self.brig_room,
+            return_location=self.return_room,
+        )
+
+        resolve_captivity(captivity, status=CaptivityStatus.RESCUED)
+
+        captivity.refresh_from_db()
+        assert captivity.status == CaptivityStatus.RESCUED
+        assert captivity.resolved_at is not None
+        captive.refresh_from_db()
+        assert captive.lifecycle_state == LifecycleState.ALIVE
+        assert captive.character.location == self.return_room
+
+    def test_resolve_captivity_holding_room_no_instanced_teardown(self) -> None:
+        """Resolving a Brig-held captive must not touch InstancedRoom machinery."""
+        captive = CharacterSheetFactory()
+        captivity = capture_character(
+            captive=captive,
+            holding_room=self.brig_room,
+            return_location=self.return_room,
+        )
+        # Should not raise — no InstancedRoom to complete.
+        resolve_captivity(captivity, status=CaptivityStatus.RELEASED)
+        assert not InstancedRoom.objects.exists()
+
+    def test_escape_captivity_from_holding_room(self) -> None:
+        captive = CharacterSheetFactory()
+        capture_character(
+            captive=captive,
+            holding_room=self.brig_room,
+            return_location=self.return_room,
+        )
+
+        freed = escape_captivity(captive)
+
+        assert freed is True
+        captive.refresh_from_db()
+        assert captive.lifecycle_state == LifecycleState.ALIVE
+        assert captive.character.location == self.return_room
+
+    def test_rescue_captive_from_holding_room(self) -> None:
+        captive = CharacterSheetFactory()
+        capture_character(
+            captive=captive,
+            holding_room=self.brig_room,
+            return_location=self.return_room,
+        )
+
+        freed = rescue_captive(captive)
+
+        assert freed is True
+        captive.refresh_from_db()
+        assert captive.lifecycle_state == LifecycleState.ALIVE
+        assert captive.character.location == self.return_room
+
+    def test_brig_room_shows_captive_status_banner(self) -> None:
+        """A Brig room with a HELD captive renders the OOC captive line."""
+        from typeclasses.mixins import _maybe_render_captivity_status
+
+        captive = CharacterSheetFactory()
+        capture_character(
+            captive=captive,
+            holding_room=self.brig_room,
+            return_location=self.return_room,
+        )
+        result = _maybe_render_captivity_status(self.brig_room)
+        assert result is not None
+        assert "held captive here" in result
+
+    def test_empty_brig_room_shows_no_banner(self) -> None:
+        """A Brig room with no captives renders nothing."""
+        from typeclasses.mixins import _maybe_render_captivity_status
+
+        result = _maybe_render_captivity_status(self.brig_room)
+        assert result is None

@@ -732,6 +732,61 @@ def _apply_magical_scars(
     )
 
 
+def _find_brig_for_captor(context: "ResolutionContext") -> "ObjectDB | None":
+    """Find an active Brig room feature in the captor's building (#1862).
+
+    Resolves the captor's building from ``context.location``, then searches
+    for an active Brig ``RoomFeatureInstance`` in that building's rooms.
+    Returns the Brig's room (``ObjectDB``) if found, ``None`` otherwise.
+    """
+    from world.buildings.room_services import building_for_room  # noqa: PLC0415
+    from world.room_features.constants import RoomFeatureServiceStrategy  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    captor_room = context.location
+    if captor_room is None:
+        return None
+    building = building_for_room(captor_room)
+    if building is None or building.area_id is None:
+        return None
+    brig_instance = (
+        RoomFeatureInstance.objects.filter(
+            feature_kind__service_strategy=RoomFeatureServiceStrategy.BRIG,
+            room_profile__area_id=building.area_id,
+            dissolved_at__isnull=True,
+        )
+        .select_related("room_profile", "brig_details")
+        .first()
+    )
+    if brig_instance is None:
+        return None
+    return brig_instance.room_profile.objectdb
+
+
+def _brig_has_capacity(brig_room: "ObjectDB") -> bool:
+    """Check if the Brig room has capacity for another prisoner (#1862)."""
+    from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
+    from world.captivity.models import Captivity  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    instance = (
+        RoomFeatureInstance.objects.filter(
+            room_profile__objectdb=brig_room,
+            dissolved_at__isnull=True,
+        )
+        .select_related("brig_details")
+        .first()
+    )
+    if instance is None or not hasattr(instance, "brig_details"):
+        return False
+    max_prisoners = instance.brig_details.max_prisoners
+    current = Captivity.objects.filter(
+        holding_room=brig_room,
+        status=CaptivityStatus.HELD,
+    ).count()
+    return current < max_prisoners
+
+
 def _capture_group_key(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -789,22 +844,41 @@ def _apply_capture(
     )
 
     try:
-        captivity = capture_character(
-            captive=sheet,
-            captor_organization=effect.capture_captor_organization,
-            # The captive's own location is the capture site they return to —
-            # not context.location (the caster's room), which differs for a
-            # TARGET capture. target.location may be None; the service allows it.
-            return_location=target.location,
-            offscreen_loss_allowed=effect.capture_offscreen_loss_allowed,
-            # Empty string → let the spawner fall back to its placeholder flavor.
-            cell_name=setup.cell_name or None,
-            cell_description=setup.cell_description or None,
-            # Captives taken in one encounter (same scene + captor) share a
-            # cell — the shared-cell default, honoured on the per-character
-            # consequence path. No scene → per-character cells (group_key None).
-            group_key=_capture_group_key(effect, context),
-        )
+        # #1862: if the captor's building has a Brig room feature, route the
+        # captive there instead of spawning a temporary InstancedRoom cell.
+        brig_room = _find_brig_for_captor(context)
+        if brig_room is not None:
+            if not _brig_has_capacity(brig_room):
+                return AppliedEffect(
+                    effect_type=EffectType.CAPTURE,
+                    description=f"{target.db_key} could not be captured — Brig at capacity",
+                    applied=False,
+                    skip_reason="Brig at capacity",
+                )
+            captivity = capture_character(
+                captive=sheet,
+                captor_organization=effect.capture_captor_organization,
+                return_location=target.location,
+                offscreen_loss_allowed=effect.capture_offscreen_loss_allowed,
+                holding_room=brig_room,
+            )
+        else:
+            captivity = capture_character(
+                captive=sheet,
+                captor_organization=effect.capture_captor_organization,
+                # The captive's own location is the capture site they return to —
+                # not context.location (the caster's room), which differs for a
+                # TARGET capture. target.location may be None; the service allows it.
+                return_location=target.location,
+                offscreen_loss_allowed=effect.capture_offscreen_loss_allowed,
+                # Empty string → let the spawner fall back to its placeholder flavor.
+                cell_name=setup.cell_name or None,
+                cell_description=setup.cell_description or None,
+                # Captives taken in one encounter (same scene + captor) share a
+                # cell — the shared-cell default, honoured on the per-character
+                # consequence path. No scene → per-character cells (group_key None).
+                group_key=_capture_group_key(effect, context),
+            )
     except AlreadyCapturedError:
         return AppliedEffect(
             effect_type=EffectType.CAPTURE,

@@ -3,6 +3,7 @@
 from django.contrib import admin
 
 from world.room_features.models import (
+    BrigDetails,
     RoomFeatureInstance,
     RoomFeatureKind,
     RoomFeatureKindInstallRitual,
@@ -54,6 +55,12 @@ class TrapAdmin(admin.ModelAdmin):
 class VaultDetailsAdmin(admin.ModelAdmin):
     list_display = ("feature_instance", "founder_persona", "max_items")
     readonly_fields = ("feature_instance", "founder_persona", "max_items")
+
+
+@admin.register(BrigDetails)
+class BrigDetailsAdmin(admin.ModelAdmin):
+    list_display = ("feature_instance", "max_prisoners")
+    readonly_fields = ("feature_instance", "max_prisoners")
 
 
 @admin.register(VaultAccessEntry)
