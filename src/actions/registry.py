@@ -171,7 +171,7 @@ from actions.definitions.gm_stories import (
 from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.definitions.identification import IdentifyAction
 from actions.definitions.imbue import ImbueAction
-from actions.definitions.investigation import SearchAction
+from actions.definitions.investigation import SearchAction, StartInvestigationAction
 from actions.definitions.items import (
     ActivatePermitAction,
     EquipAction,
@@ -720,9 +720,11 @@ _ALL_ACTIONS: list[Action] = [
     WillReadingAction(),
     # #2295 — voluntary asset sharing: introduce an owned asset to a co-present ally.
     IntroduceAssetAction(),
-    # #1825 — accusation counter-play: the criminal's post-crime evidence moves.
+    # #1825 — accusation counter-play: the criminal's post-crime evidence moves
+    # + the research-lab door into the counter-investigation.
     GatherEvidenceAction(),
     DisposeEvidenceAction(),
+    StartInvestigationAction(),
 ]
 
 # Lookup by key

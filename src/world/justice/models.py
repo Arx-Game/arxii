@@ -234,6 +234,14 @@ class AccusationCrimeClaim(SharedMemoryModel):
         related_name="frame_claims",
         help_text="The real crime being pinned on the subject (L3 frame); null for a wild L2.",
     )
+    retracted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set by nullification (#1825): a retracted claim accrues no further heat; "
+            "already-minted heat decays out on its own."
+        ),
+    )
     created_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -247,6 +255,42 @@ class AccusationCrimeClaim(SharedMemoryModel):
     def __str__(self) -> str:
         kind = "wild" if self.is_wild else "frame"
         return f"{kind} accusation claim: secret {self.secret_id} alleges {self.crime_kind}"
+
+
+class AccusationNullification(SharedMemoryModel):
+    """The record that an accusation was proven fabricated (#1825).
+
+    Written once by ``nullify_accusation`` (the investigation project's payoff). The
+    accusation Secret itself STAYS — the claim was really made; truth stays emergent —
+    but its reputation damage is compensated, its gossip heat zeroed, and its criminal
+    claim retracted. ``authorship_secret`` is the falseness made discoverable: an
+    ACTION_ANCHORED secret **about the framer**, granted to no one at mint — unearthing
+    it (the harder author-unmask trail) is what arms the denounce/backfire step.
+    """
+
+    secret = models.OneToOneField(
+        "secrets.Secret",
+        on_delete=models.CASCADE,
+        related_name="nullification",
+        help_text="The ACCUSATION secret that was proven fabricated.",
+    )
+    authorship_secret = models.OneToOneField(
+        "secrets.Secret",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="nullification_authorship",
+        help_text="The 'fabricated by <framer>' secret; null for authorless accusations.",
+    )
+    nullified_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-nullified_at"]
+        verbose_name = "Accusation nullification"
+        verbose_name_plural = "Accusation nullifications"
+
+    def __str__(self) -> str:
+        return f"nullification of secret {self.secret_id}"
 
 
 class CrimeEvidence(SharedMemoryModel):

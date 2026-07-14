@@ -470,6 +470,7 @@ class ActionRegistryTests(TestCase):
             "dispose_evidence",
             "smear_accusation",
             "refute_accusation",
+            "start_investigation",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

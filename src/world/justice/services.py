@@ -283,7 +283,7 @@ def accrue_accusation_heat(
     no crime claim, the subject has no persona, or nothing is criminal there.
     """
     claim = AccusationCrimeClaim.objects.filter(secret=secret).first()
-    if claim is None:
+    if claim is None or claim.retracted_at is not None:
         return None
     persona = secret.subject_sheet.primary_persona
     if persona is None:
