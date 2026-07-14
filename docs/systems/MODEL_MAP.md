@@ -898,6 +898,30 @@
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
 
+### WarFundingDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - covenant -> covenants.Covenant [FK]
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
+**Pointed to by:**
+  - tier_thresholds <- battles.WarFundingTierThreshold
+
+### WarFundingTierThreshold
+**Foreign Keys:**
+  - details -> battles.WarFundingDetails [FK]
+  - outcome_tier -> traits.CheckOutcome [FK]
+
+### WarFundingTierBonus
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
+### CovenantMilitaryReadiness
+**Foreign Keys:**
+  - covenant -> covenants.Covenant [OneToOne]
+
+### ReadinessThreshold
+(No foreign keys — global model keyed by min_training_level)
+
 ### Service Functions
 - `activate_stakes_for_battle(battle: 'Battle') -> 'None' — Lock any staked beats' contracts for this battle's enlisted party.`
 - `add_place(*, battle: 'Battle', name: 'str', terrain_type: 'str' = TerrainType.OPEN, movement_cost: 'int' = 1, x: 'Decimal' = Decimal('0'), y: 'Decimal' = Decimal('0'), footprint_radius: 'Decimal' = Decimal('1')) -> 'BattlePlace' — Add a named front/zone to a battle.`

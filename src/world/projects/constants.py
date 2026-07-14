@@ -39,6 +39,7 @@ class ProjectKind(models.TextChoices):
     # captivity owns RANSOM); instant-completion like RANSOM.
     PROPAGANDA = "PROPAGANDA", "Propaganda Campaign"
     CITY_DEFENSE = "CITY_DEFENSE", "City Defense"
+    WAR_FUNDING = "WAR_FUNDING", "War Funding"
 
 
 class ProjectStatus(models.TextChoices):
