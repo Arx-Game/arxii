@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("assets", "0008_clue_pool"),
+        ("assets", "0009_asset_persona_fk_and_introduction"),
     ]
 
     operations = [
