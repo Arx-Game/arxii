@@ -211,6 +211,15 @@ def spawn_units_from_template(
     properties = list(template.properties.all())
     capability_values = [(row.capability, row.value) for row in template.capability_values.all()]
 
+    # Apply war-funding bonus_units if the side has a covenant (#2381).
+    bonus_count = 0
+    if side.covenant_id is not None:
+        from world.battles.war_funding_services import get_war_funding_bonus  # noqa: PLC0415
+
+        bonus_count = get_war_funding_bonus(side.covenant).bonus_units
+
+    total = min(count + bonus_count, MAX_TEMPLATE_SPAWN)
+
     return [
         add_unit(
             battle=battle,
@@ -225,7 +234,7 @@ def spawn_units_from_template(
             capability_values=capability_values,
             individual_count=template.individual_count,
         )
-        for offset in range(1, count + 1)
+        for offset in range(1, total + 1)
     ]
 
 

@@ -50,6 +50,7 @@ class WarFundingBonus:
     quality_steps: int = 0
     strength_bonus: int = 0
     morale_bonus: int = 0
+    bonus_units: int = 0
 
 
 def _select_tier(thresholds, current_progress: int):
@@ -201,6 +202,7 @@ def get_war_funding_bonus(covenant: Covenant) -> WarFundingBonus:
             bonus.quality_steps += tier_bonus.quality_steps
             bonus.strength_bonus += tier_bonus.strength_bonus
             bonus.morale_bonus += tier_bonus.morale_bonus
+            bonus.bonus_units += tier_bonus.bonus_units
         except WarFundingTierBonus.DoesNotExist:
             pass
 
