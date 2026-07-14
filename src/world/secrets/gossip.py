@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.areas.models import Area
+    from world.character_sheets.models import CharacterSheet
 
 
 _NOT_HUB = "You can only work the rumor mill at a social hub."
@@ -46,6 +47,11 @@ _NO_REGION = "This place isn't part of any region."
 _NO_SKILL = "You don't have the ear for it (requires Gossip 1+)."
 _NOT_LEVEL_1 = "Only the lightest secrets travel as idle gossip."
 _NOT_HELD = "You can only spread gossip you've actually come into."
+_NO_SELF_SMEAR = "Smearing yourself would be a novel strategy — no."
+_SMEAR_CONSENT_BLOCKED = (
+    "They have not opened themselves to being antagonised. "
+    "You can't manufacture a scandal against them."
+)
 
 
 class GossipError(Exception):
@@ -188,6 +194,66 @@ def plant_gossip(character: ObjectDB, secret: Secret, *, room: ObjectDB) -> Goss
         _maybe_go_public(row)
     return GossipResult(
         success=delta > 0,
+        heat=row.heat,
+        went_public=row.went_public,
+        surfaced_secret_id=secret.pk,
+    )
+
+
+def plant_smear(
+    character: ObjectDB,
+    subject_sheet: CharacterSheet,
+    content: str,
+    *,
+    room: ObjectDB,
+) -> GossipResult:
+    """Mint an L1 accusation and seed its regional heat in one move (#1825).
+
+    The light-smear tier as a *type of gossip*: Gossip >= 1, standing at a social hub,
+    the target's ``hostile`` consent category open to you, and not yourself. One Gossip
+    roll drives everything — a miss mints nothing (no consolation accusation); a success
+    mints the ACCUSATION Secret at Level 1, seeds its ``SecretGossip`` heat at the
+    plant delta, and plants the counter-clue in the region's hubs with difficulty
+    seeded from the same roll (your craft sets how hard your trail is to unearth).
+    """
+    from world.secrets.constants import (  # noqa: PLC0415
+        SMEAR_CLUE_BASE_DIFFICULTY,
+        SMEAR_CLUE_DIFFICULTY_PER_LEVEL,
+    )
+    from world.secrets.services import accusation_permitted, mint_accusation  # noqa: PLC0415
+
+    _require_gossip_skill(character)
+    region = _require_hub_region(room)
+    smearer_sheet = character.sheet_data  # type: ignore[attr-defined] — typeclass extension
+    if smearer_sheet.pk == subject_sheet.pk:
+        raise GossipError(_NO_SELF_SMEAR)
+    if not accusation_permitted(framer_sheet=smearer_sheet, target_sheet=subject_sheet):
+        raise GossipError(_SMEAR_CONSENT_BLOCKED)
+
+    tier = _check_tier(character)
+    if tier < 1:
+        return GossipResult(success=False)
+
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    secret = mint_accusation(
+        accuser_persona=active_persona_for_sheet(smearer_sheet),
+        subject_sheet=subject_sheet,
+        content=content,
+        level=SecretLevel.UNCOMMON_KNOWLEDGE,
+    )
+    delta = _delta_for(tier, GOSSIP_PLANT_REGULAR, GOSSIP_PLANT_SPECIAL)
+    row, _ = SecretGossip.objects.get_or_create(secret=secret, region=region)
+    row.heat += delta
+    row.save(update_fields=["heat", "updated_date"])
+    _maybe_go_public(row)
+
+    from world.clues.services import create_accusation_counter_clue  # noqa: PLC0415
+
+    difficulty = SMEAR_CLUE_BASE_DIFFICULTY + tier * SMEAR_CLUE_DIFFICULTY_PER_LEVEL
+    create_accusation_counter_clue(secret, region=region, difficulty=difficulty)
+    return GossipResult(
+        success=True,
         heat=row.heat,
         went_public=row.went_public,
         surfaced_secret_id=secret.pk,

@@ -165,4 +165,68 @@ def _file_accusation_crime(  # noqa: PLR0913
     )
 
 
+@dataclass
+class SmearAction(Action):
+    """The one-move L1 smear — mint an accusation through the rumor mill (#1825).
+
+    Thin over ``world.secrets.gossip.plant_smear``: hub + Gossip skill + the target's
+    ``hostile`` consent gate live in the service; the action charges the smear's AP +
+    social fatigue (finally making the light tier cost something).
+    """
+
+    key: str = "smear_accusation"
+    name: str = "Smear"
+    icon: str = "comment-slash"
+    category: str = "social"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    # PLACEHOLDER cost magnitudes — tuned in a later author pass.
+    ap_cost: int = 1
+    fatigue_cost: int = 1
+    fatigue_category: str = ActionCategory.SOCIAL
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.secrets.gossip import GossipError, plant_smear  # noqa: PLC0415
+        from world.secrets.services import SecretError  # noqa: PLC0415
+
+        content = (kwargs.get("content") or "").strip()
+        if not content:
+            return _ActionResult(success=False, message="Smear them with what? (say the claim)")
+        target_persona = (
+            Persona.objects.filter(pk=kwargs.get("target_persona_id"))
+            .select_related("character_sheet")
+            .first()
+        )
+        if target_persona is None:
+            return _ActionResult(success=False, message="No such target.")
+        room = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        if room is None:
+            return _ActionResult(success=False, message="There's no one here to whisper to.")
+        try:
+            result = plant_smear(actor, target_persona.character_sheet, content, room=room)
+        except (GossipError, SecretError) as exc:
+            return _ActionResult(success=False, message=exc.user_message)
+        if not result.success:
+            return _ActionResult(
+                success=True,
+                message="PLACEHOLDER The rumor dies on your lips — nobody bites.",
+            )
+        return _ActionResult(
+            success=True,
+            message=(
+                f"PLACEHOLDER You seed a poisonous little rumor about {target_persona}. "
+                "It's making the rounds."
+            ),
+            data={"secret_id": result.surfaced_secret_id},
+        )
+
+
 mint_accusation = MintAccusationAction()

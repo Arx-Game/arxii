@@ -76,6 +76,12 @@ GOSSIP_PLANT_SPECIAL = 2  # heat added by a special-success plant (spec counts d
 GOSSIP_SUPPRESS_REGULAR = 1  # heat removed by a regular-success suppress
 GOSSIP_SUPPRESS_SPECIAL = 2  # heat removed by a special-success suppress
 
+# --- Smear counter-clue seeding (#1825) — PLACEHOLDER magnitudes. ---
+# The smear roll sets how well-hidden the trail is: counter-clue detect difficulty =
+# base + success_level * per-level (the "cost to mint ↔ difficulty to disprove" dial).
+SMEAR_CLUE_BASE_DIFFICULTY = 10
+SMEAR_CLUE_DIFFICULTY_PER_LEVEL = 5
+
 
 class GossipAction(models.TextChoices):
     """The web gossip verbs (the #1572 web face of the telnet ``gossip`` subcommands)."""
