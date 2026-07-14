@@ -18983,16 +18983,13 @@ export interface components {
     /** @description An abstract typed force at a particular front (or embedded in a vehicle). */
     BattleUnit: {
       readonly id: number;
-      name: string;
-      /** @description Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative only — properties/capabilities/quality below drive mechanics. */
-      descriptor?: string;
-      quality?: components['schemas']['QualityEnum'];
+      readonly name: string;
+      readonly descriptor: string;
+      readonly quality: string;
       status?: components['schemas']['BattleUnitStatusEnum'];
-      strength?: number;
-      /** @description Second resource alongside strength (#1712). status is always derived from whichever resource crosses its own threshold first — see world.battles.resolution._compute_unit_status. Unlike strength (starts at its ceiling), morale starts well below it — sitting near MAX_MORALE is rare. */
-      morale?: number;
-      /** @description Population data point mirroring CombatOpponent.swarm_count's naming/shape (#1794) — null means 'not a swarm-style unit'. Swarm math (#1841): a banded check penalty for acting against the swarm folds into the battle modifier stack, and STRIKE/ROUT attrition costs bodies off it proportionally (see world.battles.constants.swarm_strike_modifier and world.battles.resolution._apply_swarm_losses). Capital vessels stay on the separate per-hull Fortification integrity track (#1713) — see docs/adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md. */
-      individual_count?: number | null;
+      readonly strength: number;
+      readonly morale: number;
+      readonly individual_count: string;
       readonly side_id: number;
       readonly place_id: number | null;
     };
