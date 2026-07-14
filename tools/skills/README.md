@@ -104,15 +104,6 @@ create command returns (never compute it — issues and PRs share one counter,
 so it is rarely `N+1`), verify number↔title before any mutation, and keep
 issue/PR writes to one-per-message. Permanent good practice.
 
-### grounding-before-action `[TEMP — HARNESS-BUNDLING-WORKAROUND]`
-
-**Temporary workaround for a Claude Code 2.1.158 regression** where a tool
-result co-emitted in the same assistant message as the call it depends on is
-invisible at compose time, causing the model to confabulate the result and act
-on it. Enforces un-bundling `AskUserQuestion`/result-claims from their tool
-calls and verifying issue number↔title before mutations. **Delete this skill
-when the harness is fixed** — removal manifest + test in GH #647.
-
 ### design-vocabulary
 
 Shared vocabulary for judging interface design — depth, interface, seam,
