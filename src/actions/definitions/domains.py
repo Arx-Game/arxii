@@ -230,3 +230,79 @@ class VacateDomainOfficeAction(Action):
 
         vacate_office(organization=org, slug=DOMAIN_STEWARD_OFFICE)
         return ActionResult(success=True, message="The domain-steward office is vacated.")
+
+
+@dataclass
+class TransferFoodAction(Action):
+    """Transfer food between domains (#2219).
+
+    Gated on ``can_administer_domain`` for the source domain. Thin over
+    ``transfer_food()`` — resolves source + target domains from pks
+    (REST-safe), checks authorization, delegates to the service.
+    """
+
+    key: str = "transfer_food"
+    name: str = "Transfer Food"
+    icon: str = "arrow-left-right"
+    category: str = "domains"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.agriculture.services import transfer_food  # noqa: PLC0415
+        from world.societies.houses.services import can_administer_domain  # noqa: PLC0415
+
+        persona = _resolve_active_persona(actor)
+        source = _resolve_domain(kwargs.get("source_domain_id"))
+        target = _resolve_domain(kwargs.get("target_domain_id"))
+        amount = int(kwargs.get("amount", 0))
+
+        error = self._validate(persona, source, target, amount, can_administer_domain)
+        if error is not None:
+            return error
+
+        try:
+            result = transfer_food(
+                source_domain=source,
+                target_domain=target,
+                amount=amount,
+                acting_persona=persona,
+                character=actor,
+            )
+        except ValueError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        if result.cancelled:
+            return ActionResult(
+                success=False,
+                message="The transfer was thwarted — the food remains in the granary.",
+                data={"cancelled": True},
+            )
+
+        msg = f"Transferred {result.landed} food from {source.name} to {target.name}."
+        if result.overflow > 0:
+            msg += f" ({result.overflow} lost to overflow — granary full)."
+
+        return ActionResult(
+            success=True,
+            message=msg,
+            data={
+                "amount": result.amount,
+                "landed": result.landed,
+                "overflow": result.overflow,
+            },
+        )
+
+    @staticmethod
+    def _validate(persona, source, target, amount, can_administer_fn) -> ActionResult | None:
+        """Return a failure ActionResult if preconditions are unmet, else None."""
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        if source is None:
+            return ActionResult(success=False, message="No such source domain.")
+        if target is None:
+            return ActionResult(success=False, message="No such target domain.")
+        if not can_administer_fn(persona, source):
+            return ActionResult(success=False, message=_MSG_NOT_AUTHORIZED)
+        if amount <= 0:
+            return ActionResult(success=False, message="Amount must be positive.")
+        return None
