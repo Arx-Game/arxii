@@ -133,7 +133,11 @@ from actions.definitions.events import (
     ScheduleEventAction,
     StartEventAction,
 )
-from actions.definitions.evidence import DisposeEvidenceAction, GatherEvidenceAction
+from actions.definitions.evidence import (
+    DisposeEvidenceAction,
+    GatherEvidenceAction,
+    StartFrameJobAction,
+)
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
 from actions.definitions.forms import RevertFormAction, ShiftFormAction
@@ -725,6 +729,7 @@ _ALL_ACTIONS: list[Action] = [
     GatherEvidenceAction(),
     DisposeEvidenceAction(),
     StartInvestigationAction(),
+    StartFrameJobAction(),
 ]
 
 # Lookup by key

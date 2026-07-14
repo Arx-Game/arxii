@@ -123,3 +123,86 @@ class CmdAccuse(ArxCommand):
         if is_crime:
             args["crime_kind_slug"] = crime_slug
         return args
+
+
+class CmdFrame(ArxCommand):
+    """Doctor held crime evidence into a frame job at a Workshop of Iniquity.
+
+    The heavy tier of the manufactured scandal (#1825): you must hold gathered
+    evidence of a real crime, stand in a Workshop of Iniquity, and name a crime
+    the evidence really speaks to. Opens a project you advance with Forgery
+    checks (project/check); on completion the anchored accusation files and the
+    law starts looking your patsy's way. Consent-gated, and re-checked when the
+    frame completes. Bare ``frame`` lists the evidence you hold.
+
+    Usage:
+        frame <character> = <crime-kind> : <the claim>  (uses your held evidence)
+    """
+
+    key = "frame"
+    locks = "cmd:all()"
+    action = None
+
+    def _execute(self) -> None:
+        raw = (self.args or "").strip()
+        if not raw:
+            self._list_held_evidence()
+            return
+        self._start_frame(raw)
+
+    def _held_evidence(self) -> list[Any]:
+        from world.justice.constants import EvidenceState  # noqa: PLC0415
+        from world.justice.models import CrimeEvidence  # noqa: PLC0415
+
+        sheet = self.caller.character_sheet
+        if sheet is None:
+            return []
+        return list(
+            CrimeEvidence.objects.filter(
+                state=EvidenceState.GATHERED,
+                item_instance__holder_character_sheet=sheet,
+            ).select_related("deed")
+        )
+
+    def _list_held_evidence(self) -> None:
+        held = self._held_evidence()
+        if not held:
+            self.msg("You hold no gathered evidence to doctor.")
+            return
+        lines = ["|wEvidence you could pervert:|n"]
+        lines += [f"  {evidence.pk}. {evidence.deed.title}" for evidence in held]
+        lines.append("Use |wframe <character> = <crime-kind> : <the claim>|n at a workshop.")
+        self.msg("\n".join(lines))
+
+    def _start_frame(self, raw: str) -> None:
+        from actions.definitions.evidence import StartFrameJobAction  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        name, sep, rest = raw.partition("=")
+        crime_slug, csep, claim = rest.partition(":")
+        name, crime_slug, claim = name.strip(), crime_slug.strip(), claim.strip()
+        if not sep or not name or not csep or not crime_slug or not claim:
+            usage = "Usage: frame <character> = <crime-kind> : <the claim>"
+            raise CommandError(usage)
+        held = self._held_evidence()
+        if not held:
+            self.msg("You hold no gathered evidence to doctor.")
+            return
+        # Global search — a patsy needn't be standing in your workshop.
+        target = self.caller.search(name, global_search=True)
+        if target is None:
+            return  # search() already messaged the caller
+        sheet = target.character_sheet
+        if sheet is None:
+            no_identity = f"{target} has no character identity."
+            raise CommandError(no_identity)
+        persona = active_persona_for_sheet(sheet)
+        # One held evidence = the obvious pick; several = the most recent gather.
+        result = StartFrameJobAction().run(
+            self.caller,
+            evidence_id=held[0].pk,
+            target_persona_id=persona.pk,
+            crime_kind_slug=crime_slug,
+            content=claim,
+        )
+        self.msg(result.message)

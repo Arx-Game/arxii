@@ -63,6 +63,12 @@ _CRIME_KINDS: list[tuple[str, str, str]] = [
     ("treason", "Treason", "The realm betrayed to its enemies."),
     ("sedition", "Sedition", "Stirring subjects against their rightful lords."),
     ("forgery", "Forgery", "False instruments — coin, seal, or signature counterfeited."),
+    (
+        "false-accusation",
+        "False Accusation",
+        "Manufacturing a scandal or perverting evidence to pin a crime on the "
+        "innocent. The law hates being used as a weapon (#1825).",
+    ),
     ("bribery", "Bribery", "An official's judgment purchased."),
     (
         "tax-fraud",
@@ -119,3 +125,38 @@ def seed_crime_kinds() -> None:
             kind.name = name
             kind.description = description
             kind.save(update_fields=["name", "description"])
+
+
+FRAME_JOB_METHOD_NAME = "Doctor the Evidence"
+
+
+def ensure_frame_job_contribution_method() -> None:
+    """Seed the Forgery-check contribution method for FRAME_JOB projects (#1825).
+
+    ``Forge Evidence`` (wits + Skulduggery + Forgery, the #1825 security seed) is
+    the check — patient hands reworking what the crime left behind. AP cost /
+    progress magnitudes are PLACEHOLDER.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.projects.constants import ProjectKind  # noqa: PLC0415
+    from world.projects.models import ContributionMethod  # noqa: PLC0415
+    from world.seeds.security_checks import seed_security_check_content  # noqa: PLC0415
+
+    check_type = CheckType.objects.filter(name="Forge Evidence").first()
+    if check_type is None:
+        seed_security_check_content()
+        check_type = CheckType.objects.get(name="Forge Evidence")
+
+    ContributionMethod.objects.update_or_create(
+        kind=ProjectKind.FRAME_JOB,
+        name=FRAME_JOB_METHOD_NAME,
+        defaults={
+            "description": (
+                "PLACEHOLDER — patient, careful forgery: rework what the crime left "
+                "behind until it tells your story instead."
+            ),
+            "check_type": check_type,
+            "ap_cost": 1,
+            "progress_on_success": 3,
+        },
+    )

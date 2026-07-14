@@ -293,6 +293,83 @@ class AccusationNullification(SharedMemoryModel):
         return f"nullification of secret {self.secret_id}"
 
 
+class FrameJobDetails(SharedMemoryModel):
+    """Per-kind details for a FRAME_JOB ``Project`` (#1825) — the evidence being perverted.
+
+    Follows the details-model pattern (``RoomFeatureProgressionDetails``): a OneToOne
+    payload the completion handler reads. The frame only ever grows from a real crime's
+    gathered evidence, doctored in a Workshop of Iniquity with Forgery checks; on a
+    successful completion ``resolve_frame_job`` files the anchored L3 accusation.
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="frame_job_details",
+    )
+    evidence = models.ForeignKey(
+        "justice.CrimeEvidence",
+        on_delete=models.PROTECT,
+        related_name="frame_jobs",
+        help_text="The gathered evidence being doctored.",
+    )
+    subject_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.PROTECT,
+        related_name="frame_jobs_against",
+        help_text="The patsy the crime is being pinned on.",
+    )
+    crime_kind = models.ForeignKey(
+        CrimeKind,
+        on_delete=models.PROTECT,
+        related_name="frame_jobs",
+        help_text="The alleged crime — must be one the evidence's deed is tagged with.",
+    )
+    content = models.TextField(help_text="The claim the finished frame will assert.")
+
+    class Meta:
+        verbose_name = "Frame job details"
+        verbose_name_plural = "Frame job details"
+
+    def __str__(self) -> str:
+        return f"frame job on sheet {self.subject_sheet_id} (project #{self.project_id})"
+
+
+class DenounceRecord(SharedMemoryModel):
+    """One character's public denunciation of an unmasked framer (#1825).
+
+    The consent-gated backfire's once-only guard: exposing the authorship secret is
+    idempotent on the exposure engine's side, but the level-scaled heat must not
+    stack per repeat — one denounce per denouncer per authorship secret.
+    """
+
+    authorship_secret = models.ForeignKey(
+        "secrets.Secret",
+        on_delete=models.CASCADE,
+        related_name="denouncements",
+    )
+    denouncer_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="denouncements_made",
+    )
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["authorship_secret", "denouncer_sheet"],
+                name="uniq_denounce_secret_denouncer",
+            ),
+        ]
+        ordering = ["-created_date"]
+        verbose_name = "Denounce record"
+        verbose_name_plural = "Denounce records"
+
+    def __str__(self) -> str:
+        return f"denounce of secret {self.authorship_secret_id} by sheet {self.denouncer_sheet_id}"
+
+
 class CrimeEvidence(SharedMemoryModel):
     """Physical evidence a crime-tagged deed left at the scene (#1825).
 
