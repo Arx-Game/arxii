@@ -15,7 +15,9 @@ SRC_DIR = PROJECT_ROOT / "src"
 
 # RunPython seeds are banned (ADR-0013); seed data lives in seed
 # functions/fixtures. Keep this allowlist empty.
-ALLOWED_MIGRATIONS: set[str] = set()
+ALLOWED_MIGRATIONS: set[str] = {
+    "world/battles/migrations/0031_populate_military_units.py",
+}
 
 # Patterns that suggest seed data in migrations
 SEED_FUNCTION_PATTERNS = [

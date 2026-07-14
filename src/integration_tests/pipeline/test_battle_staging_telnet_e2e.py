@@ -141,13 +141,15 @@ class BattleStagingTelnetE2EJourneyTest(TestCase):
         # ------------------------------------------------------------
         _run(self.gm_char, "spawn Levy Spears count=3 at West Bank side=defender")
 
-        units = list(BattleUnit.objects.filter(battle=battle, name__startswith="Levy Spears"))
+        units = list(
+            BattleUnit.objects.filter(battle=battle, military_unit__name__startswith="Levy Spears")
+        )
         self.assertEqual(len(units), 3)
         defender_side = BattleSide.objects.get(battle=battle, role=BattleSideRole.DEFENDER)
         for unit in units:
             self.assertEqual(unit.side_id, defender_side.pk)
             self.assertEqual(unit.place_id, place.pk)
-            capability_rows = list(unit.capability_values.all())
+            capability_rows = list(unit.military_unit.capability_values.all())
             self.assertEqual(len(capability_rows), 1)
             self.assertEqual(capability_rows[0].capability_id, self.capability.pk)
             self.assertEqual(capability_rows[0].value, 3)

@@ -31904,41 +31904,24 @@ components:
           readOnly: true
         name:
           type: string
-          maxLength: 120
+          readOnly: true
         descriptor:
           type: string
-          description: Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative
-            only — properties/capabilities/quality below drive mechanics.
-          maxLength: 80
+          readOnly: true
         quality:
-          $ref: '#/components/schemas/QualityEnum'
+          type: string
+          readOnly: true
         status:
           $ref: '#/components/schemas/BattleUnitStatusEnum'
         strength:
           type: integer
-          maximum: 32767
-          minimum: 0
+          readOnly: true
         morale:
           type: integer
-          maximum: 32767
-          minimum: 0
-          description: Second resource alongside strength (#1712). status is always
-            derived from whichever resource crosses its own threshold first — see
-            world.battles.resolution._compute_unit_status. Unlike strength (starts
-            at its ceiling), morale starts well below it — sitting near MAX_MORALE
-            is rare.
+          readOnly: true
         individual_count:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          nullable: true
-          description: 'Population data point mirroring CombatOpponent.swarm_count''s
-            naming/shape (#1794) — null means ''not a swarm-style unit''. Swarm math
-            (#1841): a banded check penalty for acting against the swarm folds into
-            the battle modifier stack, and STRIKE/ROUT attrition costs bodies off
-            it proportionally (see world.battles.constants.swarm_strike_modifier and
-            world.battles.resolution._apply_swarm_losses). Capital vessels stay on
-            the separate per-hull Fortification integrity track (#1713) — see docs/adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md.'
+          type: string
+          readOnly: true
         side_id:
           type: integer
           readOnly: true
@@ -31947,10 +31930,15 @@ components:
           readOnly: true
           nullable: true
       required:
+      - descriptor
       - id
+      - individual_count
+      - morale
       - name
       - place_id
+      - quality
       - side_id
+      - strength
     BattleUnitStatusEnum:
       enum:
       - active

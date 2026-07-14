@@ -405,71 +405,12 @@ class BattleUnit(SharedMemoryModel):
         related_name="units_in_transit",
         help_text="Destination of an in-progress multi-round MOVE (#2007). Null when at rest.",
     )
-    name = models.CharField(max_length=120)
-    descriptor = models.CharField(
-        max_length=80,
-        blank=True,
-        help_text="Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative only "
-        "— properties/capabilities/quality below drive mechanics.",
-    )
-    properties = models.ManyToManyField(
-        Property,
-        blank=True,
+    military_unit = models.ForeignKey(
+        "military.MilitaryUnit",
+        on_delete=models.PROTECT,
         related_name="battle_units",
-        help_text="Descriptive tags this unit carries (flying, aquatic, metal-clad, "
-        "etc.) — the same catalog characters use (#1794). Presence-only, no per-unit "
-        "magnitude (matches how Property is consumed everywhere else).",
-    )
-    capabilities = models.ManyToManyField(
-        CapabilityType,
-        through="BattleUnitCapability",
-        blank=True,
-        related_name="battle_units",
-        help_text="What this unit can DO, at an authored per-unit magnitude via "
-        "BattleUnitCapability (#1794) — e.g. two units can both hold FLYING at "
-        "very different values.",
-    )
-    individual_count = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Population data point mirroring CombatOpponent.swarm_count's "
-        "naming/shape (#1794) — null means 'not a swarm-style unit'. Swarm math "
-        "(#1841): a banded check penalty for acting against the swarm folds into the "
-        "battle modifier stack, and STRIKE/ROUT attrition costs bodies off it "
-        "proportionally (see world.battles.constants.swarm_strike_modifier and "
-        "world.battles.resolution._apply_swarm_losses). Capital vessels stay on "
-        "the separate per-hull Fortification integrity track (#1713) — see "
-        "docs/adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md.",
-    )
-    quality = models.CharField(
-        max_length=20,
-        choices=UnitQuality.choices,
-        default=UnitQuality.TRAINED,
-    )
-    commander = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="commanded_battle_units",
-        help_text="Optional commander whose Battle Command modifier bonus applies to "
-        "participants fighting alongside this unit's side/place.",
-    )
-    summoned_by = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="summoned_battle_units",
-        help_text="Set when this unit was created via a military-grade summon (#1711).",
-    )
-    strength = models.PositiveSmallIntegerField(default=100)
-    morale = models.PositiveSmallIntegerField(
-        default=DEFAULT_MORALE,
-        help_text="Second resource alongside strength (#1712). status is always "
-        "derived from whichever resource crosses its own threshold first — see "
-        "world.battles.resolution._compute_unit_status. Unlike strength (starts at "
-        "its ceiling), morale starts well below it — sitting near MAX_MORALE is rare.",
+        help_text="The persistent MilitaryUnit this battle unit projects from. "
+        "All identity and stats live on MilitaryUnit (ADR-0014, ADR-0125).",
     )
     status = models.CharField(
         max_length=20,
@@ -478,67 +419,68 @@ class BattleUnit(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["battle", "side", "name"]
+        ordering = ["battle", "side", "military_unit__name"]
 
     def __str__(self) -> str:
         return f"{self.name} [{self.get_status_display()}]"
 
+    # --- Proxy properties: delegate to military_unit for backward compat ---
+    # Reads are transparent (unit.strength works); writes must go through
+    # unit.military_unit.strength = ...; unit.military_unit.save().
+
+    @property
+    def name(self) -> str:
+        return self.military_unit.name
+
+    @property
+    def descriptor(self) -> str:
+        return self.military_unit.descriptor
+
+    @property
+    def quality(self) -> str:
+        return self.military_unit.quality
+
+    @property
+    def commander(self):
+        return self.military_unit.commander
+
+    @property
+    def summoned_by(self):
+        return self.military_unit.summoned_by
+
+    @property
+    def strength(self) -> int:
+        return self.military_unit.strength
+
+    @property
+    def morale(self) -> int:
+        return self.military_unit.morale
+
+    @property
+    def individual_count(self):
+        return self.military_unit.individual_count
+
     def effective_capability(self, capability: CapabilityType) -> int:
         """Authored magnitude for this unit's hold on ``capability``, 0 if absent.
 
-        Conforms to world.mechanics.types.HasCapabilities alongside
-        CharacterSheet (#1794).
+        Delegates to the underlying MilitaryUnit (#1794). Conforms to
+        world.mechanics.types.HasCapabilities alongside CharacterSheet.
         """
-        row = self.capability_values.filter(capability=capability).first()
-        return row.value if row is not None else 0
+        return self.military_unit.effective_capability(capability)
 
     def has_property(self, prop: Property) -> bool:
         """True if this unit carries ``prop``.
 
-        Conforms to world.mechanics.types.HasProperties alongside
-        CharacterSheet (#1794).
+        Delegates to the underlying MilitaryUnit (#1794). Conforms to
+        world.mechanics.types.HasProperties alongside CharacterSheet.
         """
-        return self.properties.filter(pk=prop.pk).exists()
+        return self.military_unit.has_property(prop)
 
     def save(self, *args, **kwargs) -> None:
         is_new = self._state.adding
         super().save(*args, **kwargs)
         if is_new:
             self.battle.state_cache.register_unit(self)
-
-
-class BattleUnitCapability(SharedMemoryModel):
-    """Authored (unit, capability) -> magnitude row (#1794).
-
-    Mirrors ObjectProperty's shape (object/property/value,
-    world/mechanics/models.py:589-618) one FK swapped: BattleUnit for ObjectDB,
-    CapabilityType for Property. No source-tracking FKs — BattleUnit capabilities
-    are static authored data, not subject to reactive conditions/challenges.
-    """
-
-    unit = models.ForeignKey(
-        BattleUnit,
-        on_delete=models.CASCADE,
-        related_name="capability_values",
-    )
-    capability = models.ForeignKey(
-        CapabilityType,
-        on_delete=models.PROTECT,
-        related_name="battle_unit_values",
-    )
-    value = models.PositiveIntegerField()
-
-    class Meta:
-        ordering = ["unit", "capability"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["unit", "capability"],
-                name="unique_battle_unit_capability",
-            )
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.unit.name} {self.capability.name}: {self.value}"
 
 
 class BattleRound(AbstractRound):
@@ -1243,3 +1185,164 @@ class CityDefenseIntegrityBonus(OutcomeTierAward):
 
     def __str__(self) -> str:
         return f"{self.outcome_tier}: +{self.integrity_bonus}"
+
+
+class WarFundingDetails(SharedMemoryModel):
+    """Per-(WAR_FUNDING Project) details payload (#1890).
+
+    A covenant leader opens a war-funding project; members contribute during
+    the preparation window; at the deadline progress is graded into a
+    CheckOutcome tier via WarFundingTierThreshold rows, and the handler stores
+    the tier here and updates CovenantMilitaryReadiness. When units are later
+    mustered into a battle for this covenant, get_war_funding_bonus reads the
+    stored tier's WarFundingTierBonus and applies the bonuses.
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="war_funding_details",
+    )
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.PROTECT,
+        related_name="war_funding_projects",
+        help_text="The covenant whose military readiness this drive funds.",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="war_funding_projects",
+        help_text="The graded outcome tier, set when the handler runs at deadline.",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the handler runs; idempotency guard (claim-filter pattern).",
+    )
+
+    def __str__(self) -> str:
+        return f"WarFunding#{self.project_id}: {self.covenant_id}"
+
+
+class WarFundingTierThreshold(SharedMemoryModel):
+    """A progress band on a WarFundingDetails that grants a CheckOutcome tier.
+
+    Tier reached at deadline = highest min_progress row whose
+    min_progress <= project.current_progress. Seeded rows always include a
+    baseline failure tier at min_progress=0 so every graded project maps to
+    exactly one tier.
+    """
+
+    details = models.ForeignKey(
+        WarFundingDetails,
+        on_delete=models.CASCADE,
+        related_name="tier_thresholds",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="war_funding_thresholds",
+    )
+    min_progress = models.PositiveIntegerField(
+        help_text="Minimum progress at which this tier applies.",
+    )
+
+    class Meta:
+        ordering = ["-min_progress"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["details", "outcome_tier"],
+                name="uniq_war_funding_tier",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier} @ {self.min_progress}"
+
+
+class WarFundingTierBonus(OutcomeTierAward):
+    """Per-unit bonuses granted for a CheckOutcome tier (#1890).
+
+    Read by get_war_funding_bonus; a missing row yields zero bonuses (content
+    gap, not a crash). Staff-tunable — no hardcoded bonuses in service code.
+    """
+
+    quality_steps = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Quality upgrade steps applied at muster (0-2).",
+    )
+    strength_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Additive strength bonus per unit.",
+    )
+    morale_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Additive morale bonus per unit.",
+    )
+    training_xp = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Training experience added to CovenantMilitaryReadiness.",
+    )
+
+    def __str__(self) -> str:
+        return (
+            f"{self.outcome_tier}: +{self.quality_steps}q"
+            f" +{self.strength_bonus}s +{self.morale_bonus}m"
+        )
+
+
+class CovenantMilitaryReadiness(SharedMemoryModel):
+    """Persistent military training state for a covenant (#1890).
+
+    Accumulates training_xp across multiple WAR_FUNDING projects. When
+    training_level crosses ReadinessThreshold rows, additional quality steps
+    are granted on top of the per-tier bump — so partial successes still
+    matter over time.
+    """
+
+    covenant = models.OneToOneField(
+        "covenants.Covenant",
+        on_delete=models.CASCADE,
+        related_name="military_readiness",
+    )
+    training_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Accumulated training experience across WAR_FUNDING projects.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.covenant.name}: training {self.training_level}"
+
+
+class ReadinessThreshold(SharedMemoryModel):
+    """A global training-level band that grants bonus quality steps (#1890).
+
+    Staff-tuned rows keyed by min_training_level only (global, not per-covenant).
+    The highest min_training_level row at or below the covenant's current
+    training_level determines the bonus quality steps.
+    """
+
+    min_training_level = models.PositiveIntegerField(
+        help_text="Minimum training level at which this bonus applies.",
+    )
+    bonus_quality_steps = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Additional quality steps granted at this training level.",
+    )
+
+    class Meta:
+        ordering = ["-min_training_level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["min_training_level"],
+                name="uniq_readiness_threshold_level",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"training>={self.min_training_level}: +{self.bonus_quality_steps}q"

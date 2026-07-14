@@ -83,10 +83,10 @@ def _winning_personas(battle: Battle, winning_side_role: str) -> list[Persona]:
         sheets[participant.character_sheet_id] = participant.character_sheet
 
     commanded_units = BattleUnit.objects.filter(
-        battle=battle, side__role=winning_side_role, commander__isnull=False
-    ).select_related("commander")
+        battle=battle, side__role=winning_side_role, military_unit__commander__isnull=False
+    ).select_related("military_unit__commander")
     for unit in commanded_units:
-        sheets[unit.commander_id] = unit.commander
+        sheets[unit.military_unit.commander_id] = unit.military_unit.commander
 
     return [active_persona_for_sheet(sheet) for sheet in sheets.values()]
 

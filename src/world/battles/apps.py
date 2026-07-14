@@ -26,3 +26,12 @@ class BattlesConfig(AppConfig):
         # #1892 — register the CITY_DEFENSE kind handler + tiered resolver.
         register_kind_handler(ProjectKind.CITY_DEFENSE, complete_city_defense)
         register_tiered_resolver(ProjectKind.CITY_DEFENSE, resolve_city_defense)
+
+        from world.battles.war_funding_services import (  # noqa: PLC0415
+            complete_war_funding,
+            resolve_war_funding,
+        )
+
+        # #1890 — register the WAR_FUNDING kind handler + tiered resolver.
+        register_kind_handler(ProjectKind.WAR_FUNDING, complete_war_funding)
+        register_tiered_resolver(ProjectKind.WAR_FUNDING, resolve_war_funding)

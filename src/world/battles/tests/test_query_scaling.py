@@ -26,7 +26,7 @@ from world.battles.factories import (
     BattlePlaceFactory,
     BattleSideFactory,
 )
-from world.battles.models import BattleActionKind, BattleSideRole, BattleUnitCapability
+from world.battles.models import BattleActionKind, BattleSideRole
 from world.battles.resolution import (
     _block_if_participant_mid_audere_majora_crossing,
     resolve_battle_round,
@@ -50,6 +50,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models.soulfray import SoulfrayConfig
+from world.military.models import MilitaryUnitCapability
 from world.vitals.factories import CharacterVitalsFactory, ensure_surrounded_content
 
 
@@ -131,7 +132,7 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
         # Budget set just above this observed marginal — a regression here means
         # a new per-declaration query was reintroduced into the modifier stack,
         # scope resolution, or use_technique envelope.
-        per_declaration_budget = 30
+        per_declaration_budget = 32  # +2: military_unit.save() per STRIKE
         self.assertLess(
             marginal,
             per_declaration_budget,
@@ -165,7 +166,9 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
             vehicle_kind=VehicleKind.SHIP,
         )
         speed = CapabilityTypeFactory(name="speed")
-        BattleUnitCapability.objects.create(unit=vehicle.unit, capability=speed, value=5)
+        MilitaryUnitCapability.objects.create(
+            unit=vehicle.unit.military_unit, capability=speed, value=5
+        )
 
         def _new_participant():
             sheet = CharacterSheetFactory()
@@ -178,8 +181,8 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
             return sheet, participant
 
         commander_sheet, commander = _new_participant()
-        vehicle.unit.commander = commander_sheet
-        vehicle.unit.save(update_fields=["commander"])
+        vehicle.unit.military_unit.commander = commander_sheet
+        vehicle.unit.military_unit.save(update_fields=["commander"])
 
         victim_sheet, victim = _new_participant()
         ConditionInstanceFactory(
@@ -283,7 +286,7 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
         # Budget set just above this observed marginal -- a regression here means
         # a new per-declaration query was reintroduced into one of the non-STRIKE
         # resolution paths (#1871).
-        per_declaration_budget = 35
+        per_declaration_budget = 37  # +2: military_unit.save() per ROUT/RALLY
         self.assertLess(
             marginal,
             per_declaration_budget,

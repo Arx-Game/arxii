@@ -247,7 +247,9 @@ class SpawnUnitsFromTemplateTests(TestCase):
         template_values = {
             (row.capability_id, row.value) for row in self.template.capability_values.all()
         }
-        unit_values = {(row.capability_id, row.value) for row in unit.capability_values.all()}
+        unit_values = {
+            (row.capability_id, row.value) for row in unit.military_unit.capability_values.all()
+        }
         self.assertEqual(template_values, unit_values)
 
     def test_batches_and_numbers_continuing_past_existing(self) -> None:

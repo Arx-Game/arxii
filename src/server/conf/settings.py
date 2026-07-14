@@ -108,6 +108,7 @@ INSTALLED_APPS += [
     "world.estates.apps.EstatesConfig",
     "world.combat.apps.CombatConfig",
     "world.battles.apps.BattlesConfig",
+    "world.military.apps.MilitaryConfig",
     "world.gm.apps.GmConfig",
     "world.narrative.apps.NarrativeConfig",
     "world.predicates.apps.PredicatesConfig",

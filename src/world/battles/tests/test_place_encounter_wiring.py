@@ -22,6 +22,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterOutcome, EncounterType, RiskLevel
 from world.combat.models import CombatEncounter
 from world.combat.services import complete_encounter, join_encounter
+from world.military.factories import MilitaryUnitFactory
 from world.scenes.constants import RoundStatus
 
 
@@ -42,10 +43,16 @@ class PlaceEncounterOutcomeWiringTests(TestCase):
         self.enemy_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
         self.place = BattlePlaceFactory(battle=self.battle)
         self.enemy_unit = BattleUnitFactory(
-            battle=self.battle, side=self.enemy_side, place=self.place, strength=100
+            battle=self.battle,
+            side=self.enemy_side,
+            place=self.place,
+            military_unit=MilitaryUnitFactory(strength=100),
         )
         self.pc_unit = BattleUnitFactory(
-            battle=self.battle, side=self.pc_side, place=self.place, strength=100
+            battle=self.battle,
+            side=self.pc_side,
+            place=self.place,
+            military_unit=MilitaryUnitFactory(strength=100),
         )
         self.participant = BattleParticipantFactory(
             battle=self.battle,

@@ -244,7 +244,11 @@ def commander_bonus_for_side_at_place(side: BattleSide, place: BattlePlace | Non
     if place is None:
         return 0
     units = side.battle.state_cache.units_on_place(place.pk, statuses=(BattleUnitStatus.ACTIVE,))
-    commanders = {u.commander for u in units if u.side_id == side.pk and u.commander_id is not None}
+    commanders = {
+        u.military_unit.commander
+        for u in units
+        if u.side_id == side.pk and u.military_unit.commander_id is not None
+    }
     if not commanders:
         return 0
     target = ensure_battle_command_modifier_target()
@@ -538,11 +542,14 @@ def _apply_swarm_losses(unit: BattleUnit, attrition: int) -> int:
     and persists the new ``individual_count``. Ceil-rounding means any nonzero
     attrition against a swarm always costs at least one body.
     """
-    if unit.individual_count is None or attrition <= 0:
+    if unit.military_unit.individual_count is None or attrition <= 0:
         return 0
-    lost = min(unit.individual_count, math.ceil(unit.individual_count * attrition / 100))
-    unit.individual_count = max(0, unit.individual_count - lost)
-    unit.save(update_fields=["individual_count"])
+    lost = min(
+        unit.military_unit.individual_count,
+        math.ceil(unit.military_unit.individual_count * attrition / 100),
+    )
+    unit.military_unit.individual_count = max(0, unit.military_unit.individual_count - lost)
+    unit.military_unit.save(update_fields=["individual_count"])
     return lost
 
 
@@ -580,13 +587,14 @@ def _resolve_strike_success(
     for unit in units:
         bonus = defense_bonus_by_place.get(unit.place_id, 0)
         net_attrition = max(0, attrition - bonus)
-        unit.strength = max(0, unit.strength - net_attrition)
-        unit.status = _compute_unit_status(unit.strength, unit.morale)
+        unit.military_unit.strength = max(0, unit.military_unit.strength - net_attrition)
+        unit.status = _compute_unit_status(unit.military_unit.strength, unit.military_unit.morale)
         if unit.status == BattleUnitStatus.DESTROYED:
             result.units_destroyed.append(unit.pk)
         elif unit.status == BattleUnitStatus.ROUTED:
             result.units_routed.append(unit.pk)
-        unit.save(update_fields=["strength", "status"])
+        unit.save(update_fields=["status"])
+        unit.military_unit.save(update_fields=["strength"])
 
         bodies_lost = _apply_swarm_losses(unit, net_attrition)
         if bodies_lost:
@@ -658,15 +666,16 @@ def _resolve_rout_success(
 
     morale_damage = success_level * ROUT_MORALE_PER_LEVEL
     for unit in units:
-        previous_morale = unit.morale
-        unit.morale = max(0, unit.morale - morale_damage)
-        actual_morale_loss = previous_morale - unit.morale
-        unit.status = _compute_unit_status(unit.strength, unit.morale)
+        previous_morale = unit.military_unit.morale
+        unit.military_unit.morale = max(0, unit.military_unit.morale - morale_damage)
+        actual_morale_loss = previous_morale - unit.military_unit.morale
+        unit.status = _compute_unit_status(unit.military_unit.strength, unit.military_unit.morale)
         if unit.status == BattleUnitStatus.DESTROYED:
             result.units_destroyed.append(unit.pk)
         elif unit.status == BattleUnitStatus.ROUTED:
             result.units_routed.append(unit.pk)
-        unit.save(update_fields=["morale", "status"])
+        unit.save(update_fields=["status"])
+        unit.military_unit.save(update_fields=["morale"])
 
         bodies_lost = _apply_swarm_losses(unit, actual_morale_loss)
         if bodies_lost:
@@ -706,9 +715,10 @@ def _resolve_rally_success(
 
     morale_gain = success_level * RALLY_MORALE_PER_LEVEL
     for unit in units:
-        unit.morale = min(MAX_MORALE, unit.morale + morale_gain)
-        unit.status = _compute_unit_status(unit.strength, unit.morale)
-        unit.save(update_fields=["morale", "status"])
+        unit.military_unit.morale = min(MAX_MORALE, unit.military_unit.morale + morale_gain)
+        unit.status = _compute_unit_status(unit.military_unit.strength, unit.military_unit.morale)
+        unit.save(update_fields=["status"])
+        unit.military_unit.save(update_fields=["morale"])
 
     side = declaration.participant.side
     vp_gain = round(RALLY_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))

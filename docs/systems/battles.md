@@ -100,58 +100,33 @@ independently breachable via its own `integrity`/`max_integrity` (see ADR-0083).
 
 ### `BattleUnit`
 
-An abstract typed force (enemy or friendly) stationed at a front.
+A **thin join record** referencing a persistent `MilitaryUnit` (ADR-0125). All
+identity and stats live on `MilitaryUnit` (in `world/military`) — the single
+source of truth (ADR-0014). `BattleUnit` keeps only battle-scoped link state.
+
+Reads are transparent via `@property` proxies (`unit.strength` →
+`unit.military_unit.strength`). Writes go through `unit.military_unit`.
 
 | Field | Type | Notes |
 |---|---|---|
 | `battle` | FK → `Battle` (`related_name="units"`) | |
 | `side` | FK → `BattleSide` (`related_name="units"`) | |
 | `place` | FK → `BattlePlace` (null) | Optional front assignment |
-| `name` | CharField(120) | Display name (e.g. "Cavalry") |
-| `descriptor` | CharField(80), blank | Optional flavor tag (e.g. "zombies-on-nightmares"); narrative only — `properties`/`capabilities`/`quality` below drive mechanics. Renamed from the spine's `unit_type` (#1711). |
-| `properties` | M2M → `mechanics.Property` (blank, `related_name="battle_units"`) | Descriptive tags this unit carries (flying, aquatic, metal-clad, etc.) — the same catalog characters use (#1794). Presence-only, no per-unit magnitude. Drives type-matchup and terrain-effect lookups (summed across every matching row, replacing #1711's single-select `composition`). |
-| `capabilities` | M2M → `conditions.CapabilityType` through `BattleUnitCapability` (blank, `related_name="battle_units"`) | What this unit can DO, at an authored per-unit magnitude (#1794) — e.g. two units can both hold FLYING at very different values. |
-| `individual_count` | PositiveIntegerField (null) | Population data point mirroring `CombatOpponent.swarm_count`'s naming/shape (#1794); `None` means "not a swarm-style unit". Drives a banded STRIKE bonus + proportional STRIKE/ROUT body loss (#1841) — see [Swarm math](#swarm-math-1841). |
-| `quality` | CharField | `UnitQuality` — MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711); default TRAINED. Flat attacker-facing STRIKE-check modifier ladder, not a strength multiplier. |
-| `commander` | FK → `character_sheets.CharacterSheet` (null, `related_name="commanded_battle_units"`) | Optional commander (#1711); their Battle Command modifier-walk bonus applies to participants fighting alongside this unit's side/place. |
-| `summoned_by` | FK → `character_sheets.CharacterSheet` (null, `related_name="summoned_battle_units"`) | Set when this unit was created via a military-grade summon (#1711, see `_summon_military_unit`). |
-| `strength` | PositiveSmallIntegerField | Default 100; decremented by STRIKE successes |
-| `morale` | PositiveSmallIntegerField | Default `DEFAULT_MORALE` (70, #1712); second resource alongside strength — starts well below its ceiling, unlike strength. |
+| `transit_x/y` | Decimal | In-progress MOVE position (#2007) |
+| `transit_target_place` | FK → `BattlePlace` (null) | MOVE destination (#2007) |
+| `military_unit` | FK → `military.MilitaryUnit` (PROTECT) | The persistent unit — source of truth for all identity + stats |
 | `status` | CharField | `BattleUnitStatus` — ACTIVE / ROUTED / DESTROYED; always a derived view, never written independently (see below) |
 
-`status` is derived jointly from `strength` and `morale` by
+`status` is derived jointly from `strength` and `morale` (read via
+`unit.military_unit.strength`/`.morale`) by
 `world.battles.resolution._compute_unit_status` (#1712) — every unit-status write
-(STRIKE resolution, champion-duel-outcome routs) goes through this shared function
-rather than writing `status` directly. DESTROYED requires `strength == 0` (physical
-destruction; morale collapse alone never kills a unit). ROUTED is triggered by
-either resource crossing its own threshold: `strength ≤ 30` (`ROUTED_STRENGTH_THRESHOLD`)
-or `morale ≤ 25` (`ROUTED_MORALE_THRESHOLD`). Strength is decremented by
-`success_level × STRIKE_ATTRITION_PER_LEVEL` (10 per level).
+goes through this shared function rather than writing `status` directly.
 
-**Property/Capability holding (#1794):** `BattleUnit.effective_capability(capability)`
-returns the authored magnitude from its own `BattleUnitCapability` rows (0 if absent),
-and `BattleUnit.has_property(prop)` checks its `properties` M2M — both conform to
-`world.mechanics.types.HasCapabilities`/`HasProperties`, the same `typing.Protocol`s
-`CharacterSheet.effective_capability`/`has_property` implement. No `isinstance`
-branching is needed anywhere a holder is read generically (e.g. the modifier stack
-below).
-
-### `BattleUnitCapability`
-
-Authored `(unit, capability) → magnitude` row (#1794) — the through model for
-`BattleUnit.capabilities`. Mirrors `mechanics.ObjectProperty`'s shape (one FK swapped:
-`BattleUnit` for `ObjectDB`, `CapabilityType` for `Property`). No source-tracking FKs —
-BattleUnit capabilities are static authored data, not subject to reactive
-conditions/challenges.
-
-| Field | Type | Notes |
-|---|---|---|
-| `unit` | FK → `BattleUnit` (`related_name="capability_values"`) | |
-| `capability` | FK → `conditions.CapabilityType` (PROTECT, `related_name="battle_unit_values"`) | |
-| `value` | PositiveIntegerField | Authored magnitude |
-
-**Constraint:** unique `(unit, capability)`.
-
+**Proxy properties:** `name`, `descriptor`, `quality`, `commander`,
+`summoned_by`, `strength`, `morale`, `individual_count` — all read-only
+delegating to `self.military_unit`. `effective_capability(capability)` and
+`has_property(prop)` also delegate to `self.military_unit`, conforming to
+`world.mechanics.types.HasCapabilities`/`HasProperties`.
 ### `BattleVehicle`
 
 A vessel or great mount — a naval ship, airship, dragon, or kraken — modeled as a
@@ -1513,3 +1488,48 @@ the bonus.
 
 **Registration:** `battles/apps.py ready()` registers the kind handler +
 tiered resolver. Pattern mirrors GANG_TURF (`world/societies/gang_turf.py`).
+
+## War Funding Preparation (#1890)
+
+A `WAR_FUNDING` project kind (`TIERED_PERIOD`) that models a covenant's
+military preparation drive before mustering troops. A covenant leader opens the
+project; members contribute AP/money/checks during the window; at the deadline,
+accumulated progress is graded into a `CheckOutcome` tier via
+`WarFundingTierThreshold` rows. The handler stores the tier on
+`WarFundingDetails` and adds training XP to `CovenantMilitaryReadiness`. When
+units are later mustered into a battle for that covenant, `add_unit` reads the
+combined bonus via `get_war_funding_bonus` and upgrades the `MilitaryUnit`'s
+quality/strength/morale.
+
+Decoupled from the battle lifecycle — the project grades at its deadline
+regardless of whether a battle exists yet. The read seam is
+`get_war_funding_bonus(covenant)`, called by `add_unit` when
+`side.covenant` is set.
+
+**Models** (`world/battles/models.py`):
+- `WarFundingDetails` — OneToOne→Project (PK): `covenant` FK, `outcome_tier` FK
+  (null until graded), `applied_at` (idempotency guard).
+- `WarFundingTierThreshold` — progress band → CheckOutcome tier (mirrors
+  `CityDefenseTierThreshold`).
+- `WarFundingTierBonus` — extends `OutcomeTierAward`; four fields per tier:
+  `quality_steps` (0-2), `strength_bonus`, `morale_bonus`, `training_xp`.
+  Staff-tunable DB row; missing row yields zeros.
+- `CovenantMilitaryReadiness` — OneToOne→Covenant; `training_level`
+  (accumulated across projects). Persistent covenant military training state.
+- `ReadinessThreshold` — global (not per-covenant) training-level band →
+  `bonus_quality_steps`. Staff-tunable; seeded with 0→0, 75→1, 200→2 defaults.
+
+**Services** (`world/battles/war_funding_services.py`):
+- `start_war_funding_project(*, covenant, owner_persona, period_days, tier_thresholds)`
+  — gated on `CharacterCovenantRole` with `rank.can_lead_rituals=True`,
+  `engaged=True`, `left_at__isnull=True`.
+- `resolve_war_funding(project)` — tiered resolver
+- `complete_war_funding(project, outcome_tier)` — kind handler (idempotent,
+  updates `CovenantMilitaryReadiness.training_level`)
+- `get_war_funding_bonus(covenant)` → `WarFundingBonus` dataclass — read seam
+  for `add_unit`. Combines per-tier bonus + readiness-gated quality steps.
+- `_apply_quality_steps(base_quality, steps)` — walks UnitQuality ordering,
+  clamps at ELITE.
+
+**Registration:** `battles/apps.py ready()` registers the kind handler +
+tiered resolver. Pattern mirrors CITY_DEFENSE.

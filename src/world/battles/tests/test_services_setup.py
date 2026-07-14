@@ -702,7 +702,7 @@ class EjectVehicleOccupantsTests(TestCase):
         )
         aquatic = PropertyFactory(name="aquatic")
         passenger_unit = BattleUnitFactory(battle=side.battle, side=side, place=vehicle.place)
-        passenger_unit.properties.add(aquatic)
+        passenger_unit.military_unit.properties.add(aquatic)
         original_strength = passenger_unit.strength
 
         eject_vehicle_occupants(vehicle=vehicle)

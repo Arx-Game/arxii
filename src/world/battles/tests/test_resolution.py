@@ -75,6 +75,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import PropertyFactory
+from world.military.factories import MilitaryUnitFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.factories import CharacterVitalsFactory, ensure_surrounded_content
 
@@ -754,8 +755,12 @@ class ResolveBattleRoundSuccessTests(TestCase):
 
         battle = BattleFactory()
         side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
-        unit_a = BattleUnitFactory(battle=battle, side=side, strength=100)
-        unit_b = BattleUnitFactory(battle=battle, side=side, strength=100)
+        unit_a = BattleUnitFactory(
+            battle=battle, side=side, military_unit=MilitaryUnitFactory(strength=100)
+        )
+        unit_b = BattleUnitFactory(
+            battle=battle, side=side, military_unit=MilitaryUnitFactory(strength=100)
+        )
         declaration = BattleActionDeclarationFactory(
             battle_round__battle=battle,
             action_kind=BattleActionKind.STRIKE,
@@ -783,7 +788,9 @@ class ResolveBattleRoundSuccessTests(TestCase):
 
         battle = BattleFactory()
         side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
-        own_unit = BattleUnitFactory(battle=battle, side=side, strength=100)
+        own_unit = BattleUnitFactory(
+            battle=battle, side=side, military_unit=MilitaryUnitFactory(strength=100)
+        )
         participant = BattleParticipantFactory(battle=battle, side=side)
         declaration = BattleActionDeclarationFactory(
             battle_round__battle=battle,
@@ -806,8 +813,8 @@ class ResolveBattleRoundSuccessTests(TestCase):
         from world.battles.resolution import resolve_battle_round
         from world.battles.services import declare_battle_action
 
-        self.unit.morale = 20  # already below ROUTED_MORALE_THRESHOLD (25)
-        self.unit.save(update_fields=["morale"])
+        self.unit.military_unit.morale = 20  # already below ROUTED_MORALE_THRESHOLD (25)
+        self.unit.military_unit.save(update_fields=["morale"])
 
         declare_battle_action(
             participant=self.participant,
@@ -873,7 +880,9 @@ class RoutResolutionTests(TestCase):
         self.defender_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
         self.participant = BattleParticipantFactory(battle=self.battle, side=self.attacker_side)
         self.enemy_unit = BattleUnitFactory(
-            battle=self.battle, side=self.defender_side, strength=100, morale=70
+            battle=self.battle,
+            side=self.defender_side,
+            military_unit=MilitaryUnitFactory(strength=100, morale=70),
         )
 
     def test_rout_success_damages_morale_and_awards_vp(self) -> None:
@@ -921,7 +930,9 @@ class RoutResolutionTests(TestCase):
         from world.battles.resolution import BattleRoundResult, _resolve_rout_success
 
         own_unit = BattleUnitFactory(
-            battle=self.battle, side=self.attacker_side, strength=100, morale=70
+            battle=self.battle,
+            side=self.attacker_side,
+            military_unit=MilitaryUnitFactory(strength=100, morale=70),
         )
         declaration = BattleActionDeclarationFactory(
             battle_round__battle=self.battle,
@@ -952,8 +963,7 @@ class RallyResolutionTests(TestCase):
         unit = BattleUnitFactory(
             battle=self.battle,
             side=self.side,
-            strength=100,
-            morale=10,
+            military_unit=MilitaryUnitFactory(strength=100, morale=10),
             status=BattleUnitStatus.ROUTED,
         )
         declaration = BattleActionDeclarationFactory(
@@ -978,7 +988,11 @@ class RallyResolutionTests(TestCase):
         from world.battles.factories import BattleActionDeclarationFactory
         from world.battles.resolution import BattleRoundResult, _resolve_rally_success
 
-        unit = BattleUnitFactory(battle=self.battle, side=self.side, morale=95)
+        unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.side,
+            military_unit=MilitaryUnitFactory(morale=95),
+        )
         declaration = BattleActionDeclarationFactory(
             battle_round__battle=self.battle,
             participant=self.participant,
@@ -1001,8 +1015,7 @@ class RallyResolutionTests(TestCase):
         unit = BattleUnitFactory(
             battle=self.battle,
             side=self.side,
-            strength=20,
-            morale=70,
+            military_unit=MilitaryUnitFactory(strength=20, morale=70),
             status=BattleUnitStatus.ROUTED,
         )
         declaration = BattleActionDeclarationFactory(
@@ -1026,7 +1039,10 @@ class RallyResolutionTests(TestCase):
 
         enemy_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
         enemy_unit = BattleUnitFactory(
-            battle=self.battle, side=enemy_side, morale=10, status=BattleUnitStatus.ROUTED
+            battle=self.battle,
+            side=enemy_side,
+            military_unit=MilitaryUnitFactory(morale=10),
+            status=BattleUnitStatus.ROUTED,
         )
         declaration = BattleActionDeclarationFactory(
             battle_round__battle=self.battle,
@@ -1054,7 +1070,7 @@ class RallyResolutionTests(TestCase):
             battle=self.battle,
             side=self.side,
             place=place,
-            morale=10,
+            military_unit=MilitaryUnitFactory(morale=10),
             status=BattleUnitStatus.ROUTED,
         )
         declaration = BattleActionDeclarationFactory(
@@ -1107,7 +1123,10 @@ class RepelResolutionTests(TestCase):
         from world.battles.services import declare_battle_action
 
         defender_unit = BattleUnitFactory(
-            battle=self.battle, side=self.defender_side, place=self.place, strength=100
+            battle=self.battle,
+            side=self.defender_side,
+            place=self.place,
+            military_unit=MilitaryUnitFactory(strength=100),
         )
         attacker_participant = BattleParticipantFactory(battle=self.battle, side=self.attacker_side)
         # The REPEL declarant is created *after* attacker_participant, so it has a
@@ -1443,8 +1462,8 @@ class StrikeDestroysLivingMountEjectsOccupantsTests(TestCase):
 
         # Drive the mount's own unit down near death so a single STRIKE success
         # finishes it off (default strength=100; STRIKE_ATTRITION_PER_LEVEL=10).
-        self.vehicle.unit.strength = 5
-        self.vehicle.unit.save(update_fields=["strength"])
+        self.vehicle.unit.military_unit.strength = 5
+        self.vehicle.unit.military_unit.save(update_fields=["strength"])
 
         self.technique = TechniqueFactory(
             action_template=ActionTemplateFactory(), damage_profile=False
@@ -2088,7 +2107,7 @@ class PropertyAffinityModifierTests(TestCase):
         technique = TechniqueFactory()
         unit = BattleUnitFactory()
         flying = PropertyFactory(name="flying")
-        unit.properties.add(flying)
+        unit.military_unit.properties.add(flying)
         TechniquePropertyAffinity.objects.create(technique=technique, property=flying, modifier=15)
         self.assertEqual(_property_affinity_modifier(technique, unit), 15)
 
@@ -2099,7 +2118,7 @@ class PropertyAffinityModifierTests(TestCase):
         unit = BattleUnitFactory()
         flying = PropertyFactory(name="flying")
         metal_clad = PropertyFactory(name="metal-clad")
-        unit.properties.set([flying, metal_clad])
+        unit.military_unit.properties.set([flying, metal_clad])
         TechniquePropertyAffinity.objects.create(technique=technique, property=flying, modifier=15)
         TechniquePropertyAffinity.objects.create(
             technique=technique, property=metal_clad, modifier=-5
@@ -2120,7 +2139,7 @@ class TerrainPropertyModifierTests(TestCase):
         place = BattlePlaceFactory(terrain_type=TerrainType.DIFFICULT)
         unit = BattleUnitFactory()
         aquatic = PropertyFactory(name="aquatic")
-        unit.properties.add(aquatic)
+        unit.military_unit.properties.add(aquatic)
         TerrainPropertyEffect.objects.create(
             terrain_type=TerrainType.DIFFICULT, property=aquatic, modifier=20
         )
@@ -2133,7 +2152,7 @@ class TerrainPropertyModifierTests(TestCase):
         unit = BattleUnitFactory()
         aquatic = PropertyFactory(name="aquatic")
         heavily_armored = PropertyFactory(name="heavily-armored")
-        unit.properties.set([aquatic, heavily_armored])
+        unit.military_unit.properties.set([aquatic, heavily_armored])
         TerrainPropertyEffect.objects.create(
             terrain_type=TerrainType.DIFFICULT, property=aquatic, modifier=20
         )

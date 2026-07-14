@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
         ("justice", "0004_accusationcrimeclaim_retracted_at_and_more"),
-        ("projects", "0020_alter_contributionmethod_kind_alter_project_kind_and_more"),
+        ("projects", "0020_add_war_funding_kind"),
     ]
 
     operations = [

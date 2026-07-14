@@ -40,6 +40,7 @@ class ProjectKind(models.TextChoices):
     PROPAGANDA = "PROPAGANDA", "Propaganda Campaign"
     CITY_DEFENSE = "CITY_DEFENSE", "City Defense"
     FRAME_JOB = "FRAME_JOB", "Frame Job"
+    WAR_FUNDING = "WAR_FUNDING", "War Funding"
 
 
 class ProjectStatus(models.TextChoices):
