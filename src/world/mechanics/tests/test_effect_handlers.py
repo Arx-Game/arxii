@@ -491,7 +491,7 @@ class CaptureBrigRoutingTests(TestCase):
         from world.buildings.factories import BuildingFactory
 
         area = AreaFactory(level=10)
-        building = BuildingFactory(area=area)
+        BuildingFactory(area=area)
         captor_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         RoomProfileFactory(objectdb=captor_room, area=area)
         character = CharacterFactory(db_key="no_brig_captive")
