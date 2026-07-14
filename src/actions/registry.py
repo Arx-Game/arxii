@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from actions.base import Action
 from actions.definitions.accusations import (
+    DenounceFramerAction,
     RefuteAccusationAction,
     SmearAction,
     mint_accusation,
@@ -611,6 +612,7 @@ _ALL_ACTIONS: list[Action] = [
     mint_accusation,
     SmearAction(),
     RefuteAccusationAction(),
+    DenounceFramerAction(),
     perform,
     entrance,
     restore_sense,

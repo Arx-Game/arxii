@@ -470,6 +470,7 @@ class ActionRegistryTests(TestCase):
             "dispose_evidence",
             "smear_accusation",
             "refute_accusation",
+            "denounce_framer",
             "start_investigation",
             "start_frame_job",
         }

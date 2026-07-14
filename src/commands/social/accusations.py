@@ -18,6 +18,8 @@ from commands.exceptions import CommandError
 CRIME_SWITCH = "crime"
 # The switch that attacks an existing accusation's credibility (the defense, #1825).
 REFUTE_SWITCH = "refute"
+# The switch that turns an unmasked frame back on its author (consent-gated, #1825).
+DENOUNCE_SWITCH = "denounce"
 
 
 class CmdAccuse(ArxCommand):
@@ -36,10 +38,16 @@ class CmdAccuse(ArxCommand):
     hub — anyone may defend the accused; no consent needed. Bare ``accuse/refute``
     lists the scandals you could dispute. One attempt each.
 
+    With ``/denounce`` you wield a PROVEN fabrication against its unmasked author,
+    at a social hub — this one is consent-gated: only someone the framer has opened
+    themselves to may turn it back on them. Their reputation takes the exposure and
+    the law takes an interest, scaled by how grave the frame was.
+
     Usage:
         accuse <character> = <the claim>
         accuse/crime <character> = <crime-kind> : <the claim>
         accuse/refute [<#>]
+        accuse/denounce [<#>]
     """
 
     key = "accuse"
@@ -50,12 +58,48 @@ class CmdAccuse(ArxCommand):
         if REFUTE_SWITCH in self.switches:
             self._refute((self.args or "").strip())
             return
+        if DENOUNCE_SWITCH in self.switches:
+            self._denounce((self.args or "").strip())
+            return
         super()._execute()
 
-    def _refutable_secrets(self) -> list[Any]:
-        """The ACCUSATION secrets this character has come into (recent first)."""
+    def _denounceable_secrets(self) -> list[Any]:
+        """The proven-fabrication authorship facts this character has come into."""
+        from world.justice.models import AccusationNullification  # noqa: PLC0415
+
+        return [
+            secret
+            for secret in self._known_secrets()
+            if AccusationNullification.objects.filter(authorship_secret=secret).exists()
+        ]
+
+    def _denounce(self, arg: str) -> None:
+        from actions.definitions.accusations import DenounceFramerAction  # noqa: PLC0415
+
+        secrets = self._denounceable_secrets()
+        if not arg:
+            if not secrets:
+                self.msg("You hold no proven fabrications to lay at anyone's feet.")
+                return
+            lines = ["|wFramers you could denounce:|n"]
+            lines += [f"  {index}. {secret.content}" for index, secret in enumerate(secrets, 1)]
+            lines.append("Use |waccuse/denounce <#>|n at a social hub to name them.")
+            self.msg("\n".join(lines))
+            return
+        try:
+            position = int(arg) - 1
+        except (ValueError, TypeError):
+            usage = "Usage: accuse/denounce [<#>]"
+            raise CommandError(usage) from None
+        if not 0 <= position < len(secrets):
+            self.msg(f"No fabrication #{arg}. See |waccuse/denounce|n for the list.")
+            return
+        result = DenounceFramerAction().run(self.caller, secret_id=secrets[position].pk)
+        self.msg(result.message)
+
+    def _known_secrets(self, **secret_filters: Any) -> list[Any]:
+        """The secrets this character has come into (recent first), optionally filtered."""
         from world.roster.models import RosterEntry  # noqa: PLC0415
-        from world.secrets.constants import SecretProvenance  # noqa: PLC0415
         from world.secrets.services import known_secrets_for  # noqa: PLC0415
 
         sheet = self.caller.character_sheet
@@ -65,8 +109,16 @@ class CmdAccuse(ArxCommand):
             entry = sheet.roster_entry
         except RosterEntry.DoesNotExist:
             return []
-        held = known_secrets_for(entry).filter(secret__provenance=SecretProvenance.ACCUSATION)
+        held = known_secrets_for(entry)
+        if secret_filters:
+            held = held.filter(**secret_filters)
         return [knowledge.secret for knowledge in held]
+
+    def _refutable_secrets(self) -> list[Any]:
+        """The ACCUSATION secrets this character has come into (recent first)."""
+        from world.secrets.constants import SecretProvenance  # noqa: PLC0415
+
+        return self._known_secrets(secret__provenance=SecretProvenance.ACCUSATION)
 
     def _refute(self, arg: str) -> None:
         from actions.definitions.accusations import RefuteAccusationAction  # noqa: PLC0415

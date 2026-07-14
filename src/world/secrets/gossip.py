@@ -371,6 +371,20 @@ def gossip_decay_tick() -> int:
     return SecretGossip.objects.filter(heat__gt=GOSSIP_DECAY_FLOOR).update(heat=F("heat") - 1)
 
 
+def hub_region_for(room: ObjectDB) -> Area:
+    """Public seam: the room's region, requiring a social hub (raises GossipError).
+
+    Consumers outside this module (justice's denounce, #1825) gate hub-audience
+    actions through the same rule the gossip verbs use.
+    """
+    return _require_hub_region(room)
+
+
+def societies_for_region(region: Area) -> list:
+    """Public seam: the societies that judge a region's public — see `_societies_for_region`."""
+    return _societies_for_region(region)
+
+
 def has_gossip_skill(character: ObjectDB) -> bool:
     """Whether a character has Gossip >= 1 (the surface-eligibility gate, #1572)."""
     from world.skills.services import has_specialization  # noqa: PLC0415

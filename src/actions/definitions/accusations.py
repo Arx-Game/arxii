@@ -287,3 +287,54 @@ class RefuteAccusationAction(Action):
 
 
 mint_accusation = MintAccusationAction()
+
+
+@dataclass
+class DenounceFramerAction(Action):
+    """Turn an unmasked frame back on its author — the consent-gated backfire (#1825).
+
+    Thin over ``world.justice.denounce.denounce_framer``: the nullification-fact,
+    knowledge, hub, once-only, and hostile-consent gates all live in the service.
+    """
+
+    key: str = "denounce_framer"
+    name: str = "Denounce"
+    icon: str = "gavel"
+    category: str = "social"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    # PLACEHOLDER cost magnitudes — tuned in a later author pass.
+    ap_cost: int = 1
+    fatigue_cost: int = 1
+    fatigue_category: str = ActionCategory.SOCIAL
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.justice.denounce import DenounceError, denounce_framer  # noqa: PLC0415
+        from world.secrets.models import Secret  # noqa: PLC0415
+
+        secret_id = kwargs.get("secret_id")
+        secret = Secret.objects.filter(pk=secret_id).first() if isinstance(secret_id, int) else None
+        if secret is None:
+            return _ActionResult(success=False, message="There's no such truth to wield.")
+        room = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        if room is None:
+            return _ActionResult(success=False, message="There's no audience here.")
+        try:
+            denounce_framer(actor, secret, room=room)
+        except DenounceError as exc:
+            return _ActionResult(success=False, message=exc.user_message)
+        return _ActionResult(
+            success=True,
+            message=(
+                "PLACEHOLDER You lay the fabrication bare before the crowd — "
+                "and name the hand that stitched it."
+            ),
+            data={"secret_id": secret.pk},
+        )
