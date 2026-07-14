@@ -58,7 +58,7 @@ class CmdAccuse(ArxCommand):
         from world.secrets.constants import SecretProvenance  # noqa: PLC0415
         from world.secrets.services import known_secrets_for  # noqa: PLC0415
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             return []
         try:
@@ -114,7 +114,7 @@ class CmdAccuse(ArxCommand):
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
         target = self.search_or_raise(name)
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             no_identity = f"{target} has no character identity."
             raise CommandError(no_identity)

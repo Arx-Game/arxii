@@ -10,6 +10,8 @@ from flows.trigger_handler import TriggerHandler
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
+    from world.character_sheets.models import CharacterSheet
+
 DEFAULT_GENDER = "neutral"
 
 
@@ -57,6 +59,24 @@ class ObjectParent:
         from world.conditions.handlers import ConditionHandler
 
         return ConditionHandler(self)
+
+    @property
+    def character_sheet(self: Union[Self, "DefaultObject"]) -> "CharacterSheet | None":
+        """This object's CharacterSheet, or None for anything that isn't a character.
+
+        The safe, explicit replacement for ``getattr(obj, "sheet_data", None)``:
+        ``sheet_data`` is the reverse OneToOne from ``CharacterSheet.character`` and
+        raises on sheetless objects — the getattr idiom only "worked" because Django's
+        RelatedObjectDoesNotExist subclasses AttributeError, which also swallowed
+        genuine attribute bugs. Use this on maybe-not-a-character objects; use
+        ``obj.sheet_data`` directly where a missing sheet is a hard bug.
+        """
+        from world.character_sheets.models import CharacterSheet
+
+        try:
+            return self.sheet_data
+        except CharacterSheet.DoesNotExist:
+            return None
 
     @property
     def scene_data(self: Union[Self, "DefaultObject"]):

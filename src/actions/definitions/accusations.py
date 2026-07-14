@@ -54,7 +54,7 @@ class MintAccusationAction(Action):
         if not content:
             return _ActionResult(success=False, message="Accuse them of what? (say the claim)")
 
-        framer_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        framer_sheet = actor.character_sheet  # type: ignore[attr-defined] — typeclass property
         if framer_sheet is None:
             return _ActionResult(success=False, message="You have no character identity.")
 

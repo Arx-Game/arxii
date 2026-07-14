@@ -94,7 +94,7 @@ class CmdGossip(ArxCommand):
         target = character.search(name)
         if target is None:
             return  # search() already messaged the caller
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             self.msg(f"{target} has no character identity.")
             return
