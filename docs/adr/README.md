@@ -164,6 +164,7 @@ treat those names as hints to confirm, not gospel.
 - [0131 — Death off-ramp is automated and bounded; no resurrection path exists](0131-death-offramp-is-automated-and-bounded.md) (extends ADR-0040/0049/0076; related ADR-0023, #2287)
 - [0132 — Gods are WorshippedBeing rows with optional avatar sheets, not CharacterSheets](0132-gods-are-worshipped-beings-not-charactersheets.md) (#2355/#2289; fix-on-sight: was missing from this index)
 - [0133 — Estate settlement is player-first and timer-backed; theft moves ownership, never history](0133-estate-settlement-is-player-first-and-timer-backed.md) (extends ADR-0131; reaffirms ADR-0091; related ADR-0113, #1985)
+- [0135 — Accusation counter-play: evidence-grown frames, and defense needs no consent](0135-accusation-counterplay-evidence-frames-and-the-defense-consent-split.md) (extends ADR-0114, #2170; related ADR-0023, #1825, #2378)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

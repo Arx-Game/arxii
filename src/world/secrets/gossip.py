@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.areas.models import Area
+    from world.character_sheets.models import CharacterSheet
 
 
 _NOT_HUB = "You can only work the rumor mill at a social hub."
@@ -46,6 +47,14 @@ _NO_REGION = "This place isn't part of any region."
 _NO_SKILL = "You don't have the ear for it (requires Gossip 1+)."
 _NOT_LEVEL_1 = "Only the lightest secrets travel as idle gossip."
 _NOT_HELD = "You can only spread gossip you've actually come into."
+_NO_SELF_SMEAR = "Smearing yourself would be a novel strategy — no."
+_SMEAR_CONSENT_BLOCKED = (
+    "They have not opened themselves to being antagonised. "
+    "You can't manufacture a scandal against them."
+)
+_NOT_AN_ACCUSATION = "That's not a manufactured scandal — there's nothing to refute."
+_REFUTE_NOT_KNOWN = "You can only dispute a rumor you've actually come into."
+_ALREADY_REFUTED = "You have already made your case against this rumor."
 
 
 class GossipError(Exception):
@@ -194,6 +203,112 @@ def plant_gossip(character: ObjectDB, secret: Secret, *, room: ObjectDB) -> Goss
     )
 
 
+def plant_smear(
+    character: ObjectDB,
+    subject_sheet: CharacterSheet,
+    content: str,
+    *,
+    room: ObjectDB,
+) -> GossipResult:
+    """Mint an L1 accusation and seed its regional heat in one move (#1825).
+
+    The light-smear tier as a *type of gossip*: Gossip >= 1, standing at a social hub,
+    the target's ``hostile`` consent category open to you, and not yourself. One Gossip
+    roll drives everything — a miss mints nothing (no consolation accusation); a success
+    mints the ACCUSATION Secret at Level 1, seeds its ``SecretGossip`` heat at the
+    plant delta, and plants the counter-clue in the region's hubs with difficulty
+    seeded from the same roll (your craft sets how hard your trail is to unearth).
+    """
+    from world.secrets.constants import (  # noqa: PLC0415
+        SMEAR_CLUE_BASE_DIFFICULTY,
+        SMEAR_CLUE_DIFFICULTY_PER_LEVEL,
+    )
+    from world.secrets.services import accusation_permitted, mint_accusation  # noqa: PLC0415
+
+    _require_gossip_skill(character)
+    region = _require_hub_region(room)
+    smearer_sheet = character.sheet_data  # type: ignore[attr-defined] — typeclass extension
+    if smearer_sheet.pk == subject_sheet.pk:
+        raise GossipError(_NO_SELF_SMEAR)
+    if not accusation_permitted(framer_sheet=smearer_sheet, target_sheet=subject_sheet):
+        raise GossipError(_SMEAR_CONSENT_BLOCKED)
+
+    tier = _check_tier(character)
+    if tier < 1:
+        return GossipResult(success=False)
+
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    secret = mint_accusation(
+        accuser_persona=active_persona_for_sheet(smearer_sheet),
+        subject_sheet=subject_sheet,
+        content=content,
+        level=SecretLevel.UNCOMMON_KNOWLEDGE,
+    )
+    delta = _delta_for(tier, GOSSIP_PLANT_REGULAR, GOSSIP_PLANT_SPECIAL)
+    row, _ = SecretGossip.objects.get_or_create(secret=secret, region=region)
+    row.heat += delta
+    row.save(update_fields=["heat", "updated_date"])
+    _maybe_go_public(row)
+
+    from world.clues.services import create_accusation_counter_clue  # noqa: PLC0415
+
+    difficulty = SMEAR_CLUE_BASE_DIFFICULTY + tier * SMEAR_CLUE_DIFFICULTY_PER_LEVEL
+    create_accusation_counter_clue(secret, region=region, difficulty=difficulty)
+    return GossipResult(
+        success=True,
+        heat=row.heat,
+        went_public=row.went_public,
+        surfaced_secret_id=secret.pk,
+    )
+
+
+def refute_accusation(character: ObjectDB, secret: Secret, *, room: ObjectDB) -> GossipResult:
+    """Attack an accusation's credibility at a hub — the consentless defense (#1825).
+
+    Anyone holding knowledge of an ACCUSATION secret (or its subject) may make the
+    case against it: a Gossip-composition check vs a level-scaled difficulty. Success
+    applies a **partial** compensating reputation reversal (nullification via the
+    investigation project is the full clear). One attempt per refuter, success or
+    failure — the case has been made. **No consent gate and no skill floor** — the
+    Tom/Bob/Fred rule: defending the accused is open; only naming-and-attacking the
+    author (denounce) needs the author's hostile-consent opt-in.
+    """
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.secrets.constants import (  # noqa: PLC0415
+        REFUTE_BASE_DIFFICULTY,
+        REFUTE_DIFFICULTY_PER_LEVEL,
+        REFUTE_REVERSAL_DENOMINATOR,
+        REFUTE_REVERSAL_NUMERATOR,
+        SecretProvenance,
+    )
+    from world.secrets.models import AccusationRebuttal  # noqa: PLC0415
+    from world.secrets.services import reverse_secret_exposure  # noqa: PLC0415
+
+    _require_hub_region(room)
+    if secret.provenance != SecretProvenance.ACCUSATION:
+        raise GossipError(_NOT_AN_ACCUSATION)
+    if not _can_spread(character, secret):
+        raise GossipError(_REFUTE_NOT_KNOWN)
+    refuter_sheet = character.sheet_data  # type: ignore[attr-defined] — typeclass extension
+    if AccusationRebuttal.objects.filter(secret=secret, refuter_sheet=refuter_sheet).exists():
+        raise GossipError(_ALREADY_REFUTED)
+
+    difficulty = REFUTE_BASE_DIFFICULTY + secret.level * REFUTE_DIFFICULTY_PER_LEVEL
+    result = perform_check(character, _gossip_check_type(), target_difficulty=difficulty)
+    succeeded = result.success_level >= 1
+    AccusationRebuttal.objects.create(
+        secret=secret, refuter_sheet=refuter_sheet, succeeded=succeeded
+    )
+    if succeeded:
+        reverse_secret_exposure(
+            secret,
+            numerator=REFUTE_REVERSAL_NUMERATOR,
+            denominator=REFUTE_REVERSAL_DENOMINATOR,
+        )
+    return GossipResult(success=succeeded, surfaced_secret_id=secret.pk)
+
+
 def seek_gossip(character: ObjectDB, *, room: ObjectDB) -> GossipResult:
     """Roll to overhear a hot Level-1 secret in this region you don't yet know (#1572).
 
@@ -254,6 +369,20 @@ def gossip_decay_tick() -> int:
     from django.db.models import F  # noqa: PLC0415
 
     return SecretGossip.objects.filter(heat__gt=GOSSIP_DECAY_FLOOR).update(heat=F("heat") - 1)
+
+
+def hub_region_for(room: ObjectDB) -> Area:
+    """Public seam: the room's region, requiring a social hub (raises GossipError).
+
+    Consumers outside this module (justice's denounce, #1825) gate hub-audience
+    actions through the same rule the gossip verbs use.
+    """
+    return _require_hub_region(room)
+
+
+def societies_for_region(region: Area) -> list:
+    """Public seam: the societies that judge a region's public — see `_societies_for_region`."""
+    return _societies_for_region(region)
 
 
 def has_gossip_skill(character: ObjectDB) -> bool:

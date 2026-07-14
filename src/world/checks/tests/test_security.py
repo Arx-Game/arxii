@@ -147,8 +147,8 @@ class ResolveSecurityCheckTests(TestCase):
         """Owning the Lockpicking specialization adds to specialization_points."""
         wits = Trait.objects.get(name="wits")
         CharacterTraitValue.objects.create(character=self.character, trait=wits, value=30)
-        larceny = Trait.objects.get(name="Larceny")
-        CharacterTraitValue.objects.create(character=self.character, trait=larceny, value=30)
+        skulduggery = Trait.objects.get(name="Skulduggery")
+        CharacterTraitValue.objects.create(character=self.character, trait=skulduggery, value=30)
 
         success = CheckOutcome.objects.filter(success_level__gt=0).first()
         with force_check_outcome(success):
@@ -156,7 +156,9 @@ class ResolveSecurityCheckTests(TestCase):
                 SecurityCheckKind.LOCKPICK, self.character, target_difficulty=0
             )
 
-        spec = Specialization.objects.get(name="Lockpicking", parent_skill__trait__name="Larceny")
+        spec = Specialization.objects.get(
+            name="Lockpicking", parent_skill__trait__name="Skulduggery"
+        )
         CharacterSpecializationValueFactory(character=self.character, specialization=spec, value=30)
         with force_check_outcome(success):
             with_spec = resolve_security_check(

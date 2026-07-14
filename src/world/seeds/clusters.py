@@ -193,6 +193,14 @@ def _seed_civic_hubs() -> None:
     ensure_town_crier_kind()
 
 
+def _seed_counterplay() -> None:
+    from world.room_features.seeds import ensure_workshop_of_iniquity_kind  # noqa: PLC0415
+    from world.seeds.justice import ensure_frame_job_contribution_method  # noqa: PLC0415
+
+    ensure_workshop_of_iniquity_kind()
+    ensure_frame_job_contribution_method()
+
+
 def _seed_building_condition() -> None:
     from world.buildings.seeds import ensure_preparation_contribution_method  # noqa: PLC0415
 
@@ -369,7 +377,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "domain_dev": _seed_domain_dev,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,
-    # Security: Larceny/Athletics skills + lockpick/break/escape/guard-detection
+    # Security: Skulduggery(né Larceny)/Athletics skills + lockpick/break/escape/guard-detection
     # CheckTypes (#2180). After "stealth" (reuses its Stealth skill for SNEAK)
     # and "investigation" (reuses its Investigation skill for Guard Detection).
     "security": _seed_security,
@@ -379,6 +387,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Civic hubs: the Notice Board / Town Crier RoomFeatureKinds + the crier
     # NPCRole (#1450). Instances (which room carries one) are world data.
     "civic_hubs": _seed_civic_hubs,
+    # Counter-play (#1825): the Workshop of Iniquity RoomFeatureKind + the
+    # frame-job Forgery contribution method. After "security" (rides its
+    # Forge Evidence CheckType) and "justice" (crime kinds).
+    "counterplay": _seed_counterplay,
     # Building condition: the Grand Preparation AP-check contribution method
     # (#1930). After "governance" (rides its Household Command CheckType).
     "building_condition": _seed_building_condition,
@@ -583,6 +595,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "perception": [ConditionTemplate],
         # Civic hubs: the two reader RoomFeatureKinds + the crier NPCRole (#1450).
         "civic_hubs": [RoomFeatureKind],
+        # Counter-play: the Workshop of Iniquity kind + the frame-job
+        # ContributionMethod (#1825); represented by ContributionMethod.
+        "counterplay": [ContributionMethod],
         # Building condition: the Grand Preparation "Direct the Household"
         # ContributionMethod (#1930).
         "building_condition": [ContributionMethod],

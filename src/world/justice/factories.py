@@ -3,7 +3,13 @@ import factory.django
 
 from world.areas.factories import AreaFactory
 from world.justice.constants import DEFAULT_HEAT_WEIGHT
-from world.justice.models import AccusationCrimeClaim, AreaLaw, CrimeKind, PersonaHeat
+from world.justice.models import (
+    AccusationCrimeClaim,
+    AreaLaw,
+    CrimeEvidence,
+    CrimeKind,
+    PersonaHeat,
+)
 from world.scenes.factories import PersonaFactory
 from world.secrets.factories import SecretFactory
 from world.societies.factories import SocietyFactory
@@ -46,3 +52,12 @@ class AccusationCrimeClaimFactory(factory.django.DjangoModelFactory):
     secret = factory.SubFactory(SecretFactory)
     crime_kind = factory.SubFactory(CrimeKindFactory)
     real_deed = None
+
+
+class CrimeEvidenceFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CrimeEvidence
+
+    deed = factory.SubFactory("world.societies.factories.LegendEntryFactory")
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    item_instance = None

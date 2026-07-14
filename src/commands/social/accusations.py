@@ -16,10 +16,14 @@ from commands.exceptions import CommandError
 
 # The switch that routes a bare accusation into the criminal (heat-bearing) path.
 CRIME_SWITCH = "crime"
+# The switch that attacks an existing accusation's credibility (the defense, #1825).
+REFUTE_SWITCH = "refute"
+# The switch that turns an unmasked frame back on its author (consent-gated, #1825).
+DENOUNCE_SWITCH = "denounce"
 
 
 class CmdAccuse(ArxCommand):
-    """Manufacture a false scandal against another character.
+    """Manufacture a false scandal against another character — or pick one apart.
 
     Only works against someone who has opened themselves to antagonism (their consent
     settings). Falsity is emergent — a leaked accusation mints heat and reputation like a
@@ -30,14 +34,115 @@ class CmdAccuse(ArxCommand):
     This files a *wild* accusation — a claim with no real crime underneath, so it's the
     fragile, easily-refuted kind.
 
+    With ``/refute`` you attack a manufactured scandal you've come into, at a social
+    hub — anyone may defend the accused; no consent needed. Bare ``accuse/refute``
+    lists the scandals you could dispute. One attempt each.
+
+    With ``/denounce`` you wield a PROVEN fabrication against its unmasked author,
+    at a social hub — this one is consent-gated: only someone the framer has opened
+    themselves to may turn it back on them. Their reputation takes the exposure and
+    the law takes an interest, scaled by how grave the frame was.
+
     Usage:
         accuse <character> = <the claim>
         accuse/crime <character> = <crime-kind> : <the claim>
+        accuse/refute [<#>]
+        accuse/denounce [<#>]
     """
 
     key = "accuse"
     locks = "cmd:all()"
     action = MintAccusationAction()
+
+    def _execute(self) -> None:
+        if REFUTE_SWITCH in self.switches:
+            self._refute((self.args or "").strip())
+            return
+        if DENOUNCE_SWITCH in self.switches:
+            self._denounce((self.args or "").strip())
+            return
+        super()._execute()
+
+    def _denounceable_secrets(self) -> list[Any]:
+        """The proven-fabrication authorship facts this character has come into."""
+        from world.justice.models import AccusationNullification  # noqa: PLC0415
+
+        return [
+            secret
+            for secret in self._known_secrets()
+            if AccusationNullification.objects.filter(authorship_secret=secret).exists()
+        ]
+
+    def _denounce(self, arg: str) -> None:
+        from actions.definitions.accusations import DenounceFramerAction  # noqa: PLC0415
+
+        secrets = self._denounceable_secrets()
+        if not arg:
+            if not secrets:
+                self.msg("You hold no proven fabrications to lay at anyone's feet.")
+                return
+            lines = ["|wFramers you could denounce:|n"]
+            lines += [f"  {index}. {secret.content}" for index, secret in enumerate(secrets, 1)]
+            lines.append("Use |waccuse/denounce <#>|n at a social hub to name them.")
+            self.msg("\n".join(lines))
+            return
+        try:
+            position = int(arg) - 1
+        except (ValueError, TypeError):
+            usage = "Usage: accuse/denounce [<#>]"
+            raise CommandError(usage) from None
+        if not 0 <= position < len(secrets):
+            self.msg(f"No fabrication #{arg}. See |waccuse/denounce|n for the list.")
+            return
+        result = DenounceFramerAction().run(self.caller, secret_id=secrets[position].pk)
+        self.msg(result.message)
+
+    def _known_secrets(self, **secret_filters: Any) -> list[Any]:
+        """The secrets this character has come into (recent first), optionally filtered."""
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+        from world.secrets.services import known_secrets_for  # noqa: PLC0415
+
+        sheet = self.caller.character_sheet
+        if sheet is None:
+            return []
+        try:
+            entry = sheet.roster_entry
+        except RosterEntry.DoesNotExist:
+            return []
+        held = known_secrets_for(entry)
+        if secret_filters:
+            held = held.filter(**secret_filters)
+        return [knowledge.secret for knowledge in held]
+
+    def _refutable_secrets(self) -> list[Any]:
+        """The ACCUSATION secrets this character has come into (recent first)."""
+        from world.secrets.constants import SecretProvenance  # noqa: PLC0415
+
+        return self._known_secrets(secret__provenance=SecretProvenance.ACCUSATION)
+
+    def _refute(self, arg: str) -> None:
+        from actions.definitions.accusations import RefuteAccusationAction  # noqa: PLC0415
+
+        secrets = self._refutable_secrets()
+        if not arg:
+            if not secrets:
+                self.msg("You hold no manufactured scandals worth disputing.")
+                return
+            lines = ["|wScandals you could refute:|n"]
+            lines += [f"  {index}. {secret.content}" for index, secret in enumerate(secrets, 1)]
+            lines.append("Use |waccuse/refute <#>|n at a social hub to make your case.")
+            self.msg("\n".join(lines))
+            return
+        try:
+            position = int(arg) - 1
+        except (ValueError, TypeError):
+            usage = "Usage: accuse/refute [<#>]"
+            raise CommandError(usage) from None
+        if not 0 <= position < len(secrets):
+            self.msg(f"No scandal #{arg}. See |waccuse/refute|n for the list.")
+            return
+        result = RefuteAccusationAction().run(self.caller, secret_id=secrets[position].pk)
+        self.msg(result.message)
 
     def resolve_action_args(self) -> dict[str, Any]:
         raw = (self.args or "").strip()
@@ -61,7 +166,7 @@ class CmdAccuse(ArxCommand):
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
         target = self.search_or_raise(name)
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             no_identity = f"{target} has no character identity."
             raise CommandError(no_identity)
@@ -70,3 +175,86 @@ class CmdAccuse(ArxCommand):
         if is_crime:
             args["crime_kind_slug"] = crime_slug
         return args
+
+
+class CmdFrame(ArxCommand):
+    """Doctor held crime evidence into a frame job at a Workshop of Iniquity.
+
+    The heavy tier of the manufactured scandal (#1825): you must hold gathered
+    evidence of a real crime, stand in a Workshop of Iniquity, and name a crime
+    the evidence really speaks to. Opens a project you advance with Forgery
+    checks (project/check); on completion the anchored accusation files and the
+    law starts looking your patsy's way. Consent-gated, and re-checked when the
+    frame completes. Bare ``frame`` lists the evidence you hold.
+
+    Usage:
+        frame <character> = <crime-kind> : <the claim>  (uses your held evidence)
+    """
+
+    key = "frame"
+    locks = "cmd:all()"
+    action = None
+
+    def _execute(self) -> None:
+        raw = (self.args or "").strip()
+        if not raw:
+            self._list_held_evidence()
+            return
+        self._start_frame(raw)
+
+    def _held_evidence(self) -> list[Any]:
+        from world.justice.constants import EvidenceState  # noqa: PLC0415
+        from world.justice.models import CrimeEvidence  # noqa: PLC0415
+
+        sheet = self.caller.character_sheet
+        if sheet is None:
+            return []
+        return list(
+            CrimeEvidence.objects.filter(
+                state=EvidenceState.GATHERED,
+                item_instance__holder_character_sheet=sheet,
+            ).select_related("deed")
+        )
+
+    def _list_held_evidence(self) -> None:
+        held = self._held_evidence()
+        if not held:
+            self.msg("You hold no gathered evidence to doctor.")
+            return
+        lines = ["|wEvidence you could pervert:|n"]
+        lines += [f"  {evidence.pk}. {evidence.deed.title}" for evidence in held]
+        lines.append("Use |wframe <character> = <crime-kind> : <the claim>|n at a workshop.")
+        self.msg("\n".join(lines))
+
+    def _start_frame(self, raw: str) -> None:
+        from actions.definitions.evidence import StartFrameJobAction  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        name, sep, rest = raw.partition("=")
+        crime_slug, csep, claim = rest.partition(":")
+        name, crime_slug, claim = name.strip(), crime_slug.strip(), claim.strip()
+        if not sep or not name or not csep or not crime_slug or not claim:
+            usage = "Usage: frame <character> = <crime-kind> : <the claim>"
+            raise CommandError(usage)
+        held = self._held_evidence()
+        if not held:
+            self.msg("You hold no gathered evidence to doctor.")
+            return
+        # Global search — a patsy needn't be standing in your workshop.
+        target = self.caller.search(name, global_search=True)
+        if target is None:
+            return  # search() already messaged the caller
+        sheet = target.character_sheet
+        if sheet is None:
+            no_identity = f"{target} has no character identity."
+            raise CommandError(no_identity)
+        persona = active_persona_for_sheet(sheet)
+        # One held evidence = the obvious pick; several = the most recent gather.
+        result = StartFrameJobAction().run(
+            self.caller,
+            evidence_id=held[0].pk,
+            target_persona_id=persona.pk,
+            crime_kind_slug=crime_slug,
+            content=claim,
+        )
+        self.msg(result.message)

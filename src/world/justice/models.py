@@ -11,7 +11,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.justice.constants import DEFAULT_HEAT_WEIGHT
+from world.justice.constants import DEFAULT_HEAT_WEIGHT, EVIDENCE_BASE_QUALITY, EvidenceState
 
 # App-qualified model path repeated across FK references; centralized for dedup.
 _LEGEND_ENTRY_MODEL = "societies.LegendEntry"
@@ -234,6 +234,14 @@ class AccusationCrimeClaim(SharedMemoryModel):
         related_name="frame_claims",
         help_text="The real crime being pinned on the subject (L3 frame); null for a wild L2.",
     )
+    retracted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set by nullification (#1825): a retracted claim accrues no further heat; "
+            "already-minted heat decays out on its own."
+        ),
+    )
     created_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -247,3 +255,174 @@ class AccusationCrimeClaim(SharedMemoryModel):
     def __str__(self) -> str:
         kind = "wild" if self.is_wild else "frame"
         return f"{kind} accusation claim: secret {self.secret_id} alleges {self.crime_kind}"
+
+
+class AccusationNullification(SharedMemoryModel):
+    """The record that an accusation was proven fabricated (#1825).
+
+    Written once by ``nullify_accusation`` (the investigation project's payoff). The
+    accusation Secret itself STAYS — the claim was really made; truth stays emergent —
+    but its reputation damage is compensated, its gossip heat zeroed, and its criminal
+    claim retracted. ``authorship_secret`` is the falseness made discoverable: an
+    ACTION_ANCHORED secret **about the framer**, granted to no one at mint — unearthing
+    it (the harder author-unmask trail) is what arms the denounce/backfire step.
+    """
+
+    secret = models.OneToOneField(
+        "secrets.Secret",
+        on_delete=models.CASCADE,
+        related_name="nullification",
+        help_text="The ACCUSATION secret that was proven fabricated.",
+    )
+    authorship_secret = models.OneToOneField(
+        "secrets.Secret",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="nullification_authorship",
+        help_text="The 'fabricated by <framer>' secret; null for authorless accusations.",
+    )
+    nullified_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-nullified_at"]
+        verbose_name = "Accusation nullification"
+        verbose_name_plural = "Accusation nullifications"
+
+    def __str__(self) -> str:
+        return f"nullification of secret {self.secret_id}"
+
+
+class FrameJobDetails(SharedMemoryModel):
+    """Per-kind details for a FRAME_JOB ``Project`` (#1825) — the evidence being perverted.
+
+    Follows the details-model pattern (``RoomFeatureProgressionDetails``): a OneToOne
+    payload the completion handler reads. The frame only ever grows from a real crime's
+    gathered evidence, doctored in a Workshop of Iniquity with Forgery checks; on a
+    successful completion ``resolve_frame_job`` files the anchored L3 accusation.
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="frame_job_details",
+    )
+    evidence = models.ForeignKey(
+        "justice.CrimeEvidence",
+        on_delete=models.PROTECT,
+        related_name="frame_jobs",
+        help_text="The gathered evidence being doctored.",
+    )
+    subject_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.PROTECT,
+        related_name="frame_jobs_against",
+        help_text="The patsy the crime is being pinned on.",
+    )
+    crime_kind = models.ForeignKey(
+        CrimeKind,
+        on_delete=models.PROTECT,
+        related_name="frame_jobs",
+        help_text="The alleged crime — must be one the evidence's deed is tagged with.",
+    )
+    content = models.TextField(help_text="The claim the finished frame will assert.")
+
+    class Meta:
+        verbose_name = "Frame job details"
+        verbose_name_plural = "Frame job details"
+
+    def __str__(self) -> str:
+        return f"frame job on sheet {self.subject_sheet_id} (project #{self.project_id})"
+
+
+class DenounceRecord(SharedMemoryModel):
+    """One character's public denunciation of an unmasked framer (#1825).
+
+    The consent-gated backfire's once-only guard: exposing the authorship secret is
+    idempotent on the exposure engine's side, but the level-scaled heat must not
+    stack per repeat — one denounce per denouncer per authorship secret.
+    """
+
+    authorship_secret = models.ForeignKey(
+        "secrets.Secret",
+        on_delete=models.CASCADE,
+        related_name="denouncements",
+    )
+    denouncer_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="denouncements_made",
+    )
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["authorship_secret", "denouncer_sheet"],
+                name="uniq_denounce_secret_denouncer",
+            ),
+        ]
+        ordering = ["-created_date"]
+        verbose_name = "Denounce record"
+        verbose_name_plural = "Denounce records"
+
+    def __str__(self) -> str:
+        return f"denounce of secret {self.authorship_secret_id} by sheet {self.denouncer_sheet_id}"
+
+
+class CrimeEvidence(SharedMemoryModel):
+    """Physical evidence a crime-tagged deed left at the scene (#1825).
+
+    Generated by ``tag_deed_crimes`` when the deed has a located scene — one row
+    per deed. Evidence is *physical*: gathering it mints a real inventory item
+    (``item_instance``), so hand-offs, theft, and stashing ride the item system,
+    and holding it is what lets a character start the counter-investigation.
+    The perpetrator's moves are **dispose** (destroy the trail — dampens future
+    deed-knowledge heat) and **tamper** (a frame-job project perverts it into an
+    L3 accusation anchor; ``tamper_quality`` records the forger's craft and is
+    the examine check's target). Lives justice-side; FK into ``items`` follows
+    ADR-0010 (consumer → primitive).
+    """
+
+    deed = models.OneToOneField(
+        _LEGEND_ENTRY_MODEL,
+        on_delete=models.CASCADE,
+        related_name="crime_evidence",
+    )
+    room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.PROTECT,
+        related_name="crime_evidence",
+        help_text="The scene of the crime — where the evidence lies until gathered.",
+    )
+    item_instance = models.OneToOneField(
+        "items.ItemInstance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="crime_evidence",
+        help_text="The physical item, once gathered (null while at the scene or off-grid).",
+    )
+    state = models.CharField(
+        max_length=12,
+        choices=EvidenceState.choices,
+        default=EvidenceState.AT_SCENE,
+    )
+    quality = models.PositiveIntegerField(
+        default=EVIDENCE_BASE_QUALITY,
+        help_text="Gather/dispose check difficulty (PLACEHOLDER magnitude).",
+    )
+    tamper_quality = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="The frame-job's craft — the Scrutinize Evidence check's target difficulty.",
+    )
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_date"]
+        verbose_name = "Crime evidence"
+        verbose_name_plural = "Crime evidence"
+
+    def __str__(self) -> str:
+        return f"evidence for deed {self.deed_id} ({self.state})"

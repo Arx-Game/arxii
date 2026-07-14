@@ -34,6 +34,7 @@ class RoomFeatureServiceStrategy(models.TextChoices):
     STABLES = "STABLES", "Stables"
     VAULT = "VAULT", "Vault"
     BRIG = "BRIG", "Brig"
+    WORKSHOP_OF_INIQUITY = "WORKSHOP_OF_INIQUITY", "Workshop of Iniquity"
 
 
 class RoomFeatureInstallMechanism(models.TextChoices):

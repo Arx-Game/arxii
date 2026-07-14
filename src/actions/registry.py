@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from actions.base import Action
-from actions.definitions.accusations import mint_accusation
+from actions.definitions.accusations import (
+    DenounceFramerAction,
+    RefuteAccusationAction,
+    SmearAction,
+    mint_accusation,
+)
 from actions.definitions.alterations import ResolveAlterationAction
 from actions.definitions.assets import IntroduceAssetAction
 from actions.definitions.battles import (
@@ -129,6 +134,13 @@ from actions.definitions.events import (
     ScheduleEventAction,
     StartEventAction,
 )
+from actions.definitions.evidence import (
+    DisposeEvidenceAction,
+    ExamineEvidenceAction,
+    GatherEvidenceAction,
+    ProduceCaseEvidenceAction,
+    StartFrameJobAction,
+)
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
 from actions.definitions.forms import RevertFormAction, ShiftFormAction
@@ -166,7 +178,7 @@ from actions.definitions.gm_stories import (
 from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.definitions.identification import IdentifyAction
 from actions.definitions.imbue import ImbueAction
-from actions.definitions.investigation import SearchAction
+from actions.definitions.investigation import SearchAction, StartInvestigationAction
 from actions.definitions.items import (
     ActivatePermitAction,
     EquipAction,
@@ -600,6 +612,9 @@ _ALL_ACTIONS: list[Action] = [
     coerce,
     reveal_secret,
     mint_accusation,
+    SmearAction(),
+    RefuteAccusationAction(),
+    DenounceFramerAction(),
     perform,
     entrance,
     restore_sense,
@@ -713,6 +728,14 @@ _ALL_ACTIONS: list[Action] = [
     WillReadingAction(),
     # #2295 — voluntary asset sharing: introduce an owned asset to a co-present ally.
     IntroduceAssetAction(),
+    # #1825 — accusation counter-play: the criminal's post-crime evidence moves
+    # + the research-lab door into the counter-investigation.
+    GatherEvidenceAction(),
+    DisposeEvidenceAction(),
+    StartInvestigationAction(),
+    StartFrameJobAction(),
+    ProduceCaseEvidenceAction(),
+    ExamineEvidenceAction(),
 ]
 
 # Lookup by key

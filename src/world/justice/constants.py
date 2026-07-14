@@ -10,6 +10,34 @@ from django.db import models
 DEFAULT_HEAT_WEIGHT = 10
 HEAT_DECAY_PER_DAY = 5
 
+# --- Crime evidence (#1825) — all PLACEHOLDER magnitudes -----------------------------
+# Difficulty of the gather/dispose Skulduggery checks (and the untampered examine).
+EVIDENCE_BASE_QUALITY = 10
+# When ALL of a deed's evidence is DISPOSED, deed-knowledge heat accrual is scaled to
+# this percentage (the "much less likely to be discovered" dampener).
+DISPOSED_EVIDENCE_HEAT_FACTOR = 25
+
+GATHER_EVIDENCE_CHECK_NAME = "Gather Evidence"
+FORGE_EVIDENCE_CHECK_NAME = "Forge Evidence"
+SCRUTINIZE_EVIDENCE_CHECK_NAME = "Scrutinize Evidence"
+
+
+class EvidenceState(models.TextChoices):
+    """Lifecycle of one crime's physical evidence (#1825).
+
+    AT_SCENE → GATHERED (a real inventory item) → DISPOSED (destroyed, trail
+    dampened) / TAMPERING (a frame-job project is perverting it) → OFF_GRID
+    (the frame filed; consumed into the case file) → PRODUCED (an authority
+    pulled it back out for examination).
+    """
+
+    AT_SCENE = "at_scene", "At the scene"
+    GATHERED = "gathered", "Gathered"
+    TAMPERING = "tampering", "Being tampered with"
+    DISPOSED = "disposed", "Disposed of"
+    OFF_GRID = "off_grid", "Off-grid (case file)"
+    PRODUCED = "produced", "Produced for examination"
+
 
 class HeatTier(models.TextChoices):
     """Player-facing pursuit ratings, colour-coded — never a raw number.

@@ -352,6 +352,20 @@ def handle_library_progression(
     _install_or_level_feature(project, target_level)
 
 
+def handle_workshop_of_iniquity_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """WORKSHOP_OF_INIQUITY strategy (#1825): row-only install/level.
+
+    The workshop gates criminal projects (frame jobs now; future counterfeiting /
+    heist planning) — the gate is read-time (``frame_jobs._workshop_in_room``), so
+    the handler is a plain install/level.
+    """
+    _install_or_level_feature(project, target_level)
+
+
 def handle_training_room_progression(
     project: Project,
     target_level: int,

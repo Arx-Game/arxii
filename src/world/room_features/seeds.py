@@ -424,3 +424,31 @@ def ensure_brig_kind() -> RoomFeatureKind:
     )
     kind.allowed_building_kinds.add(ship_kind)
     return kind
+
+
+WORKSHOP_OF_INIQUITY_KIND_NAME = "Workshop of Iniquity"
+WORKSHOP_OF_INIQUITY_MAX_LEVEL = 3
+
+
+def ensure_workshop_of_iniquity_kind() -> RoomFeatureKind:
+    """Get-or-create the Workshop of Iniquity ``RoomFeatureKind`` (#1825).
+
+    The criminal-projects gate: frame jobs now; future counterfeiting / heist
+    planning. Row-only install/level; the gate is read-time
+    (``world.justice.frame_jobs._workshop_in_room``). Description is
+    Apostate-authored verbatim (2026-07-14) — NOT placeholder.
+    """
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.WORKSHOP_OF_INIQUITY,
+        defaults={
+            "name": WORKSHOP_OF_INIQUITY_KIND_NAME,
+            "max_level": WORKSHOP_OF_INIQUITY_MAX_LEVEL,
+            "install_mechanism": RoomFeatureInstallMechanism.PROJECT,
+            "description": (
+                "A scoundrel's workshop, where they might fashion disguises, false "
+                "evidence, criminal plans, illicit substances, and any other "
+                "contraband. Also great for parties."
+            ),
+        },
+    )
+    return kind

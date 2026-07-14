@@ -134,3 +134,101 @@ class GossipActionTests(TestCase):
         with force_check_outcome(self.special):
             result = suppress_gossip(self.character, self.secret, room=self._room())
         assert result.heat == 3  # special suppress removes 2
+
+
+@tag("postgres")  # hub/region resolution walks the AreaClosure materialized view (PG-only)
+class SmearGossipTests(TestCase):
+    """gossip smear (#1825) — mint an L1 accusation and seed its heat in one move."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.seeds.security_checks import seed_security_check_content
+
+        seed_check_resolution_tables()
+        seed_social_check_content()
+        seed_security_check_content()
+        cls.regular = CheckOutcomeFactory(name="smear_regular", success_level=1)
+        cls.miss = CheckOutcomeFactory(name="smear_miss", success_level=-1)
+        cls.realm = RealmFactory()
+        cls.region = AreaFactory(level=AreaLevel.REGION, realm=cls.realm)
+        cls.hub = RoomProfileFactory(area=cls.region, is_social_hub=True)
+        cls.smearer_entry = RosterEntryFactory()
+        cls.smearer_sheet = cls.smearer_entry.character_sheet
+        cls.smearer = cls.smearer_sheet.character
+        gossip_spec = Specialization.objects.get(
+            name="Gossip", parent_skill__trait__name="Persuasion"
+        )
+        CharacterSpecializationValueFactory(
+            character=cls.smearer, specialization=gossip_spec, value=10
+        )
+        cls.target_sheet = CharacterSheetFactory()  # tenure-less — always frameable
+
+    def _room(self):
+        return self.hub.objectdb
+
+    def test_successful_smear_mints_seeds_and_places_the_counter_clue(self):
+        from world.clues.models import RoomClue
+        from world.secrets.constants import (
+            SMEAR_CLUE_BASE_DIFFICULTY,
+            SMEAR_CLUE_DIFFICULTY_PER_LEVEL,
+            SecretProvenance,
+        )
+        from world.secrets.gossip import plant_smear
+        from world.secrets.models import Secret
+
+        with force_check_outcome(self.regular):
+            result = plant_smear(
+                self.smearer, self.target_sheet, "They water the wine.", room=self._room()
+            )
+        assert result.success is True
+        secret = Secret.objects.get(pk=result.surfaced_secret_id)
+        assert secret.provenance == SecretProvenance.ACCUSATION
+        assert secret.level == SecretLevel.UNCOMMON_KNOWLEDGE
+        assert secret.subject_sheet == self.target_sheet
+        row = SecretGossip.objects.get(secret=secret, region=self.region)
+        assert row.heat >= 1
+        placement = RoomClue.objects.get(clue__target_secret=secret)
+        assert placement.room_profile == self.hub
+        expected = SMEAR_CLUE_BASE_DIFFICULTY + 1 * SMEAR_CLUE_DIFFICULTY_PER_LEVEL
+        assert placement.detect_difficulty == expected
+
+    def test_failed_check_mints_nothing(self):
+        from world.secrets.gossip import plant_smear
+        from world.secrets.models import Secret
+
+        with force_check_outcome(self.miss):
+            result = plant_smear(
+                self.smearer, self.target_sheet, "They water the wine.", room=self._room()
+            )
+        assert result.success is False
+        assert not Secret.objects.filter(subject_sheet=self.target_sheet).exists()
+
+    def test_consent_blocked_target_cannot_be_smeared(self):
+        from world.consent.constants import ConsentMode
+        from world.consent.factories import (
+            SocialConsentCategoryFactory,
+            SocialConsentCategoryRuleFactory,
+            SocialConsentPreferenceFactory,
+        )
+        from world.roster.factories import RosterTenureFactory
+        from world.secrets.gossip import plant_smear
+
+        tenure = RosterTenureFactory()
+        hostile = SocialConsentCategoryFactory(key="hostile", default_mode=ConsentMode.EVERYONE)
+        pref = SocialConsentPreferenceFactory(tenure=tenure)
+        SocialConsentCategoryRuleFactory(
+            preference=pref, category=hostile, mode=ConsentMode.ALLOWLIST
+        )
+        with self.assertRaises(GossipError):
+            plant_smear(
+                self.smearer,
+                tenure.roster_entry.character_sheet,
+                "A locked-down target.",
+                room=self._room(),
+            )
+
+    def test_cannot_smear_yourself(self):
+        from world.secrets.gossip import plant_smear
+
+        with self.assertRaises(GossipError):
+            plant_smear(self.smearer, self.smearer_sheet, "I am terrible.", room=self._room())

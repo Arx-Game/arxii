@@ -124,7 +124,7 @@ from commands.setsituation import CmdSetSituation
 from commands.setstage import CmdSetStage
 from commands.ships import CmdShip
 from commands.signature import CmdSignature
-from commands.social.accusations import CmdAccuse
+from commands.social.accusations import CmdAccuse, CmdFrame
 from commands.social.blocking import (
     CmdBlock,
     CmdBlockList,
@@ -134,6 +134,7 @@ from commands.social.blocking import (
     CmdUnmute,
 )
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
+from commands.social.evidence import CmdEvidence
 from commands.social.friends import CmdFriend, CmdFriends, CmdUnfriend
 from commands.social.gossip import CmdGossip
 from commands.social.grievance import CmdGrievance
@@ -277,8 +278,11 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdSineater,
             # #1429 — the telnet face of the secret-victim grievance prompt.
             CmdGrievance,
-            # #1825 — manufacture a false scandal against a consenting target.
+            # #1825 — manufacture a false scandal against a consenting target,
+            # or doctor real evidence into a frame job at a Workshop of Iniquity.
             CmdAccuse,
+            CmdFrame,
+            CmdEvidence,
             # #1450 — the pull/browse face of the public-reaction tidings feed.
             CmdTidings,
             # #1572 — work the rumor mill at a social hub (plant/seek/suppress gossip).

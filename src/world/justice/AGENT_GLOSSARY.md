@@ -33,3 +33,30 @@
   genuinely happened (an L3), pinned on someone who did not commit it. Robust:
   refuting it means proving innocence, not disproving the crime. _Avoid_:
   using "frame" loosely for any false accusation — a wild accusation is not a frame.
+- **Crime evidence** — a `CrimeEvidence` row: the physical traces a crime-tagged
+  deed left at its located scene (one per deed). Gathered, it becomes a real
+  `ItemInstance` (holdable/givable/stealable); holding it is itself a lead.
+  _Avoid_: "clue" for the physical object — the clue is the `clues.Clue` pointer.
+- **Gather / dispose / tamper** — the criminal's post-crime evidence moves
+  (#1825): gather claims it (Skulduggery), dispose destroys it (dampens future
+  deed-knowledge heat), tamper perverts it through a frame-job project.
+- **Workshop of Iniquity** — the criminal-projects `RoomFeatureKind`; frame jobs
+  require standing in one. Future counterfeiting/heist planning shares the gate.
+- **Frame job** — the FRAME_JOB `Project` (payload `FrameJobDetails`) that
+  doctors gathered evidence into an anchored L3 accusation. Consent-gated at
+  start AND re-checked at completion.
+- **Tamper quality** — `CrimeEvidence.tamper_quality`: the forger's recorded
+  craft; the Scrutinize Evidence examine check's target difficulty.
+- **Nullification** — an `AccusationNullification` row: the investigation's
+  proof of fabrication. Reverses reputation, zeroes gossip heat, retracts the
+  crime claim, and mints the **authorship secret**. The accusation Secret stays.
+- **Authorship secret** — the ACTION_ANCHORED secret *about the framer* a
+  nullification mints (granted to no one) — the author-unmask trail's target
+  and the denounce verb's ammunition.
+- **Denounce** — `denounce_framer`: exposing the authorship secret at a hub
+  (reputation via the normal engine + false-accusation heat scaled by the
+  original accusation's level). The ONE consent-gated counter-play move
+  (Tom/Bob/Fred rule); once per denouncer (`DenounceRecord`).
+- **Case file** — where OFF_GRID frame evidence lives (not a model — the state
+  plus its `AccusationCrimeClaim`). Produced back out by local authority
+  (`has_local_authority`, PLACEHOLDER predicate pending #2378), then examined.

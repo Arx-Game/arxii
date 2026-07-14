@@ -586,6 +586,16 @@ def bump_society_reputation(persona: Persona, society, delta: int) -> int | None
     return reputation.value
 
 
+def compute_archetype_society_delta(archetypes: Sequence, society: object) -> int:
+    """The pure diffuse-channel delta for one society — no write (#1825).
+
+    Public compute seam for compensating reversals (refute/nullification), so they can
+    re-derive exactly what ``apply_archetype_society_reputation`` applied and bump the
+    negation, without reaching into the private dot product.
+    """
+    return _archetype_dot_product(list(archetypes), society)
+
+
 def apply_archetype_society_reputation(persona: Persona, societies, archetypes) -> dict[int, int]:
     """Apply archetype reputation deltas to a set of societies (#1429).
 

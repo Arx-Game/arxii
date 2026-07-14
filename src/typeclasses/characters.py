@@ -230,7 +230,7 @@ class Character(ObjectParent, DefaultCharacter):
 
         Delegates to the covenant-roles handler; returns empty frozenset if no sheet.
         """
-        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.character_sheet
         if sheet is None:
             return frozenset()
         return self.covenant_roles.active_covenant_ids()
@@ -257,7 +257,7 @@ class Character(ObjectParent, DefaultCharacter):
 
         if self.object_properties.filter(property__name=name).exists():
             return True
-        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.character_sheet
         if sheet is None:
             return False
         try:
@@ -277,7 +277,7 @@ class Character(ObjectParent, DefaultCharacter):
         from world.conditions.models import CapabilityType
         from world.conditions.services import get_effective_capability_value
 
-        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.character_sheet
         if sheet is None:
             return False
         try:
@@ -545,7 +545,7 @@ class Character(ObjectParent, DefaultCharacter):
 
             maybe_finish_empty_scene(origin, leaving=self)
 
-            sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            sheet = self.character_sheet
             if sheet is not None:
                 from world.battles.services import maybe_pause_battle_for_disconnect
                 from world.combat.services import maybe_pause_encounter_for_disconnect

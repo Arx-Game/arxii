@@ -15,11 +15,13 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import RoomProfile
+    from world.areas.models import Area
     from world.captivity.models import Captivity
     from world.checks.models import CheckType
     from world.items.models import ItemInstance
     from world.predicates.predicates import CharacterPredicateContext
     from world.roster.models import RosterEntry
+    from world.secrets.models import Secret
 
 
 def acquire_clue(roster_entry: RosterEntry, clue: Clue) -> CharacterClue:
@@ -31,6 +33,54 @@ def acquire_clue(roster_entry: RosterEntry, clue: Clue) -> CharacterClue:
     """
     held, _ = CharacterClue.objects.get_or_create(roster_entry=roster_entry, clue=clue)
     return held
+
+
+# PLACEHOLDER magnitude (#1825): at most this many hub placements per counter-clue.
+ACCUSATION_CLUE_HUB_CAP = 3
+
+
+def create_accusation_counter_clue(secret: Secret, *, region: Area, difficulty: int) -> Clue:
+    """Plant the investigable trail an accusation leaves behind (#1825). Idempotent.
+
+    Creates (or reuses) a RESEARCH-resolution SECRET clue targeting ``secret`` and
+    places it in up to ``ACCUSATION_CLUE_HUB_CAP`` of the region's social hubs at
+    ``detect_difficulty=difficulty`` — the accuser's own roll sets how hard their
+    trail is to unearth. Existing placements keep their original difficulty (no
+    silent re-difficulty on re-runs). Clue name/description are PLACEHOLDER prose.
+    """
+    clue, _ = Clue.objects.get_or_create(
+        target_kind=ClueTargetKind.SECRET,
+        target_secret=secret,
+        defaults={
+            "name": "Whispers That Don't Add Up",
+            "description": (
+                "PLACEHOLDER Something about this rumor's shape is off — the kind of "
+                "off a patient investigator could pull a thread from."
+            ),
+            "resolution_mode": ClueResolution.RESEARCH,
+        },
+    )
+    for profile in _hub_profiles_in_region(region)[:ACCUSATION_CLUE_HUB_CAP]:
+        RoomClue.objects.get_or_create(
+            room_profile=profile,
+            clue=clue,
+            defaults={"detect_difficulty": difficulty},
+        )
+    return clue
+
+
+def _hub_profiles_in_region(region: Area) -> list[RoomProfile]:
+    """The social-hub room profiles whose area chain tops out at ``region``."""
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.areas.constants import AreaLevel  # noqa: PLC0415
+    from world.areas.services import get_ancestor_at_level  # noqa: PLC0415
+
+    hubs = RoomProfile.objects.filter(is_social_hub=True, area__isnull=False).select_related("area")
+    return [
+        profile
+        for profile in hubs
+        if get_ancestor_at_level(profile.area, AreaLevel.REGION) == region
+    ]
 
 
 def target_already_known(clue: Clue, roster_entry: RosterEntry) -> bool:

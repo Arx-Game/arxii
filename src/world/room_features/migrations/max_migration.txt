@@ -1,1 +1,1 @@
-0017_brigdetails
+0018_alter_roomfeaturekind_service_strategy

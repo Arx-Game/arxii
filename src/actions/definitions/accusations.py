@@ -54,7 +54,7 @@ class MintAccusationAction(Action):
         if not content:
             return _ActionResult(success=False, message="Accuse them of what? (say the claim)")
 
-        framer_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        framer_sheet = actor.character_sheet  # type: ignore[attr-defined] — typeclass property
         if framer_sheet is None:
             return _ActionResult(success=False, message="You have no character identity.")
 
@@ -165,4 +165,176 @@ def _file_accusation_crime(  # noqa: PLR0913
     )
 
 
+@dataclass
+class SmearAction(Action):
+    """The one-move L1 smear — mint an accusation through the rumor mill (#1825).
+
+    Thin over ``world.secrets.gossip.plant_smear``: hub + Gossip skill + the target's
+    ``hostile`` consent gate live in the service; the action charges the smear's AP +
+    social fatigue (finally making the light tier cost something).
+    """
+
+    key: str = "smear_accusation"
+    name: str = "Smear"
+    icon: str = "comment-slash"
+    category: str = "social"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    # PLACEHOLDER cost magnitudes — tuned in a later author pass.
+    ap_cost: int = 1
+    fatigue_cost: int = 1
+    fatigue_category: str = ActionCategory.SOCIAL
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.secrets.gossip import GossipError, plant_smear  # noqa: PLC0415
+        from world.secrets.services import SecretError  # noqa: PLC0415
+
+        content = (kwargs.get("content") or "").strip()
+        if not content:
+            return _ActionResult(success=False, message="Smear them with what? (say the claim)")
+        target_persona = (
+            Persona.objects.filter(pk=kwargs.get("target_persona_id"))
+            .select_related("character_sheet")
+            .first()
+        )
+        if target_persona is None:
+            return _ActionResult(success=False, message="No such target.")
+        room = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        if room is None:
+            return _ActionResult(success=False, message="There's no one here to whisper to.")
+        try:
+            result = plant_smear(actor, target_persona.character_sheet, content, room=room)
+        except (GossipError, SecretError) as exc:
+            return _ActionResult(success=False, message=exc.user_message)
+        if not result.success:
+            return _ActionResult(
+                success=True,
+                message="PLACEHOLDER The rumor dies on your lips — nobody bites.",
+            )
+        return _ActionResult(
+            success=True,
+            message=(
+                f"PLACEHOLDER You seed a poisonous little rumor about {target_persona}. "
+                "It's making the rounds."
+            ),
+            data={"secret_id": result.surfaced_secret_id},
+        )
+
+
+@dataclass
+class RefuteAccusationAction(Action):
+    """Attack an accusation's credibility at a hub — the consentless defense (#1825).
+
+    Thin over ``world.secrets.gossip.refute_accusation``: hub gating, the knowledge
+    requirement, the one-attempt rule, and the partial reputation reversal all live in
+    the service. No consent gate — defending the accused is open (the Tom/Bob/Fred rule).
+    """
+
+    key: str = "refute_accusation"
+    name: str = "Refute"
+    icon: str = "scale-balanced"
+    category: str = "social"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    # PLACEHOLDER cost magnitudes — tuned in a later author pass.
+    ap_cost: int = 1
+    fatigue_cost: int = 1
+    fatigue_category: str = ActionCategory.SOCIAL
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.secrets.gossip import GossipError, refute_accusation  # noqa: PLC0415
+        from world.secrets.models import Secret  # noqa: PLC0415
+
+        secret_id = kwargs.get("secret_id")
+        secret = Secret.objects.filter(pk=secret_id).first() if isinstance(secret_id, int) else None
+        if secret is None:
+            return _ActionResult(success=False, message="There's no such rumor to refute.")
+        room = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        if room is None:
+            return _ActionResult(success=False, message="There's no one here to argue to.")
+        try:
+            result = refute_accusation(actor, secret, room=room)
+        except GossipError as exc:
+            return _ActionResult(success=False, message=exc.user_message)
+        if not result.success:
+            return _ActionResult(
+                success=True,
+                message="PLACEHOLDER Your case fails to land — the rumor keeps its teeth.",
+            )
+        return _ActionResult(
+            success=True,
+            message=(
+                "PLACEHOLDER You pick the story apart in front of everyone. "
+                "Some of the mud washes off its subject."
+            ),
+            data={"secret_id": secret.pk},
+        )
+
+
 mint_accusation = MintAccusationAction()
+
+
+@dataclass
+class DenounceFramerAction(Action):
+    """Turn an unmasked frame back on its author — the consent-gated backfire (#1825).
+
+    Thin over ``world.justice.denounce.denounce_framer``: the nullification-fact,
+    knowledge, hub, once-only, and hostile-consent gates all live in the service.
+    """
+
+    key: str = "denounce_framer"
+    name: str = "Denounce"
+    icon: str = "gavel"
+    category: str = "social"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    # PLACEHOLDER cost magnitudes — tuned in a later author pass.
+    ap_cost: int = 1
+    fatigue_cost: int = 1
+    fatigue_category: str = ActionCategory.SOCIAL
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.justice.denounce import DenounceError, denounce_framer  # noqa: PLC0415
+        from world.secrets.models import Secret  # noqa: PLC0415
+
+        secret_id = kwargs.get("secret_id")
+        secret = Secret.objects.filter(pk=secret_id).first() if isinstance(secret_id, int) else None
+        if secret is None:
+            return _ActionResult(success=False, message="There's no such truth to wield.")
+        room = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        if room is None:
+            return _ActionResult(success=False, message="There's no audience here.")
+        try:
+            denounce_framer(actor, secret, room=room)
+        except DenounceError as exc:
+            return _ActionResult(success=False, message=exc.user_message)
+        return _ActionResult(
+            success=True,
+            message=(
+                "PLACEHOLDER You lay the fabrication bare before the crowd — "
+                "and name the hand that stitched it."
+            ),
+            data={"secret_id": secret.pk},
+        )

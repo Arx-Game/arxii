@@ -111,14 +111,60 @@ deeds accept `crime_kinds=` on `create_solo_deed` / `create_legend_event`.
 `HeatTier` ladder (SAFE / TENSE / DANGEROUS / HEAT_IS_ON / EXTREME_HEAT — names user-ratified), `HEAT_TIER_FLOORS`, `tier_for_value`, `DEFAULT_HEAT_WEIGHT`,
 `HEAT_DECAY_PER_DAY` — all magnitudes PLACEHOLDER for the tuning pass.
 
+## Accusation counter-play (#1825 — the full loop)
+
+One `SecretLevel`-shaped dial: cost to mint ↔ harm ↔ difficulty to disprove ↔ framer's
+exposure risk. Everything below is player-piloted — the justice *enforcement* side stays
+NPC/automated by design tenet (#2378).
+
+- **Crime evidence** (`models.CrimeEvidence`, `evidence.py`): a crime-tagged deed with a
+  located scene leaves physical evidence there (one per deed, generated inside
+  `tag_deed_crimes`). `gather_evidence` (Skulduggery check) mints a real `ItemInstance`
+  (hand-offs/theft ride the item system; **holding evidence is a lead** —
+  `StartInvestigationAction` accepts it); `dispose_evidence` destroys it and dampens the
+  deed's future deed-knowledge heat to `DISPOSED_EVIDENCE_HEAT_FACTOR`% (all rows DISPOSED).
+  States: AT_SCENE → GATHERED → TAMPERING → OFF_GRID → PRODUCED (or DISPOSED).
+- **Frame jobs** (`frame_jobs.py`, `models.FrameJobDetails`): an L3 frame only ever grows
+  from a real crime's gathered evidence, doctored in a **Workshop of Iniquity**
+  (`RoomFeatureKind`, strategy WORKSHOP_OF_INIQUITY) via a FRAME_JOB `Project` advanced
+  with the seeded "Doctor the Evidence" Forge Evidence method. `start_frame_job` guards:
+  held GATHERED evidence, crime kind ∈ deed's tags, patsy ≠ framer ≠ actual culprit,
+  `accusation_permitted`. `resolve_frame_job` (registered at app-ready) RE-CHECKS consent,
+  files via `file_criminal_accusation` (heat lands at the crime's area), stores
+  `tamper_quality`, sends the evidence OFF_GRID, and plants the counter-clue at tamper
+  difficulty. Failure hands the evidence back.
+- **Nullification** (`nullification.py`, `models.AccusationNullification`): the RESEARCH
+  investigation's payoff (fired from `world.clues.research` for ACCUSATION targets).
+  Full compensating reputation reversal (`secrets.reverse_secret_exposure`), gossip heat
+  zeroed, the claim retracted (`AccusationCrimeClaim.retracted_at` — no further accrual;
+  existing heat decays), and the falseness minted as an ACTION_ANCHORED **authorship
+  secret about the framer** (granted to no one) with its own harder counter-clue — the
+  author-unmask trail.
+- **Denounce** (`denounce.py`, `models.DenounceRecord`): the consent-gated backfire.
+  A holder of the authorship secret exposes it at a hub (`expose_secret` + heat on the
+  `false-accusation` CrimeKind scaled by the original accusation's level). The
+  Tom/Bob/Fred rule: *defending the accused* (secrets' `refute_accusation`) is open to
+  all; *turning it on the author* requires the framer's own `hostile` consent.
+- **Case file** (`case_file.py`): filed frame evidence sits OFF_GRID.
+  `produce_case_evidence` (gated by `has_local_authority` — PLACEHOLDER: active org
+  membership under the room's enforcing society; the real gate is #2378) re-materializes
+  it; `examine_evidence` rolls Scrutinize Evidence vs `tamper_quality` — beating the
+  forger's roll grants the counter-clue directly. Piloted characters only.
+
+Actions: `gather_evidence`, `dispose_evidence`, `start_frame_job`,
+`produce_case_evidence`, `examine_evidence` (+ secrets-side `smear_accusation`,
+`refute_accusation`, `denounce_framer`, and `start_investigation` in
+actions/definitions/investigation). Telnet: the `evidence` namespace, `frame`,
+`accuse/refute`, `accuse/denounce`, `gossip smear`, `search start`.
+
 ## Deferred (verified against code at spec time)
 
 Guard-encounter spawning (combat domain — no pursuit-NPC surface exists);
 #1334 secrets-outing writer (calls `associate_heat`); allied-society warrant
 sharing; active heat-clearing (bribe/pardon — #1826); wanted-poster/public-knowledge
-surfaces. (Accusation minting + its heat bridge are now **built** — #1825,
-`file_criminal_accusation`; a criminal-accusation *player surface* that lets a
-player pick a crime kind / anchor a real deed is the next slice.)
+surfaces; the automated justice pipeline downstream of heat (NPC guards → arrest →
+NPC-judge trial, lethal outcomes + the lethal-consent flag) — #2378; NPC
+false-accusers (a content loop over this machinery) — future content issue.
 
 ## Authored law postures (Apostate, 2026-07-03 — transcribe to AreaLaw when the grid lands)
 

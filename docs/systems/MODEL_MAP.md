@@ -394,6 +394,7 @@
   - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
+  - crime_evidence <- justice.CrimeEvidence
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
@@ -689,7 +690,7 @@
 ### NPCAsset
 **Foreign Keys:**
   - promoter_persona -> scenes.Persona [FK]
-  - asset_persona -> scenes.Persona [OneToOne]
+  - asset_persona -> scenes.Persona [FK]
   - source_functionary -> npc_services.Functionary [FK] (nullable)
   - source_distinction_grant -> assets.DistinctionAssetGrant [FK] (nullable)
 **Pointed to by:**
@@ -719,6 +720,7 @@
 
 ### Service Functions
 - `coerce_into_asset(*, coercer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a blackmailed NPC as a COERCION ``NPCAsset`` (#1680).`
+- `introduce_asset(*, introducer_persona: 'Persona', ally_persona: 'Persona', asset: 'NPCAsset') -> 'NPCAsset' — Introduce an owned asset to a co-present ally, creating co-ownership (#2295).`
 - `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
 - `transition_asset_status(asset: 'NPCAsset', new_status: 'str', *, reason: 'str' = AssetTransitionReason.CONSEQUENCE) -> 'None' — Transition an NPCAsset's status, enforcing the legal-transition matrix.`
 - `transition_assets_for_dead_character(dead_character) -> 'None' — Transition all ACTIVE assets belonging to a dead character to LOST.`
@@ -1180,6 +1182,8 @@
 **Foreign Keys:**
   - captive -> character_sheets.CharacterSheet [FK]
   - cell -> instances.InstancedRoom [FK] (nullable)
+  - holding_room -> objects.ObjectDB [FK] (nullable)
+  - return_location -> objects.ObjectDB [FK] (nullable)
   - captor_organization -> societies.Organization [FK] (nullable)
   - ransom_project -> projects.Project [FK] (nullable)
   - rescue_template -> missions.MissionTemplate [FK] (nullable)
@@ -1192,7 +1196,7 @@
   - rescue_template -> missions.MissionTemplate [FK] (nullable)
 
 ### Service Functions
-- `capture_character(*, captive: 'CharacterSheet', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell: 'InstancedRoom | None' = None, group_key: 'str | None' = None, cell_name: 'str | None' = None, cell_description: 'str | None' = None) -> 'Captivity' — Take one character into a cell and record the captivity.`
+- `capture_character(*, captive: 'CharacterSheet', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell: 'InstancedRoom | None' = None, group_key: 'str | None' = None, cell_name: 'str | None' = None, cell_description: 'str | None' = None, holding_room: 'ObjectDB | None' = None) -> 'Captivity' — Take one character into a cell and record the captivity.`
 - `capture_party(*, captives: 'Iterable[CharacterSheet]', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell_name: 'str | None' = None, cell_description: 'str | None' = None) -> 'list[Captivity]' — Capture several characters into one shared cell (the default).`
 - `complete_instanced_room(room: evennia.objects.models.ObjectDB) -> None — Mark room completed, relocate occupants, delete if no history.`
 - `escape_captivity(captive: 'CharacterSheet') -> 'bool' — Free a captive by their own hand (#931 Phase 4) — the escape loop's verb.`
@@ -1353,6 +1357,7 @@
   - stylepresentationendorsement_given <- magic.StylePresentationEndorsement
   - stylepresentationendorsement_received <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
+  - fall_redemption_records <- magic.FallRedemptionRecord
   - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
   - motif <- magic.Motif
@@ -1394,6 +1399,7 @@
   - secret_grievances <- secrets.SecretGrievance
   - leverage_held <- secrets.Leverage
   - leverage_against <- secrets.Leverage
+  - accusation_rebuttals <- secrets.AccusationRebuttal
   - detected_concealments <- conditions.ConditionInstance
   - modifiers <- mechanics.CharacterModifier
   - consequence_outcomes <- checks.ConsequenceOutcome
@@ -1408,6 +1414,8 @@
   - titles <- achievements.CharacterTitle
   - conjured_obstacles <- areas.PositionEdge
   - ramparts <- areas.Rampart
+  - frame_jobs_against <- justice.FrameJobDetails
+  - denouncements_made <- justice.DenounceRecord
   - owned_instances <- instances.InstancedRoom
   - captivities <- captivity.Captivity
   - journal_entries <- journals.JournalEntry
@@ -1682,6 +1690,7 @@
 ### Service Functions
 - `acquire_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' — Record that a character has found a clue (idempotent).`
 - `clear_rescue_clues(captivity: 'Captivity') -> 'None' — Delete a captivity's rescue clues (and their placements) when it resolves (#931).`
+- `create_accusation_counter_clue(secret: 'Secret', *, region: 'Area', difficulty: 'int') -> 'Clue' — Plant the investigable trail an accusation leaves behind (#1825). Idempotent.`
 - `grant_clue_target(clue: 'Clue', roster_entry: 'RosterEntry') -> 'None' — AUTOMATIC resolution — grant a clue's target to the character on the spot.`
 - `maybe_grant_clue_triggers(character: 'ObjectDB', room: 'ObjectDB') -> 'list[Clue]' — Grant clues triggered passively by entering ``room`` (#1160).`
 - `maybe_grant_item_acquisition_clues(character: 'ObjectDB', item: 'ItemInstance') -> 'list[Clue]' — Grant clues triggered passively by ``character`` acquiring ``item`` (#1160).`
@@ -2834,8 +2843,8 @@
 - `accrue_income_stream(stream: 'OrgIncomeStream') -> 'int' — One weekly cycle: the gross amasses in the uncollected pool (#930).`
 - `accrue_monthly_interest(organization: 'Organization') -> 'int' — One month's interest lands in arrears (#927). Returns total accrued.`
 - `can_spend_treasury(treasury: 'OrganizationTreasury', persona: 'Persona') -> 'bool' — Spend authority: an active membership at tier <= spend_rank_max.`
-- `collect_org_income(*, organization: 'Organization', character) -> 'CollectionResult' — One active collection dispatch across every pooled stream of ``organization`` (#930).`
 - `collect_asset_income(*, asset, character_sheet) -> 'CollectionResult' — One active collection of a personal asset's accumulated income (#2294).`
+- `collect_org_income(*, organization: 'Organization', character) -> 'CollectionResult' — One active collection dispatch across every pooled stream of ``organization`` (#930).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' — Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
 - `extend_loan(*, creditor: 'Organization', debtor: 'Organization', principal: 'int', interest_bps_monthly: 'int' = 50, fiat: 'bool' = False) -> 'DebtInstrument' — Create a loan: principal moves creditor→debtor, instrument records it (#927).`
 - `format_coppers(amount: int) -> str — Canonical mixed display: ``1234`` → ``"12g 3s 4c"``.`
@@ -2946,6 +2955,7 @@
   - persona -> scenes.Persona [FK] (nullable)
   - combat_profile -> forms.FormCombatProfile [FK] (nullable)
   - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
   - techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - active_for <- forms.ActiveAlternateSelf
@@ -3216,6 +3226,7 @@
 **Pointed to by:**
   - applied_disguise_overlays <- forms.CharacterFormState
   - currency_instrument <- currency.CurrencyInstrumentDetails
+  - crime_evidence <- justice.CrimeEvidence
   - contents <- items.ItemInstance
   - equipped_slots <- items.EquippedItem
   - room_placement <- items.RoomItem
@@ -3615,6 +3626,9 @@
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
+  - compromise_act_types <- magic.CompromiseActType
+  - conversion_sources <- magic.ResonanceConversion
+  - conversion_targets <- magic.ResonanceConversion
   - resonancegrant_set <- magic.ResonanceGrant
   - distinction_grants <- magic.DistinctionResonanceGrant
   - distinction_rank_thresholds <- magic.DistinctionResonanceRankThreshold
@@ -3629,6 +3643,7 @@
   - rescues <- magic.SoulTetherRescue
   - pull_effects <- magic.ThreadPullEffect
   - threads <- magic.Thread
+  - alternate_self_grants <- forms.AlternateSelf
   - damage_type <- conditions.DamageType
   - corruption_condition_templates <- conditions.ConditionTemplate
   - modifier_target <- mechanics.ModifierTarget
@@ -3968,6 +3983,22 @@
   - scene -> scenes.Scene [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+
+### CompromiseActType
+**Foreign Keys:**
+  - target_resonance -> magic.Resonance [FK]
+
+### ResonanceConversion
+**Foreign Keys:**
+  - source_resonance -> magic.Resonance [FK]
+  - target_resonance -> magic.Resonance [FK]
+
+### FallRedemptionConfig
+
+### FallRedemptionRecord
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
 
 ### FuryTier
 
@@ -4473,7 +4504,7 @@
 - `get_imbue_cost_multiplier(target_kind: 'str | None') -> 'int' — Resolve the imbue dp cost multiplier for a thread kind (ADR-0051).`
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
 - `get_pull_cost(tier: 'int', target_kind: 'str | None') -> 'ThreadPullCost' — Resolve the pull cost row for (tier, target_kind).`
-- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None', *, apply_variant: 'bool' = True, character_technique=None) -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
+- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None', *, apply_variant: 'bool' = True, character_technique=None, preferred_resonance=None) -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" — Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' — Total damage-type-specific resistance from gift threads (#1580).`
@@ -4498,7 +4529,7 @@
 - `survivability_save_baselines(character: 'ObjectDB') -> 'ThreadSurvivabilitySaves' — Per-tier survivability save modifiers from thread investment (#1250).`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' — Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' — Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' — Create a new Thread anchored to the given target.`
 
@@ -5439,6 +5470,7 @@
   - domain_improvement_details <- societies.DomainImprovementDetails
   - org_capability_details <- societies.OrganizationCapabilityProjectDetails
   - research_details <- clues.ResearchProjectDetails
+  - frame_job_details <- justice.FrameJobDetails
   - ransom_captivities <- captivity.Captivity
   - city_defense_details <- battles.CityDefenseDetails
   - contributions <- projects.Contribution
@@ -5870,6 +5902,7 @@
   - entry_endorsements <- magic.SceneEntryEndorsement
   - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
+  - fall_redemption_records <- magic.FallRedemptionRecord
   - ritual_sessions <- magic.RitualSession
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
@@ -5971,7 +6004,7 @@
   - contracts_received <- currency.Contract
   - businesses <- currency.Business
   - promoted_assets <- assets.NPCAsset
-  - asset_promotion <- assets.NPCAsset
+  - asset_ownerships <- assets.NPCAsset
   - authored_secrets <- secrets.Secret
   - secret_victimhoods <- secrets.SecretVictim
   - heat_rows <- justice.PersonaHeat
@@ -6280,7 +6313,11 @@
   - known_by <- secrets.SecretKnowledge
   - gossip_heat <- secrets.SecretGossip
   - leverage <- secrets.Leverage
+  - rebuttals <- secrets.AccusationRebuttal
   - accusation_crime_claim <- justice.AccusationCrimeClaim
+  - nullification <- justice.AccusationNullification
+  - nullification_authorship <- justice.AccusationNullification
+  - denouncements <- justice.DenounceRecord
 
 ### SecretVictim
 **Foreign Keys:**
@@ -6310,6 +6347,11 @@
   - subject_sheet -> character_sheets.CharacterSheet [FK]
   - founded_on -> secrets.Secret [FK]
 
+### AccusationRebuttal
+**Foreign Keys:**
+  - secret -> secrets.Secret [FK]
+  - refuter_sheet -> character_sheets.CharacterSheet [FK]
+
 ### Service Functions
 - `accusation_permitted(*, framer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet') -> 'bool' — Target-side consent gate for a frame-job (#1825) — may *framer* accuse *target*?`
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' — Author a Level-1 player-flavor secret (the only tier a player may free-write).`
@@ -6323,6 +6365,7 @@
 - `mint_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet', founded_on: 'Secret') -> 'Leverage' — Record standing leverage ``holder_sheet`` holds over ``subject_sheet`` (#1680).`
 - `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '') -> 'RelationshipCapstone' — A secret's victim registers a grievance against its subject (#1429).`
 - `reveal_leveraged_secret(*, revealer_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' — Play the blackmail card: expose ``secret`` and spend the leverage founded on it (#1680).`
+- `reverse_secret_exposure(secret: 'Secret', *, numerator: 'int' = 1, denominator: 'int' = 1) -> 'None' — Apply compensating reputation bumps for a secret's prior exposure (#1825).`
 - `secret_known_to(secret: 'Secret', roster_entry: 'RosterEntry') -> 'bool' — Whether this character already holds the fact of this secret (#1334).`
 - `secrets_explaining(*, roster_entry: 'RosterEntry', legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'QuerySet[SecretKnowledge]' — The secrets a viewer KNOWS that are the hidden truth behind a given act (#1573).`
 - `secrets_owned_by(sheet: 'CharacterSheet', *, sort: 'str' = 'level') -> 'QuerySet[Secret]' — The secrets a character **owns** — its own shelf (#1334).`
@@ -6614,6 +6657,7 @@
   - crime_tags <- justice.DeedCrimeTag
   - heat_sources <- justice.HeatSource
   - frame_claims <- justice.AccusationCrimeClaim
+  - crime_evidence <- justice.CrimeEvidence
   - mission_deeds <- missions.MissionDeedRecord
 
 ### LegendSpread

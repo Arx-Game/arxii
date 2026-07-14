@@ -227,9 +227,13 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # when a material ItemInstance is consumed — same shape as the
             # #2066 market cascades; neither scales with claim/bequest rows.
             # Postgres 88→90; SQLite 89→91.
+            # +1 (both vendors, #1825): CrimeEvidence.item_instance SET_NULL
+            # adds one constant UPDATE in the same consume cascade — same
+            # shape again; never scales with evidence rows.
+            # Postgres 90→91; SQLite 91→92.
             from django.db import connection
 
-            expected = 90 if connection.vendor == "postgresql" else 91
+            expected = 91 if connection.vendor == "postgresql" else 92
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,

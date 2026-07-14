@@ -131,8 +131,11 @@ def resolve_research(project: Project, outcome_tier: CheckOutcome | None) -> Non
     if outcome_tier is None or outcome_tier.success_level < 0:
         return
     clue = project.research_details.clue
+    if clue.target_kind == ClueTargetKind.SECRET:
+        _resolve_secret_research(project, clue)
+        return
     if clue.target_kind != ClueTargetKind.CODEX:
-        return  # mission/secret target grants — extension point (#1143)
+        return  # mission target grants — extension point (#1143)
     entry = clue.target_codex_entry
     if entry is None:
         return
@@ -148,6 +151,27 @@ def resolve_research(project: Project, outcome_tier: CheckOutcome | None) -> Non
         )
         # Push past the threshold so the entry lands KNOWN (and fires the stories hook).
         knowledge.add_progress(entry.learn_threshold)
+
+
+def _resolve_secret_research(project: Project, clue: Clue) -> None:
+    """SECRET-target research payoff (#1825): grant the fact; nullify a proven frame.
+
+    Every contributor learns the secret. When the secret is an ACCUSATION, completing
+    the investigation is the proof of fabrication — fire the justice-side nullification
+    (compensating reputation, heat zeroed, claim retracted, the author-unmask trail).
+    """
+    from world.secrets.constants import SecretProvenance  # noqa: PLC0415
+    from world.secrets.services import grant_secret_knowledge  # noqa: PLC0415
+
+    secret = clue.target_secret
+    if secret is None:
+        return
+    for roster_entry in _distinct_contributor_roster_entries(project):
+        grant_secret_knowledge(roster_entry=roster_entry, secret=secret)
+    if secret.provenance == SecretProvenance.ACCUSATION:
+        from world.justice.nullification import nullify_accusation  # noqa: PLC0415
+
+        nullify_accusation(secret)
 
 
 def _distinct_contributor_roster_entries(project: Project) -> list[RosterEntry]:

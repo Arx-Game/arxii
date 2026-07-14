@@ -26,7 +26,6 @@ _IDENTIFICATION_STAT = "intellect"
 _EXPLORATION_CATEGORY = "Exploration"
 
 _LOCKPICKING_CHECK_TYPE_NAME = "Lockpicking"
-_LARCENY_SKILL = ("Larceny", "Picking locks, pockets, and sleight of hand.")
 _WITS_STAT = "wits"
 
 
@@ -120,36 +119,17 @@ def _ensure_wits_stat():
     return trait
 
 
-def ensure_larceny_skill():
-    """Seed the Larceny ``Skill`` (+ its backing SKILL ``Trait``)."""
-    from world.skills.models import Skill  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
-
-    name, tooltip = _LARCENY_SKILL
-    trait, _ = Trait.objects.get_or_create(
-        name=name,
-        defaults={
-            "trait_type": TraitType.SKILL,
-            "category": TraitCategory.GENERAL,
-            "is_public": True,
-        },
-    )
-    skill, _ = Skill.objects.get_or_create(
-        trait=trait,
-        defaults={"tooltip": tooltip, "display_order": 0, "is_active": True},
-    )
-    return skill
-
-
 def ensure_lockpicking_check():
-    """Seed the **Lockpicking** ``CheckType`` — wits + Larceny (#2176).
+    """Seed the **Lockpicking** ``CheckType`` — wits + Skulduggery (#2176, renamed #1825).
 
     Idempotent, authoritative (wipe-and-rewrite composition): a lockpicking
-    roll always ends up wits + Larceny, never accreting a stale composition.
+    roll always ends up wits + Skulduggery, never accreting a stale composition.
+    The skill's canonical seed (rename + ensure) lives in ``security_checks``.
     """
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.seeds.security_checks import ensure_skulduggery_skill  # noqa: PLC0415
 
-    skill = ensure_larceny_skill()
+    skill = ensure_skulduggery_skill()
     stat_trait = _ensure_wits_stat()
     category, _ = CheckCategory.objects.get_or_create(name=_EXPLORATION_CATEGORY)
     check_type, _ = CheckType.objects.get_or_create(

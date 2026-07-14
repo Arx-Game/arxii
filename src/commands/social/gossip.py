@@ -13,13 +13,18 @@ from typing import Any
 from commands.command import ArxCommand
 
 _NO_SKILL = "You don't have the ear for it (requires Gossip 1+)."
-_USAGE = "Usage: gossip [seek | plant <#> | suppress <#>]  (bare `gossip` lists your secrets)."
+_USAGE = (
+    "Usage: gossip [seek | plant <#> | suppress <#> | smear <character> = <claim>]  "
+    "(bare `gossip` lists your secrets)."
+)
+_SMEAR_USAGE = "Usage: gossip smear <character> = <the claim>"
 
 # Subcommand verbs (kept as constants — STRING_LITERAL linter forbids bare identifier strings).
 _LIST = "list"
 _SEEK = "seek"
 _PLANT = "plant"
 _SUPPRESS = "suppress"
+_SMEAR = "smear"
 
 
 class CmdGossip(ArxCommand):
@@ -30,6 +35,9 @@ class CmdGossip(ArxCommand):
       gossip seek          — roll to overhear a hot secret you don't yet know
       gossip plant <#>     — spread secret # (raises its regional heat)
       gossip suppress <#>  — talk secret #'s heat down
+      gossip smear <character> = <claim>
+                           — mint a false rumor about them and set it spreading (#1825;
+                             only against someone open to antagonism)
     """
 
     key = "gossip"
@@ -54,6 +62,8 @@ class CmdGossip(ArxCommand):
             self._seek(character, room)
         elif verb in (_PLANT, _SUPPRESS):
             self._spread(character, room, verb, rest.strip())
+        elif verb == _SMEAR:
+            self._smear(character, rest.strip())
         else:
             self.msg(_USAGE)
 
@@ -70,6 +80,27 @@ class CmdGossip(ArxCommand):
             lines.append(f"  {index}. {secret.content}  |x(heat here: {heat})|n")
         lines.append("Use |wgossip plant <#>|n to spread, or |wgossip suppress <#>|n to quiet it.")
         self.msg("\n".join(lines))
+
+    def _smear(self, character: Any, arg: str) -> None:
+        """`gossip smear <character> = <claim>` — dispatch SmearAction (#1825)."""
+        from actions.definitions.accusations import SmearAction  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        name, sep, claim = arg.partition("=")
+        name, claim = name.strip(), claim.strip()
+        if not sep or not name or not claim:
+            self.msg(_SMEAR_USAGE)
+            return
+        target = character.search(name)
+        if target is None:
+            return  # search() already messaged the caller
+        sheet = target.character_sheet
+        if sheet is None:
+            self.msg(f"{target} has no character identity.")
+            return
+        persona = active_persona_for_sheet(sheet)
+        result = SmearAction().run(character, target_persona_id=persona.pk, content=claim)
+        self.msg(result.message)
 
     def _seek(self, character: Any, room: Any) -> None:
         from world.secrets.gossip import GossipError, seek_gossip  # noqa: PLC0415
