@@ -1344,6 +1344,9 @@ def rise_battle_covenant_via_session(*, session: RitualSession) -> Covenant:
         if membership is not None:
             set_engaged_membership(membership=membership)
     _emit_rise_message(covenant)
+    from world.agriculture.services.provisioning import provision_army  # noqa: PLC0415
+
+    provision_army(covenant)
     return covenant
 
 
@@ -1370,6 +1373,8 @@ def stand_down_battle_covenant(*, covenant: Covenant) -> None:
         from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
         recompute_max_health_with_threads(m.character_sheet)
+    covenant.provisioning_ratio = None
+    covenant.save(update_fields=["provisioning_ratio"])
 
 
 def _emit_rise_message(covenant: Covenant) -> None:

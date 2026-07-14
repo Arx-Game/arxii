@@ -55,3 +55,39 @@ class BattleRiseServiceTests(TestCase):
         self.membership.refresh_from_db()
         self.assertTrue(self.cov.is_dormant)
         self.assertFalse(self.membership.engaged)
+
+    def test_rise_sets_provisioning_ratio(self):
+        """Rising a battle covenant calls provision_army and sets provisioning_ratio."""
+        from world.agriculture.models import FoodStockpile
+        from world.areas.factories import AreaFactory
+        from world.societies.houses.models import Domain
+
+        # Give the covenant's org a domain with food so provisioning is > 0
+        domain = Domain.objects.create(
+            area=AreaFactory(), name="ProvDomain", owner_org=self.cov.organization, population=100
+        )
+        FoodStockpile.objects.create(domain=domain, stored=100)
+
+        result = rise_battle_covenant_via_session(session=self._rise_session())
+        result.refresh_from_db()
+
+        assert result.provisioning_ratio is not None
+
+    def test_stand_down_clears_provisioning_ratio(self):
+        """Standing down clears provisioning_ratio back to None."""
+        from world.agriculture.models import FoodStockpile
+        from world.areas.factories import AreaFactory
+        from world.societies.houses.models import Domain
+
+        domain = Domain.objects.create(
+            area=AreaFactory(), name="ProvDomain2", owner_org=self.cov.organization, population=100
+        )
+        FoodStockpile.objects.create(domain=domain, stored=100)
+
+        rise_battle_covenant_via_session(session=self._rise_session())
+        self.cov.refresh_from_db()
+        assert self.cov.provisioning_ratio is not None
+
+        stand_down_battle_covenant(covenant=self.cov)
+        self.cov.refresh_from_db()
+        assert self.cov.provisioning_ratio is None

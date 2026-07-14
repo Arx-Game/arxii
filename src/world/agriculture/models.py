@@ -166,6 +166,20 @@ class FoodConfig(SharedMemoryModel):
         default=30,
         help_text=("Cap on the total difficulty bonus from pool size. PLACEHOLDER."),
     )
+    army_food_per_member = models.PositiveIntegerField(
+        default=10,
+        help_text="Food consumed per engaged covenant member at army mobilization. PLACEHOLDER.",
+    )
+    max_provisioning_morale_penalty = models.PositiveSmallIntegerField(
+        default=30,
+        help_text="Maximum morale points subtracted from units at zero provisioning. PLACEHOLDER.",
+    )
+    max_provisioning_strength_penalty = models.PositiveSmallIntegerField(
+        default=30,
+        help_text=(
+            "Maximum strength points subtracted from units at zero provisioning. PLACEHOLDER."
+        ),
+    )
 
     class Meta:
         verbose_name = "Food Config"

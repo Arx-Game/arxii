@@ -718,6 +718,15 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   See [areas.md](areas.md) "Presence & Travel" and "Coordinates" sections.
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
+- **Area Quality (#1889):** `AreaQuality` sidecar (per-Area quality 0-5, 3=Ordinary).
+  Raised by `CLEANUP` TIERED_PERIOD projects (players contribute AP/money/items;
+  graded at deadline into quality-delta tiers). Eroded by crime heat (`accrue_heat`
+  calls `erode_area_quality`) and `OPEN_ENCOUNTER` combat (via `ENCOUNTER_COMPLETED`
+  trigger). Weekly decay sweep (`cleanup_quality_decay_tick`) decays above-normal
+  quality after `CLEANUP_DWELL_DAYS` and regains below-normal after
+  `CLEANUP_REGAIN_WEEKS`. Room descriptions get quality-based suffixes at display
+  time. Contributors earn celestial resonance (via `ProjectKindResonanceAward`) and
+  society reputation (via `bump_society_reputation` with `area.dominant_society`).
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
@@ -2885,9 +2894,11 @@ per `pool_difficulty_step`, capped at `pool_difficulty_max_bonus`.
   - `FoodStockpile` — OneToOne to `Domain`; `stored` balance + `last_collected_at`.
     Lazily created via `get_or_create` in `collect_field_food`.
   - `FoodConfig` — singleton (pk=1) tuning knobs: production rate, consumption
-    per capita, shortage penalties, granary capacity per level, and pool-size
+    per capita, shortage penalties, granary capacity per level, pool-size
     difficulty scaling (`pool_difficulty_threshold` / `pool_difficulty_step` /
-    `pool_difficulty_max_bonus`, #2218).
+    `pool_difficulty_max_bonus`, #2218), and army provisioning knobs
+    (`army_food_per_member` / `max_provisioning_morale_penalty` /
+    `max_provisioning_strength_penalty`, #2375).
 - **Services** (`world.agriculture.services`):
   - `field_production_tick()` — daily cron; accrues `base_production × level ×
     multiplier` into each active Field's `uncollected_pool`.
@@ -2904,6 +2915,14 @@ per `pool_difficulty_step`, capped at `pool_difficulty_max_bonus`.
     prosperity toward `FoodConfig.prosperity_equilibrium` (#2238, recovery drift);
     then rolls `houses.maybe_open_unrest_crisis` per domain. No stockpile row =
     perpetual shortage. Telemetry: `domains_processed` / `shortages` / `crises_opened`.
+  - `provision_army(covenant)` (#2375) — called at battle covenant mobilization
+    (`rise_battle_covenant_via_session`). Counts engaged members, computes
+    `needed = engaged_count × army_food_per_member`, deducts from the covenant's
+    org's domains' `FoodStockpile` reserves (proportionally), and stores the
+    resulting `provisioning_ratio` (0.0–1.0) on `Covenant`. `add_unit()` reads this
+    ratio and reduces the `MilitaryUnit`'s starting morale/strength by
+    `(1 - ratio) × max_penalty`, capped at config knobs, never below 1. Cleared at
+    `stand_down_battle_covenant()`. Fires a narrative message to engaged members.
   - `resolve_domain_for_feature(instance)` — walks `RoomProfile.area` →
     `AreaClosure` ancestor chain to find the `Domain`.
   - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
