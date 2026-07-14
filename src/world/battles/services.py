@@ -69,7 +69,6 @@ from world.battles.models import (
     BattleRound,
     BattleSide,
     BattleUnit,
-    BattleUnitCapability,
     BattleVehicle,
     Fortification,
 )
@@ -208,6 +207,9 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
 ) -> BattleUnit:
     """Add an abstract typed unit to a battle side.
 
+    Creates a MilitaryUnit (persistent source of truth) and a BattleUnit
+    (thin join referencing it). All identity and stats live on MilitaryUnit.
+
     Args:
         battle: The owning ``Battle``.
         side: The ``BattleSide`` this unit belongs to.
@@ -222,7 +224,7 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         place: Optional ``BattlePlace`` this unit is stationed at.
         properties: Property tags to attach (#1794) — presence-only.
         capability_values: (CapabilityType, magnitude) pairs to attach (#1794) —
-            each becomes a BattleUnitCapability row.
+            each becomes a MilitaryUnitCapability row.
         individual_count: Optional population data point (#1794); mirrors
             CombatOpponent.swarm_count's naming. Drives banded STRIKE bonuses and
             proportional STRIKE/ROUT body loss (#1841) — see
@@ -232,9 +234,9 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
     Returns:
         The newly created ``BattleUnit``.
     """
-    unit = BattleUnit.objects.create(
-        battle=battle,
-        side=side,
+    from world.military.models import MilitaryUnit, MilitaryUnitCapability  # noqa: PLC0415
+
+    mu = MilitaryUnit.objects.create(
         name=name,
         descriptor=descriptor,
         quality=quality,
@@ -242,16 +244,20 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         summoned_by=summoned_by,
         strength=strength,
         morale=morale,
-        status=BattleUnitStatus.ACTIVE,
-        place=place,
         individual_count=individual_count,
     )
-    unit.properties.set(properties)
-    BattleUnitCapability.objects.bulk_create(
-        BattleUnitCapability(unit=unit, capability=capability, value=value)
+    mu.properties.set(properties)
+    MilitaryUnitCapability.objects.bulk_create(
+        MilitaryUnitCapability(unit=mu, capability=capability, value=value)
         for capability, value in capability_values
     )
-    return unit
+    return BattleUnit.objects.create(
+        battle=battle,
+        side=side,
+        status=BattleUnitStatus.ACTIVE,
+        place=place,
+        military_unit=mu,
+    )
 
 
 @transaction.atomic
@@ -336,10 +342,13 @@ def create_battle_vehicle(
     Returns:
         The newly created BattleVehicle.
     """
+    from world.military.models import MilitaryUnit  # noqa: PLC0415
+
+    mu = MilitaryUnit.objects.create(name=place_name)
     unit = BattleUnit.objects.create(
         battle=battle,
         side=side,
-        name=place_name,
+        military_unit=mu,
     )
     default_terrain = (
         TerrainType.AERIAL
@@ -419,11 +428,14 @@ def _apply_environmental_hazard_to_unit(unit: BattleUnit, hazard_property_name: 
     how Property is presence-only for units everywhere else."""
     from world.battles.resolution import _compute_unit_status  # noqa: PLC0415
 
-    if unit.properties.filter(name=hazard_property_name).exists():
+    if unit.military_unit.properties.filter(name=hazard_property_name).exists():
         return
-    unit.strength = max(0, unit.strength - VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY)
-    unit.status = _compute_unit_status(unit.strength, unit.morale)
-    unit.save(update_fields=["strength", "status"])
+    unit.military_unit.strength = max(
+        0, unit.military_unit.strength - VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY
+    )
+    unit.status = _compute_unit_status(unit.military_unit.strength, unit.military_unit.morale)
+    unit.save(update_fields=["status"])
+    unit.military_unit.save(update_fields=["strength"])
 
 
 def _apply_environmental_hazard_to_participant(
@@ -481,8 +493,8 @@ def assign_unit_commander(*, unit: BattleUnit, commander: CharacterSheet | None)
     Returns:
         The updated ``BattleUnit``.
     """
-    unit.commander = commander
-    unit.save(update_fields=["commander"])
+    unit.military_unit.commander = commander
+    unit.military_unit.save(update_fields=["commander"])
     return unit
 
 
@@ -904,7 +916,7 @@ def _validate_vehicle_command(
     if target_place is None:
         raise MissingScopeTargetError
     vehicle = getattr(target_place, "vehicle", None)  # noqa: GETATTR_LITERAL
-    if vehicle is None or vehicle.unit.commander_id != participant.character_sheet_id:
+    if vehicle is None or vehicle.unit.military_unit.commander_id != participant.character_sheet_id:
         raise NotVehicleCommanderError
 
 

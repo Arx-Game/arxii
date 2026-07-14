@@ -24,7 +24,6 @@ from world.battles.factories import (
 )
 from world.battles.models import (
     BattleUnit,
-    BattleUnitCapability,
     TechniquePropertyAffinity,
     TerrainPropertyEffect,
 )
@@ -34,6 +33,8 @@ from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory
 from world.magic.factories import TechniqueFactory
 from world.mechanics.factories import PropertyFactory
+from world.military.factories import MilitaryUnitFactory
+from world.military.models import MilitaryUnit, MilitaryUnitCapability
 
 
 class BattleModelTests(TestCase):
@@ -58,8 +59,10 @@ class BattleModelTests(TestCase):
             battle=self.battle,
             side=defender,
             place=place,
-            descriptor="zombies-on-nightmares",
-            strength=80,
+            military_unit=MilitaryUnitFactory(
+                descriptor="zombies-on-nightmares",
+                strength=80,
+            ),
         )
         self.assertEqual(unit.status, BattleUnitStatus.ACTIVE)
         self.assertEqual(self.battle.sides.count(), 1)
@@ -117,18 +120,19 @@ class BattleUnitTaxonomyTests(TestCase):
         self.assertEqual(unit.quality, UnitQuality.TRAINED)
         self.assertIsNone(unit.commander)
         self.assertIsNone(unit.summoned_by)
-        self.assertEqual(unit.properties.count(), 0)
-        self.assertEqual(unit.capabilities.count(), 0)
+        self.assertEqual(unit.military_unit.properties.count(), 0)
+        self.assertEqual(unit.military_unit.capabilities.count(), 0)
         self.assertIsNone(unit.individual_count)
 
     def test_commander_set_null_on_character_sheet_delete(self) -> None:
         commander = CharacterSheetFactory()
-        unit = BattleUnitFactory(commander=commander)
+        unit = BattleUnitFactory(military_unit=MilitaryUnitFactory(commander=commander))
         commander.character.delete()
         # Flush identity mapper cache so refresh_from_db picks up SET_NULL change
         BattleUnit.flush_instance_cache()
+        MilitaryUnit.flush_instance_cache()
         unit.refresh_from_db()
-        self.assertIsNone(unit.commander)
+        self.assertIsNone(unit.military_unit.commander)
 
 
 class BattleUnitPropertyCapabilityTests(TestCase):
@@ -137,7 +141,7 @@ class BattleUnitPropertyCapabilityTests(TestCase):
     def test_has_property_true_when_attached(self) -> None:
         unit = BattleUnitFactory()
         prop = PropertyFactory()
-        unit.properties.add(prop)
+        unit.military_unit.properties.add(prop)
         self.assertTrue(unit.has_property(prop))
 
     def test_has_property_false_when_absent(self) -> None:
@@ -149,12 +153,20 @@ class BattleUnitPropertyCapabilityTests(TestCase):
         """Two units holding the same capability at different magnitudes each
         report their own distinct value (the Garalothe-vs-Blarg case — no
         flattening to a presence bit)."""
-        dragon = BattleUnitFactory(name="Garalothe the Lightning Wing")
-        hedge_wizard = BattleUnitFactory(name="Blarg the Feckless")
+        dragon = BattleUnitFactory(
+            military_unit=MilitaryUnitFactory(name="Garalothe the Lightning Wing")
+        )
+        hedge_wizard = BattleUnitFactory(
+            military_unit=MilitaryUnitFactory(name="Blarg the Feckless")
+        )
         flight = CapabilityTypeFactory(name="flight")
 
-        BattleUnitCapability.objects.create(unit=dragon, capability=flight, value=50)
-        BattleUnitCapability.objects.create(unit=hedge_wizard, capability=flight, value=1)
+        MilitaryUnitCapability.objects.create(
+            unit=dragon.military_unit, capability=flight, value=50
+        )
+        MilitaryUnitCapability.objects.create(
+            unit=hedge_wizard.military_unit, capability=flight, value=1
+        )
 
         self.assertEqual(dragon.effective_capability(flight), 50)
         self.assertEqual(hedge_wizard.effective_capability(flight), 1)
@@ -173,7 +185,7 @@ class BattleUnitMoraleTests(TestCase):
         self.assertEqual(unit.morale, DEFAULT_MORALE)
 
     def test_morale_can_be_overridden(self) -> None:
-        unit = BattleUnitFactory(morale=10)
+        unit = BattleUnitFactory(military_unit=MilitaryUnitFactory(morale=10))
         self.assertEqual(unit.morale, 10)
 
 

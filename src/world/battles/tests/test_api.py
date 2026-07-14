@@ -42,6 +42,7 @@ from world.battles.services import begin_battle_round, conclude_battle, enlist_p
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.covenants.factories import CovenantFactory
+from world.military.factories import MilitaryUnitFactory
 from world.roster.factories import PlayerMediaFactory
 from world.scenes.constants import RoundStatus, ScenePrivacyMode
 from world.scenes.factories import SceneParticipationFactory
@@ -110,24 +111,28 @@ class BattleApiJourneyTest(TestCase):
             battle=cls.battle,
             side=cls.attacker_side,
             place=cls.place_ford,
-            name="Vanguard Pikes",
-            descriptor="pike-and-shot",
-            quality=UnitQuality.VETERAN,
+            military_unit=MilitaryUnitFactory(
+                name="Vanguard Pikes",
+                descriptor="pike-and-shot",
+                quality=UnitQuality.VETERAN,
+                strength=80,
+                morale=60,
+                individual_count=1,
+            ),
             status=BattleUnitStatus.ACTIVE,
-            strength=80,
-            morale=60,
-            individual_count=1,
         )
         cls.defender_unit = BattleUnitFactory(
             battle=cls.battle,
             side=cls.defender_side,
             place=cls.place_yard,
-            name="Garrison Levy",
-            descriptor="militia",
-            quality=UnitQuality.MILITIA,
+            military_unit=MilitaryUnitFactory(
+                name="Garrison Levy",
+                descriptor="militia",
+                quality=UnitQuality.MILITIA,
+                strength=50,
+                morale=40,
+            ),
             status=BattleUnitStatus.ACTIVE,
-            strength=50,
-            morale=40,
         )
 
         cls.round = BattleRoundFactory(battle=cls.battle, round_number=3, status="declaring")

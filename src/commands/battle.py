@@ -282,7 +282,7 @@ class CmdBattle(ArxCommand):
 
         unit = BattleUnit.objects.filter(
             battle=participant.battle,
-            name__iexact=name,
+            military_unit__name__iexact=name,
             status=BattleUnitStatus.ACTIVE,
         ).first()
         if unit is None:
@@ -302,7 +302,7 @@ class CmdBattle(ArxCommand):
         unit = BattleUnit.objects.filter(
             battle=participant.battle,
             side=participant.side,
-            name__iexact=name,
+            military_unit__name__iexact=name,
             status__in=(BattleUnitStatus.ACTIVE, BattleUnitStatus.ROUTED),
         ).first()
         if unit is None:

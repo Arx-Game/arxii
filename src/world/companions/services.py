@@ -319,8 +319,8 @@ def materialize_companion_as_battle_vehicle(
     )
     # Set the unit's strength from the archetype (create_battle_vehicle
     # uses the default 100; the companion's strength is authored).
-    vehicle.unit.strength = archetype.strength
-    vehicle.unit.save(update_fields=["strength"])
+    vehicle.unit.military_unit.strength = archetype.strength
+    vehicle.unit.military_unit.save(update_fields=["strength"])
 
     CompanionDeployment.objects.create(
         companion=companion,

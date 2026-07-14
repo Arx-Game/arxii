@@ -33,6 +33,7 @@ from world.covenants.services import set_engaged_membership
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+from world.military.factories import MilitaryUnitFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneParticipationFactory
@@ -77,7 +78,7 @@ class CmdBattleDeclareTests(TestCase):
         self.unit = BattleUnitFactory(
             battle=self.battle,
             side=self.attacker_side,
-            name="Iron Guard",
+            military_unit=MilitaryUnitFactory(name="Iron Guard"),
         )
 
         # Enlist player on defender side.
@@ -292,9 +293,8 @@ class CmdBattleDeclareTests(TestCase):
         own_unit = BattleUnitFactory(
             battle=self.battle,
             side=self.defender_side,
-            name="Broken Wing",
+            military_unit=MilitaryUnitFactory(name="Broken Wing", morale=5),
             status=BattleUnitStatus.ROUTED,
-            morale=5,
         )
         cmd = CmdBattle()
         _run(cmd, self.player_char, "declare rally Broken Wing with Lance Thrust")
@@ -471,7 +471,11 @@ class CmdBattleDeclareTests(TestCase):
             engaged=False,
         )
         set_engaged_membership(membership=membership)
-        own_unit = BattleUnitFactory(battle=self.battle, side=self.defender_side, name="Own Guard")
+        own_unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.defender_side,
+            military_unit=MilitaryUnitFactory(name="Own Guard"),
+        )
 
         cmd = CmdBattle()
         _run(cmd, self.player_char, "declare move Own Guard to The Ford with Lance Thrust")
@@ -496,8 +500,8 @@ class CmdBattleDeclareTests(TestCase):
             place_name="The Gull",
             vehicle_kind=VehicleKind.SHIP,
         )
-        vehicle.unit.commander = self.player_sheet
-        vehicle.unit.save(update_fields=["commander"])
+        vehicle.unit.military_unit.commander = self.player_sheet
+        vehicle.unit.military_unit.save(update_fields=["commander"])
 
         cmd = CmdBattle()
         _run(cmd, self.player_char, "declare reposition The Gull 10 5 with Lance Thrust")

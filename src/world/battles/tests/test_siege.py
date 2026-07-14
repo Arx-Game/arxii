@@ -32,7 +32,6 @@ from world.battles.factories import (
     BattlePlaceFactory,
     BattleSideFactory,
 )
-from world.battles.models import BattleUnitCapability
 from world.battles.resolution import resolve_battle_round
 from world.battles.services import (
     begin_battle_round,
@@ -45,6 +44,7 @@ from world.buildings.factories import BuildingFactory, FortificationUpgradeDetai
 from world.buildings.fortification_services import complete_fortification_upgrade
 from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory, TechniqueFactory
+from world.military.models import MilitaryUnitCapability
 from world.projects.factories import ProjectFactory
 from world.scenes.constants import RoundStatus
 
@@ -203,8 +203,8 @@ class RepositionDeclarationTests(TestCase):
         )
 
     def test_commander_can_declare_reposition(self):
-        self.vehicle.unit.commander = self.participant.character_sheet
-        self.vehicle.unit.save(update_fields=["commander"])
+        self.vehicle.unit.military_unit.commander = self.participant.character_sheet
+        self.vehicle.unit.military_unit.save(update_fields=["commander"])
         begin_battle_round(battle=self.battle)
 
         declaration = declare_battle_action(
@@ -241,11 +241,13 @@ class RepositionResolutionTests(TestCase):
             vehicle_kind=VehicleKind.SHIP,
         )
         speed = CapabilityTypeFactory(name="speed")
-        BattleUnitCapability.objects.create(unit=self.vehicle.unit, capability=speed, value=5)
+        MilitaryUnitCapability.objects.create(
+            unit=self.vehicle.unit.military_unit, capability=speed, value=5
+        )
         self.technique = TechniqueFactory(action_template=ActionTemplateFactory())
         self.participant = BattleParticipantFactory(battle=self.battle, side=self.side)
-        self.vehicle.unit.commander = self.participant.character_sheet
-        self.vehicle.unit.save(update_fields=["commander"])
+        self.vehicle.unit.military_unit.commander = self.participant.character_sheet
+        self.vehicle.unit.military_unit.save(update_fields=["commander"])
         CharacterTechniqueFactory(
             character=self.participant.character_sheet, technique=self.technique
         )

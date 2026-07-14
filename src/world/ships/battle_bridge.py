@@ -21,12 +21,12 @@ from world.battles.constants import (
 from world.battles.models import (
     Battle,
     BattleSide,
-    BattleUnitCapability,
     BattleVehicle,
     Fortification,
 )
 from world.battles.services import create_battle_vehicle
 from world.conditions.models import CapabilityType
+from world.military.models import MilitaryUnitCapability
 from world.ships.constants import DAMAGED_HULL_DISCOUNT, SPEED_CAPABILITY_NAME
 from world.ships.models import ShipDeployment, ShipDetails
 from world.ships.sanctum_bonus import ship_sanctum_bonus, ship_sanctum_capabilities
@@ -86,23 +86,23 @@ def materialize_ship_as_battle_vehicle(
 
     # Handling -> speed, read by REPOSITION (world/battles/resolution.py:726).
     speed, _ = CapabilityType.objects.get_or_create(name=SPEED_CAPABILITY_NAME)
-    BattleUnitCapability.objects.update_or_create(
-        unit=vehicle.unit,
+    MilitaryUnitCapability.objects.update_or_create(
+        unit=vehicle.unit.military_unit,
         capability=speed,
         defaults={"value": ship.effective_handling() + bonus.handling},
     )
 
     # Armament -> strength.
-    vehicle.unit.strength = ship.effective_armament() + bonus.armament
-    vehicle.unit.save(update_fields=["strength"])
+    vehicle.unit.military_unit.strength = ship.effective_armament() + bonus.armament
+    vehicle.unit.military_unit.save(update_fields=["strength"])
 
     # Level-3 sanctum threads each unlock a PLACEHOLDER capability row.
     for resonance in ship_sanctum_capabilities(ship):
         capability, _ = CapabilityType.objects.get_or_create(
             name=f"sanctum_{resonance.name.lower()}"
         )
-        BattleUnitCapability.objects.update_or_create(
-            unit=vehicle.unit,
+        MilitaryUnitCapability.objects.update_or_create(
+            unit=vehicle.unit.military_unit,
             capability=capability,
             defaults={"value": SANCTUM_CAPABILITY_VALUE},
         )

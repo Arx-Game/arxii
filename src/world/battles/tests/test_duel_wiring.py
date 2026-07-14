@@ -22,6 +22,7 @@ from world.combat.duels import create_lethal_duel, resolve_duel_end
 from world.combat.factories import ThreatPoolFactory
 from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory
+from world.military.factories import MilitaryUnitFactory
 
 
 class ChampionDuelOutcomeWiringTests(TestCase):
@@ -43,7 +44,10 @@ class ChampionDuelOutcomeWiringTests(TestCase):
         self.enemy_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
         self.place = BattlePlaceFactory(battle=self.battle)
         self.enemy_unit = BattleUnitFactory(
-            battle=self.battle, side=self.enemy_side, place=self.place, strength=100
+            battle=self.battle,
+            side=self.enemy_side,
+            place=self.place,
+            military_unit=MilitaryUnitFactory(strength=100),
         )
         # The challenger's own BattleParticipant row — apply_champion_duel_outcome
         # resolves the winner's side by looking up a BattleParticipant matching
@@ -104,7 +108,7 @@ class ChampionDuelOutcomeWiringTests(TestCase):
             battle=self.battle,
             side=self.challenger_side,
             place=self.place,
-            strength=100,
+            military_unit=MilitaryUnitFactory(strength=100),
         )
 
         enc = create_lethal_duel(
@@ -136,8 +140,8 @@ class ChampionDuelOutcomeWiringTests(TestCase):
         routed (#1712 — this exact branch had no prior test coverage)."""
         from world.battles.constants import ROUTED_STRENGTH_THRESHOLD
 
-        self.enemy_unit.strength = ROUTED_STRENGTH_THRESHOLD
-        self.enemy_unit.save(update_fields=["strength"])
+        self.enemy_unit.military_unit.strength = ROUTED_STRENGTH_THRESHOLD
+        self.enemy_unit.military_unit.save(update_fields=["strength"])
 
         enc = create_lethal_duel(
             self.pc_sheet,

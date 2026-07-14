@@ -238,9 +238,9 @@ def _next_template_unit_number(*, template: BattleUnitTemplate, battle: Battle) 
     """
     prefix = f"{template.name} "
     highest = 0
-    names = BattleUnit.objects.filter(battle=battle, name__startswith=prefix).values_list(
-        "name", flat=True
-    )
+    names = BattleUnit.objects.filter(
+        battle=battle, military_unit__name__startswith=prefix
+    ).values_list("military_unit__name", flat=True)
     for name in names:
         suffix = name[len(prefix) :]
         if suffix.isdigit():

@@ -18,7 +18,6 @@ from world.battles.models import (
     BattleRound,
     BattleSide,
     BattleUnit,
-    BattleUnitCapability,
     BattleUnitTemplate,
     BattleUnitTemplateCapability,
     BlueprintBattlePlace,
@@ -61,28 +60,16 @@ class FortificationAdmin(admin.ModelAdmin):
     list_filter = ("kind", "breached")
 
 
-class BattleUnitCapabilityInline(admin.TabularInline):
-    model = BattleUnitCapability
-    extra = 0
-    autocomplete_fields = ("capability",)
-
-
 @admin.register(BattleUnit)
 class BattleUnitAdmin(admin.ModelAdmin):
     list_display = (
         "battle",
-        "name",
-        "quality",
-        "commander",
-        "strength",
-        "morale",
+        "military_unit",
         "status",
     )
-    list_filter = ("quality", "status")
-    search_fields = ("name", "descriptor")
-    autocomplete_fields = ("commander", "summoned_by")
-    filter_horizontal = ("properties",)
-    inlines = [BattleUnitCapabilityInline]
+    list_filter = ("status",)
+    search_fields = ("military_unit__name", "military_unit__descriptor")
+    autocomplete_fields = ("military_unit",)
 
 
 @admin.register(BattleRound)

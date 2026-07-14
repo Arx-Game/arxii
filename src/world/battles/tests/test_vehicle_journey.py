@@ -14,7 +14,6 @@ from world.battles.constants import (
     VehicleKind,
 )
 from world.battles.factories import BattleFactory, BattleParticipantFactory, BattleSideFactory
-from world.battles.models import BattleUnitCapability
 from world.battles.resolution import resolve_battle_round
 from world.battles.services import (
     begin_battle_round,
@@ -25,6 +24,7 @@ from world.battles.services import (
 from world.conditions.factories import CapabilityTypeFactory, ensure_drowning_damage_type
 from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory, TechniqueFactory
 from world.mechanics.factories import PropertyFactory
+from world.military.models import MilitaryUnitCapability
 from world.vitals.factories import CharacterVitalsFactory
 
 
@@ -61,8 +61,8 @@ class VehicleJourneyTests(TestCase):
             side=attacker_side,
             place=attacker_ship.place,
         )
-        attacker_ship.unit.commander = captain.character_sheet
-        attacker_ship.unit.save(update_fields=["commander"])
+        attacker_ship.unit.military_unit.commander = captain.character_sheet
+        attacker_ship.unit.military_unit.save(update_fields=["commander"])
         CharacterTechniqueFactory(character=captain.character_sheet, technique=technique)
         CharacterAnimaFactory(character=captain.character_sheet.character, current=30, maximum=30)
 
@@ -99,7 +99,9 @@ class VehicleJourneyTests(TestCase):
         # capability the vehicle has — none set here, so distance stays 0 unless
         # a capability is granted; grant a generous SPEED so this converges fast).
         speed = CapabilityTypeFactory(name="speed")
-        BattleUnitCapability.objects.create(unit=attacker_ship.unit, capability=speed, value=50)
+        MilitaryUnitCapability.objects.create(
+            unit=attacker_ship.unit.military_unit, capability=speed, value=50
+        )
 
         while not places_overlap(attacker_ship.place, defender_ship.place):
             battle_round = begin_battle_round(battle=battle)

@@ -35,8 +35,10 @@ def rout_units_at_place(battle_place: BattlePlace, *, side_id: int) -> None:
         place=battle_place, side_id=side_id, status=BattleUnitStatus.ACTIVE
     )
     for unit in units:
-        if unit.strength <= ROUTED_STRENGTH_THRESHOLD:
-            unit.strength = 0
-        unit.morale = 0
-        unit.status = _compute_unit_status(unit.strength, unit.morale)
-        unit.save(update_fields=["strength", "morale", "status"])
+        mu = unit.military_unit
+        if mu.strength <= ROUTED_STRENGTH_THRESHOLD:
+            mu.strength = 0
+        mu.morale = 0
+        unit.status = _compute_unit_status(mu.strength, mu.morale)
+        unit.save(update_fields=["status"])
+        mu.save(update_fields=["strength", "morale"])
