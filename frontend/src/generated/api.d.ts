@@ -31220,6 +31220,9 @@ export interface components {
        *     * `STAKE_REWARD` - Stake reward
        *     * `DISTINCTION` - Distinction
        *     * `COMBO_DISCOVERY` - Combo discovery
+       *     * `COMPROMISE` - Moral compromise
+       *     * `PENANCE` - Atonement resonance conversion
+       *     * `FALL_CONVERSION` - Fall/Redemption conversion
        */
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
@@ -32522,6 +32525,9 @@ export interface components {
      *     * `STAKE_REWARD` - Stake reward
      *     * `DISTINCTION` - Distinction
      *     * `COMBO_DISCOVERY` - Combo discovery
+     *     * `COMPROMISE` - Moral compromise
+     *     * `PENANCE` - Atonement resonance conversion
+     *     * `FALL_CONVERSION` - Fall/Redemption conversion
      * @enum {string}
      */
     SourceEnum:
@@ -32541,7 +32547,10 @@ export interface components {
       | 'MISSION_REPORT'
       | 'STAKE_REWARD'
       | 'DISTINCTION'
-      | 'COMBO_DISCOVERY';
+      | 'COMBO_DISCOVERY'
+      | 'COMPROMISE'
+      | 'PENANCE'
+      | 'FALL_CONVERSION';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -48268,15 +48277,21 @@ export interface operations {
          *     * `STAKE_REWARD` - Stake reward
          *     * `DISTINCTION` - Distinction
          *     * `COMBO_DISCOVERY` - Combo discovery
+         *     * `COMPROMISE` - Moral compromise
+         *     * `PENANCE` - Atonement resonance conversion
+         *     * `FALL_CONVERSION` - Fall/Redemption conversion
          */
         source?:
           | 'COMBO_DISCOVERY'
+          | 'COMPROMISE'
           | 'DISTINCTION'
           | 'DRAMATIC_MOMENT'
           | 'ENTRY_FLOURISH'
+          | 'FALL_CONVERSION'
           | 'MISSION_REPORT'
           | 'MISSION_REWARD'
           | 'OUTFIT_TRICKLE'
+          | 'PENANCE'
           | 'POSE_ENDORSEMENT'
           | 'PROJECT_CONTRIBUTION'
           | 'ROOM_RESIDENCE'

@@ -15631,12 +15631,15 @@ paths:
           type: string
           enum:
           - COMBO_DISCOVERY
+          - COMPROMISE
           - DISTINCTION
           - DRAMATIC_MOMENT
           - ENTRY_FLOURISH
+          - FALL_CONVERSION
           - MISSION_REPORT
           - MISSION_REWARD
           - OUTFIT_TRICKLE
+          - PENANCE
           - POSE_ENDORSEMENT
           - PROJECT_CONTRIBUTION
           - ROOM_RESIDENCE
@@ -15667,6 +15670,9 @@ paths:
           * `STAKE_REWARD` - Stake reward
           * `DISTINCTION` - Distinction
           * `COMBO_DISCOVERY` - Combo discovery
+          * `COMPROMISE` - Moral compromise
+          * `PENANCE` - Atonement resonance conversion
+          * `FALL_CONVERSION` - Fall/Redemption conversion
       tags:
       - magic
       security:
@@ -55463,6 +55469,9 @@ components:
             * `STAKE_REWARD` - Stake reward
             * `DISTINCTION` - Distinction
             * `COMBO_DISCOVERY` - Combo discovery
+            * `COMPROMISE` - Moral compromise
+            * `PENANCE` - Atonement resonance conversion
+            * `FALL_CONVERSION` - Fall/Redemption conversion
         granted_at:
           type: string
           format: date-time
@@ -58231,6 +58240,9 @@ components:
       - STAKE_REWARD
       - DISTINCTION
       - COMBO_DISCOVERY
+      - COMPROMISE
+      - PENANCE
+      - FALL_CONVERSION
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -58250,6 +58262,9 @@ components:
         * `STAKE_REWARD` - Stake reward
         * `DISTINCTION` - Distinction
         * `COMBO_DISCOVERY` - Combo discovery
+        * `COMPROMISE` - Moral compromise
+        * `PENANCE` - Atonement resonance conversion
+        * `FALL_CONVERSION` - Fall/Redemption conversion
     Specialization:
       type: object
       description: Serializer for Specialization model.
