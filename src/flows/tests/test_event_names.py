@@ -51,6 +51,7 @@ class EventNameTests(TestCase):
             "combat_round_starting",
             "engagement_lock_formed",
             "engagement_lock_broken",
+            "food_pre_collect",
             "food_collected",
             "food_shortage",
             "asset_compromised",

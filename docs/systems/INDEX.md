@@ -2838,6 +2838,16 @@ a character actively collects it via a lossy check-based dispatch (mirrors
 population consumes food weekly with shortage raising unrest and lowering
 prosperity.
 
+**Food collection mini-game (#2218):** Collection is a two-event reactive flow.
+Before the pool is zeroed, `FOOD_PRE_COLLECT` fires with a mutable
+`FoodPreCollectPayload` — reactive flows may inspect the pool size, adjust the
+`difficulty_modifier` (intimidation, persuasion, bribery), or cancel the
+collection entirely (pool stays intact). After the outcome resolves,
+`FOOD_COLLECTED` fires with a frozen `FoodCollectedPayload` for post-hoc
+reactions (spawn a bandit ambush on catastrophe, etc.). Pool size scales
+difficulty: pools above `FoodConfig.pool_difficulty_threshold` add +1 difficulty
+per `pool_difficulty_step`, capped at `pool_difficulty_max_bonus`.
+
 - **Models** (`world.agriculture.models`):
   - `CropType` — staff-authored catalog (name, base_production, description).
   - `FieldDetails` — OneToOne to `RoomFeatureInstance`; carries `crop_type` FK
@@ -2848,15 +2858,19 @@ prosperity.
   - `FoodStockpile` — OneToOne to `Domain`; `stored` balance + `last_collected_at`.
     Lazily created via `get_or_create` in `collect_field_food`.
   - `FoodConfig` — singleton (pk=1) tuning knobs: production rate, consumption
-    per capita, shortage penalties, granary capacity per level.
+    per capita, shortage penalties, granary capacity per level, and pool-size
+    difficulty scaling (`pool_difficulty_threshold` / `pool_difficulty_step` /
+    `pool_difficulty_max_bonus`, #2218).
 - **Services** (`world.agriculture.services`):
   - `field_production_tick()` — daily cron; accrues `base_production × level ×
     multiplier` into each active Field's `uncollected_pool`.
   - `collect_field_food(character, field_instance)` — active collection dispatch;
-    zeroes pool, rolls a Food Collection check, applies `COLLECTION_BAND_PCTS`
-    (reused from currency), then **unrest skims the haul** (`_apply_unrest_skim`,
-    #2238), lands food into domain's `FoodStockpile` (capped at Granary capacity;
-    excess is overflow/lost).
+    emits `FOOD_PRE_COLLECT` (cancellable, #2218), zeroes pool, rolls a Food
+    Collection check at effective difficulty (base + pool bonus + reactive
+    modifier), applies `COLLECTION_BAND_PCTS` (reused from currency), then
+    **unrest skims the haul** (`_apply_unrest_skim`, #2238), lands food into
+    domain's `FoodStockpile` (capped at Granary capacity; excess is
+    overflow/lost), emits `FOOD_COLLECTED`.
   - `domain_consumption_tick()` — weekly cron (part of weekly rollover); the
     domain **civ-stat update**: population consumes food; shortage raises unrest +
     lowers prosperity; a **well-fed** week instead relaxes unrest + recovers
@@ -2867,15 +2881,22 @@ prosperity.
     `AreaClosure` ancestor chain to find the `Domain`.
   - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
     across all active Granaries in the domain's area subtree.
+- **Flow service functions** (`flows.service_functions.agriculture`):
+  - `food_collection_difficulty` — flow-callable wrapper that computes the
+    pool-size difficulty bonus for a collection attempt (#2218).
 - **Action:** `CollectFoodAction` (key `"collect_food"`, category
   `"agriculture"`) — the single commit seam for telnet + web. Resolves its Field
   from a pre-resolved `field_instance`, a `field_instance_id` (web/REST — the REST
   path does no ObjectDB resolution, so the action resolves it), or the active FIELD
-  feature in `actor.location` (telnet). **Surfaces (#2237):** telnet `harvest`
+  feature in `actor.location` (telnet). Handles cancelled results (returns
+  failure with `cancelled: True`). **Surfaces (#2237):** telnet `harvest`
   (`commands/agriculture.py` `CmdHarvest`) + web `POST /api/agriculture/collect/`
   (`CollectFoodView`, body `{field_instance_id}`). Without a surface the loop
   couldn't close — the pool filled but never drained.
-- **Events:** `FOOD_COLLECTED`, `FOOD_SHORTAGE` (in `flows/constants.py`).
+- **Events:** `FOOD_PRE_COLLECT` (cancellable pre-collect, #2218),
+  `FOOD_COLLECTED` (post-collect outcome), `FOOD_SHORTAGE` (in
+  `flows/constants.py`). Payloads: `FoodPreCollectPayload` (mutable),
+  `FoodCollectedPayload` (frozen) in `flows/events/payloads.py`.
 - **Cron tasks:** `agriculture.field_production` (daily 24h),
   `agriculture.domain_consumption` (weekly, via weekly rollover).
 - **Seeds:** `ensure_field_granary_kinds()` + `ensure_starter_crop_types()`
