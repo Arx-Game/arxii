@@ -132,6 +132,10 @@ class Bequest(SharedMemoryModel):
         BequestKind.BUSINESS: "business",
     }
 
+    # Items and businesses are persona/sheet-held surfaces (ItemInstance.holder_
+    # character_sheet, Business.owner_persona) — an organization cannot hold them.
+    _PERSONA_ONLY_KINDS = frozenset({BequestKind.SPECIFIC_ITEM, BequestKind.BUSINESS})
+
     def clean(self) -> None:
         target_field = self._KIND_TARGET_FIELD.get(BequestKind(self.kind))
         for field in ("item", "building", "business"):
@@ -144,6 +148,10 @@ class Bequest(SharedMemoryModel):
             raise ValidationError({"amount": "A coin bequest requires a positive amount."})
         if self.kind != BequestKind.COIN_AMOUNT and self.amount != 0:
             raise ValidationError({"amount": f"A {self.kind} bequest may not carry an amount."})
+        if self.kind in self._PERSONA_ONLY_KINDS and self.recipient_organization_id is not None:
+            raise ValidationError(
+                {"recipient_organization": f"A {self.kind} bequest needs a character recipient."}
+            )
 
     def __str__(self) -> str:
         return f"Bequest({self.kind}) in {self.will}"
