@@ -2600,7 +2600,9 @@ ADR-0091.
   (`PROMOTION` runtime, `DISTINCTION_GRANT` CG, `COERCION` blackmail — #1680, both source FKs
   null); `source_distinction_grant` FK
   `DistinctionAssetGrant` (nullable — idempotency key for CG grants);
-  `status`; `created_at`). No `standing` field — ongoing affection reads
+  `status`; `weekly_income` (coppers per cycle, 0 = none — #2294);
+  `uncollected_pool` (accrued income awaiting active collection — #2294);
+  `created_at`). No `standing` field — ongoing affection reads
   through the existing `NPCStanding` row for the same persona pair.
 - **`DistinctionAssetGrant`** sidecar (`world.assets.models`): staff-authored
   mapping of a `Distinction` → `NPCRole` + `role_context` + `starting_affection`
@@ -2645,13 +2647,21 @@ ADR-0091.
   - **`CluePoolEntry`**: links a `Clue` to a `CluePool` with a draw weight.
     Unique per (pool, clue). Drawn via the shared `select_weighted` utility
     (`world.checks.outcome_utils`).
+- **Income collection** (#2294): `ASSET_TASK_COLLECT` `OfferKind` +
+  `run_asset_collect_task` effect handler. An asset with `weekly_income > 0`
+  accrues coppers into its `uncollected_pool` each weekly economy cycle
+  (no cap — ADR-0081). The PC actively collects via an offer dispatch; a
+  `Tax Collection` check (reusing `COLLECTION_BAND_PCTS`) decides how much
+  arrives — catastrophe loses the entire pool. Money lands in the PC's
+  `CharacterPurse` via `transfer()` with a `CurrencyTransfer` audit row.
+  Offer is hidden when no active asset has `uncollected_pool > 0`
+  (`_asset_has_collectable_income` in `world.npc_services.services`).
 - **REST API:** `world.assets.views.NPCAssetViewSet` — read-only, mounted
   at `/api/assets/`, scoped to the requesting user's own promoted assets.
 - **Source:** `src/world/assets/`
 
 Deferred follow-ups: distinction-granted starting assets (`needs-design`),
-money streams (asset-generated income — ADR-0081 constrains to active
-collection), voluntary asset sharing.
+voluntary asset sharing.
 
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a
