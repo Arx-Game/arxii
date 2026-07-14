@@ -405,6 +405,16 @@ class BattleUnit(SharedMemoryModel):
         related_name="units_in_transit",
         help_text="Destination of an in-progress multi-round MOVE (#2007). Null when at rest.",
     )
+    military_unit = models.ForeignKey(
+        "military.MilitaryUnit",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="battle_units",
+        help_text="The persistent MilitaryUnit this battle unit projects from. "
+        "All identity and stats live on MilitaryUnit (ADR-0014). Null during "
+        "migration; populated by data migration then made non-nullable.",
+    )
     name = models.CharField(max_length=120)
     descriptor = models.CharField(
         max_length=80,
