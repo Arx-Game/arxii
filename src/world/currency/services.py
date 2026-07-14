@@ -443,6 +443,71 @@ def collect_org_income(*, organization: Organization, character) -> CollectionRe
 
 
 @transaction.atomic
+def collect_asset_income(*, asset, character_sheet) -> CollectionResult:
+    """One active collection of a personal asset's accumulated income (#2294).
+
+    Mirrors ``collect_org_income`` but for a single NPCAsset's pool: zeros
+    the pool (the money left with the collector), rolls a Tax Collection
+    check, applies the outcome band, and lands the net in the collector's
+    CharacterPurse via ``transfer`` (null source = mint). No graft — graft
+    is an org-level corruption concept that doesn't apply to a personal
+    asset. Catastrophe loses the entire pool.
+
+    Args:
+        asset: The NPCAsset whose ``uncollected_pool`` is being collected.
+        character_sheet: The CharacterSheet of the PC collecting.
+
+    Returns:
+        CollectionResult with gathered, landed, and catastrophe info.
+
+    Raises:
+        ValidationError: If the pool is empty (nothing to collect).
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.currency.constants import TAX_COLLECTION_CHECK_NAME  # noqa: PLC0415
+    from world.scenes.action_constants import (  # noqa: PLC0415
+        DIFFICULTY_VALUES,
+        DifficultyChoice,
+    )
+
+    gathered = asset.uncollected_pool
+    if gathered <= 0:
+        msg = "There is nothing waiting to be collected."
+        raise ValidationError(msg)
+    asset.uncollected_pool = 0
+    asset.save(update_fields=["uncollected_pool"])
+
+    check_type = CheckType.objects.filter(name__iexact=TAX_COLLECTION_CHECK_NAME).first()
+    success_level = 0  # unseeded world: every collection is an unremarkable partial
+    if check_type is not None:
+        result = perform_check(
+            character_sheet.character,
+            check_type,
+            target_difficulty=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+        )
+        success_level = result.success_level
+
+    pct = _collection_band_pct(success_level)
+    if pct is None:
+        # Catastrophe: the money never made it to the collector.
+        return CollectionResult(
+            gathered=gathered, landed=0, graft_leak=0, success_level=success_level, catastrophe=True
+        )
+
+    net = gathered * pct // 100
+    if net > 0:
+        transfer(
+            amount=net,
+            reason="asset income collection",
+            to_purse=get_or_create_purse(character_sheet),
+        )
+    return CollectionResult(
+        gathered=gathered, landed=net, graft_leak=0, success_level=success_level
+    )
+
+
+@transaction.atomic
 def improve_org_domain(*, organization: Organization, character) -> ImprovementResult:
     """One domain-investment attempt (#930): Scholarship/Economics against the ledgers.
 
