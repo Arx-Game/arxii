@@ -97,6 +97,90 @@ def _get_multiplier(config: FallRedemptionConfig, from_affinity: str, to_affinit
 
 
 @transaction.atomic
+def _convert_partial(
+    cr: CharacterResonance,
+    character_sheet: CharacterSheet,
+    target_resonance: Resonance,
+    multiplier: Decimal,
+    penance_amount: int | None,
+) -> tuple[int, int] | None:
+    """Partial conversion: convert a portion of balance back (Atonement)."""
+    amount_to_convert = min(
+        penance_amount if penance_amount is not None else cr.balance,
+        cr.balance,
+    )
+    if amount_to_convert <= 0:
+        return None
+
+    if cr.balance > 0:
+        lifetime_fraction = int(
+            (Decimal(amount_to_convert) / Decimal(cr.balance)) * Decimal(cr.lifetime_earned)
+        )
+    else:
+        lifetime_fraction = 0
+
+    granted_balance = int(Decimal(amount_to_convert) * multiplier)
+    granted_lifetime = lifetime_fraction
+
+    cr.balance -= amount_to_convert
+    cr.lifetime_earned -= lifetime_fraction
+    cr.save(update_fields=["balance", "lifetime_earned"])
+
+    if granted_balance > 0:
+        grant_resonance(
+            character_sheet,
+            target_resonance,
+            granted_balance,
+            source=GainSource.PENANCE,
+        )
+        # grant_resonance added granted_balance to lifetime_earned;
+        # we want the transferred fraction instead.
+        target_cr = CharacterResonance.objects.get(
+            character_sheet=character_sheet,
+            resonance=target_resonance,
+        )
+        if granted_lifetime != granted_balance:
+            target_cr.lifetime_earned += granted_lifetime - granted_balance
+            target_cr.save(update_fields=["lifetime_earned"])
+
+    return granted_balance, granted_lifetime
+
+
+def _convert_full(
+    cr: CharacterResonance,
+    character_sheet: CharacterSheet,
+    target_resonance: Resonance,
+    multiplier: Decimal,
+) -> tuple[int, int] | None:
+    """Full conversion: convert everything (Fall/Redemption)."""
+    from world.magic.models.grant import ResonanceGrant  # noqa: PLC0415
+
+    granted_balance = int(Decimal(cr.balance) * multiplier)
+    granted_lifetime = int(Decimal(cr.lifetime_earned) * multiplier)
+
+    cr.balance = 0
+    cr.lifetime_earned = 0
+    cr.save(update_fields=["balance", "lifetime_earned"])
+
+    target_cr, _ = CharacterResonance.objects.get_or_create(
+        character_sheet=character_sheet,
+        resonance=target_resonance,
+        defaults={"balance": 0, "lifetime_earned": 0},
+    )
+    target_cr.balance += granted_balance
+    target_cr.lifetime_earned += granted_lifetime
+    target_cr.save(update_fields=["balance", "lifetime_earned"])
+
+    ResonanceGrant.objects.create(
+        character_sheet=character_sheet,
+        resonance=target_resonance,
+        amount=granted_balance,
+        source=GainSource.FALL_CONVERSION,
+    )
+
+    return granted_balance, granted_lifetime
+
+
 def convert_resonance(  # noqa: PLR0913
     character_sheet: CharacterSheet,
     *,
@@ -149,101 +233,25 @@ def convert_resonance(  # noqa: PLR0913
         lifetime_before = cr.lifetime_earned
 
         if partial:
-            # Partial conversion: convert a portion (Atonement)
-            amount_to_convert = min(
-                penance_amount if penance_amount is not None else cr.balance,
-                cr.balance,
+            conv = _convert_partial(
+                cr, character_sheet, target_resonance, multiplier, penance_amount
             )
-            if amount_to_convert <= 0:
-                continue
-
-            # Proportional lifetime_earned transfer
-            if cr.balance > 0:
-                lifetime_fraction = int(
-                    (Decimal(amount_to_convert) / Decimal(cr.balance)) * Decimal(cr.lifetime_earned)
-                )
-            else:
-                lifetime_fraction = 0
-
-            granted_balance = int(Decimal(amount_to_convert) * multiplier)
-            granted_lifetime = lifetime_fraction
-
-            # Reduce source
-            cr.balance -= amount_to_convert
-            cr.lifetime_earned -= lifetime_fraction
-            cr.save(update_fields=["balance", "lifetime_earned"])
-
-            # Grant to target
-            if granted_balance > 0:
-                grant_resonance(
-                    character_sheet,
-                    target_resonance,
-                    granted_balance,
-                    source=GainSource.PENANCE,
-                )
-                # grant_resonance adds to both balance and lifetime_earned
-                # on the target, but we need the lifetime_earned to reflect
-                # the transferred amount, not the granted_balance amount.
-                # Adjust: set the target's lifetime_earned to include the
-                # transferred lifetime, not just granted_balance.
-                # Actually, grant_resonance adds `amount` to both balance and
-                # lifetime_earned. For penance, the lifetime_earned should be
-                # the transferred fraction (lifetime_fraction), not granted_balance.
-                # We need to fix up the target's lifetime_earned.
-                target_cr = CharacterResonance.objects.get(
-                    character_sheet=character_sheet,
-                    resonance=target_resonance,
-                )
-                # grant_resonance added granted_balance to lifetime_earned.
-                # We want it to be granted_lifetime instead.
-                if granted_lifetime != granted_balance:
-                    target_cr.lifetime_earned += granted_lifetime - granted_balance
-                    target_cr.save(update_fields=["lifetime_earned"])
         else:
-            # Full conversion: convert everything (Fall/Redemption)
-            amount_to_convert = cr.balance
+            conv = _convert_full(cr, character_sheet, target_resonance, multiplier)
 
-            granted_balance = int(Decimal(amount_to_convert) * multiplier)
-            granted_lifetime = int(Decimal(cr.lifetime_earned) * multiplier)
-
-            # Zero the source
-            cr.balance = 0
-            cr.lifetime_earned = 0
-            cr.save(update_fields=["balance", "lifetime_earned"])
-
-            # Grant to target — write directly + audit row (not via grant_resonance
-            # to avoid per-resonance recompute_aura calls; we batch at the end).
-            target_cr, _ = CharacterResonance.objects.get_or_create(
-                character_sheet=character_sheet,
-                resonance=target_resonance,
-                defaults={"balance": 0, "lifetime_earned": 0},
+        if conv is not None:
+            converted.append(
+                ConvertedResonance(
+                    source_resonance_id=source_resonance.pk,
+                    target_resonance_id=target_resonance.pk,
+                    balance_before=balance_before,
+                    balance_after=cr.balance,
+                    lifetime_earned_before=lifetime_before,
+                    lifetime_earned_after=cr.lifetime_earned,
+                    granted_balance=conv[0],
+                    granted_lifetime=conv[1],
+                )
             )
-            target_cr.balance += granted_balance
-            target_cr.lifetime_earned += granted_lifetime
-            target_cr.save(update_fields=["balance", "lifetime_earned"])
-
-            # Write the audit row
-            from world.magic.models.grant import ResonanceGrant  # noqa: PLC0415
-
-            ResonanceGrant.objects.create(
-                character_sheet=character_sheet,
-                resonance=target_resonance,
-                amount=granted_balance,
-                source=GainSource.FALL_CONVERSION,
-            )
-
-        converted.append(
-            ConvertedResonance(
-                source_resonance_id=source_resonance.pk,
-                target_resonance_id=target_resonance.pk,
-                balance_before=balance_before,
-                balance_after=cr.balance,
-                lifetime_earned_before=lifetime_before,
-                lifetime_earned_after=cr.lifetime_earned,
-                granted_balance=granted_balance,
-                granted_lifetime=granted_lifetime,
-            )
-        )
 
     # Thread re-anchoring (full conversion only)
     threads_reanchored = 0
@@ -303,7 +311,6 @@ def _reanchor_threads(
             # Merge: add scaled points to existing thread, retire source
             existing.developed_points += new_points
             existing.save(update_fields=["developed_points"])
-            thread.retired_at = thread.retired_at  # trigger auto_now? No, set explicitly
             from django.utils import timezone  # noqa: PLC0415
 
             thread.retired_at = timezone.now()
