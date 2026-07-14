@@ -236,6 +236,18 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
     """
     from world.military.models import MilitaryUnit, MilitaryUnitCapability  # noqa: PLC0415
 
+    # Apply war-funding bonuses if the side has a covenant (#1890).
+    if side.covenant_id is not None:
+        from world.battles.war_funding_services import (  # noqa: PLC0415
+            _apply_quality_steps,
+            get_war_funding_bonus,
+        )
+
+        bonus = get_war_funding_bonus(side.covenant)
+        quality = _apply_quality_steps(quality, bonus.quality_steps)
+        strength += bonus.strength_bonus
+        morale += bonus.morale_bonus
+
     mu = MilitaryUnit.objects.create(
         name=name,
         descriptor=descriptor,
