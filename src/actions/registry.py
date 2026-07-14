@@ -136,7 +136,9 @@ from actions.definitions.events import (
 )
 from actions.definitions.evidence import (
     DisposeEvidenceAction,
+    ExamineEvidenceAction,
     GatherEvidenceAction,
+    ProduceCaseEvidenceAction,
     StartFrameJobAction,
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
@@ -732,6 +734,8 @@ _ALL_ACTIONS: list[Action] = [
     DisposeEvidenceAction(),
     StartInvestigationAction(),
     StartFrameJobAction(),
+    ProduceCaseEvidenceAction(),
+    ExamineEvidenceAction(),
 ]
 
 # Lookup by key

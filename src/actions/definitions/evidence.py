@@ -191,3 +191,101 @@ class StartFrameJobAction(Action):
             ),
             data={"project_id": project.pk},
         )
+
+
+@dataclass
+class ProduceCaseEvidenceAction(Action):
+    """Pull a filed frame's evidence out of the case file for scrutiny (#1825).
+
+    Authority-gated in the service (``has_local_authority`` — standing under the
+    room's enforcing society; PLACEHOLDER predicate refined by #2378). Piloted
+    characters only — nothing automated produces or examines evidence.
+    """
+
+    key: str = "produce_case_evidence"
+    name: str = "Produce Case Evidence"
+    icon: str = "box-archive"
+    category: str = "investigation"
+    action_category: ActionCategory = ActionCategory.MENTAL
+    target_type: TargetType = TargetType.SELF
+
+    ap_cost: int = _EVIDENCE_AP_COST
+    fatigue_cost: int = _EVIDENCE_FATIGUE_COST
+    fatigue_category: str = ActionCategory.MENTAL
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.justice.case_file import produce_case_evidence  # noqa: PLC0415
+        from world.justice.evidence import EvidenceError  # noqa: PLC0415
+        from world.secrets.models import Secret  # noqa: PLC0415
+
+        secret_id = kwargs.get("secret_id")
+        secret = Secret.objects.filter(pk=secret_id).first() if isinstance(secret_id, int) else None
+        if secret is None:
+            return ActionResult(success=False, message="There's no such accusation on file.")
+        try:
+            evidence = produce_case_evidence(actor, secret)
+        except EvidenceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=(
+                "PLACEHOLDER The clerk unseals the case file and lays the evidence in your hands."
+            ),
+            data={"evidence_id": evidence.pk},
+        )
+
+
+@dataclass
+class ExamineEvidenceAction(Action):
+    """Scrutinize produced evidence against the framer's tamper craft (#1825)."""
+
+    key: str = "examine_evidence"
+    name: str = "Examine Evidence"
+    icon: str = "magnifying-glass-chart"
+    category: str = "investigation"
+    action_category: ActionCategory = ActionCategory.MENTAL
+    target_type: TargetType = TargetType.SELF
+
+    ap_cost: int = _EVIDENCE_AP_COST
+    fatigue_cost: int = _EVIDENCE_FATIGUE_COST
+    fatigue_category: str = ActionCategory.MENTAL
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.justice.case_file import examine_evidence  # noqa: PLC0415
+        from world.justice.evidence import EvidenceError  # noqa: PLC0415
+
+        evidence = _resolve_evidence(kwargs.get("evidence_id"))
+        if evidence is None:
+            return ActionResult(success=False, message="There's no such evidence.")
+        try:
+            result = examine_evidence(actor, evidence)
+        except EvidenceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        if not result.success:
+            return ActionResult(
+                success=True,
+                message="PLACEHOLDER You pore over it but can't say what, if anything, is off.",
+            )
+        if evidence.tamper_quality is not None:
+            return ActionResult(
+                success=True,
+                message=(
+                    "PLACEHOLDER Something IS off — the seams of a forger's hand. "
+                    "You've found a thread worth pulling."
+                ),
+                data={"evidence_id": evidence.pk},
+            )
+        return ActionResult(
+            success=True,
+            message="PLACEHOLDER Nothing is off about it — the evidence is what it seems.",
+        )

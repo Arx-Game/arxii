@@ -473,6 +473,8 @@ class ActionRegistryTests(TestCase):
             "denounce_framer",
             "start_investigation",
             "start_frame_job",
+            "produce_case_evidence",
+            "examine_evidence",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

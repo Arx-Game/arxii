@@ -134,6 +134,7 @@ from commands.social.blocking import (
     CmdUnmute,
 )
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
+from commands.social.evidence import CmdEvidence
 from commands.social.friends import CmdFriend, CmdFriends, CmdUnfriend
 from commands.social.gossip import CmdGossip
 from commands.social.grievance import CmdGrievance
@@ -281,6 +282,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # or doctor real evidence into a frame job at a Workshop of Iniquity.
             CmdAccuse,
             CmdFrame,
+            CmdEvidence,
             # #1450 — the pull/browse face of the public-reaction tidings feed.
             CmdTidings,
             # #1572 — work the rumor mill at a social hub (plant/seek/suppress gossip).
