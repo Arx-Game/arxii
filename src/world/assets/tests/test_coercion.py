@@ -45,17 +45,43 @@ class CoerceIntoAssetTests(TestCase):
             )
         self.assertFalse(NPCAsset.objects.filter(asset_persona=stranger).exists())
 
-    def test_target_already_an_asset_is_rejected(self) -> None:
+    def test_re_coercion_on_same_target_is_rejected(self) -> None:
+        """A second coercion on the same NPC is blocked (#2295 scoping)."""
         coerce_into_asset(
             coercer_persona=self.coercer,
             target_persona=self.target,
             role_context=AssetRoleContext.PERSONAL_FAVOR,
         )
-        # asset_persona is OneToOne — a second claim (even by the same coercer) is blocked.
+        # A second coercion (even by the same coercer) is blocked.
         with self.assertRaises(CoercionError):
             coerce_into_asset(
                 coercer_persona=self.coercer,
                 target_persona=self.target,
                 role_context=AssetRoleContext.INFORMANT,
             )
-        self.assertEqual(NPCAsset.objects.filter(asset_persona=self.target).count(), 1)
+        self.assertEqual(
+            NPCAsset.objects.filter(
+                asset_persona=self.target,
+                acquisition_source=AssetAcquisitionSource.COERCION,
+            ).count(),
+            1,
+        )
+
+    def test_promotion_asset_does_not_block_coercion(self) -> None:
+        """A voluntarily-cultivated asset does not block coercion (#2295)."""
+        from world.assets.factories import NPCAssetFactory
+
+        # Create a PROMOTION asset on the target by a different promoter.
+        other_promoter = PersonaFactory()
+        NPCAssetFactory(
+            promoter_persona=other_promoter,
+            asset_persona=self.target,
+            acquisition_source=AssetAcquisitionSource.PROMOTION,
+        )
+        # Coercion should still succeed — only COERCION assets block re-coercion.
+        asset = coerce_into_asset(
+            coercer_persona=self.coercer,
+            target_persona=self.target,
+            role_context=AssetRoleContext.PERSONAL_FAVOR,
+        )
+        self.assertEqual(asset.acquisition_source, AssetAcquisitionSource.COERCION)

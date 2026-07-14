@@ -116,7 +116,8 @@ def coerce_into_asset(
     source FKs null (like a CG grant, this is not a functionary promotion).
 
     Raises ``CoercionError`` if the coercer holds no leverage over the target, or the
-    target already answers to someone (``asset_persona`` is OneToOne — one owner per NPC).
+    target is already under coercion (one COERCION NPCAsset per NPC — voluntary
+    co-ownership via #2295 does not block coercion).
     """
     from world.assets.constants import AssetAcquisitionSource  # noqa: PLC0415
     from world.assets.models import NPCAsset  # noqa: PLC0415
@@ -128,8 +129,11 @@ def coerce_into_asset(
     ):
         msg = "You hold no leverage over them."
         raise CoercionError(msg, user_message=msg)
-    if NPCAsset.objects.filter(asset_persona=target_persona).exists():
-        msg = "They already answer to someone."
+    if NPCAsset.objects.filter(
+        asset_persona=target_persona,
+        acquisition_source=AssetAcquisitionSource.COERCION,
+    ).exists():
+        msg = "They already answer to someone under coercion."
         raise CoercionError(msg, user_message=msg)
     return NPCAsset.objects.create(
         promoter_persona=coercer_persona,
