@@ -8,7 +8,7 @@ import django.utils.timezone
 class Migration(migrations.Migration):
     dependencies = [
         ("areas", "0018_rampartelementprofile_rampart_and_more"),
-        ("projects", "0020_alter_contributionmethod_kind_alter_project_kind_and_more"),
+        ("projects", "0021_alter_contributionmethod_kind_alter_project_kind_and_more"),
         ("traits", "0001_initial"),
     ]
 
