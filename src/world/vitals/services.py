@@ -708,6 +708,11 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
 
     kinsperson = Kinsperson.objects.filter(sheet=character_sheet).first()
     if kinsperson is not None:
+        # Succession law and intestacy both read this flag; the death writer is
+        # the one place it gets stamped.
+        if not kinsperson.is_deceased:
+            kinsperson.is_deceased = True
+            kinsperson.save(update_fields=["is_deceased"])
         handle_death_for_pacts(kinsperson)
 
 
