@@ -65,6 +65,9 @@ class EventName(models.TextChoices):
     FOOD_PRE_COLLECT = "food_pre_collect", "Food Pre-Collect"
     FOOD_COLLECTED = "food_collected", "Food Collected"
     FOOD_SHORTAGE = "food_shortage", "Food Shortage"
+    # Inter-domain food transfer (#2219)
+    FOOD_PRE_TRANSFER = "food_pre_transfer", "Food Pre-Transfer"
+    FOOD_TRANSFERRED = "food_transferred", "Food Transferred"
     # Asset lifecycle (#1905) — emitted post-transition by transition_asset_status().
     ASSET_COMPROMISED = "asset_compromised", "Asset Compromised"
     ASSET_LOST = "asset_lost", "Asset Lost"

@@ -315,6 +315,38 @@ class FoodCollectedPayload:
     catastrophe: bool
 
 
+# ---- Inter-domain food transfer (#2219) ----
+
+
+@dataclass
+class FoodPreTransferPayload:
+    """Cancellable pre-transfer payload for inter-domain food transfer (#2219).
+
+    Emitted by ``transfer_food`` *before* food is deducted from the source
+    stockpile. Reactive flows may cancel the transfer (bandit ambush, border
+    closure) — the food stays put. The ``amount`` field is mutable so a future
+    extension can reduce it (loss-in-transit), but the MVP service does not
+    read it back.
+    """
+
+    character: Character
+    source_domain: object
+    target_domain: object
+    amount: int
+
+
+@dataclass(frozen=True)
+class FoodTransferredPayload:
+    """Post-transfer outcome payload (#2219). Read-only."""
+
+    character: Character
+    source_domain: object
+    target_domain: object
+    amount: int
+    landed: int
+    overflow: int
+
+
 PAYLOAD_FOR_EVENT: dict[str, type] = {
     "attack_pre_resolve": AttackPreResolvePayload,
     "attack_landed": AttackLandedPayload,
@@ -342,4 +374,6 @@ PAYLOAD_FOR_EVENT: dict[str, type] = {
     "asset_dismissed": AssetStatusPayload,
     "food_pre_collect": FoodPreCollectPayload,
     "food_collected": FoodCollectedPayload,
+    "food_pre_transfer": FoodPreTransferPayload,
+    "food_transferred": FoodTransferredPayload,
 }

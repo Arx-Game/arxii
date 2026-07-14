@@ -19,6 +19,7 @@ from world.agriculture.services.production import (
     get_food_config,
 )
 from world.agriculture.services.provisioning import provision_army
+from world.agriculture.services.transfer import transfer_food
 
 __all__ = [
     "collect_field_food",
@@ -30,4 +31,5 @@ __all__ = [
     "max_food_capacity",
     "provision_army",
     "resolve_domain_for_feature",
+    "transfer_food",
 ]

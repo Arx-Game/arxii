@@ -54,6 +54,8 @@ class EventNameTests(TestCase):
             "food_pre_collect",
             "food_collected",
             "food_shortage",
+            "food_pre_transfer",
+            "food_transferred",
             "asset_compromised",
             "asset_lost",
             "asset_dismissed",
