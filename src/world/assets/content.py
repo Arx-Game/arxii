@@ -91,4 +91,17 @@ def ensure_asset_promotion_content() -> NPCRole:
                 "check_difficulty": 20,
             },
         )
+    # ASSET_TASK_COLLECT offer (#2294) — reuses Tax Collection check.
+    tax_check = CheckType.objects.get(name="Tax Collection")
+    NPCServiceOffer.objects.get_or_create(
+        role=role,
+        label="Collect Income",
+        defaults={
+            "kind": OfferKind.ASSET_TASK_COLLECT.value,
+            "draw_mode": DrawMode.MENU,
+            "is_final": True,
+            "check_type": tax_check,
+            "check_difficulty": 20,
+        },
+    )
     return role
