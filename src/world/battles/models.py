@@ -1185,3 +1185,164 @@ class CityDefenseIntegrityBonus(OutcomeTierAward):
 
     def __str__(self) -> str:
         return f"{self.outcome_tier}: +{self.integrity_bonus}"
+
+
+class WarFundingDetails(SharedMemoryModel):
+    """Per-(WAR_FUNDING Project) details payload (#1890).
+
+    A covenant leader opens a war-funding project; members contribute during
+    the preparation window; at the deadline progress is graded into a
+    CheckOutcome tier via WarFundingTierThreshold rows, and the handler stores
+    the tier here and updates CovenantMilitaryReadiness. When units are later
+    mustered into a battle for this covenant, get_war_funding_bonus reads the
+    stored tier's WarFundingTierBonus and applies the bonuses.
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="war_funding_details",
+    )
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.PROTECT,
+        related_name="war_funding_projects",
+        help_text="The covenant whose military readiness this drive funds.",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="war_funding_projects",
+        help_text="The graded outcome tier, set when the handler runs at deadline.",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the handler runs; idempotency guard (claim-filter pattern).",
+    )
+
+    def __str__(self) -> str:
+        return f"WarFunding#{self.project_id}: {self.covenant_id}"
+
+
+class WarFundingTierThreshold(SharedMemoryModel):
+    """A progress band on a WarFundingDetails that grants a CheckOutcome tier.
+
+    Tier reached at deadline = highest min_progress row whose
+    min_progress <= project.current_progress. Seeded rows always include a
+    baseline failure tier at min_progress=0 so every graded project maps to
+    exactly one tier.
+    """
+
+    details = models.ForeignKey(
+        WarFundingDetails,
+        on_delete=models.CASCADE,
+        related_name="tier_thresholds",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="war_funding_thresholds",
+    )
+    min_progress = models.PositiveIntegerField(
+        help_text="Minimum progress at which this tier applies.",
+    )
+
+    class Meta:
+        ordering = ["-min_progress"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["details", "outcome_tier"],
+                name="uniq_war_funding_tier",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier} @ {self.min_progress}"
+
+
+class WarFundingTierBonus(OutcomeTierAward):
+    """Per-unit bonuses granted for a CheckOutcome tier (#1890).
+
+    Read by get_war_funding_bonus; a missing row yields zero bonuses (content
+    gap, not a crash). Staff-tunable — no hardcoded bonuses in service code.
+    """
+
+    quality_steps = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Quality upgrade steps applied at muster (0-2).",
+    )
+    strength_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Additive strength bonus per unit.",
+    )
+    morale_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Additive morale bonus per unit.",
+    )
+    training_xp = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Training experience added to CovenantMilitaryReadiness.",
+    )
+
+    def __str__(self) -> str:
+        return (
+            f"{self.outcome_tier}: +{self.quality_steps}q"
+            f" +{self.strength_bonus}s +{self.morale_bonus}m"
+        )
+
+
+class CovenantMilitaryReadiness(SharedMemoryModel):
+    """Persistent military training state for a covenant (#1890).
+
+    Accumulates training_xp across multiple WAR_FUNDING projects. When
+    training_level crosses ReadinessThreshold rows, additional quality steps
+    are granted on top of the per-tier bump — so partial successes still
+    matter over time.
+    """
+
+    covenant = models.OneToOneField(
+        "covenants.Covenant",
+        on_delete=models.CASCADE,
+        related_name="military_readiness",
+    )
+    training_level = models.PositiveIntegerField(
+        default=0,
+        help_text="Accumulated training experience across WAR_FUNDING projects.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.covenant.name}: training {self.training_level}"
+
+
+class ReadinessThreshold(SharedMemoryModel):
+    """A global training-level band that grants bonus quality steps (#1890).
+
+    Staff-tuned rows keyed by min_training_level only (global, not per-covenant).
+    The highest min_training_level row at or below the covenant's current
+    training_level determines the bonus quality steps.
+    """
+
+    min_training_level = models.PositiveIntegerField(
+        help_text="Minimum training level at which this bonus applies.",
+    )
+    bonus_quality_steps = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Additional quality steps granted at this training level.",
+    )
+
+    class Meta:
+        ordering = ["-min_training_level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["min_training_level"],
+                name="uniq_readiness_threshold_level",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"training>={self.min_training_level}: +{self.bonus_quality_steps}q"
