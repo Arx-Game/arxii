@@ -235,7 +235,7 @@ class DisplaySurfaceTests(AspectTestData):
 
         from commands.account.sheet_sections import _render_house_section
 
-        command = SimpleNamespace(caller=SimpleNamespace(sheet_data=self.sheet))
+        command = SimpleNamespace(caller=SimpleNamespace(character_sheet=self.sheet))
         lines = "\n".join(_render_house_section(command))
         self.assertIn("The Fens Endure", lines)
         self.assertIn("russet and bog-iron grey", lines)

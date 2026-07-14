@@ -365,8 +365,12 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
         except GMProfile.DoesNotExist:
             pass
         # Non-staff: scope to the caller's active persona.
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+        # Account.puppet is not None for sessionless accounts — it can be a
+        # non-character object. Explicit type dispatch (audit), not getattr-default.
         puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL
-        if puppet is None:
+        if not isinstance(puppet, ObjectDB):
             return qs.none()
         sheet_data = puppet.character_sheet
         persona = getattr(sheet_data, "primary_persona", None) if sheet_data is not None else None  # noqa: GETATTR_LITERAL

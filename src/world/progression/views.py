@@ -77,6 +77,7 @@ from world.progression.services.voting import (
     get_votes_by_voter,
 )
 from world.roster.models import RosterEntry
+from world.roster.selectors import puppeted_sheet_for
 from world.skills.services import skills_at_boundary
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -551,7 +552,7 @@ class SelectPathViewSet(CharacterContextMixin, viewsets.ViewSet):
 def _resolve_puppet_sheet(request: Request) -> tuple[Any, CharacterSheet]:
     """Return the played character and its sheet, or raise ValidationError."""
     puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
-    sheet = puppet.character_sheet if puppet is not None else None
+    sheet = puppeted_sheet_for(request.user)
     if puppet is None or sheet is None:
         msg = "You must be playing a character to view or purchase unlocks."
         raise serializers.ValidationError(msg)

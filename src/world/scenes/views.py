@@ -14,6 +14,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.roster.selectors import puppeted_sheet_for
 from world.scenes.constants import SceneAction, ScenePrivacyMode
 from world.scenes.filters import (
     PersonaFilter,
@@ -499,7 +500,7 @@ class PersonaViewSet(
         body = SetActivePersonaRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
-        sheet = puppet.character_sheet if puppet is not None else None
+        sheet = puppeted_sheet_for(request.user)
         if puppet is None or sheet is None:
             msg = "You must be playing a character to switch identities."
             raise serializers.ValidationError(msg)
@@ -522,9 +523,8 @@ class PersonaViewSet(
 
     def _played_sheet(self, request: Request) -> "CharacterSheet":
         """The played character's sheet, or raise a uniform validation error (#1127)."""
-        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
-        sheet = puppet.character_sheet if puppet is not None else None
-        if puppet is None or sheet is None:
+        sheet = puppeted_sheet_for(request.user)
+        if sheet is None:
             msg = "You must be playing a character to create an identity."
             raise serializers.ValidationError(msg)
         return sheet

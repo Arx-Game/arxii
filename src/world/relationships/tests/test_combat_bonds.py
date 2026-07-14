@@ -148,9 +148,9 @@ class BondBonusTests(TestCase):
         sheet = CharacterSheetFactory()
         ally = CharacterSheetFactory()
         actor = MagicMock()
-        actor.sheet_data = sheet
+        actor.character_sheet = sheet
         protected = MagicMock()
-        protected.sheet_data = ally
+        protected.character_sheet = ally
         self.assertEqual(bond_bonus(actor, protected), 0)
 
     def test_bond_above_floor_returns_bonus(self):
@@ -159,9 +159,9 @@ class BondBonusTests(TestCase):
 
         sheet, ally, _ = _make_bonded_pair(CharacterSheetFactory, developed_points=27)
         actor = MagicMock()
-        actor.sheet_data = sheet
+        actor.character_sheet = sheet
         protected = MagicMock()
-        protected.sheet_data = ally
+        protected.character_sheet = ally
         self.assertEqual(bond_bonus(actor, protected), 3)
 
     def test_bond_below_floor_returns_zero(self):
@@ -170,17 +170,17 @@ class BondBonusTests(TestCase):
 
         sheet, ally, _ = _make_bonded_pair(CharacterSheetFactory, developed_points=5)
         actor = MagicMock()
-        actor.sheet_data = sheet
+        actor.character_sheet = sheet
         protected = MagicMock()
-        protected.sheet_data = ally
+        protected.character_sheet = ally
         self.assertEqual(bond_bonus(actor, protected), 0)
 
     def test_no_sheet_data_returns_zero(self):
         """Actor/protected with no sheet_data → 0."""
         actor = MagicMock()
-        actor.sheet_data = None
+        actor.character_sheet = None
         protected = MagicMock()
-        protected.sheet_data = None
+        protected.character_sheet = None
         self.assertEqual(bond_bonus(actor, protected), 0)
 
 
