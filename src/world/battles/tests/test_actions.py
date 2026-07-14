@@ -489,8 +489,8 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
             place_name="The Gull",
             vehicle_kind=VehicleKind.SHIP,
         )
-        vehicle.unit.commander = self.player_sheet
-        vehicle.unit.save(update_fields=["commander"])
+        vehicle.unit.military_unit.commander = self.player_sheet
+        vehicle.unit.military_unit.save(update_fields=["commander"])
 
         result = DeclareBattleActionAction().run(
             self.player_char,

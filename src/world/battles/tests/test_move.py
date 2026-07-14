@@ -342,9 +342,11 @@ class MoveResolutionTests(TestCase):
             engaged=False,
         )
         set_engaged_membership(membership=membership)
-        from world.battles.models import BattleUnitCapability
+        from world.military.models import MilitaryUnitCapability
 
-        BattleUnitCapability.objects.create(unit=unit, capability=self.movement, value=10)
+        MilitaryUnitCapability.objects.create(
+            unit=unit.military_unit, capability=self.movement, value=10
+        )
 
         battle_round = begin_battle_round(battle=self.battle)
         declare_battle_action(

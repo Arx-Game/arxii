@@ -42,6 +42,7 @@ from world.combat.models import CombatEncounter, CombatOpponent
 from world.combat.services import complete_encounter, join_encounter
 from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory
+from world.military.factories import MilitaryUnitFactory
 from world.scenes.constants import RoundStatus
 
 
@@ -72,7 +73,10 @@ class OutcomeTriggerCoexistenceTests(TestCase):
         # Front 1: a champion-duel place.
         self.duel_place = BattlePlaceFactory(battle=self.battle)
         self.enemy_unit_at_duel = BattleUnitFactory(
-            battle=self.battle, side=self.defender_side, place=self.duel_place, strength=100
+            battle=self.battle,
+            side=self.defender_side,
+            place=self.duel_place,
+            military_unit=MilitaryUnitFactory(strength=100),
         )
         self.challenger_participant = BattleParticipantFactory(
             battle=self.battle,
@@ -84,10 +88,16 @@ class OutcomeTriggerCoexistenceTests(TestCase):
         # Front 2: a party-encounter place.
         self.party_place = BattlePlaceFactory(battle=self.battle)
         self.pc_unit_at_party = BattleUnitFactory(
-            battle=self.battle, side=self.attacker_side, place=self.party_place, strength=100
+            battle=self.battle,
+            side=self.attacker_side,
+            place=self.party_place,
+            military_unit=MilitaryUnitFactory(strength=100),
         )
         self.enemy_unit_at_party = BattleUnitFactory(
-            battle=self.battle, side=self.defender_side, place=self.party_place, strength=100
+            battle=self.battle,
+            side=self.defender_side,
+            place=self.party_place,
+            military_unit=MilitaryUnitFactory(strength=100),
         )
         self.party_participant = BattleParticipantFactory(
             battle=self.battle,

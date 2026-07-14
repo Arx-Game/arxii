@@ -39,6 +39,7 @@ from world.battles.factories import (
 from world.battles.legend_wiring import apply_battle_legend_awards
 from world.battles.services import conclude_battle
 from world.character_sheets.factories import CharacterSheetFactory
+from world.military.factories import MilitaryUnitFactory
 from world.societies.models import LegendEntry, LegendEvent
 
 
@@ -62,7 +63,11 @@ class ApplyBattleLegendAwardsTests(TestCase):
             battle=self.battle, side=self.attacker_side, character_sheet=winner_sheet
         )
         commander_sheet = CharacterSheetFactory()
-        BattleUnitFactory(battle=self.battle, side=self.attacker_side, commander=commander_sheet)
+        BattleUnitFactory(
+            battle=self.battle,
+            side=self.attacker_side,
+            military_unit=MilitaryUnitFactory(commander=commander_sheet),
+        )
         loser_sheet = CharacterSheetFactory()
         BattleParticipantFactory(
             battle=self.battle, side=self.defender_side, character_sheet=loser_sheet

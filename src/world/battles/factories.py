@@ -89,9 +89,7 @@ class BattleUnitFactory(factory_django.DjangoModelFactory):
 
     battle = factory.SubFactory(BattleFactory)
     side = factory.SubFactory(BattleSideFactory, battle=factory.SelfAttribute("..battle"))
-    name = factory.Sequence(lambda n: f"Unit {n}")
-    descriptor = "generic"
-    strength = 100
+    military_unit = factory.SubFactory("world.military.factories.MilitaryUnitFactory")
     status = BattleUnitStatus.ACTIVE
 
 

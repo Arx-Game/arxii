@@ -232,7 +232,7 @@ class WeatherModifierTests(TestCase):
         side = BattleSideFactory(battle=battle)
         unit = BattleUnitFactory(battle=battle, side=side, place=place)
         prop = PropertyFactory()
-        unit.properties.add(prop)
+        unit.military_unit.properties.add(prop)
         WeatherTypePropertyEffectFactory(weather_type=weather_type, property=prop, modifier=15)
 
         self.assertEqual(_weather_property_modifier(place, unit), 15)
@@ -246,7 +246,7 @@ class WeatherModifierTests(TestCase):
         self.assertEqual(_weather_property_modifier(place, unit), 0)
 
     def test_weather_capability_modifier_applies_below_threshold(self) -> None:
-        from world.battles.models import BattleUnitCapability
+        from world.military.models import MilitaryUnitCapability
 
         weather_type = WeatherTypeFactory()
         battle = BattleFactory(weather_override=weather_type)
@@ -254,7 +254,9 @@ class WeatherModifierTests(TestCase):
         side = BattleSideFactory(battle=battle)
         unit = BattleUnitFactory(battle=battle, side=side, place=place)
         capability = CapabilityTypeFactory()
-        BattleUnitCapability.objects.create(unit=unit, capability=capability, value=0)
+        MilitaryUnitCapability.objects.create(
+            unit=unit.military_unit, capability=capability, value=0
+        )
         WeatherTypeCapabilityChallengeFactory(
             weather_type=weather_type, capability=capability, threshold=1, modifier=-20
         )
@@ -262,7 +264,7 @@ class WeatherModifierTests(TestCase):
         self.assertEqual(_weather_capability_modifier(place, unit), -20)
 
     def test_weather_capability_modifier_zero_when_at_or_above_threshold(self) -> None:
-        from world.battles.models import BattleUnitCapability
+        from world.military.models import MilitaryUnitCapability
 
         weather_type = WeatherTypeFactory()
         battle = BattleFactory(weather_override=weather_type)
@@ -270,7 +272,9 @@ class WeatherModifierTests(TestCase):
         side = BattleSideFactory(battle=battle)
         unit = BattleUnitFactory(battle=battle, side=side, place=place)
         capability = CapabilityTypeFactory()
-        BattleUnitCapability.objects.create(unit=unit, capability=capability, value=1)
+        MilitaryUnitCapability.objects.create(
+            unit=unit.military_unit, capability=capability, value=1
+        )
         WeatherTypeCapabilityChallengeFactory(
             weather_type=weather_type, capability=capability, threshold=1, modifier=-20
         )
@@ -543,7 +547,7 @@ class RoundBoundaryExpiryTests(TestCase):
         place = BattlePlaceFactory(battle=self.battle)
         target_unit = BattleUnitFactory(battle=self.battle, side=side_b, place=place)
         prop = PropertyFactory()
-        target_unit.properties.add(prop)
+        target_unit.military_unit.properties.add(prop)
         env_technique = TechniqueFactory(
             action_template=ActionTemplateFactory(), target_weather_type=self.weather_type
         )

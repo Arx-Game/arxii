@@ -11,11 +11,12 @@ from world.battles.constants import (
     FortificationKind,
 )
 from world.battles.factories import BattleFactory, BattleSideFactory
-from world.battles.models import BattleUnitCapability, Fortification
+from world.battles.models import Fortification
 from world.conditions.models import CapabilityType
 from world.magic.constants import SanctumSlotKind, TargetKind
 from world.magic.factories import ResonanceFactory, ThreadFactory
 from world.magic.models import SanctumDetails, SanctumOwnerMode
+from world.military.models import MilitaryUnitCapability
 from world.room_features.factories import RoomFeatureInstanceFactory
 from world.ships.battle_bridge import materialize_ship_as_battle_vehicle
 from world.ships.constants import DAMAGED_HULL_DISCOUNT, SPEED_CAPABILITY_NAME
@@ -120,8 +121,8 @@ class MaterializeShipAsBattleVehicleTests(TestCase):
 
         # A level-3 capability row exists for the resonance.
         self.assertTrue(
-            BattleUnitCapability.objects.filter(
-                unit=vehicle.unit,
+            MilitaryUnitCapability.objects.filter(
+                unit=vehicle.unit.military_unit,
                 capability__name=f"sanctum_{resonance.name.lower()}",
             ).exists()
         )

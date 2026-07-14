@@ -407,79 +407,10 @@ class BattleUnit(SharedMemoryModel):
     )
     military_unit = models.ForeignKey(
         "military.MilitaryUnit",
-        null=True,
-        blank=True,
         on_delete=models.PROTECT,
         related_name="battle_units",
         help_text="The persistent MilitaryUnit this battle unit projects from. "
-        "All identity and stats live on MilitaryUnit (ADR-0014). Null during "
-        "migration; populated by data migration then made non-nullable.",
-    )
-    name = models.CharField(max_length=120)
-    descriptor = models.CharField(
-        max_length=80,
-        blank=True,
-        help_text="Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative only "
-        "— properties/capabilities/quality below drive mechanics.",
-    )
-    properties = models.ManyToManyField(
-        Property,
-        blank=True,
-        related_name="battle_units",
-        help_text="Descriptive tags this unit carries (flying, aquatic, metal-clad, "
-        "etc.) — the same catalog characters use (#1794). Presence-only, no per-unit "
-        "magnitude (matches how Property is consumed everywhere else).",
-    )
-    capabilities = models.ManyToManyField(
-        CapabilityType,
-        through="BattleUnitCapability",
-        blank=True,
-        related_name="battle_units",
-        help_text="What this unit can DO, at an authored per-unit magnitude via "
-        "BattleUnitCapability (#1794) — e.g. two units can both hold FLYING at "
-        "very different values.",
-    )
-    individual_count = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Population data point mirroring CombatOpponent.swarm_count's "
-        "naming/shape (#1794) — null means 'not a swarm-style unit'. Swarm math "
-        "(#1841): a banded check penalty for acting against the swarm folds into the "
-        "battle modifier stack, and STRIKE/ROUT attrition costs bodies off it "
-        "proportionally (see world.battles.constants.swarm_strike_modifier and "
-        "world.battles.resolution._apply_swarm_losses). Capital vessels stay on "
-        "the separate per-hull Fortification integrity track (#1713) — see "
-        "docs/adr/0123-swarm-math-is-derived-losses-not-a-second-health-pool.md.",
-    )
-    quality = models.CharField(
-        max_length=20,
-        choices=UnitQuality.choices,
-        default=UnitQuality.TRAINED,
-    )
-    commander = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="commanded_battle_units",
-        help_text="Optional commander whose Battle Command modifier bonus applies to "
-        "participants fighting alongside this unit's side/place.",
-    )
-    summoned_by = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="summoned_battle_units",
-        help_text="Set when this unit was created via a military-grade summon (#1711).",
-    )
-    strength = models.PositiveSmallIntegerField(default=100)
-    morale = models.PositiveSmallIntegerField(
-        default=DEFAULT_MORALE,
-        help_text="Second resource alongside strength (#1712). status is always "
-        "derived from whichever resource crosses its own threshold first — see "
-        "world.battles.resolution._compute_unit_status. Unlike strength (starts at "
-        "its ceiling), morale starts well below it — sitting near MAX_MORALE is rare.",
+        "All identity and stats live on MilitaryUnit (ADR-0014, ADR-0125).",
     )
     status = models.CharField(
         max_length=20,
@@ -488,67 +419,68 @@ class BattleUnit(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["battle", "side", "name"]
+        ordering = ["battle", "side", "military_unit__name"]
 
     def __str__(self) -> str:
         return f"{self.name} [{self.get_status_display()}]"
 
+    # --- Proxy properties: delegate to military_unit for backward compat ---
+    # Reads are transparent (unit.strength works); writes must go through
+    # unit.military_unit.strength = ...; unit.military_unit.save().
+
+    @property
+    def name(self) -> str:
+        return self.military_unit.name
+
+    @property
+    def descriptor(self) -> str:
+        return self.military_unit.descriptor
+
+    @property
+    def quality(self) -> str:
+        return self.military_unit.quality
+
+    @property
+    def commander(self):
+        return self.military_unit.commander
+
+    @property
+    def summoned_by(self):
+        return self.military_unit.summoned_by
+
+    @property
+    def strength(self) -> int:
+        return self.military_unit.strength
+
+    @property
+    def morale(self) -> int:
+        return self.military_unit.morale
+
+    @property
+    def individual_count(self):
+        return self.military_unit.individual_count
+
     def effective_capability(self, capability: CapabilityType) -> int:
         """Authored magnitude for this unit's hold on ``capability``, 0 if absent.
 
-        Conforms to world.mechanics.types.HasCapabilities alongside
-        CharacterSheet (#1794).
+        Delegates to the underlying MilitaryUnit (#1794). Conforms to
+        world.mechanics.types.HasCapabilities alongside CharacterSheet.
         """
-        row = self.capability_values.filter(capability=capability).first()
-        return row.value if row is not None else 0
+        return self.military_unit.effective_capability(capability)
 
     def has_property(self, prop: Property) -> bool:
         """True if this unit carries ``prop``.
 
-        Conforms to world.mechanics.types.HasProperties alongside
-        CharacterSheet (#1794).
+        Delegates to the underlying MilitaryUnit (#1794). Conforms to
+        world.mechanics.types.HasProperties alongside CharacterSheet.
         """
-        return self.properties.filter(pk=prop.pk).exists()
+        return self.military_unit.has_property(prop)
 
     def save(self, *args, **kwargs) -> None:
         is_new = self._state.adding
         super().save(*args, **kwargs)
         if is_new:
             self.battle.state_cache.register_unit(self)
-
-
-class BattleUnitCapability(SharedMemoryModel):
-    """Authored (unit, capability) -> magnitude row (#1794).
-
-    Mirrors ObjectProperty's shape (object/property/value,
-    world/mechanics/models.py:589-618) one FK swapped: BattleUnit for ObjectDB,
-    CapabilityType for Property. No source-tracking FKs — BattleUnit capabilities
-    are static authored data, not subject to reactive conditions/challenges.
-    """
-
-    unit = models.ForeignKey(
-        BattleUnit,
-        on_delete=models.CASCADE,
-        related_name="capability_values",
-    )
-    capability = models.ForeignKey(
-        CapabilityType,
-        on_delete=models.PROTECT,
-        related_name="battle_unit_values",
-    )
-    value = models.PositiveIntegerField()
-
-    class Meta:
-        ordering = ["unit", "capability"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["unit", "capability"],
-                name="unique_battle_unit_capability",
-            )
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.unit.name} {self.capability.name}: {self.value}"
 
 
 class BattleRound(AbstractRound):
