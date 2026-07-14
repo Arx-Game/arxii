@@ -94,6 +94,7 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
     form_name = serializers.SerializerMethodField()
     has_combat_profile = serializers.SerializerMethodField()
     has_techniques = serializers.SerializerMethodField()
+    resonance_name = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
 
     class Meta:
@@ -105,6 +106,7 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
             "form_name",
             "has_combat_profile",
             "has_techniques",
+            "resonance_name",
             "is_active",
         ]
 
@@ -119,6 +121,9 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
 
     def get_has_techniques(self, obj: AlternateSelf) -> bool:
         return obj.techniques.exists()
+
+    def get_resonance_name(self, obj: AlternateSelf) -> str | None:
+        return obj.resonance.name if obj.resonance_id is not None else None
 
     def get_is_active(self, obj: AlternateSelf) -> bool:
         if not hasattr(self, "_active_alternate_self_id"):

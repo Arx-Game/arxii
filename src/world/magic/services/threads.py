@@ -409,12 +409,13 @@ def _weave_gift_thread(
     name: str = "",
     description: str = "",
 ) -> Thread:
-    """GIFT weave: commit/choose a resonance onto the existing latent thread.
+    """GIFT weave: commit/choose a resonance onto a latent GIFT thread.
 
-    Unlike other thread kinds (create-on-weave), a GIFT thread pre-exists (the
-    latent level-0 thread provisioned at CG). Weaving commits a resonance onto
-    it (validating the resonance is in the gift's supported set). Does not
-    create a second thread (#1578 decision 7: one active GIFT thread per gift).
+    With multi-resonance (#1619), a character may hold multiple GIFT threads
+    on the same gift at different resonances. Weaving finds the thread at the
+    specified resonance (or provisions one if none exists at that resonance).
+    It does NOT change the resonance of an existing thread at a different
+    resonance — each resonance gets its own thread.
     """
     # Resonance-in-supported-set check: read the gift's cached resonance list
     # (list-comp) rather than ``gift.resonances.filter(pk=…).exists()`` per
@@ -424,39 +425,36 @@ def _weave_gift_thread(
 
         raise UnsupportedGiftResonanceError
 
-    # Read the existing latent thread through the cached ``character.threads``
+    # Read the existing threads through the cached ``character.threads``
     # handler (same cached queryset the resolver reads), not a fresh
     # ``Thread.objects.filter()``. The handler's list is already filtered to
     # retired_at__isnull=True.
     character = character_sheet.character
+    # #1619: Look for a thread at the specified resonance first.
     thread = next(
         (
             t
             for t in character.threads.all()
-            if t.target_kind == TargetKind.GIFT and t.target_gift_id == gift.pk
+            if t.target_kind == TargetKind.GIFT
+            and t.target_gift_id == gift.pk
+            and t.resonance_id == resonance.pk
         ),
         None,
     )
     if thread is None:
-        # No latent thread (e.g. post-CG acquisition, #1587 future): create one.
-        # For now (CG-provisioned), this branch is rare; provision on demand.
+        # No thread at this resonance yet: provision one (idempotent).
         from world.magic.specialization.services import (  # noqa: PLC0415
             provision_latent_gift_thread,
         )
 
         return provision_latent_gift_thread(character_sheet, gift, resonance=resonance)
 
-    if thread.resonance_id != resonance.pk:
-        thread.resonance = resonance
-        if name:
-            thread.name = name
-        if description:
-            thread.description = description
-        thread.full_clean()
-        thread.save(update_fields=["resonance", "name", "description"])
-        # Resonance change mutates the cached thread list; invalidate so the
-        # next read through ``character.threads`` sees the new resonance.
-        character.threads.invalidate()
+    if name:
+        thread.name = name
+    if description:
+        thread.description = description
+    if name or description:
+        thread.save(update_fields=["name", "description"])
     return thread
 
 

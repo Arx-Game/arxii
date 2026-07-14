@@ -484,6 +484,19 @@ class AlternateSelf(SharedMemoryModel):
             "Thumbnail shown when this alternate self is active (overrides persona default)"
         ),
     )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="alternate_self_grants",
+        help_text=(
+            "When set, assuming this alternate self shifts the character's "
+            "technique variant resolution to this resonance (#1619). The GIFT "
+            "thread's level still determines which variant tier unlocks; only "
+            "the resonance axis changes. Null = no resonance shift."
+        ),
+    )
 
     class Meta:
         ordering = ["character", "display_name"]

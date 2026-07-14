@@ -387,6 +387,7 @@ def get_runtime_technique_stats(
     *,
     apply_variant: bool = True,
     character_technique=None,
+    preferred_resonance=None,
 ) -> RuntimeTechniqueStats:
     """Calculate runtime intensity and control for a technique.
 
@@ -401,6 +402,10 @@ def get_runtime_technique_stats(
     ``character_technique`` (#2022): when the technique was role-granted
     (``CharacterTechnique.role_source`` is set), the variant resolver uses the
     COVENANT_ROLE thread level instead of the GIFT thread level.
+
+    ``preferred_resonance`` (#1619): when the character holds multiple GIFT
+    threads at different resonances, the caller may pass the resonance the
+    player chose at cast time. Forwarded to ``resolve_specialized_variant``.
     """
     if character is None:
         return RuntimeTechniqueStats(
@@ -424,6 +429,7 @@ def get_runtime_technique_stats(
             entity=technique,
             character=character,
             character_technique=character_technique,
+            preferred_resonance=preferred_resonance,
             _sheet=sheet,
         )
 
@@ -910,6 +916,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     lethal: bool = True,
     control_penalty: int = 0,
     apply_variant: bool = True,
+    preferred_resonance=None,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
 
@@ -951,7 +958,12 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     from world.magic.models import SoulfrayConfig  # noqa: PLC0415
 
     # Step 1: Calculate runtime stats
-    stats = get_runtime_technique_stats(technique, character, apply_variant=apply_variant)
+    stats = get_runtime_technique_stats(
+        technique,
+        character,
+        apply_variant=apply_variant,
+        preferred_resonance=preferred_resonance,
+    )
     if control_penalty:
         stats = replace(stats, control=max(stats.control - control_penalty, 0))
 

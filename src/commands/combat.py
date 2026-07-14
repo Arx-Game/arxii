@@ -66,6 +66,8 @@ if TYPE_CHECKING:
 _STRAIN_PREFIX = "strain="
 # Keyword prefix used to parse position=<name> from cast command args (#2019).
 _POSITION_PREFIX = "position="
+# Keyword prefix used to parse variant=<resonance> from cast command args (#1619).
+_VARIANT_PREFIX = "variant="
 # Keyword prefix used to parse position_a=<name>,position_b=<name> pair tokens from
 # cast command args (#2206) — arrives as a single whitespace token, kept whole (not
 # stripped) so _resolve_position_params's `val.startswith("position_a=")` branch fires.
@@ -182,6 +184,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     _anchor_str: str | None = None
     # Base-form opt-out (#1581 Task 8).
     _use_base_form: bool = False
+    # #1619: Variant resonance selection for multi-resonance characters.
+    _variant_resonance_str: str | None = None
 
     # --------------------------------------------------------------------------
 
@@ -222,6 +226,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         # #2019: Strip position=<name> or position_a=<name>,position_b=<name>
         # keywords (order-independent). Resolved to PKs in resolve_action_args.
         raw, position_str = self._extract_position_keywords(raw)
+
+        # #1619: Strip variant=<resonance> keyword (order-independent). The
+        # value is a single token (resonance name). Resolved to a PK in
+        # resolve_action_args.
+        raw, variant_str = self._extract_variant_keyword(raw)
 
         # Strip off effort=<level> if present.  After pull keywords are removed,
         # only effort= and positional tokens remain, so a simple split is safe.
@@ -267,6 +276,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         self._fury_str = fury_str
         self._anchor_str = anchor_str
         self._position_str = position_str
+        self._variant_resonance_str = variant_str
         self._parsed = True
 
     @staticmethod
@@ -357,6 +367,42 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             else:
                 kept.append(token)
         return " ".join(kept), position_val
+
+    @staticmethod
+    def _extract_variant_keyword(raw: str) -> tuple[str, str | None]:
+        """Strip ``variant=<resonance>`` token from *raw* (#1619).
+
+        The value is a single token (resonance name). Returns
+        ``(remainder, variant_val)`` where *variant_val* is the resonance
+        name string, or ``None`` when the keyword was absent.
+        """
+        kept: list[str] = []
+        variant_val: str | None = None
+        for token in raw.split():
+            if token.lower().startswith(_VARIANT_PREFIX):
+                variant_val = token[len(_VARIANT_PREFIX) :] or None
+            else:
+                kept.append(token)
+        return " ".join(kept), variant_val
+
+    def _resolve_variant_resonance(self) -> int | None:
+        """Resolve ``variant=<resonance>`` into a Resonance PK (#1619).
+
+        Returns ``None`` when no variant was declared.
+
+        Raises:
+            CommandError: If the named resonance doesn't exist.
+        """
+        if not self._variant_resonance_str:
+            return None
+
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        resonance = Resonance.objects.filter(name__iexact=self._variant_resonance_str).first()
+        if resonance is None:
+            msg = f"No resonance named '{self._variant_resonance_str}' found."
+            raise CommandError(msg)
+        return resonance.pk
 
     def _resolve_position_params(self) -> dict[str, int] | None:
         """Resolve ``position=`` into a ``position_params`` dict for the cast (#2019).
@@ -712,6 +758,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         position_params = self._resolve_position_params()
         if position_params is not None:
             kwargs["position_params"] = position_params
+
+        # #1619: Resolve variant=<resonance> keyword into preferred_resonance_id.
+        preferred_resonance_id = self._resolve_variant_resonance()
+        if preferred_resonance_id is not None:
+            kwargs["preferred_resonance_id"] = preferred_resonance_id
 
         return kwargs
 

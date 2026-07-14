@@ -805,12 +805,13 @@ class Thread(SharedMemoryModel):
             # uniq_thread_covenant_role_active (one active thread per anchor).
             # Retired threads (retired_at IS NOT NULL) are excluded so a
             # character can retire a gift thread and later weave a new one on
-            # the same gift. The single-thread-per-gift invariant is enforced
-            # here at the DB layer (decision 7); multi-resonance (multiple
-            # active GIFT threads per gift) is a deferred follow-up (#1619) and
-            # would relax this constraint + make the resolver return a set.
+            # the same gift. Multi-resonance (#1619): a character may hold
+            # multiple active GIFT threads per gift, each at a different
+            # resonance — the constraint key includes ``resonance`` so the
+            # same (owner, gift) can have threads at different resonances,
+            # but not two at the same resonance.
             models.UniqueConstraint(
-                fields=["owner", "target_gift"],
+                fields=["owner", "target_gift", "resonance"],
                 condition=models.Q(
                     target_kind=TargetKind.GIFT,
                     retired_at__isnull=True,

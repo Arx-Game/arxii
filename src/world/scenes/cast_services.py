@@ -63,7 +63,7 @@ if TYPE_CHECKING:
 
     from actions.types import PendingActionResolution
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import FuryTier, Technique
+    from world.magic.models import FuryTier, Resonance, Technique
     from world.magic.services.fury import FuryResolution
     from world.magic.types.power_ledger import PowerLedger
     from world.magic.types.pull import CastPullDeclaration
@@ -93,6 +93,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     cast_pull: CastPullDeclaration | None = None,
     confirm_soulfray_risk: bool = True,
     apply_variant: bool = True,
+    preferred_resonance: Resonance | None = None,
 ) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, FuryResolution | None]:
     """Resolve a standalone cast through use_technique + start_action_resolution.
 
@@ -174,6 +175,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
         apply_variant=apply_variant,
+        preferred_resonance=preferred_resonance,
     )
 
     # Soulfray gate: use_technique returned without resolving — propagate None result.
@@ -261,6 +263,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
+    preferred_resonance: Resonance | None = None,
 ) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, Interaction | None]:
     """Resolve a persisted standalone-cast request, mark it RESOLVED, author the OUTCOME pose.
 
@@ -297,6 +300,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
             entity=technique,
             character=character,
             character_technique=char_technique,
+            preferred_resonance=preferred_resonance,
         )
         resolved_name = resolved.name
         resolved_intensity = resolved.intensity
@@ -314,6 +318,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
         apply_variant=not use_base_form,
+        preferred_resonance=preferred_resonance,
     )
 
     # Soulfray gate: use_technique returned unconfirmed — propagate without resolving.
@@ -717,6 +722,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
+    preferred_resonance: Resonance | None = None,
 ) -> CastResult:
     """Route a FILTERED_GROUP cast that has a player-supplied persona list.
 
@@ -751,6 +757,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
         confirm_soulfray_risk=confirm_soulfray_risk,
         use_base_form=use_base_form,
         position_params=position_params,
+        preferred_resonance=preferred_resonance,
     )
 
 
@@ -768,6 +775,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     originated_as_entrance: bool = False,
+    preferred_resonance: Resonance | None = None,
 ) -> CastResult:
     """Route a cast directed at another PC (not the caster's own sheet)."""
     if is_technique_hostile(technique):
@@ -806,6 +814,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
         confirm_soulfray_risk=confirm_soulfray_risk,
         use_base_form=use_base_form,
         position_params=position_params,
+        preferred_resonance=preferred_resonance,
     )
 
 
@@ -824,6 +833,7 @@ def request_technique_cast(  # noqa: PLR0913
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     originated_as_entrance: bool = False,
+    preferred_resonance: Resonance | None = None,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
 
@@ -900,6 +910,7 @@ def request_technique_cast(  # noqa: PLR0913
             confirm_soulfray_risk=confirm_soulfray_risk,
             use_base_form=use_base_form,
             position_params=position_params,
+            preferred_resonance=preferred_resonance,
         )
 
     # Inline the other-PC check (rather than a bool var) so the type checker can
@@ -921,6 +932,7 @@ def request_technique_cast(  # noqa: PLR0913
             use_base_form=use_base_form,
             position_params=position_params,
             originated_as_entrance=originated_as_entrance,
+            preferred_resonance=preferred_resonance,
         )
 
     return _route_immediate_cast(
@@ -935,6 +947,7 @@ def request_technique_cast(  # noqa: PLR0913
         confirm_soulfray_risk=confirm_soulfray_risk,
         use_base_form=use_base_form,
         position_params=position_params,
+        preferred_resonance=preferred_resonance,
     )
 
 
@@ -1134,6 +1147,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     confirm_soulfray_risk: bool = True,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
+    preferred_resonance: Resonance | None = None,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose.
 
@@ -1176,6 +1190,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             confirm_soulfray_risk=confirm_soulfray_risk,
             use_base_form=use_base_form,
             position_params=position_params,
+            preferred_resonance=preferred_resonance,
         )
 
     return CastResult(
