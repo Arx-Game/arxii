@@ -1,5 +1,6 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from flows.consts import GLANCE_MODE
 from flows.object_states.base_state import BaseState
 from world.scenes.models import Scene
 
@@ -36,6 +37,23 @@ class RoomState(BaseState):
             return self.obj.item_data.desc or self.default_description
         except AttributeError:
             return self.default_description
+
+    def get_display_desc(self, mode: str = "look", **kwargs: Any) -> str:
+        """Return the room description, with area quality modifier if applicable."""
+        desc = super().get_display_desc(mode=mode, **kwargs)
+        if mode == GLANCE_MODE:
+            return desc
+        from world.areas.cleanup_services import (  # noqa: PLC0415
+            area_quality_description_suffix,
+        )
+        from world.areas.services import get_room_profile  # noqa: PLC0415
+
+        profile = get_room_profile(self.obj)
+        if profile is not None and profile.area is not None:
+            suffix = area_quality_description_suffix(profile.area)
+            if suffix:
+                desc = f"{desc}\n\n{suffix}"
+        return desc
 
     def get_categories(self) -> dict:
         # For now, no extra room-specific categories.
