@@ -26,6 +26,7 @@ from world.justice.factories import AreaLawFactory, CrimeKindFactory
 from world.justice.frame_jobs import resolve_frame_job, start_frame_job
 from world.justice.models import AccusationCrimeClaim, CrimeEvidence, PersonaHeat
 from world.justice.services import tag_deed_crimes
+from world.justice.tests.utils import set_character_location
 from world.projects.constants import ProjectKind, ProjectStatus
 from world.room_features.constants import RoomFeatureServiceStrategy
 from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
@@ -65,8 +66,7 @@ class FrameJobFixture(TestCase):
         RoomFeatureInstanceFactory(
             room_profile=cls.workshop_room, feature_kind=workshop_kind, level=1
         )
-        cls.framer.location = cls.workshop_room.objectdb
-        cls.framer.save()
+        set_character_location(cls.framer, cls.workshop_room.objectdb)
 
         from world.items.factories import ItemInstanceFactory
 
@@ -124,8 +124,7 @@ class StartFrameJobTests(FrameJobFixture):
             self._start()
 
     def test_requires_a_workshop_of_iniquity(self):
-        self.framer.location = self.crime_room.objectdb
-        self.framer.save()
+        set_character_location(self.framer, self.crime_room.objectdb)
         with self.assertRaises(EvidenceError):
             self._start()
 

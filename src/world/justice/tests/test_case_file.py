@@ -27,6 +27,7 @@ from world.justice.evidence import EvidenceError
 from world.justice.factories import CrimeEvidenceFactory, CrimeKindFactory
 from world.justice.models import CrimeEvidence
 from world.justice.services import record_accusation_crime
+from world.justice.tests.utils import set_character_location
 from world.roster.factories import RosterEntryFactory
 from world.secrets.factories import SecretFactory
 from world.seeds.checks import seed_check_resolution_tables
@@ -54,9 +55,9 @@ class CaseFileFixture(TestCase):
         # The investigator: a member of a crown organization, standing in the office.
         cls.investigator_entry = RosterEntryFactory()
         cls.investigator_sheet = cls.investigator_entry.character_sheet
-        cls.investigator = cls.investigator_sheet.character
-        cls.investigator.location = cls.office_room.objectdb
-        cls.investigator.save()
+        cls.investigator = set_character_location(
+            cls.investigator_sheet.character, cls.office_room.objectdb
+        )
         crown_org = OrganizationFactory(society=cls.crown)
         OrganizationMembershipFactory(
             persona=cls.investigator_sheet.primary_persona, organization=crown_org
@@ -100,9 +101,9 @@ class ProduceCaseEvidenceTests(CaseFileFixture):
 
     def test_no_authority_no_production(self):
         outsider_entry = RosterEntryFactory()
-        outsider = outsider_entry.character_sheet.character
-        outsider.location = self.office_room.objectdb
-        outsider.save()
+        outsider = set_character_location(
+            outsider_entry.character_sheet.character, self.office_room.objectdb
+        )
         with self.assertRaises(EvidenceError):
             produce_case_evidence(outsider, self.secret)
 

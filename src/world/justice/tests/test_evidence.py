@@ -23,6 +23,7 @@ from world.justice.evidence import (
 from world.justice.factories import AreaLawFactory, CrimeKindFactory
 from world.justice.models import CrimeEvidence, PersonaHeat
 from world.justice.services import accrue_for_deed_knowledge, tag_deed_crimes
+from world.justice.tests.utils import set_character_location
 from world.scenes.factories import SceneFactory
 from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.security_checks import seed_security_check_content
@@ -77,9 +78,7 @@ class EvidenceCheckFixture(TestCase):
         cls.room = RoomProfileFactory()
         cls.scene = SceneFactory(location=cls.room.objectdb)
         cls.sheet = CharacterSheetFactory()
-        cls.character = cls.sheet.character
-        cls.character.location = cls.room.objectdb
-        cls.character.save()
+        cls.character = set_character_location(cls.sheet.character, cls.room.objectdb)
         cls.crime = CrimeKindFactory(slug="theft", name="Theft")
         deed = LegendEntryFactory(scene=cls.scene)
         tag_deed_crimes(deed, [cls.crime])
@@ -114,8 +113,7 @@ class GatherEvidenceTests(EvidenceCheckFixture):
 
     def test_gather_requires_standing_at_the_scene(self):
         elsewhere = RoomProfileFactory()
-        self.character.location = elsewhere.objectdb
-        self.character.save()
+        set_character_location(self.character, elsewhere.objectdb)
         with self.assertRaises(EvidenceError):
             gather_evidence(self.character, self._evidence())
 
