@@ -504,7 +504,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own promoted assets. */
+    /** @description Read endpoints for the player's own promoted assets + introduce action. */
     get: operations['assets_list'];
     put?: never;
     post?: never;
@@ -521,10 +521,31 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own promoted assets. */
+    /** @description Read endpoints for the player's own promoted assets + introduce action. */
     get: operations['assets_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/assets/introduce/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Introduce an owned asset to a co-present ally (#2295).
+     *
+     *     POST /api/assets/introduce/ with asset_id + ally_persona_id.
+     */
+    post: operations['assets_introduce_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -35705,6 +35726,25 @@ export interface operations {
         /** @description A unique integer value identifying this npc asset. */
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCAsset'];
+        };
+      };
+    };
+  };
+  assets_introduce_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;

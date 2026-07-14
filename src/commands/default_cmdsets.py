@@ -22,6 +22,7 @@ from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
 from commands.agriculture import CmdHarvest
 from commands.alterations import CmdMageScar
+from commands.assets import CmdIntroduce
 from commands.battle import CmdBattle
 from commands.canon_review import CmdCanonReview
 from commands.captivity import CmdDemandRansom
@@ -364,6 +365,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdForm,
             # #1347 — list faces + wear-face active persona switch.
             CmdPersona,
+            # #2295 — voluntary asset introduction (co-ownership).
+            CmdIntroduce,
             # Training allocation and unlock purchase telnet surfaces.
             CmdTraining,
             CmdProgressionUnlock,

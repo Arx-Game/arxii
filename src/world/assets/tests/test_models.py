@@ -29,11 +29,23 @@ class NPCAssetModelTests(TestCase):
         with self.assertRaises(IntegrityError):
             NPCAssetFactory(promoter_persona=promoter, source_functionary=functionary)
 
-    def test_asset_persona_is_unique_across_assets(self) -> None:
+    def test_asset_persona_can_be_shared_across_owners(self) -> None:
+        """Multiple NPCAsset rows can point at the same asset_persona (#2295)."""
         shared_asset_persona = PersonaFactory()
-        NPCAssetFactory(asset_persona=shared_asset_persona)
+        promoter_a = PersonaFactory()
+        promoter_b = PersonaFactory()
+        NPCAssetFactory(promoter_persona=promoter_a, asset_persona=shared_asset_persona)
+        # A different promoter CAN own the same NPC — co-ownership.
+        asset_b = NPCAssetFactory(promoter_persona=promoter_b, asset_persona=shared_asset_persona)
+        self.assertEqual(asset_b.asset_persona, shared_asset_persona)
+
+    def test_same_promoter_cannot_have_duplicate_active_asset(self) -> None:
+        """One active NPCAsset per (promoter, asset_persona) — partial unique (#2295)."""
+        promoter = PersonaFactory()
+        shared_asset_persona = PersonaFactory()
+        NPCAssetFactory(promoter_persona=promoter, asset_persona=shared_asset_persona)
         with self.assertRaises(IntegrityError):
-            NPCAssetFactory(asset_persona=shared_asset_persona)
+            NPCAssetFactory(promoter_persona=promoter, asset_persona=shared_asset_persona)
 
 
 class AssetStatusEnumTests(TestCase):

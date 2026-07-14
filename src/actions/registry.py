@@ -5,6 +5,7 @@ from __future__ import annotations
 from actions.base import Action
 from actions.definitions.accusations import mint_accusation
 from actions.definitions.alterations import ResolveAlterationAction
+from actions.definitions.assets import IntroduceAssetAction
 from actions.definitions.battles import (
     BeginBattleRoundAction,
     BrowseBattleCatalogAction,
@@ -707,6 +708,8 @@ _ALL_ACTIONS: list[Action] = [
     CeremonySpeechAction(),
     FinishCeremonyAction(),
     AbandonCeremonyAction(),
+    # #2295 — voluntary asset sharing: introduce an owned asset to a co-present ally.
+    IntroduceAssetAction(),
 ]
 
 # Lookup by key
