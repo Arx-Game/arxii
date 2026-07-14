@@ -40,11 +40,11 @@ class NPCAsset(SharedMemoryModel):
         related_name="promoted_assets",
         help_text="The PC's persona who cultivated or was granted this asset.",
     )
-    asset_persona = models.OneToOneField(
+    asset_persona = models.ForeignKey(
         "scenes.Persona",
         on_delete=models.PROTECT,
-        related_name="asset_promotion",
-        help_text="The promoted NPC's own persona — private to one promoter.",
+        related_name="asset_ownerships",
+        help_text="The promoted NPC's own persona — shared among co-owners (#2295).",
     )
     role_context = models.CharField(
         max_length=20,
@@ -85,6 +85,14 @@ class NPCAsset(SharedMemoryModel):
         choices=AssetStatus.choices,
         default=AssetStatus.ACTIVE,
     )
+    weekly_income = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Coppers accrued per weekly cycle into uncollected_pool (0 = no income).",
+    )
+    uncollected_pool = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Coppers amassed awaiting active collection (#2294). No cap — ADR-0081.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -105,6 +113,15 @@ class NPCAsset(SharedMemoryModel):
                 fields=["promoter_persona", "source_distinction_grant"],
                 condition=models.Q(source_distinction_grant__isnull=False),
                 name="unique_npcasset_promoter_distinction_grant",
+            ),
+            # #2295 — one active NPCAsset per (promoter, asset_persona).
+            # Prevents duplicate co-ownership: can't introduce the same asset
+            # to the same ally twice. Partial on status=active so that
+            # dismissed/lost rows don't block re-introduction.
+            models.UniqueConstraint(
+                fields=["promoter_persona", "asset_persona"],
+                condition=models.Q(status="active"),
+                name="unique_active_npcasset_promoter_asset_persona",
             ),
         ]
 

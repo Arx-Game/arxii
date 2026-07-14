@@ -272,6 +272,49 @@ class AssetStatusPayload:
     reason: str
 
 
+# ---- Agriculture (#1864, #2218) ----
+
+
+@dataclass
+class FoodPreCollectPayload:
+    """Cancellable pre-collection payload for the food collection mini-game (#2218).
+
+    Emitted by ``collect_field_food`` *before* the pool is zeroed and the
+    check is rolled. Reactive flows may inspect the pool size and mutate
+    ``difficulty_modifier`` (e.g. intimidation increases difficulty for a
+    larger haul) or cancel the collection entirely (e.g. an NPC refuses
+    to hand over the food and the encounter must be resolved by other means).
+
+    The ``pool_difficulty_bonus`` is pre-computed from the pool size by the
+    service function — the base difficulty plus this bonus yields the
+    effective difficulty passed to the check. Reactive flows may further
+    adjust ``difficulty_modifier`` on top.
+    """
+
+    character: Character
+    field_instance: object
+    domain: object | None
+    gathered: int
+    pool_difficulty_bonus: int
+    difficulty_modifier: int = 0
+
+
+@dataclass(frozen=True)
+class FoodCollectedPayload:
+    """Post-collection outcome payload (#1864, #2218).
+
+    Emitted after food has landed (or been lost) in the stockpile. Read-only
+    — reactive flows cannot rewrite history.
+    """
+
+    character: Character
+    domain: object | None
+    gathered: int
+    landed: int
+    overflow: int
+    catastrophe: bool
+
+
 PAYLOAD_FOR_EVENT: dict[str, type] = {
     "attack_pre_resolve": AttackPreResolvePayload,
     "attack_landed": AttackLandedPayload,
@@ -297,4 +340,6 @@ PAYLOAD_FOR_EVENT: dict[str, type] = {
     "asset_compromised": AssetStatusPayload,
     "asset_lost": AssetStatusPayload,
     "asset_dismissed": AssetStatusPayload,
+    "food_pre_collect": FoodPreCollectPayload,
+    "food_collected": FoodCollectedPayload,
 }

@@ -19,6 +19,8 @@ class NPCAssetFactory(DjangoModelFactory):
     asset_persona = factory.SubFactory(_PERSONA_FACTORY)
     role_context = AssetRoleContext.INFORMANT
     source_functionary = factory.SubFactory("world.npc_services.factories.FunctionaryFactory")
+    weekly_income = 0
+    uncollected_pool = 0
 
 
 class CluePoolFactory(DjangoModelFactory):

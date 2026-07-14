@@ -462,6 +462,8 @@ class ActionRegistryTests(TestCase):
             "invite_to_voyage",
             "respond_voyage_invite",
             "depart_voyage",
+            # #2295 — voluntary asset sharing: introduce an owned asset to an ally.
+            "introduce_asset",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

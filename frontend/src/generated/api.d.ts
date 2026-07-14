@@ -504,7 +504,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own promoted assets. */
+    /** @description Read endpoints for the player's own promoted assets + introduce action. */
     get: operations['assets_list'];
     put?: never;
     post?: never;
@@ -521,10 +521,31 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own promoted assets. */
+    /** @description Read endpoints for the player's own promoted assets + introduce action. */
     get: operations['assets_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/assets/introduce/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Introduce an owned asset to a co-present ally (#2295).
+     *
+     *     POST /api/assets/introduce/ with asset_id + ally_persona_id.
+     */
+    post: operations['assets_introduce_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -25386,6 +25407,7 @@ export interface components {
        *     * `fan` - Fan
        *     * `minor_ally` - Minor Ally
        *     * `asset_task_intel` - Asset Task: Intel
+       *     * `asset_task_collect` - Asset Task: Collect
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -25428,6 +25450,7 @@ export interface components {
      *     * `fan` - Fan
      *     * `minor_ally` - Minor Ally
      *     * `asset_task_intel` - Asset Task: Intel
+     *     * `asset_task_collect` - Asset Task: Collect
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -25443,7 +25466,8 @@ export interface components {
       | 'guard'
       | 'fan'
       | 'minor_ally'
-      | 'asset_task_intel';
+      | 'asset_task_intel'
+      | 'asset_task_collect';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -25462,6 +25486,7 @@ export interface components {
        *     * `fan` - Fan
        *     * `minor_ally` - Minor Ally
        *     * `asset_task_intel` - Asset Task: Intel
+       *     * `asset_task_collect` - Asset Task: Collect
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -29350,6 +29375,7 @@ export interface components {
        *     * `fan` - Fan
        *     * `minor_ally` - Minor Ally
        *     * `asset_task_intel` - Asset Task: Intel
+       *     * `asset_task_collect` - Asset Task: Collect
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -36107,6 +36133,25 @@ export interface operations {
         /** @description A unique integer value identifying this npc asset. */
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCAsset'];
+        };
+      };
+    };
+  };
+  assets_introduce_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;

@@ -6,6 +6,7 @@ import importlib
 from flows.helpers.hooks import get_package_hooks
 
 SERVICE_MODULES = [
+    "flows.service_functions.agriculture",
     "flows.service_functions.communication",
     "flows.service_functions.forms",
     "flows.service_functions.movement",

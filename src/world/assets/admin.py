@@ -11,6 +11,8 @@ class NPCAssetAdmin(admin.ModelAdmin):
         "role_context",
         "acquisition_source",
         "status",
+        "weekly_income",
+        "uncollected_pool",
         "created_at",
     ]
     list_filter = ["role_context", "acquisition_source", "status"]

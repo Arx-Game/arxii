@@ -2,6 +2,10 @@
 
 FOOD_COLLECTION_CHECK_NAME = "Food Collection"
 
+#: Base difficulty label for food collection checks (#2218). Pool size and
+#: reactive triggers may escalate this. PLACEHOLDER — tune via admin or data.
+FOOD_COLLECTION_BASE_DIFFICULTY = "normal"
+
 #: Max level for the Field RoomFeatureKind.
 FIELD_MAX_LEVEL = 5
 

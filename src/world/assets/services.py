@@ -97,6 +97,14 @@ class CoercionError(Exception):
         self.user_message = user_message or message
 
 
+class IntroductionError(Exception):
+    """An asset introduction could not proceed (carries a user-facing message)."""
+
+    def __init__(self, message: str, *, user_message: str | None = None) -> None:
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
 @transaction.atomic
 def coerce_into_asset(
     *,
@@ -116,7 +124,8 @@ def coerce_into_asset(
     source FKs null (like a CG grant, this is not a functionary promotion).
 
     Raises ``CoercionError`` if the coercer holds no leverage over the target, or the
-    target already answers to someone (``asset_persona`` is OneToOne — one owner per NPC).
+    target is already under coercion (one COERCION NPCAsset per NPC — voluntary
+    co-ownership via #2295 does not block coercion).
     """
     from world.assets.constants import AssetAcquisitionSource  # noqa: PLC0415
     from world.assets.models import NPCAsset  # noqa: PLC0415
@@ -128,14 +137,82 @@ def coerce_into_asset(
     ):
         msg = "You hold no leverage over them."
         raise CoercionError(msg, user_message=msg)
-    if NPCAsset.objects.filter(asset_persona=target_persona).exists():
-        msg = "They already answer to someone."
+    if NPCAsset.objects.filter(
+        asset_persona=target_persona,
+        acquisition_source=AssetAcquisitionSource.COERCION,
+    ).exists():
+        msg = "They already answer to someone under coercion."
         raise CoercionError(msg, user_message=msg)
     return NPCAsset.objects.create(
         promoter_persona=coercer_persona,
         asset_persona=target_persona,
         role_context=role_context,
         acquisition_source=AssetAcquisitionSource.COERCION,
+    )
+
+
+@transaction.atomic
+def introduce_asset(
+    *,
+    introducer_persona: Persona,
+    ally_persona: Persona,
+    asset: NPCAsset,
+) -> NPCAsset:
+    """Introduce an owned asset to a co-present ally, creating co-ownership (#2295).
+
+    The introducer must own an ACTIVE NPCAsset for this NPC. The ally's
+    character must be co-present in the introducer's room. The ally must
+    not already co-own this asset (dedup via the partial unique constraint).
+
+    On success, creates a new NPCAsset row for the ally with
+    acquisition_source=INTRODUCTION, pointing at the same asset_persona.
+
+    Raises ``IntroductionError`` if any gate fails.
+
+    Args:
+        introducer_persona: The PC's persona who owns the asset.
+        ally_persona: The ally's persona to create co-ownership for.
+        asset: The NPCAsset being introduced.
+
+    Returns:
+        The newly created NPCAsset for the ally.
+    """
+    from world.assets.constants import AssetAcquisitionSource, AssetStatus  # noqa: PLC0415
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+
+    # Gate 1: The introducer owns this asset and it's ACTIVE.
+    if asset.promoter_persona_id != introducer_persona.pk:
+        msg = "You don't own that asset."
+        raise IntroductionError(msg, user_message=msg)
+    if asset.status != AssetStatus.ACTIVE:
+        msg = "That asset is not available."
+        raise IntroductionError(msg, user_message=msg)
+
+    # Gate 2: The ally's character is co-present in the introducer's room.
+    introducer_character = introducer_persona.character_sheet.character
+    ally_character = ally_persona.character_sheet.character
+    if (
+        introducer_character.db_location_id is None
+        or ally_character.db_location_id != introducer_character.db_location_id
+    ):
+        msg = "Your ally must be present to introduce them."
+        raise IntroductionError(msg, user_message=msg)
+
+    # Gate 3: The ally doesn't already co-own this asset (dedup).
+    if NPCAsset.objects.filter(
+        promoter_persona=ally_persona,
+        asset_persona=asset.asset_persona,
+        status=AssetStatus.ACTIVE,
+    ).exists():
+        msg = "They already have access to this asset."
+        raise IntroductionError(msg, user_message=msg)
+
+    # Create the co-owner's NPCAsset row.
+    return NPCAsset.objects.create(
+        promoter_persona=ally_persona,
+        asset_persona=asset.asset_persona,
+        role_context=asset.role_context,
+        acquisition_source=AssetAcquisitionSource.INTRODUCTION,
     )
 
 

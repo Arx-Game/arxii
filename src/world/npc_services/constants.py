@@ -23,6 +23,8 @@ class OfferKind(models.TextChoices):
     MINOR_ALLY = "minor_ally", "Minor Ally"
     # #1905 — asset tasking: PC directs an owned asset to gather intel.
     ASSET_TASK_INTEL = "asset_task_intel", "Asset Task: Intel"
+    # #2294 — PC collects accumulated income from an owned asset.
+    ASSET_TASK_COLLECT = "asset_task_collect", "Asset Task: Collect"
     # Future kinds: training/marriage/attunement.
 
 

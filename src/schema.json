@@ -747,7 +747,8 @@ paths:
   /api/assets/:
     get:
       operationId: assets_list
-      description: Read endpoints for the player's own promoted assets.
+      description: Read endpoints for the player's own promoted assets + introduce
+        action.
       parameters:
       - name: page
         required: false
@@ -769,7 +770,8 @@ paths:
   /api/assets/{id}/:
     get:
       operationId: assets_retrieve
-      description: Read endpoints for the player's own promoted assets.
+      description: Read endpoints for the player's own promoted assets + introduce
+        action.
       parameters:
       - in: path
         name: id
@@ -777,6 +779,24 @@ paths:
           type: integer
         description: A unique integer value identifying this npc asset.
         required: true
+      tags:
+      - assets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCAsset'
+          description: ''
+  /api/assets/introduce/:
+    post:
+      operationId: assets_introduce_create
+      description: |-
+        Introduce an owned asset to a co-present ally (#2295).
+
+        POST /api/assets/introduce/ with asset_id + ally_persona_id.
       tags:
       - assets
       security:
@@ -45476,6 +45496,7 @@ components:
             * `fan` - Fan
             * `minor_ally` - Minor Ally
             * `asset_task_intel` - Asset Task: Intel
+            * `asset_task_collect` - Asset Task: Collect
         label:
           type: string
           description: UI display text for the menu option.
@@ -45551,6 +45572,7 @@ components:
       - fan
       - minor_ally
       - asset_task_intel
+      - asset_task_collect
       type: string
       description: |-
         * `permit` - Permit
@@ -45566,6 +45588,7 @@ components:
         * `fan` - Fan
         * `minor_ally` - Minor Ally
         * `asset_task_intel` - Asset Task: Intel
+        * `asset_task_collect` - Asset Task: Collect
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -45590,6 +45613,7 @@ components:
             * `fan` - Fan
             * `minor_ally` - Minor Ally
             * `asset_task_intel` - Asset Task: Intel
+            * `asset_task_collect` - Asset Task: Collect
         label:
           type: string
           minLength: 1
@@ -52069,6 +52093,7 @@ components:
             * `fan` - Fan
             * `minor_ally` - Minor Ally
             * `asset_task_intel` - Asset Task: Intel
+            * `asset_task_collect` - Asset Task: Collect
         label:
           type: string
           minLength: 1

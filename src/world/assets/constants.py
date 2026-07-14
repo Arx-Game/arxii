@@ -19,6 +19,8 @@ class AssetAcquisitionSource(models.TextChoices):
     PROMOTION = "promotion", "Promotion"
     DISTINCTION_GRANT = "distinction_grant", "Distinction Grant"
     COERCION = "coercion", "Coercion"
+    # #2295 — voluntary sharing: a PC introduces their asset to a co-present ally.
+    INTRODUCTION = "introduction", "Introduction"
 
 
 class AssetRoleContext(models.TextChoices):
