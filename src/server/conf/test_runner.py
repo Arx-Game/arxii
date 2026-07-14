@@ -62,6 +62,30 @@ def _arx_init_worker(*args, **kwargs) -> None:
 
     if evennia.SESSION_HANDLER is None:
         evennia._init()
+    _install_dbholder_deepcopy_shim()
+
+
+def _install_dbholder_deepcopy_shim() -> None:
+    """Make Evennia's DbHolder deepcopy-safe for Django's TestData descriptor (#1825).
+
+    setUpTestData attributes are deep-copied per test, descending cached FK chains
+    (sheet -> character, deed -> scene -> location). Evennia stashes a DbHolder on any
+    typeclassed object whose .db/.ndb was touched, and DbHolder is un-deepcopyable —
+    so any fixture whose object graph reaches a touched ObjectDB explodes,
+    shard-order dependently. Share the holder on deepcopy: it is a lazy accessor
+    namespace bound to the identity-mapped instance, which the copy shares anyway.
+    Test-run only (installed by the runners); production never deepcopies typeclasses.
+    """
+    import copy
+
+    from evennia.typeclasses.attributes import DbHolder
+
+    # Dispatch-table entry, NOT a __deepcopy__ method: DbHolder.__getattribute__
+    # routes every instance attribute lookup through the attributes manager, so a
+    # class-level __deepcopy__ (and even __reduce_ex__) is unreachable — which is
+    # the very reason deepcopy blows up on it. copy consults _deepcopy_dispatch
+    # by exact class first, bypassing instance getattr entirely.
+    copy._deepcopy_dispatch[DbHolder] = lambda x, _memo: x
 
 
 class ArxParallelTestSuite(ParallelTestSuite):
@@ -113,8 +137,9 @@ class TimedEvenniaTestRunner(EvenniaTestSuiteRunner):
             flush_cache()
 
     def setup_test_environment(self, **kwargs):
-        """Set up test environment with timing notification."""
+        """Set up test environment with timing notification + the DbHolder shim (#1825)."""
         super().setup_test_environment(**kwargs)
+        _install_dbholder_deepcopy_shim()
         if os.environ.get("ARX_TEST_TIMING") and self.verbosity >= 2:
             print("Running tests with timing information...")
             sys.stdout.flush()
