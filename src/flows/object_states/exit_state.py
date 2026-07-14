@@ -37,7 +37,7 @@ class ExitState(BaseState):
         from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        sheet = getattr(actor.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = actor.obj.character_sheet
         if sheet is None:
             return True
         persona = active_persona_for_sheet(sheet)

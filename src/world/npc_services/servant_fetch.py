@@ -218,7 +218,7 @@ def _complete_item_fetch(
         return
 
     # Set holder if unowned (same logic as pick_up).
-    taker_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    taker_sheet = actor.character_sheet
     if item_instance.holder_character_sheet_id is None and taker_sheet is not None:
         item_instance.holder_character_sheet = taker_sheet
         item_instance.save(update_fields=["holder_character_sheet"])

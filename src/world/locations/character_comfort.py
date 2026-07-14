@@ -89,7 +89,7 @@ def comfort_mitigation(character: DefaultObject) -> dict[StatKey, int]:
     targets). The aggregate the room's exposure is measured against.
     """
     mitigation = _worn_garment_mitigation(character)
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is not None:
         _add_modifier_mitigation(sheet, mitigation)
     return mitigation
@@ -97,7 +97,7 @@ def comfort_mitigation(character: DefaultObject) -> dict[StatKey, int]:
 
 def injury_discomfort(character: DefaultObject) -> int:
     """Extra discomfort from injury — scales with how far below full health the character is."""
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None:
         return 0
     try:

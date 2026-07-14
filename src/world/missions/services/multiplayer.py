@@ -223,7 +223,7 @@ def _emit_group_resolution_narrative(
             continue
         story_text = _story_text_for(presented_opt, deed, template_name)
         actor = deed.actor
-        sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = actor.character_sheet
         if sheet is not None:
             send_narrative_message(
                 recipients=[sheet],

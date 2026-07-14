@@ -86,7 +86,7 @@ def _viewer_persona(request: Request):
         return None
     if puppet is None:
         return None
-    sheet = getattr(puppet, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = puppet.character_sheet
     if sheet is None:
         return None
     try:

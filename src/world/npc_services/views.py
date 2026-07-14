@@ -368,7 +368,7 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
         puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL
         if puppet is None:
             return qs.none()
-        sheet_data = getattr(puppet, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet_data = puppet.character_sheet
         persona = getattr(sheet_data, "primary_persona", None) if sheet_data is not None else None  # noqa: GETATTR_LITERAL
         if persona is None:
             return qs.none()

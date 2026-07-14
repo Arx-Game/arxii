@@ -37,7 +37,7 @@ def _deed_time_persona(line: MissionDeedRewardLine) -> Persona | None:
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     actor = line.deed.actor
-    sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = actor.character_sheet
     accepted = line.deed.instance.accepted_as_persona
     if accepted is not None and sheet is not None and accepted.character_sheet_id == sheet.pk:
         return accepted

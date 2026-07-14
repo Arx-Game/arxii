@@ -89,7 +89,7 @@ class CmdCovenant(ArxCommand):
     # Resolution helpers
 
     def _actor_sheet(self) -> Any:
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             msg = "You have no character sheet."
             raise CommandError(msg)
@@ -129,7 +129,7 @@ class CmdCovenant(ArxCommand):
         if not target:
             msg = f"Could not find '{char_name}'."
             raise CommandError(msg)
-        target_sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        target_sheet = target.character_sheet
         if target_sheet is None:
             msg = f"'{char_name}' has no character sheet."
             raise CommandError(msg)

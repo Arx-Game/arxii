@@ -1669,7 +1669,7 @@ def _co_present_member_count(
     target = membership.covenant
     n = 0
     for obj in room.contents:
-        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = obj.character_sheet
         if sheet is None or sheet == self_sheet:
             continue
         if sheet.character.covenant_roles.currently_held_role_in(target) is not None:
@@ -1691,7 +1691,7 @@ def covenant_members_present(*, covenant: Covenant, room: ObjectDB) -> list[Char
     )
     present: list[CharacterSheet] = []
     for obj in room.contents:
-        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = obj.character_sheet
         if sheet is not None and sheet.pk in active_sheet_ids:
             present.append(sheet)
     return present

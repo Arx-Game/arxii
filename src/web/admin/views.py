@@ -1,6 +1,7 @@
 """Admin customization views."""
 
 from datetime import UTC, datetime
+import logging
 
 from django.apps import apps
 from django.contrib.admin.views.decorators import staff_member_required
@@ -11,6 +12,8 @@ from django.views.decorators.http import require_POST
 
 from web.admin.models import AdminExcludedModel, AdminPinnedModel
 from web.admin.services import HARDCODED_EXCLUDED_APPS, analyze_fixture, execute_import
+
+logger = logging.getLogger(__name__)
 
 
 @require_POST
@@ -75,7 +78,8 @@ def export_data(request):
             model = apps.get_model(app_label, model_name)
             objects = list(model.objects.all())
             all_objects.extend(objects)
-        except Exception:  # noqa: BLE001, S112
+        except Exception:
+            logger.exception("admin export loop skipped a model (audit: was silent)")
             continue
 
     # Serialize with natural keys
@@ -157,7 +161,8 @@ def export_preview(request):
         # Get record count
         try:
             count = model.objects.count()
-        except Exception:  # noqa: BLE001, S112
+        except Exception:
+            logger.exception("admin export loop skipped a model (audit: was silent)")
             continue
 
         has_natural_key = issubclass(model, NaturalKeyMixin) or hasattr(model, "natural_key")

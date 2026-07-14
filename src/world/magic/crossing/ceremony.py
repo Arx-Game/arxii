@@ -136,7 +136,7 @@ def _unlock_codex(sheet: CharacterSheet, codex_entry: CodexEntry) -> None:
     """
     # CharacterCodexKnowledge is keyed on RosterEntry, not CharacterSheet.
     # sheet.roster_entry is a OneToOne reverse — may not exist.
-    roster_entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL
+    roster_entry = sheet.roster_entry_or_none
     if roster_entry is None:
         return
 

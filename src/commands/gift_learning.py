@@ -90,7 +90,7 @@ class CmdLearn(DispatchCommand):
         """List open GiftUnlocks (XP cost + status) and open teaching offers."""
         lines = ["|wLearn actions|n: gift <id>, technique <id>, thread <id>"]
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         lines.extend(self._gift_unlock_lines(sheet))
         lines.extend(self._technique_offer_lines())
         lines.extend(self._thread_offer_lines())

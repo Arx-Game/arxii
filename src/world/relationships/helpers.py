@@ -22,8 +22,8 @@ def get_relationship_tier(character_a: ObjectDB, character_b: ObjectDB) -> int:
     Returns:
         Relationship tier as an integer (0 = no/new relationship).
     """
-    sheet_a = getattr(character_a, "sheet_data", None)  # noqa: GETATTR_LITERAL
-    sheet_b = getattr(character_b, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet_a = character_a.character_sheet
+    sheet_b = character_b.character_sheet
     if sheet_a is None or sheet_b is None:
         return 0
     rel = CharacterRelationship.objects.filter(source=sheet_a, target=sheet_b).first()

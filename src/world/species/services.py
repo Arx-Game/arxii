@@ -39,7 +39,7 @@ def reconcile_sunlight_exposure(character, room) -> None:
     from world.species.factories import ensure_sunlight_exposure_content  # noqa: PLC0415
 
     template = ensure_sunlight_exposure_content()
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None or not _has_sunlight_drawback(sheet):
         return
     outdoor = _room_is_outdoor(room) and not _character_shelters_radiant(character, room)

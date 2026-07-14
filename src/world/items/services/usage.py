@@ -211,7 +211,7 @@ def _apply_appearance_effects(
     from world.forms.services import NonCosmeticTraitError, change_appearance  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    sheet = getattr(user, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = user.character_sheet
     if sheet is None:
         return []
 
@@ -253,7 +253,7 @@ def _apply_disguise_kit_effects(
     from world.forms.models import CharacterForm, CharacterFormState, FormType  # noqa: PLC0415
     from world.forms.services import apply_disguise  # noqa: PLC0415
 
-    sheet = getattr(user, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = user.character_sheet
     if sheet is None:
         return None
 

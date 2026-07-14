@@ -45,7 +45,7 @@ def move_object(
         raise CommandError(msg)
 
     # Auto-engage Durance covenant if co-present with members (Slice B §4.10)
-    sheet = getattr(obj.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = obj.obj.character_sheet
     if sheet is not None and obj.obj.location is not None:
         from world.covenants.services import (  # noqa: PLC0415
             evaluate_scene_engagement,
@@ -65,7 +65,7 @@ def move_object(
         from world.covenants.services import revalidate_engagements  # noqa: PLC0415
 
         for remaining in origin.contents:
-            remaining_sheet = getattr(remaining, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            remaining_sheet = remaining.character_sheet
             if remaining_sheet is None:
                 continue
             roles = remaining_sheet.character.covenant_roles

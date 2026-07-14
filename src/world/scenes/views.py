@@ -499,7 +499,7 @@ class PersonaViewSet(
         body = SetActivePersonaRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
-        sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
+        sheet = puppet.character_sheet if puppet is not None else None
         if puppet is None or sheet is None:
             msg = "You must be playing a character to switch identities."
             raise serializers.ValidationError(msg)
@@ -523,7 +523,7 @@ class PersonaViewSet(
     def _played_sheet(self, request: Request) -> "CharacterSheet":
         """The played character's sheet, or raise a uniform validation error (#1127)."""
         puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
-        sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
+        sheet = puppet.character_sheet if puppet is not None else None
         if puppet is None or sheet is None:
             msg = "You must be playing a character to create an identity."
             raise serializers.ValidationError(msg)

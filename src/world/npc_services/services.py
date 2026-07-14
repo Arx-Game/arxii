@@ -194,7 +194,7 @@ def _build_eligibility_cache(
     role_cooldown_active = NPCRoleCooldown.objects.filter(
         role_id=role.pk, persona=persona, available_at__gt=now
     ).exists()
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None:
         pc_at_npc_cap = True
     else:
@@ -359,7 +359,7 @@ def _mission_gates_pass(  # noqa: PLR0911
         return False
     if not template_visible_to(template, character, persona=persona):
         return False
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None:
         # No sheet → no level → can't satisfy the level-band gate. Fail closed
         # consistently with the PC-cap gate above (cache.pc_at_npc_cap is True

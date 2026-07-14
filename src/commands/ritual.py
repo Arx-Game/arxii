@@ -215,7 +215,7 @@ class CmdRitual(ArxCommand):
             if target is None:
                 msg = f"Cannot find '{invite_name}'."
                 raise CommandError(msg)
-            invitee_sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            invitee_sheet = target.character_sheet
             if invitee_sheet is None:
                 msg = f"'{invite_name}' has no character sheet."
                 raise CommandError(msg)

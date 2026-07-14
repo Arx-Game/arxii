@@ -44,8 +44,8 @@ class ToggleFavoriteAction(Action):
         )
 
         interaction = kwargs.get("interaction")
-        sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
-        roster_entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL
+        sheet = actor.character_sheet
+        roster_entry = sheet.roster_entry_or_none
         if sheet is None or roster_entry is None:
             return ActionResult(success=False, message="You have no roster entry to favorite with.")
         created, _favorite = toggle_interaction_favorite(
@@ -122,7 +122,7 @@ class ReactToWindowAction(Action):
         interaction = kwargs.get("interaction")
         kind = kwargs.get("kind")
         choice = kwargs.get("choice")
-        sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = actor.character_sheet
         persona = getattr(sheet, "primary_persona", None)  # noqa: GETATTR_LITERAL
         if persona is None:
             return ActionResult(success=False, message="You have no persona to react with.")

@@ -477,7 +477,7 @@ class TreatmentCandidateViewSet(CharacterContextMixin, viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        helper_sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        helper_sheet = character.character_sheet
         if helper_sheet is None:
             return Response(
                 {"detail": "No character sheet found."},

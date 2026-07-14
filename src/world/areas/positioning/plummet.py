@@ -175,7 +175,7 @@ def _apply_fall_impact(target: ObjectDB, instance: ConditionInstance) -> None:  
     from world.conditions.models import DamageType  # noqa: PLC0415
     from world.vitals.services import process_damage_consequences  # noqa: PLC0415
 
-    sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = target.character_sheet
     damage = instance.severity * settings.FALL_IMPACT_PER_LEVEL
     fall_type = DamageType.objects.filter(name=FALL_DAMAGE_TYPE_NAME).first()
 

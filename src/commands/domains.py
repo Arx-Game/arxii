@@ -99,7 +99,7 @@ class CmdDomain(ArxCommand):
     def _active_persona(self) -> Any:
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             msg = "You have no character sheet."
             raise CommandError(msg)
@@ -245,7 +245,7 @@ class CmdDomain(ArxCommand):
         if not target:
             msg = f"Could not find '{char_name}'."
             raise CommandError(msg)
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             msg = f"'{char_name}' has no character sheet."
             raise CommandError(msg)

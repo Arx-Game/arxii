@@ -30,9 +30,8 @@ class SineaterDispatchTests(TestCase):
     def test_pleas_no_sheet_sends_error(self):
         cmd = CmdSineater()
         cmd.caller = MagicMock()
-        cmd.caller.sheet_data = None
-        del cmd.caller.sheet_data
-        type(cmd.caller).sheet_data = None
+        # Simulate "no sheet": the command reads the character_sheet property (audit).
+        type(cmd.caller).character_sheet = None
         cmd.args = "pleas"
         cmd.caller.search.return_value = None
         cmd.func()

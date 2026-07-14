@@ -45,7 +45,7 @@ def _display_mode(mode: str | None) -> str | None:
 
 
 def _resolve_owner_tenure(actor: ObjectDB, tenure_id: int | None):
-    sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = actor.character_sheet
     if sheet is None:
         return None, _MSG_NO_IDENTITY
     try:

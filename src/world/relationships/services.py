@@ -873,8 +873,8 @@ def bond_bonus(actor: ObjectDB, protected: ObjectDB) -> int:
     Looks up the directed relationship actor→protected and returns
     ``int(mechanical_bonus)`` if above the config floor, else 0.
     """
-    actor_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
-    protected_sheet = getattr(protected, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    actor_sheet = actor.character_sheet
+    protected_sheet = protected.character_sheet
     if actor_sheet is None or protected_sheet is None:
         return 0
 

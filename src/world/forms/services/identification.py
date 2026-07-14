@@ -102,7 +102,7 @@ def _presents_fake_name(target_character) -> bool:
     from world.scenes.models import Persona  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    sheet = getattr(target_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = target_character.character_sheet
     if sheet is None:
         return False
     try:
@@ -194,7 +194,7 @@ def identification_difficulty(viewer_sheet: CharacterSheet, target_character) ->
             kit_quality_bonus=0,
         )
 
-    target_sheet = getattr(target_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    target_sheet = target_character.character_sheet
     familiarity_ease = 0
     if target_sheet is not None:
         familiarity_ease += _relationship_ease(viewer_sheet, target_sheet)
@@ -274,7 +274,7 @@ def _target_persona_pair(target_character) -> tuple[Persona | None, Persona | No
     from world.scenes.models import Persona  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    target_sheet = getattr(target_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    target_sheet = target_character.character_sheet
     if target_sheet is None:
         return None, None
     try:
@@ -371,7 +371,7 @@ def attempt_identification(
     from world.forms.constants import IDENTIFICATION_CHECK_TYPE_NAME  # noqa: PLC0415
     from world.scenes.services import persona_discovery_between  # noqa: PLC0415
 
-    viewer_sheet = getattr(viewer_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    viewer_sheet = viewer_character.character_sheet
     if viewer_sheet is None:
         return _failure_result()
 

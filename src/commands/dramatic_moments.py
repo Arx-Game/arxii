@@ -177,7 +177,7 @@ class CmdMoment(ArxCommand):
         if target is None:
             return
 
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL, STRING_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             self.msg("That is not a character.")
             return

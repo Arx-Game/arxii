@@ -590,7 +590,7 @@ def react_to_unauthorized_entry(actor, room) -> None:
     from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = actor.character_sheet
     if sheet is None:
         return
     persona = active_persona_for_sheet(sheet)

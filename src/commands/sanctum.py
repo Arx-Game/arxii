@@ -307,7 +307,7 @@ class CmdSanctum(DispatchCommand):
         ]
 
         # getattr avoids AttributeError on objects that don't carry a sheet.
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is not None:
             lines.extend(self._standing_sanctum_lines(sheet))
 

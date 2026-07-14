@@ -742,7 +742,7 @@ def get_presented_appearance(character, *, pierced: bool = False) -> list[Presen
     )
 
     descriptors: dict[int, str] = {}
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is not None and not hide_descriptors:
         try:
             persona = active_persona_for_sheet(sheet)

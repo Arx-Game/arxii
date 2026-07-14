@@ -434,7 +434,7 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
         if character is None:
             return None
         # Reverse OneToOne may be absent for sheet-less characters.
-        return getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        return character.character_sheet
 
     def list(self, request: Request) -> Response:
         """GET — return current intent or {"intent": null}."""
@@ -551,7 +551,7 @@ class SelectPathViewSet(CharacterContextMixin, viewsets.ViewSet):
 def _resolve_puppet_sheet(request: Request) -> tuple[Any, CharacterSheet]:
     """Return the played character and its sheet, or raise ValidationError."""
     puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
-    sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
+    sheet = puppet.character_sheet if puppet is not None else None
     if puppet is None or sheet is None:
         msg = "You must be playing a character to view or purchase unlocks."
         raise serializers.ValidationError(msg)

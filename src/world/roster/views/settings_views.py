@@ -41,8 +41,8 @@ class VisibilitySettingsView(APIView):
     def _current_tenure(self, request: Request) -> RosterTenure:
         """The played character's current tenure, or raise a uniform validation error."""
         puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
-        sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
-        entry = getattr(sheet, "roster_entry", None) if sheet is not None else None  # noqa: GETATTR_LITERAL
+        sheet = puppet.character_sheet if puppet is not None else None
+        entry = sheet.roster_entry_or_none if sheet is not None else None
         tenure = entry.current_tenure if entry is not None else None
         if tenure is None:
             msg = "You must be playing a character to change its visibility."

@@ -44,7 +44,7 @@ def _codex_entry_learned(sheet: CharacterSheet, entry_id: int) -> bool:
     """
     from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
 
-    roster_entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL — reverse OneToOne may not exist
+    roster_entry = sheet.roster_entry_or_none
     if roster_entry is None:
         return False
     return CharacterCodexKnowledge.objects.filter(

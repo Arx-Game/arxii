@@ -84,7 +84,7 @@ class CmdDurance(ArxCommand):
         from world.magic.audere_majora import AudereMajoraThreshold  # noqa: PLC0415
         from world.progression.selectors import eligible_advanced_paths_for  # noqa: PLC0415
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             msg = "You have no character sheet."
             raise CommandError(msg)
@@ -246,7 +246,7 @@ class CmdDurance(ArxCommand):
         from world.progression.exceptions import ClassLevelAdvancementError  # noqa: PLC0415
         from world.progression.services.advancement import convene_durance_at_site  # noqa: PLC0415
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             msg = "You have no character sheet."
             raise CommandError(msg)

@@ -213,7 +213,7 @@ def _apply_masked_deed_association(
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     mask = instance.accepted_as_persona
-    sheet = getattr(reporter, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = reporter.character_sheet
     if mask is None or sheet is None or mask.character_sheet_id != sheet.pk:
         return
     reporting_persona = active_persona_for_sheet(sheet)
@@ -242,7 +242,7 @@ def _apply_masked_deed_association(
 def _deliver_bonus_money(reporter: ObjectDB, amount: int) -> None:
     from world.currency.services import deliver_mission_money  # noqa: PLC0415
 
-    sheet = getattr(reporter, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = reporter.character_sheet
     if sheet is not None and amount > 0:
         deliver_mission_money(recipient_sheet=sheet, amount=amount, ref="mission-embellish-bonus")
 
@@ -253,7 +253,7 @@ def _apply_fame_prestige(reporter: ObjectDB, delta: int) -> None:
     from world.scenes.constants import PersonaType  # noqa: PLC0415
     from world.societies.renown import award_deed_prestige, set_persona_fame  # noqa: PLC0415
 
-    sheet = getattr(reporter, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = reporter.character_sheet
     if sheet is None:
         return
     persona = sheet.personas.filter(persona_type=PersonaType.PRIMARY).first()
@@ -267,7 +267,7 @@ def _grant_style_resonance(reporter: ObjectDB, style: str) -> None:
     name = _STYLE_RESONANCE.get(style)
     if name is None:
         return
-    sheet = getattr(reporter, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = reporter.character_sheet
     if sheet is None:
         return
     from world.magic.constants import GainSource  # noqa: PLC0415

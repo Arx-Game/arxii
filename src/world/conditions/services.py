@@ -277,7 +277,7 @@ def can_perceive(actor: "ObjectDB", target: "ObjectDB") -> bool:  # noqa: OBJECT
     concealments = active_concealments(target)
     if not concealments.exists():
         return True
-    actor_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    actor_sheet = actor.character_sheet
     if actor_sheet is None:
         return False
     return not concealments.exclude(detected_by=actor_sheet).exists()

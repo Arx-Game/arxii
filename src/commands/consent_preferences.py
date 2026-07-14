@@ -200,7 +200,7 @@ class CmdConsent(DispatchCommand):
         from world.roster.models import RosterTenure  # noqa: PLC0415
 
         target = self.search_or_raise(name)
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             _no_identity_msg = f"{target} has no character identity."
             raise CommandError(_no_identity_msg)
@@ -217,7 +217,7 @@ class CmdConsent(DispatchCommand):
         """Return the caller's active RosterTenure."""
         from world.roster.models import RosterTenure  # noqa: PLC0415
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             _no_identity_msg = "You have no character identity."
             raise CommandError(_no_identity_msg)
