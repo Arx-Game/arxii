@@ -33,6 +33,7 @@ class RoomFeatureServiceStrategy(models.TextChoices):
     SOCIAL_HUB = "SOCIAL_HUB", "Social Hub"
     STABLES = "STABLES", "Stables"
     VAULT = "VAULT", "Vault"
+    BRIG = "BRIG", "Brig"
 
 
 class RoomFeatureInstallMechanism(models.TextChoices):
@@ -95,6 +96,17 @@ SOCIAL_HUB_TRAFFIC_SOURCE = "social_hub"
 #: Per-level max-items capacity for a Vault room feature (#2179).
 #: ``max_items = instance.level * VAULT_MAX_ITEMS_PER_LEVEL``.
 VAULT_MAX_ITEMS_PER_LEVEL = 20
+
+#: Per-level prisoner capacity for a Brig room feature (#1862).
+#: ``max_prisoners = instance.level * BRIG_CAPACITY_PER_LEVEL``.
+BRIG_CAPACITY_PER_LEVEL = 2
+
+#: Escape-check difficulty added per Brig level (#1862). PLACEHOLDER — pending
+#: the mission-difficulty-injection design pass; MVP uses capacity-only gating.
+BRIG_ESCAPE_DIFFICULTY_PER_LEVEL = 2
+
+#: Max level for the seeded Brig kind (#1862).
+BRIG_MAX_LEVEL = 3
 
 
 class DefenseKind(models.TextChoices):
