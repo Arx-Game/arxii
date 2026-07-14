@@ -97,6 +97,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [Tooling](tooling.md) | in-progress | Player building tools, GM tools (level-gated), staff tools |
 | [Covenants](covenants.md) | in-progress | Roles, speed ranks, gear compatibility, Thread anchor + API shipped — covenant entity / lifecycle / formation ritual still post-MVP |
 | Vitals | in-progress | CharacterVitals model; #521 shipped the sheet surface — VitalsPanel on the character sheet over an owner/staff-gated `GET /api/vitals/<id>/`, FatigueBars extraction wiring the formerly-unmounted fatigue display (FatigueStatusView removed) — needs non-combat integration |
+| Wills & Estates | shipped | #1985: `world/estates` — wills (bequests/executors/testament), player-first timer-backed settlement (funeral / will-reading / sweeper doors, ADR-0133), intestacy cascade + escheat, debts-first execution, stolen-goods consent gate, inherited theft claims, Agreements sheet tab |
 | [GM System](gm-system.md) | in-progress | Phases 0-3 complete: identity, tables, roster/invites. Phase 4 dissolved into Stories; Phase 5 UI deferred until after Stories |
 | [Staff Inbox & Player Submissions](staff-inbox.md) | in-progress | Staff frontend complete; player-facing submission forms pending (Phase 5b) |
 

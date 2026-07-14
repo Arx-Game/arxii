@@ -162,6 +162,8 @@ treat those names as hints to confirm, not gospel.
 - [0129 — Wind consumes as banded SCENE check modifiers on missile deliveries only](0129-wind-consumes-as-banded-scene-modifiers-on-missile-deliveries.md) (related #1522)
 - [0130 — The combat offense flavor catalog applies to standalone casts; combat rounds deliberately do not consume ActionTemplate.consequence_pool](0130-combat-offense-catalog-is-standalone-cast-only.md) (extends the #1320 magic technique-cast catalog pattern; related ADR-0096)
 - [0131 — Death off-ramp is automated and bounded; no resurrection path exists](0131-death-offramp-is-automated-and-bounded.md) (extends ADR-0040/0049/0076; related ADR-0023, #2287)
+- [0132 — Gods are WorshippedBeing rows with optional avatar sheets, not CharacterSheets](0132-gods-are-worshipped-beings-not-charactersheets.md) (#2355/#2289; fix-on-sight: was missing from this index)
+- [0133 — Estate settlement is player-first and timer-backed; theft moves ownership, never history](0133-estate-settlement-is-player-first-and-timer-backed.md) (extends ADR-0131; reaffirms ADR-0091; related ADR-0113, #1985)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
