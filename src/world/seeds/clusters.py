@@ -36,6 +36,9 @@ def _seed_combat() -> None:
 
 
 def _seed_battles() -> None:
+    from world.battles.seeds import (  # noqa: PLC0415
+        seed_war_funding_contribution_methods,
+    )
     from world.seeds.game_content.battles import (  # noqa: PLC0415
         seed_battle_staging_catalog,
         seed_champion_duel_outcome_wiring,
@@ -49,6 +52,8 @@ def _seed_battles() -> None:
     # Property/CapabilityType rows by name), no ordering dependency on another
     # cluster.
     seed_battle_staging_catalog()
+    # WAR_FUNDING check-based contribution methods (#2382).
+    seed_war_funding_contribution_methods()
 
 
 def _seed_checks() -> None:
