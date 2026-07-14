@@ -2868,9 +2868,11 @@ per `pool_difficulty_step`, capped at `pool_difficulty_max_bonus`.
   - `FoodStockpile` — OneToOne to `Domain`; `stored` balance + `last_collected_at`.
     Lazily created via `get_or_create` in `collect_field_food`.
   - `FoodConfig` — singleton (pk=1) tuning knobs: production rate, consumption
-    per capita, shortage penalties, granary capacity per level, and pool-size
+    per capita, shortage penalties, granary capacity per level, pool-size
     difficulty scaling (`pool_difficulty_threshold` / `pool_difficulty_step` /
-    `pool_difficulty_max_bonus`, #2218).
+    `pool_difficulty_max_bonus`, #2218), and army provisioning knobs
+    (`army_food_per_member` / `max_provisioning_morale_penalty` /
+    `max_provisioning_strength_penalty`, #2375).
 - **Services** (`world.agriculture.services`):
   - `field_production_tick()` — daily cron; accrues `base_production × level ×
     multiplier` into each active Field's `uncollected_pool`.
@@ -2887,6 +2889,14 @@ per `pool_difficulty_step`, capped at `pool_difficulty_max_bonus`.
     prosperity toward `FoodConfig.prosperity_equilibrium` (#2238, recovery drift);
     then rolls `houses.maybe_open_unrest_crisis` per domain. No stockpile row =
     perpetual shortage. Telemetry: `domains_processed` / `shortages` / `crises_opened`.
+  - `provision_army(covenant)` (#2375) — called at battle covenant mobilization
+    (`rise_battle_covenant_via_session`). Counts engaged members, computes
+    `needed = engaged_count × army_food_per_member`, deducts from the covenant's
+    org's domains' `FoodStockpile` reserves (proportionally), and stores the
+    resulting `provisioning_ratio` (0.0–1.0) on `Covenant`. `add_unit()` reads this
+    ratio and reduces the `MilitaryUnit`'s starting morale/strength by
+    `(1 - ratio) × max_penalty`, capped at config knobs, never below 1. Cleared at
+    `stand_down_battle_covenant()`. Fires a narrative message to engaged members.
   - `resolve_domain_for_feature(instance)` — walks `RoomProfile.area` →
     `AreaClosure` ancestor chain to find the `Domain`.
   - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
