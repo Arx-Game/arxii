@@ -86,6 +86,18 @@ class CollectFoodAction(Action):
         except ValueError as exc:
             return ActionResult(success=False, message=str(exc))
 
+        if result.cancelled:
+            return ActionResult(
+                success=False,
+                message="Your collection attempt was thwarted — the food remains in the field.",
+                data={
+                    "gathered": result.gathered,
+                    "landed": result.landed,
+                    "overflow": result.overflow,
+                    "cancelled": True,
+                },
+            )
+
         if result.catastrophe:
             return ActionResult(
                 success=True,

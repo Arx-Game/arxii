@@ -13,7 +13,9 @@ class FoodCollectionResult:
     the attempt); ``landed`` is what reached the stockpile after the
     outcome band; ``overflow`` is what was lost above the Granary's
     capacity; ``success_level`` is the check band that decided it.
-    ``catastrophe`` marks the nothing-lands case.
+    ``catastrophe`` marks the nothing-lands case.  ``cancelled`` marks
+    a pre-collect reactive cancellation (#2218): a trigger cancelled the
+    collection before the check was rolled — the pool was *not* zeroed.
     """
 
     gathered: int
@@ -21,3 +23,4 @@ class FoodCollectionResult:
     overflow: int
     success_level: int
     catastrophe: bool = False
+    cancelled: bool = False

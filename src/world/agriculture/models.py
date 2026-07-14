@@ -145,6 +145,27 @@ class FoodConfig(SharedMemoryModel):
         default=100,
         help_text="Max stored food per Granary level.",
     )
+    # Pool-size difficulty scaling (#2218): a larger accumulated pool is harder
+    # to collect — more food means more laborers, carts, and attention drawn.
+    # All PLACEHOLDER — tune via admin.
+    pool_difficulty_threshold = models.PositiveIntegerField(
+        default=50,
+        help_text=(
+            "Pool size above which difficulty begins to ramp "
+            "(the first 'step' boundary). PLACEHOLDER."
+        ),
+    )
+    pool_difficulty_step = models.PositiveIntegerField(
+        default=50,
+        help_text=(
+            "Each full step of pool size above the threshold adds one "
+            "difficulty point. PLACEHOLDER."
+        ),
+    )
+    pool_difficulty_max_bonus = models.PositiveSmallIntegerField(
+        default=30,
+        help_text=("Cap on the total difficulty bonus from pool size. PLACEHOLDER."),
+    )
 
     class Meta:
         verbose_name = "Food Config"

@@ -44,8 +44,8 @@ class CollectFieldFoodTests(TestCase):
         instance = _make_field(pool=100)
 
         # No check type seeded → success_level defaults to 0 → 85% band
-        # No domain → all overflow
-        result = collect_field_food(MagicMock(), instance)
+        # No domain → all overflow.  location=None so no emit_event dispatch.
+        result = collect_field_food(MagicMock(location=None), instance)
         self.assertIsInstance(result, FoodCollectionResult)
         self.assertEqual(result.gathered, 100)
         self.assertFalse(result.catastrophe)

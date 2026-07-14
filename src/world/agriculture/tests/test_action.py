@@ -35,7 +35,7 @@ class CollectFoodActionTests(TestCase):
         FieldDetails.objects.create(feature_instance=instance, crop_type=crop, uncollected_pool=50)
 
         action = CollectFoodAction()
-        result = action.execute(MagicMock(), field_instance=instance)
+        result = action.execute(MagicMock(location=None), field_instance=instance)
 
         self.assertTrue(result.success)
         self.assertIn("landed", result.data)
@@ -61,7 +61,7 @@ class CollectFoodActionTests(TestCase):
         FieldDetails.objects.create(feature_instance=instance, crop_type=crop, uncollected_pool=0)
 
         action = CollectFoodAction()
-        result = action.execute(MagicMock(), field_instance=instance)
+        result = action.execute(MagicMock(location=None), field_instance=instance)
 
         self.assertFalse(result.success)
 
@@ -96,7 +96,9 @@ class CollectFoodResolutionTests(TestCase):
         from actions.definitions.collect_food import CollectFoodAction
 
         instance = _make_field(pool=50, name="RestField")
-        result = CollectFoodAction().execute(MagicMock(), field_instance_id=instance.pk)
+        result = CollectFoodAction().execute(
+            MagicMock(location=None), field_instance_id=instance.pk
+        )
         self.assertTrue(result.success)
         self.assertIn("landed", result.data)
 
@@ -112,7 +114,7 @@ class CollectFoodResolutionTests(TestCase):
     def test_unknown_field_id_returns_failure(self):
         from actions.definitions.collect_food import CollectFoodAction
 
-        result = CollectFoodAction().execute(MagicMock(), field_instance_id=999999)
+        result = CollectFoodAction().execute(MagicMock(location=None), field_instance_id=999999)
         self.assertFalse(result.success)
         self.assertIn("field", result.message.lower())
 
