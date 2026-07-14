@@ -22,6 +22,11 @@ class NPCAssetModelTests(TestCase):
         self.assertEqual(asset.role_context, AssetRoleContext.INFORMANT)
         self.assertIsNotNone(asset.created_at)
 
+    def test_asset_income_fields_default_to_zero(self) -> None:
+        asset = NPCAssetFactory()
+        self.assertEqual(asset.weekly_income, 0)
+        self.assertEqual(asset.uncollected_pool, 0)
+
     def test_cannot_promote_same_functionary_twice_for_same_promoter(self) -> None:
         promoter = PersonaFactory()
         functionary = FunctionaryFactory()

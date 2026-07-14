@@ -85,6 +85,14 @@ class NPCAsset(SharedMemoryModel):
         choices=AssetStatus.choices,
         default=AssetStatus.ACTIVE,
     )
+    weekly_income = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Coppers accrued per weekly cycle into uncollected_pool (0 = no income).",
+    )
+    uncollected_pool = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Coppers amassed awaiting active collection (#2294). No cap — ADR-0081.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
