@@ -84,11 +84,11 @@ class ThreadTargetGiftIntegrityTests(TestCase):
                     target_gift=self.gift,
                 )  # duplicate (owner, gift), both active
 
-    def test_unique_active_gift_thread_rejects_different_resonance(self) -> None:
-        # The constraint is (owner, target_gift), NOT (owner, resonance, gift):
-        # a second active thread on the same gift at a DIFFERENT resonance is
-        # rejected too (one active GIFT thread per gift — decision 7, #1578).
-        # Multi-resonance is a deferred follow-up (#1619).
+    def test_unique_active_gift_thread_allows_different_resonance(self) -> None:
+        # The constraint is (owner, target_gift, resonance) per #1619:
+        # a second active thread on the same gift at a DIFFERENT resonance
+        # is now allowed (multi-resonance). But a duplicate at the SAME
+        # resonance is still rejected.
         Thread.objects.create(
             owner=self.sheet,
             resonance=self.resonance,
@@ -96,11 +96,19 @@ class ThreadTargetGiftIntegrityTests(TestCase):
             target_gift=self.gift,
         )
         other_resonance = ResonanceFactory()
+        # Different resonance → allowed.
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=other_resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+        )
+        # Same resonance → rejected.
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 Thread.objects.create(
                     owner=self.sheet,
-                    resonance=other_resonance,
+                    resonance=self.resonance,
                     target_kind=TargetKind.GIFT,
                     target_gift=self.gift,
                 )

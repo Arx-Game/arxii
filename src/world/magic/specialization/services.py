@@ -146,7 +146,17 @@ def _active_alt_self_resonance(sheet: CharacterSheet) -> Resonance | None:
 
     Returns ``None`` when no alt-self is active, the active alt-self has no
     ``resonance`` set, or the lookup raises (defensive — never blocks casting).
+
+    Cached per-sheet: the result is stashed on the sheet's ``__dict__`` so
+    multiple calls within the same request (variant resolver + gift_resonances_for)
+    share one DB query rather than re-querying. The cache key is a private
+    attribute name that won't collide with model fields.
     """
+    cache_key = "_alt_self_resonance_cache"
+    cached = sheet.__dict__.get(cache_key, _SHEET_UNSET)
+    if cached is not _SHEET_UNSET:
+        return cached  # type: ignore[return-value]
+
     from world.forms.models import ActiveAlternateSelf  # noqa: PLC0415
 
     try:
@@ -156,13 +166,19 @@ def _active_alt_self_resonance(sheet: CharacterSheet) -> Resonance | None:
             .first()
         )
     except ActiveAlternateSelf.DoesNotExist:
-        return None
+        result = None
+        sheet.__dict__[cache_key] = result
+        return result
     if active is None or active.alternate_self_id is None:
+        sheet.__dict__[cache_key] = None
         return None
     alt = active.alternate_self
     if alt is None:
+        sheet.__dict__[cache_key] = None
         return None
-    return alt.resonance
+    result = alt.resonance
+    sheet.__dict__[cache_key] = result
+    return result
 
 
 def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
