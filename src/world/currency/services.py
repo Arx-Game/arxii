@@ -1101,6 +1101,7 @@ def run_weekly_economy() -> dict[str, int]:
     return {
         "interest": _weekly_interest_accrual(),
         "income": _weekly_income_streams(),
+        "assets": _weekly_asset_income(),
         "debt_service": _weekly_debt_service(),
         "contracts": _weekly_contract_settlement(),
         "wages": _weekly_wages(),
@@ -1163,6 +1164,27 @@ def _weekly_income_streams() -> int:
             count += 1
         except Exception:
             logger.exception("weekly economy: income stream %s failed", stream.pk)
+    return count
+
+
+def _weekly_asset_income() -> int:
+    """Accrue weekly income into each active asset's uncollected pool (#2294).
+
+    Mirrors ``_weekly_income_streams`` for orgs: income amasses in the pool
+    but never lands passively (ADR-0081). No cap — a hoarded pool
+    concentrates collection risk.
+    """
+    from world.assets.constants import AssetStatus  # noqa: PLC0415
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+
+    count = 0
+    for asset in NPCAsset.objects.filter(status=AssetStatus.ACTIVE, weekly_income__gt=0):
+        try:
+            asset.uncollected_pool = asset.uncollected_pool + asset.weekly_income
+            asset.save(update_fields=["uncollected_pool"])
+            count += 1
+        except Exception:
+            logger.exception("weekly economy: asset income %s failed", asset.pk)
     return count
 
 

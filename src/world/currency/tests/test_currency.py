@@ -796,6 +796,20 @@ class WeeklyEconomyTests(TestCase):
         debtor_treasury.refresh_from_db()
         assert debtor_treasury.balance == 100_000
 
+    def test_weekly_economy_accrues_asset_income(self) -> None:
+        """The weekly cron accrues asset weekly_income into uncollected_pool."""
+        from world.assets.factories import NPCAssetFactory
+        from world.currency.services import run_weekly_economy
+
+        asset = NPCAssetFactory(weekly_income=500)
+        asset.uncollected_pool = 0
+        asset.save(update_fields=["uncollected_pool"])
+
+        run_weekly_economy()
+
+        asset.refresh_from_db()
+        assert asset.uncollected_pool == 500
+
     def test_wages_skip_inactive_players(self) -> None:
         from world.currency.models import CharacterEmployment, Profession
         from world.currency.services import get_or_create_purse, run_weekly_economy
