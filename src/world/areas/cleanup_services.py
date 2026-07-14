@@ -110,6 +110,13 @@ def start_cleanup_project(
         threshold_target=None,
         description=f"Area cleanup of {area.name}",
     )
+    # Set the celestial resonance FK if the seed content exists.
+    from world.magic.models.affinity import Resonance  # noqa: PLC0415
+
+    hope = Resonance.objects.filter(name="Hope").first()
+    if hope is not None:
+        project.resonance = hope
+        project.save(update_fields=["resonance"])
     details = CleanupProjectDetails.objects.create(
         project=project,
         target_area=area,
