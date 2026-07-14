@@ -112,7 +112,54 @@ def _get_dominant_affinity_name(performer_sheet: CharacterSheet) -> str:
     return aura.dominant_affinity
 
 
-def perform_atonement_rite(  # noqa: C901
+def _try_resonance_conversion(
+    performer_sheet: CharacterSheet,
+    penance_amount: int | None,
+) -> ConversionResult | None:
+    """Attempt to convert non-native resonance back to Celestial.
+
+    Returns the first ConversionResult, or None if no conversion happened.
+    """
+    from world.magic.exceptions import ConversionMappingError  # noqa: PLC0415
+    from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
+    from world.magic.services.conversion import (  # noqa: PLC0415
+        convert_resonance,
+        get_fall_redemption_config,
+    )
+
+    non_native_rows = CharacterResonance.objects.filter(
+        character_sheet=performer_sheet,
+        balance__gt=0,
+    ).exclude(resonance__affinity__name__iexact=_CELESTIAL_AFFINITY_NAME)
+    non_native_rows = non_native_rows.select_related("resonance__affinity")
+
+    if not non_native_rows.exists():
+        return None
+
+    config = get_fall_redemption_config()
+    converted_results = []
+    seen_affinities: set[str] = set()
+    for cr in non_native_rows:
+        source_affinity = cr.resonance.affinity.name.lower()
+        if source_affinity in seen_affinities:
+            continue
+        seen_affinities.add(source_affinity)
+        try:
+            result = convert_resonance(
+                performer_sheet,
+                source_affinity=source_affinity,
+                target_affinity=_CELESTIAL_AFFINITY_NAME,
+                multiplier=config.penance_exchange_rate,
+                partial=True,
+                penance_amount=penance_amount,
+            )
+            converted_results.append(result)
+        except ConversionMappingError:
+            pass
+    return converted_results[0] if converted_results else None
+
+
+def perform_atonement_rite(
     *,
     performer_sheet: CharacterSheet,
     target_sheet: CharacterSheet,
@@ -160,11 +207,6 @@ def perform_atonement_rite(  # noqa: C901
         AtonementStageOutOfRange: if corruption stage > 2.
         AtonementNothingToAtone: if neither effect is applicable.
     """
-    from world.magic.exceptions import ConversionMappingError  # noqa: PLC0415
-    from world.magic.services.conversion import (  # noqa: PLC0415
-        convert_resonance,
-        get_fall_redemption_config,
-    )
 
     # --- Gate 1: affinity check ---
     dominant = _get_dominant_affinity_name(performer_sheet)
@@ -200,51 +242,9 @@ def perform_atonement_rite(  # noqa: C901
         )
 
     # --- Effect 2: resonance conversion (Celestial with non-native balance) ---
-    from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
-
     resonance_conversion = None
     if dominant == _CELESTIAL_AFFINITY_NAME:
-        # Find non-native resonance rows with balance > 0
-        non_native_rows = CharacterResonance.objects.filter(
-            character_sheet=performer_sheet,
-            balance__gt=0,
-        ).exclude(resonance__affinity__name__iexact=_CELESTIAL_AFFINITY_NAME)
-
-        # Exclude rows that are already Celestial — only convert non-native.
-        # Also exclude the resonance being atoned for from the conversion
-        # if it's already Celestial (it is, since Effect 1 targets corruption
-        # on a potentially non-Celestial resonance).
-        non_native_rows = non_native_rows.select_related("resonance__affinity")
-
-        if non_native_rows.exists():
-            config = get_fall_redemption_config()
-            # Convert each non-native affinity's resonance back to Celestial
-            # For simplicity, group by source affinity and convert each
-            converted_results = []
-            seen_affinities = set()
-            for cr in non_native_rows:
-                source_affinity = cr.resonance.affinity.name.lower()
-                if source_affinity in seen_affinities:
-                    continue
-                seen_affinities.add(source_affinity)
-                try:
-                    result = convert_resonance(
-                        performer_sheet,
-                        source_affinity=source_affinity,
-                        target_affinity=_CELESTIAL_AFFINITY_NAME,
-                        multiplier=config.penance_exchange_rate,
-                        partial=True,
-                        penance_amount=penance_amount,
-                    )
-                    converted_results.append(result)
-                except ConversionMappingError:
-                    # No ResonanceConversion mapping exists for this
-                    # (source_resonance, celestial) pair — skip this affinity.
-                    pass
-            if converted_results:
-                # Return the first conversion result (there should typically
-                # be one — either Primal or Abyssal, rarely both)
-                resonance_conversion = converted_results[0]
+        resonance_conversion = _try_resonance_conversion(performer_sheet, penance_amount)
 
     # --- At least one effect must fire ---
     if corruption_result is None and resonance_conversion is None:

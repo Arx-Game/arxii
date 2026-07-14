@@ -21,6 +21,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.managers import ArxSharedMemoryManager
 from world.magic.types.aura import AffinityType
 
+_RESONANCE_FK = "magic.Resonance"
+_CONFIG_VERBOSE = "Fall / Redemption Config"
+
 
 class CompromiseActType(SharedMemoryModel):
     """Authored act category that grants non-native resonance when performed.
@@ -34,7 +37,7 @@ class CompromiseActType(SharedMemoryModel):
     name = models.CharField(max_length=80, unique=True)
     description = models.TextField(blank=True)
     target_resonance = models.ForeignKey(
-        "magic.Resonance",
+        _RESONANCE_FK,
         on_delete=models.PROTECT,
         related_name="compromise_act_types",
         help_text="The resonance granted by this compromising act.",
@@ -72,7 +75,7 @@ class ResonanceConversion(SharedMemoryModel):
     """
 
     source_resonance = models.ForeignKey(
-        "magic.Resonance",
+        _RESONANCE_FK,
         on_delete=models.PROTECT,
         related_name="conversion_sources",
         help_text="The resonance being converted away from.",
@@ -83,7 +86,7 @@ class ResonanceConversion(SharedMemoryModel):
         help_text="The destination affinity for this conversion path.",
     )
     target_resonance = models.ForeignKey(
-        "magic.Resonance",
+        _RESONANCE_FK,
         on_delete=models.PROTECT,
         related_name="conversion_targets",
         help_text="The resonance the source converts into for this path.",
@@ -170,11 +173,11 @@ class FallRedemptionConfig(SharedMemoryModel):
     )
 
     class Meta:
-        verbose_name = "Fall / Redemption Config"
-        verbose_name_plural = "Fall / Redemption Config"
+        verbose_name = _CONFIG_VERBOSE
+        verbose_name_plural = _CONFIG_VERBOSE
 
     def __str__(self) -> str:
-        return "Fall / Redemption Config"
+        return _CONFIG_VERBOSE
 
 
 class ConversionType(models.TextChoices):
