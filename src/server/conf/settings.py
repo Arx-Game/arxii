@@ -105,6 +105,7 @@ INSTALLED_APPS += [
     "world.vitals.apps.VitalsConfig",
     "world.worship.apps.WorshipConfig",
     "world.ceremonies.apps.CeremoniesConfig",
+    "world.estates.apps.EstatesConfig",
     "world.combat.apps.CombatConfig",
     "world.battles.apps.BattlesConfig",
     "world.gm.apps.GmConfig",
