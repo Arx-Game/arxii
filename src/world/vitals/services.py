@@ -696,6 +696,20 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
     set_lifecycle_state(character_sheet, LifecycleState.DEAD)
     _deliver_death_condolence(character_sheet)
 
+    # Estate settlement window opens at death (#1985); marriage pacts dissolve
+    # (houses' death seam, previously unwired). Lazy imports per the same
+    # convention as the roster propagation above.
+    from world.estates.services import open_settlement  # noqa: PLC0415
+
+    open_settlement(character_sheet)
+
+    from world.roster.models.families import Kinsperson  # noqa: PLC0415
+    from world.societies.houses.services import handle_death_for_pacts  # noqa: PLC0415
+
+    kinsperson = Kinsperson.objects.filter(sheet=character_sheet).first()
+    if kinsperson is not None:
+        handle_death_for_pacts(kinsperson)
+
 
 def _active_scene_at_body(character_sheet: CharacterSheet) -> Scene | None:
     """The active scene at the body's location, if any (#2287).
