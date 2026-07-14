@@ -16,6 +16,17 @@ from world.skills.models import Specialization
 from world.traits.factories import CheckOutcomeFactory
 
 
+def _set_character_location(character, room):
+    """Bypass Evennia's at_db_location_postsave hook (keeps setUpTestData
+    attributes deepcopy-safe — a full .save() stashes an un-deepcopyable
+    DbHolder on the cached instance; see test_dispatch_scene_tick)."""
+    from evennia.objects.models import ObjectDB
+
+    ObjectDB.objects.filter(pk=character.pk).update(db_location=room)
+    character.db_location = room
+    return character
+
+
 @tag("postgres")  # hub/region resolution walks the AreaClosure materialized view
 class SmearActionTests(TestCase):
     @classmethod
@@ -27,9 +38,9 @@ class SmearActionTests(TestCase):
         cls.region = AreaFactory(level=AreaLevel.REGION, realm=cls.realm)
         cls.hub = RoomProfileFactory(area=cls.region, is_social_hub=True)
         cls.smearer_entry = RosterEntryFactory()
-        cls.smearer = cls.smearer_entry.character_sheet.character
-        cls.smearer.location = cls.hub.objectdb
-        cls.smearer.save()
+        cls.smearer = _set_character_location(
+            cls.smearer_entry.character_sheet.character, cls.hub.objectdb
+        )
         gossip_spec = Specialization.objects.get(
             name="Gossip", parent_skill__trait__name="Persuasion"
         )

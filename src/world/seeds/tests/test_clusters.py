@@ -35,6 +35,7 @@ class TestClusterRegistry(TestCase):
                 "security",
                 "perception",
                 "civic_hubs",
+                "counterplay",
                 "building_condition",
                 "kudos",
                 "survivability",

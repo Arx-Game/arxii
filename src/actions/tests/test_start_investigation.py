@@ -20,6 +20,17 @@ from world.roster.factories import RosterEntryFactory
 from world.secrets.factories import SecretFactory
 
 
+def _set_character_location(character, room):
+    """Bypass Evennia's at_db_location_postsave hook (keeps setUpTestData
+    attributes deepcopy-safe — a full .save() stashes an un-deepcopyable
+    DbHolder on the cached instance; see test_dispatch_scene_tick)."""
+    from evennia.objects.models import ObjectDB
+
+    ObjectDB.objects.filter(pk=character.pk).update(db_location=room)
+    character.db_location = room
+    return character
+
+
 class StartInvestigationActionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -29,9 +40,9 @@ class StartInvestigationActionTests(TestCase):
         )
         RoomFeatureInstanceFactory(room_profile=cls.lab_room, feature_kind=lab_kind, level=1)
         cls.entry = RosterEntryFactory()
-        cls.character = cls.entry.character_sheet.character
-        cls.character.location = cls.lab_room.objectdb
-        cls.character.save()
+        cls.character = _set_character_location(
+            cls.entry.character_sheet.character, cls.lab_room.objectdb
+        )
         cls.secret = SecretFactory(subject_sheet=CharacterSheetFactory())
         cls.clue = Clue.objects.create(
             target_kind=ClueTargetKind.SECRET,
@@ -63,8 +74,7 @@ class StartInvestigationActionTests(TestCase):
 
         acquire_clue(self.entry, self.clue)
         elsewhere = RoomProfileFactory()
-        self.character.location = elsewhere.objectdb
-        self.character.save()
+        _set_character_location(self.character, elsewhere.objectdb)
         result = StartInvestigationAction().run(self.character, clue_id=self.clue.pk)
         assert not result.success
 

@@ -20,6 +20,17 @@ from world.societies.factories import LegendEntryFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
+def _set_character_location(character, room):
+    """Bypass Evennia's at_db_location_postsave hook (keeps setUpTestData
+    attributes deepcopy-safe — a full .save() stashes an un-deepcopyable
+    DbHolder on the cached instance; see test_dispatch_scene_tick)."""
+    from evennia.objects.models import ObjectDB
+
+    ObjectDB.objects.filter(pk=character.pk).update(db_location=room)
+    character.db_location = room
+    return character
+
+
 class EvidenceActionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -28,9 +39,7 @@ class EvidenceActionTests(TestCase):
         cls.success = CheckOutcomeFactory(name="ev_act_success", success_level=1)
         cls.room = RoomProfileFactory()
         cls.sheet = CharacterSheetFactory()
-        cls.character = cls.sheet.character
-        cls.character.location = cls.room.objectdb
-        cls.character.save()
+        cls.character = _set_character_location(cls.sheet.character, cls.room.objectdb)
         deed = LegendEntryFactory(scene=SceneFactory(location=cls.room.objectdb))
         tag_deed_crimes(deed, [CrimeKindFactory(slug="theft", name="Theft")])
         cls.evidence = CrimeEvidence.objects.get(deed=deed)
@@ -54,8 +63,7 @@ class EvidenceActionTests(TestCase):
         from actions.definitions.evidence import GatherEvidenceAction
 
         elsewhere = RoomProfileFactory()
-        self.character.location = elsewhere.objectdb
-        self.character.save()
+        _set_character_location(self.character, elsewhere.objectdb)
         result = GatherEvidenceAction().run(self.character, evidence_id=self.evidence.pk)
         assert not result.success
         assert "standing" in result.message
