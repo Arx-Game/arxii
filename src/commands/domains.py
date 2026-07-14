@@ -53,10 +53,11 @@ class CmdDomain(ArxCommand):
         domain improve <domain> cost=<n> [gross=<n>] [prosperity=<n>] [holding=<id>]
         domain appoint <domain> <char> [title=<text>] [check=<trait>]
         domain vacate <domain>
+        domain transfer <source-domain> <target-domain> amount=<n>
 
-    ``holding``/``improve`` require house leadership OR the domain-steward office;
-    ``appoint``/``vacate`` require leadership. Omit ``<domain>`` when you run
-    exactly one.
+    ``holding``/``improve``/``transfer`` require house leadership OR the
+    domain-steward office; ``appoint``/``vacate`` require leadership. Omit
+    ``<domain>`` when you run exactly one.
     """
 
     key = "domain"
@@ -86,10 +87,11 @@ class CmdDomain(ArxCommand):
             "improve": self._improve,
             "appoint": self._appoint,
             "vacate": self._vacate,
+            "transfer": self._transfer,
         }
         handler = handlers.get(first)
         if handler is None:
-            msg = "Usage: domain [list|offices|holding|improve|appoint|vacate] ..."
+            msg = "Usage: domain [list|offices|holding|improve|appoint|vacate|transfer] ..."
             raise CommandError(msg)
         handler(rest)
 
@@ -256,4 +258,33 @@ class CmdDomain(ArxCommand):
 
         domain = self._resolve_domain(" ".join(rest).strip() or None)
         result = VacateDomainOfficeAction().run(actor=self.caller, domain_id=domain.pk)
+        self._send(result)
+
+    def _transfer(self, rest: list[str]) -> None:
+        from actions.definitions.domains import TransferFoodAction  # noqa: PLC0415
+
+        positional, kwargs = _parse_kwargs(rest)
+        if not positional or "amount" not in kwargs:  # noqa: STRING_LITERAL
+            msg = "Usage: domain transfer <source-domain> <target-domain> amount=<n>"
+            raise CommandError(msg)
+        if not kwargs["amount"].isdigit():  # noqa: STRING_LITERAL
+            msg = "Amount must be a positive number."
+            raise CommandError(msg)
+        # Last positional token is the target domain; the rest name the source.
+        target_name = positional[-1]
+        source_name = " ".join(positional[:-1]).strip() or None
+        source = self._resolve_domain(source_name)
+        # Target resolves among ALL domains, not just the caller's administrable ones.
+        from world.societies.houses.models import Domain  # noqa: PLC0415
+
+        target = Domain.objects.filter(name__iexact=target_name).first()
+        if target is None:
+            msg = f"No domain named '{target_name}'."
+            raise CommandError(msg)
+        result = TransferFoodAction().run(
+            actor=self.caller,
+            source_domain_id=source.pk,
+            target_domain_id=target.pk,
+            amount=int(kwargs["amount"]),
+        )
         self._send(result)
