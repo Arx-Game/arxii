@@ -151,8 +151,14 @@ class AltSelfResonanceShiftTests(TestCase):
         )
         self.assertEqual(resolved.name, "Celestial Form")
 
-    def test_gift_resonances_for_returns_alt_self_resonance(self) -> None:
-        """gift_resonances_for returns the alt-self's resonance when active."""
+    def test_gift_resonances_for_returns_thread_resonance_not_alt_self(self) -> None:
+        """gift_resonances_for returns the thread's resonance, not the alt-self's.
+
+        The alt-self resonance override is applied in the variant resolver
+        (_resolve_technique_variant), not in gift_resonances_for — to avoid
+        an extra DB query in the cast pipeline. This test documents that
+        contract: gift_resonances_for always reads from the GIFT thread.
+        """
         self._provision_and_level_thread()
 
         # Before assumption: returns the thread's resonance.
@@ -166,12 +172,13 @@ class AltSelfResonanceShiftTests(TestCase):
         )
         assume_alternate_self(self.sheet, alt)
 
-        # After assumption: returns the alt-self's resonance.
+        # After assumption: still returns the thread's resonance (not alt-self's).
+        # The alt-self override is the resolver's job.
         resonances = gift_resonances_for(self.sheet.character, self.gift)
-        self.assertEqual([r.pk for r in resonances], [self.abyssal.pk])
+        self.assertEqual([r.pk for r in resonances], [self.celestial.pk])
 
-    def test_gift_resonances_for_reverts_after_revert(self) -> None:
-        """gift_resonances_for reverts to the thread's resonance after revert."""
+    def test_gift_resonances_for_unchanged_after_revert(self) -> None:
+        """gift_resonances_for always returns the thread's resonance (no alt-self effect)."""
         self._provision_and_level_thread()
 
         alt = AlternateSelfFactory(

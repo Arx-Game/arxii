@@ -250,3 +250,35 @@ class MultiResonanceTests(TestCase):
             preferred_resonance=self.celestial,
         )
         self.assertEqual(resolved_pref.name, "Celestial Form")
+
+    def test_gift_resonances_for_not_affected_by_alt_self(self) -> None:
+        """gift_resonances_for returns thread resonances, not alt-self resonance.
+
+        The alt-self override lives in the resolver, not gift_resonances_for.
+        """
+        from world.forms.factories import (
+            AlternateSelfFactory,
+            CharacterFormFactory,
+            CharacterFormStateFactory,
+        )
+        from world.forms.models import FormType
+        from world.forms.services import assume_alternate_self
+
+        self._level_thread(self.celestial)
+        self._level_thread(self.abyssal)
+
+        true_form = CharacterFormFactory(
+            character=self.sheet.character, name="True", form_type=FormType.TRUE
+        )
+        CharacterFormStateFactory(character=self.sheet.character, active_form=true_form)
+
+        alt = AlternateSelfFactory(
+            character=self.sheet,
+            resonance=self.abyssal,
+        )
+        assume_alternate_self(self.sheet, alt)
+
+        # gift_resonances_for returns both thread resonances, not the alt-self's.
+        resonances = gift_resonances_for(self.sheet.character, self.gift)
+        pks = {r.pk for r in resonances}
+        self.assertEqual(pks, {self.celestial.pk, self.abyssal.pk})

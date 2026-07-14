@@ -146,17 +146,7 @@ def _active_alt_self_resonance(sheet: CharacterSheet) -> Resonance | None:
 
     Returns ``None`` when no alt-self is active, the active alt-self has no
     ``resonance`` set, or the lookup raises (defensive — never blocks casting).
-
-    Cached per-sheet: the result is stashed on the sheet's ``__dict__`` so
-    multiple calls within the same request (variant resolver + gift_resonances_for)
-    share one DB query rather than re-querying. The cache key is a private
-    attribute name that won't collide with model fields.
     """
-    cache_key = "_alt_self_resonance_cache"
-    cached = sheet.__dict__.get(cache_key, _SHEET_UNSET)
-    if cached is not _SHEET_UNSET:
-        return cached  # type: ignore[return-value]
-
     from world.forms.models import ActiveAlternateSelf  # noqa: PLC0415
 
     try:
@@ -166,19 +156,13 @@ def _active_alt_self_resonance(sheet: CharacterSheet) -> Resonance | None:
             .first()
         )
     except ActiveAlternateSelf.DoesNotExist:
-        result = None
-        sheet.__dict__[cache_key] = result
-        return result
+        return None
     if active is None or active.alternate_self_id is None:
-        sheet.__dict__[cache_key] = None
         return None
     alt = active.alternate_self
     if alt is None:
-        sheet.__dict__[cache_key] = None
         return None
-    result = alt.resonance
-    sheet.__dict__[cache_key] = result
-    return result
+    return alt.resonance
 
 
 def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
@@ -211,16 +195,16 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     if sheet is None:
         return gift.cached_resonances
 
-    # #1619: If an alt-self with a resonance is active, it overrides the
-    # thread's resonance for all gift-resonance reads.
-    alt_resonance = _active_alt_self_resonance(sheet)
-    if alt_resonance is not None:
-        return [alt_resonance]
-
     # #1619: Multi-resonance — return all GIFT thread resonances for this
     # gift. When only one exists (the common case), this is a single-element
     # list (same shape as before). When multiple exist, the caller gets the
     # full set and may present a cast-time picker.
+    #
+    # The alt-self resonance override is NOT applied here — it's applied in
+    # the variant resolver (_resolve_technique_variant), which is the single
+    # place that decides which variant manifests. This avoids an extra DB
+    # query in gift_resonances_for (which is called from multiple cast sites)
+    # and keeps the query-scaling budget intact.
     gift_threads = [
         t
         for t in character.threads.all()
