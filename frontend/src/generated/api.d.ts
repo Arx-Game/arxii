@@ -25142,6 +25142,7 @@ export interface components {
        *     * `fan` - Fan
        *     * `minor_ally` - Minor Ally
        *     * `asset_task_intel` - Asset Task: Intel
+       *     * `asset_task_collect` - Asset Task: Collect
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -25184,6 +25185,7 @@ export interface components {
      *     * `fan` - Fan
      *     * `minor_ally` - Minor Ally
      *     * `asset_task_intel` - Asset Task: Intel
+     *     * `asset_task_collect` - Asset Task: Collect
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -25199,7 +25201,8 @@ export interface components {
       | 'guard'
       | 'fan'
       | 'minor_ally'
-      | 'asset_task_intel';
+      | 'asset_task_intel'
+      | 'asset_task_collect';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -25218,6 +25221,7 @@ export interface components {
        *     * `fan` - Fan
        *     * `minor_ally` - Minor Ally
        *     * `asset_task_intel` - Asset Task: Intel
+       *     * `asset_task_collect` - Asset Task: Collect
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -29014,6 +29018,7 @@ export interface components {
        *     * `fan` - Fan
        *     * `minor_ally` - Minor Ally
        *     * `asset_task_intel` - Asset Task: Intel
+       *     * `asset_task_collect` - Asset Task: Collect
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
