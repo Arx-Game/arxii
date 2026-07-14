@@ -25,7 +25,7 @@ class CovenantAdmin(admin.ModelAdmin):
     list_display = ("name", "covenant_type", "level", "formed_at", "dissolved_at")
     list_filter = ("covenant_type",)
     search_fields = ("name",)
-    readonly_fields = ("formed_at",)
+    readonly_fields = ("formed_at", "provisioning_ratio")
 
 
 @admin.register(CovenantLevelThreshold)
