@@ -18,6 +18,7 @@ from world.agriculture.services.production import (
     field_production_tick,
     get_food_config,
 )
+from world.agriculture.services.provisioning import provision_army
 
 __all__ = [
     "collect_field_food",
@@ -27,5 +28,6 @@ __all__ = [
     "handle_field_progression",
     "handle_granary_progression",
     "max_food_capacity",
+    "provision_army",
     "resolve_domain_for_feature",
 ]
