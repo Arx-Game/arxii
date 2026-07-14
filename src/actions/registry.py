@@ -129,6 +129,7 @@ from actions.definitions.events import (
     ScheduleEventAction,
     StartEventAction,
 )
+from actions.definitions.evidence import DisposeEvidenceAction, GatherEvidenceAction
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
 from actions.definitions.forms import RevertFormAction, ShiftFormAction
@@ -713,6 +714,9 @@ _ALL_ACTIONS: list[Action] = [
     WillReadingAction(),
     # #2295 — voluntary asset sharing: introduce an owned asset to a co-present ally.
     IntroduceAssetAction(),
+    # #1825 — accusation counter-play: the criminal's post-crime evidence moves.
+    GatherEvidenceAction(),
+    DisposeEvidenceAction(),
 ]
 
 # Lookup by key

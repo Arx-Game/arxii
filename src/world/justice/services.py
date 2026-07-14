@@ -19,7 +19,12 @@ from django.db import transaction
 from django.db.models import F
 from django.db.models.functions import Greatest
 
-from world.justice.constants import HEAT_DECAY_PER_DAY, tier_for_value
+from world.justice.constants import (
+    DISPOSED_EVIDENCE_HEAT_FACTOR,
+    HEAT_DECAY_PER_DAY,
+    EvidenceState,
+    tier_for_value,
+)
 from world.justice.models import (
     AccusationCrimeClaim,
     AreaLaw,
@@ -93,11 +98,19 @@ def enforcing_society_for(area: Area | None) -> Society | None:
 
 
 def tag_deed_crimes(deed: LegendEntry, crime_kinds: Iterable[CrimeKind]) -> int:
-    """Idempotently mark ``deed`` as an instance of each crime kind; returns rows created."""
+    """Idempotently mark ``deed`` as an instance of each crime kind; returns rows created.
+
+    A crime-tagged deed with a located scene also leaves physical evidence there
+    (#1825) — the counter-play's raw material (gather → dispose/tamper).
+    """
+    from world.justice.evidence import generate_crime_evidence  # noqa: PLC0415
+
     created = 0
     for kind in crime_kinds:
         _, was_created = DeedCrimeTag.objects.get_or_create(deed=deed, crime_kind=kind)
         created += int(was_created)
+    if created:
+        generate_crime_evidence(deed)
     return created
 
 
@@ -156,14 +169,31 @@ def accrue_for_deed_knowledge(*, deed: LegendEntry, room: ObjectDB, new_knower_c
     area = area_for_room(room)
     if area is None:
         return
+    scale = _evidence_dampened_scale(deed, new_knower_count)
     for kind in kinds:
         accrue_heat(
             persona=deed.persona,
             crime_kind=kind,
             area=area,
             deed=deed,
-            scale=new_knower_count,
+            scale=scale,
         )
+
+
+def _evidence_dampened_scale(deed: LegendEntry, scale: int) -> int:
+    """Dampen heat spread when every piece of the deed's evidence was disposed of (#1825).
+
+    Destroying the trail is the criminal's reward for cleaning up: with ALL
+    evidence DISPOSED, accrual scale drops to ``DISPOSED_EVIDENCE_HEAT_FACTOR``
+    percent (floored at 1 — word of mouth never goes fully cold). A deed that
+    left no evidence (no located scene) is unaffected.
+    """
+    from world.justice.models import CrimeEvidence  # noqa: PLC0415
+
+    rows = list(CrimeEvidence.objects.filter(deed=deed))
+    if not rows or any(row.state != EvidenceState.DISPOSED for row in rows):
+        return scale
+    return max(1, scale * DISPOSED_EVIDENCE_HEAT_FACTOR // 100)
 
 
 def heat_for(persona: Persona, room: ObjectDB, *, include_sources: bool = False) -> HeatReading:
