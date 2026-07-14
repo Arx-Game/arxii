@@ -367,6 +367,31 @@ def abandon_stale_ceremonies() -> None:
         logger.info("Ceremony auto-abandon: %d stale rites closed", count)
 
 
+def auto_settle_estates() -> None:
+    """Settle estates past the window deadline (#1985) — the sweeper door.
+
+    Player-first, timer-backed (spec Decision 2): the funeral and will-reading
+    doors get the full window; if nobody acts, the estate resolves on its own
+    so one idler never blocks everyone else's RP.
+    """
+    from django.utils import timezone
+
+    from world.estates.constants import SettlementDoor, SettlementStatus
+    from world.estates.models import EstateSettlement
+    from world.estates.services import execute_settlement
+
+    due = EstateSettlement.objects.filter(
+        status=SettlementStatus.PENDING,
+        deadline__lt=timezone.now(),
+    ).select_related("character_sheet")
+    count = 0
+    for settlement in due:
+        execute_settlement(settlement.character_sheet, via=SettlementDoor.AUTO)
+        count += 1
+    if count:
+        logger.info("Estate sweeper: %d settlements executed", count)
+
+
 def auto_retire_dead_characters() -> None:
     """Auto-retire dead characters past the grace window (#2287).
 
@@ -760,6 +785,14 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
             callable=abandon_stale_ceremonies,
             interval=timedelta(hours=1),
             description="Auto-abandon OPEN ceremonies whose container closed (#2289).",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="estates.auto_settle",
+            callable=auto_settle_estates,
+            interval=timedelta(hours=1),
+            description="Settle estates past the window deadline (#1985).",
         )
     )
 

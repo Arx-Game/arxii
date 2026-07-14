@@ -451,6 +451,8 @@ class ActionRegistryTests(TestCase):
             "ceremony_speech",
             "ceremony_finish",
             "ceremony_abandon",
+            # #1985 — estates.
+            "will_reading",
             # #1855 — overworld travel / voyages.
             "start_voyage",
             "advance_voyage_leg",

@@ -118,6 +118,7 @@ from actions.definitions.endorsements import (
     SceneEntryEndorseAction,
     StylePresentationEndorseAction,
 )
+from actions.definitions.estates import WillReadingAction
 from actions.definitions.events import (
     CancelEventAction,
     CompleteEventAction,
@@ -707,6 +708,8 @@ _ALL_ACTIONS: list[Action] = [
     CeremonySpeechAction(),
     FinishCeremonyAction(),
     AbandonCeremonyAction(),
+    # #1985 — estates (the executor's will-reading settlement door).
+    WillReadingAction(),
 ]
 
 # Lookup by key
