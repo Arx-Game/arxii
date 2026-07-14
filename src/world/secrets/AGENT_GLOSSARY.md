@@ -19,3 +19,15 @@ _Avoid_: known secret, CharacterSecret, secret grant.
 **Act anchor**:
 The recorded act a secret is the hidden truth behind (#1573) — held as optional FKs on the `Secret` itself (`legend_deed` → `LegendEntry`, `mission_deed` → `MissionDeedRecord`, `scene` → `Scene`). One act = one secret: the act may surface through several of these records at once, but they are co-facets of a single truth, never separate secrets. The distinct *consequences* (legend / criminal / society) are not the anchor — they ride the #1429 reputation payload. The FK lives on the secret (not a back-reference on the record) per ADR-0062.
 _Avoid_: deed link, deed discriminator, one-secret-per-deed, evidence record (the raw-`Interaction` blackmail link is a later slice).
+
+**Smear**:
+The one-move Level-1 accusation through the rumor mill (`plant_smear`, #1825): a single Gossip roll gates hub + skill + the target's hostile consent, mints the ACCUSATION secret, seeds its regional gossip heat, and plants the counter-clue whose difficulty the same roll sets. A miss mints nothing.
+_Avoid_: slander (no such verb), gossip attack.
+
+**Rebuttal**:
+An `AccusationRebuttal` row (#1825): one character's public case against an accusation's credibility — the consentless defense (anyone holding the knowledge may refute at a hub; the Tom/Bob/Fred rule). One attempt per refuter, success or failure; success applies a partial compensating reversal. The full clear is justice-side nullification.
+_Avoid_: disproof (nullification is the proof), counter-accusation (that's denounce, justice-side).
+
+**Compensating reversal**:
+`reverse_secret_exposure` — re-deriving what `expose_secret` applied (diffuse archetype deltas + relational org-victim severities) and bumping the negation, fraction-scaled. Not idempotent; callers own the once-only guard. `societies_exposed` is never un-set: the secret *was* exposed, the world just stops believing it.
+_Avoid_: un-expose, reputation rollback.

@@ -79,7 +79,9 @@ actions, backends, and service functions.
 - **`investigation.py`**: `CmdSearch` (`search`, alias `investigate`, #1866) — a bare
   telnet delegate to the pre-existing `SearchAction` (`actions/definitions/
   investigation.py`), which had zero telnet command before. Mirrors `CmdRest`'s
-  (`fatigue.py`) thin-shell shape.
+  (`fatigue.py`) thin-shell shape. #1825 adds the `search start [<#>]` subverb —
+  list your held RESEARCH-mode leads / dispatch `StartInvestigationAction` (opens
+  the collaborative investigation project at an active LAB).
 - **`outfit.py`**: `CmdOutfit` (`outfit`, #1866) — the outfit CRUD + wear/present
   namespace. One `ArxCommand` routes a leading subverb (`save`/`rename`/`delete`/
   `addslot`/`removeslot`/`wear`/`undress`/`present`) to `SaveOutfitAction`/
@@ -895,10 +897,23 @@ actions, backends, and service functions.
   `/api/tidings/feed/` endpoint calls). Lists recent deeds + scandals the active character's
   societies are aware of, newest first. (`gossip`/`news` are intentionally *not* used — `gossip`
   is reserved for level-1-secret access at hubs, `news` for OOC game news; criers are NPCs.)
+- **`evidence.py` (social/)** (#1825): `CmdEvidence` (`evidence <subverb>`) — the
+  physical-evidence namespace: bare `evidence` lists at-scene leavings of your own
+  deeds + held evidence; `gather [<id>]` / `dispose <id>` / `examine <id>` dispatch the
+  matching evidence Actions by plain-int id; `produce <#>` indexes your known
+  frame-anchored accusations and dispatches `ProduceCaseEvidenceAction`
+  (authority-gated in the service). No business logic in the command.
+- **`accusations.py` (social/)** additions (#1825): `CmdAccuse` gains `/refute [<#>]`
+  (list + dispatch `RefuteAccusationAction` — the consentless defense) and
+  `/denounce [<#>]` (list proven-fabrication authorship facts + dispatch
+  `DenounceFramerAction` — the consent-gated backfire). `CmdFrame` (`frame <char> =
+  <crime-kind> : <the claim>`) opens a frame-job project from your held gathered
+  evidence at a Workshop of Iniquity; bare `frame` lists what you hold.
 - **`gossip.py`**: `CmdGossip` (`gossip`, #1572) — work the rumor mill at a **social hub**. Thin over
   `world.secrets.gossip`: `gossip` (list your gossipable Level-1 secrets + their heat here), `gossip
   seek` (roll to overhear a hot secret you don't know), `gossip plant <#>` (spread it — raises
-  regional heat), `gossip suppress <#>` (lower heat). Gated on Gossip ≥ 1 + standing in an
+  regional heat), `gossip suppress <#>` (lower heat), `gossip smear <char> = <claim>`
+  (#1825 — dispatch `SmearAction`: the one-move L1 accusation through the rumor mill). Gated on Gossip ≥ 1 + standing in an
   `is_social_hub` room (the services enforce both; the command surfaces the skill gate). The reserved
   `gossip` verb the tidings note above set aside.
 - **`entrance_flourish.py`** (#1140/#2183): `CmdEnter` (`enter [<technique>[=<target>]]`) — a

@@ -288,6 +288,26 @@ They do not use the command system, dispatchers, or handlers.
   `CmdSteal` (`steal <item>` / `steal <item> from <container>`, mirrors
   `CmdGet`'s two grammars but always dispatches `StealAction`), `CmdSecure`
   (`secure <container>=<open|friends|owner_only>`).
+  `evidence.py` (#1825) — the accusation counter-play's evidence verbs, all thin over
+  `world.justice`: `GatherEvidenceAction` (`gather_evidence`) / `DisposeEvidenceAction`
+  (`dispose_evidence`) wrap `justice.evidence` (Skulduggery checks; gather mints a real
+  ItemInstance); `StartFrameJobAction` (`start_frame_job`) wraps
+  `justice.frame_jobs.start_frame_job` (Workshop-of-Iniquity-gated FRAME_JOB project,
+  consent-checked at start and re-checked at completion);
+  `ProduceCaseEvidenceAction` (`produce_case_evidence`) / `ExamineEvidenceAction`
+  (`examine_evidence`) wrap `justice.case_file` (authority-gated production; Scrutinize
+  Evidence vs the stored tamper roll). All resolve plain-int `evidence_id`/`secret_id`
+  kwargs themselves (REST shape). Telnet: `CmdEvidence` (`evidence <subverb>`) +
+  `CmdFrame` (`frame`), `src/commands/social/evidence.py`/`accusations.py`.
+  `accusations.py` additionally carries the #1825 counter-play social verbs:
+  `SmearAction` (`smear_accusation`, wraps `secrets.gossip.plant_smear` — the one-move
+  L1 smear; telnet `gossip smear`), `RefuteAccusationAction` (`refute_accusation`,
+  consentless defense; telnet `accuse/refute`), `DenounceFramerAction`
+  (`denounce_framer`, the consent-gated backfire over `justice.denounce`; telnet
+  `accuse/denounce`). `investigation.py` gains `StartInvestigationAction`
+  (`start_investigation`) — the first player start surface for RESEARCH projects:
+  at an active LAB, from a held RESEARCH clue or held frame evidence; telnet
+  `search start [<#>]`.
   `movement.py` (#2163) — alongside the existing `GetAction`/`DropAction`/`GiveAction`/
   `TraverseExitAction`/`HomeAction`, the "go there" auto-walk pair: `TravelAction`
   (key `"travel_to"`, `target_type=SINGLE`) computes a route via

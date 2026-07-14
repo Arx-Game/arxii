@@ -1081,6 +1081,13 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
   into pursuit heat justice-side via `AccusationCrimeClaim` + `file_criminal_accusation`
   (see Justice, #1825) — wild L2 (named crime, no real deed → easily refuted) vs L3 frame
   (a real deed pinned on someone who didn't do it → robust)
+- **Counter-play, secrets side (#1825):** `gossip.plant_smear` (one-move L1 smear:
+  Gossip roll gates mint + heat seed + counter-clue; `SmearAction`, `gossip smear`),
+  `gossip.refute_accusation` + `AccusationRebuttal` (the consentless defense — partial
+  compensating reversal; `RefuteAccusationAction`, `accuse/refute`),
+  `reverse_secret_exposure` (the shared compensating-bump seam; full reversal =
+  justice's nullification), public `hub_region_for`/`societies_for_region` seams.
+  The evidence/frame/nullify/denounce/case-file machinery is justice-side (see Justice)
 - **Discovery:** secrets are a `Clue` `target_kind` (`SECRET` + `target_secret` FK) — found
   through the same Search / `acquire_clue` loop; `grant_clue_target` teaches the fact
 - **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
@@ -1102,12 +1109,22 @@ heat; identity-association copies it (`associate_heat` — the #1334 outing seam
   (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society), `HeatSource`
   (allegation provenance — false accusations are emergent, never flagged),
   `AccusationCrimeClaim` (→ `secrets.Secret` — the frame-job→heat bridge; `real_deed`
-  null = wild L2, set = L3 frame for a real crime, #1825)
+  null = wild L2, set = L3 frame for a real crime; `retracted_at` set by
+  nullification, #1825), `CrimeEvidence` (physical evidence a crime-tagged deed
+  left at its scene; → `items.ItemInstance` when gathered; states
+  AT_SCENE→GATHERED→TAMPERING→OFF_GRID→PRODUCED/DISPOSED), `FrameJobDetails`
+  (FRAME_JOB Project payload), `AccusationNullification` (proven-fabrication
+  record + the authorship secret), `DenounceRecord` (once-only backfire guard)
 - **Key functions (`world/justice/services.py`):** `law_for`, `enforcing_society_for`,
-  `accrue_heat`, `accrue_for_deed_knowledge`, `heat_for`, `associate_heat`,
-  `tag_deed_crimes`, `heat_decay_tick` (daily cron); accusation bridge (#1825):
-  `record_accusation_crime`, `accrue_accusation_heat`, `file_criminal_accusation`
-  (composes `secrets.mint_accusation` + claim + heat — justice→secrets, ADR-0010)
+  `accrue_heat`, `accrue_for_deed_knowledge` (evidence-disposal dampener), `heat_for`,
+  `associate_heat`, `tag_deed_crimes` (+ evidence generation), `heat_decay_tick`
+  (daily cron); accusation bridge (#1825): `record_accusation_crime`,
+  `accrue_accusation_heat` (skips retracted claims), `file_criminal_accusation`
+  (composes `secrets.mint_accusation` + claim + heat — justice→secrets, ADR-0010);
+  counter-play (#1825): `evidence.generate_crime_evidence`/`gather_evidence`/
+  `dispose_evidence`, `frame_jobs.start_frame_job`/`resolve_frame_job` (FRAME_JOB
+  handler), `nullification.nullify_accusation`, `denounce.denounce_framer`,
+  `case_file.has_local_authority`/`produce_case_evidence`/`examine_evidence`
 - **Writers:** deed-knowledge seam (`grant_deed_knowledge(room=…)`); mission report
   CRIME_WATCH sink (`missions.integrations.crime_watch.flag_crime` + the
   MOSTLY_ACCURATE dodge + masked-report association chance)

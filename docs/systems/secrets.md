@@ -262,7 +262,30 @@ scandals) — gossip is the **pre-exposure, skill-gated** tier, modelled as a **
   `expose_secret` to the **societies matching the region** — bridging this casual tier into the
   formal reputation/`tidings` engine. All magnitudes are PLACEHOLDER.
 - **Telnet:** `gossip` (`commands/social/gossip.py`) — `gossip` (list), `gossip seek`, `gossip plant
-  <#>`, `gossip suppress <#>`. The reserved `gossip` verb.
+  <#>`, `gossip suppress <#>`, `gossip smear <char> = <claim>`. The reserved `gossip` verb.
+
+## Accusation counter-play — the secrets-side verbs (#1825)
+
+The offense/defense pair riding this app (the justice side — evidence, frame jobs,
+nullification, denounce, case file — is in `docs/systems/justice.md`):
+
+- **Smear** (`gossip.plant_smear` / `SmearAction` `smear_accusation` / `gossip smear`): the
+  one-move L1 tier — one Gossip roll gates hub + skill + the target's `hostile` consent,
+  mints the ACCUSATION secret, seeds its regional heat, and plants the counter-clue
+  (`clues.create_accusation_counter_clue`, difficulty seeded from the roll — the
+  cost-to-mint ↔ difficulty-to-disprove dial). A miss mints nothing.
+- **Refute** (`gossip.refute_accusation` / `RefuteAccusationAction` / `accuse/refute`,
+  `AccusationRebuttal`): the **consentless defense** (Tom/Bob/Fred rule) — anyone holding
+  knowledge of an ACCUSATION may attack its credibility at a hub; a level-scaled check;
+  success applies a **partial** compensating reversal via `reverse_secret_exposure`
+  (nullification is the full clear). One attempt per refuter, success or failure.
+- **`reverse_secret_exposure(secret, *, numerator, denominator)`**: the compensating-bump
+  seam refutation (partial) and justice's nullification (full) share — re-derives both
+  exposure channels (diffuse via `societies.compute_archetype_society_delta`, relational
+  org-victim severities) against `societies_exposed` and bumps the negation. NOT
+  idempotent; callers own the once-only guard.
+- Public hub seams: `hub_region_for(room)` / `societies_for_region(region)` (consumed by
+  justice's denounce).
 
 ## Boundary with Codex
 
