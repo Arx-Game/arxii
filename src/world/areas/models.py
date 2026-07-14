@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import connection, models
+from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.areas.constants import AreaLevel
@@ -150,6 +151,92 @@ class AreaClosure(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.ancestor_id} -> {self.descendant_id} (depth {self.depth})"
+
+
+class AreaQuality(SharedMemoryModel):
+    """Per-Area quality stat (sidecar, ADR-0010 — Area stays dependency-free).
+
+    Quality 0-5 (3 = Ordinary). Raised by CLEANUP projects, eroded by crime
+    and combat, decays/regains via weekly sweep.
+    """
+
+    area = models.OneToOneField(
+        Area,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="quality",
+    )
+    quality = models.PositiveSmallIntegerField(default=3)
+    condition_since = models.DateTimeField(default=timezone.now)
+
+    def __str__(self) -> str:
+        return f"{self.area}: quality {self.quality}"
+
+
+class CleanupProjectDetails(SharedMemoryModel):
+    """Per-(CLEANUP Project) details payload (#1889).
+
+    A TIERED_PERIOD project targeting a neighborhood Area. Players contribute
+    over a period; at the deadline progress is graded into a CheckOutcome tier
+    via CleanupTierThreshold rows, and the tier's quality_delta bumps
+    AreaQuality.
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="cleanup_details",
+    )
+    target_area = models.ForeignKey(
+        Area,
+        on_delete=models.PROTECT,
+        related_name="cleanup_projects",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the quality bump was applied; NULL until the handler runs.",
+    )
+
+    def __str__(self) -> str:
+        return f"Cleanup#{self.project_id}: {self.target_area}"
+
+
+class CleanupTierThreshold(SharedMemoryModel):
+    """A progress band on a CleanupProjectDetails that grants a CheckOutcome tier.
+
+    Tier reached at deadline = highest min_progress row whose
+    min_progress <= project.current_progress. The quality_delta field
+    determines how much AreaQuality rises for this tier.
+    """
+
+    details = models.ForeignKey(
+        CleanupProjectDetails,
+        on_delete=models.CASCADE,
+        related_name="tier_thresholds",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="cleanup_thresholds",
+    )
+    min_progress = models.PositiveIntegerField()
+    quality_delta = models.PositiveSmallIntegerField(
+        help_text="How much quality rises if this tier is reached.",
+    )
+
+    class Meta:
+        ordering = ["-min_progress"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["details", "outcome_tier"],
+                name="uniq_cleanup_tier",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier} @ {self.min_progress} (+{self.quality_delta})"
 
 
 def refresh_area_closure() -> None:
