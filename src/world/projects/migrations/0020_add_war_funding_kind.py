@@ -1,0 +1,105 @@
+# Generated for #1890
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("projects", "0019_add_city_defense_kind"),
+    ]
+
+    operations = [
+        migrations.AlterField(
+            model_name="contributionmethod",
+            name="kind",
+            field=models.CharField(
+                choices=[
+                    ("BUILDING_CONSTRUCTION", "Building Construction"),
+                    ("BUILDING_EXTENSION", "Building Extension"),
+                    ("BUILDING_PREPARATION", "Building Preparation"),
+                    ("BUILDING_RENOVATION", "Building Renovation"),
+                    ("BUILDING_UPGRADE", "Building Upgrade"),
+                    ("DOMAIN_IMPROVEMENT", "Domain Improvement"),
+                    ("FORTIFICATION_UPGRADE", "Fortification Upgrade"),
+                    ("INTERIOR_DESIGN", "Interior Design"),
+                    ("ROOM_FEATURE_PROGRESSION", "Room Feature Progression"),
+                    ("ROOM_DEFENSE_INSTALLATION", "Room Defense Installation"),
+                    ("RESEARCH", "Research"),
+                    ("RANSOM", "Ransom"),
+                    ("SHIP_CONSTRUCTION", "Ship Construction"),
+                    ("SHIP_UPGRADE", "Ship Upgrade"),
+                    ("SHIP_REPAIR", "Ship Repair"),
+                    ("TEST_KIND", "Test Kind (framework tests only)"),
+                    ("GANG_TURF", "Gang Turf"),
+                    ("ORGANIZATION_CAPABILITY", "Organization Capability"),
+                    ("PROPAGANDA", "Propaganda Campaign"),
+                    ("CITY_DEFENSE", "City Defense"),
+                    ("WAR_FUNDING", "War Funding"),
+                ],
+                help_text="The ProjectKind whose projects offer this contribution method.",
+                max_length=40,
+            ),
+        ),
+        migrations.AlterField(
+            model_name="project",
+            name="kind",
+            field=models.CharField(
+                choices=[
+                    ("BUILDING_CONSTRUCTION", "Building Construction"),
+                    ("BUILDING_EXTENSION", "Building Extension"),
+                    ("BUILDING_PREPARATION", "Building Preparation"),
+                    ("BUILDING_RENOVATION", "Building Renovation"),
+                    ("BUILDING_UPGRADE", "Building Upgrade"),
+                    ("DOMAIN_IMPROVEMENT", "Domain Improvement"),
+                    ("FORTIFICATION_UPGRADE", "Fortification Upgrade"),
+                    ("INTERIOR_DESIGN", "Interior Design"),
+                    ("ROOM_FEATURE_PROGRESSION", "Room Feature Progression"),
+                    ("ROOM_DEFENSE_INSTALLATION", "Room Defense Installation"),
+                    ("RESEARCH", "Research"),
+                    ("RANSOM", "Ransom"),
+                    ("SHIP_CONSTRUCTION", "Ship Construction"),
+                    ("SHIP_UPGRADE", "Ship Upgrade"),
+                    ("SHIP_REPAIR", "Ship Repair"),
+                    ("TEST_KIND", "Test Kind (framework tests only)"),
+                    ("GANG_TURF", "Gang Turf"),
+                    ("ORGANIZATION_CAPABILITY", "Organization Capability"),
+                    ("PROPAGANDA", "Propaganda Campaign"),
+                    ("CITY_DEFENSE", "City Defense"),
+                    ("WAR_FUNDING", "War Funding"),
+                ],
+                help_text="Discriminator selecting which per-kind details model applies.",
+                max_length=40,
+            ),
+        ),
+        migrations.AlterField(
+            model_name="projectkindresonanceaward",
+            name="kind",
+            field=models.CharField(
+                choices=[
+                    ("BUILDING_CONSTRUCTION", "Building Construction"),
+                    ("BUILDING_EXTENSION", "Building Extension"),
+                    ("BUILDING_PREPARATION", "Building Preparation"),
+                    ("BUILDING_RENOVATION", "Building Renovation"),
+                    ("BUILDING_UPGRADE", "Building Upgrade"),
+                    ("DOMAIN_IMPROVEMENT", "Domain Improvement"),
+                    ("FORTIFICATION_UPGRADE", "Fortification Upgrade"),
+                    ("INTERIOR_DESIGN", "Interior Design"),
+                    ("ROOM_FEATURE_PROGRESSION", "Room Feature Progression"),
+                    ("ROOM_DEFENSE_INSTALLATION", "Room Defense Installation"),
+                    ("RESEARCH", "Research"),
+                    ("RANSOM", "Ransom"),
+                    ("SHIP_CONSTRUCTION", "Ship Construction"),
+                    ("SHIP_UPGRADE", "Ship Upgrade"),
+                    ("SHIP_REPAIR", "Ship Repair"),
+                    ("TEST_KIND", "Test Kind (framework tests only)"),
+                    ("GANG_TURF", "Gang Turf"),
+                    ("ORGANIZATION_CAPABILITY", "Organization Capability"),
+                    ("PROPAGANDA", "Propaganda Campaign"),
+                    ("CITY_DEFENSE", "City Defense"),
+                    ("WAR_FUNDING", "War Funding"),
+                ],
+                max_length=40,
+                unique=True,
+            ),
+        ),
+    ]

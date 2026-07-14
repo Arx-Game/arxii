@@ -1,1 +1,1 @@
-0019_add_city_defense_kind
+0020_add_war_funding_kind
