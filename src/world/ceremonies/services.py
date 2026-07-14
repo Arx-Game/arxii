@@ -289,12 +289,16 @@ def abandon_ceremony(*, ceremony: Ceremony) -> Ceremony:
 
 
 def execute_will(character_sheet: "CharacterSheet") -> None:
-    """Execute the deceased's will — NO-OP SEAM for #1985 (wills & estates).
+    """Execute the deceased's estate — the funeral door of #1985.
 
-    A funeral's finish calls this per honoree; #1985 replaces the body with the
-    real bequest machinery. Deliberately does nothing today (spec Decision 5).
+    A funeral's finish calls this per honoree. Delegates to the single
+    idempotent settlement path; an already-settled (or never-opened) estate
+    is a quiet no-op, so honoring a long-dead character stays safe.
     """
-    logger.info("Will-execution seam invoked for %s (no-op until #1985).", character_sheet)
+    from world.estates.constants import SettlementDoor  # noqa: PLC0415
+    from world.estates.services import execute_settlement  # noqa: PLC0415
+
+    execute_settlement(character_sheet, via=SettlementDoor.FUNERAL)
 
 
 def open_funeral_for(character_sheet: "CharacterSheet") -> Ceremony | None:

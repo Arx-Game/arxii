@@ -84,4 +84,6 @@ urlpatterns = [
     # Worship + ceremonies (#2355/#2289)
     path("worship/", include("world.worship.urls", namespace="worship")),
     path("ceremonies/", include("world.ceremonies.urls", namespace="ceremonies")),
+    # Wills & estate settlement (#1985)
+    path("estates/", include("world.estates.urls", namespace="estates")),
 ]

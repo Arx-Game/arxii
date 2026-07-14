@@ -27,6 +27,7 @@ from world.items.exceptions import (
     NotInPossession,
     NotReachable,
     OwnedByAnother,
+    RecipientConsentDenied,
     RecipientNotAdjacent,
     TheftNotPermitted,
     VaultAccessDenied,
@@ -55,6 +56,42 @@ def _active_tenure_for_sheet(sheet: CharacterSheet) -> RosterTenure | None:
         roster_entry__character_sheet=sheet,
         end_date__isnull=True,
     ).first()
+
+
+def _require_hot_goods_consent(recipient: CharacterState, item_instance: ItemInstance) -> None:
+    """Refuse transferring a hot item to a consent-off recipient (#1985).
+
+    An item is hot when its latest theft was never resolved (the victim never
+    got it back). The recipient's ``receiving-stolen-goods`` consent gates the
+    transfer; the raised message is category-generic so neither party learns
+    the item's provenance from the refusal. NPC recipients (no live tenure)
+    are unaffected — consent is a player-protection surface.
+    """
+    recipient_sheet = getattr(recipient.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if recipient_sheet is None:
+        return
+    recipient_tenure = _active_tenure_for_sheet(recipient_sheet)
+    if recipient_tenure is None:
+        return
+    from world.items.services.provenance import (  # noqa: PLC0415
+        has_unresolved_stolen_provenance,
+    )
+
+    if not has_unresolved_stolen_provenance(item_instance):
+        return
+    from world.consent.services import (  # noqa: PLC0415
+        consent_blocks_targeting,
+        receiving_stolen_goods_category,
+    )
+
+    giver_sheet = item_instance.holder_character_sheet
+    giver_tenure = _active_tenure_for_sheet(giver_sheet) if giver_sheet is not None else None
+    if consent_blocks_targeting(
+        owner_tenure=recipient_tenure,
+        category=receiving_stolen_goods_category(),
+        actor_tenure=giver_tenure,
+    ):
+        raise RecipientConsentDenied
 
 
 def _container_policy_denies(taker_sheet: CharacterSheet, container_instance: ItemInstance) -> bool:
@@ -317,6 +354,7 @@ def give(
         raise NotInPossession
     if recipient.obj.location != giver.obj.location:
         raise RecipientNotAdjacent
+    _require_hot_goods_consent(recipient, item.instance)
 
     previous_holder_sheet = item.instance.holder_character_sheet
     # Snapshot rows before iteration — unequip_item deletes them as we go.

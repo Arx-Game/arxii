@@ -235,6 +235,20 @@ class RecipientNotAdjacent(InventoryError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"They are not here to receive it."})
 
 
+class RecipientConsentDenied(InventoryError):
+    """The recipient's consent settings refuse this transfer (#1985).
+
+    Deliberately category-generic: the message must never reveal WHY the
+    transfer was refused (naming the stolen-goods category would leak the
+    item's hot provenance to both parties).
+    """
+
+    user_message = "Their consent settings do not permit this transfer."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"Their consent settings do not permit this transfer."}
+    )
+
+
 class NotReachable(InventoryError):
     user_message = "You can't reach that."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"You can't reach that."})

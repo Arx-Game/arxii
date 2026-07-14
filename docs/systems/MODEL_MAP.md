@@ -577,6 +577,7 @@
   - weather_state <- weather.RegionWeatherState
   - market_squares <- items.MarketSquare
   - battles <- battles.Battle
+  - city_defense_projects <- battles.CityDefenseDetails
   - default_permits_offered <- npc_services.PermitOfferDetails
   - building_profile <- buildings.Building
   - building_permits_valid_in <- buildings.BuildingPermitDetails
@@ -701,9 +702,26 @@
 **Pointed to by:**
   - granted_assets <- assets.NPCAsset
 
+### AssetTaskIntelDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - clue_pool -> assets.CluePool [FK]
+
+### CluePool
+**Pointed to by:**
+  - intel_task_offers <- assets.AssetTaskIntelDetails
+  - entries <- assets.CluePoolEntry
+
+### CluePoolEntry
+**Foreign Keys:**
+  - pool -> assets.CluePool [FK]
+  - clue -> clues.Clue [FK]
+
 ### Service Functions
 - `coerce_into_asset(*, coercer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a blackmailed NPC as a COERCION ``NPCAsset`` (#1680).`
 - `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
+- `transition_asset_status(asset: 'NPCAsset', new_status: 'str', *, reason: 'str' = AssetTransitionReason.CONSEQUENCE) -> 'None' — Transition an NPCAsset's status, enforcing the legal-transition matrix.`
+- `transition_assets_for_dead_character(dead_character) -> 'None' — Transition all ACTIVE assets belonging to a dead character to LOST.`
 
 
 ## world.battles
@@ -863,6 +881,23 @@
   - template -> battles.BattleUnitTemplate [FK]
   - capability -> conditions.CapabilityType [FK]
 
+### CityDefenseDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - area -> areas.Area [FK]
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
+**Pointed to by:**
+  - tier_thresholds <- battles.CityDefenseTierThreshold
+
+### CityDefenseTierThreshold
+**Foreign Keys:**
+  - details -> battles.CityDefenseDetails [FK]
+  - outcome_tier -> traits.CheckOutcome [FK]
+
+### CityDefenseIntegrityBonus
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
 ### Service Functions
 - `activate_stakes_for_battle(battle: 'Battle') -> 'None' — Lock any staked beats' contracts for this battle's enlisted party.`
 - `add_place(*, battle: 'Battle', name: 'str', terrain_type: 'str' = TerrainType.OPEN, movement_cost: 'int' = 1, x: 'Decimal' = Decimal('0'), y: 'Decimal' = Decimal('0'), footprint_radius: 'Decimal' = Decimal('1')) -> 'BattlePlace' — Add a named front/zone to a battle.`
@@ -949,6 +984,7 @@
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
   - source_project -> projects.Project [OneToOne] (nullable)
 **Pointed to by:**
+  - bequests <- estates.Bequest
   - battle_fortifications <- battles.Fortification
   - materials_used <- buildings.BuildingMaterial
   - extension_details <- buildings.BuildingExtensionDetails
@@ -1375,6 +1411,8 @@
   - devotion_standings <- worship.DevotionStanding
   - worship_declaration <- worship.WorshipDeclaration
   - ceremony_honors <- ceremonies.CeremonyHonoree
+  - will <- estates.Will
+  - estate_settlement <- estates.EstateSettlement
   - duels_won <- combat.CombatEncounter
   - summoned_combatants <- combat.CombatOpponent
   - combo_learnings <- combat.ComboLearning
@@ -1585,6 +1623,7 @@
   - target_persona -> scenes.Persona [FK] (nullable)
   - target_persona_linked -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
+  - pool_entries <- assets.CluePoolEntry
   - held_by <- clues.CharacterClue
   - research_projects <- clues.ResearchProjectDetails
   - room_placements <- clues.RoomClue
@@ -2479,6 +2518,7 @@
 - `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool', is_rival: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
 - `effective_consent_mode(pref: 'SocialConsentPreference | None', category: 'SocialConsentCategory') -> 'str' — The ConsentMode governing *(pref, category)* after tree inheritance (#2170).`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
+- `receiving_stolen_goods_category() -> 'SocialConsentCategory' — Lazy seeded row for the hot-goods receipt gate (#1985) — default-deny.`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
@@ -2763,6 +2803,8 @@
 ### Business
 **Foreign Keys:**
   - owner_persona -> scenes.Persona [FK]
+**Pointed to by:**
+  - bequests <- estates.Bequest
 
 ### Service Functions
 - `accrue_income_stream(stream: 'OrgIncomeStream') -> 'int' — One weekly cycle: the gross amasses in the uncollected pool (#930).`
@@ -3162,6 +3204,8 @@
   - crafted_recipes <- items.CraftedItemRecipe
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
+  - bequests <- estates.Bequest
+  - estate_claims <- estates.EstateClaim
   - project_contributions <- projects.Contribution
   - building_permit_details <- buildings.BuildingPermitDetails
 
@@ -5005,6 +5049,7 @@
   - role -> npc_services.NPCRole [FK]
   - check_type -> checks.CheckType [FK] (nullable)
 **Pointed to by:**
+  - asset_task_intel_details <- assets.AssetTaskIntelDetails
   - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
   - cooldowns <- npc_services.OfferCooldown
   - mission_offer_details <- npc_services.MissionOfferDetails
@@ -5371,6 +5416,7 @@
   - org_capability_details <- societies.OrganizationCapabilityProjectDetails
   - research_details <- clues.ResearchProjectDetails
   - ransom_captivities <- captivity.Captivity
+  - city_defense_details <- battles.CityDefenseDetails
   - contributions <- projects.Contribution
   - resulting_building <- buildings.Building
   - building_extension_details <- buildings.BuildingExtensionDetails
@@ -5920,6 +5966,9 @@
   - ceremonies_officiated <- ceremonies.Ceremony
   - ceremony_offerings <- ceremonies.CeremonyOffering
   - ceremony_speeches <- ceremonies.CeremonySpeech
+  - executor_duties <- estates.WillExecutor
+  - bequests_received <- estates.Bequest
+  - estate_claims <- estates.EstateClaim
   - combat_opponents <- combat.CombatOpponent
   - gm_table_memberships <- gm.GMTableMembership
   - mission_invites_received <- missions.MissionInvite
@@ -5944,6 +5993,8 @@
   - constructed_ships <- ships.ShipConstructionDetails
   - led_voyages <- travel.Voyage
   - voyage_participations <- travel.VoyageParticipant
+  - voyage_invites_received <- travel.VoyageInvite
+  - voyage_invites_sent <- travel.VoyageInvite
   - founded_vaults <- room_features.VaultDetails
   - vault_access_entries <- room_features.VaultAccessEntry
   - vault_access_granted <- room_features.VaultAccessEntry
@@ -6448,6 +6499,8 @@
   - hosted_stalls <- items.MarketStall
   - event_invitations <- events.EventInvitation
   - covenant <- covenants.Covenant
+  - bequests_received <- estates.Bequest
+  - estate_claims <- estates.EstateClaim
   - gemits <- narrative.Gemit
   - npc_roles <- npc_services.NPCRole
   - loan_offers <- npc_services.LoanOfferDetails
@@ -7060,12 +7113,13 @@
 
 ### Stake
 **Foreign Keys:**
-  - beat -> stories.Beat [FK]
-  - template -> stories.StakeTemplate [FK] (nullable)
   - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - subject_item -> items.ItemInstance [FK] (nullable)
   - subject_society -> societies.Society [FK] (nullable)
   - subject_organization -> societies.Organization [FK] (nullable)
+  - subject_asset -> assets.NPCAsset [FK] (nullable)
+  - beat -> stories.Beat [FK]
+  - template -> stories.StakeTemplate [FK] (nullable)
 **Pointed to by:**
   - routing_for_transitions <- stories.TransitionRequiredOutcome
   - resolutions <- stories.StakeResolution
@@ -7105,11 +7159,12 @@
 
 ### StoryProtectedSubject
 **Foreign Keys:**
-  - story -> stories.Story [FK]
   - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - subject_item -> items.ItemInstance [FK] (nullable)
   - subject_society -> societies.Society [FK] (nullable)
   - subject_organization -> societies.Organization [FK] (nullable)
+  - subject_asset -> assets.NPCAsset [FK] (nullable)
+  - story -> stories.Story [FK]
   - beat -> stories.Beat [FK] (nullable)
 **Pointed to by:**
   - clearances <- stories.CustodyClearance
@@ -7179,6 +7234,9 @@
   - consequences <- checks.Consequence
   - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
   - battle_outcome_mappings <- battles.BattleOutcomeMapping
+  - city_defense_projects <- battles.CityDefenseDetails
+  - city_defense_thresholds <- battles.CityDefenseTierThreshold
+  - battles_citydefenseintegritybonus <- battles.CityDefenseIntegrityBonus
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution
 

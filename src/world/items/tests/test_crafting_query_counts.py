@@ -222,9 +222,14 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # forms.models into items.models changed identity-map warm-up
             # ordering, adding one constant SELECT (not a per-row N+1).
             # Postgres 86→88; SQLite 87→89.
+            # +2 (both vendors, #1985): EstateClaim.item PROTECT adds one
+            # collect SELECT and Bequest.item SET_NULL adds one constant UPDATE
+            # when a material ItemInstance is consumed — same shape as the
+            # #2066 market cascades; neither scales with claim/bequest rows.
+            # Postgres 88→90; SQLite 89→91.
             from django.db import connection
 
-            expected = 88 if connection.vendor == "postgresql" else 89
+            expected = 90 if connection.vendor == "postgresql" else 91
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,

@@ -93,6 +93,19 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         ConsentMode.ALLOWLIST,
     ),
     (
+        "receiving-stolen-goods",
+        "Receiving Stolen Goods",
+        # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #1985):
+        "Whether hot items — stolen and never recovered — may be given, sold, or "
+        "bequeathed to you. Opting in acknowledges that reclamation RP may someday "
+        "come looking for what you hold; your character stays honestly unaware.",
+        28,
+        # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept at ALLOWLIST so the
+        # lazy `receiving_stolen_goods_category()` fallback (unseeded) and any orphaned
+        # row stay strict (mirrors theft, #1985).
+        ConsentMode.ALLOWLIST,
+    ),
+    (
         "manipulative",
         "Manipulative",
         "Deceptive, persuasive, or psychologically influencing social actions "
@@ -120,6 +133,7 @@ _CATEGORY_PARENTS: dict[str, str] = {
     "manipulative": "antagonism",
     "theft": "antagonism",
     "secret-investigation": "antagonism",
+    "receiving-stolen-goods": "antagonism",
 }
 
 # ActionTemplate.name → category key

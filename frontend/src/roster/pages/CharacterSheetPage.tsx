@@ -24,6 +24,7 @@ import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
 import { SpellbookTab } from '@/magic/components/SpellbookTab';
 import { LocationsTab } from '@/locations/components/LocationsTab';
+import { AgreementsPanel } from '@/estates/components/AgreementsPanel';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -115,6 +116,7 @@ export function CharacterSheetPage() {
           {isMyCharacter && <TabsTrigger value="crime">Crime</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="friends">Friends</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="locations">Locations</TabsTrigger>}
+          {isMyCharacter && <TabsTrigger value="agreements">Agreements</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="sheet" className="space-y-4">
@@ -241,6 +243,16 @@ export function CharacterSheetPage() {
                 that section off when viewing a non-active character owned by this account.
                 Radix unmounts inactive tabs, so these queries only fire when opened. */}
             <LocationsTab personaId={viewedPersonaId} isActiveCharacter={isActiveCharacter} />
+          </TabsContent>
+        )}
+
+        {isMyCharacter && (
+          <TabsContent value="agreements" className="space-y-4">
+            {/* Agreements hub (#1985): binding declarations that fire later. V1 content is
+                the will (bequests, executors, testament) plus executor/claim surfaces;
+                vows, oaths, treaties, and pacts join as they ship. Sheet pk == character
+                ObjectDB pk (OneToOne shares pk). */}
+            <AgreementsPanel characterSheetId={entry.character.id} />
           </TabsContent>
         )}
       </Tabs>

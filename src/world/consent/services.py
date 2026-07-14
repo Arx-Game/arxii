@@ -294,6 +294,24 @@ def theft_category() -> SocialConsentCategory:
     return category
 
 
+def receiving_stolen_goods_category() -> SocialConsentCategory:
+    """Lazy seeded row for the hot-goods receipt gate (#1985) — default-deny.
+
+    Gates whether hot-provenance items (stolen, never recovered) may be given,
+    sold, or bequeathed to the owner. Opting in is the OOC acknowledgement that
+    reclamation RP may follow; the character stays honestly unaware.
+    """
+    category, _ = SocialConsentCategory.objects.get_or_create(
+        key="receiving-stolen-goods",
+        defaults={
+            "name": "Receiving Stolen Goods",
+            "description": "Whether hot items may be given, sold, or bequeathed to you.",
+            "default_mode": ConsentMode.ALLOWLIST,
+        },
+    )
+    return category
+
+
 def get_social_consent_summary(tenure: RosterTenure) -> dict:
     preference = SocialConsentPreference.objects.filter(tenure=tenure).first()
     rules = SocialConsentCategoryRule.objects.filter(

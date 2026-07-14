@@ -17,7 +17,8 @@
   Secret).
 - **Ghost window (funeral container)** — an OPEN funeral honoring a dead character at
   their location re-opens their emit/pose voice (third container, ADR-0131).
-- **Will seam** — `execute_will(sheet)`, the deliberate no-op a funeral's finish
-  invokes per honoree until #1985 builds wills.
+- **Will seam** — `execute_will(sheet)`, invoked per honoree at a funeral's finish;
+  since #1985 it delegates to `estates.execute_settlement` (the funeral door —
+  first of funeral / will-reading / sweeper wins; safe no-op for long-dead honorees).
 - **Trusted handler** — someone the dead player's tenure friended; may take from the
   corpse without `steal`.

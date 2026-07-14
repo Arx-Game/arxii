@@ -4288,6 +4288,35 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `_speech`/`_finish`/`_abandon`; telnet `ceremony` family; API `/api/worship/beings/` +
   `/api/ceremonies/ceremonies/` (both paginated read-only); game-view `CeremonyRoomCard`.
 
+### Wills & Estate Settlement (#1985)
+Death opens a settlement window; the estate executes through the first of three doors —
+funeral finish, executor will-reading, or the deadline sweeper (14 real days, PLACEHOLDER)
+— never blockable by an idler, never stealing RP (ADR-0133). Full doc:
+[estates.md](estates.md).
+
+- **Models** (`world/estates`): `Will` (OneToOne sheet; testament prose; frozen once a
+  settlement exists), `WillExecutor` (persona; any one may read), `Bequest` (kind-major
+  lines: SPECIFIC_ITEM/COIN_AMOUNT/ALL_COIN/BUILDING/BUSINESS/RESIDUARY; typed
+  persona-XOR-org recipient; items/businesses persona-only), `EstateSettlement`
+  (PENDING/SETTLED/PARKED + `settled_via`), `EstateClaim` (inherited theft grievance,
+  claimant-visible only), `EstateConfig` (singleton window).
+- **Services**: `open_settlement` (from `_mark_dead`, which now also stamps
+  `Kinsperson.is_deceased` + fires `handle_death_for_pacts`); `execute_settlement` (ONE
+  idempotent path: debts → bequests → residuary sweep → contract substitution → tenancy/
+  employment end → claims; PARKED = zero-mutation rollback); `resolve_intestate_heir`
+  (family-org head → public-record kin; hidden kin never auto-inherit);
+  `resolve_escheat_org` (nearest `Domain.owner_org` by parent walk).
+- **Ownership/theft**: `OwnershipEventType.INHERITED` (+ `PROVENANCE_EVENT_TYPES`);
+  `items/services/provenance.py` hot-item reads; `receiving-stolen-goods` consent
+  category (default-deny) gating `give()` + estate delivery via `RecipientConsentDenied`
+  (category-generic refusal).
+- **Integration**: funeral door via `ceremonies.execute_will` delegation; `will_reading`
+  REGISTRY action; `estates.auto_settle` hourly cron; API `/api/estates/`
+  (wills/bequests/executors CRUD own-scoped 404-not-filtered; settlements
+  executor-scoped; claims claimant-scoped); `AgreementsPanel` sheet tab.
+- **Source:** `src/world/estates/`
+- **Details:** [estates.md](estates.md)
+
 ### Vitals
 Character mortality, health tracking, and the acute-peril dying state. System-agnostic — called by
 combat, poison, spells, exhaustion, and any damage source.

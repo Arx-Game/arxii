@@ -9620,6 +9620,578 @@ paths:
               schema:
                 $ref: '#/components/schemas/Era'
           description: ''
+  /api/estates/bequests/:
+    get:
+      operationId: estates_bequests_list
+      description: CRUD on bequest lines of my own wills.
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          type: string
+          enum:
+          - all_coin
+          - building
+          - business
+          - coin_amount
+          - residuary
+          - specific_item
+        description: |-
+          * `specific_item` - Specific Item
+          * `coin_amount` - Coin Amount
+          * `all_coin` - All Remaining Coin
+          * `building` - Building
+          * `business` - Business
+          * `residuary` - Residuary (everything else)
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: will
+        schema:
+          type: integer
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBequestList'
+          description: ''
+    post:
+      operationId: estates_bequests_create
+      description: CRUD on bequest lines of my own wills.
+      tags:
+      - estates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bequest'
+          description: ''
+  /api/estates/bequests/{id}/:
+    get:
+      operationId: estates_bequests_retrieve
+      description: CRUD on bequest lines of my own wills.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bequest.
+        required: true
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bequest'
+          description: ''
+    put:
+      operationId: estates_bequests_update
+      description: CRUD on bequest lines of my own wills.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bequest.
+        required: true
+      tags:
+      - estates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bequest'
+          description: ''
+    patch:
+      operationId: estates_bequests_partial_update
+      description: CRUD on bequest lines of my own wills.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bequest.
+        required: true
+      tags:
+      - estates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBequestRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bequest'
+          description: ''
+    delete:
+      operationId: estates_bequests_destroy
+      description: CRUD on bequest lines of my own wills.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bequest.
+        required: true
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/estates/claims/:
+    get:
+      operationId: estates_claims_list
+      description: Inherited grievances, claimant-only (the holder is never notified).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: settlement
+        schema:
+          type: integer
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEstateClaimList'
+          description: ''
+  /api/estates/claims/{id}/:
+    get:
+      operationId: estates_claims_retrieve
+      description: Inherited grievances, claimant-only (the holder is never notified).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this estate claim.
+        required: true
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstateClaim'
+          description: ''
+  /api/estates/executors/:
+    get:
+      operationId: estates_executors_list
+      description: Tag/untag executors on my own wills.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: will
+        schema:
+          type: integer
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWillExecutorList'
+          description: ''
+    post:
+      operationId: estates_executors_create
+      description: Tag/untag executors on my own wills.
+      tags:
+      - estates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WillExecutorRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WillExecutor'
+          description: ''
+  /api/estates/executors/{id}/:
+    get:
+      operationId: estates_executors_retrieve
+      description: Tag/untag executors on my own wills.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this will executor.
+        required: true
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WillExecutor'
+          description: ''
+    put:
+      operationId: estates_executors_update
+      description: Tag/untag executors on my own wills.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this will executor.
+        required: true
+      tags:
+      - estates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WillExecutorRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WillExecutor'
+          description: ''
+    patch:
+      operationId: estates_executors_partial_update
+      description: Tag/untag executors on my own wills.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this will executor.
+        required: true
+      tags:
+      - estates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedWillExecutorRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WillExecutor'
+          description: ''
+    delete:
+      operationId: estates_executors_destroy
+      description: Tag/untag executors on my own wills.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this will executor.
+        required: true
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/estates/settlements/:
+    get:
+      operationId: estates_settlements_list
+      description: Settlement status for executors (and staff) — feeds the settlement
+        card.
+      parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - parked
+          - pending
+          - settled
+        description: |-
+          * `pending` - Pending
+          * `settled` - Settled
+          * `parked` - Parked (staff attention)
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEstateSettlementList'
+          description: ''
+  /api/estates/settlements/{id}/:
+    get:
+      operationId: estates_settlements_retrieve
+      description: Settlement status for executors (and staff) — feeds the settlement
+        card.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this estate settlement.
+        required: true
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstateSettlement'
+          description: ''
+  /api/estates/wills/:
+    get:
+      operationId: estates_wills_list
+      description: CRUD on my own characters' wills; frozen once a settlement opens.
+      parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWillList'
+          description: ''
+    post:
+      operationId: estates_wills_create
+      description: CRUD on my own characters' wills; frozen once a settlement opens.
+      tags:
+      - estates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WillRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Will'
+          description: ''
+  /api/estates/wills/{id}/:
+    get:
+      operationId: estates_wills_retrieve
+      description: CRUD on my own characters' wills; frozen once a settlement opens.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this will.
+        required: true
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Will'
+          description: ''
+    put:
+      operationId: estates_wills_update
+      description: CRUD on my own characters' wills; frozen once a settlement opens.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this will.
+        required: true
+      tags:
+      - estates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WillRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Will'
+          description: ''
+    patch:
+      operationId: estates_wills_partial_update
+      description: CRUD on my own characters' wills; frozen once a settlement opens.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this will.
+        required: true
+      tags:
+      - estates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedWillRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Will'
+          description: ''
+    delete:
+      operationId: estates_wills_destroy
+      description: CRUD on my own characters' wills; frozen once a settlement opens.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this will.
+        required: true
+      tags:
+      - estates
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/events/:
     get:
       operationId: events_list
@@ -31980,6 +32552,100 @@ components:
       required:
       - description
       - name
+    Bequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        will:
+          type: integer
+        order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Execution order within this bequest's kind.
+        kind:
+          $ref: '#/components/schemas/BequestKindEnum'
+        item:
+          type: integer
+          nullable: true
+        building:
+          type: integer
+          description: The Area row this Building decorates. Must be level BUILDING.
+          nullable: true
+        business:
+          type: integer
+          nullable: true
+        amount:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Coppers; COIN_AMOUNT bequests only.
+        recipient_persona:
+          type: integer
+          nullable: true
+        recipient_organization:
+          type: integer
+          nullable: true
+      required:
+      - id
+      - kind
+      - will
+    BequestKindEnum:
+      enum:
+      - specific_item
+      - coin_amount
+      - all_coin
+      - building
+      - business
+      - residuary
+      type: string
+      description: |-
+        * `specific_item` - Specific Item
+        * `coin_amount` - Coin Amount
+        * `all_coin` - All Remaining Coin
+        * `building` - Building
+        * `business` - Business
+        * `residuary` - Residuary (everything else)
+    BequestRequest:
+      type: object
+      properties:
+        will:
+          type: integer
+        order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Execution order within this bequest's kind.
+        kind:
+          $ref: '#/components/schemas/BequestKindEnum'
+        item:
+          type: integer
+          nullable: true
+        building:
+          type: integer
+          description: The Area row this Building decorates. Must be level BUILDING.
+          nullable: true
+        business:
+          type: integer
+          nullable: true
+        amount:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Coppers; COIN_AMOUNT bequests only.
+        recipient_persona:
+          type: integer
+          nullable: true
+        recipient_organization:
+          type: integer
+          nullable: true
+      required:
+      - kind
+      - will
     BlankEnum:
       enum:
       - ''
@@ -38411,6 +39077,75 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    EstateClaim:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        settlement:
+          type: integer
+        item:
+          type: integer
+        item_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - item
+      - item_name
+      - settlement
+    EstateSettlement:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        deceased_name:
+          type: string
+          readOnly: true
+        opened_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deadline:
+          type: string
+          format: date-time
+          description: When the sweeper door auto-settles (opened_at + config window).
+        status:
+          $ref: '#/components/schemas/EstateSettlementStatusEnum'
+        settled_via:
+          oneOf:
+          - $ref: '#/components/schemas/SettledViaEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        settled_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - character_sheet
+      - deadline
+      - deceased_name
+      - id
+      - opened_at
+    EstateSettlementStatusEnum:
+      enum:
+      - pending
+      - settled
+      - parked
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `settled` - Settled
+        * `parked` - Parked (staff attention)
     EventCreate:
       type: object
       description: Serializer for creating events. Host is derived from the request.
@@ -46315,6 +47050,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Beat'
+    PaginatedBequestList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Bequest'
     PaginatedBlockList:
       type: object
       required:
@@ -47016,6 +47774,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Era'
+    PaginatedEstateClaimList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EstateClaim'
+    PaginatedEstateSettlementList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EstateSettlement'
     PaginatedEventInvitationList:
       type: object
       required:
@@ -49813,6 +50617,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserStoryMute'
+    PaginatedWillExecutorList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WillExecutor'
+    PaginatedWillList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Will'
     PaginatedWorshippedBeingRefList:
       type: object
       required:
@@ -50167,6 +51017,40 @@ components:
           nullable: true
           description: 'Optional: a MissionTemplate this beat requires (Phase 5b.3
             data shape only; engine deferred). SET_NULL on template delete.'
+    PatchedBequestRequest:
+      type: object
+      properties:
+        will:
+          type: integer
+        order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Execution order within this bequest's kind.
+        kind:
+          $ref: '#/components/schemas/BequestKindEnum'
+        item:
+          type: integer
+          nullable: true
+        building:
+          type: integer
+          description: The Area row this Building decorates. Must be level BUILDING.
+          nullable: true
+        business:
+          type: integer
+          nullable: true
+        amount:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Coppers; COIN_AMOUNT bequests only.
+        recipient_persona:
+          type: integer
+          nullable: true
+        recipient_organization:
+          type: integer
+          nullable: true
     PatchedBugReportDetailRequest:
       type: object
       properties:
@@ -52279,6 +53163,22 @@ components:
       properties:
         appear_offline:
           type: boolean
+    PatchedWillExecutorRequest:
+      type: object
+      properties:
+        will:
+          type: integer
+        persona:
+          type: integer
+    PatchedWillRequest:
+      type: object
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        testament_text:
+          type: string
+          description: Player-authored prose an executor reads aloud at the will-reading.
     Path:
       type: object
       description: Serializer for Path in CG context.
@@ -57299,6 +58199,16 @@ components:
         * `COMA` - Coma
         * `RETIRED` - Retired
         * `DEAD` - Dead
+    SettledViaEnum:
+      enum:
+      - funeral
+      - reading
+      - auto
+      type: string
+      description: |-
+        * `funeral` - Funeral
+        * `reading` - Will Reading
+        * `auto` - Deadline Sweeper
     SeverityCeilingEnum:
       enum:
       - 1
@@ -62705,6 +63615,81 @@ components:
         * `interaction` - Interaction
         * `scene_participation` - Scene Participation
         * `journal` - Journal Entry
+    Will:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        testament_text:
+          type: string
+          description: Player-authored prose an executor reads aloud at the will-reading.
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        bequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/Bequest'
+          readOnly: true
+        executors:
+          type: array
+          items:
+            $ref: '#/components/schemas/WillExecutor'
+          readOnly: true
+        is_frozen:
+          type: boolean
+          readOnly: true
+      required:
+      - bequests
+      - character_sheet
+      - executors
+      - id
+      - is_frozen
+      - updated_at
+    WillExecutor:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        will:
+          type: integer
+        persona:
+          type: integer
+        persona_name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - persona
+      - persona_name
+      - will
+    WillExecutorRequest:
+      type: object
+      properties:
+        will:
+          type: integer
+        persona:
+          type: integer
+      required:
+      - persona
+      - will
+    WillRequest:
+      type: object
+      properties:
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        testament_text:
+          type: string
+          description: Player-authored prose an executor reads aloud at the will-reading.
+      required:
+      - character_sheet
     WindowReactInput:
       type: object
       properties:
