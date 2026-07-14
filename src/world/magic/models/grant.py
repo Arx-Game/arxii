@@ -481,6 +481,65 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="DISTINCTION"),
             ),
+            # #1583 — COMPROMISE / PENANCE / FALL_CONVERSION: no typed source FK.
+            # Attributed by discriminator only (like MISSION_REPORT / STAKE_REWARD).
+            models.CheckConstraint(
+                name="res_grant_compromise_shape",
+                check=(
+                    Q(source="COMPROMISE")
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
+                )
+                | ~Q(source="COMPROMISE"),
+            ),
+            models.CheckConstraint(
+                name="res_grant_penance_shape",
+                check=(
+                    Q(source="PENANCE")
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
+                )
+                | ~Q(source="PENANCE"),
+            ),
+            models.CheckConstraint(
+                name="res_grant_fall_conversion_shape",
+                check=(
+                    Q(source="FALL_CONVERSION")
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
+                )
+                | ~Q(source="FALL_CONVERSION"),
+            ),
         ]
 
     def __str__(self) -> str:

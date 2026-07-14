@@ -563,3 +563,36 @@ class PortalAnchorDissolveNotAllowed(MagicError):
     """Raised when dissolving an anchor without owner standing (owner-gated, #2222)."""
 
     user_message = "You don't have standing to dissolve this anchor."
+
+
+# ---------------------------------------------------------------------------
+# #1583 — Fall / Redemption
+# ---------------------------------------------------------------------------
+
+
+class FallRedemptionError(MagicError):
+    """Base for all Fall/Redemption conversion refusals.
+
+    Carries a ``user_message`` safe for display; callers surface this to the
+    player rather than the raw exception string.
+    """
+
+    user_message: str
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
+
+
+class FallEligibilityError(FallRedemptionError):
+    """Raised when a character's aura has not drifted enough for a Fall/Redemption,
+    or when they have already undergone an irreversible conversion."""
+
+
+class ConversionMappingError(FallRedemptionError):
+    """Raised when no ResonanceConversion row exists for a
+    (source_resonance, target_affinity) pair."""
+
+
+class PenanceError(FallRedemptionError):
+    """Raised when there is no non-native resonance to convert during Atonement."""

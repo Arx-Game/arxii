@@ -2544,6 +2544,128 @@ def wire_covenant_lifecycle_rituals() -> object:
     )
 
 
+def wire_fall_redemption_content() -> object:
+    """Idempotent seed for the Fall/Redemption Ritual + config (#1583).
+
+    Without this, the Fall/Redemption conversion ceremony is unreachable —
+    the Ritual row that ``ritual draft`` resolves by name does not exist.
+
+    Creates (get_or_create on name):
+    - ``FallRedemptionConfig`` singleton (pk=1) with default multipliers.
+    - "Ritual of Falling" Ritual — SERVICE dispatch to
+      ``world.magic.services.fall_redemption.perform_fall``.
+
+    The existing "Rite of Atonement" Ritual row is already seeded by
+    ``seed_canonical_rituals()`` — its service function is extended in-place
+    (#1583); no new Ritual row is needed for Atonement.
+
+    Also seeds example ``CompromiseActType`` and ``ResonanceConversion``
+    rows if the canonical Affinities/Resonances from ``seed_starter_magic_story``
+    exist (self-contained — skips gracefully if they don't).
+
+    Returns a simple namespace with the created objects.
+    """
+    from types import SimpleNamespace
+
+    from world.magic.models import (
+        CompromiseActType,
+        FallRedemptionConfig,
+        ResonanceConversion,
+    )
+
+    # Singleton config
+    config, _ = FallRedemptionConfig.objects.get_or_create(pk=1)
+
+    # The Fall/Redemption ritual
+    fall_ritual, _ = Ritual.objects.get_or_create(
+        name="Ritual of Falling",
+        defaults={
+            "description": (
+                "The irreversible ceremony of Fall or Redemption — converting "
+                "all resonance and threads to a new affinity. Falling grants "
+                "power; Redemption is lossy."
+            ),
+            "narrative_prose": (
+                "The character stands at the threshold of transformation. "
+                "Every compromise, every drift, every choice has led here. "
+                "The resonance shifts, threads realign, and the soul is "
+                "remade in a new image."
+            ),
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": "world.magic.services.fall_redemption.perform_fall",
+            "flow": None,
+            "hedge_accessible": False,
+            "glimpse_eligible": False,
+        },
+    )
+
+    # Seed example CompromiseActType rows (self-contained — only if
+    # the canonical Affinities/Resonances exist)
+    compromise_types = []
+    try:
+        from world.magic.models import Affinity, Resonance
+
+        celestial_affinity = Affinity.objects.get(name__iexact="Celestial")
+        primal_affinity = Affinity.objects.get(name__iexact="Primal")
+        abyssal_affinity = Affinity.objects.get(name__iexact="Abyssal")
+
+        # Find or create example resonances in each affinity
+        cele_res, _ = Resonance.objects.get_or_create(
+            name="Bene",
+            defaults={"affinity": celestial_affinity},
+        )
+        primal_res, _ = Resonance.objects.get_or_create(
+            name="Praedari",
+            defaults={"affinity": primal_affinity},
+        )
+        abyssal_res, _ = Resonance.objects.get_or_create(
+            name="Dissolution",
+            defaults={"affinity": abyssal_affinity},
+        )
+
+        # Example compromise act types
+        for name, resonance, amount, is_cruelty in [
+            ("Combat Kill", primal_res, 10, False),
+            ("Pragmatic Choice", primal_res, 15, False),
+            ("Torture", abyssal_res, 25, True),
+            ("Malicious Harm", abyssal_res, 20, True),
+        ]:
+            act_type, _ = CompromiseActType.objects.get_or_create(
+                name=name,
+                defaults={
+                    "target_resonance": resonance,
+                    "amount": amount,
+                    "is_cruelty": is_cruelty,
+                    "description": f"Grants {amount} {resonance.name} resonance.",
+                },
+            )
+            compromise_types.append(act_type)
+
+        # Example ResonanceConversion mappings
+        for source_res, target_affinity, target_res in [
+            (cele_res, "primal", primal_res),
+            (cele_res, "abyssal", abyssal_res),
+            (primal_res, "abyssal", abyssal_res),
+            (primal_res, "celestial", cele_res),
+            (abyssal_res, "primal", primal_res),
+            (abyssal_res, "celestial", cele_res),
+        ]:
+            ResonanceConversion.objects.get_or_create(
+                source_resonance=source_res,
+                target_affinity=target_affinity,
+                defaults={"target_resonance": target_res},
+            )
+    except Affinity.DoesNotExist:
+        # Canonical affinities don't exist yet — skip example content.
+        pass
+
+    return SimpleNamespace(
+        config=config,
+        fall_ritual=fall_ritual,
+        compromise_types=compromise_types,
+    )
+
+
 def author_reference_corruption_content() -> None:
     """Seed 1 Primal + 1 Abyssal reference Corruption content set.
 

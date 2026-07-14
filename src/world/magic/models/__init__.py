@@ -96,6 +96,13 @@ from world.magic.models.endorsement import (
     SceneEntryEndorsement,
     StylePresentationEndorsement,
 )
+from world.magic.models.fall_redemption import (
+    CompromiseActType,
+    ConversionType,
+    FallRedemptionConfig,
+    FallRedemptionRecord,
+    ResonanceConversion,
+)
 from world.magic.models.fury import FuryConfig, FuryTier
 from world.magic.models.gain_config import ResonanceGainConfig
 from world.magic.models.gift_unlocks import (
@@ -263,9 +270,12 @@ __all__ = [
     "CharacterThreadWeavingUnlock",
     "CharacterTradition",
     "CodexEntryRitualGrant",
+    # fall/redemption compromise act types (#1583)
+    "CompromiseActType",
+    # crossing catalog (#1990 — generalized from #1989)
+    "ConversionType",
     # corruption config (Scope 7 §2.3)
     "CorruptionConfig",
-    # crossing catalog (#1990 — generalized from #1989)
     "CrossingChoice",
     "CrossingOption",
     # currency-knob sidecar (#1834)
@@ -284,6 +294,8 @@ __all__ = [
     "EntryFlourishRecord",
     "Facet",
     "FacetManager",
+    "FallRedemptionConfig",
+    "FallRedemptionRecord",
     # fury lever
     "FuryConfig",
     "FuryTier",
@@ -336,6 +348,7 @@ __all__ = [
     # renown award config abstract base (#953)
     "Resonance",
     # resonance-environment config
+    "ResonanceConversion",
     "ResonanceEnvironmentConfig",
     # gain config (Spec C §2.1)
     "ResonanceGainConfig",

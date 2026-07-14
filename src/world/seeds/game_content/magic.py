@@ -2876,6 +2876,10 @@ def seed_magic_dev() -> MagicDevSeedResult:
 
     ensure_portal_travel_content()
 
+    from world.magic.factories import wire_fall_redemption_content  # noqa: PLC0415
+
+    wire_fall_redemption_content()
+
     return MagicDevSeedResult(
         config=config,
         rituals=rituals,

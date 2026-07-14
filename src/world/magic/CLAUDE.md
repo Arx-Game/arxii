@@ -1456,6 +1456,60 @@ kind, "Mirrorwalking" Minor Gift + "Mirrorwalk" Technique, starter anchors in th
 magic-story cascade rooms. Full eligibility chain + API/frontend detail:
 `docs/systems/magic.md`'s "Portal travel" section.
 
+## Fall / Redemption: Asymmetric Resonance Conversion (#1583)
+
+The Fall/Redemption system lets characters convert their affinity through
+dramatic ceremony. **Falling gains power; Redemption is lossy** (ADR-0054,
+ADR-0134). Compromising acts (combat kills, cruelty, malice) grant
+spendable non-native resonance via `grant_resonance` with
+`source=GainSource.COMPROMISE` — the existing `CharacterResonance` rows ARE
+the drift tracker. `recompute_aura` shifts affinity percentages; the Fall
+becomes available when the target affinity crosses
+`FallRedemptionConfig.fall_threshold_percent`.
+
+**Models (`models/fall_redemption.py`):**
+- `CompromiseActType` — authored act category → (target_resonance, amount,
+  is_cruelty). Staff author act types; mission/combat/social systems
+  reference them.
+- `ResonanceConversion` — authored mapping (source_resonance,
+  target_affinity) → target_resonance. One row per path.
+- `FallRedemptionConfig` — singleton (pk=1, `ArxSharedMemoryManager`) with
+  conversion multipliers per path + penance exchange rate + fall threshold.
+- `FallRedemptionRecord` — immutable audit of a full (irreversible) Fall
+  or Redemption. `ConversionType` TextChoices: FALL / REDEMPTION.
+
+**Services:**
+- `services/conversion.py` — `convert_resonance()` shared engine for both
+  partial (Atonement) and full (Fall) conversion. Transfers `balance` and
+  `lifetime_earned` (scaled by multiplier) from source to target resonance.
+  `lifetime_earned` is transferred, not decremented — the total is preserved
+  modulo the multiplier, so `recompute_aura` shifts correctly. Full
+  conversion re-anchors `Thread.resonance` FK (merging into existing
+  target-resonance threads if needed, retiring duplicates). Partial
+  conversion (Atonement) does NOT touch threads.
+- `services/fall_redemption.py` — `grant_compromise_resonance()` (thin
+  wrapper over `grant_resonance`), `perform_fall()` (the full ceremony,
+  gated by aura threshold + irreversibility), `get_fall_redemption_config()`.
+
+**Extended Rite of Atonement (`services/atonement.py`):**
+The existing Rite of Atonement is extended to do BOTH:
+1. **Corruption reduction** (existing) — `reduce_corruption` for stages 1–2.
+   Stage 3+ still raises; stage 0 skips this effect.
+2. **Resonance conversion** (new) — if the performer is Celestial-dominant
+   with non-native `balance > 0`, converts it back to Celestial at the lossy
+  `penance_exchange_rate` (default 0.5 = 2:1). No typed FK needed.
+At least one effect must fire, or `AtonementNothingToAtone` is raised.
+Repeatable (not a Fall); each conversion loses half the value.
+
+**New `GainSource` values** (all `NON_ACCELERATED_GAIN_SOURCES`):
+`COMPROMISE`, `PENANCE`, `FALL_CONVERSION`. No typed source FK
+(MISSION_REPORT shape). Three new `ResonanceGrant` CheckConstraints.
+
+**Seed content:** `wire_fall_redemption_content()` in `factories.py`,
+called by `seed_magic_dev()`. Seeds the "Ritual of Falling" Ritual row
+(SERVICE dispatch), the `FallRedemptionConfig` singleton, example
+`CompromiseActType` rows, and example `ResonanceConversion` mappings.
+
 ## Removed Models (deprecated)
 
 The following models have been removed and replaced:
@@ -1557,6 +1611,7 @@ not in a standalone pull.
 - `docs/architecture/resonance-threads.md` - Resonance Pivot Spec A (Threads + Currency + Rituals + Mage Scars rename)
 - `docs/architecture/resonance-gain.md` - Resonance Pivot Spec C (Endorsements + Room Aura + Residence Trickle)
 - `docs/architecture/soul-tether.md` - Resonance Pivot Spec B (Soul Tether bond mechanic)
+- `docs/adr/0134-resonance-as-drift-compromising-acts-grant-spendable-non-native-resonance.md` - Resonance-as-drift decision (#1583)
 
 ## Key Rules
 
