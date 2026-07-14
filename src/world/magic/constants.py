@@ -233,6 +233,10 @@ class GainSource(models.TextChoices):
     DISTINCTION = "DISTINCTION", "Distinction"
     # #2017 — combo discovery reward
     COMBO_DISCOVERY = "COMBO_DISCOVERY", "Combo discovery"
+    # #1583 — Fall/Redemption: compromising acts grant non-native resonance
+    COMPROMISE = "COMPROMISE", "Moral compromise"
+    PENANCE = "PENANCE", "Atonement resonance conversion"
+    FALL_CONVERSION = "FALL_CONVERSION", "Fall/Redemption conversion"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -266,6 +270,9 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.SANCTUM_OWNER_BONUS,
         GainSource.SANCTUM_DISSOLUTION_RECOVERY,
         GainSource.COMBO_DISCOVERY,
+        GainSource.COMPROMISE,
+        GainSource.PENANCE,
+        GainSource.FALL_CONVERSION,
     }
 )
 

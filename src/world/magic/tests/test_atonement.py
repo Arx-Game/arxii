@@ -111,14 +111,16 @@ class TestAtonementRiteRefusals(TestCase):
         with self.assertRaises(AtonementSelfTargetRequired):
             _call(performer_sheet=performer, target_sheet=target, resonance=resonance)
 
-    def test_stage_0_refused(self) -> None:
-        """Stage 0 (no corruption) is refused."""
+    def test_stage_0_no_drift_refused(self) -> None:
+        """Stage 0 (no corruption) with no non-native resonance raises NothingToAtone."""
+        from world.magic.services.atonement import AtonementNothingToAtone
+
         sheet = CharacterSheetFactory()
         resonance = ResonanceFactory()
         _set_dominant_affinity(sheet, "Celestial")
-        # No corruption setup → stage == 0
+        # No corruption setup → stage == 0; no non-native balance either
 
-        with self.assertRaises(AtonementStageOutOfRange):
+        with self.assertRaises(AtonementNothingToAtone):
             _call(performer_sheet=sheet, target_sheet=sheet, resonance=resonance)
 
     def test_stage_3_refused(self) -> None:

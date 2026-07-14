@@ -17,6 +17,7 @@ from world.magic.models import (
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
     CharacterTradition,
+    CompromiseActType,
     CrossingChoice,
     CrossingOption,
     DistinctionResonanceRankThreshold,
@@ -1074,6 +1075,74 @@ class CrossingChoiceAdmin(admin.ModelAdmin):
     list_display = ("thread", "crossing_level", "option", "chosen_at")
     list_filter = ("crossing_level",)
     readonly_fields = ("thread", "crossing_level", "option", "chosen_at")
+
+    def has_add_permission(self, request):  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+
+# ---------------------------------------------------------------------------
+# #1583 — Fall / Redemption
+# ---------------------------------------------------------------------------
+
+
+@admin.register(CompromiseActType)
+class CompromiseActTypeAdmin(admin.ModelAdmin):
+    """Admin for authored compromise act types."""
+
+    list_display = ("name", "target_resonance", "amount", "is_cruelty")
+    list_filter = ("is_cruelty",)
+    search_fields = ("name", "description")
+
+
+from world.magic.models import (  # noqa: E402
+    FallRedemptionConfig,
+    FallRedemptionRecord,
+    ResonanceConversion,
+)
+
+
+@admin.register(ResonanceConversion)
+class ResonanceConversionAdmin(admin.ModelAdmin):
+    """Admin for resonance conversion mappings."""
+
+    list_display = ("source_resonance", "target_affinity", "target_resonance")
+    search_fields = (
+        "source_resonance__name",
+        "target_resonance__name",
+    )
+
+
+@admin.register(FallRedemptionConfig)
+class FallRedemptionConfigAdmin(admin.ModelAdmin):
+    """Admin for the Fall/Redemption tuning singleton."""
+
+    list_display = ("id", "celestial_to_primal_multiplier", "celestial_to_abyssal_multiplier")
+
+
+@admin.register(FallRedemptionRecord)
+class FallRedemptionRecordAdmin(admin.ModelAdmin):
+    """Read-only admin for Fall/Redemption conversion audit records."""
+
+    list_display = (
+        "character_sheet",
+        "conversion_type",
+        "from_affinity",
+        "to_affinity",
+        "performed_at",
+    )
+    list_filter = ("conversion_type", "from_affinity", "to_affinity")
+    readonly_fields = (
+        "character_sheet",
+        "conversion_type",
+        "from_affinity",
+        "to_affinity",
+        "multiplier",
+        "performed_at",
+        "scene",
+    )
 
     def has_add_permission(self, request):  # noqa: ARG002
         return False
