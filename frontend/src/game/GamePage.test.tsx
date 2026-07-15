@@ -99,6 +99,10 @@ vi.mock('@/scenes/components/PlaceBar', () => ({
   PlaceBar: () => <div data-testid="place-bar">PlaceBar</div>,
 }));
 
+vi.mock('@/scenes/components/SpeakerQueueBar', () => ({
+  SpeakerQueueBar: () => <div data-testid="speaker-queue-bar">SpeakerQueueBar</div>,
+}));
+
 vi.mock('@/scenes/components/ActionPanel', () => ({
   ActionPanel: () => <div data-testid="action-panel">ActionPanel</div>,
 }));
