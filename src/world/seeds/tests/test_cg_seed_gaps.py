@@ -30,12 +30,15 @@ class FormTraitSeedTests(TestCase):
         skin = FormTrait.objects.get(name="skin_tone")
         self.assertGreaterEqual(skin.options.count(), 4)
 
-    def test_species_form_trait_links_human(self):
-        """SpeciesFormTrait links Human to all seeded FormTraits with is_available_in_cg=True."""
+    def test_species_form_trait_links_all_species(self):
+        """SpeciesFormTrait links both Human and Khati to all FormTraits."""
         seed_character_creation_dev()
-        human = Species.objects.get(name="Human")
-        links = SpeciesFormTrait.objects.filter(species=human, is_available_in_cg=True)
-        self.assertGreaterEqual(links.count(), 3)
+        for species_name in ["Human", "Khati"]:
+            sp = Species.objects.get(name=species_name)
+            links = SpeciesFormTrait.objects.filter(species=sp, is_available_in_cg=True)
+            self.assertGreaterEqual(
+                links.count(), 3, f"{species_name} should have 3 form trait links"
+            )
 
     def test_idempotent(self):
         """Re-running doesn't create duplicates."""
@@ -43,11 +46,74 @@ class FormTraitSeedTests(TestCase):
         seed_character_creation_dev()
         self.assertEqual(FormTrait.objects.filter(name="hair_color").count(), 1)
         self.assertEqual(FormTraitOption.objects.filter(trait__name="hair_color").count(), 7)
-        human = Species.objects.get(name="Human")
-        self.assertEqual(
-            SpeciesFormTrait.objects.filter(species=human, trait__name="hair_color").count(),
-            1,
-        )
+        for species_name in ["Human", "Khati"]:
+            sp = Species.objects.get(name=species_name)
+            self.assertEqual(
+                SpeciesFormTrait.objects.filter(species=sp, trait__name="hair_color").count(),
+                1,
+            )
+
+
+class RealmAndAreaSeedTests(TestCase):
+    """Tests for realm, starting area, beginnings, and species seeding."""
+
+    def test_multiple_realms(self):
+        """Seed creates both Arx and Luxen realms."""
+        seed_character_creation_dev()
+        from world.realms.models import Realm
+
+        self.assertTrue(Realm.objects.filter(name="Arx").exists())
+        self.assertTrue(Realm.objects.filter(name="Luxen").exists())
+
+    def test_multiple_starting_areas(self):
+        """Seed creates both Arx City and Luxen Port."""
+        seed_character_creation_dev()
+        from world.character_creation.models import StartingArea
+
+        self.assertTrue(StartingArea.objects.filter(name="Arx City").exists())
+        self.assertTrue(StartingArea.objects.filter(name="Luxen Port").exists())
+        luxen = StartingArea.objects.get(name="Luxen Port")
+        self.assertEqual(luxen.realm.name, "Luxen")
+
+    def test_multiple_beginnings(self):
+        """Seed creates both Commoner and Noble beginnings."""
+        seed_character_creation_dev()
+        from world.character_creation.models import Beginnings
+
+        self.assertTrue(Beginnings.objects.filter(name="Commoner").exists())
+        self.assertTrue(Beginnings.objects.filter(name="Noble").exists())
+        noble = Beginnings.objects.get(name="Noble")
+        self.assertTrue(noble.family_known)
+        commoner = Beginnings.objects.get(name="Commoner")
+        self.assertFalse(commoner.family_known)
+
+    def test_multiple_species(self):
+        """Seed creates both Human and Khati species."""
+        seed_character_creation_dev()
+        self.assertTrue(Species.objects.filter(name="Human").exists())
+        self.assertTrue(Species.objects.filter(name="Khati").exists())
+
+    def test_beginnings_allow_both_species(self):
+        """Both beginnings allow both species."""
+        seed_character_creation_dev()
+        from world.character_creation.models import Beginnings
+
+        for name in ["Commoner", "Noble"]:
+            b = Beginnings.objects.get(name=name)
+            species_names = {s.name for s in b.allowed_species.all()}
+            self.assertIn("Human", species_names)
+            self.assertIn("Khati", species_names)
+
+    def test_starting_areas_have_rooms(self):
+        """Every seeded StartingArea has a default_starting_room."""
+        seed_character_creation_dev()
+        from world.character_creation.models import StartingArea
+
+        for area in StartingArea.objects.all():
+            self.assertIsNotNone(
+                area.default_starting_room,
+                f"StartingArea '{area.name}' has no default_starting_room",
+            )
 
 
 class HeritageSeedTests(TestCase):

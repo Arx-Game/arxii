@@ -181,6 +181,14 @@ def seed_character_creation_dev() -> None:
         name="Arx",
         defaults={"description": "The default realm.", "crest_asset": "", "theme": ""},
     )
+    realm_luxen, _ = Realm.objects.get_or_create(
+        name="Luxen",
+        defaults={
+            "description": "A sunlit coastal realm of trade and intrigue.",
+            "crest_asset": "",
+            "theme": "",
+        },
+    )
     area, _ = StartingArea.objects.get_or_create(
         name="Arx City",
         defaults={
@@ -192,14 +200,35 @@ def seed_character_creation_dev() -> None:
             "minimum_trust": 0,
         },
     )
+    area_luxen, _ = StartingArea.objects.get_or_create(
+        name="Luxen Port",
+        defaults={
+            "description": "A bustling port city in the Luxen realm.",
+            "realm": realm_luxen,
+            "is_active": True,
+            "sort_order": 1,
+            "access_level": StartingArea.AccessLevel.ALL,
+            "minimum_trust": 0,
+        },
+    )
     # #2121 — every seeded StartingArea must resolve to a real room (never a
     # silent None spawn). Never overwrite an already-wired room (staff edit).
     if area.default_starting_room_id is None:
         area.default_starting_room = ensure_canonical_fallback_room()
         area.save(update_fields=["default_starting_room"])
+    if area_luxen.default_starting_room_id is None:
+        area_luxen.default_starting_room = ensure_canonical_fallback_room()
+        area_luxen.save(update_fields=["default_starting_room"])
     species, _ = Species.objects.get_or_create(
         name="Human",
         defaults={"description": "The default species.", "sort_order": 0},
+    )
+    species_khati, _ = Species.objects.get_or_create(
+        name="Khati",
+        defaults={
+            "description": "A feline species known for agility and perception.",
+            "sort_order": 1,
+        },
     )
     beginnings, _ = Beginnings.objects.get_or_create(
         name="Commoner",
@@ -212,7 +241,21 @@ def seed_character_creation_dev() -> None:
             "family_known": False,
         },
     )
+    beginnings_noble, _ = Beginnings.objects.get_or_create(
+        name="Noble",
+        defaults={
+            "description": "A noble upbringing with known family and standing.",
+            "starting_area": area,
+            "trust_required": 0,
+            "is_active": True,
+            "sort_order": 1,
+            "family_known": True,
+        },
+    )
     beginnings.allowed_species.add(species)  # M2M add is idempotent
+    beginnings.allowed_species.add(species_khati)
+    beginnings_noble.allowed_species.add(species)
+    beginnings_noble.allowed_species.add(species_khati)
     Gender.objects.get_or_create(
         key="male",
         defaults={"display_name": "Male", "is_default": False},
@@ -257,6 +300,7 @@ def seed_character_creation_dev() -> None:
         },
     )
     _seed_form_traits(species)
+    _seed_form_traits(species_khati)
     _seed_heritages()
     _seed_pronouns()
     _seed_commoner_families(realm)
