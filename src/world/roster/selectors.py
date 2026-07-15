@@ -64,7 +64,7 @@ def puppeted_sheet_for(user: object) -> CharacterSheet | None:
     has no puppet attribute at all — inline ``puppet.character_sheet`` dances 500'd
     the summons list and silently degraded drf-spectacular's queryset inference.
     """
-    puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL — AnonymousUser has none
+    puppet = user.puppet if isinstance(user, AccountDB) else None
     if not isinstance(puppet, ObjectDB):
         return None
     return puppet.character_sheet

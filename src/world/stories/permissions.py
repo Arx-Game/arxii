@@ -1612,7 +1612,7 @@ def user_owns_or_leads_story(user: AbstractBaseUser | AnonymousUser, story: Stor
         return False
     if story.owners.filter(id=user.id).exists():
         return True
-    gm_profile = getattr(user, "gm_profile", None)  # noqa: GETATTR_LITERAL — Django o2o-safe
+    gm_profile = user.gm_profile_or_none
     return (
         gm_profile is not None
         and story.primary_table_id is not None

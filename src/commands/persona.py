@@ -75,7 +75,11 @@ class CmdPersona(DispatchCommand):
         if not name:
             self.msg("Usage: persona create <name>")
             return
-        bypass = bool(getattr(self.caller, "is_staff", False))  # noqa: GETATTR_LITERAL
+        # is_staff lives on the Account, not the puppeted Character — the old
+        # getattr(self.caller, ...) read was always False, so the staff cap
+        # bypass never actually worked (silent-fail audit, tranche 2).
+        account = self.caller.account
+        bypass = bool(account and account.is_staff)
         try:
             persona = create_persona(
                 self.caller.sheet_data, name=name, persona_type="established", bypass_cap=bypass

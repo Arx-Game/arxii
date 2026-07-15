@@ -273,10 +273,12 @@ class GMAwardAction(Action):
         amount: Any,
         description: str,
     ) -> ActionResult:
+        from typeclasses.characters import Character  # noqa: PLC0415
         from world.progression.services.awards import award_xp  # noqa: PLC0415
         from world.progression.types import ProgressionReason  # noqa: PLC0415
 
-        account = getattr(target, "active_account", None)  # noqa: GETATTR_LITERAL
+        # active_account is a Character-only property; target is typed ObjectDB.
+        account = target.active_account if isinstance(target, Character) else None
         if account is None:
             return ActionResult(success=False, message=f"{target.key} has no controlling account.")
 
@@ -284,7 +286,9 @@ class GMAwardAction(Action):
         if amount_int is None:
             return ActionResult(success=False, message="amount must be a positive whole number.")
 
-        gm_account = getattr(actor, "active_account", None)  # noqa: GETATTR_LITERAL
+        from typeclasses.characters import Character  # noqa: PLC0415
+
+        gm_account = actor.active_account if isinstance(actor, Character) else None
         try:
             award_xp(
                 account,
@@ -332,7 +336,9 @@ class GMAwardAction(Action):
         if amount_int is None:
             return ActionResult(success=False, message="amount must be a positive whole number.")
 
-        gm_account = getattr(actor, "active_account", None)  # noqa: GETATTR_LITERAL
+        from typeclasses.characters import Character  # noqa: PLC0415
+
+        gm_account = actor.active_account if isinstance(actor, Character) else None
         try:
             award_development_points(
                 sheet,

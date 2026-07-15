@@ -207,7 +207,7 @@ def resolve_escheat_org(character_sheet: CharacterSheet):
         areas.append(home.room_profile.area)
     character = character_sheet.character
     location = character.location
-    room_profile = getattr(location, "room_profile", None) if location else None  # noqa: GETATTR_LITERAL
+    room_profile = location.room_profile_or_none if location else None
     if room_profile is not None and room_profile.area is not None:
         areas.append(room_profile.area)
     for area in areas:

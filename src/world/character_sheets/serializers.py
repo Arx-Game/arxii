@@ -404,7 +404,7 @@ def _build_appearance(
     # the overlay's traits (not the real form's), filtered by the overlay's level.
     # Gated on ``privileged`` only — a disguise overlay can be active even when the
     # presented face is the primary persona (reveal_identity=True for a public face).
-    form_state = getattr(character, "form_state", None)  # noqa: GETATTR_LITERAL
+    form_state = character.form_state_or_none
     if not privileged and form_state is not None and form_state.active_fake_overlay_id is not None:
         overlay = form_state.active_fake_overlay
         if overlay.concealment_level == ConcealmentLevel.FULL:

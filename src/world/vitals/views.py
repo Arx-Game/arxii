@@ -49,7 +49,7 @@ class CharacterVitalsView(APIView):
         except CharacterSheet.DoesNotExist:
             raise NotFound from None
 
-        vitals = getattr(sheet, "vitals", None)  # noqa: GETATTR_LITERAL
+        vitals = sheet.vitals_or_none
         if vitals is not None:
             health = vitals.health
             max_health = vitals.max_health
@@ -62,7 +62,7 @@ class CharacterVitalsView(APIView):
             wound_description = ""
         vitals_status = derive_character_status(sheet)
 
-        fatigue_pool = getattr(sheet, "fatigue", None)  # noqa: GETATTR_LITERAL
+        fatigue_pool = sheet.fatigue_or_none
         payload = {
             "health": health,
             "max_health": max_health,

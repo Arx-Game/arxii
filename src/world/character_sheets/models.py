@@ -18,11 +18,13 @@ if TYPE_CHECKING:
     from world.achievements.models import Achievement
     from world.classes.models import CharacterClassLevel
     from world.conditions.models import CapabilityType, ConditionTemplate
+    from world.fatigue.models import FatiguePool
     from world.items.handlers import CharacterSheetOutfitsHandler
     from world.magic.models.affinity import Resonance
     from world.mechanics.models import Property
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona
+    from world.vitals.models import CharacterVitals
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -664,6 +666,36 @@ class CharacterSheet(SharedMemoryModel):
         try:
             return self.roster_entry
         except RosterEntry.DoesNotExist:
+            return None
+
+    @property
+    def vitals_or_none(self) -> CharacterVitals | None:
+        """This sheet's CharacterVitals, or None when not yet provisioned.
+
+        Same reverse-OneToOne trap family as ``roster_entry_or_none``: the raw
+        ``sheet.vitals`` accessor raises an AttributeError subclass, which the
+        getattr idiom silently swallowed. Use ``sheet.vitals`` directly where a
+        missing row is a hard bug (vitals are seeded at CG finalization).
+        """
+        from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+        try:
+            return self.vitals
+        except CharacterVitals.DoesNotExist:
+            return None
+
+    @property
+    def fatigue_or_none(self) -> FatiguePool | None:
+        """This sheet's FatiguePool, or None when not yet provisioned.
+
+        Same reverse-OneToOne trap family as ``roster_entry_or_none``; see
+        ``vitals_or_none``.
+        """
+        from world.fatigue.models import FatiguePool  # noqa: PLC0415
+
+        try:
+            return self.fatigue
+        except FatiguePool.DoesNotExist:
             return None
 
     @cached_property

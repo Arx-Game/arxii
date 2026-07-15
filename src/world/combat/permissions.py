@@ -15,6 +15,10 @@ def can_view_encounter_effects(user: object, encounter: CombatEncounter) -> bool
     visibility by design — effect/power-ledger detail is more sensitive than
     spectating the scene.
     """
+
+    # Suppression justified: user is deliberately duck-typed (object) — tests
+    # exercise this with bare non-user objects, and absence of the attribute
+    # is the "not authenticated" signal itself.
     if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
         return False
     if user.is_staff:

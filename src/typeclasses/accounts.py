@@ -22,12 +22,17 @@ several more options for customizing the Guest account system.
 
 """
 
+from typing import TYPE_CHECKING
+
 from django.conf import settings
 from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 
 from commands.utils import serialize_cmdset
 from web.webclient.message_types import WebsocketMessageType
+
+if TYPE_CHECKING:
+    from world.gm.models import GMProfile
 
 
 class CharacterList:
@@ -110,6 +115,24 @@ class Account(DefaultAccount):
             player_data.display_name = self.username
             player_data.save()
         return player_data
+
+    @property
+    def gm_profile_or_none(self) -> "GMProfile | None":
+        """This account's GMProfile, or None for non-GM accounts.
+
+        The raw ``account.gm_profile`` reverse OneToOne raises an AttributeError
+        subclass on non-GM accounts, which the getattr idiom silently swallowed
+        (the sheet_data trap, #2386). Use ``account.gm_profile`` directly where a
+        missing profile is a hard bug. Callers holding ``request.user`` must
+        still guard ``is_authenticated`` first — AnonymousUser has no properties
+        from this typeclass at all.
+        """
+        from world.gm.models import GMProfile
+
+        try:
+            return self.gm_profile
+        except GMProfile.DoesNotExist:
+            return None
 
     @cached_property
     def characters(self):

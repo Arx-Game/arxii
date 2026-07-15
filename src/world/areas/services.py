@@ -76,7 +76,7 @@ def colored_area_path(room: ObjectDB) -> str:
     area. Segments are joined by " - " (the Arx-1 shape).
     """
     room_name = _room_display_name(room)
-    profile = getattr(room, "room_profile", None)  # noqa: GETATTR_LITERAL — reverse OneToOne
+    profile = room.room_profile_or_none
     if profile is None or profile.area is None:
         return room_name
     segments: list[str] = []
@@ -249,7 +249,7 @@ def area_for_scene(scene: Scene | None) -> Area | None:
     location = scene.location if scene is not None else None
     if location is None:
         return None
-    profile = getattr(location, "room_profile", None)  # noqa: GETATTR_LITERAL
+    profile = location.room_profile_or_none
     return profile.area if profile is not None else None
 
 

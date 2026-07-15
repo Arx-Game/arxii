@@ -401,7 +401,7 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
         body = OfferSummonsCreateSerializer(data=request.data)
         body.is_valid(raise_exception=True)
 
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        gm_profile = request.user.gm_profile_or_none
         summons = create_summons(
             body.offer,
             body.target_persona,

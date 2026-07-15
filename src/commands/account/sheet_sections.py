@@ -424,11 +424,11 @@ def _render_status_section(command: Command) -> list[str]:
 
     lines = [f"|wStatus — {character.key}:|n"]
 
-    vitals = getattr(viewer, "vitals", None)  # noqa: GETATTR_LITERAL
+    vitals = viewer.vitals_or_none
     wound = vitals.wound_description if vitals else "a healthy appearance"
     lines.append(f"  Condition: {derive_character_status(viewer)} — {wound}")
 
-    fatigue_pool = getattr(viewer, "fatigue", None)  # noqa: GETATTR_LITERAL
+    fatigue_pool = viewer.fatigue_or_none
     fatigue = get_full_status(viewer, pool=fatigue_pool)
     zones = ", ".join(
         f"{category}: {data['zone']}"

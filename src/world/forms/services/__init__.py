@@ -691,7 +691,7 @@ def _form_to_present(character, *, pierced: bool) -> CharacterForm | None:
     ground-truth read, ``pierced=True``); otherwise the real form. Falls back to the true form
     when no explicit real-form slot is set.
     """
-    form_state = getattr(character, "form_state", None)  # noqa: GETATTR_LITERAL
+    form_state = character.form_state_or_none
     if form_state is not None and not pierced and form_state.active_fake_overlay_id is not None:
         return form_state.active_fake_overlay
     try:
@@ -724,7 +724,7 @@ def get_presented_appearance(character, *, pierced: bool = False) -> list[Presen
         return []
 
     # Full concealment: an unpierced viewer sees nothing (#1272).
-    form_state = getattr(character, "form_state", None)  # noqa: GETATTR_LITERAL
+    form_state = character.form_state_or_none
     if (
         not pierced
         and form_state is not None

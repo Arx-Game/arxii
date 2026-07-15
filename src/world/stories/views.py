@@ -3610,7 +3610,7 @@ class StoryProtectedSubjectViewSet(viewsets.ModelViewSet):
             return qs.none()
         if user.is_staff:
             return qs
-        gm_profile = getattr(user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        gm_profile = user.gm_profile_or_none
         filters_q = models.Q(story__owners=user)
         if gm_profile is not None:
             filters_q |= models.Q(story__primary_table__gm=gm_profile)
@@ -3711,7 +3711,7 @@ class CustodyClearanceViewSet(
             return qs.none()
         if user.is_staff:
             return qs
-        gm_profile = getattr(user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        gm_profile = user.gm_profile_or_none
         filters_q = models.Q(protected_subject__story__owners=user)
         if gm_profile is not None:
             filters_q |= models.Q(requested_by=gm_profile)

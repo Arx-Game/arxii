@@ -577,6 +577,12 @@ def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
     positions (no edges) have an empty ``adjacent_position_ids`` list.
     """
     # Prefer prefetched data (zero queries); fall back to DB when absent.
+    # Suppression justified: genuine Prefetch(to_attr) presence probe — the attr
+    # truly does not exist unless the view prefetched it. Known flag: the
+    # to_attr lands on an identity-mapped Room (SharedMemoryModel), so a
+    # cached room can carry a stale positions graph across requests; the
+    # sanctioned fix (cached_property + mutation invalidation) is positioning-
+    # domain work, tracked in the tranche-2 audit PR.
     positions_cached = getattr(room, "positions_cached", None)  # noqa: GETATTR_LITERAL
     if positions_cached is not None:
         positions = sorted(positions_cached, key=lambda x: x.pk)
@@ -705,6 +711,9 @@ def position_graph(room: ObjectDB) -> PositionGraph:
     collecting only each position's edges_as_a across the whole room's
     position set yields every edge exactly once — no dedup needed.
     """
+
+    # Suppression justified: Prefetch(to_attr) presence probe — see the twin site
+    # in room_adjacency above (including the identity-map staleness flag).
     positions_cached = getattr(room, "positions_cached", None)  # noqa: GETATTR_LITERAL
     if positions_cached is not None:
         positions = sorted(positions_cached, key=lambda p: p.pk)

@@ -127,10 +127,15 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
 
     def get_is_active(self, obj: AlternateSelf) -> bool:
         if not hasattr(self, "_active_alternate_self_id"):
+            from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+            # request is absent from serializer context during schema generation;
+            # user may be AnonymousUser (no puppet). Explicit dispatch, not
+            # getattr-defaults — and a None puppet must not reach .character_sheet.
             request = self.context.get("request")
-            user = getattr(request, "user", None)  # noqa: GETATTR_LITERAL
-            puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL
-            sheet = puppet.character_sheet
+            user = request.user if request is not None else None
+            puppet = user.puppet if isinstance(user, AccountDB) else None
+            sheet = puppet.character_sheet if puppet is not None else None
             active = (
                 getattr(sheet, "active_alternate_self", None)  # noqa: GETATTR_LITERAL
                 if sheet is not None

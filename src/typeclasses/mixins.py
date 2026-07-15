@@ -10,7 +10,9 @@ from flows.trigger_handler import TriggerHandler
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
+    from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
+    from world.forms.models import FormState
 
 DEFAULT_GENDER = "neutral"
 
@@ -76,6 +78,39 @@ class ObjectParent:
         try:
             return self.sheet_data
         except CharacterSheet.DoesNotExist:
+            return None
+
+    @property
+    def room_profile_or_none(self: Union[Self, "DefaultObject"]) -> "RoomProfile | None":
+        """This object's RoomProfile, or None for anything that isn't a profiled room.
+
+        ``room_profile`` is the reverse OneToOne from ``RoomProfile.objectdb`` and
+        raises on profile-less objects (RelatedObjectDoesNotExist subclasses
+        AttributeError, which the getattr idiom silently swallowed — the sheet_data
+        trap, #2386). Use this on maybe-not-a-room objects; use ``obj.room_profile``
+        directly where a missing profile is a hard bug; use
+        ``world.areas.services.get_room_profile`` when you want get-or-create.
+        """
+        from evennia_extensions.models import RoomProfile
+
+        try:
+            return self.room_profile
+        except RoomProfile.DoesNotExist:
+            return None
+
+    @property
+    def form_state_or_none(self: Union[Self, "DefaultObject"]) -> "FormState | None":
+        """This object's FormState, or None for anything without one.
+
+        Same reverse-OneToOne trap family as ``character_sheet``/
+        ``room_profile_or_none``: use this on maybe-formless objects; use
+        ``obj.form_state`` directly where a missing row is a hard bug.
+        """
+        from world.forms.models import FormState
+
+        try:
+            return self.form_state
+        except FormState.DoesNotExist:
             return None
 
     @property

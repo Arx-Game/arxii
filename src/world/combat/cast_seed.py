@@ -83,7 +83,7 @@ def _opponent_kwargs_from_sheet(sheet: CharacterSheet) -> _OpponentKwargs:
     - ``threat_pool`` None: a PC opponent's actions are PC-declared, not driven
       by an NPC threat pool (the model FK is nullable).
     """
-    vitals = getattr(sheet, "vitals", None)  # noqa: GETATTR_LITERAL
+    vitals = sheet.vitals_or_none
     max_health = (
         vitals.max_health if vitals is not None and vitals.max_health else _DEFAULT_MAX_HEALTH
     )

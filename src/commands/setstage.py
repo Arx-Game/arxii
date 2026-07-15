@@ -91,7 +91,7 @@ class CmdSetStage(ArxCommand):
                 lines = ["No positions are set in this room yet."]
             self.msg("\n".join(lines))
 
-            profile = getattr(room, "room_profile", None)  # noqa: GETATTR_LITERAL
+            profile = room.room_profile_or_none
             default = profile.default_blueprint if profile is not None else None
             if default is not None:
                 self.msg(f"Default blueprint here: {default.name} (pk {default.pk})")
