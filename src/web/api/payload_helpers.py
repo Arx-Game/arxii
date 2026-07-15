@@ -61,13 +61,30 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
             )
         )
     )
-    pending_applications = list(
-        RosterApplication.objects.filter(
-            player_data=account.player_data,
-            status=ApplicationStatus.PENDING,
-        ).select_related("character")
+    # PlayerData is created by ArxAccountAdapter on signup, but accounts
+    # created via the ORM (tests, management commands, social auth edge
+    # cases) may not have one. Guard the reverse OneToOne access so the
+    # payload returns empty applications instead of 500ing.
+    try:
+        player_data = account.player_data
+    except AccountDB.player_data.RelatedObjectDoesNotExist:
+        player_data = None
+    pending_applications = (
+        list(
+            RosterApplication.objects.filter(
+                player_data=player_data,
+                status=ApplicationStatus.PENDING,
+            ).select_related("character")
+        )
+        if player_data
+        else []
     )
-    puppeted_character_ids = {char.id for char in account.get_puppeted_characters()}
+    # get_puppeted_characters() requires Evennia's SESSION_HANDLER to be
+    # active; in test environments (no server running) it may not exist.
+    try:
+        puppeted_character_ids = {char.id for char in account.get_puppeted_characters()}
+    except (AttributeError, RuntimeError):
+        puppeted_character_ids = set()
     return {
         "active_entries": active_entries,
         "pending_applications": pending_applications,

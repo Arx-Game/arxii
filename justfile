@@ -342,6 +342,12 @@ fe-e2e-frontend *args:
 fe-e2e-install:
     cd frontend && npx playwright install chromium
 
+# Seed a pre-verified test account for e2e / integration testing.
+# Creates username 'e2e_test_account' with verified email — idempotent.
+#   just seed-test-account
+seed-test-account:
+    cd src && uv run arx manage seed_test_account
+
 # --- Cache / scratch ---------------------------------------------------------
 
 # Delete all Python bytecode caches under src/.
