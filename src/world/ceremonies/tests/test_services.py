@@ -207,6 +207,42 @@ class CeremonyFlowTests(TestCase):
             LegendEntry.objects.filter(persona=officiant_sheet.primary_persona).exists()
         )
 
+    def test_finish_adds_offering_legend_to_honoree_deed(self) -> None:
+        from world.items.factories import ItemInstanceFactory
+        from world.societies.factories import LegendEntryFactory, LegendSourceTypeFactory
+        from world.societies.models import LegendEntry
+
+        ceremony, _officiant_sheet, dead = self._open_funeral()
+
+        # Offer a legendary item (legend_value=75) alongside a plain item (legend_value=0)
+        legendary = ItemInstanceFactory(template__value=10)
+        source_type = LegendSourceTypeFactory()
+        maker_sheet = CharacterSheetFactory()
+        deed = LegendEntryFactory(
+            persona=maker_sheet.primary_persona, source_type=source_type, base_value=75
+        )
+        legendary.legend_deeds.add(deed)
+        plain = ItemInstanceFactory(template__value=5)
+
+        record_offering(ceremony=ceremony, item_instances=[legendary, plain])
+
+        with mock.patch("world.ceremonies.services.execute_will"):
+            finish_ceremony(ceremony=ceremony)
+
+        # The honoree's ceremony deed should include the 75 legend from the item.
+        honoree_deed = LegendEntry.objects.filter(
+            persona=dead.primary_persona,
+            source_type__name="Ceremony",
+        ).first()
+        self.assertIsNotNone(honoree_deed)
+        # Base honoree prestige (50) + offering gold (15*1=15) + legend (75) = 140
+        # before multiplier. Just assert it exceeds the no-legend baseline.
+        self.assertGreater(honoree_deed.base_value, 75)
+
+        # The maker's deed survives — item was destroyed but deed is not.
+        self.assertTrue(LegendEntry.objects.filter(pk=deed.pk).exists())
+        self.assertEqual(deed.persona, maker_sheet.primary_persona)
+
     def test_finish_twice_rejected(self) -> None:
         ceremony, _, _ = self._open_funeral()
         finish_ceremony(ceremony=ceremony)

@@ -236,6 +236,7 @@ def finish_ceremony(*, ceremony: Ceremony) -> Ceremony:
     )  # percent; floor keeps a botched rite from zeroing the honors (PLACEHOLDER)
 
     offering_value_total = sum(o.item_value for o in ceremony.offerings.all())
+    offering_legend_total = sum(o.item_legend_value for o in ceremony.offerings.all())
     honorees = list(ceremony.honorees.select_related("honoree_sheet"))
     speeches = list(ceremony.speeches.all())
     total_awarded = 0
@@ -248,6 +249,7 @@ def finish_ceremony(*, ceremony: Ceremony) -> Ceremony:
         base = (
             config.base_honoree_prestige
             + offering_value_total * config.offering_prestige_per_value
+            + offering_legend_total
             + speech_levels * config.speech_prestige_base
         )
         amount = base * multiplier // 100
