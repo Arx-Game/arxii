@@ -4372,6 +4372,13 @@ funeral finish, executor will-reading, or the deadline sweeper (14 real days, PL
 - **Source:** `src/world/estates/`
 - **Details:** [estates.md](estates.md)
 
+### Dreams (#2290)
+The dream realm — a parallel layer on the room graph for sleeping/unconscious characters.
+Dream reflections, mental fatigue dream danger, Dream Peril consequence pool (nightmares/
+madness/death), thread-gated dreamwalking with escape lever, and the deep dreaming area.
+- **Source:** `src/world/dreams/`
+- **Details:** [dreams.md](dreams.md)
+
 ### Vitals
 Character mortality, health tracking, and the acute-peril dying state. System-agnostic — called by
 combat, poison, spells, exhaustion, and any damage source.

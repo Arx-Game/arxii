@@ -112,6 +112,12 @@ from actions.definitions.dramatic_moments import (
     ConfirmDramaticMomentSuggestionAction,
     DismissDramaticMomentSuggestionAction,
 )
+from actions.definitions.dreams import (
+    AscendAction,
+    DescendAction,
+    DreamwalkAction,
+    SleepAction,
+)
 from actions.definitions.duels import (
     AcceptChallengeAction,
     AcknowledgeRiskAction,
@@ -725,6 +731,11 @@ _ALL_ACTIONS: list[Action] = [
     ListGuardAssignmentsAction(),
     # #2287 — death & unconsciousness core slice.
     WakeAction(),
+    # #2290 — dream realm.
+    SleepAction(),
+    DescendAction(),
+    AscendAction(),
+    DreamwalkAction(),
     RetireCharacterAction(),
     GiveDeathKudosAction(),
     # #2289 — ceremonies (worship rites over the events/scenes chassis).

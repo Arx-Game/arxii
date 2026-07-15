@@ -54,6 +54,7 @@ from commands.defenses import CmdDefense
 from commands.domains import CmdDomain
 from commands.door import CmdBreak, CmdLock, CmdPick, CmdUnlock
 from commands.dramatic_moments import CmdMoment
+from commands.dreams import CmdSleep  # #2290
 from commands.duels import CmdDuel
 from commands.durance import CmdDurance
 from commands.encounter import CmdEncounter
@@ -306,6 +307,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRest,
             # #2287 — telnet face of WakeAction; attempt to wake from unconsciousness.
             CmdWake,
+            # #2290 — telnet face of SleepAction; voluntarily sleep to enter the dream realm.
+            CmdSleep,
             # #2287 — telnet face of RetireCharacterAction; lay a dead character to rest.
             CmdRetire,
             # #2237 — telnet face of CollectFoodAction; harvest a field's food.

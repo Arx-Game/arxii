@@ -134,7 +134,13 @@ class GiveDeathKudosAction(Action):
 
 @dataclass
 class WakeAction(Action):
-    """Attempt to wake from unconsciousness (one check per round)."""
+    """Attempt to wake from Sleeping or Unconscious (#2287, #2290).
+
+    For Sleeping (voluntary sleep): removes the condition immediately unless
+    the character is dream-engaged (an active scene round in the dream room).
+
+    For Unconscious (KO): runs the existing roll-based wake arc from #2287.
+    """
 
     key: str = "wake"
     name: str = "Wake"
@@ -150,6 +156,12 @@ class WakeAction(Action):
     ) -> ActionResult:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
+        from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+        from world.conditions.services import (  # noqa: PLC0415
+            has_condition,
+            remove_condition,
+        )
+        from world.vitals.constants import SLEEPING_CONDITION_NAME  # noqa: PLC0415
         from world.vitals.services import attempt_wake  # noqa: PLC0415
 
         try:
@@ -158,5 +170,38 @@ class WakeAction(Action):
             sheet = None
         if sheet is None:
             return ActionResult(success=False, message="You are already awake.")
+
+        # Check Sleeping first (voluntary sleep, #2290)
+        sleeping_template = ConditionTemplate.objects.filter(
+            name=SLEEPING_CONDITION_NAME,
+        ).first()
+        if sleeping_template is not None and has_condition(actor, sleeping_template):
+            # Check dream engagement gate
+            from world.dreams.engagement import is_dream_engaged  # noqa: PLC0415
+
+            if is_dream_engaged(sheet):
+                return ActionResult(
+                    success=False,
+                    message="You are lost in the dream; you cannot wake until the danger passes.",
+                )
+            # Check for escape lever — dreamwalk destination stored on the character's ndb
+            destination = getattr(actor.ndb, "dreamwalk_destination", None)  # noqa: GETATTR_LITERAL
+
+            remove_condition(actor, sleeping_template)
+
+            # Escape lever: move to the dreamwalk destination if one was stored
+            if destination is not None:
+                actor.location = destination
+                actor.save(update_fields=["db_location"])
+                return ActionResult(
+                    success=True,
+                    message=(
+                        "You wake — but not where you fell asleep."
+                        " The dream has carried you elsewhere."
+                    ),
+                )
+            return ActionResult(success=True, message="You wake from your dream.")
+
+        # Fall through to Unconscious wake arc (#2287)
         result = attempt_wake(sheet)
         return ActionResult(success=result.woke, message=result.message)

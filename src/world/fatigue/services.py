@@ -271,9 +271,27 @@ def resolve_fatigue_collapse(
     collapse risk applies; this assumes risk applies and rolls it. On a failed
     endurance check the strain computed by attempt_power_through is applied to
     health via apply_exhaustion_damage regardless of the power-through outcome.
+
+    #2290: when the character is dreamside (Sleeping/Unconscious) and the
+    collapsing category is mental, the collapse routes through the Dream Peril
+    consequence pool instead of the standard exhaustion damage path.
     """
     if attempt_endurance_check(character_sheet, category):
         return FatigueCollapseResult(collapsed=False, powered_through=False, strain_damage=0)
+
+    # Branch: if dreamside and mental fatigue, route to Dream Peril pool (#2290)
+    if category == ActionCategory.MENTAL:  # noqa: STRING_LITERAL
+        from world.vitals.services import perceives_dreamside  # noqa: PLC0415
+
+        if perceives_dreamside(character_sheet):
+            from world.dreams.peril import resolve_dream_peril_collapse  # noqa: PLC0415
+
+            result = resolve_dream_peril_collapse(character_sheet)
+            return FatigueCollapseResult(
+                collapsed=result.died,
+                powered_through=not result.died,
+                strain_damage=0,
+            )
 
     power_success, strain_damage = attempt_power_through(character_sheet, category)
     apply_exhaustion_damage(character_sheet, strain_damage)

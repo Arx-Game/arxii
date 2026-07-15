@@ -122,6 +122,7 @@ jobs:
               evennia_extensions typeclasses behaviors world.ships world.boundaries
               world.companions world.assets world.agriculture world.travel world.estates
               world.military
+              world.dreams
               integration_tests.pipeline integration_tests.game_content
           # shard-4 (~2,545): world.scenes (892) + world.items (529) + world.conditions (326)
           #                   + world.areas (224) + world.buildings (135) + world.forms (114)
