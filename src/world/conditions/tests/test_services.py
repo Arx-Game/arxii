@@ -5,9 +5,8 @@ Tests for conditions service layer.
 from decimal import Decimal
 
 from django.test import TestCase, tag
-from evennia.objects.models import ObjectDB
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import (
@@ -65,7 +64,7 @@ class GetActiveConditionsTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.category1 = ConditionCategoryFactory(name="debuff", is_negative=True)
@@ -122,7 +121,7 @@ class HasConditionTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.condition = ConditionTemplateFactory(name="frozen")
@@ -150,10 +149,10 @@ class ApplyConditionTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
-        cls.source = ObjectDB.objects.create(db_key="SourceCharacter")
+        cls.source = ObjectDBFactory(db_key="SourceCharacter")
         cls.condition = ConditionTemplateFactory(
             name="burning",
             default_duration_type=DurationType.ROUNDS,
@@ -278,7 +277,7 @@ class ApplyConditionProgressionTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.progressive = ConditionTemplateFactory(
@@ -321,7 +320,7 @@ class ApplyConditionInteractionsTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.burning = ConditionTemplateFactory(name="burning")
@@ -374,7 +373,7 @@ class RemoveConditionTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.condition = ConditionTemplateFactory(name="frozen")
@@ -421,7 +420,7 @@ class RemoveConditionsByCategoryTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.debuff_category = ConditionCategoryFactory(name="debuff")
@@ -450,7 +449,7 @@ class ProcessDamageInteractionsTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.fire = DamageTypeFactory(name="fire")
@@ -561,7 +560,7 @@ class GetCapabilityStatusTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.movement = CapabilityTypeFactory(name="movement")
@@ -665,7 +664,7 @@ class GetCapabilityValueTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.flight = CapabilityTypeFactory(name="flight")
@@ -692,7 +691,7 @@ class GetAllCapabilityValuesTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.movement = CapabilityTypeFactory(name="movement")
@@ -757,7 +756,7 @@ class GetCheckModifierTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.combat_attack = CheckTypeFactory(name="combat-attack")
@@ -841,7 +840,7 @@ class GetResistanceModifierTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.fire = DamageTypeFactory(name="fire")
@@ -917,7 +916,7 @@ class RoundProcessingTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.fire = DamageTypeFactory(name="fire")
@@ -1006,7 +1005,7 @@ class SuppressConditionTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.condition = ConditionTemplateFactory(name="poisoned")
@@ -1045,7 +1044,7 @@ class ClearAllConditionsTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.debuff_category = ConditionCategoryFactory(name="debuff", is_negative=True)
@@ -1091,7 +1090,7 @@ class CombatModifiersTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
 
@@ -1134,7 +1133,7 @@ class StageSpecificEffectsTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.target = ObjectDBFactory(db_key="TestTarget")
 
         CharacterSheetFactory(character=cls.target)
         cls.movement = CapabilityTypeFactory(name="movement")
