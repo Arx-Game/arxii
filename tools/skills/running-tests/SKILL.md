@@ -143,6 +143,15 @@ A background `arx test` run holds live shared state; three recurring traps:
   files live from the shared tree; a mid-run branch switch makes modules
   inconsistent and produces bogus import tracebacks. Finish or kill the run
   first (then see the reset step above).
+- **Runaway allocations die at a 4GB/process ceiling (`ARX_TEST_MEM_LIMIT_GB`).**
+  The runner sets `RLIMIT_AS` so a memory runaway — classic cause: a bare
+  `MagicMock` fed into a `while node is not None: node = node.parent` walk,
+  where the mock fabricates `.parent` forever (#2386) — fails as an ordinary
+  test ERROR with a `MemoryError` traceback naming the loop, instead of
+  swap-thrashing the devcontainer or OOM-killing the CI runner. Diagnostic
+  corollary: a CI shard dying with "runner received a shutdown signal" and
+  zero test failures printed is an OOM suspect first, infra second. Raise the
+  env var only if a suite legitimately exceeds 4GB; `0` disables.
 
 ## `--keepdb` and faithful local repro
 

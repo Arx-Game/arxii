@@ -114,7 +114,12 @@ class ReconcileSunlightExposureTest(TestCase):
     def _vampire(self, *, outdoor: bool):
         """Build a mock character + room with a sunlight drawback species."""
         char = MagicMock()
+        char.character_sheet = char.sheet_data  # the property resolves to the same sheet
         char.sheet_data.species = MagicMock(pk=1)
+        # Honor the acyclic parent-chain contract. An unset .parent would let
+        # _species_and_ancestors walk a fabricated mock chain forever the moment
+        # the _has_sunlight_drawback patch below stops covering that path.
+        char.sheet_data.species.parent = None
         char.sheet_data.species_id = 1
         char.sheet_data.character = char
         room = MagicMock()
