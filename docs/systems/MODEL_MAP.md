@@ -3223,6 +3223,7 @@
   - designer_persona_display -> scenes.Persona [FK] (nullable)
   - contained_in -> items.ItemInstance [FK] (nullable)
   - image -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - legend_deeds -> societies.LegendEntry [M2M] (#2359)
 **Pointed to by:**
   - applied_disguise_overlays <- forms.CharacterFormState
   - currency_instrument <- currency.CurrencyInstrumentDetails

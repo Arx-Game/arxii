@@ -231,9 +231,14 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # adds one constant UPDATE in the same consume cascade — same
             # shape again; never scales with evidence rows.
             # Postgres 90→91; SQLite 91→92.
+            # +1 (both vendors, #2359): ItemInstance.legend_deeds M2M through
+            # table adds one constant SELECT in the Django cascade-collect when
+            # a material ItemInstance is consumed — same shape as the market/
+            # estate/evidence bumps; never scales with linked-deed count.
+            # Postgres 91→92; SQLite 92→93.
             from django.db import connection
 
-            expected = 91 if connection.vendor == "postgresql" else 92
+            expected = 92 if connection.vendor == "postgresql" else 93
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,

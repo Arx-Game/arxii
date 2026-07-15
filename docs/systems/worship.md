@@ -58,17 +58,20 @@ renown-only; Wedding/Coronation are later rows, #2358), `Ceremony` (officiant
 Persona, TRUE `being` vs `presented_being` — see leak rule, location
 RoomProfile, status OPEN/COMPLETED/ABANDONED, one-OPEN-per-location
 constraint, quality_level), `CeremonyHonoree`, `CeremonyOffering` (item
-snapshot; the item is destroyed), `CeremonySpeech`, `CeremonyConfig` singleton
-(all magnitudes PLACEHOLDER).
+snapshot; the item is destroyed; `item_legend_value` snapshots the offered
+item's legend at sacrifice time — #2359), `CeremonySpeech`, `CeremonyConfig`
+singleton (all magnitudes PLACEHOLDER).
 
 **Services** (`ceremonies/services.py`): `open_ceremony` (Decision-10
 being/presented mapping: default = officiant's public declaration; explicit
 override naming their `secret_being` = twisted rite presenting the public
 front; any other override = open rite), `record_offering` (destroys items via
-`hard_delete_item_instance`; pool always to the TRUE being; devotion follows
-belief — Decision 11), `record_speech` (Performance/Oratory roll),
+`hard_delete_item_instance`; snapshots `item.legend_value` before destruction
+as `CeremonyOffering.item_legend_value` — #2359; pool always to the TRUE
+being; devotion follows belief — Decision 11), `record_speech` (Performance/Oratory roll),
 `finish_ceremony` (one Rites + tradition-spec quality roll → multiplier;
-honoree deeds via the legend engine's `create_solo_deed`; officiant lesser
+honoree deeds via the legend engine's `create_solo_deed`; offering legend
+total added to honoree prestige base — #2359; officiant lesser
 cut; funeral handler calls the `execute_will` **no-op seam** for #1985),
 `abandon_ceremony` (awards nothing), `open_funeral_for` (the ghost-container
 lookup).
@@ -111,6 +114,8 @@ leaves the model layer except via the clue path.
 ## Deferred (filed)
 
 Wedding/Coronation types over `Union`/`MarriagePact` (#2358), event
-grandeur/prestige investment (#2357), item legend value (#2359), miracles +
+grandeur/prestige investment (#2357), item legend value at offerings (#2359,
+**shipped** — `ItemInstance.legend_deeds` M2M + `CeremonyOffering.item_legend_value`
++ finish-tally wiring), miracles +
 audere coupling (#2360), post-CG conversion (#2361), getinline queue (#2356);
 wills remain #1985 (the `execute_will` seam).

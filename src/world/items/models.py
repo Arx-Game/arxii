@@ -697,6 +697,12 @@ class ItemInstance(SharedMemoryModel):
         db_index=True,
         help_text="Set when the item is consumed/destroyed and removed from play. Null = in play.",
     )
+    legend_deeds = models.ManyToManyField(
+        "societies.LegendEntry",
+        blank=True,
+        related_name="linked_items",
+        help_text="Deeds that made this item legendary (#2359). Provenance-preserving link.",
+    )
 
     objects = ItemInstanceManager()
 
@@ -718,6 +724,11 @@ class ItemInstance(SharedMemoryModel):
     def display_description(self) -> str:
         """Return custom description if set, otherwise template description."""
         return self.custom_description or self.template.description
+
+    @property
+    def legend_value(self) -> int:
+        """Sum of all active linked deeds' total values (#2359)."""
+        return sum(d.get_total_value() for d in self.legend_deeds.filter(is_active=True))
 
     def crafted_modifier_value(self, target: ModifierTarget) -> int:
         """Total crafted modifier value for ``target`` across all recipes on this item.
