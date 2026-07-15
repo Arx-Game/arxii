@@ -249,9 +249,10 @@ class CmdHire(ArxCommand):
         if summons.status != SummonsStatus.PENDING:
             msg = f"Summons #{summons_id} is already {summons.status}."
             raise CommandError(msg)
-        # Verify the summons targets the caller's persona.
-        persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        if persona is None or summons.target_persona_id != persona.pk:
+        # Verify the summons targets one of the caller's personas — ownership
+        # spans every face the sheet owns, so a summons sent to the primary is
+        # still answerable while the player presents as an alt.
+        if summons.target_persona.character_sheet_id != self.caller.sheet_data.pk:
             msg = f"Summons #{summons_id} is not directed at you."
             raise CommandError(msg)
         return summons

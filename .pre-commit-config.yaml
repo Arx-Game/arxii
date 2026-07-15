@@ -23,6 +23,12 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: noqa-ratchet
+        name: Ratchet grandfathered noqa suppressions (count may only go down)
+        entry: uv run python tools/lint_noqa_ratchet.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: prefetch-string
         name: Block bare strings in prefetch_related
         entry: uv run python tools/lint_prefetch_string.py

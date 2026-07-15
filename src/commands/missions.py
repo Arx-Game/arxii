@@ -141,15 +141,17 @@ class CmdMission(ArxCommand):
         self.msg("\n".join(lines))
 
     def _append_pending_invites(self, lines: list[str]) -> None:
-        """Append pending mission invites addressed to the caller's persona (#887)."""
+        """Append pending mission invites addressed to any of the caller's personas (#887).
+
+        Private self-view: spans every face the sheet owns, so an invite sent
+        to the primary still surfaces while the player presents as an alt.
+        """
         from world.missions.models import MissionInvite  # noqa: PLC0415
 
-        persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        if persona is None:
-            return
         pending = (
             MissionInvite.objects.filter(
-                target_persona=persona, response=MissionInvite.Response.PENDING
+                target_persona__character_sheet=self.caller.sheet_data,
+                response=MissionInvite.Response.PENDING,
             )
             .select_related("instance__template")
             .values_list("pk", "instance__template__name")
@@ -160,15 +162,15 @@ class CmdMission(ArxCommand):
         )
 
     def _append_pending_summonses(self, lines: list[str]) -> None:
-        """Append pending summonses directed at the caller's persona (#2050)."""
+        """Append pending summonses directed at any of the caller's personas (#2050)."""
         from world.npc_services.constants import SummonsStatus  # noqa: PLC0415
         from world.npc_services.models import OfferSummons  # noqa: PLC0415
 
-        persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        if persona is None:
-            return
         pending = (
-            OfferSummons.objects.filter(target_persona=persona, status=SummonsStatus.PENDING)
+            OfferSummons.objects.filter(
+                target_persona__character_sheet=self.caller.sheet_data,
+                status=SummonsStatus.PENDING,
+            )
             .select_related("offer__role")
             .order_by("created_at")
         )
@@ -309,11 +311,17 @@ class CmdMission(ArxCommand):
         target = self.caller.search(name)
         if target is None:
             return  # search already sent a "not found" message
-        holder_persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        invitee_persona = getattr(target.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        if holder_persona is None or invitee_persona is None:
-            msg = "Both characters need a persona."
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        # Invites are face-to-face: the holder acts as the face they currently
+        # present, and the invitee is the face the holder can see in the room —
+        # never either side's primary directly (alt-leak, #981).
+        target_sheet = target.character_sheet
+        if target_sheet is None:
+            msg = f"{target.key} is not a character."
             raise CommandError(msg)
+        holder_persona = active_persona_for_sheet(self.caller.sheet_data)
+        invitee_persona = active_persona_for_sheet(target_sheet)
         try:
             invite = invite_to_mission(instance, holder_persona, invitee_persona)
         except InviteError as exc:
@@ -332,11 +340,11 @@ class CmdMission(ArxCommand):
         if not token.isdigit():
             msg = "Which invitation? Usage: mission accept <invite-id>"
             raise CommandError(msg)
-        persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        if persona is None:
-            msg = "You have no active persona."
-            raise CommandError(msg)
-        invite = MissionInvite.objects.filter(pk=int(token), target_persona=persona).first()
+        # Ownership spans every face the sheet owns: an invite addressed to the
+        # primary is still answerable while the player presents as an alt.
+        invite = MissionInvite.objects.filter(
+            pk=int(token), target_persona__character_sheet=self.caller.sheet_data
+        ).first()
         if invite is None:
             raise CommandError(_ERR_NOT_PARTICIPANT)
         decision = MissionInvite.Response.ACCEPTED if accept else MissionInvite.Response.DECLINED

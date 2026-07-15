@@ -106,20 +106,20 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
 
 
 def _pending_invites_for(character: ObjectDB) -> tuple[JournalInvite, ...]:
-    """PENDING MissionInvites addressed to this character's primary persona (#2049).
+    """PENDING MissionInvites addressed to any of this character's personas (#2049).
 
-    One query for the whole journal (not per-entry); threaded into every entry
-    since invites are persona-scoped, not instance-scoped. Mirrors the telnet
-    ``_append_pending_invites`` query (commands/missions.py:117).
+    The journal is the player's private self-view, so it spans every face the
+    sheet owns — an invite sent to the primary must still surface while the
+    player presents as an alt. No persona resolution involved (and no leak:
+    nothing here is shown to other players). Mirrors the telnet
+    ``_append_pending_invites`` query (commands/missions.py).
     """
     from world.missions.models import MissionInvite  # noqa: PLC0415
 
-    persona = getattr(character.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
-    if persona is None:
-        return ()
     rows = (
         MissionInvite.objects.filter(
-            target_persona=persona, response=MissionInvite.Response.PENDING
+            target_persona__character_sheet=character.sheet_data,
+            response=MissionInvite.Response.PENDING,
         )
         .select_related("instance__template")
         .order_by("invited_at")
@@ -133,20 +133,20 @@ def _pending_invites_for(character: ObjectDB) -> tuple[JournalInvite, ...]:
 
 
 def _pending_summons_for(character: ObjectDB) -> tuple[JournalSummons, ...]:
-    """PENDING OfferSummons directed at this character's primary persona (#2050).
+    """PENDING OfferSummons directed at any of this character's personas (#2050).
 
-    One query for the whole journal (not per-entry); threaded into every entry
-    since summonses are persona-scoped, not instance-scoped. Mirrors the telnet
-    ``_append_pending_summonses`` query (commands/missions.py).
+    Private self-view: spans every persona the sheet owns, same rationale as
+    ``_pending_invites_for``. Mirrors the telnet ``_append_pending_summonses``
+    query (commands/missions.py).
     """
     from world.npc_services.constants import SummonsStatus  # noqa: PLC0415
     from world.npc_services.models import OfferSummons  # noqa: PLC0415
 
-    persona = getattr(character.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
-    if persona is None:
-        return ()
     rows = (
-        OfferSummons.objects.filter(target_persona=persona, status=SummonsStatus.PENDING)
+        OfferSummons.objects.filter(
+            target_persona__character_sheet=character.sheet_data,
+            status=SummonsStatus.PENDING,
+        )
         .select_related("offer__role")
         .order_by("created_at")
     )

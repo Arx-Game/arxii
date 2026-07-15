@@ -613,9 +613,10 @@ class PendingAlterationSerializer(serializers.ModelSerializer):
         ]
 
     def get_character_name(self, obj: PendingAlteration) -> str:
-        """Return the primary persona name for the pending's sheet."""
-        persona = getattr(obj.character, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        return getattr(persona, "name", "") if persona is not None else ""  # noqa: GETATTR_LITERAL
+        """Return the presented persona name for the pending's sheet (#981)."""
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        return active_persona_for_sheet(obj.character).name
 
     def get_tier_caps(self, obj: PendingAlteration) -> dict:
         return ALTERATION_TIER_CAPS.get(obj.tier, {})
@@ -987,8 +988,11 @@ class ThreadSerializer(serializers.ModelSerializer):
             track_id=target_id,
         ).first()
         if progress is None:
-            partner_persona = getattr(partner_sheet, "primary_persona", None)  # noqa: GETATTR_LITERAL
-            partner_name = getattr(partner_persona, "name", None) or "them"  # noqa: GETATTR_LITERAL
+            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+            # Name the partner by the face they present, never their primary
+            # directly (alt-leak, #981) — this message is shown to another player.
+            partner_name = active_persona_for_sheet(partner_sheet).name or "them"
             msg = f"You have no developed '{track.name}' track with {partner_name} yet."
             raise serializers.ValidationError(msg)
         return progress
@@ -2795,12 +2799,13 @@ class RitualSessionParticipantSummarySerializer(serializers.Serializer):
     responded_at = serializers.DateTimeField(allow_null=True)
 
     def get_character_name(self, obj: object) -> str:
-        """Return primary persona name for the participant's sheet."""
+        """Return the presented persona name for the participant's sheet (#981)."""
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
         sheet = getattr(obj, "character_sheet", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             return ""
-        persona = getattr(sheet, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        return getattr(persona, "name", "") if persona is not None else ""  # noqa: GETATTR_LITERAL
+        return active_persona_for_sheet(sheet).name
 
 
 class RitualSessionListSerializer(serializers.ModelSerializer):
@@ -2832,12 +2837,13 @@ class RitualSessionListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_initiator_name(self, obj: object) -> str:
-        """Return primary persona name of the initiator sheet."""
+        """Return the presented persona name of the initiator sheet (#981)."""
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
         initiator = getattr(obj, "initiator", None)  # noqa: GETATTR_LITERAL
         if initiator is None:
             return ""
-        persona = getattr(initiator, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        return getattr(persona, "name", "") if persona is not None else ""  # noqa: GETATTR_LITERAL
+        return active_persona_for_sheet(initiator).name
 
     def get_participant_count(self, obj: object) -> dict[str, int]:
         """Return counts by state. Uses participants_cached if prefetched."""
@@ -2914,11 +2920,12 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_initiator_name(self, obj: object) -> str:
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
         initiator = getattr(obj, "initiator", None)  # noqa: GETATTR_LITERAL
         if initiator is None:
             return ""
-        persona = getattr(initiator, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        return getattr(persona, "name", "") if persona is not None else ""  # noqa: GETATTR_LITERAL
+        return active_persona_for_sheet(initiator).name
 
     def get_session_references(self, obj: object) -> list[dict[str, object]]:
         """Summarise session-level references (participant=None).

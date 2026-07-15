@@ -122,10 +122,14 @@ class ReactToWindowAction(Action):
         interaction = kwargs.get("interaction")
         kind = kwargs.get("kind")
         choice = kwargs.get("choice")
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
         sheet = actor.character_sheet
-        persona = getattr(sheet, "primary_persona", None)  # noqa: GETATTR_LITERAL
-        if persona is None:
+        if sheet is None:
             return ActionResult(success=False, message="You have no persona to react with.")
+        # Reacting is an IC act: attribute it to the face the actor currently
+        # presents, never the primary directly (alt-leak, #981).
+        persona = active_persona_for_sheet(sheet)
 
         try:
             config = get_reaction_kind(kind)

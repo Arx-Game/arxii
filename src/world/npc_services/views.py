@@ -373,10 +373,13 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
         if not isinstance(puppet, ObjectDB):
             return qs.none()
         sheet_data = puppet.character_sheet
-        persona = getattr(sheet_data, "primary_persona", None) if sheet_data is not None else None  # noqa: GETATTR_LITERAL
-        if persona is None:
+        if sheet_data is None:
             return qs.none()
-        return qs.filter(target_persona=persona)
+        # Private self-view: summonses addressed to any of the caller's
+        # personas, so one sent to the primary still lists while the player
+        # presents as an alt. No persona resolution, no cross-persona leak —
+        # every face here belongs to the same sheet.
+        return qs.filter(target_persona__character_sheet=sheet_data)
 
     def get_permissions(self) -> list:
         """Create is GM/staff only; list/retrieve/respond are open to authenticated users."""
