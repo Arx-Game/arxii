@@ -80,8 +80,20 @@ services:
     # Windows browser reaches the in-container server. The skill's
     # start-server.sh defaults to binding 127.0.0.1; pass --host 0.0.0.0
     # --url-host localhost so it actually listens on the forwarded interface.
+    #
+    # Web ports for manual browser testing of the game from the Windows host:
+    #   3000 — Vite dev server (frontend with hot reload); proxies /api → :4001
+    #   4001 — Django/Evennia web server (REST API, admin, static assets)
+    #   4002 — Evennia portal (game websocket — the browser connects directly)
+    # All three are needed: the browser loads the page from :3000, makes API
+    # calls through Vite's proxy to :4001, and opens a websocket to :4002.
+    # Use `arx serve` (which serves the built frontend from Django) if you
+    # only want to forward 4001+4002 and skip Vite.
     ports:
       - "49200:49200"
+      - "3000:3000"
+      - "4001:4001"
+      - "4002:4002"
     command: sleep infinity
     # Cap container logs at 150 MB (50 MB × 3 rotated files). Docker's
     # default json-file driver has no rotation — a crash-looping process
