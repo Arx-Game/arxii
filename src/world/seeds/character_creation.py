@@ -22,11 +22,19 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_TYPECLASS,
 )
 from world.character_creation.models import Beginnings, StartingArea
-from world.character_sheets.models import Gender
+from world.character_sheets.models import Gender, Heritage, Pronouns
 from world.classes.models import Path, PathStage
-from world.forms.models import Build, HeightBand
+from world.forms.models import (
+    Build,
+    FormTrait,
+    FormTraitOption,
+    HeightBand,
+    SpeciesFormTrait,
+    TraitType as FormTraitType,
+)
 from world.realms.models import Realm
 from world.roster.models import Roster
+from world.roster.models.families import Family
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -236,6 +244,10 @@ def seed_character_creation_dev() -> None:
             "is_cg_selectable": True,
         },
     )
+    _seed_form_traits(species)
+    _seed_heritages()
+    _seed_pronouns()
+    _seed_commoner_families(realm)
     for stat_name in DEFAULT_STAT_NAMES:
         Trait.objects.get_or_create(
             name=stat_name,
@@ -267,3 +279,192 @@ def _seed_cg_explanations() -> None:
 
     for key, text in CG_EXPLANATION_COPY.items():
         CGExplanation.objects.update_or_create(key=key, defaults={"text": text})
+
+
+# ---------------------------------------------------------------------------
+# Appearance traits (FormTrait / FormTraitOption / SpeciesFormTrait)
+# ---------------------------------------------------------------------------
+
+# Each entry is (trait_name, display_name, trait_type, is_cosmetic, [options]).
+# Options are (name, display_name) tuples. These are the minimum viable
+# appearance choices a player needs to complete the Appearance stage of CG.
+_APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]], ...] = (
+    (
+        "hair_color",
+        "Hair Color",
+        FormTraitType.COLOR,
+        True,
+        (
+            ("black", "Black"),
+            ("brown", "Brown"),
+            ("blonde", "Blonde"),
+            ("red", "Red"),
+            ("auburn", "Auburn"),
+            ("white", "White"),
+            ("gray", "Gray"),
+        ),
+    ),
+    (
+        "eye_color",
+        "Eye Color",
+        FormTraitType.COLOR,
+        False,
+        (
+            ("brown", "Brown"),
+            ("blue", "Blue"),
+            ("green", "Green"),
+            ("gray", "Gray"),
+            ("hazel", "Hazel"),
+        ),
+    ),
+    (
+        "skin_tone",
+        "Skin Tone",
+        FormTraitType.COLOR,
+        False,
+        (
+            ("fair", "Fair"),
+            ("light", "Light"),
+            ("medium", "Medium"),
+            ("tan", "Tan"),
+            ("dark", "Dark"),
+        ),
+    ),
+)
+
+
+def _seed_form_traits(species: Species) -> None:
+    """Seed FormTrait, FormTraitOption, and SpeciesFormTrait for the given species.
+
+    Creates the minimum viable appearance options for character creation.
+    Each trait is linked to the species via SpeciesFormTrait with
+    ``is_available_in_cg=True`` and no ``allowed_options`` restriction
+    (all options are available).
+    """
+    for sort_idx, (name, display_name, trait_type, is_cosmetic, options) in enumerate(
+        _APPEARANCE_TRAITS
+    ):
+        trait, _ = FormTrait.objects.get_or_create(
+            name=name,
+            defaults={
+                "display_name": display_name,
+                "trait_type": trait_type,
+                "is_cosmetic": is_cosmetic,
+                "sort_order": sort_idx,
+            },
+        )
+        for opt_sort_idx, (opt_name, opt_display) in enumerate(options):
+            FormTraitOption.objects.get_or_create(
+                trait=trait,
+                name=opt_name,
+                defaults={
+                    "display_name": opt_display,
+                    "sort_order": opt_sort_idx,
+                },
+            )
+        SpeciesFormTrait.objects.get_or_create(
+            species=species,
+            trait=trait,
+            defaults={"is_available_in_cg": True},
+        )
+
+
+# ---------------------------------------------------------------------------
+# Heritage
+# ---------------------------------------------------------------------------
+
+_HERITAGES: tuple[tuple[str, str, bool, bool, str], ...] = (
+    # (name, description, is_special, family_known, family_display)
+    (
+        "Normal",
+        "A standard upbringing with known family and origins.",
+        False,
+        True,
+        "",
+    ),
+    (
+        "Sleeper",
+        "Awakened from magical slumber with unknown origins.",
+        True,
+        False,
+        "Unknown",
+    ),
+    (
+        "Misbegotten",
+        "Born from the Tree of Souls with no parents.",
+        True,
+        False,
+        "Discoverable in play",
+    ),
+)
+
+
+def _seed_heritages() -> None:
+    """Seed canonical Heritage rows for the Lineage stage of CG."""
+    for name, description, is_special, family_known, family_display in _HERITAGES:
+        Heritage.objects.get_or_create(
+            name=name,
+            defaults={
+                "description": description,
+                "is_special": is_special,
+                "family_known": family_known,
+                "family_display": family_display,
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
+# Pronouns
+# ---------------------------------------------------------------------------
+
+_PRONOUNS: tuple[tuple[str, str, str, str, str, bool], ...] = (
+    # (key, display_name, subject, object, possessive, is_default)
+    ("he_him", "He/Him", "he", "him", "his", False),
+    ("she_her", "She/Her", "she", "her", "hers", False),
+    ("they_them", "They/Them", "they", "them", "theirs", False),
+)
+
+
+def _seed_pronouns() -> None:
+    """Seed canonical Pronouns rows for the Identity stage of CG."""
+    for key, display_name, subject, obj, possessive, is_default in _PRONOUNS:
+        Pronouns.objects.get_or_create(
+            key=key,
+            defaults={
+                "display_name": display_name,
+                "subject": subject,
+                "object": obj,
+                "possessive": possessive,
+                "is_default": is_default,
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
+# Commoner families
+# ---------------------------------------------------------------------------
+
+_COMMONER_FAMILIES: tuple[str, ...] = (
+    "The Vintners",
+    "The Ironwrights",
+    "The Millers",
+)
+
+
+def _seed_commoner_families(realm: Realm) -> None:
+    """Seed at least one commoner family per realm for the Lineage stage.
+
+    Players with the "Normal" heritage need a family to claim during CG.
+    These are placeholder commoner families — staff can rename or add
+    noble houses via the admin.
+    """
+    for name in _COMMONER_FAMILIES:
+        Family.objects.get_or_create(
+            name=name,
+            defaults={
+                "family_type": Family.FamilyType.COMMONER,
+                "description": f"A commoner family of {realm.name}.",
+                "is_playable": True,
+                "origin_realm": realm,
+            },
+        )
