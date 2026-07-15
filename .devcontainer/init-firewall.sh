@@ -162,9 +162,12 @@ resolve_and_add "pypi.org"
 resolve_and_add "api.code.umans.ai"
 
 # Playwright downloads Chromium binaries from its own CDN (cdn.playwright.dev),
-# needed for headless browser E2E testing from inside the container. Resolved
-# via dig like the other small/stable hosts above.
-resolve_and_add "cdn.playwright.dev"
+# which is fronted by Azure Front Door. Azure Front Door rotates IPs across a
+# large pool, so a single dig only catches whichever edge node answered — the
+# next request may hit a different IP and be blocked. Instead, we allowlist the
+# full AzureFrontDoor.Frontend service-tag range from the Azure JSON fetched in
+# step (e) below. The single dig was the root cause of Chromium install failures
+# (EHOSTUNREACH / No route to host) after the firewall took effect.
 
 # ---- b) GitHub meta API (git + api + web + packages CIDRs) ----
 echo "Fetching GitHub IP ranges via meta API..."
@@ -260,6 +263,25 @@ if [ "$AZURE_COUNT" -lt 50 ]; then
     exit 1
 fi
 echo "  Added ${AZURE_COUNT} Azure Storage CIDRs."
+
+# ---- e2) Azure Front Door published ranges (cdn.playwright.dev) ----
+# Playwright's CDN is fronted by Azure Front Door, which rotates IPs across a
+# large pool. The service tag "AzureFrontDoor.Frontend" publishes the full set.
+# Without this, the single dig in step (a) only catches one edge node and the
+# Chromium binary download fails with EHOSTUNREACH once the firewall takes
+# effect. Same AZURE_JSON as (e), different service-tag selector.
+AZURE_FD_COUNT=0
+while read -r cidr; do
+    if is_valid_ipv4_cidr "$cidr"; then
+        ipset add allowed-domains "$cidr" -exist
+        AZURE_FD_COUNT=$((AZURE_FD_COUNT + 1))
+    fi
+done < <(echo "$AZURE_JSON" | jq -r '.values[] | select(.name == "AzureFrontDoor.Frontend") | .properties.addressPrefixes[]')
+if [ "$AZURE_FD_COUNT" -lt 10 ]; then
+    echo "ERROR: Azure Front Door service tag returned only ${AZURE_FD_COUNT} IPv4 CIDRs (minimum 10); aborting" >&2
+    exit 1
+fi
+echo "  Added ${AZURE_FD_COUNT} Azure Front Door CIDRs."
 
 # ---- f) AWS CloudFront published ranges (sonarcloud.io, api.sonarcloud.io) ----
 echo "Fetching AWS CloudFront IP ranges..."

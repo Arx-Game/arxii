@@ -184,8 +184,12 @@ cloudinary.config(
 )
 
 # Email configuration
-if env("RESEND_API_KEY", default=""):
-    # Use Resend for email delivery
+if env("RESEND_API_KEY", default="") and not DEBUG:
+    # Use Resend for email delivery in production only.
+    # In DEBUG mode, always use the console backend so registration / email
+    # verification flows work without outbound SMTP (e.g. in the devcontainer,
+    # which blocks smtp.resend.com:587). The verification key prints to the
+    # server log, where it can be extracted for manual or automated testing.
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = "smtp.resend.com"
     EMAIL_PORT = 587

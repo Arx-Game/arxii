@@ -73,6 +73,12 @@ RUN cd /tmp/mise && ~/.local/bin/mise trust \
 USER root
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
  && apt-get install -y --no-install-recommends gh shellcheck \
+      # Playwright Chromium runtime dependencies (not the browser itself —
+      # that's downloaded at runtime via `npx playwright install chromium`).
+      # Without these libs, Chromium launches but crashes on first navigation.
+      libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 \
+      libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+      libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \
  && rm -rf /var/lib/apt/lists/*
 USER vscode
 
