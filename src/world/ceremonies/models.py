@@ -126,6 +126,10 @@ class CeremonyOffering(SharedMemoryModel):
     ceremony = models.ForeignKey(Ceremony, on_delete=models.CASCADE, related_name="offerings")
     item_name = models.CharField(max_length=200)
     item_value = models.PositiveIntegerField(default=0)
+    item_legend_value = models.PositiveIntegerField(
+        default=0,
+        help_text="Legend value of the offered item at sacrifice time (#2359).",
+    )
     worship_grant = models.ForeignKey(
         "worship.WorshipGrant",
         null=True,

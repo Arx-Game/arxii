@@ -167,9 +167,28 @@ class CeremonyFlowTests(TestCase):
         self.assertGreater(self.being.resonance_pool, 0)
         offering = CeremonyOffering.objects.get(ceremony=ceremony)
         self.assertEqual(offering.item_value, 10)
+        self.assertEqual(offering.item_legend_value, 0)
         self.assertIsNotNone(offering.worship_grant)
         standing = DevotionStanding.objects.get(character_sheet=officiant_sheet, being=self.being)
         self.assertGreater(standing.favor, 0)
+
+    def test_offering_snapshots_item_legend_value(self) -> None:
+        from world.items.factories import ItemInstanceFactory
+        from world.societies.factories import LegendEntryFactory, LegendSourceTypeFactory
+
+        ceremony, _, _ = self._open_funeral()
+        instance = ItemInstanceFactory(template__value=10)
+        source_type = LegendSourceTypeFactory()
+        sheet = CharacterSheetFactory()
+        deed = LegendEntryFactory(
+            persona=sheet.primary_persona, source_type=source_type, base_value=75
+        )
+        instance.legend_deeds.add(deed)
+
+        record_offering(ceremony=ceremony, item_instances=[instance])
+
+        offering = CeremonyOffering.objects.get(ceremony=ceremony)
+        self.assertEqual(offering.item_legend_value, 75)
 
     def test_finish_tallies_honoree_and_officiant_deeds_and_calls_will_seam(self) -> None:
         from world.societies.models import LegendEntry

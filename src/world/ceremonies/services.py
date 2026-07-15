@@ -149,6 +149,7 @@ def record_offering(
     offerings: list[CeremonyOffering] = []
     for instance in item_instances:
         value = instance.template.value
+        legend_value = instance.legend_value
         name = str(instance)
         hard_delete_item_instance(instance)
         grant = None
@@ -164,6 +165,7 @@ def record_offering(
                 ceremony=ceremony,
                 item_name=name,
                 item_value=value,
+                item_legend_value=legend_value,
                 worship_grant=grant,
                 offered_by=ceremony.officiant,
             )
