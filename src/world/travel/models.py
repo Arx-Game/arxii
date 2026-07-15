@@ -207,6 +207,13 @@ class Voyage(SharedMemoryModel):
     )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    provisioning_ratio = models.FloatField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Last leg's provisioning ratio (0.0-1.0). Null before first leg or for land voyages."
+        ),
+    )
 
     class Meta:
         verbose_name = "Voyage"
