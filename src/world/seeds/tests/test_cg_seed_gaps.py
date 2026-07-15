@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from world.character_sheets.models import Heritage, Pronouns
+from world.character_sheets.models import Gender, Heritage, Pronouns
 from world.forms.models import FormTrait, FormTraitOption, SpeciesFormTrait
 from world.roster.models.families import Family
 from world.seeds.character_creation import seed_character_creation_dev
@@ -92,6 +92,17 @@ class PronounsSeedTests(TestCase):
         self.assertTrue(Pronouns.objects.filter(key="he_him").exists())
         self.assertTrue(Pronouns.objects.filter(key="she_her").exists())
         self.assertTrue(Pronouns.objects.filter(key="they_them").exists())
+
+    def test_genders_created(self):
+        """Seed creates male, female, non_binary, and unspecified."""
+        seed_character_creation_dev()
+        self.assertTrue(Gender.objects.filter(key="male").exists())
+        self.assertTrue(Gender.objects.filter(key="female").exists())
+        self.assertTrue(Gender.objects.filter(key="non_binary").exists())
+        self.assertTrue(Gender.objects.filter(key="unspecified").exists())
+        # unspecified is the default
+        default = Gender.objects.get(key="unspecified")
+        self.assertTrue(default.is_default)
 
     def test_pronoun_fields(self):
         """Pronoun fields are populated correctly."""

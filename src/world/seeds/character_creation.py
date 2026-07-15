@@ -214,6 +214,18 @@ def seed_character_creation_dev() -> None:
     )
     beginnings.allowed_species.add(species)  # M2M add is idempotent
     Gender.objects.get_or_create(
+        key="male",
+        defaults={"display_name": "Male", "is_default": False},
+    )
+    Gender.objects.get_or_create(
+        key="female",
+        defaults={"display_name": "Female", "is_default": False},
+    )
+    Gender.objects.get_or_create(
+        key="non_binary",
+        defaults={"display_name": "Non-Binary", "is_default": False},
+    )
+    Gender.objects.get_or_create(
         key="unspecified",
         defaults={"display_name": "Unspecified", "is_default": True},
     )
