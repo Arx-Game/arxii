@@ -68,6 +68,17 @@ iptables -A INPUT  -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
 # pool (172.17–172.31.x.x) and any custom bridge networks in that range.
 iptables -A OUTPUT -d 172.16.0.0/12 -j ACCEPT
 
+# Inbound web ports — allows the host browser to reach the devcontainer's
+# forwarded ports (docker-compose maps these 1:1). Without these INPUT
+# rules the default-deny policy drops the host's SYN packets, so
+# localhost:4001 times out even though the server is listening on 0.0.0.0.
+#   3000 — Vite dev server (frontend with hot reload; proxies /api → :4001)
+#   4001 — Django/Evennia web server (REST API, admin, built frontend)
+#   4002 — Evennia portal (game websocket)
+iptables -A INPUT -p tcp --dport 3000 -j ACCEPT
+iptables -A INPUT -p tcp --dport 4001 -j ACCEPT
+iptables -A INPUT -p tcp --dport 4002 -j ACCEPT
+
 # ---------------------------------------------------------------------------
 # 3. Build the ipset of allowed egress destinations.
 #    hash:net supports both single IPs (/32) and CIDR prefixes.
