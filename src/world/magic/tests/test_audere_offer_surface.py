@@ -6,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionInstanceFactory
 from world.magic.audere import (
@@ -51,7 +51,7 @@ class AudereOfferServiceTests(TestCase):
         cls.obj_ct = ContentType.objects.get_for_model(ObjectDB)
 
     def setUp(self) -> None:
-        self.character = ObjectDB.objects.create(db_key="offer_surface_char")
+        self.character = ObjectDBFactory(db_key="offer_surface_char")
         self.sheet = CharacterSheetFactory(character=self.character)
         self.anima = CharacterAnimaFactory(character=self.character, current=10, maximum=50)
         self.engagement = CharacterEngagement.objects.create(
@@ -81,7 +81,7 @@ class AudereOfferServiceTests(TestCase):
         assert not PendingAudereOffer.objects.filter(character_sheet=self.sheet).exists()
 
     def test_no_offer_for_npc_without_sheet(self) -> None:
-        npc = ObjectDB.objects.create(db_key="offer_surface_npc")
+        npc = ObjectDBFactory(db_key="offer_surface_npc")
 
         assert maybe_create_audere_offer(npc, runtime_intensity=20) is None
         assert not PendingAudereOffer.objects.exists()
