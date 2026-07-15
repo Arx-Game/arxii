@@ -301,6 +301,30 @@ export interface Place {
 }
 
 // ---------------------------------------------------------------------------
+// Speaker queue types (#2356)
+// ---------------------------------------------------------------------------
+
+export interface SpeakerQueueEntry {
+  id: number;
+  persona: number;
+  persona_name: string;
+  position: number;
+  joined_at: string;
+}
+
+export interface SpeakerQueue {
+  id: number;
+  room: number;
+  scene: number | null;
+  is_active: boolean;
+  opened_by: number | null;
+  opened_by_name: string;
+  opened_at: string;
+  closed_at: string | null;
+  entries: SpeakerQueueEntry[];
+}
+
+// ---------------------------------------------------------------------------
 // Standalone technique cast types
 // ---------------------------------------------------------------------------
 

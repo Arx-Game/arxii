@@ -13,6 +13,7 @@ import type {
   CastRequestBody,
   CastResponse,
   PendingActionTarget,
+  SpeakerQueue,
 } from './actionTypes';
 
 /**
@@ -230,6 +231,52 @@ export async function joinPlace(_sceneId: string, placeId: number): Promise<void
 export async function leavePlace(_sceneId: string, placeId: number): Promise<void> {
   const res = await apiFetch(`/api/places/${placeId}/leave/`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to leave place');
+}
+
+// ---------------------------------------------------------------------------
+// Speaker queue API (#2356)
+// ---------------------------------------------------------------------------
+
+export async function fetchSpeakerQueue(roomId: string): Promise<{ results: SpeakerQueue[] }> {
+  const res = await apiFetch(`/api/speaker-queues/?room=${roomId}`);
+  if (!res.ok) throw new Error('Failed to load speaker queue');
+  return res.json();
+}
+
+export async function openSpeakerQueue(roomId: number): Promise<void> {
+  const res = await apiFetch('/api/speaker-queues/open/', {
+    method: 'POST',
+    body: JSON.stringify({ room_id: roomId }),
+  });
+  if (!res.ok) throw new Error('Failed to open speaker queue');
+}
+
+export async function closeSpeakerQueue(queueId: number): Promise<void> {
+  const res = await apiFetch(`/api/speaker-queues/${queueId}/close/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to close speaker queue');
+}
+
+export async function joinSpeakerQueue(queueId: number): Promise<void> {
+  const res = await apiFetch(`/api/speaker-queues/${queueId}/join/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to join speaker queue');
+}
+
+export async function leaveSpeakerQueue(queueId: number): Promise<void> {
+  const res = await apiFetch(`/api/speaker-queues/${queueId}/leave/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to leave speaker queue');
+}
+
+export async function advanceSpeakerQueue(queueId: number): Promise<void> {
+  const res = await apiFetch(`/api/speaker-queues/${queueId}/advance/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to advance speaker queue');
+}
+
+export async function skipSpeakerInQueue(queueId: number, personaName: string): Promise<void> {
+  const res = await apiFetch(`/api/speaker-queues/${queueId}/skip/`, {
+    method: 'POST',
+    body: JSON.stringify({ target_name: personaName }),
+  });
+  if (!res.ok) throw new Error('Failed to skip speaker');
 }
 
 /**

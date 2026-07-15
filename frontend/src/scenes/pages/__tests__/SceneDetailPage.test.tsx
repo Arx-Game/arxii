@@ -255,6 +255,10 @@ vi.mock('../../components/PlaceBar', () => ({
   PlaceBar: () => <div data-testid="place-bar">PlaceBar</div>,
 }));
 
+vi.mock('../../components/SpeakerQueueBar', () => ({
+  SpeakerQueueBar: () => <div data-testid="speaker-queue-bar">SpeakerQueueBar</div>,
+}));
+
 vi.mock('../../components/ConsentPrompt', () => ({
   ConsentPrompt: () => <div data-testid="consent-prompt">ConsentPrompt</div>,
 }));

@@ -214,3 +214,18 @@ class Room(ObjectParent, DefaultRoom):
         from world.scenes.round_services import maybe_finish_empty_scene
 
         maybe_finish_empty_scene(self, leaving=obj)
+        # #2356: remove a departing character from the room's speaker queue.
+        if obj.is_typeclass("typeclasses.characters.Character", exact=False):
+            from world.scenes.models import Persona
+            from world.scenes.services import active_persona_for_sheet
+            from world.scenes.speaker_queue_services import (
+                remove_persona_from_room_queues,
+            )
+
+            sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            if sheet is not None:
+                try:
+                    persona = active_persona_for_sheet(sheet)
+                    remove_persona_from_room_queues(self, persona)
+                except Persona.DoesNotExist:
+                    pass
