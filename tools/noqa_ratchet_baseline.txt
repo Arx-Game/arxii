@@ -1,0 +1,5 @@
+# Maximum allowed `# noqa: <TOKEN>` suppressions under src/, per token.
+# Enforced by tools/lint_noqa_ratchet.py (pre-commit + CI). May only go DOWN
+# as audit tranches retire grandfathered sites; bumping it up is a deliberate,
+# reviewed exception — justify it in the commit message.
+GETATTR_LITERAL 286

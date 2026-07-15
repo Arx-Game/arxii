@@ -52,10 +52,11 @@ class SpeakerQueueSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "opened_at", "closed_at"]
 
     def get_entries(self, obj: SpeakerQueue) -> Any:
-        entries = getattr(obj, "_prefetched_entries", None)  # noqa: GETATTR_LITERAL
-        if entries is None:
-            entries = queue_entries(obj)
-        return SpeakerQueueEntrySerializer(entries, many=True).data
+        # No Prefetch(to_attr=...) fallback here: nothing sets one, and adding it
+        # onto a SharedMemoryModel would leak prefetched rows across requests —
+        # pass batched entries via serializer context if list query counts ever
+        # need trimming.
+        return SpeakerQueueEntrySerializer(queue_entries(obj), many=True).data
 
 
 class SpeakerQueueViewSet(viewsets.ReadOnlyModelViewSet):

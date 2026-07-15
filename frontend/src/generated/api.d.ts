@@ -30334,7 +30334,7 @@ export interface components {
     PendingAlteration: {
       readonly id: number;
       readonly character_id: number;
-      /** @description Return the primary persona name for the pending's sheet. */
+      /** @description Return the presented persona name for the pending's sheet (#981). */
       readonly character_name: string;
       status?: components['schemas']['PendingAlterationStatusEnum'];
       /**
@@ -31965,7 +31965,7 @@ export interface components {
       readonly id: number;
       readonly ritual_name: string;
       readonly participation_rule: string;
-      /** @description Return primary persona name of the initiator sheet. */
+      /** @description Return the presented persona name of the initiator sheet (#981). */
       readonly initiator_name: string;
       readonly proposed_terms: string;
       /** Format: date-time */
@@ -31981,7 +31981,7 @@ export interface components {
     /** @description Brief participant row used inside list/detail session serializers. */
     RitualSessionParticipantSummary: {
       character_sheet_id: number;
-      /** @description Return primary persona name for the participant's sheet. */
+      /** @description Return the presented persona name for the participant's sheet (#981). */
       readonly character_name: string;
       state: string;
       /** Format: date-time */

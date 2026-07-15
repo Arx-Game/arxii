@@ -53621,7 +53621,7 @@ components:
           readOnly: true
         character_name:
           type: string
-          description: Return the primary persona name for the pending's sheet.
+          description: Return the presented persona name for the pending's sheet (#981).
           readOnly: true
         status:
           $ref: '#/components/schemas/PendingAlterationStatusEnum'
@@ -57058,7 +57058,7 @@ components:
           readOnly: true
         initiator_name:
           type: string
-          description: Return primary persona name of the initiator sheet.
+          description: Return the presented persona name of the initiator sheet (#981).
           readOnly: true
         proposed_terms:
           type: string
@@ -57098,7 +57098,8 @@ components:
           type: integer
         character_name:
           type: string
-          description: Return primary persona name for the participant's sheet.
+          description: Return the presented persona name for the participant's sheet
+            (#981).
           readOnly: true
         state:
           type: string
