@@ -320,6 +320,28 @@ fe-lint *args:
 fe-test *args:
     cd frontend && pnpm test --run {{args}}
 
+# Run Playwright e2e tests against the Django-served frontend (production
+# build). Requires the Evennia server to be running on :4001 (just start).
+# The smoke tests (frontend/e2e/smoke.spec.ts etc.) can also run against
+# `vite preview` with no backend — use `fe-e2e-frontend` for that mode.
+#   just fe-e2e                      # all e2e tests against Django backend
+#   just fe-e2e user-journey          # specific spec file
+fe-e2e *args:
+    cd frontend && npx playwright test --config e2e.backend.config.ts {{args}}
+
+# Run Playwright e2e tests against the Vite preview build (no backend).
+# This is the original smoke-test mode — pages render but all API calls fail.
+#   just fe-e2e-frontend
+#   just fe-e2e-frontend smoke
+fe-e2e-frontend *args:
+    cd frontend && npx playwright test {{args}}
+
+# Install Playwright's Chromium browser binary. Must be run once before e2e
+# tests work. Requires the devcontainer firewall to allowlist cdn.playwright.dev
+# (already configured in init-firewall.sh via Azure Front Door ranges).
+fe-e2e-install:
+    cd frontend && npx playwright install chromium
+
 # --- Cache / scratch ---------------------------------------------------------
 
 # Delete all Python bytecode caches under src/.
