@@ -40,6 +40,22 @@ def _broadcast_room_state(actor: ObjectDB) -> None:
         room._broadcast_room_state()  # noqa: SLF001
 
 
+def _resolve_queue(actor: ObjectDB) -> tuple[Any, Any, Any] | ActionResult:
+    """Resolve the actor's room, persona, and active queue.
+
+    Returns ``(room, persona, queue)`` on success, or a failure ``ActionResult``
+    when the room is missing or no active queue exists.
+    """
+    room = actor.location
+    if room is None:
+        return ActionResult(success=False, message=_NOT_IN_ROOM)
+    persona = active_persona_for_sheet(actor.sheet_data)
+    queue = get_active_queue(room)
+    if queue is None:
+        return ActionResult(success=False, message=_NO_QUEUE)
+    return room, persona, queue
+
+
 @dataclass
 class OpenSpeakerQueueAction(Action):
     """Open a speaker queue in the actor's current room."""
@@ -54,10 +70,7 @@ class OpenSpeakerQueueAction(Action):
         return [HasCharacterSheetPrerequisite()]
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
         room = actor.location
         if room is None:
@@ -88,18 +101,12 @@ class CloseSpeakerQueueAction(Action):
         return [HasCharacterSheetPrerequisite()]
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        room = actor.location
-        if room is None:
-            return ActionResult(success=False, message=_NOT_IN_ROOM)
-        queue = get_active_queue(room)
-        if queue is None:
-            return ActionResult(success=False, message=_NO_QUEUE)
-        persona = active_persona_for_sheet(actor.sheet_data)
+        resolved = _resolve_queue(actor)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        _, persona, queue = resolved
         is_staff = bool(actor.account and actor.account.is_staff)
         if not (queue.opened_by_id == persona.pk or is_staff):
             return ActionResult(
@@ -125,18 +132,12 @@ class JoinSpeakerQueueAction(Action):
         return [HasCharacterSheetPrerequisite()]
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        room = actor.location
-        if room is None:
-            return ActionResult(success=False, message=_NOT_IN_ROOM)
-        queue = get_active_queue(room)
-        if queue is None:
-            return ActionResult(success=False, message=_NO_QUEUE)
-        persona = active_persona_for_sheet(actor.sheet_data)
+        resolved = _resolve_queue(actor)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        _, persona, queue = resolved
         try:
             entry = join_queue(queue, persona)
         except SpeakerQueueError as exc:
@@ -162,18 +163,12 @@ class LeaveSpeakerQueueAction(Action):
         return [HasCharacterSheetPrerequisite()]
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        room = actor.location
-        if room is None:
-            return ActionResult(success=False, message=_NOT_IN_ROOM)
-        queue = get_active_queue(room)
-        if queue is None:
-            return ActionResult(success=False, message=_NO_QUEUE)
-        persona = active_persona_for_sheet(actor.sheet_data)
+        resolved = _resolve_queue(actor)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        _, persona, queue = resolved
         left = leave_queue(queue, persona)
         if not left:
             return ActionResult(success=False, message="You are not in line.")
@@ -200,18 +195,12 @@ class AdvanceSpeakerQueueAction(Action):
         return [HasCharacterSheetPrerequisite()]
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        room = actor.location
-        if room is None:
-            return ActionResult(success=False, message=_NOT_IN_ROOM)
-        queue = get_active_queue(room)
-        if queue is None:
-            return ActionResult(success=False, message=_NO_QUEUE)
-        persona = active_persona_for_sheet(actor.sheet_data)
+        resolved = _resolve_queue(actor)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        _, persona, queue = resolved
         is_staff = bool(actor.account and actor.account.is_staff)
         current = queue.entries.filter(position=1).first()
         is_current = current is not None and current.persona_id == persona.pk
@@ -249,17 +238,12 @@ class SkipSpeakerAction(Action):
         return [HasCharacterSheetPrerequisite()]
 
     def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        room = actor.location
-        if room is None:
-            return ActionResult(success=False, message=_NOT_IN_ROOM)
-        queue = get_active_queue(room)
-        if queue is None:
-            return ActionResult(success=False, message=_NO_QUEUE)
+        resolved = _resolve_queue(actor)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        _, _persona, queue = resolved
         target_name = kwargs.get("target_name", "")
         if not target_name:
             return ActionResult(success=False, message="Skip whom?")
@@ -273,17 +257,11 @@ class SkipSpeakerAction(Action):
         ).first()
         if target_persona is None:
             return ActionResult(success=False, message=f"{target_name} is not in line.")
-        return _do_skip(actor, queue, target_name, target_persona)
+        return _skip_result(actor, queue, target_name, skip_speaker(queue, target_persona))
 
 
-def _do_skip(
-    actor: ObjectDB,
-    queue: Any,
-    target_name: str,
-    target_persona: Any,
-) -> ActionResult:
-    """Execute the skip and build the result message."""
-    next_entry = skip_speaker(queue, target_persona)
+def _skip_result(actor: ObjectDB, queue: Any, target_name: str, next_entry: Any) -> ActionResult:
+    """Build the skip result message and broadcast."""
     _broadcast_room_state(actor)
     if next_entry is not None:
         return ActionResult(
