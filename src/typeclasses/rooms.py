@@ -222,7 +222,7 @@ class Room(ObjectParent, DefaultRoom):
                 remove_persona_from_room_queues,
             )
 
-            sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            sheet = obj.character_sheet
             if sheet is not None:
                 try:
                     persona = active_persona_for_sheet(sheet)
