@@ -12,6 +12,7 @@ from world.scenes.interaction_views import (
 from world.scenes.place_views import PlaceViewSet
 from world.scenes.reaction_views import ReactionWindowViewSet
 from world.scenes.social_control_views import BlockViewSet, MuteViewSet
+from world.scenes.speaker_queue_views import SpeakerQueueViewSet
 from world.scenes.views import (
     PersonaViewSet,
     SceneSummaryRevisionViewSet,
@@ -43,6 +44,7 @@ router.register(
     basename="scenesummaryrevision",
 )
 router.register(r"places", PlaceViewSet, basename="place")
+router.register(r"speaker-queues", SpeakerQueueViewSet, basename="speakerqueue")
 router.register(
     r"action-requests",
     SceneActionRequestViewSet,
