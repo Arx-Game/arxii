@@ -141,6 +141,7 @@ from commands.social.grievance import CmdGrievance
 from commands.social.rivals import CmdRival, CmdRivals, CmdUnrival
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
+from commands.speaker_queue import CmdLine  # #2356
 from commands.story import CmdStory
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
@@ -408,6 +409,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdOutfit,
             # #1866 — places join/leave telnet namespace.
             CmdPlaces,
+            # #2356 — speaker queue (getinline) telnet namespace.
+            CmdLine,
             # #2005 — tactical position graph: list/take/move telnet namespace.
             CmdPosition,
             # #2163 — "go there" travel: auto-walk to a character's location.
