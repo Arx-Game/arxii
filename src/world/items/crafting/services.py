@@ -439,10 +439,12 @@ def _record_crafted_recipe(
 
     crafter_sheet = CharacterSheet.objects.filter(character=crafter_character).first()
     if tier is not None and is_masterwork(tier) and crafter_sheet is not None:
+        assert isinstance(target_item, ItemInstance)  # noqa: S101
         award_masterwork_renown(
             crafter_character_sheet=crafter_sheet,
             tier=tier,
             item_label=str(target_item.template),
+            item_instance=target_item,
         )
     return crafted_recipe
 

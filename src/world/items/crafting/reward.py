@@ -20,7 +20,7 @@ from world.items.crafting.constants import (
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.items.models import QualityTier
+    from world.items.models import ItemInstance, QualityTier
 
 
 def is_masterwork(tier: QualityTier | None) -> bool:
@@ -34,13 +34,18 @@ def is_masterwork(tier: QualityTier | None) -> bool:
 
 
 def award_masterwork_renown(
-    *, crafter_character_sheet: CharacterSheet, tier: QualityTier, item_label: str
+    *,
+    crafter_character_sheet: CharacterSheet,
+    tier: QualityTier,
+    item_label: str,
+    item_instance: ItemInstance | None = None,
 ) -> None:
     """Grant the crafter a solo legend deed for a masterwork-quality craft (#2243).
 
     No-op if the sheet has no persona to attach renown to. Reuses the shared
     ``create_solo_deed`` seam, so the deed flows through the same legend/renown
-    engine as any other notable act.
+    engine as any other notable act. If ``item_instance`` is provided, the
+    deed is linked to the item via the ``legend_deeds`` M2M (#2359).
     """
     from world.societies.models import LegendSourceType  # noqa: PLC0415
     from world.societies.services import create_solo_deed  # noqa: PLC0415
@@ -52,10 +57,12 @@ def award_masterwork_renown(
         name="Crafting",
         defaults={"description": "Masterwork crafting — fine goods that make a name."},
     )
-    create_solo_deed(
+    entry = create_solo_deed(
         persona,
         f"Crafted a masterwork {item_label}",
         source_type,
         MASTERWORK_DEED_BASE_VALUE,
         description=f"PLACEHOLDER — {tier.name}-quality work worthy of note.",
     )
+    if item_instance is not None:
+        item_instance.legend_deeds.add(entry)
