@@ -45,6 +45,8 @@ class FoodConfigAdmin(admin.ModelAdmin):
         "army_food_per_member",
         "max_provisioning_morale_penalty",
         "max_provisioning_strength_penalty",
+        "crew_food_per_leg",
+        "ship_provisioning_ap_surcharge",
     ]
 
 
