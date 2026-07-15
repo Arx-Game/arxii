@@ -2,4 +2,4 @@
 # Enforced by tools/lint_noqa_ratchet.py (pre-commit + CI). May only go DOWN
 # as audit tranches retire grandfathered sites; bumping it up is a deliberate,
 # reviewed exception — justify it in the commit message.
-GETATTR_LITERAL 143
+GETATTR_LITERAL 137

@@ -283,10 +283,12 @@ class ConditionInstanceFactory(DjangoModelFactory):
     class Meta:
         model = ConditionInstance
 
+    # A real typeclassed object — bare ObjectDB rows lack the ObjectParent
+    # mixin (no trigger_handler/character_sheet) and can't exist in production.
     target = factory.LazyFunction(
-        lambda: __import__("evennia.objects.models", fromlist=["ObjectDB"]).ObjectDB.objects.create(
-            db_key="TestTarget"
-        )
+        lambda: __import__(
+            "evennia_extensions.factories", fromlist=["ObjectDBFactory"]
+        ).ObjectDBFactory(db_key="TestTarget")
     )
     condition = factory.SubFactory(ConditionTemplateFactory)
     current_stage = None

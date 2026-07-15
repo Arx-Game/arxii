@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
-    from world.forms.models import FormState
+    from world.forms.models import CharacterFormState
 
 DEFAULT_GENDER = "neutral"
 
@@ -36,6 +36,25 @@ class ObjectParent:
         from evennia_extensions.data_handlers import ObjectItemDataHandler
 
         return ObjectItemDataHandler(self)
+
+    def clear_cached_properties(self: Union[Self, "DefaultObject"]) -> None:
+        """Drop every ``@cached_property`` entry from the instance ``__dict__``.
+
+        Called by ``RelatedCacheClearingMixin.clear_related_caches`` on related
+        models (e.g. ``Position.related_cache_fields = ["room"]``) so caches on
+        identity-mapped game objects stay in sync with related-row mutations.
+        Mirrors ``Account.clear_cached_properties`` but discovers properties
+        generically (both Django's and functools' descriptors) instead of a
+        hand-kept name list.
+        """
+        from functools import (  # noqa: CACHED_PROPERTY_IMPORT — clearing both descriptor kinds
+            cached_property as functools_cached_property,
+        )
+
+        for klass in type(self).__mro__:
+            for name, attr in klass.__dict__.items():
+                if isinstance(attr, (cached_property, functools_cached_property)):
+                    self.__dict__.pop(name, None)
 
     def get_object_state(
         self: Union[Self, "DefaultObject"],
@@ -99,18 +118,18 @@ class ObjectParent:
             return None
 
     @property
-    def form_state_or_none(self: Union[Self, "DefaultObject"]) -> "FormState | None":
-        """This object's FormState, or None for anything without one.
+    def form_state_or_none(self: Union[Self, "DefaultObject"]) -> "CharacterFormState | None":
+        """This object's CharacterFormState, or None for anything without one.
 
         Same reverse-OneToOne trap family as ``character_sheet``/
         ``room_profile_or_none``: use this on maybe-formless objects; use
         ``obj.form_state`` directly where a missing row is a hard bug.
         """
-        from world.forms.models import FormState
+        from world.forms.models import CharacterFormState
 
         try:
             return self.form_state
-        except FormState.DoesNotExist:
+        except CharacterFormState.DoesNotExist:
             return None
 
     @property

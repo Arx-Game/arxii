@@ -60,6 +60,10 @@ def emit_event(
 
 def _gather_triggers(event_name: str, location: Any) -> list[Any]:
     """Collect every trigger for ``event_name`` from ``location`` + its contents."""
+    if location is None:
+        # Location-less emissions (simulations, off-grid resolutions) have no
+        # room to gather triggers from — the old getattr-default hid this case.
+        return []
     owners: list[Any] = [location]
     contents = getattr(location, "contents", None) or []  # noqa: GETATTR_LITERAL
     owners.extend(contents)

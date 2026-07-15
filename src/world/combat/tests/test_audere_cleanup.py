@@ -4,6 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.services import cleanup_completed_encounter
@@ -39,7 +40,9 @@ class CleanupAudereTeardownTests(TestCase):
         cls.obj_ct = ContentType.objects.get_for_model(ObjectDB)
 
     def setUp(self) -> None:
-        self.character = ObjectDB.objects.create(db_key="audere_cleanup_char")
+        # A real typeclassed object — bare ObjectDB rows lack the ObjectParent
+        # mixin (no trigger_handler) and can't exist in production.
+        self.character = ObjectDBFactory(db_key="audere_cleanup_char")
         self.sheet = CharacterSheetFactory(character=self.character)
         self.anima = CharacterAnimaFactory(character=self.character, current=10, maximum=50)
         self.engagement = CharacterEngagement.objects.create(
@@ -84,7 +87,7 @@ class CleanupAuderaMajoraTeardownTests(TestCase):
 
     def setUp(self) -> None:
         _audere, self.majora_template = wire_audere_power_multipliers()
-        self.character = ObjectDB.objects.create(db_key="majora_cleanup_char")
+        self.character = ObjectDBFactory(db_key="majora_cleanup_char")
         self.sheet = CharacterSheetFactory(character=self.character)
         self.encounter = CombatEncounterFactory()
         self.participant = CombatParticipantFactory(

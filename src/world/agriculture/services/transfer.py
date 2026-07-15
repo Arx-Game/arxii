@@ -59,7 +59,7 @@ def transfer_food(
         msg = "Cannot transfer food to the same domain."
         raise ValueError(msg)
 
-    location = character.location
+    location = character.location if character is not None else None
 
     # --- Pre-transfer event (cancellable, mutable) ---
     cancelled = False

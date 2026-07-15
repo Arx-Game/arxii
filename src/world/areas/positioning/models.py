@@ -1,11 +1,14 @@
 from datetime import datetime
+from typing import ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.areas.positioning.constants import PositionKind, RampartCrackState, RampartSignature
 
 _DAMAGE_TYPE_MODEL = "conditions.DamageType"
@@ -58,8 +61,14 @@ class PositionEdgeBase(SharedMemoryModel):
                 raise ValidationError(msg)
 
 
-class Position(PositionNodeBase):
-    """A named tactical region within a room. The node of the positioning graph."""
+class Position(RelatedCacheClearingMixin, PositionNodeBase):
+    """A named tactical region within a room. The node of the positioning graph.
+
+    Saving/deleting a Position invalidates the room's ``positions_cached``
+    (identity-mapped rooms would otherwise serve a stale graph across requests).
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["room"]
 
     room = models.ForeignKey("objects.ObjectDB", on_delete=models.CASCADE, related_name="positions")
     elevation_anchor = models.ForeignKey(
@@ -94,14 +103,43 @@ class Position(PositionNodeBase):
     def __str__(self) -> str:
         return f"{self.name} ({self.get_kind_display()}) in {self.room_id}"
 
+    # Prefetch/query shared interfaces (see Room.positions_cached): combat's
+    # encounter queryset pre-fills these names via nested Prefetch(to_attr=...);
+    # independent callers get the same shape from the lazy queries.
 
-class PositionEdge(PositionEdgeBase):
+    @cached_property
+    def passable_edges_as_a(self) -> list["PositionEdge"]:
+        return list(self.edges_as_a.filter(is_passable=True).only("position_a_id", "position_b_id"))
+
+    @cached_property
+    def passable_edges_as_b(self) -> list["PositionEdge"]:
+        return list(self.edges_as_b.filter(is_passable=True).only("position_a_id", "position_b_id"))
+
+    @cached_property
+    def all_edges_as_a(self) -> list["PositionEdge"]:
+        return list(self.edges_as_a.select_related("gating_challenge__template"))
+
+    @property
+    def rampart_or_none(self) -> "Rampart | None":
+        """This position's Rampart, or None — the raw reverse OneToOne raises."""
+        try:
+            return self.rampart
+        except Rampart.DoesNotExist:
+            return None
+
+
+class PositionEdge(RelatedCacheClearingMixin, PositionEdgeBase):
     """Traversable adjacency between two positions in the same room.
 
     Stored canonically (position_a_id < position_b_id). A non-null
     gating_challenge means crossing is gated by that Challenge (the
     cross-the-chasm gate); its approaches carry capability routes.
+
+    Saving/deleting an edge invalidates both endpoints' cached edge lists and
+    the room's ``positions_cached`` graph.
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["position_a", "position_b", "position_a.room"]
 
     position_a = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="edges_as_a")
     position_b = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="edges_as_b")

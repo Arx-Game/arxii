@@ -33,6 +33,37 @@ class Room(ObjectParent, DefaultRoom):
         super().at_object_creation()
         RoomProfile.objects.get_or_create(objectdb=self)
 
+    @cached_property
+    def positions_cached(self) -> list:
+        """This room's tactical positions — the Prefetch/query shared interface.
+
+        Combat's encounter queryset pre-fills this name via
+        ``Prefetch(..., to_attr="positions_cached")`` (world/combat/views.py);
+        independent callers get the same data — including the nested
+        ``passable_edges_as_a`` / ``passable_edges_as_b`` / ``all_edges_as_a``
+        attrs, so consumers never probe — from this lazy query (4 queries, no
+        per-position N+1). Invalidated on Position/PositionEdge saves via
+        ``related_cache_fields`` → ``clear_cached_properties``.
+        """
+        from django.db.models import Prefetch
+
+        from world.areas.positioning.models import PositionEdge
+
+        passable = PositionEdge.objects.filter(is_passable=True).only(
+            "position_a_id", "position_b_id"
+        )
+        return list(
+            self.positions.prefetch_related(
+                Prefetch("edges_as_a", queryset=passable, to_attr="passable_edges_as_a"),
+                Prefetch("edges_as_b", queryset=passable, to_attr="passable_edges_as_b"),
+                Prefetch(
+                    "edges_as_a",
+                    queryset=PositionEdge.objects.select_related("gating_challenge__template"),
+                    to_attr="all_edges_as_a",
+                ),
+            )
+        )
+
     def return_appearance(self, looker, **kwargs):
         """Standard room appearance plus the Functionaries standing here (#1766).
 
