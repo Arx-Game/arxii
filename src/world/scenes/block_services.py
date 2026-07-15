@@ -126,7 +126,7 @@ def sheet_blocked_for_viewer(*, viewer_account: Any, sheet: CharacterSheet) -> b
     One indexed ``exists()`` query (the sheet's current player is read from the prefetched tenure).
     Staff bypass blocks (handled by the caller). Returns False for an anonymous viewer.
     """
-    if viewer_account is None or not getattr(viewer_account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if viewer_account is None or not viewer_account.is_authenticated:
         return False
 
     # Persona-scoped, either direction — keyed on the viewer's account and only this sheet's faces.
@@ -158,9 +158,9 @@ def member_blocked_viewer(*, viewer_account: Any, member_sheet: CharacterSheet) 
 
     Staff bypass: returns False for staff (they see real names everywhere).
     """
-    if viewer_account is None or not getattr(viewer_account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if viewer_account is None or not viewer_account.is_authenticated:
         return False
-    if getattr(viewer_account, "is_staff", False):  # noqa: GETATTR_LITERAL
+    if viewer_account.is_staff:
         return False
 
     roster_entry = member_sheet.roster_entry
@@ -189,7 +189,7 @@ def hidden_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
     present) the owners' current personas. Empty for an anonymous viewer; staff bypass is the
     caller's concern.
     """
-    if viewer_account is None or not getattr(viewer_account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if viewer_account is None or not viewer_account.is_authenticated:
         return set()
 
     blocks = list(

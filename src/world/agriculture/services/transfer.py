@@ -59,7 +59,7 @@ def transfer_food(
         msg = "Cannot transfer food to the same domain."
         raise ValueError(msg)
 
-    location = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    location = character.location
 
     # --- Pre-transfer event (cancellable, mutable) ---
     cancelled = False

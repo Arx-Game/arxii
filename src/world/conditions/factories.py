@@ -418,7 +418,7 @@ def install_cancel_damage_trigger(objectdb: object) -> None:
     # fires inside a rolled-back TestCase, so the trigger would stay invisible and
     # the cancel would not fire. Refresh synchronously (the #1584 / resolve_round
     # pattern).
-    handler = getattr(objectdb, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    handler = objectdb.trigger_handler
     if handler is not None:
         handler.refresh()
 

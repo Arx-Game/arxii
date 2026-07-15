@@ -369,7 +369,7 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
 
         # Account.puppet is not None for sessionless accounts — it can be a
         # non-character object. Explicit type dispatch (audit), not getattr-default.
-        puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL
+        puppet = user.puppet
         if not isinstance(puppet, ObjectDB):
             return qs.none()
         sheet_data = puppet.character_sheet
@@ -435,7 +435,7 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
         body = SummonsRespondSerializer(data=request.data)
         body.is_valid(raise_exception=True)
 
-        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        puppet = request.user.puppet
         if puppet is None:
             msg = "No puppeted character — log in and assume a character."
             raise ValidationError(msg)

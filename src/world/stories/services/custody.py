@@ -100,7 +100,7 @@ def _actor_character_ids(actor_account: AccountDB | None) -> set[int]:
     """
     if actor_account is None:
         return set()
-    player_data = getattr(actor_account, "player_data", None)  # noqa: GETATTR_LITERAL
+    player_data = actor_account.player_data
     if player_data is None:
         return set()
     return {tenure.roster_entry.character_sheet_id for tenure in player_data.cached_active_tenures}

@@ -385,7 +385,7 @@ class DefendAndInterposeBothReduceDamageTest(TestCase):
         # Production avoids this via resolve_round's _refresh_participant_trigger_
         # handlers; mirror that here with a synchronous refresh so the freshly
         # installed trigger is visible within this same transaction.
-        ally_trigger_handler = getattr(self.ally, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        ally_trigger_handler = self.ally.trigger_handler
         if ally_trigger_handler is not None:
             ally_trigger_handler.refresh()
 

@@ -4311,7 +4311,7 @@ def _refresh_participant_trigger_handlers(encounter: CombatEncounter) -> None:
     ).select_related("character_sheet__character")
     for participant in participants:
         character = participant.character_sheet.character
-        handler = getattr(character, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        handler = character.trigger_handler
         if handler is not None:
             handler.refresh()
 

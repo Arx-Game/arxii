@@ -472,7 +472,7 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
 
     def _resolve_actor(self, request):
         """Return the caller's active puppet ObjectDB if they own its sheet."""
-        actor = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        actor = request.user.puppet
         if actor is None:
             return None, NO_ACTIVE_CHARACTER_MESSAGE
         try:

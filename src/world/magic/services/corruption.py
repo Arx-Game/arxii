@@ -202,7 +202,7 @@ def _resolve_location(character_sheet: CharacterSheet) -> object:
     character = _resolve_character(character_sheet)
     if character is None:
         return None
-    return getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    return character.location
 
 
 def _make_no_op_result(  # noqa: PLR0913

@@ -57,7 +57,7 @@ def opportunities_for_character(character: ObjectDB) -> OpportunitiesResult:
     Viewer-scoped: every row is filtered through ``template_visible_to``
     for this character. No RESTRICTED templates are ever exposed.
     """
-    room = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    room = character.location
     here_rows = _here_postings(character, room)
     nearby_rows = _nearby_givers(character, room)
     org_rows = _org_offers(character)

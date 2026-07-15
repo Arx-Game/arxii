@@ -189,7 +189,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
 
             request = self.context.get("request")
             user = request.user if request is not None else None
-            if user and getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+            if user and user.is_authenticated:
                 self.context[cache_key] = muted_persona_ids_for_viewer(viewer_account=user)
             else:
                 self.context[cache_key] = set()
@@ -329,7 +329,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         user = request.user if request is not None else None
         result = bool(
             user is not None
-            and getattr(user, "is_authenticated", False)  # noqa: GETATTR_LITERAL
+            and user.is_authenticated
             and (user.is_staff or scene.is_gm(user) or scene.is_owner(user))
         )
         cache[scene.pk] = result

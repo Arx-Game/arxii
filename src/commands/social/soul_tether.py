@@ -302,9 +302,7 @@ class CmdTether(ArxCommand):
         sineater_sheet = _get_sheet(sineater_char)
         caller_sheet = _get_sheet(self.caller)
 
-        scene = get_active_scene(
-            getattr(self.caller, "location", None)  # noqa: GETATTR_LITERAL
-        )
+        scene = get_active_scene(self.caller.location)
         if scene is None:
             msg = "You are not in an active scene."
             raise CommandError(msg)
@@ -481,9 +479,7 @@ class CmdSineater(ArxCommand):
         sinner_sheet = _get_sheet(sinner_char)
         caller_sheet = _get_sheet(self.caller)
 
-        scene = get_active_scene(
-            getattr(self.caller, "location", None)  # noqa: GETATTR_LITERAL
-        )
+        scene = get_active_scene(self.caller.location)
         if scene is None:
             msg = "You are not in an active scene."
             raise CommandError(msg)

@@ -128,7 +128,7 @@ def who_listing(viewer_account: object | None = None) -> list[WhoEntry]:
     idle_by_puppet: dict[int, float] = {}
     puppets_by_id: dict[int, object] = {}
     for session in SESSION_HANDLER.get_sessions():
-        puppet = getattr(session, "puppet", None)  # noqa: GETATTR_LITERAL
+        puppet = session.puppet
         if puppet is None:
             continue
         last = getattr(session, "cmd_last_visible", None)  # noqa: GETATTR_LITERAL

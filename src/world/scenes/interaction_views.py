@@ -527,7 +527,7 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
         catalog_entry = ReactionEmoji.objects.filter(emoji=emoji, is_active=True).first()
         if catalog_entry is None or catalog_entry.valence == 0:
             return False, None
-        actor = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        actor = request.user.puppet
         if actor is None:
             return False, None
         author_persona = interaction.persona

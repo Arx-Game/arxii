@@ -157,7 +157,7 @@ class BattleViewSet(ReadOnlyModelViewSet):
         for scene read-visibility.
         """
         user = self.request.user
-        if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+        if user.is_staff:
             return qs
         return qs.filter(scene__in=Scene.objects.viewable_by(user)).distinct()
 

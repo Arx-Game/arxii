@@ -20,7 +20,7 @@ class PuppetActorMixin:
         Returns the ObjectDB character (puppet) or ``None`` when resolution
         fails — caller should respond with HTTP 400.
         """
-        actor = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        actor = request.user.puppet
         if actor is None:
             return None
         try:

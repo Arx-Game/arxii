@@ -115,7 +115,7 @@ class DuelChallengeViewSet(ReadOnlyModelViewSet):
 
     def get_queryset(self) -> QuerySet[DuelChallenge]:
         user = self.request.user
-        played_ids = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
+        played_ids = user.played_character_sheet_ids
         if not played_ids:
             return DuelChallenge.objects.none()
         return (
@@ -302,7 +302,7 @@ class CombatEncounterViewSet(ModelViewSet):
         queryset and keep their own permission gates.
         """
         user = self.request.user
-        if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+        if user.is_staff:
             return qs
         return qs.filter(scene__in=Scene.objects.viewable_by(user)).distinct()
 

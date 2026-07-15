@@ -75,7 +75,7 @@ def draft_session(  # noqa: PLR0913
     from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
     with transaction.atomic():
-        scene = get_active_scene(getattr(initiator.character, "location", None))  # noqa: GETATTR_LITERAL
+        scene = get_active_scene(initiator.character.location)
         session = RitualSession.objects.create(
             ritual=ritual,
             initiator=initiator,

@@ -32,7 +32,7 @@ def _resolve_field_instance(actor: ObjectDB, field_instance_id: Any) -> RoomFeat
     if field_instance_id is not None:
         return fields.filter(pk=field_instance_id).first()
 
-    location = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+    location = actor.location
     if location is None:
         return None
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415

@@ -144,7 +144,7 @@ class SceneLinesAndVeilsView(APIView):
         if not tenure_id:
             raise serializers.ValidationError({"tenure": "tenure query param is required."})
 
-        player_data = getattr(request.user, "player_data", None)  # noqa: GETATTR_LITERAL
+        player_data = request.user.player_data
         try:
             viewer_tenure = RosterTenure.objects.get(pk=tenure_id, player_data=player_data)
         except (RosterTenure.DoesNotExist, ValueError):

@@ -40,7 +40,7 @@ def is_staff_observer(observer: object) -> bool:
     account = getattr(observer, "account", None)  # noqa: GETATTR_LITERAL
     if account is None:
         return False
-    return bool(getattr(account, "is_staff", False))  # noqa: GETATTR_LITERAL
+    return bool(account.is_staff)
 
 
 class PlayerOnlyPermission(IsAuthenticated):

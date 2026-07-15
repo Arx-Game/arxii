@@ -114,7 +114,7 @@ def where_listing(viewer_account: object | None = None) -> list[WhereEntry]:
     seen: set[int] = set()
     entries: list[WhereEntry] = []
     for session in SESSION_HANDLER.get_sessions():
-        puppet = getattr(session, "puppet", None)  # noqa: GETATTR_LITERAL
+        puppet = session.puppet
         if puppet is None or puppet.id in seen:
             continue
         seen.add(puppet.id)
@@ -246,7 +246,7 @@ def area_for_scene(scene: Scene | None) -> Area | None:
     package-init time), so this module — not ``world.magic`` — is the safe home
     for the shared helper.
     """
-    location = getattr(scene, "location", None) if scene is not None else None  # noqa: GETATTR_LITERAL
+    location = scene.location if scene is not None else None
     if location is None:
         return None
     profile = getattr(location, "room_profile", None)  # noqa: GETATTR_LITERAL

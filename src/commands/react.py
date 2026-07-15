@@ -86,7 +86,7 @@ class CmdReact(ArxCommand):
     def _active_scene(self) -> Any:
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
-        scene = get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
+        scene = get_active_scene(self.caller.location)
         if scene is None:
             msg = "There is no active scene here."
             raise CommandError(msg)

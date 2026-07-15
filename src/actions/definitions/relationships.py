@@ -555,7 +555,7 @@ class RelationshipBumpAction(BaseRelationshipAction):
         )
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
-        location = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        location = actor.location
         scene = get_active_scene(location) if location is not None else None
         if scene is None:
             return None

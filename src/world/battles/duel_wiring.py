@@ -104,7 +104,7 @@ def install_champion_duel_trigger(encounter: CombatEncounter) -> None:
         return
     trigger, created = Trigger.objects.get_or_create(obj=room, trigger_definition=trigger_def)
     if created:
-        handler = getattr(room, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        handler = room.trigger_handler
         if handler is not None:
             handler.on_trigger_added(trigger)
 

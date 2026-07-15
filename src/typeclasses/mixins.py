@@ -236,7 +236,7 @@ def _maybe_render_captivity_status(obj) -> str | None:
     character or item runs no query.
     """
     # Only rooms hold captives — skip the query for characters/items/exits.
-    if getattr(obj, "location", None) is not None:  # noqa: GETATTR_LITERAL
+    if obj.location is not None:
         return None
     from django.db.models import Q
 

@@ -17,11 +17,11 @@ def can_view_encounter_effects(user: object, encounter: CombatEncounter) -> bool
     """
     if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
         return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+    if user.is_staff:
         return True
     if encounter.scene.is_gm(user):
         return True
-    character_ids = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
+    character_ids = user.played_character_sheet_ids
     return any(
         p.character_sheet.character_id in character_ids for p in encounter.participants.all()
     )

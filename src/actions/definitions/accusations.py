@@ -141,7 +141,7 @@ def _file_accusation_crime(  # noqa: PLR0913
     if crime_kind is None:
         no_crime = f"There's no such crime to accuse them of: {crime_slug!r}."
         return _ActionResult(success=False, message=no_crime)
-    location = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+    location = actor.location
     area = area_for_room(location) if location is not None else None
     level = kwargs.get("level") or SecretLevel.WHISPERS
     try:
@@ -207,7 +207,7 @@ class SmearAction(Action):
         )
         if target_persona is None:
             return _ActionResult(success=False, message="No such target.")
-        room = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        room = actor.location
         if room is None:
             return _ActionResult(success=False, message="There's no one here to whisper to.")
         try:
@@ -264,7 +264,7 @@ class RefuteAccusationAction(Action):
         secret = Secret.objects.filter(pk=secret_id).first() if isinstance(secret_id, int) else None
         if secret is None:
             return _ActionResult(success=False, message="There's no such rumor to refute.")
-        room = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        room = actor.location
         if room is None:
             return _ActionResult(success=False, message="There's no one here to argue to.")
         try:
@@ -323,7 +323,7 @@ class DenounceFramerAction(Action):
         secret = Secret.objects.filter(pk=secret_id).first() if isinstance(secret_id, int) else None
         if secret is None:
             return _ActionResult(success=False, message="There's no such truth to wield.")
-        room = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        room = actor.location
         if room is None:
             return _ActionResult(success=False, message="There's no audience here.")
         try:

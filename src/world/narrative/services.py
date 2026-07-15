@@ -200,7 +200,7 @@ def _session_in_audience(session: object, eligible_persona_ids: set[int]) -> boo
 
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    puppet = getattr(session, "puppet", None)  # noqa: GETATTR_LITERAL
+    puppet = session.puppet
     if puppet is None:
         return False
     try:

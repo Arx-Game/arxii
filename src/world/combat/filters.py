@@ -42,7 +42,7 @@ class DuelChallengeFilter(django_filters.FilterSet):
     def filter_role(
         self, queryset: QuerySet[DuelChallenge], name: str, value: str
     ) -> QuerySet[DuelChallenge]:
-        played_ids = getattr(self.request.user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
+        played_ids = self.request.user.played_character_sheet_ids
         if value == _ROLE_INCOMING:
             return queryset.filter(challenged_sheet_id__in=played_ids)
         if value == _ROLE_OUTGOING:
