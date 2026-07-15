@@ -52,12 +52,12 @@ class CmdPoses(ArxCommand):
             char_name,
             not_found_msg=f"No character named '{char_name}' here.",
         )
-        endorsee_sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        endorsee_sheet = target.character_sheet
         if endorsee_sheet is None:
             msg = f"'{char_name}' has no character sheet."
             raise CommandError(msg)
 
-        endorser_sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        endorser_sheet = self.caller.character_sheet
         if endorser_sheet is None:
             msg = "You have no character sheet."
             raise CommandError(msg)
@@ -169,7 +169,7 @@ class CmdEndorse(ArxCommand):
             char_name,
             not_found_msg=f"No character named '{char_name}' here.",
         )
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             msg = f"'{char_name}' has no character sheet."
             raise CommandError(msg)
@@ -223,7 +223,7 @@ class CmdEndorse(ArxCommand):
             raise CommandError(msg)
 
         endorsee_sheet = self._resolve_endorsee(char_name)
-        endorser_sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        endorser_sheet = self.caller.character_sheet
         if endorser_sheet is None:
             msg = "You have no character sheet."
             raise CommandError(msg)

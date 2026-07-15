@@ -12,9 +12,12 @@ and it never raises—errors on individual classes are caught and skipped.
 from __future__ import annotations
 
 from collections.abc import Iterator
+import logging
 
 from evennia.utils.idmapper.models import SharedMemoryModel
 from pympler.asizeof import asizeof as _asizeof
+
+logger = logging.getLogger(__name__)
 
 
 def _iter_subclasses() -> Iterator[type]:
@@ -96,6 +99,7 @@ def snapshot() -> dict[str, tuple[int, int]]:
             seen_cache_ids.add(cid)
             approx_bytes = _asizeof(cache)
             result[_label(cls)] = (count, int(approx_bytes))
-        except Exception:  # noqa: BLE001,S112
+        except Exception:  # noqa: BLE001
+            logger.debug("idmapper gauge skipped a cache class (audit: was silent)", exc_info=True)
             continue
     return result

@@ -365,7 +365,7 @@ def emit_ambient_room_stir(room: ObjectDB, *, exclude: ObjectDB | None = None) -
     for obj in room.contents:
         if exclude is not None and obj.pk == exclude.pk:
             continue
-        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = obj.character_sheet
         if sheet is not None:
             recipients.append(sheet)
     if not recipients:

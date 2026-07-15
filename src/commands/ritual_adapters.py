@@ -264,7 +264,7 @@ class DuranceAdapter(RitualDraftAdapter):
             participant_kwargs["testament"] = testament
         path_token = kwargs.get("path", "").strip()
         if path_token:
-            sheet = getattr(caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            sheet = caller.character_sheet
             path = resolve_advanced_path_by_name(sheet, path_token) if sheet else None
             if path is None:
                 from world.progression.selectors import eligible_advanced_paths_for  # noqa: PLC0415

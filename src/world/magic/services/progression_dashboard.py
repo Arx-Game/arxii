@@ -233,7 +233,7 @@ def build_progression_dashboard(sheet: CharacterSheet) -> list[StageView]:
 
     No queries run inside the per-stage / per-milestone loops.
     """
-    roster_entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL
+    roster_entry = sheet.roster_entry_or_none
     current_stage = _current_path_stage(sheet)
 
     # Load all milestones in a single query.

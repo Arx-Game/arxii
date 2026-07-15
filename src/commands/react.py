@@ -77,7 +77,7 @@ class CmdReact(ArxCommand):
     # Shared resolution
 
     def _actor_sheet(self) -> Any:
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             msg = "You have no character sheet."
             raise CommandError(msg)
@@ -99,7 +99,7 @@ class CmdReact(ArxCommand):
         target = self.search_or_raise(
             char_name, not_found_msg=f"No character named '{char_name}' here."
         )
-        endorsee_sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        endorsee_sheet = target.character_sheet
         if endorsee_sheet is None:
             msg = f"'{char_name}' has no character sheet."
             raise CommandError(msg)

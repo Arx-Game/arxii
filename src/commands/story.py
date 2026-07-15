@@ -1460,7 +1460,7 @@ class CmdStory(ArxNamespaceCommand):
             msg = f"Multiple characters match '{name}'."
             raise CommandError(msg)
         target = matches[0]
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             msg = f"'{name}' is not a character with a sheet."
             raise CommandError(msg)

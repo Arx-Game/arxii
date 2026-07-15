@@ -97,7 +97,7 @@ class GMAwardDistinctionAction(Action):
             # search() already messaged the actor with a not-found/ambiguous notice.
             return ActionResult(success=False)
 
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             return ActionResult(success=False, message="That is not a character.")
 

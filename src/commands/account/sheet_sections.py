@@ -467,7 +467,7 @@ def _render_family_section(command: object) -> list[str]:
     distinctly (the Arx 1 in-law ambiguity is gone by construction).
     """
     character = command.caller
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — puppet may be sheetless
+    sheet = character.character_sheet
     if sheet is None:
         return ["No character sheet."]
     from world.roster.models import Kinsperson, RosterEntry  # noqa: PLC0415
@@ -525,7 +525,7 @@ def _render_family_section(command: object) -> list[str]:
 def _render_house_section(command: object) -> list[str]:
     """``sheet/house`` (#1884) — the character's house: fealty, titles, tidings."""
     character = command.caller
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — puppet may be sheetless
+    sheet = character.character_sheet
     if sheet is None:
         return ["No character sheet."]
     from world.roster.models import Kinsperson  # noqa: PLC0415

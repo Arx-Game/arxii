@@ -98,7 +98,7 @@ class CmdOutfit(ArxCommand):
     def _show_hub(self) -> None:
         from world.items.models import Outfit  # noqa: PLC0415
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             self.msg("You have no character sheet.")
             return

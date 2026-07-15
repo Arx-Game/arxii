@@ -48,7 +48,7 @@ def persona_for_character(character: Character) -> Persona:
     than silently bypassing any gate that needs the persona (cooldown,
     standing, item ownership, etc.).
     """
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None:
         raise MissingPrimaryPersonaError(character)
     try:

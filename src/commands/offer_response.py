@@ -18,7 +18,7 @@ class CmdDecline(ArxCommand):
     action = None
 
     def _execute(self) -> None:
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         args = (self.args or "").strip()
         if not args:
             self.msg(format_pending_listing(get_all_pending(sheet) if sheet is not None else []))

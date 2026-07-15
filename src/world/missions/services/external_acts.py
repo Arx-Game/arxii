@@ -173,7 +173,7 @@ def fast_forward_external_acts(instance: MissionInstance, node: MissionNode) -> 
     holder = instance.participants.filter(is_contract_holder=True).first()
     if holder is None:
         return
-    sheet = getattr(holder.character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = holder.character.character_sheet
     if sheet is None:
         return
     option = node.options.filter(

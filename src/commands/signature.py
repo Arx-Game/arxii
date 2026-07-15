@@ -133,7 +133,7 @@ class CmdSignature(DispatchCommand):
         from world.magic.constants import TargetKind  # noqa: PLC0415
         from world.magic.models import CharacterTechnique  # noqa: PLC0415
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             msg = "No active character."
             raise CommandError(msg)

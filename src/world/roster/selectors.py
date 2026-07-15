@@ -54,3 +54,17 @@ def active_player_character_sheets() -> list[CharacterSheet]:
         .select_related("roster_entry")
         .distinct()
     )
+
+
+def puppeted_sheet_for(user: object) -> CharacterSheet | None:
+    """The CharacterSheet of the character ``user`` is currently puppeting, or None.
+
+    The canonical user→puppet→sheet resolver (silent-fail audit): ``Account.puppet``
+    can be a truthy non-character object for sessionless accounts, and AnonymousUser
+    has no puppet attribute at all — inline ``puppet.character_sheet`` dances 500'd
+    the summons list and silently degraded drf-spectacular's queryset inference.
+    """
+    puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL — AnonymousUser has none
+    if not isinstance(puppet, ObjectDB):
+        return None
+    return puppet.character_sheet

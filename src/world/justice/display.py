@@ -41,7 +41,7 @@ def heat_reading_for_character(character: ObjectDB, room: ObjectDB | None) -> He
 
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None or room is None:
         return None
     try:

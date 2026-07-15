@@ -73,7 +73,7 @@ def _parse_kwargs(args: str) -> dict[str, str]:
 
 def _get_sheet(character: Any) -> Any:
     """Return the CharacterSheet for *character* or raise ``CommandError``."""
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None:
         msg = f"{character} has no character sheet."
         raise CommandError(msg)

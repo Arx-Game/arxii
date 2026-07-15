@@ -130,7 +130,7 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
             request = self.context.get("request")
             user = getattr(request, "user", None)  # noqa: GETATTR_LITERAL
             puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL
-            sheet = getattr(puppet, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            sheet = puppet.character_sheet
             active = (
                 getattr(sheet, "active_alternate_self", None)  # noqa: GETATTR_LITERAL
                 if sheet is not None

@@ -64,7 +64,7 @@ class ObjectParent:
     def character_sheet(self: Union[Self, "DefaultObject"]) -> "CharacterSheet | None":
         """This object's CharacterSheet, or None for anything that isn't a character.
 
-        The safe, explicit replacement for ``getattr(obj, "sheet_data", None)``:
+        The safe, explicit replacement for ``obj.character_sheet``:
         ``sheet_data`` is the reverse OneToOne from ``CharacterSheet.character`` and
         raises on sheetless objects — the getattr idiom only "worked" because Django's
         RelatedObjectDoesNotExist subclasses AttributeError, which also swallowed

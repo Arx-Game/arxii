@@ -35,7 +35,7 @@ def _online_recipients(room: DefaultObject) -> list[CharacterSheet]:
     for obj in room.contents:
         if not obj.sessions.count():
             continue
-        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = obj.character_sheet
         if sheet is not None:
             recipients.append(sheet)
     return recipients

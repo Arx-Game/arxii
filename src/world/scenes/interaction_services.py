@@ -550,7 +550,7 @@ def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
 
     # Auto-engage covenant for the participant (Slice B §4.10). Fires even when
     # the character has no account yet, matching prior behavior.
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is not None and scene.location is not None:
         from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
 

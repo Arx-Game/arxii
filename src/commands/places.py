@@ -85,7 +85,7 @@ class CmdPlaces(ArxCommand):
         from world.scenes.place_models import PlacePresence  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             msg = "No active character."
             raise CommandError(msg)

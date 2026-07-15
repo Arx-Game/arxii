@@ -210,7 +210,7 @@ def _seed_legend_stories(
     from world.societies.models import LegendDeedStory, LegendEntry  # noqa: PLC0415
     from world.societies.spread_services import save_deed_story  # noqa: PLC0415
 
-    sheet = getattr(participant.character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = participant.character.character_sheet
     if sheet is None:
         return
     if participant.is_contract_holder and instance.accepted_as_persona_id is not None:
@@ -317,7 +317,7 @@ def resolve_beat_option(
     # an activation is open — safe to call on every action.
     from world.missions.services.beat import activate_stakes_for_instance  # noqa: PLC0415
 
-    stake_sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    stake_sheet = character.character_sheet
     if stake_sheet is not None:
         activate_stakes_for_instance(instance, [stake_sheet])
 
@@ -325,7 +325,7 @@ def resolve_beat_option(
     story_text = _story_text_for(presented, deed, instance.template.name)
     is_terminal = instance.current_node_id is None
 
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is not None:
         send_narrative_message(
             recipients=[sheet],

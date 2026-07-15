@@ -356,7 +356,7 @@ def apply_relationship_escalation_spike(
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
     from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
-    fallen_sheet = getattr(fallen_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    fallen_sheet = fallen_character.character_sheet
     if fallen_sheet is None:
         return
 
@@ -427,7 +427,7 @@ def apply_peril_escalation_spike(
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
     from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
-    victim_sheet = getattr(victim_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    victim_sheet = victim_character.character_sheet
     if victim_sheet is None:
         return
 

@@ -205,7 +205,7 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
         invalidate_active_scene_cache(scene.location)
 
         for obj in scene.location.contents:
-            sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            sheet = obj.character_sheet
             if sheet is None:
                 continue
             roles = sheet.character.covenant_roles

@@ -73,7 +73,7 @@ def _active_persona_for(character: ObjectDB) -> Persona | None:
 
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None:
         return None
     try:
@@ -89,7 +89,7 @@ def _known_travel_technique_map(character: ObjectDB) -> dict[int, Technique]:
     character who knows several techniques bound to the same anchor kind
     still only needs one to travel through it.
     """
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None:
         return {}
 

@@ -24,11 +24,11 @@ class CharacterCompanionHandler:
         """This character's currently-bonded (unreleased) companions.
 
         Returns [] gracefully when the character has no sheet_data (mirrors
-        the existing getattr(self, "sheet_data", None) guard pattern used
+        the existing self.character_sheet guard pattern used
         throughout typeclasses/characters.py) — e.g. a CompanionObject or a
         GM/Staff character has no companions of its own.
         """
-        sheet = getattr(self.character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.character.character_sheet
         if sheet is None:
             return []
         return list(

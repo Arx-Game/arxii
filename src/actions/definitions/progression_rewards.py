@@ -287,7 +287,7 @@ class SelectPathAction(Action):
         from world.progression.exceptions import PathAlreadySelectedError  # noqa: PLC0415
         from world.progression.services.advancement import select_initial_path  # noqa: PLC0415
 
-        if getattr(actor, "sheet_data", None) is None:  # noqa: GETATTR_LITERAL
+        if actor.character_sheet is None:
             return ActionResult(success=False, message="No active character.")
         path = Path.objects.filter(
             pk=kwargs.get("path_id"), is_active=True, stage=PathStage.PROSPECT

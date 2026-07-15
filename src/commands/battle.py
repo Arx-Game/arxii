@@ -248,7 +248,7 @@ class CmdBattle(ArxCommand):
     # Resolution helpers
 
     def _actor_sheet(self) -> object:
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             msg = "You have no character sheet."
             raise CommandError(msg)

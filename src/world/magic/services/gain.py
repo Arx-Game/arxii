@@ -59,6 +59,7 @@ Accessor reference (verified 2026-04-23 during implementation):
 from __future__ import annotations
 
 from decimal import Decimal
+import logging
 import math
 from typing import TYPE_CHECKING
 
@@ -97,6 +98,8 @@ from world.magic.types import (
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
 from world.scenes.models import Interaction, Persona, Scene, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
+
+logger = logging.getLogger(__name__)
 
 
 def account_for_sheet(sheet: CharacterSheet) -> AccountDB | None:
@@ -1009,8 +1012,8 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
                         room_profile=rp,
                     )
                     grants_issued += 1
-            except Exception:  # noqa: BLE001, S112
-                # TODO: structured log via Evennia logger.
+            except Exception:
+                logger.exception("resonance trickle skipped a sheet (audit: was silent)")
                 continue
 
     return ResonanceDailyTickSummary(
@@ -1129,7 +1132,8 @@ def resonance_weekly_settlement_tick() -> ResonanceWeeklySettlementSummary:
         sheet = CharacterSheet.objects.get(pk=sheet_id)
         try:
             result = settle_weekly_pot(sheet)
-        except Exception:  # noqa: BLE001, S112
+        except Exception:
+            logger.exception("resonance grant loop skipped an entry (audit: was silent)")
             continue
         if result.endorsements_settled:
             endorsers_settled += 1
