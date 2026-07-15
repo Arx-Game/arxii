@@ -37,6 +37,7 @@ import { threadToComposerMode, tabKeyToComposerMode } from '@/scenes/hooks/threa
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
+import { SpeakerQueueBar } from '@/scenes/components/SpeakerQueueBar';
 import { ActionPanel } from '@/scenes/components/ActionPanel';
 import { PendingActionAttachments } from '@/scenes/components/PendingActionAttachments';
 import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
@@ -495,6 +496,7 @@ export function GamePage() {
                   : undefined
               }
               placeBar={placesRoomId ? <PlaceBar sceneId={placesRoomId} /> : undefined}
+              speakerQueueBar={placesRoomId ? <SpeakerQueueBar roomId={placesRoomId} /> : undefined}
               pendingAttachments={
                 sceneId ? (
                   <PendingActionAttachments

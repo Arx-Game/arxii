@@ -51,3 +51,28 @@ class MasterworkRenownTests(TestCase):
         entry = LegendEntry.objects.latest("id")
         self.assertEqual(entry.persona, sheet.primary_persona)
         self.assertIn("masterwork", entry.title.lower())
+
+    def test_masterwork_with_item_instance_links_deed(self):
+        sheet = CharacterSheetFactory()
+        tier = QualityTierFactory(name="Superb", stat_multiplier=Decimal("2.0"))
+        instance = ItemInstanceFactory()
+
+        award_masterwork_renown(
+            crafter_character_sheet=sheet,
+            tier=tier,
+            item_label="Blade",
+            item_instance=instance,
+        )
+
+        entry = LegendEntry.objects.latest("id")
+        self.assertIn(entry, instance.legend_deeds.all())
+        self.assertGreater(instance.legend_value, 0)
+
+    def test_masterwork_without_item_instance_still_works(self):
+        sheet = CharacterSheetFactory()
+        tier = QualityTierFactory(name="Superb", stat_multiplier=Decimal("2.0"))
+
+        before = LegendEntry.objects.count()
+        award_masterwork_renown(crafter_character_sheet=sheet, tier=tier, item_label="Blade")
+
+        self.assertEqual(LegendEntry.objects.count(), before + 1)

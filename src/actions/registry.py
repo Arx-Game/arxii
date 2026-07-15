@@ -112,6 +112,12 @@ from actions.definitions.dramatic_moments import (
     ConfirmDramaticMomentSuggestionAction,
     DismissDramaticMomentSuggestionAction,
 )
+from actions.definitions.dreams import (
+    AscendAction,
+    DescendAction,
+    DreamwalkAction,
+    SleepAction,
+)
 from actions.definitions.duels import (
     AcceptChallengeAction,
     AcknowledgeRiskAction,
@@ -368,6 +374,14 @@ from actions.definitions.social import (
     resolve_entry_flourish,
     restore_sense,
     seduce,
+)
+from actions.definitions.speaker_queue import (
+    AdvanceSpeakerQueueAction,
+    CloseSpeakerQueueAction,
+    JoinSpeakerQueueAction,
+    LeaveSpeakerQueueAction,
+    OpenSpeakerQueueAction,
+    SkipSpeakerAction,
 )
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
@@ -717,6 +731,11 @@ _ALL_ACTIONS: list[Action] = [
     ListGuardAssignmentsAction(),
     # #2287 — death & unconsciousness core slice.
     WakeAction(),
+    # #2290 — dream realm.
+    SleepAction(),
+    DescendAction(),
+    AscendAction(),
+    DreamwalkAction(),
     RetireCharacterAction(),
     GiveDeathKudosAction(),
     # #2289 — ceremonies (worship rites over the events/scenes chassis).
@@ -739,6 +758,13 @@ _ALL_ACTIONS: list[Action] = [
     ExamineEvidenceAction(),
     # #2219 — inter-domain food transfer.
     TransferFoodAction(),
+    # #2356 — speaker queue: room-scoped turn-order utility.
+    OpenSpeakerQueueAction(),
+    CloseSpeakerQueueAction(),
+    JoinSpeakerQueueAction(),
+    LeaveSpeakerQueueAction(),
+    AdvanceSpeakerQueueAction(),
+    SkipSpeakerAction(),
 ]
 
 # Lookup by key

@@ -27089,6 +27089,215 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrganizationReputation'
           description: ''
+  /api/speaker-queues/:
+    get:
+      operationId: speaker_queues_list
+      description: Read-only ViewSet with action endpoints for speaker queue mutations.
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - in: query
+        name: room
+        schema:
+          type: integer
+      tags:
+      - speaker-queues
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SpeakerQueue'
+          description: ''
+  /api/speaker-queues/{id}/:
+    get:
+      operationId: speaker_queues_retrieve
+      description: Read-only ViewSet with action endpoints for speaker queue mutations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this speaker queue.
+        required: true
+      tags:
+      - speaker-queues
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeakerQueue'
+          description: ''
+  /api/speaker-queues/{id}/advance/:
+    post:
+      operationId: speaker_queues_advance_create
+      description: Read-only ViewSet with action endpoints for speaker queue mutations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this speaker queue.
+        required: true
+      tags:
+      - speaker-queues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeakerQueueRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeakerQueue'
+          description: ''
+  /api/speaker-queues/{id}/close/:
+    post:
+      operationId: speaker_queues_close_create
+      description: Read-only ViewSet with action endpoints for speaker queue mutations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this speaker queue.
+        required: true
+      tags:
+      - speaker-queues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeakerQueueRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeakerQueue'
+          description: ''
+  /api/speaker-queues/{id}/join/:
+    post:
+      operationId: speaker_queues_join_create
+      description: Read-only ViewSet with action endpoints for speaker queue mutations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this speaker queue.
+        required: true
+      tags:
+      - speaker-queues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeakerQueueRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeakerQueue'
+          description: ''
+  /api/speaker-queues/{id}/leave/:
+    post:
+      operationId: speaker_queues_leave_create
+      description: Read-only ViewSet with action endpoints for speaker queue mutations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this speaker queue.
+        required: true
+      tags:
+      - speaker-queues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeakerQueueRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeakerQueue'
+          description: ''
+  /api/speaker-queues/{id}/skip/:
+    post:
+      operationId: speaker_queues_skip_create
+      description: Read-only ViewSet with action endpoints for speaker queue mutations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this speaker queue.
+        required: true
+      tags:
+      - speaker-queues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeakerQueueRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeakerQueue'
+          description: ''
+  /api/speaker-queues/open/:
+    post:
+      operationId: speaker_queues_open_create
+      description: Open a speaker queue in the caller's room.
+      tags:
+      - speaker-queues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeakerQueueRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeakerQueue'
+          description: ''
   /api/staff-inbox/:
     get:
       operationId: staff_inbox_retrieve
@@ -59164,6 +59373,66 @@ components:
         * `COMPROMISE` - Moral compromise
         * `PENANCE` - Atonement resonance conversion
         * `FALL_CONVERSION` - Fall/Redemption conversion
+    SpeakerQueue:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        room:
+          type: integer
+          description: Room the queue belongs to.
+        scene:
+          type: integer
+          nullable: true
+          description: Active scene when the queue was opened, for auto-clear on scene
+            finish.
+        is_active:
+          type: boolean
+        opened_by:
+          type: integer
+          nullable: true
+          description: Persona who opened the queue.
+        opened_by_name:
+          type: string
+          readOnly: true
+        opened_at:
+          type: string
+          format: date-time
+          readOnly: true
+        closed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        entries:
+          readOnly: true
+      required:
+      - closed_at
+      - entries
+      - id
+      - opened_at
+      - opened_by_name
+      - room
+    SpeakerQueueRequest:
+      type: object
+      properties:
+        room:
+          type: integer
+          description: Room the queue belongs to.
+        scene:
+          type: integer
+          nullable: true
+          description: Active scene when the queue was opened, for auto-clear on scene
+            finish.
+        is_active:
+          type: boolean
+        opened_by:
+          type: integer
+          nullable: true
+          description: Persona who opened the queue.
+      required:
+      - room
     Specialization:
       type: object
       description: Serializer for Specialization model.

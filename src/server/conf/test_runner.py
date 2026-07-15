@@ -63,6 +63,42 @@ def _arx_init_worker(*args, **kwargs) -> None:
     if evennia.SESSION_HANDLER is None:
         evennia._init()
     _install_dbholder_deepcopy_shim()
+    _install_test_memory_ceiling()
+
+
+def _install_test_memory_ceiling() -> None:
+    """Cap the process address space so runaway allocations fail loudly (#2386).
+
+    A runaway allocation loop (e.g. a test feeding a bare MagicMock into a
+    parent-chain walk, so ``node = node.parent`` never hits None) otherwise
+    consumes the whole machine: locally it swap-thrashes the devcontainer; in
+    CI it OOMs the runner, which GitHub reports as a bare "runner received a
+    shutdown signal" with no test failure printed. With RLIMIT_AS set, the
+    loop dies at the cap with a MemoryError traceback naming the allocation
+    site, and the suite reports an ordinary ERROR and keeps going.
+
+    Tunable via ARX_TEST_MEM_LIMIT_GB (default 4; 0 disables). 4GB is sized to
+    the devcontainer (7.7GB RAM — the cap must trip before the box thrashes)
+    and is proven sufficient: the full shard-2 composition (1,046 tests,
+    Postgres tier) completes under it. Applied per process — parallel fork
+    workers inherit it; spawn workers re-apply via ``_arx_init_worker``. Never
+    raises an existing tighter limit (an explicit ``ulimit -v`` wins).
+    """
+    try:
+        import resource
+    except ImportError:  # Windows: no RLIMIT support; CI (Linux) still covers this
+        return
+
+    limit_gb = float(os.environ.get("ARX_TEST_MEM_LIMIT_GB", "8"))
+    if limit_gb <= 0:
+        return
+    soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+    target = int(limit_gb * 1024**3)
+    if hard != resource.RLIM_INFINITY:
+        target = min(target, hard)
+    if soft != resource.RLIM_INFINITY and soft <= target:
+        return
+    resource.setrlimit(resource.RLIMIT_AS, (target, hard))
 
 
 def _install_dbholder_deepcopy_shim() -> None:
@@ -140,6 +176,7 @@ class TimedEvenniaTestRunner(EvenniaTestSuiteRunner):
         """Set up test environment with timing notification + the DbHolder shim (#1825)."""
         super().setup_test_environment(**kwargs)
         _install_dbholder_deepcopy_shim()
+        _install_test_memory_ceiling()
         if os.environ.get("ARX_TEST_TIMING") and self.verbosity >= 2:
             print("Running tests with timing information...")
             sys.stdout.flush()

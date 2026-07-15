@@ -1711,6 +1711,14 @@ action consent flow, and a three-mode non-combat round framework.
   `get_resolver(action_key)`), consent (`SocialConsentCategory` enforcement)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
+- **Speaker Queue (#2356):** Room-scoped turn-order utility for structured RP gatherings (court, sermons, Q&A). Does NOT gate actions — players can pose/say/react freely.
+  - **Models** (`speaker_queue_models.py`): `SpeakerQueue` (one active per room, UniqueConstraint on `is_active=True`; FK room PROTECT, scene SET_NULL for auto-clear, opened_by persona), `SpeakerQueueEntry` (ordered membership; FK queue CASCADE + persona CASCADE; position 1=current speaker; unique per queue+persona).
+  - **Services** (`speaker_queue_services.py`): `open_queue`, `close_queue`, `join_queue`, `leave_queue`, `advance_queue`, `skip_speaker`, `get_active_queue`, `queue_entries`, `clear_queue_on_scene_finish`, `remove_persona_from_room_queues`.
+  - **Actions** (`actions/definitions/speaker_queue.py`): 6 REGISTRY actions — `open_speaker_queue`, `close_speaker_queue`, `join_speaker_queue`, `leave_speaker_queue`, `advance_speaker_queue`, `skip_speaker`. All `target_type=SELF`, `category="scenes"`.
+  - **Telnet** (`commands/speaker_queue.py`): `CmdLine` (`line`) — subverb-routed: `line open|close|join|leave|next|skip <name>`.
+  - **Web** (`speaker_queue_views.py`): `SpeakerQueueViewSet` — read + `open`/`close`/`join`/`leave`/`advance`/`skip` action endpoints.
+  - **Frontend** (`scenes/components/SpeakerQueueBar.tsx`): Inline scene panel component, mirrors `PlaceBar`.
+  - **Auto-cleanup:** Scene finish (`finish_scene_full`), departure (`Room.at_object_leave`), disconnect (`Character.at_post_unpuppet`).
 ### Stories
 Player-driven narrative campaign system with hierarchical structure and task-gated progression.
 
@@ -4363,6 +4371,13 @@ funeral finish, executor will-reading, or the deadline sweeper (14 real days, PL
   executor-scoped; claims claimant-scoped); `AgreementsPanel` sheet tab.
 - **Source:** `src/world/estates/`
 - **Details:** [estates.md](estates.md)
+
+### Dreams (#2290)
+The dream realm — a parallel layer on the room graph for sleeping/unconscious characters.
+Dream reflections, mental fatigue dream danger, Dream Peril consequence pool (nightmares/
+madness/death), thread-gated dreamwalking with escape lever, and the deep dreaming area.
+- **Source:** `src/world/dreams/`
+- **Details:** [dreams.md](dreams.md)
 
 ### Vitals
 Character mortality, health tracking, and the acute-peril dying state. System-agnostic — called by

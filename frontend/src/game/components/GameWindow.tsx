@@ -77,6 +77,8 @@ interface GameWindowProps {
   isAtPlace?: boolean;
   /** `PlaceBar`, rendered directly above the composer (#2156). */
   placeBar?: ReactNode;
+  /** `SpeakerQueueBar`, rendered alongside PlaceBar (#2356). */
+  speakerQueueBar?: ReactNode;
   /** `PendingActionAttachments`, rendered directly above the composer (#2156). */
   pendingAttachments?: ReactNode;
   /** Open conversation tabs (#2165); absent = no strip, plain feed. */
@@ -105,6 +107,7 @@ export function GameWindow({
   onPoseSubmitted,
   isAtPlace,
   placeBar,
+  speakerQueueBar,
   pendingAttachments,
   conversationTabs,
   speakingAs,
@@ -241,6 +244,7 @@ export function GameWindow({
         <ChatWindow messages={session.messages} />
       )}
       {placeBar}
+      {speakerQueueBar}
       {pendingAttachments}
       <CommandInput
         character={active}

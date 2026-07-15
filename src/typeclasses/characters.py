@@ -330,20 +330,21 @@ class Character(ObjectParent, DefaultCharacter):
         Uses the scene_state properties to get current state information.
         Falls back to executing 'look' command if state retrieval fails.
 
-        #2287: while Unconscious, perception relocates to the liminal dream
-        room — the frontend renders the dream side, not the waking room.
+        #2287/#2290: while Unconscious or Sleeping, perception relocates to the
+        dream space — the frontend renders the dream side, not the waking room.
         """
         if not (self.has_account and self.location):
             return
         room = self.location
-        from world.vitals.services import get_dream_room, perceives_dreamside
+        from world.dreams.services import get_dream_space
+        from world.vitals.services import perceives_dreamside
 
         try:
             sheet = self.sheet_data
         except ObjectDoesNotExist:
             sheet = None
         if perceives_dreamside(sheet):
-            room = get_dream_room() or room
+            room = get_dream_space(room=self.location) or room
         caller_state = self.scene_state
         room_state = room.scene_state
         if caller_state and room_state:
@@ -544,6 +545,20 @@ class Character(ObjectParent, DefaultCharacter):
             from world.scenes.round_services import maybe_finish_empty_scene
 
             maybe_finish_empty_scene(origin, leaving=self)
+
+            # #2356: remove this character from the room's speaker queue.
+            from world.scenes.models import Persona
+            from world.scenes.services import active_persona_for_sheet
+            from world.scenes.speaker_queue_services import (
+                remove_persona_from_room_queues,
+            )
+
+            if self.character_sheet is not None:
+                try:
+                    persona = active_persona_for_sheet(self.character_sheet)
+                    remove_persona_from_room_queues(origin, persona)
+                except Persona.DoesNotExist:
+                    pass
 
             sheet = self.character_sheet
             if sheet is not None:

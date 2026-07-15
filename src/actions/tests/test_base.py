@@ -477,6 +477,18 @@ class ActionRegistryTests(TestCase):
             "examine_evidence",
             # #2219 — inter-domain food transfer.
             "transfer_food",
+            # #2290 — dream realm.
+            "sleep",
+            "descend",
+            "ascend",
+            "dreamwalk",
+            # #2356 — speaker queue: room-scoped turn-order utility.
+            "open_speaker_queue",
+            "close_speaker_queue",
+            "join_speaker_queue",
+            "leave_speaker_queue",
+            "advance_speaker_queue",
+            "skip_speaker",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

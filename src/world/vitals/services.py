@@ -1123,10 +1123,22 @@ def perceives_dreamside(character_sheet: CharacterSheet | None) -> bool:
     Unconscious characters dream; the dead do NOT — a ghost watches the waking
     room (the ghost interlude), so death always wins over any lingering
     Unconscious instance.
+
+    Sleeping characters also dream (#2290) — voluntary sleep applies the
+    Sleeping condition, which broadens dreamside perception.
     """
     if character_sheet is None or is_dead(character_sheet):
         return False
-    return unconscious_instance(character_sheet) is not None
+    if unconscious_instance(character_sheet) is not None:
+        return True
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import has_condition  # noqa: PLC0415
+    from world.vitals.constants import SLEEPING_CONDITION_NAME  # noqa: PLC0415
+
+    sleeping_template = ConditionTemplate.objects.filter(name=SLEEPING_CONDITION_NAME).first()
+    if sleeping_template is None:
+        return False
+    return has_condition(character_sheet.character, sleeping_template)
 
 
 def calculate_wake_difficulty(*, health_pct: float, rounds_elapsed: int) -> int:
@@ -1195,10 +1207,23 @@ def _wake_roll_blocked(
     return None
 
 
+def _maybe_move_to_destination(character: ObjectDB, destination_room: ObjectDB | None) -> None:  # noqa: OBJECTDB_PARAM
+    """Move a waking character to their dreamwalk destination (#2290 escape lever).
+
+    Called after a successful wake when ``destination_room`` is provided.
+    Uses Evennia's ``move_object`` so room-state broadcasts fire normally.
+    """
+    if destination_room is None:
+        return
+    character.location = destination_room
+    character.save(update_fields=["db_location"])
+
+
 def attempt_wake(
     character_sheet: CharacterSheet | None,
     *,
     in_combat_tick: bool = False,
+    destination_room: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
 ) -> WakeResult:
     """Attempt to wake from Unconscious: one Endurance check per round.
 
@@ -1209,6 +1234,11 @@ def attempt_wake(
     (``in_combat_tick=True``) get one free roll per round instead. A character
     who is actively Bleeding Out cannot wake — stabilising the dying comes
     first.
+
+    #2290: ``destination_room`` — when provided (the dreamwalk target's physical
+    room), the character's body is moved there after waking. This is the escape
+    lever: a dreamwalker who reached a bonded dreamer's dreamspace can wake up
+    at the target's location instead of their own body's location.
     """
     from world.conditions.services import SECONDS_PER_ROUND, remove_condition  # noqa: PLC0415
     from world.vitals.peril_resolution import acute_peril_instances  # noqa: PLC0415
@@ -1226,6 +1256,7 @@ def attempt_wake(
     character = character_sheet.character
     if instance.expires_at is not None and now >= instance.expires_at:
         remove_condition(character, instance.condition)
+        _maybe_move_to_destination(character, destination_room)
         return WakeResult(
             attempted=True, woke=True, message="You claw your way back to consciousness."
         )
@@ -1242,6 +1273,7 @@ def attempt_wake(
     result = perform_check(character, check_type, target_difficulty=difficulty)
     if int(result.success_level) >= 0:
         remove_condition(character, instance.condition)
+        _maybe_move_to_destination(character, destination_room)
         return WakeResult(
             attempted=True, woke=True, message="You claw your way back to consciousness."
         )
