@@ -1287,11 +1287,16 @@ class WarFundingTierBonus(OutcomeTierAward):
         default=0,
         help_text="Training experience added to CovenantMilitaryReadiness.",
     )
+    bonus_units = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Extra units spawned from the same template at muster time.",
+    )
 
     def __str__(self) -> str:
         return (
             f"{self.outcome_tier}: +{self.quality_steps}q"
             f" +{self.strength_bonus}s +{self.morale_bonus}m"
+            f" +{self.bonus_units}u"
         )
 
 

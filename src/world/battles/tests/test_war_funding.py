@@ -80,13 +80,16 @@ def _make_war_funding_details(
     return details
 
 
-def _make_tier_bonus(outcome_tier, *, quality_steps=0, strength=0, morale=0, xp=0):
+def _make_tier_bonus(  # noqa: PLR0913
+    outcome_tier, *, quality_steps=0, strength=0, morale=0, xp=0, bonus_units=0
+):
     return WarFundingTierBonus.objects.create(
         outcome_tier=outcome_tier,
         quality_steps=quality_steps,
         strength_bonus=strength,
         morale_bonus=morale,
         training_xp=xp,
+        bonus_units=bonus_units,
     )
 
 
@@ -210,6 +213,7 @@ class GetWarFundingBonusTests(TestCase):
         self.assertEqual(bonus.quality_steps, 3)  # 2 per-tier + 1 readiness
         self.assertEqual(bonus.strength_bonus, 30)
         self.assertEqual(bonus.morale_bonus, 20)
+        self.assertEqual(bonus.bonus_units, 0)  # not set in this test
 
     def test_zeros_for_no_project(self) -> None:
         covenant = CovenantFactory()
@@ -217,6 +221,7 @@ class GetWarFundingBonusTests(TestCase):
         self.assertEqual(bonus.quality_steps, 0)
         self.assertEqual(bonus.strength_bonus, 0)
         self.assertEqual(bonus.morale_bonus, 0)
+        self.assertEqual(bonus.bonus_units, 0)
 
     def test_zeros_for_missing_award_row(self) -> None:
         covenant = CovenantFactory()
@@ -228,6 +233,17 @@ class GetWarFundingBonusTests(TestCase):
         self.assertEqual(bonus.quality_steps, 0)
         self.assertEqual(bonus.strength_bonus, 0)
         self.assertEqual(bonus.morale_bonus, 0)
+        self.assertEqual(bonus.bonus_units, 0)
+
+    def test_bonus_units_from_tier_bonus(self) -> None:
+        covenant = CovenantFactory()
+        details = _make_war_funding_details(covenant=covenant, progress=100)
+        critical_tier = details.tier_thresholds.get(min_progress=100).outcome_tier
+        _make_tier_bonus(critical_tier, bonus_units=2)
+        complete_war_funding(details.project, critical_tier)
+
+        bonus = get_war_funding_bonus(covenant)
+        self.assertEqual(bonus.bonus_units, 2)
 
     def test_zeros_for_missing_readiness(self) -> None:
         covenant = CovenantFactory()

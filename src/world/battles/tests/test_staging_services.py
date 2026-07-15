@@ -279,3 +279,82 @@ class SpawnUnitsFromTemplateTests(TestCase):
             self.template, battle=self.battle, side=self.side, place=self.place
         )
         self.assertEqual(units[0].place, self.place)
+
+    def test_bonus_units_spawned_for_covenant(self) -> None:
+        """War-funding bonus_units spawns extra units from the same template (#2381)."""
+        from world.battles.models import (
+            WarFundingDetails,
+            WarFundingTierBonus,
+            WarFundingTierThreshold,
+        )
+        from world.battles.war_funding_services import complete_war_funding
+        from world.covenants.factories import CovenantFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        covenant = CovenantFactory()
+        side = BattleSideFactory(
+            battle=self.battle, covenant=covenant, role=BattleSideRole.DEFENDER
+        )
+
+        # Create a completed war-funding project with bonus_units=2.
+        from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus
+        from world.projects.factories import ProjectFactory
+
+        project = ProjectFactory(
+            kind=ProjectKind.WAR_FUNDING,
+            completion_mode=CompletionMode.TIERED_PERIOD,
+            status=ProjectStatus.COMPLETED,
+        )
+        details = WarFundingDetails.objects.create(project=project, covenant=covenant)
+        critical = CheckOutcomeFactory(success_level=2)
+        WarFundingTierThreshold.objects.create(
+            details=details, outcome_tier=critical, min_progress=0
+        )
+        WarFundingTierBonus.objects.create(outcome_tier=critical, bonus_units=2)
+        complete_war_funding(project, critical)
+
+        units = spawn_units_from_template(self.template, battle=self.battle, side=side, count=1)
+        self.assertEqual(len(units), 3)  # 1 requested + 2 bonus
+
+    def test_bonus_units_clamped_to_max(self) -> None:
+        """bonus_units + count is clamped to MAX_TEMPLATE_SPAWN (#2381)."""
+        from world.battles.models import (
+            WarFundingDetails,
+            WarFundingTierBonus,
+            WarFundingTierThreshold,
+        )
+        from world.battles.war_funding_services import complete_war_funding
+        from world.covenants.factories import CovenantFactory
+        from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus
+        from world.projects.factories import ProjectFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        covenant = CovenantFactory()
+        side = BattleSideFactory(
+            battle=self.battle, covenant=covenant, role=BattleSideRole.DEFENDER
+        )
+
+        project = ProjectFactory(
+            kind=ProjectKind.WAR_FUNDING,
+            completion_mode=CompletionMode.TIERED_PERIOD,
+            status=ProjectStatus.COMPLETED,
+        )
+        details = WarFundingDetails.objects.create(project=project, covenant=covenant)
+        critical = CheckOutcomeFactory(success_level=2)
+        WarFundingTierThreshold.objects.create(
+            details=details, outcome_tier=critical, min_progress=0
+        )
+        WarFundingTierBonus.objects.create(outcome_tier=critical, bonus_units=10)
+        complete_war_funding(project, critical)
+
+        units = spawn_units_from_template(
+            self.template, battle=self.battle, side=side, count=MAX_TEMPLATE_SPAWN - 5
+        )
+        self.assertEqual(len(units), MAX_TEMPLATE_SPAWN)
+
+    def test_no_bonus_units_without_covenant(self) -> None:
+        """No bonus units when the side has no covenant (#2381)."""
+        units = spawn_units_from_template(
+            self.template, battle=self.battle, side=self.side, count=2
+        )
+        self.assertEqual(len(units), 2)

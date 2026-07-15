@@ -215,6 +215,7 @@ class WarFundingTierBonusAdmin(admin.ModelAdmin):
         "strength_bonus",
         "morale_bonus",
         "training_xp",
+        "bonus_units",
     )
     raw_id_fields = ("outcome_tier",)
     ordering = ("-outcome_tier__success_level",)
