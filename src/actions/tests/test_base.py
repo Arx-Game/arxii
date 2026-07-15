@@ -477,6 +477,11 @@ class ActionRegistryTests(TestCase):
             "examine_evidence",
             # #2219 — inter-domain food transfer.
             "transfer_food",
+            # #2290 — dream realm.
+            "sleep",
+            "descend",
+            "ascend",
+            "dreamwalk",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -66,3 +66,33 @@ class DreamReflection(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Dream of {self.waking_room}"
+
+
+class DreamPerilConfig(SharedMemoryModel):
+    """Singleton config for Dream Peril collapse resolution (#2290).
+
+    Stores the resist check type and difficulty used when a dreamer's
+    mental fatigue collapses while dreamside. The resolver calls
+    ``select_consequence`` directly (not via ``_resolve_peril_via_pool``
+    which requires a staged ConditionInstance).
+    """
+
+    resist_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dream_peril_configs",
+        help_text="Check type rolled for Dream Peril resistance.",
+    )
+    resist_difficulty = models.PositiveIntegerField(
+        default=20,
+        help_text="Target difficulty for the Dream Peril resist check.",
+    )
+
+    class Meta:
+        verbose_name = "Dream Peril Config"
+        verbose_name_plural = "Dream Peril Configs"
+
+    def __str__(self) -> str:
+        return "Dream Peril Config"

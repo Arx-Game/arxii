@@ -34,6 +34,7 @@ from world.vitals.constants import (
     POOL_DEFAULT_DEATH,
     POOL_DEFAULT_WOUND,
     POOL_KNOCKOUT,
+    SLEEPING_CONDITION_NAME,
 )
 from world.vitals.factories import (
     _ensure_peril_category,
@@ -133,6 +134,57 @@ def ensure_unconscious_condition() -> ConditionTemplate:
     )
 
     for capability_name in (FoundationalCapability.AWARENESS, FoundationalCapability.MOVEMENT):
+        capability = CapabilityType.objects.get(name=capability_name)
+        ConditionCapabilityEffect.objects.get_or_create(
+            condition=template,
+            stage=None,
+            capability=capability,
+            defaults={"value": -100},
+        )
+    return template
+
+
+def ensure_sleeping_condition() -> ConditionTemplate:
+    """Ensure the Sleeping condition for voluntary dream entry (#2290).
+
+    Mirrors Unconscious's capability-zeroing (awareness, movement, limb_use → 0)
+    but is voluntarily applied by SleepAction and has no guaranteed-wake
+    deadline — the character wakes when they choose (via ``wake``), unless
+    dream-engaged (an active scene round in the dream room stamps a deadline).
+    """
+    from world.conditions.constants import (  # noqa: PLC0415
+        DurationType,
+        FoundationalCapability,
+    )
+    from world.conditions.models import (  # noqa: PLC0415
+        CapabilityType,
+        ConditionCapabilityEffect,
+        ConditionTemplate,
+    )
+
+    ensure_foundational_capabilities()
+    category = _ensure_peril_category()
+
+    template, _ = ConditionTemplate.objects.get_or_create(
+        name=SLEEPING_CONDITION_NAME,
+        defaults={
+            "category": category,
+            "description": ("Asleep and dreaming. Cannot take any actions in the waking world."),
+            "player_description": (
+                "You drift in dreams, your body resting somewhere in the waking world."
+            ),
+            "observer_description": "lies asleep, lost in dreams.",
+            "default_duration_type": DurationType.UNTIL_CURED,
+            "default_duration_value": 0,
+            "is_visible_to_others": True,
+        },
+    )
+
+    for capability_name in (
+        FoundationalCapability.AWARENESS,
+        FoundationalCapability.MOVEMENT,
+        FoundationalCapability.LIMB_USE,
+    ):
         capability = CapabilityType.objects.get(name=capability_name)
         ConditionCapabilityEffect.objects.get_or_create(
             condition=template,
@@ -391,6 +443,7 @@ def seed_survivability_content() -> None:
     """Seed everything the survivability pipeline needs to fire in production."""
     ensure_foundational_capabilities()
     ensure_unconscious_condition()
+    ensure_sleeping_condition()
     ensure_bleeding_out_condition()
     create_bleed_out_terminal_pool()
     create_abandonment_pools()

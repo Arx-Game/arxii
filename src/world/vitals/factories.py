@@ -44,6 +44,7 @@ __all__ = [
     "CharacterVitalsFactory",
     "create_abandonment_pools",
     "create_bleed_out_terminal_pool",
+    "create_dream_peril_pool",
     "ensure_surrounded_content",
 ]
 
@@ -296,6 +297,56 @@ def create_abandonment_pools() -> dict[str, ConsequencePool]:
     _seed_captured_alive_consequence(pools[POOL_ABANDONMENT_ENEMY])
 
     return pools
+
+
+def create_dream_peril_pool():
+    """Create (or return existing) the dream_peril ConsequencePool (#2290).
+
+    Outcomes authored:
+    - ``wake_shaken`` (Success tier, weight=3, no character_loss): character
+      wakes, mental fatigue partially resets, minor temporary debuff.
+    - ``nightmares`` (Partial Success tier, weight=2, no character_loss): a
+      persistent Nightmares condition applied to the waking character.
+    - ``madness`` (Partial Success tier, weight=1, no character_loss): a
+      severe persistent Madness condition (behavior-altering).
+    - ``die`` (Failure tier, weight=1, character_loss=True): physical death
+      — the dreamer's body dies. Only reachable when death_is_permitted
+      (environmental/deep-dreaming sources; excluded for PC sources per
+      ADR-0023).
+
+    Returns the ConsequencePool instance (safe to call multiple times —
+    uses get_or_create throughout).
+    """
+    from actions.models import ConsequencePool
+    from world.vitals.constants import POOL_DREAM_PERIL
+
+    pool, _ = ConsequencePool.objects.get_or_create(
+        name=POOL_DREAM_PERIL,
+        defaults={
+            "description": (
+                "Dream peril resolution: a dreamer's mental fatigue has"
+                " collapsed. They may wake shaken, suffer nightmares,"
+                " descend into madness, or die — their body lost in the"
+                " deep dreaming."
+            ),
+        },
+    )
+
+    failure = _get_or_create_outcome(_OUTCOME_FAILURE, success_level=-1)
+    partial = _get_or_create_outcome(_OUTCOME_PARTIAL, success_level=0)
+    success = _get_or_create_outcome(_OUTCOME_SUCCESS, success_level=1)
+
+    _seed_pool_consequences(
+        pool,
+        [
+            (success, "wake_shaken", 3, False),
+            (partial, "nightmares", 2, False),
+            (partial, "madness", 1, False),
+            (failure, "die", 1, True),
+        ],
+    )
+
+    return pool
 
 
 def ensure_surrounded_content() -> dict[str, object]:

@@ -143,4 +143,13 @@ BLEED_OUT_STAGE_SPECS: list[tuple[int, str, int, int | None]] = [
 
 DREAM_ROOM_KEY: str = "The Threshold of Dreams"
 DREAM_ROOM_TAG: str = "dream_liminal"
+
+# ---------------------------------------------------------------------------
+# Sleeping condition (#2290 — voluntary sleep for dream entry)
+# ---------------------------------------------------------------------------
+
+SLEEPING_CONDITION_NAME: str = "Sleeping"
+
+# Dream Peril consequence pool natural key
+POOL_DREAM_PERIL: str = "dream_peril"
 DREAM_ROOM_TAG_CATEGORY: str = "system"

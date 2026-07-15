@@ -56,21 +56,19 @@ class LookAction(Action):
                 return ActionResult(success=False, message=f"Could not find '{target.key}'.")
 
         # #2287: an unconscious looker's perception is dreamside — looking at
-        # "the room" shows the liminal dream room, not the waking one.
+        # "the room" shows the dream space, not the waking one.
         if target == actor.location:
             from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-            from world.vitals.services import (  # noqa: PLC0415
-                get_dream_room,
-                perceives_dreamside,
-            )
+            from world.dreams.services import get_dream_space  # noqa: PLC0415
+            from world.vitals.services import perceives_dreamside  # noqa: PLC0415
 
             try:
                 sheet = actor.sheet_data
             except (AttributeError, ObjectDoesNotExist):
                 sheet = None
             if perceives_dreamside(sheet):
-                target = get_dream_room() or target
+                target = get_dream_space(room=actor.location) or target
 
         sdm = context.scene_data if context else SceneDataManager()
         target_state = sdm.initialize_state_for_object(target)
