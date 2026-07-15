@@ -7,6 +7,7 @@ from world.agriculture.models import (
     FieldDetails,
     FoodConfig,
     FoodStockpile,
+    FoodTransfer,
     GranaryDetails,
 )
 
@@ -45,3 +46,10 @@ class FoodConfigAdmin(admin.ModelAdmin):
         "max_provisioning_morale_penalty",
         "max_provisioning_strength_penalty",
     ]
+
+
+@admin.register(FoodTransfer)
+class FoodTransferAdmin(admin.ModelAdmin):
+    list_display = ["source_domain", "target_domain", "amount", "acting_persona", "created_at"]
+    readonly_fields = ["created_at"]
+    search_fields = ["source_domain__name", "target_domain__name"]

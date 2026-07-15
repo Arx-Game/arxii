@@ -475,6 +475,8 @@ class ActionRegistryTests(TestCase):
             "start_frame_job",
             "produce_case_evidence",
             "examine_evidence",
+            # #2219 — inter-domain food transfer.
+            "transfer_food",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

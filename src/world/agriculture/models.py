@@ -186,3 +186,38 @@ class FoodConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return "Food Config (singleton)"
+
+
+class FoodTransfer(SharedMemoryModel):
+    """Audit row for every inter-domain food transfer (#2219).
+
+    Mirrors ``CurrencyTransfer``'s audit-trail pattern: every food
+    movement between domains is logged with source, target, amount,
+    and acting persona.
+    """
+
+    source_domain = models.ForeignKey(
+        "societies.Domain",
+        on_delete=models.CASCADE,
+        related_name="food_transfers_out",
+    )
+    target_domain = models.ForeignKey(
+        "societies.Domain",
+        on_delete=models.CASCADE,
+        related_name="food_transfers_in",
+    )
+    amount = models.PositiveIntegerField(help_text="Food units moved.")
+    acting_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="food_transfers_initiated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"FoodTransfer({self.source_domain_id}→{self.target_domain_id}: {self.amount})"

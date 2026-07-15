@@ -104,6 +104,7 @@ from actions.definitions.domains import (
     AddDomainHoldingAction,
     AppointDomainOfficeAction,
     StartDomainImprovementAction,
+    TransferFoodAction,
     VacateDomainOfficeAction,
 )
 from actions.definitions.doors import BreakExitAction, LockAction, PickLockAction, UnlockAction
@@ -736,6 +737,8 @@ _ALL_ACTIONS: list[Action] = [
     StartFrameJobAction(),
     ProduceCaseEvidenceAction(),
     ExamineEvidenceAction(),
+    # #2219 — inter-domain food transfer.
+    TransferFoodAction(),
 ]
 
 # Lookup by key

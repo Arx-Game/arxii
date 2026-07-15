@@ -24,3 +24,19 @@ class FoodCollectionResult:
     success_level: int
     catastrophe: bool = False
     cancelled: bool = False
+
+
+@dataclass(frozen=True)
+class FoodTransferResult:
+    """Outcome of one inter-domain food transfer.
+
+    ``amount`` is what was requested; ``landed`` is what reached the
+    target stockpile after the capacity cap; ``overflow`` is what was
+    lost (target granary full). ``cancelled`` marks a pre-transfer
+    reactive cancellation — no food was moved.
+    """
+
+    amount: int
+    landed: int
+    overflow: int
+    cancelled: bool = False

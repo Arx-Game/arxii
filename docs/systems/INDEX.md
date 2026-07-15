@@ -2899,6 +2899,9 @@ per `pool_difficulty_step`, capped at `pool_difficulty_max_bonus`.
     `pool_difficulty_max_bonus`, #2218), and army provisioning knobs
     (`army_food_per_member` / `max_provisioning_morale_penalty` /
     `max_provisioning_strength_penalty`, #2375).
+  - `FoodTransfer` — audit row for inter-domain food transfers (#2219);
+    source_domain, target_domain, amount, acting_persona, created_at.
+    Mirrors `CurrencyTransfer`.
 - **Services** (`world.agriculture.services`):
   - `field_production_tick()` — daily cron; accrues `base_production × level ×
     multiplier` into each active Field's `uncollected_pool`.
@@ -2927,6 +2930,11 @@ per `pool_difficulty_step`, capped at `pool_difficulty_max_bonus`.
     `AreaClosure` ancestor chain to find the `Domain`.
   - `max_food_capacity(domain)` — sums `granary.level × capacity_per_level`
     across all active Granaries in the domain's area subtree.
+  - `transfer_food(*, source_domain, target_domain, amount, acting_persona,
+    character)` (#2219) — moves food from source `FoodStockpile` to target
+    (capped at Granary capacity; overflow lost). Emits `FOOD_PRE_TRANSFER`
+    (cancellable) + `FOOD_TRANSFERRED` (frozen) events. Creates a `FoodTransfer`
+    audit row.
 - **Flow service functions** (`flows.service_functions.agriculture`):
   - `food_collection_difficulty` — flow-callable wrapper that computes the
     pool-size difficulty bonus for a collection attempt (#2218).
@@ -2940,9 +2948,12 @@ per `pool_difficulty_step`, capped at `pool_difficulty_max_bonus`.
   (`CollectFoodView`, body `{field_instance_id}`). Without a surface the loop
   couldn't close — the pool filled but never drained.
 - **Events:** `FOOD_PRE_COLLECT` (cancellable pre-collect, #2218),
-  `FOOD_COLLECTED` (post-collect outcome), `FOOD_SHORTAGE` (in
-  `flows/constants.py`). Payloads: `FoodPreCollectPayload` (mutable),
-  `FoodCollectedPayload` (frozen) in `flows/events/payloads.py`.
+  `FOOD_COLLECTED` (post-collect outcome), `FOOD_SHORTAGE`,
+  `FOOD_PRE_TRANSFER` (cancellable pre-transfer, #2219),
+  `FOOD_TRANSFERRED` (post-transfer outcome) (in `flows/constants.py`).
+  Payloads: `FoodPreCollectPayload` (mutable), `FoodCollectedPayload` (frozen),
+  `FoodPreTransferPayload` (mutable), `FoodTransferredPayload` (frozen) in
+  `flows/events/payloads.py`.
 - **Cron tasks:** `agriculture.field_production` (daily 24h),
   `agriculture.domain_consumption` (weekly, via weekly rollover).
 - **Seeds:** `ensure_field_granary_kinds()` + `ensure_starter_crop_types()`
