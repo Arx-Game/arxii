@@ -360,7 +360,7 @@ def advance_leg(voyage: Voyage, caller) -> None:  # noqa: C901, PLR0912, PLR0915
         from world.agriculture.services import provision_ship_leg  # noqa: PLC0415
 
         provisioning_ratio = provision_ship_leg(voyage)
-        if provisioning_ratio == 0.0:
+        if provisioning_ratio <= 0.0:
             raise VoyageError(
                 user_message="The crew is starving — you can't sail without provisions."
             )
