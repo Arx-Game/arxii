@@ -1,1 +1,1 @@
-0002_alter_voyage_status_voyageinvite
+0003_voyage_provisioning_ratio

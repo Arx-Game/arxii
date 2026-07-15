@@ -18,7 +18,7 @@ from world.agriculture.services.production import (
     field_production_tick,
     get_food_config,
 )
-from world.agriculture.services.provisioning import provision_army
+from world.agriculture.services.provisioning import provision_army, provision_ship_leg
 from world.agriculture.services.transfer import transfer_food
 
 __all__ = [
@@ -30,6 +30,7 @@ __all__ = [
     "handle_granary_progression",
     "max_food_capacity",
     "provision_army",
+    "provision_ship_leg",
     "resolve_domain_for_feature",
     "transfer_food",
 ]
