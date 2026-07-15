@@ -41,7 +41,7 @@ def applicable_threads_for_cast(
     sheet = _get_character_sheet(character)
     if sheet is None:
         return None
-    location = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    location = character.location
     location_id = location.pk if location is not None else None
     return build_cast_applicable_threads(
         sheet, technique, location_id=location_id, cast_pull=cast_pull

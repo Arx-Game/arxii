@@ -283,10 +283,12 @@ class ConditionInstanceFactory(DjangoModelFactory):
     class Meta:
         model = ConditionInstance
 
+    # A real typeclassed object — bare ObjectDB rows lack the ObjectParent
+    # mixin (no trigger_handler/character_sheet) and can't exist in production.
     target = factory.LazyFunction(
-        lambda: __import__("evennia.objects.models", fromlist=["ObjectDB"]).ObjectDB.objects.create(
-            db_key="TestTarget"
-        )
+        lambda: __import__(
+            "evennia_extensions.factories", fromlist=["ObjectDBFactory"]
+        ).ObjectDBFactory(db_key="TestTarget")
     )
     condition = factory.SubFactory(ConditionTemplateFactory)
     current_stage = None
@@ -418,7 +420,7 @@ def install_cancel_damage_trigger(objectdb: object) -> None:
     # fires inside a rolled-back TestCase, so the trigger would stay invisible and
     # the cancel would not fire. Refresh synchronously (the #1584 / resolve_round
     # pattern).
-    handler = getattr(objectdb, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    handler = objectdb.trigger_handler
     if handler is not None:
         handler.refresh()
 

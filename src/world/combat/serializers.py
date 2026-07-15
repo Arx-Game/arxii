@@ -365,7 +365,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
 
         # Read the prefetched OneToOne (select_related on the viewset queryset)
         # exactly once — no per-category re-query. None when no row exists yet.
-        fatigue_pool = getattr(character_sheet, "fatigue", None)  # noqa: GETATTR_LITERAL
+        fatigue_pool = character_sheet.fatigue_or_none
         well_rested = fatigue_pool.well_rested if fatigue_pool else False
         pools: dict[str, dict[str, int]] = {}
         for category in ActionCategory:

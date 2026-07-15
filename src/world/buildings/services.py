@@ -233,7 +233,7 @@ def validate_permit_site(
         )
         raise PermitHolderMismatchError(msg)
 
-    room_profile = getattr(site_room, "room_profile", None)  # noqa: GETATTR_LITERAL
+    room_profile = site_room.room_profile_or_none
     if room_profile is None:
         msg = f"Site {getattr(site_room, 'pk', '?')} has no RoomProfile (not a room)."  # noqa: GETATTR_LITERAL
         raise PermitSiteNotOutdoorError(msg)
@@ -278,7 +278,7 @@ def _ward_for_room(site_room) -> Area | None:
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import AreaClosure  # noqa: PLC0415
 
-    room_profile = getattr(site_room, "room_profile", None)  # noqa: GETATTR_LITERAL
+    room_profile = site_room.room_profile_or_none
     site_area = room_profile.area if room_profile else None
     if site_area is None:
         return None

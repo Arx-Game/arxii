@@ -37,7 +37,7 @@ class SceneQuerySet(models.QuerySet):
         anonymous/None -> public only. This is the single source of truth
         for scene read-visibility (was inlined in SceneViewSet.get_queryset).
         """
-        if account is not None and getattr(account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        if account is not None and account.is_authenticated:
             if account.is_staff:
                 return self
             return self.filter(
@@ -78,7 +78,7 @@ class InteractionQuerySet(models.QuerySet):
         # Local imports avoid the managers <-> models import cycle (models imports this module).
         from world.scenes.models import Interaction, SceneParticipation  # noqa: PLC0415
 
-        is_authenticated = account is not None and getattr(account, "is_authenticated", False)  # noqa: GETATTR_LITERAL
+        is_authenticated = account is not None and account.is_authenticated
         if is_authenticated and account.is_staff:
             # Staff sees everything except very-private (#1219: that tier admits no exception).
             return self.exclude(visibility=InteractionVisibility.VERY_PRIVATE)

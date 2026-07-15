@@ -2802,7 +2802,7 @@ class RitualSessionParticipantSummarySerializer(serializers.Serializer):
         """Return the presented persona name for the participant's sheet (#981)."""
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        sheet = getattr(obj, "character_sheet", None)  # noqa: GETATTR_LITERAL
+        sheet = obj.character_sheet
         if sheet is None:
             return ""
         return active_persona_for_sheet(sheet).name
@@ -2850,7 +2850,7 @@ class RitualSessionListSerializer(serializers.ModelSerializer):
         from world.magic.constants import ParticipantState  # noqa: PLC0415
 
         # Use participants_cached (populated by Prefetch to_attr) when available.
-        cached = getattr(obj, "participants_cached", None)  # noqa: GETATTR_LITERAL
+        cached = obj.participants_cached
         if cached is not None:
             participants = cached
         else:
@@ -2874,7 +2874,7 @@ class RitualSessionListSerializer(serializers.ModelSerializer):
         if initiator is not None and initiator.pk in my_sheet_ids:
             return {"role": "initiator", "state": None}
         # Check participant rows. Use participants_cached when prefetched.
-        cached = getattr(obj, "participants_cached", None)  # noqa: GETATTR_LITERAL
+        cached = obj.participants_cached
         participants_iter = (
             cached if cached is not None else getattr(obj, "participants", None).all()  # noqa: GETATTR_LITERAL
         )

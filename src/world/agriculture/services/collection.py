@@ -130,7 +130,7 @@ def collect_field_food(character, field_instance) -> FoodCollectionResult:
     pool_bonus = _pool_difficulty_bonus(field_instance, character)
 
     # --- Pre-collect event (cancellable, mutable) ---
-    location = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    location = character.location
     pre_payload = FoodPreCollectPayload(
         character=character,
         field_instance=field_instance,

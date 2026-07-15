@@ -187,7 +187,7 @@ class IsSceneGMPrerequisite(Prerequisite):
             return True, ""
 
         account = resolve_account_or_none(actor)
-        scene = get_active_scene(getattr(actor, "location", None))  # noqa: GETATTR_LITERAL
+        scene = get_active_scene(actor.location)
         if scene is not None and scene.is_gm(account):
             return True, ""
         return False, "Only the scene's GM or staff can do that."

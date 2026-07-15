@@ -4,6 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
@@ -95,7 +96,7 @@ class AudereEligibilityTests(TestCase):
         cls.obj_ct = ContentType.objects.get_for_model(ObjectDB)
 
     def _create_character(self) -> ObjectDB:
-        return ObjectDB.objects.create(db_key="test_char")
+        return ObjectDBFactory(db_key="test_char")
 
     def _create_engagement(self, character: ObjectDB) -> CharacterEngagement:
         return CharacterEngagement.objects.create(
@@ -206,7 +207,7 @@ class AudereLifecycleTests(TestCase):
         cls.obj_ct = ContentType.objects.get_for_model(ObjectDB)
 
     def setUp(self) -> None:
-        self.character = ObjectDB.objects.create(db_key="lifecycle_char")
+        self.character = ObjectDBFactory(db_key="lifecycle_char")
         self.anima = CharacterAnimaFactory(character=self.character, current=10, maximum=50)
         self.engagement = CharacterEngagement.objects.create(
             character=self.character,
@@ -328,6 +329,6 @@ class AudereEligibilityQueryCountTests(TestCase):
         zero-query arithmetic check that fails, so no Soulfray/engagement/Audere
         queries fire.
         """
-        character = ObjectDB.objects.create(db_key="query_count_char")
+        character = ObjectDBFactory(db_key="query_count_char")
         with self.assertNumQueries(1):
             check_audere_eligibility(character, runtime_intensity=1)

@@ -30,8 +30,8 @@ class ResolutionContextTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.location = ObjectDB.objects.create(db_key="ContextRoom")
-        cls.character = ObjectDB.objects.create(db_key="ContextChar")
+        cls.location = ObjectDBFactory(db_key="ContextRoom")
+        cls.character = ObjectDBFactory(db_key="ContextChar")
         ObjectDB.objects.filter(pk=cls.character.pk).update(db_location=cls.location)
         ObjectDB.flush_cached_instance(cls.character)
         cls.character = ObjectDB.objects.get(pk=cls.character.pk)
@@ -69,7 +69,7 @@ class SelectConsequenceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="GenericResolveChar")
+        cls.character = ObjectDBFactory(db_key="GenericResolveChar")
         cls.outcome_success = CheckOutcomeFactory(name="GenSuccess", success_level=1)
         cls.outcome_failure = CheckOutcomeFactory(name="GenFailure", success_level=-1)
 
@@ -214,7 +214,7 @@ class ApplyResolutionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="ApplyChar")
+        cls.character = ObjectDBFactory(db_key="ApplyChar")
         cls.outcome = CheckOutcomeFactory(name="ApplySuccess", success_level=1)
         cls.consequence = ConsequenceFactory(
             outcome_tier=cls.outcome,
@@ -446,7 +446,7 @@ class ApplyPoolForTierTests(TestCase):
 
     def test_fires_only_matching_tier_consequences(self) -> None:
         """Only consequences matching the provided tier are applied."""
-        character = ObjectDB.objects.create(db_key="TierPoolTestChar")
+        character = ObjectDBFactory(db_key="TierPoolTestChar")
         decisive = CheckOutcomeFactory(name="Decisive Victory", success_level=6)
         marginal = CheckOutcomeFactory(name="Marginal Victory", success_level=1)
 
@@ -481,7 +481,7 @@ class ApplyPoolForTierTests(TestCase):
 
     def test_fires_nothing_when_no_tier_matches(self) -> None:
         """No consequences are applied when the pool contains no matching tier."""
-        character = ObjectDB.objects.create(db_key="TierPoolTestChar2")
+        character = ObjectDBFactory(db_key="TierPoolTestChar2")
         decisive = CheckOutcomeFactory(name="Decisive Victory 2", success_level=6)
         marginal = CheckOutcomeFactory(name="Marginal Victory 2", success_level=1)
 

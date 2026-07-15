@@ -16,6 +16,7 @@ from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset
+from core.descriptors import ReverseOneToOneOrNone
 from flows.constants import EventName
 from flows.emit import emit_event
 from flows.events.payloads import AttackLandedPayload, MovedPayload, MovePreDepartPayload
@@ -60,6 +61,11 @@ class Character(ObjectParent, DefaultCharacter):
     is_story_runner: bool = False
 
     state_class = CharacterState
+
+    #: Reverse-OneToOne safe accessor (#2386): the CharacterFormState row, or
+    #: None when unprovisioned. Character-scoped, so it lives here rather than
+    #: on ObjectParent (CharacterFormState.character is limited to Characters).
+    form_state_or_none = ReverseOneToOneOrNone("form_state")
 
     # Example typeclass defaults for item_data fallbacks
     # These provide sensible defaults when data objects don't exist

@@ -7,6 +7,8 @@ plus planned selector functions for character application filtering.
 
 from __future__ import annotations
 
+from typing import Any
+
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
@@ -56,15 +58,23 @@ def active_player_character_sheets() -> list[CharacterSheet]:
     )
 
 
-def puppeted_sheet_for(user: object) -> CharacterSheet | None:
+def puppeted_sheet_for(user: Any) -> CharacterSheet | None:
     """The CharacterSheet of the character ``user`` is currently puppeting, or None.
 
     The canonical user→puppet→sheet resolver (silent-fail audit): ``Account.puppet``
     can be a truthy non-character object for sessionless accounts, and AnonymousUser
     has no puppet attribute at all — inline ``puppet.character_sheet`` dances 500'd
     the summons list and silently degraded drf-spectacular's queryset inference.
+
+    Gate on ``is_authenticated`` rather than an ``isinstance(user, AccountDB)``
+    check: every Django user-like defines it (AnonymousUser → False, so we never
+    reach ``.puppet``), API tests may pass duck-typed authenticated fakes, and a
+    non-user object fails loudly on the missing attribute instead of silently
+    resolving to None.
     """
-    puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL — AnonymousUser has none
+    if user is None or not user.is_authenticated:
+        return None
+    puppet = user.puppet
     if not isinstance(puppet, ObjectDB):
         return None
     return puppet.character_sheet

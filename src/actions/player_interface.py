@@ -1063,7 +1063,7 @@ def _set_the_stage_actions(character: ObjectDB) -> list[PlayerAction]:
     if location is None:
         return []
 
-    profile = getattr(location, "room_profile", None)  # noqa: GETATTR_LITERAL
+    profile = location.room_profile_or_none
     if profile is None:
         return []
 

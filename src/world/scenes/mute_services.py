@@ -21,7 +21,7 @@ def muted_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
 
     One query. Empty for an anonymous viewer. One-way: only the muter's own view changes.
     """
-    if viewer_account is None or not getattr(viewer_account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if viewer_account is None or not viewer_account.is_authenticated:
         return set()
     return set(
         Mute.objects.filter(owner__account=viewer_account, mute_ic=True).values_list(
@@ -35,7 +35,7 @@ def ooc_muted_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
 
     One query. Empty for an anonymous viewer. One-way: only the muter's own view changes.
     """
-    if viewer_account is None or not getattr(viewer_account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if viewer_account is None or not viewer_account.is_authenticated:
         return set()
     return set(
         Mute.objects.filter(owner__account=viewer_account, mute_ooc=True).values_list(

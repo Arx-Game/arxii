@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from world.items.handlers import CharacterSheetOutfitsHandler
     from world.magic.models.affinity import Resonance
     from world.mechanics.models import Property
-    from world.roster.models import RosterEntry
     from world.scenes.models import Persona
 
 from django.core.exceptions import ValidationError
@@ -32,6 +31,7 @@ from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.descriptors import ReverseOneToOneOrNone
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.character_sheets.types import (
     DECAY_TIER_THRESHOLDS_DAYS,
@@ -650,21 +650,14 @@ class CharacterSheet(SharedMemoryModel):
 
         return StatHandler(self)
 
-    @property
-    def roster_entry_or_none(self) -> RosterEntry | None:
-        """This sheet's RosterEntry, or None (test/NPC sheets outside the roster flow).
-
-        The safe, explicit replacement for ``sheet.roster_entry_or_none``:
-        the reverse OneToOne raises RelatedObjectDoesNotExist (an AttributeError
-        subclass), so the getattr default silently swallowed genuine attribute bugs
-        along with the expected miss. Mirrors ``ObjectParent.character_sheet``.
-        """
-        from world.roster.models import RosterEntry  # noqa: PLC0415
-
-        try:
-            return self.roster_entry
-        except RosterEntry.DoesNotExist:
-            return None
+    # Reverse-OneToOne safe accessors (the *_or_none family, #2386): missing row
+    # → None; genuine attribute bugs still raise. Use the raw accessors
+    # (``sheet.vitals`` etc.) directly where a missing row is a hard bug —
+    # vitals/fatigue are seeded at CG finalization; roster_entry is absent for
+    # test/NPC sheets outside the roster flow.
+    roster_entry_or_none = ReverseOneToOneOrNone("roster_entry")
+    vitals_or_none = ReverseOneToOneOrNone("vitals")
+    fatigue_or_none = ReverseOneToOneOrNone("fatigue")
 
     @cached_property
     def primary_persona(self) -> Persona:

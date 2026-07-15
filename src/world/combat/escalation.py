@@ -216,7 +216,7 @@ def install_escalation_room_triggers(encounter: CombatEncounter) -> None:
             continue
         trigger, created = Trigger.objects.get_or_create(obj=room, trigger_definition=trigger_def)
         if created:
-            handler = getattr(room, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+            handler = room.trigger_handler
             if handler is not None:
                 handler.on_trigger_added(trigger)
 
@@ -253,7 +253,7 @@ def remove_escalation_room_triggers(encounter: CombatEncounter) -> None:
     Trigger.objects.filter(pk__in=trigger_pks).delete()
     # Invalidate the in-memory TriggerHandler cache so dispatch stops seeing
     # the deleted rows (same sequence as soul_tether's install path).
-    handler = getattr(room, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    handler = room.trigger_handler
     if handler is not None:
         for pk in trigger_pks:
             handler.on_trigger_removed(pk)

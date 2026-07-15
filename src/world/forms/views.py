@@ -156,7 +156,7 @@ class AlternateSelfViewSet(
         """#1111 — assume an alternate self owned by the played character."""
         body = ShiftFormRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        puppet = request.user.puppet
         sheet = puppeted_sheet_for(request.user)
         if puppet is None or sheet is None:
             msg = "You must be playing a character to shift forms."
@@ -187,7 +187,7 @@ class AlternateSelfViewSet(
     )
     def revert(self, request: Request) -> Response:
         """#1111 — revert the active alternate self (blocked while not in control)."""
-        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        puppet = request.user.puppet
         sheet = puppeted_sheet_for(request.user)
         if puppet is None or sheet is None:
             msg = "You must be playing a character to revert forms."

@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.services import create_character_with_sheet
 from world.conditions.models import ConditionTemplate
 from world.conditions.services import apply_condition
@@ -20,10 +21,9 @@ class DreamwalkActionTests(TestCase):
         ensure_foundational_capabilities()
         ensure_sleeping_condition()
         ensure_dream_room()
-        from evennia.objects.models import ObjectDB
 
-        self.char_room = ObjectDB.objects.create(db_key="Char Room")
-        self.target_room = ObjectDB.objects.create(db_key="Target Room")
+        self.char_room = ObjectDBFactory(db_key="Char Room")
+        self.target_room = ObjectDBFactory(db_key="Target Room")
         self.char, self.sheet, _ = create_character_with_sheet(
             character_key="Dreamwalker",
             primary_persona_name="Dreamwalker",

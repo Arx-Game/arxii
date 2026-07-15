@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Self, Union
 
 from django.utils.functional import cached_property
 
+from core.descriptors import ReverseOneToOneOrNone
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
 from flows.trigger_handler import TriggerHandler
@@ -77,6 +78,46 @@ class ObjectParent:
             return self.sheet_data
         except CharacterSheet.DoesNotExist:
             return None
+
+    # Reverse-OneToOne safe accessors (the *_or_none family, #2386): missing row
+    # → None; genuine attribute bugs still raise. Use the raw accessor where a
+    # missing row is a hard bug; use world.areas.services.get_room_profile when
+    # you want get-or-create.
+    room_profile_or_none = ReverseOneToOneOrNone("room_profile")
+
+    @cached_property
+    def positions_cached(self: Union[Self, "DefaultObject"]) -> list:
+        """This object's tactical positions — the Prefetch/query shared interface.
+
+        Lives on ObjectParent (not Room) because ``Position.room`` is an FK to
+        bare ObjectDB: any object may be asked for its positions and answers
+        with an empty list rather than AttributeError. Combat's encounter
+        queryset pre-fills this name via ``Prefetch(..., to_attr=
+        "positions_cached")`` (world/combat/views.py); independent callers get
+        the same shape — nested ``passable_edges_as_a`` / ``passable_edges_as_b``
+        / ``all_edges_as_a`` attrs and the rampart join — from this lazy query
+        (4 bounded queries, no per-position N+1). Invalidated by
+        Position/PositionEdge save/delete and the bulk positioning services via
+        ``world.areas.positioning.models.invalidate_position_graph_caches``.
+        """
+        from django.db.models import Prefetch
+
+        from world.areas.positioning.models import PositionEdge
+
+        passable = PositionEdge.objects.filter(is_passable=True).only(
+            "position_a_id", "position_b_id"
+        )
+        return list(
+            self.positions.select_related("rampart__element_profile").prefetch_related(
+                Prefetch("edges_as_a", queryset=passable, to_attr="passable_edges_as_a"),
+                Prefetch("edges_as_b", queryset=passable, to_attr="passable_edges_as_b"),
+                Prefetch(
+                    "edges_as_a",
+                    queryset=PositionEdge.objects.select_related("gating_challenge__template"),
+                    to_attr="all_edges_as_a",
+                ),
+            )
+        )
 
     @property
     def scene_data(self: Union[Self, "DefaultObject"]):
@@ -236,7 +277,7 @@ def _maybe_render_captivity_status(obj) -> str | None:
     character or item runs no query.
     """
     # Only rooms hold captives — skip the query for characters/items/exits.
-    if getattr(obj, "location", None) is not None:  # noqa: GETATTR_LITERAL
+    if obj.location is not None:
         return None
     from django.db.models import Q
 

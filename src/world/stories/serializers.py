@@ -2427,7 +2427,7 @@ class CreateBulletinPostInputSerializer(serializers.Serializer):
         if request is None:
             msg = "Request context is required."
             raise serializers.ValidationError(msg)
-        if getattr(request.user, "is_staff", False):  # noqa: GETATTR_LITERAL
+        if request.user.is_staff:
             return table
         try:
             gm_profile = request.user.gm_profile

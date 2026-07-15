@@ -40,6 +40,7 @@ from unittest.mock import patch
 from django.test import TestCase, tag
 from evennia import create_object
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.checks.test_helpers import force_check_outcome
 from world.combat.models import ClashContributionDeclaration
 from world.conditions.models import ConditionInstance
@@ -533,11 +534,10 @@ class BerserkDecayTests(TestCase):
 
     def test_berserk_decays_after_duration_rounds(self) -> None:
         """apply_condition with duration_rounds=2 → expires after 2 process_round_end calls."""
-        from evennia.objects.models import ObjectDB
 
         from world.character_sheets.factories import CharacterSheetFactory
 
-        target = ObjectDB.objects.create(db_key="BerserkDecayTarget")
+        target = ObjectDBFactory(db_key="BerserkDecayTarget")
         CharacterSheetFactory(character=target)
 
         apply_condition(

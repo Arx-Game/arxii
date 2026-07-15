@@ -25,6 +25,7 @@ from world.areas.positioning.models import (
     PositionShelter,
     Rampart,
     RampartElementProfile,
+    invalidate_position_graph_caches,
 )
 from world.mechanics.models import ChallengeInstance
 
@@ -101,7 +102,9 @@ def connect_positions(
 def disconnect_positions(a: Position, b: Position) -> None:
     """Remove the edge between two positions (order-independent)."""
     lo, hi = (a, b) if a.pk < b.pk else (b, a)
+    # QuerySet.delete() bypasses PositionEdge.delete()'s targeted cache pops.
     PositionEdge.objects.filter(position_a=lo, position_b=hi).delete()
+    invalidate_position_graph_caches(lo.room)
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +409,10 @@ def instantiate_blueprint(
                 # ChallengeInstance for these pks would still report is_active=True.
                 ChallengeInstance.flush_instance_cache()
             # Cascade deletes PositionEdges and ObjectPositions via FK on_delete=CASCADE.
+            # Bulk delete bypasses the per-instance cache pops; an edgeless
+            # blueprint would otherwise leave the pre-restage graph cached.
             Position.objects.filter(room=room).delete()
+            invalidate_position_graph_caches(room)
 
         # Build Position instances from the blueprint without hitting the DB per-item.
         blueprint_positions = list(blueprint.positions.all())
@@ -422,6 +428,9 @@ def instantiate_blueprint(
             for bp_pos in blueprint_positions
         ]
         Position.objects.bulk_create(new_positions)
+        # bulk_create bypasses Position.save()'s cache pop (both replace and
+        # additive paths need the room's cached graph dropped).
+        invalidate_position_graph_caches(room)
 
         # bulk_create may not populate PKs reliably on SQLite (pre-Django 3.0 behaviour).
         # Re-fetch the freshly created positions for this room and key by name.
@@ -576,43 +585,21 @@ def room_position_adjacency(room: ObjectDB) -> list[PositionAdjacency]:
     Returns a ``PositionAdjacency`` per position in pk order; isolated
     positions (no edges) have an empty ``adjacent_position_ids`` list.
     """
-    # Prefer prefetched data (zero queries); fall back to DB when absent.
-    positions_cached = getattr(room, "positions_cached", None)  # noqa: GETATTR_LITERAL
-    if positions_cached is not None:
-        positions = sorted(positions_cached, key=lambda x: x.pk)
-        return [
-            PositionAdjacency(
-                position_id=p.pk,
-                # edges_as_a: p is position_a → neighbor is position_b_id
-                # edges_as_b: p is position_b → neighbor is position_a_id
-                adjacent_position_ids=sorted(
-                    {edge.position_b_id for edge in getattr(p, "passable_edges_as_a", [])}  # noqa: GETATTR_LITERAL
-                    | {edge.position_a_id for edge in getattr(p, "passable_edges_as_b", [])}  # noqa: GETATTR_LITERAL
-                ),
-            )
-            for p in positions
-        ]
-
-    # Fallback path: 2 queries.
-    positions = list(Position.objects.filter(room=room).order_by("pk"))
-    position_ids = {p.pk for p in positions}
-
-    # All passable edges in the room — canonical order means position_a.room
-    # == room, so filtering on position_a__room covers both endpoints.
-    edges = PositionEdge.objects.filter(
-        position_a__room=room,
-        is_passable=True,
-    ).values_list("position_a_id", "position_b_id")
-
-    # Build adjacency dict: position_id → sorted list of adjacent ids.
-    adj: dict[int, list[int]] = {p.pk: [] for p in positions}
-    for a_id, b_id in edges:
-        if a_id in position_ids and b_id in position_ids:
-            adj[a_id].append(b_id)
-            adj[b_id].append(a_id)
-
+    # room.positions_cached is the Prefetch/query shared interface (Tehom's
+    # pattern): combat's encounter queryset pre-fills it (with the nested edge
+    # attrs) via Prefetch(to_attr=...); otherwise the Room cached_property runs
+    # the same shape lazily. No probing, no fallback branch.
+    positions = sorted(room.positions_cached, key=lambda x: x.pk)
     return [
-        PositionAdjacency(position_id=p.pk, adjacent_position_ids=sorted(adj[p.pk]))
+        PositionAdjacency(
+            position_id=p.pk,
+            # edges_as_a: p is position_a → neighbor is position_b_id
+            # edges_as_b: p is position_b → neighbor is position_a_id
+            adjacent_position_ids=sorted(
+                {edge.position_b_id for edge in p.passable_edges_as_a}
+                | {edge.position_a_id for edge in p.passable_edges_as_b}
+            ),
+        )
         for p in positions
     ]
 
@@ -694,45 +681,25 @@ def position_graph(room: ObjectDB) -> PositionGraph:
     every edge, with is_passable/blocks_flight/gating_challenge_name intact,
     for obstacle/gate visibility.
 
-    When called via a viewset whose queryset prefetches ``room.positions_cached``
-    with each position's full edge set onto ``all_edges_as_a`` (a
-    ``Prefetch(to_attr=...)``) and each position's ``rampart`` (#2209, via
-    ``select_related("rampart__element_profile")`` on that same Prefetch's
-    queryset), this function builds the graph in-memory with zero extra
-    queries. Falls back to 3 queries otherwise (positions + edges + ramparts).
+    ``room.positions_cached`` (with each position's full edge set on
+    ``all_edges_as_a``) is either pre-filled by a viewset's
+    ``Prefetch(to_attr=...)`` or lazily built by the Room cached_property —
+    one shared interface, same shape both ways. Ramparts (#2209) come from one
+    bulk query keyed by position id.
 
     Because edges are stored canonically (position_a.pk < position_b.pk),
     collecting only each position's edges_as_a across the whole room's
     position set yields every edge exactly once — no dedup needed.
     """
-    positions_cached = getattr(room, "positions_cached", None)  # noqa: GETATTR_LITERAL
-    if positions_cached is not None:
-        positions = sorted(positions_cached, key=lambda p: p.pk)
-        nodes = [
-            _position_node(p, getattr(p, "rampart", None))  # noqa: GETATTR_LITERAL
-            for p in positions
-        ]
-        edges = [
-            _position_edge_info(edge)
-            for p in positions
-            for edge in getattr(p, "all_edges_as_a", [])  # noqa: GETATTR_LITERAL
-        ]
-        return PositionGraph(nodes=nodes, edges=edges)
 
-    positions = list(Position.objects.filter(room=room).order_by("pk"))
-    ramparts_by_position = _ramparts_by_position_id(room)
-    nodes = [_position_node(p, ramparts_by_position.get(p.pk)) for p in positions]
-    raw_edges = PositionEdge.objects.filter(position_a__room=room).select_related(
-        "gating_challenge__template"
-    )
-    edges = [_position_edge_info(edge) for edge in raw_edges]
+    # room.positions_cached is the Prefetch/query shared interface (see
+    # room_adjacency above). rampart_or_none reads the warm path's
+    # select_related cache for free (the zero-query contract, #2006); cold
+    # callers pay one bounded lookup per position in the room.
+    positions = sorted(room.positions_cached, key=lambda p: p.pk)
+    nodes = [_position_node(p, p.rampart_or_none) for p in positions]
+    edges = [_position_edge_info(edge) for p in positions for edge in p.all_edges_as_a]
     return PositionGraph(nodes=nodes, edges=edges)
-
-
-def _ramparts_by_position_id(room: ObjectDB) -> dict[int, Rampart]:
-    """One query: every Rampart covering a position in *room*, keyed by position_id."""
-    ramparts = Rampart.objects.filter(position__room=room).select_related("element_profile")
-    return {rampart.position_id: rampart for rampart in ramparts}
 
 
 def adjacent_open_positions(position: Position) -> list[PositionEdge]:
@@ -972,7 +939,10 @@ def materialize_aerial_layer(room: ObjectDB) -> None:
 
 def teardown_aerial_layer(room: ObjectDB) -> None:
     """Delete every AERIAL position in the room (cascades aerial edges/occupancy)."""
+    # QuerySet.delete() bypasses the per-instance cache pops; surviving ground
+    # positions would otherwise keep serving edges to the deleted aerial twins.
     Position.objects.filter(room=room, kind=PositionKind.AERIAL).delete()
+    invalidate_position_graph_caches(room)
 
 
 def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:

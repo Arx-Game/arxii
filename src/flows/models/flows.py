@@ -38,7 +38,7 @@ def _resolve_emit_location(flow_execution: "FlowExecution") -> Any:
 
     if isinstance(owner, DefaultRoom):
         return owner
-    return getattr(owner, "location", None)  # noqa: GETATTR_LITERAL
+    return owner.location
 
 
 class FlowDefinition(SharedMemoryModel):

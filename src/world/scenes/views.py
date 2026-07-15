@@ -499,7 +499,7 @@ class PersonaViewSet(
         """
         body = SetActivePersonaRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        puppet = request.user.puppet
         sheet = puppeted_sheet_for(request.user)
         if puppet is None or sheet is None:
             msg = "You must be playing a character to switch identities."

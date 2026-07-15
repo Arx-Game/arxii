@@ -114,7 +114,7 @@ def _presents_fake_name(target_character) -> bool:
 
 def _baseline_difficulty(target_character) -> int | None:
     """The target's presentation baseline, or ``None`` when there's nothing to identify."""
-    form_state = getattr(target_character, "form_state", None)  # noqa: GETATTR_LITERAL
+    form_state = target_character.form_state_or_none
     if form_state is not None and form_state.active_fake_overlay_id is not None:
         overlay = form_state.active_fake_overlay
         base = _BASELINE_BY_KIND_AND_LEVEL[(form_state.overlay_kind, overlay.concealment_level)]
@@ -154,7 +154,7 @@ def _kit_quality_bonus(target_character) -> int:
     applied disguise — baseline unchanged, the spec's "existing narrative-only
     disguise flow is unaffected" requirement).
     """
-    form_state = getattr(target_character, "form_state", None)  # noqa: GETATTR_LITERAL
+    form_state = target_character.form_state_or_none
     if form_state is None or form_state.applied_kit_instance_id is None:
         return 0
     kit = form_state.applied_kit_instance

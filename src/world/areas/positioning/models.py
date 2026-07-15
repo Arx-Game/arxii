@@ -4,11 +4,41 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.descriptors import ReverseOneToOneOrNone
 from world.areas.positioning.constants import PositionKind, RampartCrackState, RampartSignature
 
 _DAMAGE_TYPE_MODEL = "conditions.DamageType"
+
+# Instance-dict names of the Prefetch/query shared-interface caches on Position.
+_POSITION_EDGE_CACHES = ("passable_edges_as_a", "passable_edges_as_b", "all_edges_as_a")
+
+
+def _pop_room_graph(room) -> None:
+    """Drop *room*'s cached ``positions_cached`` entry (targeted, never a blanket
+    cached-property clear — the identity-mapped Room also caches live state such
+    as ``scene_data``/``trigger_handler`` whose identity must survive mutations)."""
+    if room is not None:
+        room.__dict__.pop("positions_cached", None)
+
+
+def invalidate_position_graph_caches(room) -> None:
+    """Invalidate the full cached positions graph for *room*.
+
+    Pops the room's ``positions_cached`` plus every in-room Position's edge
+    caches (Positions are SharedMemoryModel singletons, so their cached edge
+    lists outlive requests too). Model ``save()``/``delete()`` call cheaper
+    targeted pops themselves; bulk mutation paths (``QuerySet.delete()``,
+    ``bulk_create``) bypass those hooks and MUST call this explicitly.
+    """
+    if room is None:
+        return
+    _pop_room_graph(room)
+    for position in Position.objects.filter(room=room):
+        for name in _POSITION_EDGE_CACHES:
+            position.__dict__.pop(name, None)
 
 
 class PositionNodeBase(SharedMemoryModel):
@@ -59,7 +89,13 @@ class PositionEdgeBase(SharedMemoryModel):
 
 
 class Position(PositionNodeBase):
-    """A named tactical region within a room. The node of the positioning graph."""
+    """A named tactical region within a room. The node of the positioning graph.
+
+    Saving/deleting a Position invalidates the room's cached ``positions_cached``
+    (identity-mapped rooms would otherwise serve a stale graph across requests);
+    the invalidation is targeted — only the graph cache, never the room's other
+    cached properties (scene_data et al. hold live state).
+    """
 
     room = models.ForeignKey("objects.ObjectDB", on_delete=models.CASCADE, related_name="positions")
     elevation_anchor = models.ForeignKey(
@@ -94,6 +130,34 @@ class Position(PositionNodeBase):
     def __str__(self) -> str:
         return f"{self.name} ({self.get_kind_display()}) in {self.room_id}"
 
+    def save(self, *args, **kwargs) -> None:
+        super().save(*args, **kwargs)
+        _pop_room_graph(self.room)
+
+    def delete(self, *args, **kwargs):
+        room = self.room
+        result = super().delete(*args, **kwargs)
+        _pop_room_graph(room)
+        return result
+
+    # Prefetch/query shared interfaces (see ObjectParent.positions_cached):
+    # combat's encounter queryset pre-fills these names via nested
+    # Prefetch(to_attr=...); independent callers get the same shape lazily.
+
+    @cached_property
+    def passable_edges_as_a(self) -> list["PositionEdge"]:
+        return list(self.edges_as_a.filter(is_passable=True).only("position_a_id", "position_b_id"))
+
+    @cached_property
+    def passable_edges_as_b(self) -> list["PositionEdge"]:
+        return list(self.edges_as_b.filter(is_passable=True).only("position_a_id", "position_b_id"))
+
+    @cached_property
+    def all_edges_as_a(self) -> list["PositionEdge"]:
+        return list(self.edges_as_a.select_related("gating_challenge__template"))
+
+    rampart_or_none = ReverseOneToOneOrNone("rampart")
+
 
 class PositionEdge(PositionEdgeBase):
     """Traversable adjacency between two positions in the same room.
@@ -101,6 +165,10 @@ class PositionEdge(PositionEdgeBase):
     Stored canonically (position_a_id < position_b_id). A non-null
     gating_challenge means crossing is gated by that Challenge (the
     cross-the-chasm gate); its approaches carry capability routes.
+
+    Saving/deleting an edge invalidates both endpoints' cached edge lists and
+    the room's ``positions_cached`` graph — targeted pops only, never a blanket
+    cached-property clear.
     """
 
     position_a = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="edges_as_a")
@@ -158,6 +226,24 @@ class PositionEdge(PositionEdgeBase):
 
     def __str__(self) -> str:
         return f"Edge({self.position_a_id}<->{self.position_b_id})"
+
+    def _invalidate_graph_caches(self) -> None:
+        for position in (self.position_a, self.position_b):
+            if position is None:
+                continue
+            for name in _POSITION_EDGE_CACHES:
+                position.__dict__.pop(name, None)
+        if self.position_a is not None:
+            _pop_room_graph(self.position_a.room)
+
+    def save(self, *args, **kwargs) -> None:
+        super().save(*args, **kwargs)
+        self._invalidate_graph_caches()
+
+    def delete(self, *args, **kwargs):
+        result = super().delete(*args, **kwargs)
+        self._invalidate_graph_caches()
+        return result
 
 
 class PositionBlueprint(SharedMemoryModel):

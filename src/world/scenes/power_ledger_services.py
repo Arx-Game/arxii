@@ -64,9 +64,9 @@ def purge_scene_power_ledger(scene: Scene) -> None:
 
 def viewer_can_see_ledger(interaction: Interaction, user: object) -> bool:
     """True iff the user is staff or plays the character behind interaction.persona."""
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if not user.is_authenticated:
         return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+    if user.is_staff:
         return True
-    played = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
+    played = user.played_character_sheet_ids
     return interaction.persona.character_sheet_id in played

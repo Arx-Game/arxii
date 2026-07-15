@@ -264,7 +264,10 @@ class CmdStory(ArxNamespaceCommand):
             self.msg("No beats yet for that episode.")
             return
 
-        player_data = getattr(self.caller.account, "player_data", None)  # noqa: GETATTR_LITERAL
+        # account is None for an unpuppeted/possessed object; player_data itself
+        # is a get-or-create property that never returns None on a real Account.
+        account = self.caller.account
+        player_data = account.player_data if account else None
         pending_by_beat: dict[int, tuple[int, ...]] = {}
         if player_data is not None:
             for entry in player_pending_treasured_signoffs(player_data, beats):
@@ -396,7 +399,8 @@ class CmdStory(ArxNamespaceCommand):
         if not subject_token:
             raise CommandError(usage)
 
-        player_data = getattr(self.caller.account, "player_data", None)  # noqa: GETATTR_LITERAL
+        account = self.caller.account
+        player_data = account.player_data if account else None
         if player_data is None:
             msg = "You have no player identity to sign off with."
             raise CommandError(msg)

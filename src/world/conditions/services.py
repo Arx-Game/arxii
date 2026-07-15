@@ -305,7 +305,7 @@ def _register_unseen_observer_if_concealing(
     from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
     from world.scenes.services import register_unseen_observer  # noqa: PLC0415
 
-    scene = get_active_scene(getattr(target, "location", None))  # noqa: GETATTR_LITERAL
+    scene = get_active_scene(target.location)
     if scene is None:
         return
     try:
@@ -331,7 +331,7 @@ def _clear_unseen_observer_if_concealing(
     from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
     from world.scenes.services import clear_unseen_observer  # noqa: PLC0415
 
-    scene = get_active_scene(getattr(target, "location", None))  # noqa: GETATTR_LITERAL
+    scene = get_active_scene(target.location)
     if scene is None:
         return
     try:
@@ -761,7 +761,7 @@ def apply_condition(  # noqa: PLR0913
     - CONDITION_APPLIED (post-save, frozen)
     """
     source = source_character or source_technique
-    target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
+    target_location = target.location
     pre_payload = ConditionPreApplyPayload(
         target=target,
         template=condition,
@@ -880,7 +880,7 @@ def bulk_apply_conditions(
     results: list[ApplyConditionResult] = []
     for app in applications:
         source = source_character or source_technique
-        target_location = getattr(app.target, "location", None)  # noqa: GETATTR_LITERAL
+        target_location = app.target.location
         pre_payload = ConditionPreApplyPayload(
             target=app.target,
             template=app.template,
@@ -992,7 +992,7 @@ def _make_just_installed_triggers_live(target: "ObjectDB") -> None:  # noqa: OBJ
     immediately after installing. Refresh synchronously here so that emit sees the
     just-installed trigger (mirrors combat ``resolve_round``'s pre-attack refresh).
     """
-    handler = getattr(target, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    handler = target.trigger_handler
     if handler is not None:
         handler.refresh()
 
@@ -1032,7 +1032,7 @@ def _install_reactive_side_effects(
         # Notify the target's in-memory TriggerHandler so the new rows are
         # visible to the NEXT emit_event dispatch (bulk_create bypasses
         # save(), so on_trigger_added is not called automatically).
-        trigger_handler = getattr(target, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        trigger_handler = target.trigger_handler
         if trigger_handler is not None:
             for new_trigger in created_triggers:
                 trigger_handler.on_trigger_added(new_trigger)
@@ -1103,7 +1103,7 @@ def _teardown_removed_condition_instance(
     instance_pk = instance.pk
     condition = instance.condition
     source = instance.source_character or instance.source_technique
-    target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
+    target_location = target.location
 
     instance.delete()
     _invalidate_condition_handler(target)
@@ -1154,7 +1154,7 @@ def remove_condition(
 
     instance_pk = instance.pk
     source = instance.source_character or instance.source_technique
-    target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
+    target_location = target.location
 
     if not remove_all_stacks and instance.stacks > 1:
         instance.stacks -= 1
@@ -1208,7 +1208,7 @@ def _resolve_deferred_death_on_expiry(
     vitals.death_deferred_pending = False
     vitals.save(update_fields=["death_deferred_pending"])
 
-    target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
+    target_location = target.location
     if target_location is not None:
         from flows.constants import EventName  # noqa: PLC0415
         from flows.events.payloads import CharacterKilledPayload  # noqa: PLC0415
@@ -2301,7 +2301,7 @@ def advance_condition_severity(
             old_stage=previous_stage,
             new_stage=instance.current_stage,
         )
-        target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
+        target_location = instance.target.location
         if target_location is not None:
             emit_event(
                 EventName.CONDITION_STAGE_CHANGED,
@@ -2342,7 +2342,7 @@ def _perform_advancement_resist_check(
         target_stage=next_stage,
         base_difficulty=next_stage.resist_difficulty,
     )
-    location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
+    location = instance.target.location
     if location is not None:
         emit_event(
             EventName.CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE,
@@ -2471,7 +2471,7 @@ def decay_condition_severity(
         _clear_unseen_observer_if_concealing(instance.target, instance.condition)
 
     if new_stage != previous_stage:
-        target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
+        target_location = instance.target.location
         if target_location is not None:
             emit_event(
                 EventName.CONDITION_STAGE_CHANGED,

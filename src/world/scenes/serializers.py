@@ -125,7 +125,7 @@ class SceneParticipantSerializer(serializers.ModelSerializer):
         return None
 
     def get_dramatic_moment_count(self, obj) -> int:
-        sheet = getattr(obj, "character_sheet", None)  # noqa: GETATTR_LITERAL - Persona.character_sheet FK; getattr used for None-safety across nullable FK
+        sheet = obj.character_sheet
         if sheet is None:
             return 0
         count_map: dict[int, int] = self.context.get("dramatic_moment_counts", {})

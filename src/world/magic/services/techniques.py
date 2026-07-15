@@ -813,7 +813,7 @@ def _emit_cast_events(  # noqa: PLR0913 - frozen event payload fields
         )
 
     for affected_target in effective_targets:
-        target_room = getattr(affected_target, "location", None)  # noqa: GETATTR_LITERAL
+        target_room = affected_target.location
         if target_room is None:
             continue
         emit_event(
@@ -1006,7 +1006,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
 
     # --- TECHNIQUE_PRE_CAST (cancellable, before anima deduction) ---
     effective_targets = targets or []
-    caster_room = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    caster_room = character.location
 
     # Evaluate the resonance-environment primitive ONCE per cast, before power
     # derivation. The result feeds the ENVIRONMENT power-shift stage here AND is

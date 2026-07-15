@@ -72,7 +72,7 @@ def _collect_beat_entries(
 
     # For players, scope to their own character's completions.
     if viewer_role == VIEWER_ROLE_PLAYER and progress is not None:
-        character_sheet = getattr(progress, "character_sheet", None)  # noqa: GETATTR_LITERAL
+        character_sheet = progress.character_sheet
         if character_sheet is not None:
             completions_qs = completions_qs.filter(character_sheet=character_sheet)
 
@@ -120,7 +120,7 @@ def _collect_episode_entries(
 
     # For players, scope to their own character's resolutions.
     if viewer_role == VIEWER_ROLE_PLAYER and progress is not None:
-        character_sheet = getattr(progress, "character_sheet", None)  # noqa: GETATTR_LITERAL
+        character_sheet = progress.character_sheet
         if character_sheet is not None:
             resolutions_qs = resolutions_qs.filter(character_sheet=character_sheet)
 

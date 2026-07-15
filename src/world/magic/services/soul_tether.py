@@ -319,7 +319,7 @@ def _install_soul_tether_triggers(
             source_condition=active_condition,
         )
         # Invalidate the in-memory TriggerHandler cache so it picks up the new row.
-        trigger_handler = getattr(sinner_objectdb, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        trigger_handler = sinner_objectdb.trigger_handler
         if trigger_handler is not None:
             trigger_handler.on_trigger_added(trigger)
 
@@ -466,7 +466,7 @@ def dissolve_soul_tether(
 
             # Invalidate the Sinner's in-memory TriggerHandler so the
             # cascade-deleted Trigger rows leave the cache on commit (#964).
-            trigger_handler = getattr(sinner_sheet.character, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+            trigger_handler = sinner_sheet.character.trigger_handler
             if trigger_handler is not None:
                 trigger_handler.invalidate()
 
@@ -480,7 +480,7 @@ def dissolve_soul_tether(
     # to any reactive subscribers.  Resolve location from the Sinner's current position.
     if dissolved_sinner_sheet is not None:
         sinner_character = dissolved_sinner_sheet.character
-        location = getattr(sinner_character, "location", None)  # noqa: GETATTR_LITERAL
+        location = sinner_character.location
         if location is not None:
             dissolved_payload = SoulTetherDissolvedPayload(
                 sinner_sheet=dissolved_sinner_sheet,
@@ -1696,7 +1696,7 @@ def soul_tether_stage_advance_prompt(*, payload: Any) -> None:
         return
 
     # 4. Get Sinner's location.
-    sinner_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
+    sinner_location = instance.target.location
     if sinner_location is None:
         return
 

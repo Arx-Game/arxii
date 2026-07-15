@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
@@ -55,8 +56,8 @@ class ResolveValidationTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="ResolveChar")
-        cls.location = ObjectDB.objects.create(db_key="ResolveRoom")
+        cls.character = ObjectDBFactory(db_key="ResolveChar")
+        cls.location = ObjectDBFactory(db_key="ResolveRoom")
 
         cls.capability = CapabilityTypeFactory(name="fire_resolve")
         cls.prop = PropertyFactory(name="flammable_resolve")
@@ -207,7 +208,7 @@ class ConsequenceSelectionTests(TestCase):
             self.approach,
             self.template,
             self.outcome_success,
-            ObjectDB.objects.create(db_key="SelChar1"),
+            ObjectDBFactory(db_key="SelChar1"),
         )
         assert consequence.label == "Template success"
 
@@ -228,7 +229,7 @@ class ConsequenceSelectionTests(TestCase):
             self.approach,
             self.template,
             self.outcome_success,
-            ObjectDB.objects.create(db_key="SelChar2"),
+            ObjectDBFactory(db_key="SelChar2"),
         )
         assert consequence.label == "Approach success override"
 
@@ -241,7 +242,7 @@ class ConsequenceSelectionTests(TestCase):
             self.approach,
             self.template,
             other_outcome,
-            ObjectDB.objects.create(db_key="SelChar3"),
+            ObjectDBFactory(db_key="SelChar3"),
         )
         assert consequence.label == "CritSuccess_sel"
         assert consequence.pk is None  # Unsaved fallback
@@ -252,8 +253,8 @@ class EffectHandlerTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.location = ObjectDB.objects.create(db_key="EffectRoom")
-        cls.character = ObjectDB.objects.create(db_key="EffectChar")
+        cls.location = ObjectDBFactory(db_key="EffectRoom")
+        cls.character = ObjectDBFactory(db_key="EffectChar")
         # Set location via FK update to avoid Evennia's at_db_location_postsave hook.
         # Flush the SharedMemoryModel identity-map cache so the next get() hits the DB.
         ObjectDB.objects.filter(pk=cls.character.pk).update(db_location=cls.location)
@@ -383,8 +384,8 @@ class ResolveFullTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="FullResolveChar")
-        cls.location = ObjectDB.objects.create(db_key="FullResolveRoom")
+        cls.character = ObjectDBFactory(db_key="FullResolveChar")
+        cls.location = ObjectDBFactory(db_key="FullResolveRoom")
 
         cls.capability = CapabilityTypeFactory(name="fire_full")
         cls.prop = PropertyFactory(name="flammable_full")

@@ -319,7 +319,7 @@ def user_owns_episode_story(user: AbstractBaseUser | AnonymousUser, episode: Epi
     create-path enforcement (where DRF never calls ``has_object_permission``)
     can never drift from the object-permission walk (#1770 PR1 review).
     """
-    if user is None or not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if user is None or not user.is_authenticated:
         return False
     return episode.chapter.story.owners.filter(id=user.id).exists()
 
@@ -1250,10 +1250,10 @@ def classify_story_log_viewer_role(
     - player: user has access to the story (participant, owner, or appropriate scope)
     - no_access: none of the above
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if not user.is_authenticated:
         return VIEWER_ROLE_NO_ACCESS
 
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+    if user.is_staff:
         return VIEWER_ROLE_STAFF
 
     # user is authenticated (AbstractBaseUser = AccountDB) — gm_profile is a OneToOne reverse.
@@ -1288,9 +1288,9 @@ def can_view_story_gm_text(user: AbstractBaseUser | AnonymousUser, story: Story)
     Owner membership reads the cached ``Story.owner_account_ids`` set, so no
     owners query is issued per serialization.
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if not user.is_authenticated:
         return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+    if user.is_staff:
         return True
     try:
         gm_profile = user.gm_profile
@@ -1359,9 +1359,9 @@ def _user_can_read_bulletin_post(
     - story=None (table-wide): any active table member
     - story=set (story-scoped): any active StoryParticipation on post.story
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if not user.is_authenticated:
         return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+    if user.is_staff:
         return True
 
     # Lead GM of the table (post.table.gm is the Lead GMProfile).
@@ -1499,9 +1499,9 @@ def _user_can_access_story_notes(
     of the story's primary table. Mirrors the owner/Lead-GM resolution used by
     classify_story_log_viewer_role and IsStoryOwnerOrStaff.
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if not user.is_authenticated:
         return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+    if user.is_staff:
         return True
 
     # Story owner.
@@ -1608,11 +1608,11 @@ def user_owns_or_leads_story(user: AbstractBaseUser | AnonymousUser, story: Stor
     shallower than ``user_owns_beat_story`` — ``StoryProtectedSubject`` FKs
     ``story`` directly, no beat/episode/chapter walk needed.
     """
-    if user is None or not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if user is None or not user.is_authenticated:
         return False
     if story.owners.filter(id=user.id).exists():
         return True
-    gm_profile = getattr(user, "gm_profile", None)  # noqa: GETATTR_LITERAL — Django o2o-safe
+    gm_profile = user.gm_profile_or_none
     return (
         gm_profile is not None
         and story.primary_table_id is not None

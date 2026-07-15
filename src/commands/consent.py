@@ -102,7 +102,7 @@ class ConsentRequestCommand(PullParsingMixin, ArxCommand):
         derives them. Raises ``CommandError`` on either miss so the command
         surfaces a clean message.
         """
-        scene = get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
+        scene = get_active_scene(self.caller.location)
         if scene is None:
             msg = "You are not in an active scene."
             raise CommandError(msg)

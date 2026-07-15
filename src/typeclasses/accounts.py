@@ -27,6 +27,7 @@ from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 
 from commands.utils import serialize_cmdset
+from core.descriptors import ReverseOneToOneOrNone
 from web.webclient.message_types import WebsocketMessageType
 
 
@@ -111,6 +112,12 @@ class Account(DefaultAccount):
             player_data.save()
         return player_data
 
+    # Reverse-OneToOne safe accessor (#2386): the GMProfile row, or None for
+    # non-GM accounts. Use ``account.gm_profile`` directly where a missing
+    # profile is a hard bug; callers holding ``request.user`` must still guard
+    # ``is_authenticated`` — AnonymousUser has no typeclass properties at all.
+    gm_profile_or_none = ReverseOneToOneOrNone("gm_profile")
+
     @cached_property
     def characters(self):
         """Return characters actively played by this account."""
@@ -171,21 +178,16 @@ class Account(DefaultAccount):
         )
 
     def clear_cached_properties(self) -> None:
-        """Drop our ``@cached_property`` entries from the instance ``__dict__``.
+        """Drop every ``@cached_property`` entry from the instance ``__dict__``.
 
         Called by ``RelatedCacheClearingMixin.clear_related_caches`` on
         related models (e.g. ``RosterTenure``) so account-level caches stay
-        in sync with persona/tenure mutations. The mixin's default fallback
-        only handles ``functools.cached_property`` — these properties use
-        Django's ``cached_property``, so we override to clear them
-        explicitly.
+        in sync with persona/tenure mutations. Delegates to the shared
+        generic implementation — no hand-kept name list to forget entries in.
         """
-        for prop in (
-            "cached_primary_persona_ids",
-            "played_character_sheet_ids",
-            "characters",
-        ):
-            self.__dict__.pop(prop, None)
+        from evennia_extensions.mixins import clear_django_cached_properties
+
+        clear_django_cached_properties(self)
 
     def get_available_characters(self):
         """Returns characters this player can currently control."""

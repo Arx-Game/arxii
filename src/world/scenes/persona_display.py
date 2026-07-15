@@ -52,7 +52,7 @@ def compose_sdesc(persona: Persona) -> str:
     noun = "person"
 
     # Full concealment forces "person" regardless of gender (#1272).
-    form_state = getattr(character, "form_state", None)  # noqa: GETATTR_LITERAL
+    form_state = character.form_state_or_none
     is_full_concealment = (
         form_state is not None
         and form_state.active_fake_overlay_id is not None

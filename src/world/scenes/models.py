@@ -176,7 +176,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         """
         if self.is_public:
             return True
-        if account is None or not getattr(account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        if account is None or not account.is_authenticated:
             return False
         if account.is_staff:
             return True

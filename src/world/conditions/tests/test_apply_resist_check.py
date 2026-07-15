@@ -4,8 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import ConditionTemplateFactory
@@ -17,7 +17,9 @@ class ApplyConditionResistCheckTest(TestCase):
     """apply_condition consults ConditionTemplate.resist_check_type before applying."""
 
     def setUp(self) -> None:
-        self.target = ObjectDB.objects.create(db_key="ResistTarget")
+        # A real typeclassed object (bare ObjectDB rows lack the ObjectParent
+        # mixin — no trigger_handler — and can't exist in production).
+        self.target = ObjectDBFactory(db_key="ResistTarget")
         CharacterSheetFactory(character=self.target)
 
     def test_resist_check_success_blocks_application(self) -> None:
@@ -73,9 +75,9 @@ class BulkApplyConditionsResistCheckTest(TestCase):
     """bulk_apply_conditions applies the same resist-check gate per item."""
 
     def setUp(self) -> None:
-        self.target_a = ObjectDB.objects.create(db_key="BulkResistTargetA")
+        self.target_a = ObjectDBFactory(db_key="BulkResistTargetA")
         CharacterSheetFactory(character=self.target_a)
-        self.target_b = ObjectDB.objects.create(db_key="BulkResistTargetB")
+        self.target_b = ObjectDBFactory(db_key="BulkResistTargetB")
         CharacterSheetFactory(character=self.target_b)
 
     def test_one_resists_one_does_not(self) -> None:

@@ -33,6 +33,17 @@ _MSG_NO_CHARACTER_SHEET = "You have no character sheet."
 # ValueError is raised for "already knows this technique".
 _ACQUISITION_EXC = (MagicError, AlterationGateError, ProtagonismLockedError, ValueError)
 
+# The three typed members carry a safe user_message; bare ValueError (the
+# "already knows this technique" path) has only its str(). Explicit dispatch —
+# getattr-with-default here would silently swallow a genuine attribute bug.
+_USER_MESSAGE_EXC = (MagicError, AlterationGateError, ProtagonismLockedError)
+
+
+def _acquisition_error_message(exc: Exception) -> str:
+    if isinstance(exc, _USER_MESSAGE_EXC):
+        return exc.user_message
+    return str(exc)
+
 
 def _actor_sheet(actor: ObjectDB) -> Any:  # noqa: OBJECTDB_PARAM
     """Return actor.sheet_data, or None when the actor has no CharacterSheet."""
@@ -93,7 +104,7 @@ class PurchaseGiftUnlockAction(Action):
         try:
             receipt = spend_xp_on_gift_unlock(sheet, unlock, teacher=teacher)
         except _ACQUISITION_EXC as exc:
-            return ActionResult(success=False, message=getattr(exc, "user_message", str(exc)))  # noqa: GETATTR_LITERAL
+            return ActionResult(success=False, message=_acquisition_error_message(exc))
 
         return ActionResult(
             success=True,
@@ -147,7 +158,7 @@ class AcceptTechniqueOfferAction(Action):
         try:
             character_technique = accept_technique_offer_service(sheet, offer)
         except _ACQUISITION_EXC as exc:
-            return ActionResult(success=False, message=getattr(exc, "user_message", str(exc)))  # noqa: GETATTR_LITERAL
+            return ActionResult(success=False, message=_acquisition_error_message(exc))
 
         return ActionResult(
             success=True,
@@ -200,7 +211,7 @@ class AcceptThreadWeavingOfferAction(Action):
         try:
             purchase = accept_thread_weaving_unlock(sheet, offer)
         except _ACQUISITION_EXC as exc:
-            return ActionResult(success=False, message=getattr(exc, "user_message", str(exc)))  # noqa: GETATTR_LITERAL
+            return ActionResult(success=False, message=_acquisition_error_message(exc))
 
         return ActionResult(
             success=True,
