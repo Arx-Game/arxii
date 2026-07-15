@@ -103,6 +103,7 @@ INSTALLED_APPS += [
     "world.fatigue.apps.FatigueConfig",
     "world.covenants.apps.CovenantsConfig",
     "world.vitals.apps.VitalsConfig",
+    "world.dreams.apps.DreamsConfig",
     "world.worship.apps.WorshipConfig",
     "world.ceremonies.apps.CeremoniesConfig",
     "world.estates.apps.EstatesConfig",
