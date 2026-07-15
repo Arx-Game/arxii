@@ -161,6 +161,11 @@ resolve_and_add "pypi.org"
 # (eu-west-3); dig-resolved like the other small/stable hosts above.
 resolve_and_add "api.code.umans.ai"
 
+# Playwright downloads Chromium binaries from its own CDN (cdn.playwright.dev),
+# needed for headless browser E2E testing from inside the container. Resolved
+# via dig like the other small/stable hosts above.
+resolve_and_add "cdn.playwright.dev"
+
 # ---- b) GitHub meta API (git + api + web + packages CIDRs) ----
 echo "Fetching GitHub IP ranges via meta API..."
 GITHUB_META=$(curl -sf --connect-timeout 15 --max-time 30 https://api.github.com/meta)
