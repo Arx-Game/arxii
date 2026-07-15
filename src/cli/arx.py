@@ -792,23 +792,23 @@ def ngrok(  # noqa: C901, PLR0915
         pass
 
 
-@app.command()
+@app.command(name="integration-test")
 def integration_test():
     """Set up integration test environment with automated ngrok configuration.
 
     SAFETY CHECK: Requires ALLOW_INTEGRATION_TESTS=true in .env
     This prevents accidentally running integration tests in production.
 
-    This command automates the tedious parts of integration testing:
-    - Starts ngrok tunnel on port 3000
-    - Backs up and updates .env with ngrok URL
-    - Provides clear instructions for manual testing steps
-    - Restores .env on Ctrl+C
+    This command wraps `arx ngrok` with an integration-testing checklist.
+    It starts an ngrok tunnel on port 3000, updates .env, and prints
+    next steps for manual testing of social auth and other external
+    integrations.
 
     After running this command, you'll need to:
-    1. Start Django backend (new terminal): uv run arx manage runserver
+    1. Start Evennia backend (new terminal): arx start
     2. Start frontend (new terminal): cd frontend && pnpm dev
-    3. Follow the testing checklist in src/integration_tests/QUICKSTART.md
+    3. Update provider redirect URIs (see docs/integrations/social-auth.md)
+    4. Follow the testing checklist printed below
 
     Examples:
         arx integration-test    # Start integration test environment
@@ -827,8 +827,37 @@ def integration_test():
         typer.echo("in production environments.")
         raise typer.Exit(1)
 
-    integration_script = SRC_DIR / "integration_tests" / "setup_integration_env.py"
-    subprocess.run([sys.executable, str(integration_script)], check=False)
+    # Start ngrok via the existing ngrok command, then print the checklist.
+    typer.echo("=" * 70)
+    typer.echo("INTEGRATION TEST MODE")
+    typer.echo("=" * 70)
+    typer.echo("")
+    typer.echo("Starting ngrok tunnel (port 3000)...")
+    typer.echo("")
+    ngrok()
+
+    # ngrok() blocks until Ctrl+C; if we reach here, the user stopped it.
+    typer.echo("")
+    typer.echo("=" * 70)
+    typer.echo("INTEGRATION TEST CHECKLIST")
+    typer.echo("=" * 70)
+    typer.echo("")
+    typer.echo("While ngrok was running, did you complete these?")
+    typer.echo("")
+    typer.echo("  [ ] Updated redirect URIs in each provider console:")
+    typer.echo("      Google:  https://console.cloud.google.com/apis/credentials")
+    typer.echo("      Discord: https://discord.com/developers/applications")
+    typer.echo("      Facebook: https://developers.facebook.com/apps/")
+    typer.echo("")
+    typer.echo("  [ ] Tested username/password registration")
+    typer.echo("  [ ] Tested email verification flow")
+    typer.echo("  [ ] Tested login → authenticated home page")
+    typer.echo("  [ ] Tested social login (at least one provider)")
+    typer.echo("  [ ] Tested protected route redirect (e.g. /journals while logged out)")
+    typer.echo("")
+    typer.echo("See docs/integrations/social-auth.md for provider setup details.")
+    typer.echo("See frontend/e2e/user-journey.spec.ts for automated e2e tests.")
+    typer.echo("=" * 70)
 
 
 # Backup command options
