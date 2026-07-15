@@ -67,7 +67,7 @@ class CmdDemandRansom(ArxCommand):
         if target is None:
             return  # search() already messaged the caller.
 
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             msg = "That is not a character."
             raise CommandError(msg)

@@ -16500,6 +16500,142 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/speaker-queues/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet with action endpoints for speaker queue mutations. */
+    get: operations['speaker_queues_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/speaker-queues/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet with action endpoints for speaker queue mutations. */
+    get: operations['speaker_queues_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/speaker-queues/{id}/advance/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Read-only ViewSet with action endpoints for speaker queue mutations. */
+    post: operations['speaker_queues_advance_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/speaker-queues/{id}/close/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Read-only ViewSet with action endpoints for speaker queue mutations. */
+    post: operations['speaker_queues_close_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/speaker-queues/{id}/join/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Read-only ViewSet with action endpoints for speaker queue mutations. */
+    post: operations['speaker_queues_join_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/speaker-queues/{id}/leave/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Read-only ViewSet with action endpoints for speaker queue mutations. */
+    post: operations['speaker_queues_leave_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/speaker-queues/{id}/skip/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Read-only ViewSet with action endpoints for speaker queue mutations. */
+    post: operations['speaker_queues_skip_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/speaker-queues/open/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Open a speaker queue in the caller's room. */
+    post: operations['speaker_queues_open_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/staff-inbox/': {
     parameters: {
       query?: never;
@@ -32922,6 +33058,31 @@ export interface components {
       | 'COMPROMISE'
       | 'PENANCE'
       | 'FALL_CONVERSION';
+    SpeakerQueue: {
+      readonly id: number;
+      /** @description Room the queue belongs to. */
+      room: number;
+      /** @description Active scene when the queue was opened, for auto-clear on scene finish. */
+      scene?: number | null;
+      is_active?: boolean;
+      /** @description Persona who opened the queue. */
+      opened_by?: number | null;
+      readonly opened_by_name: string;
+      /** Format: date-time */
+      readonly opened_at: string;
+      /** Format: date-time */
+      readonly closed_at: string | null;
+      readonly entries: unknown;
+    };
+    SpeakerQueueRequest: {
+      /** @description Room the queue belongs to. */
+      room: number;
+      /** @description Active scene when the queue was opened, for auto-clear on scene finish. */
+      scene?: number | null;
+      is_active?: boolean;
+      /** @description Persona who opened the queue. */
+      opened_by?: number | null;
+    };
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -58683,6 +58844,203 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OrganizationReputation'];
+        };
+      };
+    };
+  };
+  speaker_queues_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        room?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpeakerQueue'][];
+        };
+      };
+    };
+  };
+  speaker_queues_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this speaker queue. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpeakerQueue'];
+        };
+      };
+    };
+  };
+  speaker_queues_advance_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this speaker queue. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SpeakerQueueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpeakerQueue'];
+        };
+      };
+    };
+  };
+  speaker_queues_close_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this speaker queue. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SpeakerQueueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpeakerQueue'];
+        };
+      };
+    };
+  };
+  speaker_queues_join_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this speaker queue. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SpeakerQueueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpeakerQueue'];
+        };
+      };
+    };
+  };
+  speaker_queues_leave_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this speaker queue. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SpeakerQueueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpeakerQueue'];
+        };
+      };
+    };
+  };
+  speaker_queues_skip_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this speaker queue. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SpeakerQueueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpeakerQueue'];
+        };
+      };
+    };
+  };
+  speaker_queues_open_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SpeakerQueueRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpeakerQueue'];
         };
       };
     };

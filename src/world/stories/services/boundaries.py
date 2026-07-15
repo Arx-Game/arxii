@@ -177,7 +177,7 @@ def _resolve_sheet_identity(
     sheet_player: dict[int, int] = {}
     sheet_tenure: dict[int, int] = {}
     for sheet in sheets:
-        entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+        entry = sheet.roster_entry_or_none
         cur = entry.current_tenure if entry else None
         if cur is not None:
             sheet_player[sheet.pk] = cur.player_data_id

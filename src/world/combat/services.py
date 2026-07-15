@@ -2288,7 +2288,7 @@ def _enforce_opponent_custody_gate(
     """
     if is_ephemeral or acting_account is None:
         return
-    sheet = getattr(objectdb, "sheet_data", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+    sheet = objectdb.character_sheet
     if sheet is None:
         return
 
@@ -8887,7 +8887,7 @@ def _resonant_armor_soak(character: Character) -> int:
         get_modifier_breakdown,
     )
 
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+    sheet = character.character_sheet
     if sheet is None:
         return 0
     try:

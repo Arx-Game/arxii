@@ -125,7 +125,7 @@ class CmdCompanion(DispatchCommand):
 
     def _sheet(self) -> Any:
         """Return the caller's CharacterSheet, or raise CommandError if none."""
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             msg = "You have no character sheet."
             raise CommandError(msg)
@@ -321,7 +321,7 @@ class CmdCompanion(DispatchCommand):
         """List the caller's active companions + remaining capacity per gift."""
         lines = ["|wCompanion actions|n: bind, release, fight, deploy, order, mount, dismount"]
 
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             self.msg("\n".join(lines))
             return

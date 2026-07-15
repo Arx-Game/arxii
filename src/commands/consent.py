@@ -122,7 +122,7 @@ class ConsentRequestCommand(PullParsingMixin, ArxCommand):
 
     def _persona_for(self, character: object, missing_msg: str) -> Persona:
         """Active persona for ``character``; ``CommandError(missing_msg)`` on miss."""
-        sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = character.character_sheet
         if sheet is None:
             raise CommandError(missing_msg)
         try:
@@ -286,7 +286,7 @@ class _RespondCommand(ArxCommand):
         ``self.args`` is a digit, looks up by pk (still constrained to the
         caller as target). Returns None when nothing matches.
         """
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             return None
         try:
@@ -325,13 +325,13 @@ class CmdAccept(_RespondCommand):
             super()._execute()
 
     def _has_registry_pending(self) -> bool:
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             return False
         return bool(get_all_pending(sheet))
 
     def _dispatch_registry(self, args: str) -> str:
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         keyword, _, rest = args.partition(" ")
         if not keyword:
             return format_pending_listing(get_all_pending(sheet) if sheet is not None else [])

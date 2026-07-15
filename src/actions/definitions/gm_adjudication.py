@@ -309,7 +309,7 @@ class GMAwardAction(Action):
         from world.progression.types import DevelopmentSource, ProgressionReason  # noqa: PLC0415
         from world.traits.models import Trait  # noqa: PLC0415
 
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             return ActionResult(success=False, message=f"{target.key} has no character sheet.")
 

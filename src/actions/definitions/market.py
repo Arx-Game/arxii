@@ -25,7 +25,7 @@ _MSG_NO_PERSONA = "You have no active character."
 def _active_persona(actor: ObjectDB):
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL — puppet may be sheetless
+    sheet = actor.character_sheet
     if sheet is None:
         return None
     return active_persona_for_sheet(sheet)

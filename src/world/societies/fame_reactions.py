@@ -89,7 +89,7 @@ def _active_persona(character: ObjectDB) -> Persona | None:
     """
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    sheet = character.character_sheet
     if sheet is None:
         return None
     try:
@@ -119,7 +119,7 @@ def _deliver(line: FameReactionLine, character: ObjectDB, room: ObjectDB) -> Non
         for obj in room.contents:
             if obj.pk == character.pk:
                 continue
-            sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            sheet = obj.character_sheet
             if sheet is not None:
                 bystander_sheets.append(sheet)
         if bystander_sheets:
@@ -130,7 +130,7 @@ def _deliver(line: FameReactionLine, character: ObjectDB, room: ObjectDB) -> Non
                 ooc_note="Fame reaction (bystander register, #881).",
             )
     if line.arriver_body:
-        arriver_sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        arriver_sheet = character.character_sheet
         if arriver_sheet is not None:
             send_narrative_message(
                 recipients=[arriver_sheet],

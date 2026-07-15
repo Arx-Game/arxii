@@ -354,6 +354,17 @@ def advance_leg(voyage: Voyage, caller) -> None:  # noqa: C901, PLR0912, PLR0915
     if route_edge is None:
         raise VoyageError(user_message="The route ahead seems to have vanished.")
 
+    # Ship crew provisioning (#2217)
+    provisioning_ratio = None
+    if voyage.ship is not None:
+        from world.agriculture.services import provision_ship_leg  # noqa: PLC0415
+
+        provisioning_ratio = provision_ship_leg(voyage)
+        if provisioning_ratio <= 0.0:
+            raise VoyageError(
+                user_message="The crew is starving — you can't sail without provisions."
+            )
+
     # Compute AP cost for each participant
     active_participants = list(
         voyage.participants.filter(left_at__isnull=True).select_related("persona")
@@ -375,6 +386,14 @@ def advance_leg(voyage: Voyage, caller) -> None:  # noqa: C901, PLR0912, PLR0915
             continue
         time = compute_travel_time(route_edge, voyage.travel_method, character_sheet, voyage.ship)
         costs[participant.pk] = compute_ap_cost(time)
+        if provisioning_ratio is not None and provisioning_ratio < 1.0:
+            from world.agriculture.services.production import (  # noqa: PLC0415
+                get_food_config,
+            )
+
+            config = get_food_config()
+            surcharge = (1.0 - provisioning_ratio) * config.ship_provisioning_ap_surcharge / 100
+            costs[participant.pk] = math.ceil(costs[participant.pk] * (1 + surcharge))
 
     # Check caller can afford first — if not, fail atomically
     caller_cost = costs.get(caller_participant.pk, 0)
@@ -608,5 +627,6 @@ def depart_voyage(voyage: Voyage, caller) -> Voyage:
         VoyageParticipant.objects.create(voyage=voyage, persona=invite.target_persona)
 
     voyage.status = VoyageStatus.IN_TRANSIT
+    voyage.provisioning_ratio = None
     voyage.save()
     return voyage

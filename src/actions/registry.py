@@ -375,6 +375,14 @@ from actions.definitions.social import (
     restore_sense,
     seduce,
 )
+from actions.definitions.speaker_queue import (
+    AdvanceSpeakerQueueAction,
+    CloseSpeakerQueueAction,
+    JoinSpeakerQueueAction,
+    LeaveSpeakerQueueAction,
+    OpenSpeakerQueueAction,
+    SkipSpeakerAction,
+)
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
@@ -750,6 +758,13 @@ _ALL_ACTIONS: list[Action] = [
     ExamineEvidenceAction(),
     # #2219 — inter-domain food transfer.
     TransferFoodAction(),
+    # #2356 — speaker queue: room-scoped turn-order utility.
+    OpenSpeakerQueueAction(),
+    CloseSpeakerQueueAction(),
+    JoinSpeakerQueueAction(),
+    LeaveSpeakerQueueAction(),
+    AdvanceSpeakerQueueAction(),
+    SkipSpeakerAction(),
 ]
 
 # Lookup by key

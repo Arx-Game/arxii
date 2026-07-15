@@ -546,6 +546,20 @@ class Character(ObjectParent, DefaultCharacter):
 
             maybe_finish_empty_scene(origin, leaving=self)
 
+            # #2356: remove this character from the room's speaker queue.
+            from world.scenes.models import Persona
+            from world.scenes.services import active_persona_for_sheet
+            from world.scenes.speaker_queue_services import (
+                remove_persona_from_room_queues,
+            )
+
+            if self.character_sheet is not None:
+                try:
+                    persona = active_persona_for_sheet(self.character_sheet)
+                    remove_persona_from_room_queues(origin, persona)
+                except Persona.DoesNotExist:
+                    pass
+
             sheet = self.character_sheet
             if sheet is not None:
                 from world.battles.services import maybe_pause_battle_for_disconnect

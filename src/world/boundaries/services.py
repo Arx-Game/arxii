@@ -66,7 +66,7 @@ def _sheet_player_and_tenure_ids(sheets: list[CharacterSheet]) -> tuple[set[int]
     player_ids: set[int] = set()
     tenure_ids: set[int] = set()
     for sheet in sheets:
-        entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+        entry = sheet.roster_entry_or_none
         tenure = entry.current_tenure if entry else None
         if tenure is not None:
             player_ids.add(tenure.player_data_id)

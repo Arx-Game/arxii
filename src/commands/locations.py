@@ -233,7 +233,7 @@ class CmdRoom(ArxCommand):
         if not target:
             msg = f"Could not find '{char_name}'."
             raise CommandError(msg)
-        sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = target.character_sheet
         if sheet is None:
             msg = f"'{char_name}' has no character sheet."
             raise CommandError(msg)

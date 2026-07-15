@@ -70,7 +70,7 @@ class CmdResonance(ArxCommand):
 
     def _viewer_sheet(self) -> CharacterSheet:
         """The caller's own sheet. Raises ``CommandError`` if the caller has none."""
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.caller.character_sheet
         if sheet is None:
             raise CommandError(_NO_IDENTITY)
         return sheet

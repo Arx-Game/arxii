@@ -90,7 +90,7 @@ class SearchAction(Action):
             register_detection,
         )
 
-        actor_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        actor_sheet = actor.character_sheet
         if actor_sheet is None or actor.location is None:
             return
         detected_any = False
@@ -213,7 +213,7 @@ class StartInvestigationAction(Action):
         from world.clues.models import CharacterClue, Clue  # noqa: PLC0415
         from world.clues.services import acquire_clue  # noqa: PLC0415
 
-        entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL
+        entry = sheet.roster_entry_or_none
         if entry is None:
             return ActionResult(success=False, message="You have no roster identity.")
 

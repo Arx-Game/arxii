@@ -148,7 +148,7 @@ def _is_solo_without_vow(persona: Persona) -> bool:
         for obj in location.contents:
             if obj == character:
                 continue
-            if getattr(obj, "sheet_data", None) is not None:  # noqa: GETATTR_LITERAL
+            if obj.character_sheet is not None:
                 return False
     return True
 

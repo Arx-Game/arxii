@@ -462,7 +462,7 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
             request = self.context.get("request")
             if request and request.user.is_authenticated:
                 # Check the requesting user owns the character behind this persona
-                roster_entry = getattr(persona.character_sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL
+                roster_entry = persona.character_sheet.roster_entry_or_none
                 if roster_entry is None:
                     raise serializers.ValidationError(
                         {"persona": "Persona's character has no roster entry."}
@@ -483,7 +483,10 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
             # Check that persona's character's account is a scene participant
             from world.roster.models import RosterTenure  # noqa: PLC0415
 
-            roster_entry = getattr(persona.character_sheet.character, "roster_entry", None)  # noqa: GETATTR_LITERAL
+            # Audit fix (was getattr(...character, "roster_entry", None)): the reverse
+            # OneToOne lives on the SHEET — the old receiver was the ObjectDB character,
+            # so this always resolved None and the participant check silently never ran.
+            roster_entry = persona.character_sheet.roster_entry_or_none
             if roster_entry:
                 active_tenure = (
                     RosterTenure.objects.filter(

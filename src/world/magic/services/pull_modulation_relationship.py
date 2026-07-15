@@ -118,7 +118,7 @@ def relationship_bond_modulation(
     from world.magic.services.threads import _soft_cap  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
-    x_sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    x_sheet = target.character_sheet
     if x_sheet is None:
         return base_scaled
 

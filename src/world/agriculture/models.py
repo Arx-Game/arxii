@@ -180,6 +180,17 @@ class FoodConfig(SharedMemoryModel):
             "Maximum strength points subtracted from units at zero provisioning. PLACEHOLDER."
         ),
     )
+    crew_food_per_leg = models.PositiveIntegerField(
+        default=5,
+        help_text="Food consumed per crew member per voyage leg. PLACEHOLDER.",
+    )
+    ship_provisioning_ap_surcharge = models.PositiveSmallIntegerField(
+        default=50,
+        help_text=(
+            "Max AP surcharge percentage at zero provisioning "
+            "(50 = up to 50% extra AP). PLACEHOLDER."
+        ),
+    )
 
     class Meta:
         verbose_name = "Food Config"

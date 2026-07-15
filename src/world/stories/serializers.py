@@ -291,7 +291,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
         if sheet is None:
             return None
         # OneToOne reverse accessor may not exist.
-        entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL
+        entry = sheet.roster_entry_or_none
         tenure = entry.current_tenure if entry else None
         return tenure.pk if tenure else None
 

@@ -68,7 +68,7 @@ def has_regarded_target_present(*, character_sheet: CharacterSheet, covenant: Co
         return False
 
     for obj in location.contents:
-        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = obj.character_sheet
         if sheet is None or sheet == character_sheet:
             continue
         target_persona = active_persona_for_sheet(sheet)

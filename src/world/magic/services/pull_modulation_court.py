@@ -58,7 +58,7 @@ def court_regard_modulation(
     leader_persona = _resolve_court_leader_persona(thread)
     if leader_persona is None:
         return base_scaled
-    target_sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    target_sheet = target.character_sheet
     if target_sheet is None:
         return base_scaled
     regard = get_regard(leader_persona, active_persona_for_sheet(target_sheet))

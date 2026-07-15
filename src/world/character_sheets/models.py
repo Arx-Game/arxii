@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from world.items.handlers import CharacterSheetOutfitsHandler
     from world.magic.models.affinity import Resonance
     from world.mechanics.models import Property
+    from world.roster.models import RosterEntry
     from world.scenes.models import Persona
 
 from django.core.exceptions import ValidationError
@@ -625,7 +626,7 @@ class CharacterSheet(SharedMemoryModel):
         available signal (so consumers can still read decay_tier even when
         the cron won't auto-flip activity_state).
         """
-        entry = getattr(self, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+        entry = self.roster_entry_or_none
         if entry is None:
             return self.created_by.last_login if self.created_by_id else None
 
@@ -648,6 +649,22 @@ class CharacterSheet(SharedMemoryModel):
         from world.achievements.handlers import StatHandler  # noqa: PLC0415
 
         return StatHandler(self)
+
+    @property
+    def roster_entry_or_none(self) -> RosterEntry | None:
+        """This sheet's RosterEntry, or None (test/NPC sheets outside the roster flow).
+
+        The safe, explicit replacement for ``sheet.roster_entry_or_none``:
+        the reverse OneToOne raises RelatedObjectDoesNotExist (an AttributeError
+        subclass), so the getattr default silently swallowed genuine attribute bugs
+        along with the expected miss. Mirrors ``ObjectParent.character_sheet``.
+        """
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        try:
+            return self.roster_entry
+        except RosterEntry.DoesNotExist:
+            return None
 
     @cached_property
     def primary_persona(self) -> Persona:

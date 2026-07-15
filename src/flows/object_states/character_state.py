@@ -48,7 +48,7 @@ class CharacterState(BaseState):
         from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        sheet = getattr(self.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        sheet = self.obj.character_sheet
         if sheet is None:
             return None
         try:

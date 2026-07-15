@@ -205,12 +205,18 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
         invalidate_active_scene_cache(scene.location)
 
         for obj in scene.location.contents:
-            sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            sheet = obj.character_sheet
             if sheet is None:
                 continue
             roles = sheet.character.covenant_roles
             if not any(m.engaged for m in roles.active_memberships):
                 continue
             revalidate_engagements(character_sheet=sheet, room=scene.location)
+
+    # #2356: close any active speaker queue for this scene's room.
+    if scene.location is not None:
+        from world.scenes.speaker_queue_services import clear_queue_on_scene_finish  # noqa: PLC0415
+
+        clear_queue_on_scene_finish(scene)
 
     broadcast_scene_message(scene, SceneAction.END)

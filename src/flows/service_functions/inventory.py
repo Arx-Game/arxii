@@ -67,7 +67,7 @@ def _require_hot_goods_consent(recipient: CharacterState, item_instance: ItemIns
     the item's provenance from the refusal. NPC recipients (no live tenure)
     are unaffected — consent is a player-protection surface.
     """
-    recipient_sheet = getattr(recipient.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    recipient_sheet = recipient.obj.character_sheet
     if recipient_sheet is None:
         return
     recipient_tenure = _active_tenure_for_sheet(recipient_sheet)
@@ -271,7 +271,7 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     """
     if not item.can_take(taker=character):
         raise NotReachable
-    taker_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    taker_sheet = character.obj.character_sheet
     denial = _take_denial(taker_sheet, item.instance)
     if denial is not None:
         raise denial
@@ -502,7 +502,7 @@ def take_out(character: CharacterState, item: ItemState) -> None:
         raise NotReachable
     if item.instance.contained_in is None:
         raise NotInContainer
-    taker_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    taker_sheet = character.obj.character_sheet
     denial = _take_denial(taker_sheet, item.instance)
     if denial is not None:
         raise denial
@@ -637,7 +637,7 @@ def steal(character: CharacterState, item: ItemState) -> None:
     # None rather than raise DoesNotExist — steal_permitted then delegates to
     # take_requires_steal, which returns False for a None sheet, so a
     # sheet-less actor always ends up refused here (they free-take instead).
-    taker_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    taker_sheet = character.obj.character_sheet
     if not steal_permitted(taker_sheet, item.instance):
         raise TheftNotPermitted
     previous_holder_sheet = item.instance.holder_character_sheet
@@ -673,7 +673,7 @@ def set_container_policy(character: CharacterState, container: ItemState, policy
     owner = container.instance.holder_character_sheet
     # getattr, not direct access: a sheet-less actor owns nothing, so it can
     # never be the container's owner — refuse rather than raise DoesNotExist.
-    actor_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    actor_sheet = character.obj.character_sheet
     if owner is None or actor_sheet is None or owner.pk != actor_sheet.pk:
         raise NotInPossession
     container.instance.access_policy = ContainerAccessPolicy(policy)

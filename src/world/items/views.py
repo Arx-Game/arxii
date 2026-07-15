@@ -1291,7 +1291,7 @@ class VisibleItemDetailViewSet(viewsets.ViewSet):
         observer = _fetch_owned_observer(request, user)
         if observer is None:
             return None
-        return getattr(observer, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        return observer.character_sheet
 
     def _user_can_view(self, user: AccountDB, item: ItemInstance, request: Request) -> bool:
         """Permission check for ``item`` against ``user`` and the observer."""

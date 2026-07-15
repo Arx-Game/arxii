@@ -26,9 +26,13 @@ class ReconcileSunlightExposureTest(TestCase):
         cls.template = ensure_sunlight_exposure_content()
 
     def test_no_sheet_is_noop(self):
-        """A character without sheet_data (NPC/non-puppet) is a no-op."""
+        """A character without a CharacterSheet (NPC/non-puppet) is a no-op."""
         char = MagicMock()
-        del char.sheet_data  # getattr returns MagicMock by default; force AttributeError
+        # Sheetless objects surface as character_sheet=None (the property maps
+        # RelatedObjectDoesNotExist to None); a bare MagicMock would instead
+        # fabricate an attribute chain and _species_and_ancestors would walk
+        # mock.parent forever.
+        char.character_sheet = None
         with patch("world.species.services.apply_condition") as ac:
             reconcile_sunlight_exposure(char, room=None)
         ac.assert_not_called()
