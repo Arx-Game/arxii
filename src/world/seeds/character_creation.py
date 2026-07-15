@@ -252,10 +252,24 @@ def seed_character_creation_dev() -> None:
             "family_known": True,
         },
     )
-    beginnings.allowed_species.add(species)  # M2M add is idempotent
-    beginnings.allowed_species.add(species_khati)
+    beginnings_luxen, _ = Beginnings.objects.get_or_create(
+        name="Luxen Commoner",
+        defaults={
+            "description": "A common beginning in the sunlit port of Luxen.",
+            "starting_area": area_luxen,
+            "trust_required": 0,
+            "is_active": True,
+            "sort_order": 2,
+            "family_known": False,
+        },
+    )
+    # Arx beginnings: Human only. Luxen beginnings: Human + Khati.
+    # This tests the species-filtering UI — Khati only appears when Luxen
+    # is selected as the starting area.
+    beginnings.allowed_species.add(species)
     beginnings_noble.allowed_species.add(species)
-    beginnings_noble.allowed_species.add(species_khati)
+    beginnings_luxen.allowed_species.add(species)
+    beginnings_luxen.allowed_species.add(species_khati)
     Gender.objects.get_or_create(
         key="male",
         defaults={"display_name": "Male", "is_default": False},

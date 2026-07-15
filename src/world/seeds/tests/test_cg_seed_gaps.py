@@ -93,16 +93,23 @@ class RealmAndAreaSeedTests(TestCase):
         self.assertTrue(Species.objects.filter(name="Human").exists())
         self.assertTrue(Species.objects.filter(name="Khati").exists())
 
-    def test_beginnings_allow_both_species(self):
-        """Both beginnings allow both species."""
+    def test_beginnings_allow_correct_species(self):
+        """Arx beginnings allow Human only; Luxen beginnings allow Human + Khati."""
         seed_character_creation_dev()
         from world.character_creation.models import Beginnings
 
+        # Arx beginnings: Human only
         for name in ["Commoner", "Noble"]:
             b = Beginnings.objects.get(name=name)
             species_names = {s.name for s in b.allowed_species.all()}
             self.assertIn("Human", species_names)
-            self.assertIn("Khati", species_names)
+            self.assertNotIn("Khati", species_names, f"{name} should not allow Khati")
+
+        # Luxen beginnings: Human + Khati
+        luxen = Beginnings.objects.get(name="Luxen Commoner")
+        species_names = {s.name for s in luxen.allowed_species.all()}
+        self.assertIn("Human", species_names)
+        self.assertIn("Khati", species_names)
 
     def test_starting_areas_have_rooms(self):
         """Every seeded StartingArea has a default_starting_room."""
