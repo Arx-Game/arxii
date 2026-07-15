@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Self, Union
 
 from django.utils.functional import cached_property
 
+from core.descriptors import ReverseOneToOneOrNone
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
 from flows.trigger_handler import TriggerHandler
@@ -10,9 +11,7 @@ from flows.trigger_handler import TriggerHandler
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
-    from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
-    from world.forms.models import CharacterFormState
 
 DEFAULT_GENDER = "neutral"
 
@@ -36,25 +35,6 @@ class ObjectParent:
         from evennia_extensions.data_handlers import ObjectItemDataHandler
 
         return ObjectItemDataHandler(self)
-
-    def clear_cached_properties(self: Union[Self, "DefaultObject"]) -> None:
-        """Drop every ``@cached_property`` entry from the instance ``__dict__``.
-
-        Called by ``RelatedCacheClearingMixin.clear_related_caches`` on related
-        models (e.g. ``Position.related_cache_fields = ["room"]``) so caches on
-        identity-mapped game objects stay in sync with related-row mutations.
-        Mirrors ``Account.clear_cached_properties`` but discovers properties
-        generically (both Django's and functools' descriptors) instead of a
-        hand-kept name list.
-        """
-        from functools import (  # noqa: CACHED_PROPERTY_IMPORT — clearing both descriptor kinds
-            cached_property as functools_cached_property,
-        )
-
-        for klass in type(self).__mro__:
-            for name, attr in klass.__dict__.items():
-                if isinstance(attr, (cached_property, functools_cached_property)):
-                    self.__dict__.pop(name, None)
 
     def get_object_state(
         self: Union[Self, "DefaultObject"],
@@ -99,38 +79,45 @@ class ObjectParent:
         except CharacterSheet.DoesNotExist:
             return None
 
-    @property
-    def room_profile_or_none(self: Union[Self, "DefaultObject"]) -> "RoomProfile | None":
-        """This object's RoomProfile, or None for anything that isn't a profiled room.
+    # Reverse-OneToOne safe accessors (the *_or_none family, #2386): missing row
+    # → None; genuine attribute bugs still raise. Use the raw accessor where a
+    # missing row is a hard bug; use world.areas.services.get_room_profile when
+    # you want get-or-create.
+    room_profile_or_none = ReverseOneToOneOrNone("room_profile")
 
-        ``room_profile`` is the reverse OneToOne from ``RoomProfile.objectdb`` and
-        raises on profile-less objects (RelatedObjectDoesNotExist subclasses
-        AttributeError, which the getattr idiom silently swallowed — the sheet_data
-        trap, #2386). Use this on maybe-not-a-room objects; use ``obj.room_profile``
-        directly where a missing profile is a hard bug; use
-        ``world.areas.services.get_room_profile`` when you want get-or-create.
+    @cached_property
+    def positions_cached(self: Union[Self, "DefaultObject"]) -> list:
+        """This object's tactical positions — the Prefetch/query shared interface.
+
+        Lives on ObjectParent (not Room) because ``Position.room`` is an FK to
+        bare ObjectDB: any object may be asked for its positions and answers
+        with an empty list rather than AttributeError. Combat's encounter
+        queryset pre-fills this name via ``Prefetch(..., to_attr=
+        "positions_cached")`` (world/combat/views.py); independent callers get
+        the same shape — nested ``passable_edges_as_a`` / ``passable_edges_as_b``
+        / ``all_edges_as_a`` attrs and the rampart join — from this lazy query
+        (4 bounded queries, no per-position N+1). Invalidated by
+        Position/PositionEdge save/delete and the bulk positioning services via
+        ``world.areas.positioning.models.invalidate_position_graph_caches``.
         """
-        from evennia_extensions.models import RoomProfile
+        from django.db.models import Prefetch
 
-        try:
-            return self.room_profile
-        except RoomProfile.DoesNotExist:
-            return None
+        from world.areas.positioning.models import PositionEdge
 
-    @property
-    def form_state_or_none(self: Union[Self, "DefaultObject"]) -> "CharacterFormState | None":
-        """This object's CharacterFormState, or None for anything without one.
-
-        Same reverse-OneToOne trap family as ``character_sheet``/
-        ``room_profile_or_none``: use this on maybe-formless objects; use
-        ``obj.form_state`` directly where a missing row is a hard bug.
-        """
-        from world.forms.models import CharacterFormState
-
-        try:
-            return self.form_state
-        except CharacterFormState.DoesNotExist:
-            return None
+        passable = PositionEdge.objects.filter(is_passable=True).only(
+            "position_a_id", "position_b_id"
+        )
+        return list(
+            self.positions.select_related("rampart__element_profile").prefetch_related(
+                Prefetch("edges_as_a", queryset=passable, to_attr="passable_edges_as_a"),
+                Prefetch("edges_as_b", queryset=passable, to_attr="passable_edges_as_b"),
+                Prefetch(
+                    "edges_as_a",
+                    queryset=PositionEdge.objects.select_related("gating_challenge__template"),
+                    to_attr="all_edges_as_a",
+                ),
+            )
+        )
 
     @property
     def scene_data(self: Union[Self, "DefaultObject"]):

@@ -25,6 +25,7 @@ from world.areas.positioning.models import (
     PositionShelter,
     Rampart,
     RampartElementProfile,
+    invalidate_position_graph_caches,
 )
 from world.mechanics.models import ChallengeInstance
 
@@ -101,7 +102,9 @@ def connect_positions(
 def disconnect_positions(a: Position, b: Position) -> None:
     """Remove the edge between two positions (order-independent)."""
     lo, hi = (a, b) if a.pk < b.pk else (b, a)
+    # QuerySet.delete() bypasses PositionEdge.delete()'s targeted cache pops.
     PositionEdge.objects.filter(position_a=lo, position_b=hi).delete()
+    invalidate_position_graph_caches(lo.room)
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +409,10 @@ def instantiate_blueprint(
                 # ChallengeInstance for these pks would still report is_active=True.
                 ChallengeInstance.flush_instance_cache()
             # Cascade deletes PositionEdges and ObjectPositions via FK on_delete=CASCADE.
+            # Bulk delete bypasses the per-instance cache pops; an edgeless
+            # blueprint would otherwise leave the pre-restage graph cached.
             Position.objects.filter(room=room).delete()
+            invalidate_position_graph_caches(room)
 
         # Build Position instances from the blueprint without hitting the DB per-item.
         blueprint_positions = list(blueprint.positions.all())
@@ -422,6 +428,9 @@ def instantiate_blueprint(
             for bp_pos in blueprint_positions
         ]
         Position.objects.bulk_create(new_positions)
+        # bulk_create bypasses Position.save()'s cache pop (both replace and
+        # additive paths need the room's cached graph dropped).
+        invalidate_position_graph_caches(room)
 
         # bulk_create may not populate PKs reliably on SQLite (pre-Django 3.0 behaviour).
         # Re-fetch the freshly created positions for this room and key by name.
@@ -693,12 +702,6 @@ def position_graph(room: ObjectDB) -> PositionGraph:
     return PositionGraph(nodes=nodes, edges=edges)
 
 
-def _ramparts_by_position_id(room: ObjectDB) -> dict[int, Rampart]:
-    """One query: every Rampart covering a position in *room*, keyed by position_id."""
-    ramparts = Rampart.objects.filter(position__room=room).select_related("element_profile")
-    return {rampart.position_id: rampart for rampart in ramparts}
-
-
 def adjacent_open_positions(position: Position) -> list[PositionEdge]:
     """Return edges to adjacent passable, unblocked positions.
 
@@ -936,7 +939,10 @@ def materialize_aerial_layer(room: ObjectDB) -> None:
 
 def teardown_aerial_layer(room: ObjectDB) -> None:
     """Delete every AERIAL position in the room (cascades aerial edges/occupancy)."""
+    # QuerySet.delete() bypasses the per-instance cache pops; surviving ground
+    # positions would otherwise keep serving edges to the deleted aerial twins.
     Position.objects.filter(room=room, kind=PositionKind.AERIAL).delete()
+    invalidate_position_graph_caches(room)
 
 
 def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:

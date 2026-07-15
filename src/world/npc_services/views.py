@@ -24,7 +24,6 @@ from actions.definitions.npc_services import (
     resolve_npc_offer,
     start_npc_interaction,
 )
-from world.gm.models import GMProfile
 from world.gm.permissions import IsGMOrStaff
 from world.npc_services.filters import (
     MissionOfferDetailsFilterSet,
@@ -359,20 +358,13 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
         if user.is_staff:
             return qs
         # GMs see all (they create and manage summonses).
-        try:
-            user.gm_profile  # noqa: B018
+        if user.gm_profile_or_none is not None:
             return qs
-        except GMProfile.DoesNotExist:
-            pass
-        # Non-staff: scope to the caller's active persona.
-        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+        # Non-staff: scope to the caller's puppeted sheet via the canonical
+        # resolver (handles AnonymousUser and truthy non-character puppets).
+        from world.roster.selectors import puppeted_sheet_for  # noqa: PLC0415
 
-        # Account.puppet is not None for sessionless accounts — it can be a
-        # non-character object. Explicit type dispatch (audit), not getattr-default.
-        puppet = user.puppet
-        if not isinstance(puppet, ObjectDB):
-            return qs.none()
-        sheet_data = puppet.character_sheet
+        sheet_data = puppeted_sheet_for(user)
         if sheet_data is None:
             return qs.none()
         # Private self-view: summonses addressed to any of the caller's

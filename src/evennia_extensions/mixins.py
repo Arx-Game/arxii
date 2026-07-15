@@ -11,6 +11,23 @@ from typing import ClassVar
 from django.utils.functional import cached_property as django_cached_property
 
 
+def clear_django_cached_properties(obj) -> None:
+    """Drop every cached_property entry (Django's or functools') from *obj*.
+
+    The single implementation behind ``CachedPropertiesMixin.clear_cached_properties``
+    and ``Account.clear_cached_properties`` — walk the MRO, find both descriptor
+    kinds, pop their names from the instance ``__dict__``.
+    """
+    names = [
+        name
+        for klass in type(obj).__mro__
+        for name, attr in klass.__dict__.items()
+        if isinstance(attr, (functools_cached_property, django_cached_property))
+    ]
+    for name in names:
+        obj.__dict__.pop(name, None)
+
+
 class CachedPropertiesMixin:
     """
     Mixin that provides automatic cache clearing for cached_property decorators.
@@ -31,22 +48,7 @@ class CachedPropertiesMixin:
 
     def clear_cached_properties(self):
         """Clear all cached properties from this object."""
-        cls = self.__class__
-
-        # Find all cached_property descriptors in the class hierarchy
-        # Support both Django's and functools cached_property
-        cached_props = []
-        for klass in cls.__mro__:
-            for name, attr in klass.__dict__.items():
-                if isinstance(
-                    attr,
-                    (functools_cached_property, django_cached_property),
-                ):
-                    cached_props.append(name)
-
-        # Clear each cached property from the instance dict
-        for prop_name in cached_props:
-            self.__dict__.pop(prop_name, None)
+        clear_django_cached_properties(self)
 
     def save(self, *args, **kwargs):
         """Save and automatically clear cached properties."""
