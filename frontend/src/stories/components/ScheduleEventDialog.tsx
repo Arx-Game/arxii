@@ -15,7 +15,7 @@
  * not surfaced in the session-request action.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -32,7 +32,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { AreaDrilldownPicker } from '@/events/components/AreaDrilldownPicker';
-import { searchPersonas } from '@/events/queries';
+import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import { toLocalDatetimeValue } from '@/events/types';
 import { useCreateEventFromSessionRequest } from '../queries';
 import type { GMQueueAssignedRequest } from '../types';
@@ -84,28 +84,13 @@ export function ScheduleEventDialog({ request }: ScheduleEventDialogProps) {
 
   // Persona search state
   const [personaQuery, setPersonaQuery] = useState('');
-  const [personaResults, setPersonaResults] = useState<PersonaOption[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<PersonaOption | null>(null);
-  const [personaSearching, setPersonaSearching] = useState(false);
-  const personaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const createMutation = useCreateEventFromSessionRequest();
 
-  // Debounced persona search
-  useEffect(() => {
-    if (personaDebounceRef.current) clearTimeout(personaDebounceRef.current);
-    if (personaQuery.trim().length < 2) {
-      setPersonaResults([]);
-      return;
-    }
-    personaDebounceRef.current = setTimeout(() => {
-      setPersonaSearching(true);
-      searchPersonas(personaQuery.trim())
-        .then((results) => setPersonaResults(results))
-        .catch(() => setPersonaResults([]))
-        .finally(() => setPersonaSearching(false));
-    }, 300);
-  }, [personaQuery]);
+  // Debounced, race-safe persona search (2026-07 audit — shared hook).
+  const { results, isFetching: personaSearching } = usePersonaSearch(personaQuery);
+  const personaResults = selectedPersona?.name === personaQuery ? [] : results;
 
   function resetForm() {
     setName(`${request.story_title} — ${request.episode_title}`);
@@ -115,7 +100,6 @@ export function ScheduleEventDialog({ request }: ScheduleEventDialogProps) {
     setDescription('');
     setFieldErrors({});
     setPersonaQuery('');
-    setPersonaResults([]);
     setSelectedPersona(null);
   }
 
@@ -280,7 +264,6 @@ export function ScheduleEventDialog({ request }: ScheduleEventDialogProps) {
                           onClick={() => {
                             setSelectedPersona(p);
                             setPersonaQuery('');
-                            setPersonaResults([]);
                           }}
                         >
                           {p.name}

@@ -1,16 +1,15 @@
 /**
  * CharacterSearchField — debounced persona search field.
  *
- * Follows the debounced search pattern from InviteToTableDialog.tsx.
- * Calls searchPersonas from @/events/queries on each keystroke (debounced 300ms).
- * onChange is called with the selected persona id (number).
+ * Uses the shared `usePersonaSearch` hook (2026-07 audit) for debounced,
+ * race-safe search. onChange is called with the selected persona id (number).
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { searchPersonas } from '@/events/queries';
+import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import type { FieldProps } from '@/rituals/types';
 
 interface PersonaOption {
@@ -20,10 +19,11 @@ interface PersonaOption {
 
 export function CharacterSearchField({ field, value, onChange, disabled }: FieldProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<PersonaOption[]>([]);
   const [selectedName, setSelectedName] = useState('');
-  const [searching, setSearching] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { results, isFetching: searching } = usePersonaSearch(query);
+  // Hide the dropdown once a selection is committed (query === selectedName).
+  const showResults = selectedName !== query ? results : [];
 
   // Populate display name when value is provided externally
   useEffect(() => {
@@ -33,30 +33,9 @@ export function CharacterSearchField({ field, value, onChange, disabled }: Field
     }
   }, [value]);
 
-  // Debounced search
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-    debounceRef.current = setTimeout(() => {
-      setSearching(true);
-      searchPersonas(query.trim())
-        .then((res) => setResults(res))
-        .catch(() => setResults([]))
-        .finally(() => setSearching(false));
-    }, 300);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query]);
-
   function handleSelect(persona: PersonaOption) {
     setSelectedName(persona.name);
     setQuery(persona.name);
-    setResults([]);
     onChange(persona.id);
   }
 
@@ -85,9 +64,9 @@ export function CharacterSearchField({ field, value, onChange, disabled }: Field
         {searching && (
           <span className="absolute right-2 top-2 text-xs text-muted-foreground">Searching…</span>
         )}
-        {results.length > 0 && (
+        {showResults.length > 0 && (
           <ul className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover shadow-lg">
-            {results.map((p) => (
+            {showResults.map((p) => (
               <li key={p.id}>
                 <button
                   type="button"

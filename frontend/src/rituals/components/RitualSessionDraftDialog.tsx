@@ -9,7 +9,7 @@
  * with the session id so the caller can navigate to the detail page.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import type React from 'react';
 import {
   Dialog,
@@ -25,7 +25,7 @@ import { Label } from '@/components/ui/label';
 import { extractErrorMessage } from '@/lib/errors';
 import { RitualForm } from './RitualForm';
 import { useDraftRitualSession } from '@/rituals/queries';
-import { searchPersonas } from '@/events/queries';
+import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import type { RitualWithSchema, RitualInputSchema } from '../types';
 import type { RitualSessionDraft } from '../api';
 
@@ -70,32 +70,15 @@ interface InviteePickerProps {
 
 function InviteePicker({ selected, onAdd, onRemove, disabled }: InviteePickerProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<PersonaOption[]>([]);
-  const [searching, setSearching] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-    debounceRef.current = setTimeout(() => {
-      setSearching(true);
-      searchPersonas(query.trim())
-        .then((res) => setResults(filterUnselected(res, selected)))
-        .catch(() => setResults([]))
-        .finally(() => setSearching(false));
-    }, 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query, selected]);
+  // Debounced, race-safe persona search (2026-07 audit — shared hook), minus
+  // anyone already selected.
+  const { results: rawResults, isFetching: searching } = usePersonaSearch(query);
+  const results = filterUnselected(rawResults, selected);
 
   function handleSelect(persona: PersonaOption) {
     onAdd(persona);
     setQuery('');
-    setResults([]);
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {

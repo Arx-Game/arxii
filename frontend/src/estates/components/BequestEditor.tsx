@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { searchOrganizations, searchPersonas } from '@/events/queries';
+import { usePersonaSearch, useOrganizationSearch } from '@/roster/usePersonaSearch';
 import type { Will } from '../estatesQueries';
 import type { useWillMutations } from '../estatesQueries';
 
@@ -38,21 +38,26 @@ export function BequestEditor({ will, frozen, mutations }: BequestEditorProps) {
   const [recipientQuery, setRecipientQuery] = useState('');
   const [recipientIsOrg, setRecipientIsOrg] = useState(false);
   const [recipient, setRecipient] = useState<{ id: number; name: string } | null>(null);
-  const [matches, setMatches] = useState<{ id: number; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const targetField = TARGET_FIELD[kind];
   const personaOnly = PERSONA_ONLY_KINDS.has(kind);
 
-  const search = async (query: string) => {
+  // Race-safe debounced search (2026-07 audit): the old handler awaited the
+  // fetch inline with no debounce or ordering guard, and a toggle mid-request
+  // could show org results under a persona query. Both hooks are keyed by term;
+  // only the one matching the current toggle fetches.
+  const { results: personaMatches } = usePersonaSearch(recipientQuery, {
+    enabled: !recipientIsOrg,
+  });
+  const { results: orgMatches } = useOrganizationSearch(recipientQuery, {
+    enabled: recipientIsOrg,
+  });
+  const matches = recipientIsOrg ? orgMatches : personaMatches;
+
+  const search = (query: string) => {
     setRecipientQuery(query);
     setRecipient(null);
-    if (query.length < 2) {
-      setMatches([]);
-      return;
-    }
-    const found = recipientIsOrg ? await searchOrganizations(query) : await searchPersonas(query);
-    setMatches(found.slice(0, 5));
   };
 
   const submit = () => {

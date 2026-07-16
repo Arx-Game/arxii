@@ -102,6 +102,7 @@ visible (non-404) to any authenticated user if the backend queryset allows it.
 A `viewer_role` of `'none'` means the user has no relationship to this table;
 show read-only mode.
 
-**Persona search reuses `searchPersonas` from `@/events/queries`.** The pattern
-was established in `ScheduleEventDialog.tsx` — a debounced text search against
-`/api/personas/?search=`. Reuse it directly rather than duplicating.
+**Persona search uses the shared `usePersonaSearch` hook** (`@/roster/usePersonaSearch`,
+2026-07 audit). It wraps `searchPersonas` in React Query for debounced, race-safe
+type-ahead — do NOT hand-roll a `setTimeout`+`setState` debounce (the prior copies
+lacked a stale-response guard). `useOrganizationSearch` is the org-search sibling.

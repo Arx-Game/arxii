@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { searchPersonas } from '@/events/queries';
+import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import type { Will } from '../estatesQueries';
 import type { useWillMutations } from '../estatesQueries';
 
@@ -13,16 +13,9 @@ interface ExecutorEditorProps {
 
 export function ExecutorEditor({ will, frozen, mutations }: ExecutorEditorProps) {
   const [query, setQuery] = useState('');
-  const [matches, setMatches] = useState<{ id: number; name: string }[]>([]);
-
-  const search = async (value: string) => {
-    setQuery(value);
-    if (value.length < 2) {
-      setMatches([]);
-      return;
-    }
-    setMatches((await searchPersonas(value)).slice(0, 5));
-  };
+  // Race-safe debounced search (2026-07 audit): the old handler awaited
+  // searchPersonas inline with no debounce or ordering guard.
+  const { results: matches } = usePersonaSearch(query);
 
   return (
     <section className="space-y-2">
@@ -57,7 +50,7 @@ export function ExecutorEditor({ will, frozen, mutations }: ExecutorEditorProps)
           <Input
             placeholder="Search characters…"
             value={query}
-            onChange={(e) => void search(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
           />
           {matches.length > 0 && (
             <ul className="rounded border text-sm">
@@ -69,7 +62,6 @@ export function ExecutorEditor({ will, frozen, mutations }: ExecutorEditorProps)
                     onClick={() => {
                       mutations.addExecutor.mutate({ willId: will.id, personaId: m.id });
                       setQuery('');
-                      setMatches([]);
                     }}
                   >
                     {m.name}
