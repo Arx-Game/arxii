@@ -122,7 +122,21 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "PLR2004", # magic values are common in test data
     "ARG001",  # unused function arguments (fixtures)
     "PLC0415", # imports inside functions for test isolation
+    "S603",    # subprocess calls in test setup
+    "S607",    # partial executable path for git CLI in tests
+]
 
+# Content push module — subprocess git calls are its core function
+"src/core_management/content_push.py" = [
+    "S603",    # subprocess without shell check — git CLI calls
+    "S607",    # partial executable path — git is always on PATH
+    "TRY003",  # long exception messages — user-facing error text
+    "EM101",   # string literal in exception — user-facing error text
+    "EM102",   # f-string in exception — formatted git error output
+]
+"src/web/admin/content_push_views.py" = [
+    "S603",    # subprocess without shell check — git CLI calls
+    "S607",    # partial executable path — git is always on PATH
 ]
 
 # Additional test patterns

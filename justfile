@@ -383,6 +383,15 @@ export-content:
 check-export:
     uv run python tools/export_content.py --check
 
+# Commit and push exported fixtures to the private content repo's origin main.
+# Run after `export-content`. Stages fixtures/, commits, and pushes.
+push-content:
+    uv run python tools/push_content.py
+
+# Dry-run: show what would be committed, commit nothing.
+check-push:
+    uv run python tools/push_content.py --check
+
 # Validate content files + report remaining PLACEHOLDER slots; writes nothing.
 check-content:
     uv run python tools/build_content_fixtures.py --check

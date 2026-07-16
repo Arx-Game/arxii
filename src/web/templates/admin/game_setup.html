@@ -27,6 +27,10 @@
         <a href="{% url 'admin_content_export' %}">Export to content repo</a>
         writes authored content models from the DB back to the
         <code>CONTENT_REPO_PATH</code> checkout's <code>fixtures/</code> directory.
+        <br>
+        <a href="{% url 'admin_content_push' %}">Push to lore repo</a>
+        commits and pushes exported fixtures to the content repo's
+        <code>origin main</code>.
       {% else %}
         set <code>CONTENT_REPO_PATH</code> in <code>src/.env</code> to enable
         this step. Until then, the
