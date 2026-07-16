@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ title }}</h1>
+
+  {% if not content_repo_configured %}
+    <div class="errornote">
+      CONTENT_REPO_PATH is not set or does not exist. Add it to
+      <code>src/.env</code> pointing at your local checkout of the
+      private content repository.
+    </div>
+  {% elif error %}
+    <div class="errornote">{{ error }}</div>
+  {% else %}
+    <p>
+      This will stage all changes under <code>fixtures/</code>, commit them,
+      and push to <code>origin {{ branch }}</code> in the content repo.
+      The lore repo's pre-push hook blocks history rewrites — if the push
+      is rejected, it will pull with <code>--rebase</code> and retry once.
+    </p>
+
+    {% if not has_changes %}
+      <p><strong>No changes to commit.</strong> The working tree is clean.
+      Run <code>just export-content</code> first to write fixture files.</p>
+    {% else %}
+      <p>
+        <strong>{{ file_count }} file(s)</strong> changed on branch
+        <code>{{ branch }}</code>:
+      </p>
+
+      {% if diff_stat %}
+      <pre>{{ diff_stat }}</pre>
+      {% endif %}
+
+      {% if status_lines %}
+      <details>
+        <summary>Full status</summary>
+        <pre>{{ status_lines }}</pre>
+      </details>
+      {% endif %}
+
+      <form method="post" action="{% url 'admin_content_push_run' %}">
+        {% csrf_token %}
+        <p>
+          <input type="submit" value="Commit and push to lore repo" class="default">
+          <a href="{% url 'admin_game_setup' %}" class="button">Cancel</a>
+        </p>
+      </form>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

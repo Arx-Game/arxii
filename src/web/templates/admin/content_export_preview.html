@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ title }}</h1>
+
+  {% if not content_repo_configured %}
+    <div class="errornote">
+      CONTENT_REPO_PATH is not set or does not exist. Add it to
+      <code>src/.env</code> pointing at your local checkout of the
+      private content repository.
+    </div>
+  {% else %}
+    <p>
+      This will export <strong>{{ total_records }} records</strong> across
+      <strong>{{ total_models }} content models</strong> to the
+      <code>CONTENT_REPO_PATH</code> checkout's <code>fixtures/</code> directory.
+      Each model is written as a separate JSON file with natural keys (no pks).
+      Existing files will be overwritten.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Records</th>
+          <th>Output file</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in models %}
+        <tr>
+          <td><code>{{ m.label }}</code></td>
+          <td>{{ m.count }}</td>
+          <td><code>{{ m.output }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <form method="post" action="{% url 'admin_content_export_run' %}">
+      {% csrf_token %}
+      <p>
+        <input type="submit" value="Export to content repo" class="default">
+        <a href="{% url 'admin_game_setup' %}" class="button">Cancel</a>
+      </p>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}
