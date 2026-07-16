@@ -20,7 +20,12 @@ if TYPE_CHECKING:
     from world.magic.audere import AudereThreshold
 from world.conditions.models import CapabilityType, ConditionTemplate, DamageType
 from world.items.models import ItemInstance
-from world.magic.constants import ALTERATION_TIER_CAPS, TargetKind, anima_band_for
+from world.magic.constants import (
+    ALTERATION_TIER_CAPS,
+    TargetKind,
+    anima_band_for,
+    is_imbuing_ritual,
+)
 from world.magic.models import (
     Cantrip,
     CharacterAnima,
@@ -1081,6 +1086,7 @@ class RitualSerializer(serializers.ModelSerializer):
         source="author_account", read_only=True, allow_null=True
     )
     check_config = serializers.SerializerMethodField()
+    is_imbuing = serializers.SerializerMethodField()
 
     class Meta:
         model = Ritual
@@ -1099,6 +1105,7 @@ class RitualSerializer(serializers.ModelSerializer):
             "participation_rule",
             "min_participants",
             "max_participants",
+            "is_imbuing",
         ]
         read_only_fields = fields
 
@@ -1108,6 +1115,16 @@ class RitualSerializer(serializers.ModelSerializer):
         if config is None:
             return None
         return RitualCheckConfigSerializer(config).data
+
+    def get_is_imbuing(self, obj: Ritual) -> bool:
+        """True for the Rite of Imbuing (2026-07 audit).
+
+        Web imbuing resolves the ritual by this flag — the serializer never
+        exposes ``service_function_path`` (server-internal), and the old
+        client-side path filter matched a field that was never sent, so the
+        Imbue button could not succeed on any server.
+        """
+        return is_imbuing_ritual(name=obj.name, service_function_path=obj.service_function_path)
 
 
 class RitualCheckConfigPatchSerializer(serializers.Serializer):

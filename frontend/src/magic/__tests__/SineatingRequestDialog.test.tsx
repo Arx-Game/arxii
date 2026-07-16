@@ -221,7 +221,9 @@ describe('SineatingRequestDialog', () => {
 
   it('shows persona search results after typing and selecting fills the field', async () => {
     setupMocks();
-    vi.mocked(eventsQueries.searchPersonas).mockResolvedValue([{ id: 20, name: 'Rael' }]);
+    vi.mocked(eventsQueries.searchPersonas).mockResolvedValue([
+      { id: 20, name: 'Rael', character_sheet: 55 },
+    ]);
 
     render(<SineatingRequestDialog {...defaultProps} />, { wrapper: createWrapper() });
 
@@ -266,7 +268,9 @@ describe('SineatingRequestDialog', () => {
 
   it('submitting fires useRequestSineating().mutate with the correct body shape', async () => {
     const { mutate } = setupMocks();
-    vi.mocked(eventsQueries.searchPersonas).mockResolvedValue([{ id: 20, name: 'Rael' }]);
+    vi.mocked(eventsQueries.searchPersonas).mockResolvedValue([
+      { id: 20, name: 'Rael', character_sheet: 55 },
+    ]);
 
     render(<SineatingRequestDialog {...defaultProps} />, { wrapper: createWrapper() });
 
@@ -301,7 +305,7 @@ describe('SineatingRequestDialog', () => {
     expect(mutate).toHaveBeenCalledWith(
       {
         actor_sheet_id: 10,
-        sineater_sheet_id: 20,
+        sineater_sheet_id: 55,
         resonance_id: 3,
         max_units: 5,
         scene_id: 5,
@@ -321,7 +325,9 @@ describe('SineatingRequestDialog', () => {
     const { mutate } = setupMocks();
     const onSuccess = vi.fn();
     const onOpenChange = vi.fn();
-    vi.mocked(eventsQueries.searchPersonas).mockResolvedValue([{ id: 20, name: 'Rael' }]);
+    vi.mocked(eventsQueries.searchPersonas).mockResolvedValue([
+      { id: 20, name: 'Rael', character_sheet: 55 },
+    ]);
 
     // Make mutate invoke its onSuccess callback immediately
     mutate.mockImplementation((_body: unknown, callbacks: { onSuccess?: () => void }) => {

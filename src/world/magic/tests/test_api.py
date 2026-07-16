@@ -1103,8 +1103,41 @@ class RitualPerformViewTests(APITestCase):
             [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
         )
 
-    def test_imbuing_ceremony_dispatch_creates_pending_effect(self) -> None:
-        """Rite of Imbuing is CEREMONY-kind: POST creates a PendingRitualEffect."""
+    def test_imbuing_ceremony_web_post_fuses_perform_and_finisher(self) -> None:
+        """One web POST performs the CEREMONY AND applies the imbue (2026-07 audit).
+
+        The old contract only minted the PendingRitualEffect and silently
+        dropped thread/amount — a dead state, since the web has no separate
+        finisher UI (the telnet ``imbue`` command is the CEREMONY finisher).
+        """
+        self.client.force_authenticate(user=self.account)
+        starting_level = self.thread.level
+        response = self.client.post(
+            reverse("magic:ritual-perform"),
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.ritual.pk,
+                "kwargs": {"thread_id": self.thread.pk, "amount": 5},
+                "components": [],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["ritual_id"], self.ritual.pk)
+        self.assertEqual(response.data["execution_kind"], "CEREMONY")
+        self.assertIn("result", response.data)
+        self.thread.refresh_from_db()
+        self.assertGreater(self.thread.level, starting_level)
+        # The finisher consumed the pending effect the perform minted.
+        self.assertFalse(
+            PendingRitualEffect.objects.filter(
+                character=self.sheet,
+                ritual=self.ritual,
+            ).exists(),
+        )
+
+    def test_imbuing_ceremony_requires_thread_kwargs(self) -> None:
+        """A bare imbuing perform 400s — the web has no finisher to consume it."""
         self.client.force_authenticate(user=self.account)
         response = self.client.post(
             reverse("magic:ritual-perform"),
@@ -1116,17 +1149,7 @@ class RitualPerformViewTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertEqual(response.data["ritual_id"], self.ritual.pk)
-        self.assertEqual(response.data["execution_kind"], "CEREMONY")
-        self.assertNotIn("result", response.data)
-        self.assertTrue(
-            PendingRitualEffect.objects.filter(
-                character=self.sheet,
-                ritual=self.ritual,
-            ).exists(),
-            "A PendingRitualEffect must be created for a CEREMONY-kind ritual.",
-        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_imbuing_ceremony_duplicate_returns_400(self) -> None:
         """A second Rite of Imbuing before the first is consumed returns 400."""
@@ -1138,7 +1161,7 @@ class RitualPerformViewTests(APITestCase):
             {
                 "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
-                "kwargs": {},
+                "kwargs": {"thread_id": self.thread.pk, "amount": 5},
             },
             format="json",
         )
@@ -1257,7 +1280,7 @@ class RitualPerformViewTests(APITestCase):
             {
                 "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
-                "kwargs": {},
+                "kwargs": {"thread_id": self.thread.pk, "amount": 5},
                 "components": [own_item.pk],
             },
             format="json",
@@ -1396,6 +1419,24 @@ class RitualSerializerTests(APITestCase):
         self.assertIn("description", data)
         self.assertIn("narrative_prose", data)
         self.assertIn("hedge_accessible", data)
+
+    def test_is_imbuing_flags_the_imbuing_ritual_only(self) -> None:
+        """The web Imbue flow resolves the ritual by this flag (2026-07 audit).
+
+        The old frontend filtered on ``service_function_path`` — a field the
+        serializer never sends — so web imbuing was unreachable everywhere.
+        """
+        from world.magic.factories import ImbuingRitualFactory, RitualFactory
+        from world.magic.serializers import RitualSerializer
+
+        # NOTE: this class's self.ritual is a RENAMED ImbuingRitualFactory row
+        # ("test_ritual") — deliberately NOT the canonical rite, so it must not
+        # flag. The canonical row (default name) must.
+        canonical = ImbuingRitualFactory()
+        self.assertTrue(RitualSerializer(canonical).data["is_imbuing"])
+        self.assertFalse(RitualSerializer(self.ritual).data["is_imbuing"])
+        other = RitualFactory(name="not_imbuing")
+        self.assertFalse(RitualSerializer(other).data["is_imbuing"])
 
 
 class RitualViewSetTests(APITestCase):

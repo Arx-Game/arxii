@@ -37,6 +37,7 @@ from world.magic.constants import (
     RitualExecutionKind,
     SuggestionStatus,
     TargetKind,
+    is_imbuing_ritual,
 )
 from world.magic.exceptions import (
     InvalidImbueAmount,
@@ -170,7 +171,7 @@ from world.stories.pagination import StandardResultsSetPagination
 _ERR_THREAD_NOT_FOUND = "Thread not found or not owned by the actor."
 _ERR_RESONANCE_NOT_FOUND = "Resonance not found."
 _ERR_IMBUING_REQUIRES_THREAD = "Imbuing ritual requires thread_id in kwargs (int)."
-_IMBUING_SERVICE_PATH = "world.magic.services.spend_resonance_for_imbuing"
+_ERR_IMBUING_REQUIRES_AMOUNT = "Imbuing ritual requires amount in kwargs (positive int)."
 
 # =============================================================================
 # Lookup Table ViewSets (Read-Only)
@@ -1004,6 +1005,38 @@ class RitualPerformView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @staticmethod
+    def _resolve_imbuing_kwargs(sheet: CharacterSheet, kwargs: dict) -> Response | None:
+        """Resolve/validate the imbuing ``thread_id``/``amount`` kwargs in place.
+
+        Returns a 400 ``Response`` on invalid input, else ``None`` (with
+        ``kwargs["thread"]`` resolved to an owned, non-retired Thread).
+        """
+        thread_id = kwargs.pop("thread_id", None)
+        if not isinstance(thread_id, int):
+            return Response(
+                {"detail": _ERR_IMBUING_REQUIRES_THREAD},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        thread = Thread.objects.filter(
+            pk=thread_id,
+            owner=sheet,
+            retired_at__isnull=True,
+        ).first()
+        if thread is None:
+            return Response(
+                {"detail": _ERR_THREAD_NOT_FOUND},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        kwargs["thread"] = thread
+        amount = kwargs.get("amount")
+        if not isinstance(amount, int) or amount < 1:
+            return Response(
+                {"detail": _ERR_IMBUING_REQUIRES_AMOUNT},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return None
+
     def post(self, request: Request) -> Response:
         """Validate, resolve, and dispatch the ritual; return a result payload."""
         serializer = RitualPerformRequestSerializer(
@@ -1018,26 +1051,16 @@ class RitualPerformView(APIView):
         kwargs: dict = dict(data.get("kwargs") or {})
         components = list(data.get("components") or [])
 
-        # Imbuing (and potentially other SERVICE rituals) takes a Thread. The
-        # primitive-only kwargs surface carries ``thread_id``; resolve here.
-        if ritual.service_function_path == _IMBUING_SERVICE_PATH:
-            thread_id = kwargs.pop("thread_id", None)
-            if not isinstance(thread_id, int):
-                return Response(
-                    {"detail": _ERR_IMBUING_REQUIRES_THREAD},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            thread = Thread.objects.filter(
-                pk=thread_id,
-                owner=sheet,
-                retired_at__isnull=True,
-            ).first()
-            if thread is None:
-                return Response(
-                    {"detail": _ERR_THREAD_NOT_FOUND},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            kwargs["thread"] = thread
+        # Imbuing takes a Thread. The primitive-only kwargs surface carries
+        # ``thread_id``; resolve here (covers both the canonical CEREMONY
+        # ritual and a staff-authored SERVICE variant).
+        imbuing = is_imbuing_ritual(
+            name=ritual.name, service_function_path=ritual.service_function_path
+        )
+        if imbuing:
+            error = self._resolve_imbuing_kwargs(sheet, kwargs)
+            if error is not None:
+                return error
 
         from actions.definitions.ritual import PerformRitualAction  # noqa: PLC0415
 
@@ -1055,6 +1078,40 @@ class RitualPerformView(APIView):
             return Response(
                 {"detail": action_result.message},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # The canonical Rite of Imbuing is CEREMONY-kind: performing it only
+        # mints the PendingRitualEffect the telnet ``imbue`` finisher consumes.
+        # The web is the "specialized host UI" (Ritual.client_hosted) and sends
+        # one POST — fuse the finisher here so thread/amount actually apply
+        # (2026-07 audit: without this the pending effect was created and the
+        # imbue silently never happened).
+        if imbuing and ritual.execution_kind == RitualExecutionKind.CEREMONY:
+            from actions.definitions.imbue import ImbueAction  # noqa: PLC0415
+
+            finisher_result = ImbueAction().run(
+                actor=sheet.character,
+                thread=kwargs["thread"],
+                amount=kwargs["amount"],
+            )
+            if not finisher_result.success:
+                return Response(
+                    {"detail": finisher_result.message},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            imbue_result = finisher_result.data.get("result")
+            return Response(
+                {
+                    "ritual_id": ritual.pk,
+                    "execution_kind": ritual.execution_kind,
+                    "result": (
+                        asdict(imbue_result)
+                        if dataclasses.is_dataclass(imbue_result)
+                        else imbue_result
+                    ),
+                    "message": finisher_result.message,
+                },
+                status=status.HTTP_200_OK,
             )
 
         result = action_result.data.get("result")

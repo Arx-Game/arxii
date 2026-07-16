@@ -40,8 +40,11 @@ import { useRequestSineating, useCharacterResonances } from '../queries';
 // ---------------------------------------------------------------------------
 
 interface PersonaOption {
+  /** Persona pk (display + selection). */
   id: number;
   name: string;
+  /** Owning CharacterSheet pk — the id the backend actually wants (#audit2). */
+  character_sheet: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +150,7 @@ export function SineatingRequestDialog({
   const unitsValid = Number.isFinite(unitsNum) && unitsNum >= 1 && unitsNum <= availableUnits;
   const canSubmit =
     selectedSineater !== null &&
+    selectedSineater.character_sheet !== null &&
     resonanceId !== null &&
     sceneId !== null &&
     unitsValid &&
@@ -154,12 +158,22 @@ export function SineatingRequestDialog({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit || selectedSineater === null || resonanceId === null || sceneId === null) return;
+    if (
+      !canSubmit ||
+      selectedSineater === null ||
+      selectedSineater.character_sheet === null ||
+      resonanceId === null ||
+      sceneId === null
+    )
+      return;
 
     requestMutation.mutate(
       {
         actor_sheet_id: sinnerSheetId,
-        sineater_sheet_id: selectedSineater.id,
+        // The CharacterSheet pk (2026-07 audit): this was selectedSineater.id,
+        // a Persona pk — CharacterSheet.objects.get(pk=...) then mis-targeted
+        // or 404'd whenever the two id sequences diverged.
+        sineater_sheet_id: selectedSineater.character_sheet,
         resonance_id: resonanceId,
         max_units: unitsNum,
         scene_id: sceneId,
@@ -257,7 +271,10 @@ export function SineatingRequestDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {resonanceList.map((cr) => (
-                    <SelectItem key={cr.id} value={String(cr.id)}>
+                    // value = cr.resonance (Resonance pk), NOT cr.id (the
+                    // CharacterResonance row pk) — the backend resolves a
+                    // Resonance, so the row pk mis-targeted/404'd (2026-07 audit).
+                    <SelectItem key={cr.resonance} value={String(cr.resonance)}>
                       {cr.resonance_name}
                     </SelectItem>
                   ))}

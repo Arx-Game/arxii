@@ -58,6 +58,7 @@ const mockRitual = {
   participation_rule: 'SINGLE_ACTOR' as const,
   min_participants: null,
   max_participants: null,
+  is_imbuing: false,
 };
 
 describe('Rituals Query Hooks', () => {

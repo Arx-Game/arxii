@@ -31939,6 +31939,15 @@ export interface components {
       readonly participation_rule: components['schemas']['ParticipationRuleEnum'];
       readonly min_participants: number | null;
       readonly max_participants: number | null;
+      /**
+       * @description True for the Rite of Imbuing (2026-07 audit).
+       *
+       *     Web imbuing resolves the ritual by this flag — the serializer never
+       *     exposes ``service_function_path`` (server-internal), and the old
+       *     client-side path filter matched a field that was never sent, so the
+       *     Imbue button could not succeed on any server.
+       */
+      readonly is_imbuing: boolean;
     };
     /**
      * @description Write serializer for the nested check_config on a PATCH.

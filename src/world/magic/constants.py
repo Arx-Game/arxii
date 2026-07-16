@@ -453,3 +453,23 @@ def anima_band_for(current: int, maximum: int) -> str:
         if ratio >= threshold:
             return label
     return ANIMA_BANDS[-1][1]
+
+
+# The Rite of Imbuing's two identities (2026-07 audit). The CANONICAL seeded
+# ritual is CEREMONY-kind with an empty service path, identified by NAME — the
+# same identity the ImbueAction finisher and PendingRitualEffectPrerequisite
+# already match on. IMBUING_SERVICE_PATH additionally marks a staff-authored
+# SERVICE-dispatch variant, which RitualPerformView special-cases (thread_id
+# resolution). RitualSerializer.is_imbuing exposes the combined predicate so
+# web clients can find the ritual without the API leaking service paths (the
+# old frontend filtered on a field the serializer never sent, making web
+# imbuing unreachable on every server).
+IMBUING_RITUAL_NAME = "Rite of Imbuing"
+IMBUING_SERVICE_PATH = "world.magic.services.spend_resonance_for_imbuing"
+
+
+def is_imbuing_ritual(*, name: str, service_function_path: str) -> bool:
+    """Single predicate for "is this the Rite of Imbuing" — serializer + view share it."""
+    return name.casefold() == IMBUING_RITUAL_NAME.casefold() or (
+        service_function_path == IMBUING_SERVICE_PATH
+    )
