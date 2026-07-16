@@ -155,6 +155,10 @@ class BuildResult:
     # output path -> source file per object, same order as fixtures[output].
     # Lets load_entries name the originating file in a resolution error.
     source_paths: dict[str, list[Path]] = field(default_factory=dict)
+    # Human-readable warnings for objects that were skipped (stale models,
+    # missing NaturalKeyMixin, etc.). Collected during build, surfaced to the
+    # operator by the CLI / admin button.
+    skipped: list[str] = field(default_factory=list)
 
 
 def parse_content_file(path: Path, domain: str) -> ContentEntry:
@@ -366,11 +370,49 @@ DOMAIN_BUILDERS = {
 }
 
 
+def build_fixture_json(content_root: Path, result: BuildResult) -> None:
+    """Scan ``content_root/fixtures/`` for raw Django fixture JSON files.
+
+    Each ``.json`` file is an array of ``{"model": "app.model", "fields": {...}}``
+    objects (optionally with a ``"pk"`` key that is stripped — upsert is by
+    natural key, not pk). Objects are appended into ``result.fixtures`` using
+    the source file path as the key, with corresponding ``source_paths`` for
+    error reporting.
+
+    Fully dynamic: no hardcoded model list. Models are resolved at load time
+    in ``load_entries`` via ``apps.get_model``. Stale labels (renamed/removed
+    models) are skipped there with a warning in ``result.skipped``.
+
+    FK values that are lists (Django's natural-key fixture convention, e.g.
+    ``"resonance": ["resonance", "Insidia"]``) are left as-is in the fields
+    dict — ``_resolve_natural_key_fields`` resolves them at upsert time.
+    """
+    fixtures_dir = content_root / "fixtures"
+    if not fixtures_dir.is_dir():
+        return
+    for path in sorted(fixtures_dir.rglob("*.json")):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            msg = f"{path}: invalid JSON: {exc}"
+            raise ContentError(msg) from exc
+        if not isinstance(raw, list):
+            msg = f"{path}: expected a JSON array of fixture objects."
+            raise ContentError(msg)
+        if not raw:
+            continue
+        key = str(path.relative_to(content_root))
+        result.fixtures[key] = raw
+        result.source_paths[key] = [path] * len(raw)
+
+
 def build_all(content_root: Path) -> BuildResult:
     """Walk known domains under ``content_root``; parse, validate, build.
 
-    Unknown directories are reference canon — ignored by design. Raises
-    ContentError (with every failing file listed) when validation fails.
+    Also scans ``content_root/fixtures/`` for raw Django fixture JSON files
+    (the lore repo's primary content format). Unknown directories are
+    reference canon — ignored by design. Raises ``ContentError`` (with every
+    failing file listed) when validation fails.
     """
     result = BuildResult()
     errors: list[str] = []
@@ -393,6 +435,11 @@ def build_all(content_root: Path) -> BuildResult:
         if objects:
             result.fixtures[config["output"]] = objects
             result.source_paths[config["output"]] = paths
+    # Raw fixture JSON from the lore repo's fixtures/ directory.
+    try:
+        build_fixture_json(content_root, result)
+    except ContentError as exc:
+        errors.append(str(exc))
     if errors:
         msg = "Content validation failed:\n" + "\n".join(errors)
         raise ContentError(msg)
@@ -436,11 +483,63 @@ def _resolve_natural_key_fields(model, fields: dict, source_path: Path | None) -
             )
             raise ContentError(msg)
         related_model = field.related_model
+        from django.core.exceptions import (  # noqa: PLC0415
+            ObjectDoesNotExist as _ObjectDoesNotExist,
+        )
+
         try:
             fields[field_name] = related_model.objects.get_by_natural_key(*value)
         except related_model.DoesNotExist:
             msg = f"{location}: {field_name!r} {related_model.__name__} {value!r} not found."
             raise ContentError(msg) from None
+        except _ObjectDoesNotExist as exc:
+            # A nested FK resolution (inside get_by_natural_key →
+            # _resolve_fk_arg) raises a DIFFERENT model's DoesNotExist —
+            # not related_model.DoesNotExist. Catch the base class to
+            # cover that case too.
+            msg = (
+                f"{location}: {field_name!r} {related_model.__name__} "
+                f"{value!r} not found (nested: {exc})."
+            )
+            raise ContentError(msg) from None
+
+
+def _extract_natural_key(model, fields: dict, source_path: Path | None) -> dict:
+    """Pop the natural-key fields from *fields* and return them as a lookup dict.
+
+    For models with ``NaturalKeyMixin``, pops each field listed in
+    ``NaturalKeyConfig.fields`` from *fields* (so they are NOT passed in
+    ``defaults`` to ``update_or_create`` — passing them would be a no-op on
+    UPDATE but would shadow the lookup on CREATE for auto-gen fields).
+
+    For models WITHOUT ``NaturalKeyMixin``, raises ``ContentError`` naming
+    the model and source file. The loader cannot upsert without a natural key
+    — ``loaddata``'s pk-based INSERT is the only other option, and that path
+    is unsafe for ``SharedMemoryModel`` (see ``load_entries`` docstring).
+    """
+    from core.natural_keys import NaturalKeyMixin  # noqa: PLC0415
+
+    if not issubclass(model, NaturalKeyMixin):
+        location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+        msg = (
+            f"{location}: model {model.__name__} lacks NaturalKeyMixin — "
+            "cannot upsert by natural key. Add NaturalKeyMixin to the model "
+            "or skip this fixture."
+        )
+        raise ContentError(msg)
+
+    config = model.NaturalKeyConfig
+    lookup: dict = {}
+    for field_name in config.fields:
+        if field_name not in fields:
+            location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+            msg = (
+                f"{location}: natural-key field {field_name!r} not found in "
+                f"fixture fields for {model.__name__}."
+            )
+            raise ContentError(msg)
+        lookup[field_name] = fields.pop(field_name)
+    return lookup
 
 
 def load_entries(result: BuildResult) -> tuple[int, int]:
@@ -454,10 +553,31 @@ def load_entries(result: BuildResult) -> tuple[int, int]:
     explicitly, which the identity map handles correctly. The emitted
     fixture JSON remains valid for FRESH-database seeding (pure inserts).
 
+    Handles two sources of objects in ``result.fixtures``:
+
+    - **YAML frontmatter entries** (built by the per-domain builders) — use
+      ``name`` as the natural key (every frontmatter domain's model has a
+      DB-unique ``name``).
+    - **Raw fixture JSON** (loaded by ``build_fixture_json``) — resolve the
+      natural key from the model's own ``NaturalKeyConfig.fields`` via
+      ``_extract_natural_key``, so models with composite keys (e.g.
+      ``ConditionStage`` keyed on ``condition`` + ``stage_order``) work too.
+
+    Both paths share the same ``_resolve_natural_key_fields`` pass for FK
+    natural-key-list values.
+
+    Stale model labels (referencing renamed/removed models) are skipped with
+    a warning written to ``result.skipped`` — the load does not fail, but the
+    skip is visible to the operator.
+
     Requires Django to be configured; imports are deferred so the module
     stays import-safe for pure validation.
     """
     from django.apps import apps  # noqa: PLC0415
+    from django.core.exceptions import FieldError  # noqa: PLC0415
+    from django.db import IntegrityError  # noqa: PLC0415
+
+    from core.natural_keys import NaturalKeyConfigError  # noqa: PLC0415
 
     created_count = 0
     updated_count = 0
@@ -465,11 +585,60 @@ def load_entries(result: BuildResult) -> tuple[int, int]:
         paths = result.source_paths.get(output_path, [])
         for obj, source_path in zip(objects, paths, strict=False):
             app_label, model_name = obj["model"].split(".")
-            model = apps.get_model(app_label, model_name)
+            try:
+                model = apps.get_model(app_label, model_name)
+            except LookupError:
+                result.skipped.append(
+                    f"{source_path}: stale model {obj['model']!r} (renamed or removed) — skipped."
+                )
+                continue
             fields = dict(obj["fields"])
-            name = fields.pop("name")
-            _resolve_natural_key_fields(model, fields, source_path)
-            _, created = model.objects.update_or_create(name=name, defaults=fields)
+            # Strip pk if present — upsert is by natural key, not pk.
+            fields.pop("pk", None)
+            try:
+                lookup = _extract_natural_key(model, fields, source_path)
+            except ContentError as exc:
+                result.skipped.append(str(exc))
+                continue
+            # Resolve natural-key-list FK values in both the lookup (the
+            # natural-key fields themselves) and the remaining defaults.
+            try:
+                _resolve_natural_key_fields(model, lookup, source_path)
+                _resolve_natural_key_fields(model, fields, source_path)
+                _, created = model.objects.update_or_create(**lookup, defaults=fields)
+            except (ValueError, TypeError) as exc:
+                # A FK value that is a raw integer (pk-based fixture) rather
+                # than a natural-key list causes a ValueError on assignment.
+                # These fixtures can't be upserted by natural key — skip.
+                result.skipped.append(
+                    f"{source_path}: {model.__name__} could not be loaded "
+                    f"(likely pk-based FK reference): {exc}"
+                )
+                continue
+            except (NaturalKeyConfigError, ContentError, FieldError) as exc:
+                # FK resolution failure or schema drift. ContentError covers
+                # the re-raised DoesNotExist from _resolve_natural_key_fields;
+                # NaturalKeyConfigError covers arity mismatches; FieldError
+                # covers fixture fields that no longer exist on the model.
+                result.skipped.append(f"{source_path}: {model.__name__} could not be loaded: {exc}")
+                continue
+            except model.DoesNotExist as exc:
+                # The model's own DoesNotExist — the natural-key lookup
+                # didn't find an existing row (shouldn't happen for
+                # update_or_create, but catch just in case).
+                result.skipped.append(
+                    f"{source_path}: {model.__name__} could not be loaded (lookup failed): {exc}"
+                )
+                continue
+            except IntegrityError as exc:
+                # DB constraint violation (e.g. a unique constraint on a
+                # non-natural-key field that the fixture data violates).
+                # The record can't be loaded — skip it.
+                result.skipped.append(
+                    f"{source_path}: {model.__name__} could not be loaded "
+                    f"(constraint violation): {exc}"
+                )
+                continue
             if created:
                 created_count += 1
             else:

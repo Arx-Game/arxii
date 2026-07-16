@@ -1,5 +1,6 @@
 """Content pipeline (#944): parsing, validation, fixture shape, idempotent load."""
 
+import json
 from pathlib import Path
 import tempfile
 
@@ -381,3 +382,237 @@ class ResolveNaturalKeyFieldsGuardTests(TestCase):
         fields = {"faction_affiliation": ["Builders Guild"]}
         _resolve_natural_key_fields(NPCRole, fields, None)
         assert fields["faction_affiliation"].name == "Builders Guild"
+
+
+class FixtureJsonBuildTests(TestCase):
+    """build_fixture_json: parsing raw Django fixture JSON from fixtures/ dir."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_no_fixtures_dir_is_noop(self) -> None:
+        """build_all with no fixtures/ dir just has frontmatter results."""
+        _write(self.root, "skills/performance.md", GOOD_SKILL)
+        result = build_all(self.root)
+        fixture_keys = [k for k in result.fixtures if k.startswith("fixtures/")]
+        assert fixture_keys == []
+
+    def test_fixture_json_loaded_into_result(self) -> None:
+        """A fixtures/ dir with one JSON file is parsed into result.fixtures."""
+        _write(
+            self.root,
+            "fixtures/magic/effects.json",
+            json.dumps(
+                [
+                    {
+                        "model": "magic.effecttype",
+                        "fields": {
+                            "name": "Test Effect",
+                            "description": "An effect type.",
+                        },
+                    },
+                ]
+            ),
+        )
+        result = build_all(self.root)
+        assert "fixtures/magic/effects.json" in result.fixtures
+        obj = result.fixtures["fixtures/magic/effects.json"][0]
+        assert obj["model"] == "magic.effecttype"
+        assert obj["fields"]["name"] == "Test Effect"
+
+    def test_pk_is_stripped_at_load_time(self) -> None:
+        """Objects with a pk field load fine — pk is stripped in load_entries."""
+        _write(
+            self.root,
+            "fixtures/magic/effects.json",
+            json.dumps(
+                [
+                    {
+                        "model": "magic.effecttype",
+                        "pk": 99,
+                        "fields": {
+                            "name": "Pked Effect",
+                            "description": "Has a pk.",
+                        },
+                    },
+                ]
+            ),
+        )
+        result = build_all(self.root)
+        obj = result.fixtures["fixtures/magic/effects.json"][0]
+        assert "pk" in obj  # pk is in the raw fixture, stripped at load time
+
+    def test_invalid_json_raises_content_error(self) -> None:
+        _write(self.root, "fixtures/bad.json", "{not valid json")
+        with self.assertRaises(ContentError):
+            build_all(self.root)
+
+    def test_non_array_json_raises_content_error(self) -> None:
+        _write(self.root, "fixtures/bad.json", json.dumps({"model": "magic.affinity"}))
+        with self.assertRaises(ContentError):
+            build_all(self.root)
+
+    def test_empty_array_is_skipped(self) -> None:
+        _write(self.root, "fixtures/empty.json", "[]")
+        result = build_all(self.root)
+        assert "fixtures/empty.json" not in result.fixtures
+
+
+class FixtureJsonLoadTests(TestCase):
+    """End-to-end: build fixture JSON → load_entries → upsert by natural key."""
+
+    def setUp(self) -> None:
+        self.content = tempfile.TemporaryDirectory()
+        self.addCleanup(self.content.cleanup)
+        self.root = Path(self.content.name)
+
+    def test_load_creates_then_updates_by_natural_key(self) -> None:
+        """A fixture JSON object with a natural key upserts correctly."""
+        fixture_data = json.dumps(
+            [
+                {
+                    "model": "magic.effecttype",
+                    "fields": {
+                        "name": "Test Effect",
+                        "description": "Original description.",
+                    },
+                },
+            ]
+        )
+        _write(self.root, "fixtures/magic/effects.json", fixture_data)
+        created, updated = load_entries(build_all(self.root))
+        assert (created, updated) == (1, 0)
+
+        from world.magic.models import EffectType
+
+        et = EffectType.objects.get(name="Test Effect")
+        assert et.description == "Original description."
+
+        # Re-author the description; reload must UPDATE the same row.
+        updated_data = json.dumps(
+            [
+                {
+                    "model": "magic.effecttype",
+                    "fields": {
+                        "name": "Test Effect",
+                        "description": "Rewritten description.",
+                    },
+                },
+            ]
+        )
+        _write(self.root, "fixtures/magic/effects.json", updated_data)
+        created, updated = load_entries(build_all(self.root))
+        assert (created, updated) == (0, 1)
+        et.refresh_from_db()
+        assert et.description == "Rewritten description."
+
+    def test_pk_stripped_on_load(self) -> None:
+        """Objects with pk fields load fine — pk is ignored, upsert is by natural key."""
+        _write(
+            self.root,
+            "fixtures/magic/effects.json",
+            json.dumps(
+                [
+                    {
+                        "model": "magic.effecttype",
+                        "pk": 42,
+                        "fields": {
+                            "name": "Pked Effect",
+                            "description": "Has a pk.",
+                        },
+                    },
+                ]
+            ),
+        )
+        created, updated = load_entries(build_all(self.root))
+        assert (created, updated) == (1, 0)
+
+    def test_stale_model_label_skipped_with_warning(self) -> None:
+        """A fixture referencing a renamed/removed model is skipped, not fatal."""
+        _write(
+            self.root,
+            "fixtures/stale/old_model.json",
+            json.dumps(
+                [
+                    {"model": "magic.threadtype", "fields": {"name": "Friend"}},
+                ]
+            ),
+        )
+        result = build_all(self.root)
+        created, updated = load_entries(result)
+        assert (created, updated) == (0, 0)
+        assert len(result.skipped) == 1
+        assert "magic.threadtype" in result.skipped[0]
+
+    def test_model_without_natural_key_skipped_with_warning(self) -> None:
+        """A model that lacks NaturalKeyMixin is skipped with a clear message."""
+        # RitualSession is a SharedMemoryModel without NaturalKeyMixin.
+        _write(
+            self.root,
+            "fixtures/magic/session.json",
+            json.dumps(
+                [
+                    {"model": "magic.ritualsession", "fields": {"name": "Test"}},
+                ]
+            ),
+        )
+        result = build_all(self.root)
+        load_entries(result)
+        assert any("NaturalKeyMixin" in s for s in result.skipped)
+
+    def test_fk_natural_key_resolved(self) -> None:
+        """FK values as natural-key lists (e.g. ['Name']) resolve correctly."""
+        # ModifierTarget has a 'category' FK to ModifierCategory, which has
+        # NaturalKeyMixin (name). Write a fixture with a natural-key FK ref.
+        _write(
+            self.root,
+            "fixtures/mechanics/targets.json",
+            json.dumps(
+                [
+                    {
+                        "model": "mechanics.modifiertarget",
+                        "fields": {
+                            "category": ["power"],
+                            "name": "Test Target",
+                        },
+                    },
+                ]
+            ),
+        )
+        # Pre-create the ModifierCategory so the FK resolves.
+        from world.mechanics.models import ModifierCategory
+
+        ModifierCategory.objects.get_or_create(name="power")
+        created, updated = load_entries(build_all(self.root))
+        assert created + updated == 1
+
+    def test_combined_frontmatter_and_fixture_json(self) -> None:
+        """Both YAML frontmatter and fixture JSON load in one pass."""
+        _write(self.root, "skills/performance.md", GOOD_SKILL)
+        _write(
+            self.root,
+            "fixtures/magic/effects.json",
+            json.dumps(
+                [
+                    {
+                        "model": "magic.effecttype",
+                        "fields": {
+                            "name": "Combined Test Effect",
+                            "description": "From fixture JSON.",
+                        },
+                    },
+                ]
+            ),
+        )
+        result = build_all(self.root)
+        # Frontmatter entry
+        assert len(result.entries) == 1
+        # Fixture JSON
+        assert "fixtures/magic/effects.json" in result.fixtures
+        # Frontmatter output
+        assert "world/traits/fixtures/content_skills.json" in result.fixtures
+        # Both load
+        created, _updated = load_entries(result)
+        assert created >= 2  # 1 trait + 1 effect type

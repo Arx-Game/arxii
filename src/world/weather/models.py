@@ -136,7 +136,7 @@ class WeatherType(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class WeatherTypeExposure(SharedMemoryModel):
+class WeatherTypeExposure(NaturalKeyMixin, SharedMemoryModel):
     """One exposure axis a weather type imparts to a region while active (#1522).
 
     ``(weather_type, stat_key) -> value``: positive = more discomfort (Stormy → +WET, +WIND;
@@ -164,11 +164,16 @@ class WeatherTypeExposure(SharedMemoryModel):
             ),
         ]
 
+    class NaturalKeyConfig:
+        fields = ["weather_type", "stat_key"]
+
+    objects = NaturalKeyManager()
+
     def __str__(self) -> str:
         return f"{self.weather_type.name}: {self.stat_key} {self.value:+d}"
 
 
-class WeatherEmit(SharedMemoryModel):
+class WeatherEmit(NaturalKeyMixin, SharedMemoryModel):
     """An atmospheric flavour line shown while a weather type holds (#1522).
 
     Seeded (later slice) from the Arx-1 emit corpus. Gated by IC season and time-of-day phase
@@ -201,6 +206,11 @@ class WeatherEmit(SharedMemoryModel):
 
     class Meta:
         ordering = ["weather_type", "id"]
+
+    class NaturalKeyConfig:
+        fields = ["weather_type", "text"]
+
+    objects = NaturalKeyManager()
 
     def __str__(self) -> str:
         return f"{self.weather_type.name} emit #{self.pk}"
@@ -237,7 +247,7 @@ class RegionWeatherState(SharedMemoryModel):
         return f"{self.area.name}: {self.weather_type.name}"
 
 
-class FeastDay(SharedMemoryModel):
+class FeastDay(NaturalKeyMixin, SharedMemoryModel):
     """An annually-recurring IC date that forces a special weather over the world (#1522).
 
     The automation behind "spooky things on feast days" (Eclipse of Mirrors, Moon Madness):
@@ -265,6 +275,11 @@ class FeastDay(SharedMemoryModel):
         constraints = [
             models.UniqueConstraint(fields=["ic_month", "ic_day"], name="unique_feast_day_date"),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    objects = NaturalKeyManager()
 
     def __str__(self) -> str:
         return f"{self.name} ({self.ic_month:02d}-{self.ic_day:02d}): {self.weather_type.name}"

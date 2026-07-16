@@ -369,7 +369,9 @@ clean-pyc:
 #   just gen-api-types
 # Build fixtures from the private content checkout, then load them.
 # Requires CONTENT_REPO_PATH in src/.env (the content repo is never named here).
+# If CONTENT_REPO_URL is also set and the checkout doesn't exist, clones it first.
 load-content:
+    bash tools/ensure_content_repo.sh
     uv run python tools/build_content_fixtures.py --load
 
 # Validate content files + report remaining PLACEHOLDER slots; writes nothing.

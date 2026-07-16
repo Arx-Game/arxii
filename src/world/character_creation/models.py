@@ -440,7 +440,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         return Language.objects.filter(id__in=language_ids)
 
 
-class BeginningTradition(SharedMemoryModel):
+class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
     """Maps which traditions are available for each beginning during CG.
     CG-only concern -- traditions exist independently post-CG."""
 
@@ -472,6 +472,11 @@ class BeginningTradition(SharedMemoryModel):
         ordering = ["sort_order"]
         verbose_name = "Beginning Tradition"
         verbose_name_plural = "Beginning Traditions"
+
+    class NaturalKeyConfig:
+        fields = ["beginning", "tradition"]
+
+    objects = NaturalKeyManager()
 
     def __str__(self) -> str:
         return f"{self.beginning} -> {self.tradition}"

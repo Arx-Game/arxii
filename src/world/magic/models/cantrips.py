@@ -10,11 +10,12 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import CantripArchetype
 from world.magic.models.techniques import EffectType, TechniqueStyle
 
 
-class Cantrip(SharedMemoryModel):
+class Cantrip(NaturalKeyMixin, SharedMemoryModel):
     """Staff-curated starter technique template for character creation.
 
     A cantrip is a baby technique — same mechanical system, just preset at low values.
@@ -80,6 +81,11 @@ class Cantrip(SharedMemoryModel):
         ordering = ["sort_order", "name"]
         verbose_name = "Cantrip"
         verbose_name_plural = "Cantrips"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    objects = NaturalKeyManager()
 
     @cached_property
     def cached_allowed_facets(self) -> list:
