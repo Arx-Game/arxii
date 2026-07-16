@@ -16,7 +16,12 @@ export function apiFetch(url: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers);
 
   if (method !== 'GET') {
-    headers.set('Content-Type', 'application/json');
+    // A FormData body must NOT be labeled application/json — fetch derives the
+    // correct multipart Content-Type (with boundary) only when none is set.
+    // Forcing JSON here made every multipart upload a guaranteed DRF 400.
+    if (!(options.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json');
+    }
     headers.set('X-CSRFToken', getCSRFToken());
   }
 

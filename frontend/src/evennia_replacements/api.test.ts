@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { postLogin } from './api';
+import { apiFetch, postLogin } from './api';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -9,6 +9,27 @@ globalThis.fetch = mockFetch;
 vi.mock('@/lib/utils', () => ({
   getCookie: vi.fn().mockReturnValue('mock-csrf-token'),
 }));
+
+describe('apiFetch content-type handling (2026-07 audit)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockFetch.mockResolvedValue({ ok: true });
+  });
+
+  it('labels JSON bodies application/json', async () => {
+    await apiFetch('/api/x/', { method: 'POST', body: JSON.stringify({ a: 1 }) });
+    const headers = mockFetch.mock.calls[0][1].headers as Headers;
+    expect(headers.get('Content-Type')).toBe('application/json');
+  });
+
+  it('never sets Content-Type on a FormData body (fetch supplies the multipart boundary)', async () => {
+    const form = new FormData();
+    form.append('image_file', new Blob(['x']), 'x.png');
+    await apiFetch('/api/roster/media/', { method: 'POST', body: form });
+    const headers = mockFetch.mock.calls[0][1].headers as Headers;
+    expect(headers.get('Content-Type')).toBeNull();
+  });
+});
 
 describe('postLogin', () => {
   beforeEach(() => {
