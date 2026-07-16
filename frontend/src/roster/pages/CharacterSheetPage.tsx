@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReputationTab } from '@/reputation/components/ReputationTab';
 import { VitalsPanel } from '@/vitals/components/VitalsPanel';
 import { FriendButton } from '@/friends/components/FriendButton';
+import { RivalButton } from '@/friends/components/RivalButton';
 import { FriendsTab } from '@/friends/components/FriendsTab';
 import { GossipPanel } from '@/secrets/components/GossipPanel';
 import { SecretsTab } from '@/secrets/components/SecretsTab';
@@ -95,6 +96,14 @@ export function CharacterSheetPage() {
         {/* Friend this character — an OOC trusted-partner designation (#1727), only on others' sheets. */}
         {!isMyCharacter && (
           <FriendButton
+            viewerEntryId={viewerEntryId}
+            targetEntryId={entryId}
+            targetName={entry.character.name}
+          />
+        )}
+        {/* Declare an IC rival — the antagonism-consent counterpart (#2170), double opt-in. */}
+        {!isMyCharacter && (
+          <RivalButton
             viewerEntryId={viewerEntryId}
             targetEntryId={entryId}
             targetName={entry.character.name}

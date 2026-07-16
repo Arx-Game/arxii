@@ -58,7 +58,11 @@ them; the reverse direction does not.
 actor must have declared the other a rival. Double opt-in by design (unlike one-directional
 friendship): the mode lets a character open an antagonism category to the people they have an
 IC rivalry with, and no one is dragged into that category one-sidedly. Telnet:
-`rival`/`unrival`/`rivals` (`commands/social/rivals.py`).
+`rival`/`unrival`/`rivals` (`commands/social/rivals.py`). Web: `RivalryViewSet`
+(`/api/scenes/rivals/` — list/declare/withdraw, `world/scenes/friend_views.py`; the list
+annotates `is_mutual`), surfaced as the `RivalButton`
+(`frontend/src/friends/components/RivalButton.tsx`) on another character's sheet page and
+card drawer, next to the `FriendButton`.
 
 **ActionTemplate link:** `ActionTemplate.consent_category` (nullable FK → `SocialConsentCategory`,
 `on_delete=SET_NULL`) tags each social template with its category. Uncategorized templates

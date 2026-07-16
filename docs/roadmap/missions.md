@@ -66,6 +66,10 @@ Missions are branching narrative quest chains — the primary way characters int
   in the chain (Legend-Risk Floor, ADR-0107) — each T(n+1) gated on T(n) via the ordinary
   `has_completed_mission` predicate leaf. Journey-level acceptance test:
   `src/integration_tests/pipeline/test_tutorial_chain_e2e.py`.
+  A tutor-offered **"Terms of Engagement"** side-step (gated on T1, parallel to the T2..T7
+  spine — re-gates nothing, #2170) walks the new player to the antagonism-consent tree
+  (web Settings → Privacy / telnet `consent modes`) so the Friends+whitelist default is a
+  chosen, understood starting point (PLACEHOLDER copy).
   Two real pre-existing bugs the tutorial's live-play journey surfaced and fixed in-branch
   (Fold In, Don't File): (1) trigger-giver and board-giver grants
   (`trigger_dispatch._dispatch_from_giver`, `boards.take_from_board`) resolved the acting
