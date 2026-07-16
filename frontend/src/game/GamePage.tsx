@@ -291,6 +291,15 @@ export function GamePage() {
     threadingResetForNewScene();
   }, [active, sceneId, threadingResetForNewScene]);
 
+  // The stored composer mode is context-bound the same way tabs are (2026-07
+  // audit): a whisper mode set as character A survived switching to character
+  // B (whose activeThreadTab is null, so effectiveComposerMode fell through
+  // to the stored mode) — typing Enter then whispered A's target AS B. Reset
+  // it on the same [active, sceneId] pair every other context reset uses.
+  useEffect(() => {
+    setComposerMode(undefined);
+  }, [active, sceneId]);
+
   // Continuously mark the ACTIVE TAB's thread seen as its interactions grow —
   // this is the thread the player is actively viewing (the room anchor when
   // no tab is active), so it never accumulates unread. Unselected threads are

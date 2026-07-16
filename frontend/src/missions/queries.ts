@@ -359,6 +359,10 @@ export function useBeat(
     queryKey: missionKeys.beat(instanceId ?? 0, roomKey),
     queryFn: () => getBeat(instanceId as number),
     enabled: instanceId !== undefined,
+    // Liveness (2026-07 audit): a beat can be resolved by another participant
+    // or fast-forwarded by an external act — nothing pushes that, so poll
+    // while the card is mounted.
+    refetchInterval: 10_000,
   });
 }
 
@@ -403,6 +407,11 @@ export function useGroupBeat(
     queryKey: missionKeys.groupBeat(instanceId ?? 0, roomKey),
     queryFn: () => getGroupBeat(instanceId as number),
     enabled: instanceId !== undefined,
+    // Liveness (2026-07 audit): group ballots are inherently multiplayer —
+    // without a poll, participant B never saw A's vote land, and the
+    // "waiting for the server to resolve" countdown state waited forever
+    // (only a tab refocus ever refetched). 5s matches the rituals inbox.
+    refetchInterval: 5_000,
   });
 }
 

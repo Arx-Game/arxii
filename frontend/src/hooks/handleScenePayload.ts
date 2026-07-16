@@ -1,6 +1,6 @@
 import type { ScenePayload } from './types';
 import type { AppDispatch } from '@/store/store';
-import { clearSceneInteractions, setSessionScene } from '@/store/gameSlice';
+import { setSessionScene } from '@/store/gameSlice';
 import type { MyRosterEntry } from '@/roster/types';
 
 export function handleScenePayload(
@@ -9,8 +9,7 @@ export function handleScenePayload(
   dispatch: AppDispatch
 ) {
   const scene = payload.action === 'end' ? null : payload.scene;
+  // Scene end = scene -> null = an id change, so setSessionScene's guarded
+  // transition reset clears the WS buffer; no separate dispatch needed.
   dispatch(setSessionScene({ character, scene }));
-  if (payload.action === 'end') {
-    dispatch(clearSceneInteractions(character));
-  }
 }

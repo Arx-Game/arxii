@@ -35,8 +35,28 @@ import type { MyRosterEntry } from '@/roster/types';
 import { getWebSocketUrl } from '@/config';
 import { toast } from 'sonner';
 import { fetchAccount } from '@/evennia_replacements/api';
+import { queryClient } from '@/queryClient';
 
 const sockets: Record<string, WebSocket> = {};
+// Names with a connect() in flight (pre-socket-creation await window) — the
+// synchronous guard that prevents two near-simultaneous connects from each
+// opening a socket and leaking the first (2026-07 audit).
+const connecting = new Set<string>();
+// Per-character reconnect bookkeeping (2026-07 audit): an abnormal close used
+// to just mark the session disconnected and stop — a network blip silently
+// froze the feed until the user manually re-clicked their character tab.
+const reconnectAttempts: Record<string, number> = {};
+const reconnectTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+const MAX_RECONNECT_ATTEMPTS = 6;
+
+function clearReconnect(character: string) {
+  reconnectAttempts[character] = 0;
+  const timer = reconnectTimers[character];
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    delete reconnectTimers[character];
+  }
+}
 
 export function useGameSocket() {
   const dispatch = useAppDispatch();
@@ -44,12 +64,16 @@ export function useGameSocket() {
   const navigate = useNavigate();
 
   const disconnectAll = useCallback(() => {
+    // Explicit disconnect: cancel any pending reconnects first so a closing
+    // socket doesn't immediately resurrect itself.
+    Object.keys(reconnectTimers).forEach(clearReconnect);
     Object.values(sockets).forEach((socket) => socket.close());
   }, []);
 
   const connect = useCallback(
     async (character: MyRosterEntry['name']) => {
-      if (sockets[character]) return;
+      if (sockets[character] || connecting.has(character)) return;
+      connecting.add(character);
 
       let currentAccount = account;
       if (!currentAccount) {
@@ -58,10 +82,12 @@ export function useGameSocket() {
           if (currentAccount) {
             dispatch(setAccount(currentAccount));
           } else {
+            connecting.delete(character);
             navigate('/login');
             return;
           }
         } catch {
+          connecting.delete(character);
           navigate('/login');
           return;
         }
@@ -71,23 +97,41 @@ export function useGameSocket() {
       const url = getWebSocketUrl(window.location);
       const socket = new WebSocket(url);
       sockets[character] = socket;
+      connecting.delete(character);
 
       socket.addEventListener('open', () => {
+        clearReconnect(character);
         dispatch(setSessionConnectionStatus({ character, status: true }));
         const puppet: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [`@ic ${character}`], {}];
         socket.send(JSON.stringify(puppet));
+        // Backfill anything that arrived while no socket was listening: the
+        // REST feed is the source of record and may still be "fresh" for up
+        // to staleTime, so force it stale on every (re)connect.
+        queryClient.invalidateQueries({ queryKey: ['scene-interactions'] }).catch(() => {});
       });
 
       socket.addEventListener('close', (event) => {
         dispatch(setSessionConnectionStatus({ character, status: false }));
         delete sockets[character];
         if (event.code === 1000) {
+          clearReconnect(character);
           // Only reset game state if this was the last active connection
           const remainingConnections = Object.keys(sockets).length;
           if (remainingConnections === 0) {
             dispatch(resetGame());
           }
+          return;
         }
+        // Abnormal close: reconnect with capped exponential backoff
+        // (1s, 2s, 4s, ... 30s). The open handler re-puppets and backfills.
+        const attempt = (reconnectAttempts[character] ?? 0) + 1;
+        if (attempt > MAX_RECONNECT_ATTEMPTS) return;
+        reconnectAttempts[character] = attempt;
+        const delay = Math.min(1000 * 2 ** (attempt - 1), 30_000);
+        reconnectTimers[character] = setTimeout(() => {
+          delete reconnectTimers[character];
+          connect(character).catch(() => {});
+        }, delay);
       });
 
       socket.addEventListener('message', (event) => {
@@ -173,6 +217,14 @@ export function useGameSocket() {
           // Control message: COMMANDS
           if (msgType === WS_MESSAGE_TYPE.COMMANDS) {
             handleCommandPayload(character, args as CommandSpec[]);
+            return;
+          }
+
+          // Broadcast to every account session on each successful puppet —
+          // nothing to do client-side (the open handler already re-puppets),
+          // but without this branch the frame fell through to parseGameMessage
+          // and rendered as raw JSON noise in the system lane (2026-07 audit).
+          if (msgType === WS_MESSAGE_TYPE.PUPPET_CHANGED) {
             return;
           }
 
