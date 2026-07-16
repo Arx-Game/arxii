@@ -5,6 +5,7 @@ import { useTenureGalleriesQuery, useUploadPlayerMedia, useAssociateMedia } from
 import MyTenureSelect from '@/components/MyTenureSelect';
 import { SubmitButton } from '@/components/SubmitButton';
 import type { Option } from '@/shared/types';
+import { extractErrorMessage } from '@/lib/errors';
 
 interface UploadFormValues {
   image_file: FileList;
@@ -45,18 +46,28 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
     setPreview(null);
   }, [fileList]);
 
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const onSubmit = async (data: UploadFormValues) => {
+    setSubmitError(null);
     const formData = new FormData();
     formData.append('image_file', data.image_file[0]);
     if (data.title) formData.append('title', data.title);
     if (data.description) formData.append('description', data.description);
-    const result = await uploadMutation.mutateAsync(formData);
-    if (data.tenure) {
-      await associateMutation.mutateAsync({
-        mediaId: result.id,
-        tenureId: data.tenure,
-        galleryId: data.gallery?.value,
-      });
+    try {
+      const result = await uploadMutation.mutateAsync(formData);
+      if (data.tenure) {
+        await associateMutation.mutateAsync({
+          mediaId: result.id,
+          tenureId: data.tenure,
+          galleryId: data.gallery?.value,
+        });
+      }
+    } catch (err) {
+      // Without this catch the rejection escaped handleSubmit unhandled —
+      // a failed upload gave the user zero feedback.
+      setSubmitError(extractErrorMessage(err, 'Upload failed.'));
+      return;
     }
     reset();
     onUploadComplete?.();
@@ -105,6 +116,7 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
             )}
           />
         )}
+        {submitError && <p className="text-sm text-destructive">{submitError}</p>}
         <SubmitButton
           className="rounded bg-blue-500 px-2 py-1 text-white"
           isLoading={uploadMutation.isPending || associateMutation.isPending}

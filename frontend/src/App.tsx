@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { GuestOnlyRoute } from './components/GuestOnlyRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RequireCharacter } from './components/RequireCharacter';
@@ -301,717 +302,733 @@ export function CombatRouteRedirect() {
 function App() {
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route
-          path="/login"
-          element={
-            <GuestOnlyRoute>
-              <LoginPage />
-            </GuestOnlyRoute>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <GuestOnlyRoute>
-              <RegisterPage />
-            </GuestOnlyRoute>
-          }
-        />
-        <Route path="/register/verify-email" element={<EmailVerificationPendingPage />} />
-        <Route path="/verify-email/:key" element={<EmailVerifyPage />} />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
-        <Route path="/account/unverified" element={<UnverifiedAccountPage />} />
-        <Route path="/how-to-start" element={<HowToStartPage />} />
-        <Route path="/profile/*" element={<ProfilePage />}>
-          <Route path="mail" element={<MailPage />} />
-          <Route path="media" element={<PlayerMediaPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+      {/* Route-level boundary (2026-07 audit): ~130 queries use throwOnError
+          with only main.tsx's root boundary above the Layout — one transient
+          failure on any unwrapped page replaced the ENTIRE app (nav included)
+          with the fallback. Catching inside Layout keeps the chrome alive;
+          the root boundary remains the last resort. */}
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
           <Route
-            path="privacy"
+            path="/login"
             element={
-              <Suspense fallback={<PageLoadingFallback />}>
-                <PrivacyPage />
-              </Suspense>
+              <GuestOnlyRoute>
+                <LoginPage />
+              </GuestOnlyRoute>
             }
           />
           <Route
-            path="boundaries"
+            path="/register"
             element={
-              <Suspense fallback={<PageLoadingFallback />}>
-                <BoundariesPage />
-              </Suspense>
+              <GuestOnlyRoute>
+                <RegisterPage />
+              </GuestOnlyRoute>
             }
           />
-          <Route path="blocks" element={<BlocksSettingsPage />} />
-          <Route path="mutes" element={<MutesSettingsPage />} />
-          <Route index element={<Navigate to="mail" replace />} />
-        </Route>
-        <Route path="/roster" element={<RosterListPage />} />
-        <Route path="/characters/create" element={<CharacterCreationPage />} />
-        <Route path="/characters/:id" element={<CharacterSheetPage />} />
-        <Route path="/missions/journal" element={<JournalPage />} />
-        <Route
-          path="/journals"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
+          <Route path="/register/verify-email" element={<EmailVerificationPendingPage />} />
+          <Route path="/verify-email/:key" element={<EmailVerifyPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/account/unverified" element={<UnverifiedAccountPage />} />
+          <Route path="/how-to-start" element={<HowToStartPage />} />
+          {/* Guarded (2026-07 audit): unauthenticated visits fired the subtree's
+            account-scoped queries straight into 403s. */}
+          <Route
+            path="/profile/*"
+            element={
               <ProtectedRoute>
-                <JournalsPage />
+                <ProfilePage />
               </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route path="/tidings" element={<TidingsPage />} />
-        <Route path="/scenes" element={<ScenesListPage />} />
-        <Route path="/scenes/:id" element={<SceneDetailPage />} />
-        <Route path="/scenes/:id/combat" element={<CombatRouteRedirect />} />
-        <Route path="/scenes/:id/battle" element={<BattleMapPage />} />
-        <Route path="/battles/:id" element={<BattleWriteupPage />} />
-        <Route path="/events" element={<EventsListPage />} />
-        <Route
-          path="/events/new"
-          element={
-            <ProtectedRoute>
-              <EventCreatePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/events/:id/edit"
-          element={
-            <ProtectedRoute>
-              <EventEditPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/events/:id" element={<EventDetailPage />} />
-        <Route
-          path="/xp-kudos"
-          element={
-            <ProtectedRoute>
-              <RequireCharacter>
-                <XpKudosPage />
-              </RequireCharacter>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/feedback"
-          element={
-            <ProtectedRoute>
-              <FeedbackPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/bug-report"
-          element={
-            <ProtectedRoute>
-              <BugReportPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/report-player"
-          element={
-            <ProtectedRoute>
-              <PlayerReportPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/game" element={<GamePage />} />
-        <Route path="/codex" element={<CodexPage />} />
-        <Route
-          path="/market"
-          element={
-            <ProtectedRoute>
-              <MarketPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/wardrobe"
-          element={
-            <ProtectedRoute>
-              <WardrobePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/staff"
-          element={
-            <StaffRoute>
-              <StaffHubPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/inbox"
-          element={
-            <StaffRoute>
-              <StaffInboxPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/missions"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <MissionBrowserPage />
+            }
+          >
+            <Route path="mail" element={<MailPage />} />
+            <Route path="media" element={<PlayerMediaPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route
+              path="privacy"
+              element={
+                <Suspense fallback={<PageLoadingFallback />}>
+                  <PrivacyPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="boundaries"
+              element={
+                <Suspense fallback={<PageLoadingFallback />}>
+                  <BoundariesPage />
+                </Suspense>
+              }
+            />
+            <Route path="blocks" element={<BlocksSettingsPage />} />
+            <Route path="mutes" element={<MutesSettingsPage />} />
+            <Route index element={<Navigate to="mail" replace />} />
+          </Route>
+          <Route path="/roster" element={<RosterListPage />} />
+          <Route path="/characters/create" element={<CharacterCreationPage />} />
+          <Route path="/characters/:id" element={<CharacterSheetPage />} />
+          <Route path="/missions/journal" element={<JournalPage />} />
+          <Route
+            path="/journals"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <JournalsPage />
+                </ProtectedRoute>
               </Suspense>
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/missions/new"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <CreateMissionPage />
-              </Suspense>
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/missions/:id/canvas"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <MissionCanvasPage />
-              </Suspense>
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/missions/:id/nodes/:nodeId"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <MissionNodePage />
-              </Suspense>
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/missions/:id/nodes/:nodeId/options/:optionId"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <MissionOptionPage />
-              </Suspense>
-            </StaffRoute>
-          }
-        />
-        {/* NPC-mediated giver editor lives on the npc-services framework
+            }
+          />
+          <Route path="/tidings" element={<TidingsPage />} />
+          <Route path="/scenes" element={<ScenesListPage />} />
+          <Route path="/scenes/:id" element={<SceneDetailPage />} />
+          <Route path="/scenes/:id/combat" element={<CombatRouteRedirect />} />
+          <Route path="/scenes/:id/battle" element={<BattleMapPage />} />
+          <Route path="/battles/:id" element={<BattleWriteupPage />} />
+          <Route path="/events" element={<EventsListPage />} />
+          <Route
+            path="/events/new"
+            element={
+              <ProtectedRoute>
+                <EventCreatePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/events/:id/edit"
+            element={
+              <ProtectedRoute>
+                <EventEditPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/events/:id" element={<EventDetailPage />} />
+          <Route
+            path="/xp-kudos"
+            element={
+              <ProtectedRoute>
+                <RequireCharacter>
+                  <XpKudosPage />
+                </RequireCharacter>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/feedback"
+            element={
+              <ProtectedRoute>
+                <FeedbackPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/bug-report"
+            element={
+              <ProtectedRoute>
+                <BugReportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/report-player"
+            element={
+              <ProtectedRoute>
+                <PlayerReportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/game" element={<GamePage />} />
+          <Route path="/codex" element={<CodexPage />} />
+          <Route
+            path="/market"
+            element={
+              <ProtectedRoute>
+                <MarketPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/wardrobe"
+            element={
+              <ProtectedRoute>
+                <WardrobePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/staff"
+            element={
+              <StaffRoute>
+                <StaffHubPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/inbox"
+            element={
+              <StaffRoute>
+                <StaffInboxPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/missions"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionBrowserPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/missions/new"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <CreateMissionPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/missions/:id/canvas"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionCanvasPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/missions/:id/nodes/:nodeId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionNodePage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/missions/:id/nodes/:nodeId/options/:optionId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionOptionPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          {/* NPC-mediated giver editor lives on the npc-services framework
             (NPCRole + NPCServiceOffer) per #686/#728; trigger-based givers
             (ROOM_TRIGGER + ENVIRONMENTAL_DETAIL) get their own editor — #729. */}
-        <Route
-          path="/staff/npc-services/roles"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <NPCRolesLibraryPage />
-              </Suspense>
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/npc-services/roles/:id"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <NPCRoleEditorPage />
-              </Suspense>
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/missions/givers"
-          element={
-            <StaffRoute>
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                <TriggerGiversPage />
-              </Suspense>
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/applications"
-          element={
-            <StaffRoute>
-              <StaffApplicationsPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/applications/:id"
-          element={
-            <StaffRoute>
-              <StaffApplicationDetailPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/feedback"
-          element={
-            <StaffRoute>
-              <StaffFeedbackPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/feedback/:id"
-          element={
-            <StaffRoute>
-              <StaffFeedbackDetailPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/bug-reports"
-          element={
-            <StaffRoute>
-              <StaffBugReportsPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/bug-reports/:id"
-          element={
-            <StaffRoute>
-              <StaffBugReportDetailPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/player-reports"
-          element={
-            <StaffRoute>
-              <StaffPlayerReportsPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/player-reports/:id"
-          element={
-            <StaffRoute>
-              <StaffPlayerReportDetailPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/system-errors"
-          element={
-            <StaffRoute>
-              <StaffSystemErrorsPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/system-errors/:id"
-          element={
-            <StaffRoute>
-              <StaffSystemErrorDetailPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/gm-applications"
-          element={
-            <StaffRoute>
-              <StaffGMApplicationsPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/gm-applications/:id"
-          element={
-            <StaffRoute>
-              <StaffGMApplicationDetailPage />
-            </StaffRoute>
-          }
-        />
-        <Route
-          path="/staff/accounts/:id/history"
-          element={
-            <StaffRoute>
-              <StaffAccountHistoryPage />
-            </StaffRoute>
-          }
-        />
-        <Route path="/characters/create/application" element={<CharacterCreationPage />} />
-
-        {/* ------------------------------------------------------------------ */}
-        {/* Stories (Phase 4) — lazy-loaded, route-level code splitting         */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/stories"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <Navigate to="my-active" replace />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/my-active"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <MyActiveStoriesPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/gm-queue"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <GMQueuePage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/gm/dashboard"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <GMDashboardPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/agm-opportunities"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <AGMOpportunitiesPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/my-claims"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <MyAGMClaimsPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/staff-workload"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
+          <Route
+            path="/staff/npc-services/roles"
+            element={
               <StaffRoute>
-                <StaffWorkloadPage />
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <NPCRolesLibraryPage />
+                </Suspense>
               </StaffRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/author"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <StoryAuthorPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/author/:storyId"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <StoryAuthorPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        {/* /stories/:id must come after the named /stories/* paths */}
-        <Route
-          path="/stories/:id"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <StoryDetailPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-
-        {/* ------------------------------------------------------------------ */}
-        {/* Phase 5 — tables, era admin, browse stories, mute settings, offers  */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/tables"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <TablesListPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/tables/:id"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <TableDetailPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/eras"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
+            }
+          />
+          <Route
+            path="/staff/npc-services/roles/:id"
+            element={
               <StaffRoute>
-                <EraAdminPage />
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <NPCRoleEditorPage />
+                </Suspense>
               </StaffRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/browse"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <BrowseStoriesPage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/stories/my-offers"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <MyStoryOffersPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/crossover/inbox"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <CrossoverInboxPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/narrative/mute-settings"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <MuteSettingsPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
+            }
+          />
+          <Route
+            path="/staff/missions/givers"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <TriggerGiversPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/applications"
+            element={
+              <StaffRoute>
+                <StaffApplicationsPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/applications/:id"
+            element={
+              <StaffRoute>
+                <StaffApplicationDetailPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/feedback"
+            element={
+              <StaffRoute>
+                <StaffFeedbackPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/feedback/:id"
+            element={
+              <StaffRoute>
+                <StaffFeedbackDetailPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/bug-reports"
+            element={
+              <StaffRoute>
+                <StaffBugReportsPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/bug-reports/:id"
+            element={
+              <StaffRoute>
+                <StaffBugReportDetailPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/player-reports"
+            element={
+              <StaffRoute>
+                <StaffPlayerReportsPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/player-reports/:id"
+            element={
+              <StaffRoute>
+                <StaffPlayerReportDetailPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/system-errors"
+            element={
+              <StaffRoute>
+                <StaffSystemErrorsPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/system-errors/:id"
+            element={
+              <StaffRoute>
+                <StaffSystemErrorDetailPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/gm-applications"
+            element={
+              <StaffRoute>
+                <StaffGMApplicationsPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/gm-applications/:id"
+            element={
+              <StaffRoute>
+                <StaffGMApplicationDetailPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/accounts/:id/history"
+            element={
+              <StaffRoute>
+                <StaffAccountHistoryPage />
+              </StaffRoute>
+            }
+          />
+          <Route path="/characters/create/application" element={<CharacterCreationPage />} />
 
-        {/* ------------------------------------------------------------------ */}
-        {/* Rituals                                                              */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/rituals"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <RitualsListPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/rituals/sessions/inbox"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <RitualSessionInboxPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/rituals/sessions/:id"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <RitualSessionDetailPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
+          {/* ------------------------------------------------------------------ */}
+          {/* Stories (Phase 4) — lazy-loaded, route-level code splitting         */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/stories"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <Navigate to="my-active" replace />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/my-active"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <MyActiveStoriesPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/gm-queue"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <GMQueuePage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/gm/dashboard"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <GMDashboardPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/agm-opportunities"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <AGMOpportunitiesPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/my-claims"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <MyAGMClaimsPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/staff-workload"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <StaffRoute>
+                  <StaffWorkloadPage />
+                </StaffRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/author"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <StoryAuthorPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/author/:storyId"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <StoryAuthorPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          {/* /stories/:id must come after the named /stories/* paths */}
+          <Route
+            path="/stories/:id"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <StoryDetailPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
 
-        {/* ------------------------------------------------------------------ */}
-        {/* Covenants (Slice B Phase 9)                                         */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/covenants"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <CovenantsListPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/covenants/:id"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <CovenantDetailPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
+          {/* ------------------------------------------------------------------ */}
+          {/* Phase 5 — tables, era admin, browse stories, mute settings, offers  */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/tables"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <TablesListPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/tables/:id"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <TableDetailPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/eras"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <StaffRoute>
+                  <EraAdminPage />
+                </StaffRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/browse"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <BrowseStoriesPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stories/my-offers"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <MyStoryOffersPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/crossover/inbox"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <CrossoverInboxPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/narrative/mute-settings"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <MuteSettingsPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
 
-        {/* ------------------------------------------------------------------ */}
-        {/* Org stub page — click-through destination (#1446, seeds #1884)     */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/orgs/:id"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <OrgPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
+          {/* ------------------------------------------------------------------ */}
+          {/* Rituals                                                              */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/rituals"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <RitualsListPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/rituals/sessions/inbox"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <RitualSessionInboxPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/rituals/sessions/:id"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <RitualSessionDetailPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
 
-        {/* ------------------------------------------------------------------ */}
-        {/* Org books — the family-books / management screen (#930)            */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/books"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <BooksShelfPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/books/:orgId"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <OrgBooksPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
+          {/* ------------------------------------------------------------------ */}
+          {/* Covenants (Slice B Phase 9)                                         */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/covenants"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <CovenantsListPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/covenants/:id"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <CovenantDetailPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
 
-        {/* ------------------------------------------------------------------ */}
-        {/* Thread Hub + Thread Detail                                          */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/threads"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <RequireCharacter>
-                  <ThreadHubPage />
-                </RequireCharacter>
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/threads/teaching"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <RequireCharacter>
-                  <WeavingTeachingOffersPage />
-                </RequireCharacter>
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/threads/:id"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <RequireCharacter>
-                  <ThreadDetailPage />
-                </RequireCharacter>
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/sanctums"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <RequireCharacter>
-                  <SanctumDashboardPage />
-                </RequireCharacter>
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
+          {/* ------------------------------------------------------------------ */}
+          {/* Org stub page — click-through destination (#1446, seeds #1884)     */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/orgs/:id"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <OrgPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
 
-        {/* ------------------------------------------------------------------ */}
-        {/* Technique builder                                                   */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/techniques/build"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <TechniqueBuilderPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
+          {/* ------------------------------------------------------------------ */}
+          {/* Org books — the family-books / management screen (#930)            */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/books"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <BooksShelfPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/books/:orgId"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <OrgBooksPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
 
-        {/* ------------------------------------------------------------------ */}
-        {/* Magic progression dashboard (#536)                                 */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/magic/progression"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <RequireCharacter>
-                  <MagicProgressionPage />
-                </RequireCharacter>
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
+          {/* ------------------------------------------------------------------ */}
+          {/* Thread Hub + Thread Detail                                          */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/threads"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <RequireCharacter>
+                    <ThreadHubPage />
+                  </RequireCharacter>
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/threads/teaching"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <RequireCharacter>
+                    <WeavingTeachingOffersPage />
+                  </RequireCharacter>
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/threads/:id"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <RequireCharacter>
+                    <ThreadDetailPage />
+                  </RequireCharacter>
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/sanctums"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <RequireCharacter>
+                    <SanctumDashboardPage />
+                  </RequireCharacter>
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
 
-        {/* ------------------------------------------------------------------ */}
-        {/* Mage Scars — pending alteration resolution (#877)                   */}
-        {/* ------------------------------------------------------------------ */}
-        <Route
-          path="/magic/alterations"
-          element={
-            <Suspense fallback={<PageLoadingFallback />}>
-              <ProtectedRoute>
-                <AlterationResolutionPage />
-              </ProtectedRoute>
-            </Suspense>
-          }
-        />
+          {/* ------------------------------------------------------------------ */}
+          {/* Technique builder                                                   */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/techniques/build"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <TechniqueBuilderPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
 
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+          {/* ------------------------------------------------------------------ */}
+          {/* Magic progression dashboard (#536)                                 */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/magic/progression"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <RequireCharacter>
+                    <MagicProgressionPage />
+                  </RequireCharacter>
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+
+          {/* ------------------------------------------------------------------ */}
+          {/* Mage Scars — pending alteration resolution (#877)                   */}
+          {/* ------------------------------------------------------------------ */}
+          <Route
+            path="/magic/alterations"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <AlterationResolutionPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </ErrorBoundary>
       <RouletteModal />
       <Toaster />
       <DuelChallengeNotifier />
