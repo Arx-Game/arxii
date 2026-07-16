@@ -47,9 +47,24 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
     Staff see all non-covenant organizations.
     """
 
-    queryset = Organization.objects.prefetch_related(
-        "ranks",  # noqa: PREFETCH_STRING
-    ).order_by("id")
+    # Prefetch the house-payload relations (2026-07 audit): OrganizationSerializer
+    # .get_house serializes titles/domains/aspects/features inline, which fired
+    # ~6 queries per org with a family (~300 on a 50-org page). select_related
+    # the family + prefetch the rest so the payload reads from cache.
+    queryset = (
+        Organization.objects.select_related("family", "society", "org_type")
+        .prefetch_related(
+            "ranks",  # noqa: PREFETCH_STRING
+            "titles__holder",  # noqa: PREFETCH_STRING
+            "domains__holdings",  # noqa: PREFETCH_STRING
+            "aspects__definition",  # noqa: PREFETCH_STRING
+            "aspects__option",  # noqa: PREFETCH_STRING
+            "features__feature",  # noqa: PREFETCH_STRING
+            "fealty__liege",  # noqa: PREFETCH_STRING  — this org's liege edge (get_house)
+            "vassal_edges__vassal",  # noqa: PREFETCH_STRING  — its direct vassals
+        )
+        .order_by("id")
+    )
     serializer_class = OrganizationSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = SocietiesPagination

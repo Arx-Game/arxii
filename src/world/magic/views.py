@@ -2130,6 +2130,21 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
     filterset_class = RitualSessionFilterSet
     permission_classes = [IsAuthenticated]
 
+    def get_serializer_context(self) -> dict:
+        """Compute the requester's sheet ids ONCE (2026-07 audit).
+
+        RitualSessionListSerializer.get_my_role re-ran
+        ``RosterEntry.for_account(...).character_ids()`` per row on an
+        unpaginated list; seed it here so the serializer reads from context.
+        """
+        context = super().get_serializer_context()
+        user = self.request.user
+        if user.is_authenticated:
+            context["my_sheet_ids"] = set(
+                RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
+            )
+        return context
+
     def get_queryset(self):
         """Scope to sessions where user is initiator or invited participant."""
         from django.db.models import Q  # noqa: PLC0415

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.core.exceptions import ObjectDoesNotExist
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -108,23 +109,30 @@ class OrganizationSerializer(serializers.ModelSerializer):
     def get_house(self, obj) -> dict | None:
         if obj.family is None:
             return None
-        from world.societies.houses.models import FealtyEdge  # noqa: PLC0415
-        from world.societies.houses.services import vassals_of  # noqa: PLC0415
 
-        edge = FealtyEdge.objects.filter(vassal=obj).select_related("liege").first()
+        # Read the prefetched relations (OrganizationViewSet queryset, 2026-07
+        # audit) — `.all()` uses the prefetch cache; titles are sorted in Python
+        # to avoid a fresh ordered query per org. The liege edge (`fealty`,
+        # OneToOne) and direct vassals (`vassal_edges`) are prefetched too, so
+        # the whole house payload costs zero extra queries per org on a list.
+        try:
+            liege_edge = obj.fealty  # reverse OneToOne, prefetched
+        except ObjectDoesNotExist:
+            liege_edge = None
+        titles = sorted(obj.titles.all(), key=lambda t: (t.tier, t.name))
         payload = {
             "family_name": obj.family.name,
-            "liege_name": edge.liege.name if edge is not None else "",
-            "vassal_names": [vassal.name for vassal in vassals_of(obj)],
-            "titles": obj.titles.select_related("holder").order_by("tier", "name"),
-            "domains": obj.domains.prefetch_related("holdings"),  # noqa: PREFETCH_STRING
+            "liege_name": liege_edge.liege.name if liege_edge is not None else "",
+            "vassal_names": [edge.vassal.name for edge in obj.vassal_edges.all()],
+            "titles": titles,
+            "domains": obj.domains.all(),
             "aspects": [
                 {
                     "definition": facet.definition.name,
                     "option": facet.option.name,
                     "description": facet.option.description,
                 }
-                for facet in obj.aspects.select_related("definition", "option")
+                for facet in obj.aspects.all()
             ],
             "features": [
                 {
@@ -132,7 +140,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
                     "slug": stamped.feature.slug,
                     "description": stamped.feature.description,
                 }
-                for stamped in obj.features.select_related("feature")
+                for stamped in obj.features.all()
             ],
         }
         return HouseDetailSerializer(payload).data

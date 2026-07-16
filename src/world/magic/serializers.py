@@ -2882,8 +2882,11 @@ class RitualSessionListSerializer(serializers.ModelSerializer):
             return {"role": "unknown", "state": None}
         user = request.user
         initiator = obj.initiator
-        # Check if initiator's sheet belongs to this user.
-        my_sheet_ids = set(RosterEntry.objects.for_account(user).character_ids())
+        # Prefer the per-request sheet-id set the viewset seeds into context
+        # (2026-07 audit) — falls back to a direct query for other callers.
+        my_sheet_ids = self.context.get("my_sheet_ids")
+        if my_sheet_ids is None:
+            my_sheet_ids = set(RosterEntry.objects.for_account(user).character_ids())
         if initiator is not None and initiator.pk in my_sheet_ids:
             return {"role": "initiator", "state": None}
         # Check participant rows. Use participants_cached when prefetched.
