@@ -10,9 +10,11 @@ Character creation is a multi-stage process that guides players through creating
 2. **Heritage** - Special heritage (Sleeper/Misbegotten) or normal → Species → Gender/Pronouns → Age
 3. **Lineage** - Family selection (or "Unknown" for special heritage)
 4. **Distinctions** - Advantages and disadvantages
-5. **Path & Skills** - Class/path selection and skill customization
-6. **Attributes** - Primary stat allocation (cap-aware with distinction/species bonuses)
-7. **Magic** - Starter Gift + Technique catalog picks, aura distribution
+5. **Path** - Class/path selection (tradition selection moves here in a follow-up task)
+6. **Gift** - Starter Gift + Technique catalog picks, aura distribution (still renders the
+   `MagicStage` component pending the Gift-stage swap; see #2426 Task 10)
+7. **Attributes & Skills** - Primary stat allocation (cap-aware with distinction/species
+   bonuses) plus skill point allocation (moved in from Path, #2426 Task 9)
 8. **Appearance** - Height, build, form traits (hair/eye color, etc.)
 9. **Identity** - Name, description, personality, background
 10. **Final Touches** - Goals (optional)

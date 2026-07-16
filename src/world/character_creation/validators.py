@@ -33,9 +33,9 @@ def get_all_stage_errors(draft: CharacterDraft) -> StageValidationErrors:
         Stage.HERITAGE: get_heritage_errors(draft),
         Stage.LINEAGE: get_lineage_errors(draft),
         Stage.DISTINCTIONS: get_distinctions_errors(draft),
-        Stage.PATH_SKILLS: get_path_skills_errors(draft),
+        Stage.PATH: get_path_errors(draft),
+        Stage.GIFT: compute_magic_errors(draft),
         Stage.ATTRIBUTES: get_attributes_errors(draft),
-        Stage.MAGIC: compute_magic_errors(draft),
         Stage.APPEARANCE: get_appearance_errors(draft),
         Stage.IDENTITY: get_identity_errors(draft),
         Stage.FINAL_TOUCHES: [],
@@ -108,14 +108,25 @@ def get_distinctions_errors(draft: CharacterDraft) -> list[str]:
     return errors
 
 
-def get_path_skills_errors(draft: CharacterDraft) -> list[str]:
-    """Return validation errors for the Path & Skills stage."""
-    errors: list[str] = []
-    if not draft.selected_path:
-        errors.append("Select a path")
-    if errors:
-        return errors  # Can't validate skills without path
+def get_path_errors(draft: CharacterDraft) -> list[str]:
+    """Return validation errors for the Path stage.
 
+    Skill point allocation used to be validated here too (Stage was "Path &
+    Skills"); it now lives under the Attributes & Skills stage — see
+    ``get_skill_allocation_errors`` (#2426).
+    """
+    if not draft.selected_path:
+        return ["Select a path"]
+    return []
+
+
+def get_skill_allocation_errors(draft: CharacterDraft) -> list[str]:
+    """Return validation errors for skill point allocation.
+
+    Moved from the Path stage into the Attributes & Skills stage (#2426) —
+    skills are now allocated alongside primary attributes, not path selection.
+    """
+    errors: list[str] = []
     try:
         draft.validate_path_skills()
     except serializers.ValidationError as exc:
@@ -130,8 +141,8 @@ def get_path_skills_errors(draft: CharacterDraft) -> list[str]:
 
 
 def get_attributes_errors(draft: CharacterDraft) -> list[str]:
-    """Return validation errors for the Attributes stage."""
-    errors: list[str] = []
+    """Return validation errors for the Attributes & Skills stage."""
+    errors: list[str] = [*get_skill_allocation_errors(draft)]
     stats = draft.draft_data.get("stats", {})
 
     # All 12 stats must exist

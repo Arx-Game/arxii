@@ -980,16 +980,21 @@ class CharacterDraft(SharedMemoryModel):
         return {name: stats.get(name, STAT_DEFAULT_VALUE) for name in REQUIRED_STATS}
 
     def _is_attributes_complete(self) -> bool:
-        """Check if attributes stage is complete."""
+        """Check if the Attributes & Skills stage is complete (stats + skill allocation)."""
         return not self.get_stage_validation_errors().get(self.Stage.ATTRIBUTES, [])
 
-    def _is_path_skills_complete(self) -> bool:
-        """Check Stage 5 (Path & Skills) completion status."""
-        return not self.get_stage_validation_errors().get(self.Stage.PATH_SKILLS, [])
+    def _is_path_complete(self) -> bool:
+        """Check Stage 5 (Path) completion status."""
+        return not self.get_stage_validation_errors().get(self.Stage.PATH, [])
 
     def validate_path_skills(self) -> None:
         """
-        Validate Stage 5 (Path & Skills) data.
+        Validate skill point allocation data.
+
+        Skill allocation is now part of the Attributes & Skills stage
+        (formerly validated as part of the "Path & Skills" stage, #2426) —
+        the method name is kept since ``draft_data["skills"]``/
+        ``draft_data["specializations"]`` are unchanged.
 
         Raises:
             rest_framework.serializers.ValidationError: If validation fails,

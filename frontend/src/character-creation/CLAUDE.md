@@ -19,9 +19,11 @@ character-creation/
     ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
     ├── LineageStage.tsx     # Stage 3: Family selection
     ├── DistinctionsStage.tsx # Stage 4: Distinctions
-    ├── PathStage.tsx        # Stage 5: Path & Skills
-    ├── AttributesStage.tsx  # Stage 6: Attributes
-    ├── MagicStage.tsx       # Stage 7: Magic (cantrip selection + aura)
+    ├── PathStage.tsx        # Stage 5: Path selection
+    ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
+    ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection)
+    ├── MagicStage.tsx       # Stage 6 (Gift): cantrip selection + aura — temporary,
+    │                        #   pending the #2426 Task 10 GiftStage swap
     ├── AppearanceStage.tsx  # Stage 8: Appearance
     ├── IdentityStage.tsx    # Stage 9: Identity
     ├── FinalTouchesStage.tsx # Stage 10: Goals

@@ -327,8 +327,8 @@ export const mockIncompleteDraft: CharacterDraft = {
     3: true,
     4: false, // incomplete
     5: true,
-    6: false, // incomplete
-    7: true,
+    6: true,
+    7: false, // incomplete (Attributes & Skills)
     8: true,
     9: true,
     10: false, // incomplete

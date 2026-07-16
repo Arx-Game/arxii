@@ -30,7 +30,7 @@ import {
   LineageStage,
   MagicStage,
   OriginStage,
-  PathSkillsStage,
+  PathStage,
   ReviewStage,
   StageErrorBoundary,
   StageStepper,
@@ -191,11 +191,12 @@ export function CharacterCreationPage() {
         return <LineageStage draft={draft} onStageSelect={handleStageSelect} />;
       case Stage.ATTRIBUTES:
         return <AttributesStage draft={draft} />;
-      case Stage.PATH_SKILLS:
-        return <PathSkillsStage draft={draft} />;
+      case Stage.PATH:
+        return <PathStage draft={draft} />;
       case Stage.DISTINCTIONS:
         return <DistinctionsStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
-      case Stage.MAGIC:
+      case Stage.GIFT:
+        // TODO(#2426 Task 10): swap for the new GiftStage component.
         return <MagicStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.APPEARANCE:
         return (
