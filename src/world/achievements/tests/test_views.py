@@ -132,7 +132,8 @@ class CharacterAchievementViewSetTests(TestCase):
         """List endpoint returns character achievements."""
         response = self.client.get("/api/achievements/character-achievements/")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
+        # Paginated envelope (2026-07 audit fix).
+        assert len(response.data["results"]) == 2
 
     def test_filter_by_character_sheet(self) -> None:
         """Filter by character_sheet returns only that character's achievements."""
@@ -140,8 +141,8 @@ class CharacterAchievementViewSetTests(TestCase):
             f"/api/achievements/character-achievements/?character_sheet={self.sheet.pk}"
         )
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["achievement"]["name"] == "First"
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["achievement"]["name"] == "First"
 
     def test_includes_discovery_info(self) -> None:
         """Character achievement includes discovery information."""

@@ -439,7 +439,8 @@ class CanonReviewViewSetTests(APITestCase):
         self.client.force_authenticate(user=self.staff)
         resp = self.client.get(self.CANON_LIST_URL)
         self.assertEqual(resp.status_code, 200)
-        self.assertTrue(any(r["id"] == self.review.pk for r in resp.data))
+        # Paginated envelope (2026-07 audit fix).
+        self.assertTrue(any(r["id"] == self.review.pk for r in resp.data["results"]))
 
     def test_staff_can_clear_pending_review(self) -> None:
         self.client.force_authenticate(user=self.staff)

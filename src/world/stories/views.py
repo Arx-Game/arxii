@@ -3970,6 +3970,9 @@ class CanonReviewViewSet(
     queryset = CanonReview.objects.select_related("story", "reviewer").order_by("-created_at")
     serializer_class = CanonReviewSerializer
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    # Paginated (2026-07 audit): resolved reviews accumulate forever — the
+    # unpaginated list eventually returned the entire review history.
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["status", "tier"]
     ordering_fields = ["created_at", "resolved_at"]

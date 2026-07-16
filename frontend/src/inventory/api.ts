@@ -9,6 +9,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { fetchAllPages } from '@/lib/pagination';
 import type { components } from '@/generated/api';
 import type {
   BodyRegion,
@@ -58,12 +59,10 @@ async function readError(res: Response, fallback: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export async function listOutfits(characterSheetId: number): Promise<Outfit[]> {
-  const res = await apiFetch(`${BASE_URL}/outfits/?character_sheet=${characterSheetId}`);
-  if (!res.ok) {
-    throw new Error(await readError(res, 'Failed to load outfits'));
-  }
-  const data = (await res.json()) as PaginatedResponse<Outfit>;
-  return data.results;
+  return fetchAllPages<Outfit>(
+    `${BASE_URL}/outfits/?character_sheet=${characterSheetId}`,
+    'Failed to load outfits'
+  );
 }
 
 export async function getOutfit(id: number): Promise<Outfit> {
@@ -139,12 +138,13 @@ export async function deleteOutfitSlot(id: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function listInventory(characterId: number): Promise<ItemInstance[]> {
-  const res = await apiFetch(`${BASE_URL}/inventory/?character=${characterId}`);
-  if (!res.ok) {
-    throw new Error(await readError(res, 'Failed to load inventory'));
-  }
-  const data = (await res.json()) as PaginatedResponse<ItemInstance>;
-  return data.results;
+  // Follow every page (2026-07 audit): the endpoint paginates at 50 and this
+  // read hydrates the wardrobe's instance lookup — a worn item past page 1
+  // vanished from Currently Worn and made its Wear/Drop buttons no-op.
+  return fetchAllPages<ItemInstance>(
+    `${BASE_URL}/inventory/?character=${characterId}`,
+    'Failed to load inventory'
+  );
 }
 
 export async function postUseItem(itemId: number): Promise<UseItemResult> {
@@ -156,12 +156,10 @@ export async function postUseItem(itemId: number): Promise<UseItemResult> {
 }
 
 export async function listEquipped(characterId: number): Promise<EquippedItem[]> {
-  const res = await apiFetch(`${BASE_URL}/equipped-items/?character=${characterId}`);
-  if (!res.ok) {
-    throw new Error(await readError(res, 'Failed to load equipped items'));
-  }
-  const data = (await res.json()) as PaginatedResponse<EquippedItem>;
-  return data.results;
+  return fetchAllPages<EquippedItem>(
+    `${BASE_URL}/equipped-items/?character=${characterId}`,
+    'Failed to load equipped items'
+  );
 }
 
 // ---------------------------------------------------------------------------

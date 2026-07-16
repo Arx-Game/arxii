@@ -62,7 +62,8 @@ function numOrNull(raw: string): number | null {
 }
 
 export function TriggerGiversPage() {
-  const { data, isLoading } = useGivers();
+  // page_size: paginator max (2026-07 audit) — the list truncated at 25 givers.
+  const { data, isLoading } = useGivers({ page_size: 100 });
   const givers = data?.results ?? [];
 
   return (
@@ -162,7 +163,10 @@ function CreateGiverCard() {
 function GiverCard({ giver }: { giver: MissionGiver }) {
   const patch = usePatchGiver();
   const del = useDeleteGiver();
-  const { data: templatesData } = useMissionTemplates({});
+  // page_size: paginator max (2026-07 audit) — same 25-row truncation as the
+  // NPCRoleEditorPage picker; an existing giver's assignments couldn't even
+  // be re-saved consistently once templates passed one page.
+  const { data: templatesData } = useMissionTemplates({ page_size: 100 });
   const templates = templatesData?.results ?? [];
 
   const [kind, setKind] = useState<string>(giver.giver_kind ?? 'room_trigger');

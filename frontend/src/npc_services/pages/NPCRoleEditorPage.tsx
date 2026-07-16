@@ -573,7 +573,9 @@ function AddOfferForm({ roleId }: { roleId: number }) {
   const createOffer = useCreateOffer(roleId);
   const createDetails = useCreateMissionDetails(roleId);
   const deleteOffer = useDeleteOffer(roleId);
-  const { data: templatesData } = useMissionTemplates({});
+  // page_size: the paginator max (2026-07 audit) — this picker read only page 1
+  // (25 rows), so the 26th authored template couldn't be assigned to an offer.
+  const { data: templatesData } = useMissionTemplates({ page_size: 100 });
   const templates = templatesData?.results ?? [];
 
   const submit = () => {
