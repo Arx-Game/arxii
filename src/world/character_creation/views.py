@@ -357,6 +357,16 @@ class CGGiftOptionViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = CGGiftOptionFilter
 
+    def filter_queryset(self, queryset: QuerySet[Gift]) -> QuerySet[Gift]:
+        """Skip ``CGGiftOptionFilter``'s form validation — it exists only for OpenAPI
+        schema/discoverability (see its docstring); real ``draft_id`` resolution
+        (including malformed-value handling) already happened in ``get_queryset()``
+        via ``_get_draft()``. Without this override, ``NumberFilter`` form validation
+        would 400 a non-numeric ``draft_id`` instead of treating it as absent like
+        every other malformed/missing param on this endpoint.
+        """
+        return queryset
+
     def _get_draft(self) -> CharacterDraft | None:
         """Resolve the request's own CharacterDraft from ``?draft_id=``."""
         request = _view_request(self)
@@ -365,7 +375,11 @@ class CGGiftOptionViewSet(viewsets.ReadOnlyModelViewSet):
         raw = request.query_params.get("draft_id")  # noqa: USE_FILTERSET
         if not raw:
             return None
-        return get_object_or_404(CharacterDraft, pk=raw, account=request.user)
+        try:
+            draft_id = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
 
     def get_queryset(self) -> QuerySet[Gift]:
         """Return gifts pickable under the draft's tradition, available to its path."""
@@ -402,23 +416,42 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = CGTechniqueOptionFilter
 
+    def filter_queryset(self, queryset: QuerySet[Technique]) -> QuerySet[Technique]:
+        """Skip ``CGTechniqueOptionFilter``'s form validation — it exists only for
+        OpenAPI schema/discoverability (see its docstring); real ``draft_id``/``gift_id``
+        resolution (including malformed-value handling) already happened in
+        ``get_queryset()`` via ``_resolve_options()``. Without this override,
+        ``NumberFilter`` form validation would 400 a non-numeric id instead of treating
+        it as absent like every other malformed/missing param on this endpoint.
+        """
+        return queryset
+
     def _resolve_options(self) -> TechniqueOptions | None:
         """Resolve pool/signature techniques for ``?draft_id=&gift_id=``, cached per request."""
         if hasattr(self, "_cg_technique_options"):
             return self._cg_technique_options
 
         request = _view_request(self)
-        draft_id = None
-        gift_id = None
+        raw_draft_id = None
+        raw_gift_id = None
         if request is not None:
-            draft_id = request.query_params.get("draft_id")  # noqa: USE_FILTERSET
-            gift_id = request.query_params.get("gift_id")  # noqa: USE_FILTERSET
+            raw_draft_id = request.query_params.get("draft_id")  # noqa: USE_FILTERSET
+            raw_gift_id = request.query_params.get("gift_id")  # noqa: USE_FILTERSET
         options: TechniqueOptions | None = None
-        if draft_id and gift_id:
-            draft = get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
-            if draft.selected_tradition_id is not None and draft.selected_path_id is not None:
-                gift = get_object_or_404(Gift, pk=gift_id)
-                options = get_technique_options(draft.selected_path, gift, draft.selected_tradition)
+        if raw_draft_id and raw_gift_id:
+            try:
+                draft_id = int(raw_draft_id)
+                gift_id = int(raw_gift_id)
+            except (TypeError, ValueError):
+                draft_id = None
+                gift_id = None
+            if draft_id is not None and gift_id is not None:
+                draft = get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
+                if draft.selected_tradition_id is not None and draft.selected_path_id is not None:
+                    gift = get_object_or_404(Gift, pk=gift_id)
+                    options = get_technique_options(
+                        draft.selected_path, gift, draft.selected_tradition
+                    )
 
         self._cg_technique_options = options
         return options

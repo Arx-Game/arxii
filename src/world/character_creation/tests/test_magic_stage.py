@@ -337,6 +337,13 @@ class CGGiftOptionEndpointTest(TestCase):
         assert response.status_code == status.HTTP_200_OK
         assert response.data == []
 
+    def test_malformed_draft_id_returns_empty_list(self):
+        """Non-numeric draft_id is treated as absent, never a 500 (review finding)."""
+        response = self.client.get("/api/character-creation/gifts/", {"draft_id": "abc"})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
     def test_other_accounts_draft_is_not_accessible(self):
         """draft_id scoped to the requesting account (get_object_or_404 account=)."""
         other_account = AccountFactory()
@@ -349,6 +356,22 @@ class CGGiftOptionEndpointTest(TestCase):
         response = self.client.get("/api/character-creation/gifts/", {"draft_id": draft.id})
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_tradition_selected_but_no_path_returns_empty_list(self):
+        draft = CharacterDraftFactory(account=self.account, selected_tradition=self.tradition)
+
+        response = self.client.get("/api/character-creation/gifts/", {"draft_id": draft.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_path_selected_but_no_tradition_returns_empty_list(self):
+        draft = CharacterDraftFactory(account=self.account, selected_path=self.path)
+
+        response = self.client.get("/api/character-creation/gifts/", {"draft_id": draft.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
 
 
 class CGTechniqueOptionEndpointTest(TestCase):
@@ -432,3 +455,41 @@ class CGTechniqueOptionEndpointTest(TestCase):
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data == []
+
+    def test_malformed_draft_id_returns_empty_list(self):
+        """Non-numeric draft_id is treated as absent, never a 500 (review finding)."""
+        response = self.client.get(
+            "/api/character-creation/technique-options/",
+            {"draft_id": "abc", "gift_id": self.gift.id},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_malformed_gift_id_returns_empty_list(self):
+        """Non-numeric gift_id is treated as absent, never a 500 (review finding)."""
+        draft = self._draft()
+
+        response = self.client.get(
+            "/api/character-creation/technique-options/",
+            {"draft_id": draft.id, "gift_id": "abc"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_other_accounts_draft_is_not_accessible(self):
+        """draft_id scoped to the requesting account (get_object_or_404 account=)."""
+        other_account = AccountFactory()
+        draft = CharacterDraftFactory(
+            account=other_account,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+        )
+
+        response = self.client.get(
+            "/api/character-creation/technique-options/",
+            {"draft_id": draft.id, "gift_id": self.gift.id},
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
