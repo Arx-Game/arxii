@@ -1,6 +1,6 @@
 import type { RoomStatePayload } from './types';
 import type { AppDispatch } from '@/store/store';
-import { clearSceneInteractions, setSessionRoom, setSessionScene } from '@/store/gameSlice';
+import { setSessionRoom, setSessionScene } from '@/store/gameSlice';
 import type { MyRosterEntry } from '@/roster/types';
 
 export function handleRoomStatePayload(
@@ -26,6 +26,8 @@ export function handleRoomStatePayload(
       },
     })
   );
+  // setSessionScene owns the scene-transition reset (baseline, tabs, and the
+  // WS interaction buffer) — guarded on an actual scene-id change, so the
+  // room_state broadcast fired by every arrival no longer wipes the live feed.
   dispatch(setSessionScene({ character, scene: payload.scene ?? null }));
-  dispatch(clearSceneInteractions(character));
 }

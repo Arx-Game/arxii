@@ -165,8 +165,10 @@ describe('handleScenePayload', () => {
         character: 'TestCharacter',
         scene: null,
       });
-      expect(clearSceneInteractions).toHaveBeenCalledWith('TestCharacter');
-      expect(mockDispatch).toHaveBeenCalledTimes(2);
+      // 2026-07 audit: the buffer clear moved into setSessionScene's guarded
+      // scene-transition reset — the handler no longer dispatches it.
+      expect(clearSceneInteractions).not.toHaveBeenCalled();
+      expect(mockDispatch).toHaveBeenCalledTimes(1);
     });
 
     it('dispatches null even when payload.scene has data', () => {
@@ -468,7 +470,7 @@ describe('handleScenePayload', () => {
       expect(mockDispatch).toHaveBeenCalledTimes(1);
     });
 
-    it('calls dispatch twice for end action (setSessionScene + clearSceneInteractions)', () => {
+    it('calls dispatch once for end action (setSessionScene owns the buffer clear)', () => {
       const payload: ScenePayload = {
         action: 'end',
         scene: createSceneSummary(1, 'Test'),
@@ -476,7 +478,7 @@ describe('handleScenePayload', () => {
 
       handleScenePayload('Char', payload, mockDispatch);
 
-      expect(mockDispatch).toHaveBeenCalledTimes(2);
+      expect(mockDispatch).toHaveBeenCalledTimes(1);
     });
 
     it('dispatches the correct action type', () => {
@@ -540,7 +542,7 @@ describe('handleScenePayload', () => {
         scene: null,
       });
 
-      expect(mockDispatch).toHaveBeenCalledTimes(4);
+      expect(mockDispatch).toHaveBeenCalledTimes(3);
     });
 
     it('handles complete payload with owner status true', () => {

@@ -57,6 +57,9 @@ interface GameState {
   active: MyRosterEntry['name'] | null;
 }
 
+// Module-scope monotonic id for session messages (see addSessionMessage).
+let nextMessageId = 0;
+
 const initialState: GameState = {
   sessions: {},
   active: null,
@@ -110,7 +113,11 @@ export const gameSlice = createSlice({
       const { character, message } = action.payload;
       const session = state.sessions[character];
       if (session) {
-        session.messages.push({ ...message, id: Date.now().toString() });
+        // Monotonic counter, NOT Date.now() (2026-07 audit): multi-line server
+        // output lands as several frames in the same millisecond, and the id
+        // is used as a React key — duplicate keys dropped/misrendered rows.
+        nextMessageId += 1;
+        session.messages.push({ ...message, id: `m${nextMessageId}` });
         if (state.active !== character) {
           session.unread += 1;
         }
@@ -160,6 +167,13 @@ export const gameSlice = createSlice({
           // scene's table/whisper set is a mis-send vector.
           session.openThreadTabs = [];
           session.activeThreadTab = null;
+          // The WS interaction buffer is scene-contextual too (2026-07 audit):
+          // this clear used to be a separate unconditional dispatch on EVERY
+          // room_state frame — and the backend broadcasts room_state to all
+          // occupants whenever anything enters the room, so mid-scene arrivals
+          // erased every pose/whisper buffered since the last REST fetch.
+          // Clearing only on a real scene change keeps the feed intact.
+          session.sceneInteractions = [];
         }
         session.scene = scene;
       }

@@ -78,7 +78,7 @@ describe('handleRoomStatePayload', () => {
           hub: null,
         },
       });
-      expect(mockDispatch).toHaveBeenCalledTimes(3);
+      expect(mockDispatch).toHaveBeenCalledTimes(2);
     });
 
     it('threads the civic-hub tidings block through to the room (#1450)', () => {
@@ -144,10 +144,12 @@ describe('handleRoomStatePayload', () => {
       handleRoomStatePayload(character, payload, mockDispatch);
 
       const calls = (mockDispatch as unknown as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls.length).toBe(3);
+      // 2026-07 audit: the unconditional clearSceneInteractions dispatch is
+      // gone — the WS-buffer clear now lives inside setSessionScene, guarded
+      // on an actual scene-id change (room_state fires on every arrival).
+      expect(calls.length).toBe(2);
       expect(calls[0][0].type).toBe('game/setSessionRoom');
       expect(calls[1][0].type).toBe('game/setSessionScene');
-      expect(calls[2][0].type).toBe('game/clearSceneInteractions');
     });
   });
 

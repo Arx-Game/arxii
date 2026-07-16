@@ -503,16 +503,22 @@ describe('gameSlice', () => {
         expect(result.sessions['TestCharacter'].messages[0].content).toBe('Hello world');
       });
 
-      it('generates id using Date.now().toString()', () => {
+      it('generates unique monotonic ids (2026-07 audit: Date.now() collided on burst frames)', () => {
         const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
-        const message = createGameMessage('Hello');
 
-        const result = reducer(
+        let state = reducer(
           initialState,
-          addSessionMessage({ character: 'TestCharacter', message })
+          addSessionMessage({ character: 'TestCharacter', message: createGameMessage('One') })
+        );
+        state = reducer(
+          state,
+          addSessionMessage({ character: 'TestCharacter', message: createGameMessage('Two') })
         );
 
-        expect(result.sessions['TestCharacter'].messages[0].id).toBe(MOCK_TIMESTAMP.toString());
+        const [first, second] = state.sessions['TestCharacter'].messages;
+        expect(first.id).not.toBe(second.id);
+        expect(first.id).toMatch(/^m\d+$/);
+        expect(second.id).toMatch(/^m\d+$/);
       });
 
       it('preserves all message properties', () => {
@@ -528,7 +534,7 @@ describe('gameSlice', () => {
         expect(addedMessage.content).toBe('Test content');
         expect(addedMessage.type).toBe(GAME_MESSAGE_TYPE.ACTION);
         expect(addedMessage.timestamp).toBe(1234567890);
-        expect(addedMessage.id).toBe(MOCK_TIMESTAMP.toString());
+        expect(addedMessage.id).toMatch(/^m\d+$/);
       });
 
       it('appends to existing messages', () => {

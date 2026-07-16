@@ -131,6 +131,11 @@ export function useRitualSessionDetail(id: number) {
     queryKey: ritualSessionKeys.detail(id),
     queryFn: () => api.fetchRitualSessionDetail(id),
     enabled: id > 0,
+    // Liveness (2026-07 audit): the detail page promises "polling for live
+    // updates" but only the inbox/outbox polled — the initiator's "waiting
+    // for participants" panel and disabled Fire button never updated without
+    // a manual reload, deadlocking the fire flow. Matches the inbox cadence.
+    refetchInterval: 5_000,
     throwOnError: true,
   });
 }
