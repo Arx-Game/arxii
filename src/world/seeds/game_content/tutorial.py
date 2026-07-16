@@ -83,6 +83,7 @@ _T4_NAME = "A Simple Job"
 _T5_NAME = "The Loom"
 _T6_NAME = "Sworn Together"
 _T7_NAME = "The Long Dark"
+_TC_NAME = "Terms of Engagement"
 
 _DETAIL_OBJECT_KEY = "a faint scorch mark on the wall"
 _DETAIL_OBJECT_TYPECLASS = "typeclasses.objects.Object"
@@ -95,10 +96,15 @@ _TUTOR_ROLE_NAME = "Threshold Warden"
 
 @dataclass
 class TutorialSeedResult:
-    """Returned by seed_tutorial_dev(). Templates in chain order, T1 first."""
+    """Returned by seed_tutorial_dev(). Templates in chain order, T1 first.
+
+    ``consent_template`` is the "Terms of Engagement" antagonism-consent primer (#2170) —
+    a tutor-offered side-step gated on T1, parallel to the T2..T7 spine.
+    """
 
     templates: list[MissionTemplate]
     tutor_role: NPCRole
+    consent_template: MissionTemplate
 
 
 def _has_completed(template_id: int) -> dict:
@@ -309,6 +315,63 @@ def _ensure_offer(
             role_cooldown_duration=role_cooldown_duration,
         )
     return offer
+
+
+def _seed_consent_primer(gate_template: MissionTemplate) -> MissionTemplate:
+    """ "Terms of Engagement" — the antagonism-consent onboarding beat (#2170 item 3).
+
+    A tutor-offered side-step gated on T1 (parallel to the T2..T7 spine — it re-gates
+    nothing). Walks the new player to the consent tree so the Friends+whitelist default
+    is a *chosen, understood* starting point, not a silent one: the summary frames it IC,
+    the epilogue points at the real surfaces (web Settings → Privacy; telnet ``consent`` /
+    ``consent modes``, which render the per-mode pros/cons from CONSENT_MODE_GUIDANCE).
+
+    All prose here is PLACEHOLDER (agent-drafted — Apostate to rewrite, #2170).
+    """
+    from world.missions.factories import (  # noqa: PLC0415
+        MissionNodeFactory,
+        MissionOptionFactory,
+        MissionOptionRouteFactory,
+        MissionOptionRouteRewardFactory,
+        MissionTemplateFactory,
+    )
+
+    template = MissionTemplateFactory(
+        name=_TC_NAME,
+        summary=(
+            'The Warden looks you over like a quartermaster sizing a recruit. "This city will '
+            "test you — with knives, with lies, with light fingers. Before it does, decide who "
+            'is allowed to try. Nobody moves against you here without your leave."'
+        ),
+        epilogue=(
+            "Your boundaries are yours to set, and to change. Open Settings → Privacy on the "
+            "web (or type 'consent' in the classic client) to review who may target you with "
+            "hostile play: set the whole Antagonism group at once, or tune a single category. "
+            "'consent modes' explains the trade-offs of each setting — the default lets only "
+            "your OOC friends try anything against you until you say otherwise."
+        ),
+        risk_tier=1,
+        level_band_min=1,
+        level_band_max=5,
+        visibility=MissionVisibility.RESTRICTED,
+        availability_rule=_has_completed(gate_template.pk),
+    )
+    if not template.nodes.exists():
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        option = MissionOptionFactory(
+            node=entry,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            authored_ic_framing="Weigh who you'd let raise a hand against you, and set your terms.",
+        )
+        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
+        MissionOptionRouteRewardFactory(
+            route=route,
+            sink=DeedRewardSink.MONEY,
+            amount=25,
+            contract_holder_only=True,
+        )
+    return template
 
 
 def _seed_t3(gate_template: MissionTemplate) -> MissionTemplate:
@@ -599,6 +662,9 @@ def seed_tutorial_dev() -> TutorialSeedResult:
     tutor_role = _ensure_tutor_role()
     _ensure_tutor_functionary(tutor_role, room)
 
+    consent_primer = _seed_consent_primer(t1)
+    _ensure_offer(tutor_role, "A word about boundaries", consent_primer)
+
     t3 = _seed_t3(t2)
     _ensure_offer(tutor_role, "Kindle a first spark", t3)
 
@@ -615,4 +681,8 @@ def seed_tutorial_dev() -> TutorialSeedResult:
     t7 = _seed_t7(t6)
     _ensure_offer(tutor_role, "Answer the long dark's call", t7)
 
-    return TutorialSeedResult(templates=[t1, t2, t3, t4, t5, t6, t7], tutor_role=tutor_role)
+    return TutorialSeedResult(
+        templates=[t1, t2, t3, t4, t5, t6, t7],
+        tutor_role=tutor_role,
+        consent_template=consent_primer,
+    )

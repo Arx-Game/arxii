@@ -39,6 +39,7 @@ _T4_NAME = "A Simple Job"
 _T5_NAME = "The Loom"
 _T6_NAME = "Sworn Together"
 _T7_NAME = "The Long Dark"
+_TC_NAME = "Terms of Engagement"
 
 
 def _gate_for(template: MissionTemplate) -> dict:
@@ -141,6 +142,30 @@ class SeedTutorialDevTests(TestCase):
         )
         self.assertIsNotNone(giver.target_id)
         self.assertEqual(self.t2.availability_rule, _gate_for(self.t1))
+
+    # -- Consent primer "Terms of Engagement" (#2170 item 3) ----------------
+
+    def test_consent_primer_gate_offer_and_shape(self) -> None:
+        """The antagonism-consent onboarding side-step: gated on T1, tutor-offered.
+
+        Parallel to the T2..T7 spine — it must never re-gate the chain itself
+        (T2 stays gated on T1, T3 on T2; asserted by their own tests above/below).
+        """
+        primer = MissionTemplate.objects.get(name=_TC_NAME)
+        self.assertEqual(primer.risk_tier, 1)
+        self.assertEqual(primer.availability_rule, _gate_for(self.t1))
+
+        details = MissionOfferDetails.objects.get(mission_template=primer)
+        self.assertEqual(details.offer.kind, OfferKind.MISSION)
+        self.assertEqual(details.role_cooldown_duration, timedelta(0))
+
+        # The epilogue is the surface that points at the real consent tree.
+        self.assertIn("Privacy", primer.epilogue)
+        self.assertIn("consent", primer.epilogue)
+
+        entry = primer.nodes.get(is_entry=True)
+        option = entry.options.get()
+        self.assertEqual(option.option_kind, OptionKind.BRANCH)
 
     # -- T3 First Spark ---------------------------------------------------
 
