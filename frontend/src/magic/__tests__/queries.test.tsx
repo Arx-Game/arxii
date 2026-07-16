@@ -474,7 +474,10 @@ describe('magicKeys', () => {
     ]);
     expect(magicKeys.threadList()).toEqual(['magic', 'threads', 'list']);
     expect(magicKeys.thread(7)).toEqual(['magic', 'threads', 7]);
-    expect(magicKeys.threadHubSummary()).toEqual(['magic', 'thread-hub-summary']);
+    // Sheet-scoped (2026-07 audit): null = unresolved sheet, a distinct cache
+    // row from any real character's summary so alt data can't cross-serve.
+    expect(magicKeys.threadHubSummary()).toEqual(['magic', 'thread-hub-summary', null]);
+    expect(magicKeys.threadHubSummary(42)).toEqual(['magic', 'thread-hub-summary', 42]);
     expect(magicKeys.characterResonanceList()).toEqual(['magic', 'character-resonances', 'list']);
     expect(magicKeys.teachingOffers()).toEqual(['magic', 'teaching-offers', 'list']);
   });

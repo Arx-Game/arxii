@@ -91,7 +91,9 @@ export function ActionPanel({ sceneId }: Props) {
   // action may have spent anima/resonance, so both invalidate the same set
   // of caches (#2158).
   function invalidateActionOutcomeQueries() {
-    queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+    // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
+    // real key is 'scene-interactions' (useSceneInteractions).
+    queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
     queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
     if (characterId !== null) {
       queryClient.invalidateQueries({ queryKey: magicKeys.characterAnima(characterId) });

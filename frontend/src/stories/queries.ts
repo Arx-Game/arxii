@@ -63,8 +63,25 @@ export type { BeatOutcome };
 // Query key factory
 // ---------------------------------------------------------------------------
 
+const storiesAll = ['stories'] as const;
+
+/**
+ * Params-eliding list-key builder (2026-07 audit fix). The old shape appended
+ * `params` unconditionally, so a no-arg invalidation call produced
+ * `['stories','beats',undefined]` — which React Query v5's partial matching
+ * does NOT treat as a prefix of `['stories','beats',{episode:5}]`. Every
+ * no-arg `storiesKeys.xxx()` invalidation therefore matched nothing the user
+ * was looking at. Eliding the slot makes the no-arg form a true prefix.
+ */
+function listKey<P>(segment: string) {
+  return (params?: P) =>
+    params === undefined
+      ? ([...storiesAll, segment] as const)
+      : ([...storiesAll, segment, params] as const);
+}
+
 export const storiesKeys = {
-  all: ['stories'] as const,
+  all: storiesAll,
 
   // Dashboards
   myActive: () => [...storiesKeys.all, 'my-active'] as const,
@@ -72,38 +89,36 @@ export const storiesKeys = {
   staffWorkload: () => [...storiesKeys.all, 'staff-workload'] as const,
 
   // Stories
-  storyList: (params?: ListStoriesParams) => [...storiesKeys.all, 'list', params] as const,
+  storyList: listKey<ListStoriesParams>('list'),
   story: (id: number) => [...storiesKeys.all, 'story', id] as const,
 
   // Chapters
-  chapterList: (params?: ListChaptersParams) => [...storiesKeys.all, 'chapters', params] as const,
+  chapterList: listKey<ListChaptersParams>('chapters'),
   chapter: (id: number) => [...storiesKeys.all, 'chapter', id] as const,
 
   // Episodes
-  episodeList: (params?: ListEpisodesParams) => [...storiesKeys.all, 'episodes', params] as const,
+  episodeList: listKey<ListEpisodesParams>('episodes'),
   episode: (id: number) => [...storiesKeys.all, 'episode', id] as const,
 
   // Beats
-  beatList: (params?: ListBeatsParams) => [...storiesKeys.all, 'beats', params] as const,
+  beatList: listKey<ListBeatsParams>('beats'),
   beat: (id: number) => [...storiesKeys.all, 'beat', id] as const,
 
   // Progress
-  groupProgress: (params?: ListGroupProgressParams) =>
-    [...storiesKeys.all, 'group-progress', params] as const,
-  globalProgress: (params?: { story?: number; is_active?: boolean; page?: number }) =>
-    [...storiesKeys.all, 'global-progress', params] as const,
+  groupProgress: listKey<ListGroupProgressParams>('group-progress'),
+  globalProgress: listKey<{ story?: number; is_active?: boolean; page?: number }>(
+    'global-progress'
+  ),
 
   // Contributions
-  contributions: (params?: ListContributionsParams) =>
-    [...storiesKeys.all, 'contributions', params] as const,
+  contributions: listKey<ListContributionsParams>('contributions'),
 
   // AGM Claims
-  agmClaims: (params?: ListClaimsParams) => [...storiesKeys.all, 'agm-claims', params] as const,
+  agmClaims: listKey<ListClaimsParams>('agm-claims'),
   agmClaim: (id: number) => [...storiesKeys.all, 'agm-claim', id] as const,
 
   // Session requests
-  sessionRequests: (params?: ListSessionRequestsParams) =>
-    [...storiesKeys.all, 'session-requests', params] as const,
+  sessionRequests: listKey<ListSessionRequestsParams>('session-requests'),
   sessionRequest: (id: number) => [...storiesKeys.all, 'session-request', id] as const,
 
   // Story log
@@ -113,38 +128,33 @@ export const storiesKeys = {
   storyNotes: (storyId: number) => [...storiesKeys.all, 'story-notes', storyId] as const,
 
   // Transitions (Wave 9)
-  transitionList: (params?: ListTransitionsParams) =>
-    [...storiesKeys.all, 'transitions', params] as const,
+  transitionList: listKey<ListTransitionsParams>('transitions'),
   transition: (id: number) => [...storiesKeys.all, 'transition', id] as const,
 
   // EpisodeProgressionRequirements (Wave 9)
-  progressionRequirements: (params?: ListProgressionRequirementsParams) =>
-    [...storiesKeys.all, 'progression-requirements', params] as const,
+  progressionRequirements: listKey<ListProgressionRequirementsParams>('progression-requirements'),
 
   // TransitionRequiredOutcomes (Wave 9)
-  transitionRequiredOutcomes: (params?: ListTransitionRequiredOutcomesParams) =>
-    [...storiesKeys.all, 'transition-required-outcomes', params] as const,
+  transitionRequiredOutcomes: listKey<ListTransitionRequiredOutcomesParams>(
+    'transition-required-outcomes'
+  ),
 
   // StoryGMOffers (Wave 5)
-  storyGMOffers: (params?: ListStoryGMOffersParams) =>
-    [...storiesKeys.all, 'story-gm-offers', params] as const,
+  storyGMOffers: listKey<ListStoryGMOffersParams>('story-gm-offers'),
   storyGMOffer: (id: number) => [...storiesKeys.all, 'story-gm-offer', id] as const,
 
   // GMProfiles (Wave 5)
-  gmProfiles: (params?: ListGMProfilesParams) =>
-    [...storiesKeys.all, 'gm-profiles', params] as const,
+  gmProfiles: listKey<ListGMProfilesParams>('gm-profiles'),
 
   // Eras (Wave 6)
-  eraList: (params?: ListErasParams) => [...storiesKeys.all, 'eras', params] as const,
+  eraList: listKey<ListErasParams>('eras'),
   era: (id: number) => [...storiesKeys.all, 'era', id] as const,
 
   // StoryProtectedSubject (#2001 Task 8)
-  protectedSubjects: (params?: ListProtectedSubjectsParams) =>
-    [...storiesKeys.all, 'protected-subjects', params] as const,
+  protectedSubjects: listKey<ListProtectedSubjectsParams>('protected-subjects'),
 
   // CustodyClearance (#2001 Task 8)
-  custodyClearances: (params?: ListCustodyClearancesParams) =>
-    [...storiesKeys.all, 'custody-clearances', params] as const,
+  custodyClearances: listKey<ListCustodyClearancesParams>('custody-clearances'),
 };
 
 // ---------------------------------------------------------------------------
@@ -769,6 +779,12 @@ export function useSaveTransitionWithOutcomes() {
     onSuccess: (transition) => {
       qc.invalidateQueries({ queryKey: storiesKeys.transitionList() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.transition(transition.id) }).catch(() => {});
+      // The atomic save replaces the transition's full outcome set — without
+      // this, TransitionFormDialog repopulated its routing rows from the stale
+      // outcome cache on reopen and a second save silently reverted the edit.
+      qc.invalidateQueries({
+        queryKey: storiesKeys.transitionRequiredOutcomes(),
+      }).catch(() => {});
     },
   });
 }

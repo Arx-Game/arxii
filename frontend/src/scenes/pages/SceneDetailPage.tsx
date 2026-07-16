@@ -118,7 +118,8 @@ export function SceneDetailPage() {
       }),
     onSuccess: () => {
       setActionAttachment(null);
-      queryClient.invalidateQueries({ queryKey: ['scene-messages', id] });
+      // 2026-07 audit: 'scene-messages' matched no query — the feed key is 'scene-interactions'.
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', id] });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', id] });
     },
     onError: () => {

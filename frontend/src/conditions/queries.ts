@@ -36,7 +36,10 @@ export function useDamageTypes() {
  */
 export function useTreatmentCandidates(targetPersonaId: number | null, characterId: number | null) {
   return useQuery({
-    queryKey: ['conditions', 'treatment-candidates', targetPersonaId],
+    // characterId is IN the key (2026-07 audit): the fetch sends it as the
+    // X-Character-ID header, so an account switching active characters was
+    // served the previous character's cached candidates for the same target.
+    queryKey: ['conditions', 'treatment-candidates', targetPersonaId, characterId],
     queryFn: () => fetchTreatmentCandidates(targetPersonaId as number, characterId as number),
     enabled: targetPersonaId != null && characterId != null,
   });

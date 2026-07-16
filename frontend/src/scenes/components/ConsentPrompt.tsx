@@ -202,7 +202,9 @@ export function ConsentPrompt({ sceneId }: Props) {
     onSuccess: (data) => {
       toastDispositionMessage(data);
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
-      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+      // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
+      // real key is 'scene-interactions' (useSceneInteractions).
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
     },
   });
 
@@ -238,7 +240,9 @@ export function ConsentPrompt({ sceneId }: Props) {
     onSuccess: (data) => {
       toastDispositionMessage(data);
       queryClient.invalidateQueries({ queryKey: ['pending-targets', sceneId] });
-      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+      // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
+      // real key is 'scene-interactions' (useSceneInteractions).
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
     },
   });
 
