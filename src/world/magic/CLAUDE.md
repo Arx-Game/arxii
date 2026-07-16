@@ -308,13 +308,29 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   now forwards `ritual=ritual` to the service function, so technique-granting
   rituals can resolve their `TechniqueGrant` row.
 
-### Cantrips (Character Creation)
-- `Cantrip` - Staff-curated technique templates for CG magic stage selection
-- A cantrip IS a baby technique — at CG finalization it creates a real Technique
-- Fields: archetype (display grouping), effect_type, style, base_intensity, base_control, base_anima_cost
-- Mechanical fields are hidden from the player; they only see name/description/archetype/facets
-- Cantrips are filtered by character's Path via `?path_id=` query param (style must be in Path's allowed_styles)
-- New players see only their path's cantrips; returning players (advanced mode) see all cantrips
+### Cantrips (Character Creation) — SUPERSEDED (#2426)
+
+`Cantrip` is dead code pending full removal (#2426 Task 8) — the model still exists
+but is no longer seeded or used by CG. See "Starter Gift Catalog" below for the live
+mechanism, and `docs/systems/magic.md`'s "Cantrips (CG Technique Templates)" section
+for the supersession note.
+
+### Starter Gift Catalog (CG Technique Picks, #2426)
+
+The CG magic stage picks a staff-authored catalog `Gift` + `Technique`s directly — no
+`Gift`/`Technique` row is minted at CG time; `finalize_magic_data` only *links* the
+picks (see `services/cg_catalog.py` above). `seed_starter_gift_catalog()`
+(`world/seeds/game_content/magic.py`, called by `seed_magic_dev()`) authors the
+picked-from content on a fresh DB:
+- 5 MAJOR `Gift` rows, one per `TechniqueStyle`/PROSPECT-`Path` pair (Emberwork/Steel,
+  Shadowcraft/Whispers, Resonant Chorus/Voice, Sacred Communion/Chosen, Glyphwork/Tomes)
+- 25 authored `Technique` rows (5 per Gift, one per `TechniqueCategory`:
+  attack/defense/buff/debuff/utility) — `level=1/intensity=1/control=1/anima_cost=5`,
+  the shared standalone-cast `ActionTemplate`, `action_category` inherited from the
+  linked `Path`
+- `PathGiftGrant` per (path, gift) with all 5 techniques as `starter_techniques`
+- The "Unbound" `Tradition` (richer traditions are lore-repo fixture content) +
+  `TraditionGiftGrant` rows granting Unbound every starter gift, no signatures
 - 5 styles map 1:1 to 5 Prospect paths: Manifestation→Steel, Subtle→Whispers, Performance→Voice, Prayer→Chosen, Incantation→Tome
 
 ### Signature Motif Bonus (#1582 — ADR-0072)

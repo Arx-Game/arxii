@@ -6,10 +6,10 @@ seed rows — the content a fresh DB needs to actually run ``finalize_character`
 Create-if-missing; never overwrites; never deletes (the #651 invariant).
 
 Child of #651 / epic #1220 (Phase A). Registered in ``CLUSTER_SEEDERS`` after
-``magic`` because ``finalize_character`` picks the magic-seeded selectable
-``Cantrip`` + ``Resonance``/``TechniqueStyle`` at finalize time — NOT because
-``Beginnings`` FKs into magic (it FKs ``starting_area`` -> ``Realm`` and an M2M
-``allowed_species`` -> ``Species``).
+``magic`` because ``finalize_character`` picks the magic-seeded catalog
+``Gift``/``Technique`` + ``Resonance``/``TechniqueStyle`` at finalize time (#2426) —
+NOT because ``Beginnings`` FKs into magic (it FKs ``starting_area`` -> ``Realm`` and
+an M2M ``allowed_species`` -> ``Species``).
 """
 
 from __future__ import annotations
@@ -18,8 +18,10 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from world.character_creation.constants import (
+    CG_MODIFIER_CATEGORY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
+    STARTING_TECHNIQUE_PICKS_TARGET,
 )
 from world.character_creation.models import Beginnings, StartingArea
 from world.character_sheets.models import Gender, Heritage, Pronouns
@@ -168,6 +170,79 @@ def ensure_canonical_fallback_room() -> ObjectDB:
         typeclass=FALLBACK_STARTING_ROOM_TYPECLASS,
         key=FALLBACK_STARTING_ROOM_KEY,
         nohome=True,
+    )
+
+
+def wire_starting_technique_picks_target():
+    """Seed the 'starting_technique_picks' ModifierTarget (#2426).
+
+    A character-creation-scoped flat bonus: distinctions granting extra CG
+    magic-stage technique picks (e.g. Tradition Training) target this row.
+    ``CharacterDraft.starting_technique_picks`` sums it via
+    ``_get_distinction_bonus(STARTING_TECHNIQUE_PICKS_TARGET, CG_MODIFIER_CATEGORY)``.
+    Idempotent via get_or_create on (category, name) — mirrors
+    ``wire_elevation_advantage_modifier_target`` (world/combat/factories.py).
+    """
+    from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+
+    category, _ = ModifierCategory.objects.get_or_create(name=CG_MODIFIER_CATEGORY)
+    target, _ = ModifierTarget.objects.get_or_create(
+        name=STARTING_TECHNIQUE_PICKS_TARGET,
+        category=category,
+        defaults={
+            "description": "Extra CG magic-stage technique picks, beyond the base of 1.",
+        },
+    )
+    return target
+
+
+def ensure_tradition_training_distinction() -> None:
+    """Seed the 'Tradition Training' distinction (#2426).
+
+    Grants +1 CG magic-stage technique pick per rank (max_rank=2) via a
+    DistinctionEffect targeting ``starting_technique_picks``. ``cost_per_rank=1``
+    mirrors the existing seeded-distinction convention (the "Attractive"
+    distinction, ``world/seeds/social_relationships.py``); "Arcane" is the
+    magic-flavored category named in ``DistinctionCategory``'s own docstring
+    ("the initial set: Physical, Mental, Personality, Social, Background, Arcane").
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionEffect,
+    )
+
+    target = wire_starting_technique_picks_target()
+
+    category, _ = DistinctionCategory.objects.get_or_create(
+        slug="arcane",
+        defaults={
+            "name": "Arcane",
+            "description": (
+                "Distinctions tied to a character's magical tradition, practice, or gifts."
+            ),
+        },
+    )
+    distinction, _ = Distinction.objects.get_or_create(
+        slug="tradition-training",
+        defaults={
+            "name": "Tradition Training",
+            "category": category,
+            "description": (
+                "PLACEHOLDER: Years spent under a tradition's tutelage broaden which "
+                "techniques you can call your own at the outset."
+            ),
+            "cost_per_rank": 1,
+            "max_rank": 2,
+        },
+    )
+    DistinctionEffect.objects.update_or_create(
+        distinction=distinction,
+        target=target,
+        defaults={
+            "value_per_rank": 1,
+            "description": "+1 CG magic-stage technique pick per rank.",
+        },
     )
 
 
@@ -335,6 +410,7 @@ def seed_character_creation_dev() -> None:
         },
     )
     _seed_cg_explanations()
+    ensure_tradition_training_distinction()
 
 
 def _seed_cg_explanations() -> None:

@@ -85,9 +85,12 @@ class TestSeededCharacterCreation(TestCase):
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
         from world.character_sheets.models import CharacterSheet
-        from world.magic.models import Cantrip, Resonance
+        from world.magic.models import Resonance, Tradition
+        from world.magic.services.cg_catalog import get_gift_options, get_technique_options
         from world.seeds.character_creation import DEFAULT_STAT_NAMES
+        from world.skills.models import Skill
         from world.tarot.models import TarotCard
+        from world.traits.models import Trait, TraitType
 
         seed_dev_database()
 
@@ -103,8 +106,11 @@ class TestSeededCharacterCreation(TestCase):
         gender = CharacterDraft._meta.get_field("selected_gender").related_model.objects.get(
             key="unspecified"
         )
+        # "The Wanderer" (the generic fallback path) has no starter Gift options —
+        # the CG-selectable magic pipeline lives on the 5 style-linked PROSPECT
+        # paths seeded by seed_starter_gift_catalog (#2426).
         path = CharacterDraft._meta.get_field("selected_path").related_model.objects.get(
-            name="The Wanderer"
+            name="Path of Steel"
         )
         height_band = CharacterDraft._meta.get_field("height_band").related_model.objects.get(
             name="average_band"
@@ -114,11 +120,22 @@ class TestSeededCharacterCreation(TestCase):
         )
         tarot = TarotCard.objects.get(name="The Fool")
 
-        # The seeded magic cluster provides a selectable cantrip.
-        cantrip = Cantrip.objects.first()
-        self.assertIsNotNone(cantrip, "magic cluster must seed a selectable cantrip")
+        # The seeded magic cluster provides the Unbound tradition + a Gift/technique
+        # pool for every PROSPECT path (#2426).
+        tradition = Tradition.objects.get(name="Unbound")
+        gift_options = get_gift_options(tradition, path)
+        self.assertTrue(gift_options, "Unbound must have a gift option for Path of Steel")
+        gift = gift_options[0]
+        technique_options = get_technique_options(path, gift, tradition)
+        available_techniques = technique_options.pool + technique_options.signature
+        self.assertTrue(available_techniques, "the picked gift must have >=1 available technique")
+        technique = available_techniques[0]
         resonance = Resonance.objects.first()
         self.assertIsNotNone(resonance, "magic cluster must seed a resonance")
+        stat = Trait.objects.filter(trait_type=TraitType.STAT).first()
+        self.assertIsNotNone(stat, "character-creation cluster must seed STAT traits")
+        skill = Skill.objects.filter(is_active=True).first()
+        self.assertIsNotNone(skill, "checks cluster must seed an active skill")
 
         account = AccountDB.objects.create(username="seeded_cg_player")
         draft_data = {
@@ -129,10 +146,12 @@ class TestSeededCharacterCreation(TestCase):
             "tarot_card_name": tarot.name,
             "tarot_reversed": False,
             "traits_complete": True,
-            "selected_cantrip_id": cantrip.id,
+            "selected_gift_id": gift.id,
+            "selected_technique_ids": [technique.id],
             "selected_gift_resonance_id": resonance.id,
+            "anima_check_stat_id": stat.id,
+            "anima_check_skill_id": skill.id,
         }
-        # selected_tradition may be nullable; leave it unset unless finalize needs it.
 
         draft = CharacterDraft.objects.create(
             account=account,
@@ -141,6 +160,7 @@ class TestSeededCharacterCreation(TestCase):
             selected_species=species,
             selected_gender=gender,
             selected_path=path,
+            selected_tradition=tradition,
             age=25,
             height_band=height_band,
             height_inches=(height_band.min_inches + height_band.max_inches) // 2,

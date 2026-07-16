@@ -1,5 +1,5 @@
 """Tests for seed_magic_config() — Task 1.1, seed_canonical_rituals() — Task 1.2,
-seed_thread_pull_catalog() — Task 1.3, seed_cantrip_starter_catalog() — Task 1.8,
+seed_thread_pull_catalog() — Task 1.3, seed_starter_gift_catalog() — #2426 Task 7,
 and seed_starter_magic_story() — Task 13g.
 
 Verifies:
@@ -12,9 +12,11 @@ Verifies:
 6. ThreadPullCost + ThreadPullEffect catalog rows are created correctly (Task 1.3).
 7. Thread pull catalog seeding is idempotent (Task 1.3).
 8. Staff edits to ThreadPullEffect survive a re-run (Task 1.3).
-9. Cantrip starter catalog creates 5 styles, 6 effect types, 25 cantrips (Task 1.8).
-10. Cantrip catalog seeding is idempotent (Task 1.8).
-11. Staff edits to Cantrip rows survive a re-run (Task 1.8).
+9. Starter gift catalog creates 5 styles, 6 effect types (with correct category), 5 MAJOR
+   Gifts, 25 Techniques, 5 PathGiftGrant rows, the Unbound Tradition + its 5
+   TraditionGiftGrant rows — and creates zero Cantrip rows (#2426 Task 7).
+10. Starter gift catalog seeding is idempotent.
+11. Staff edits to Gift/Technique rows survive a re-run.
 12. seed_starter_magic_story() composes all 8 phases in dependency order (Task 13g).
 13. Re-running the orchestrator produces no changes (idempotent at slice level) (Task 13g).
 14. Staff edits to seeded rows survive re-runs (Task 13g).
@@ -23,18 +25,18 @@ Verifies:
 from django.test import TestCase
 
 from integration_tests.game_content.magic import (
-    CantripStarterCatalogResult,
     MagicConfigResult,
     RitualSeedResult,
+    StarterGiftCatalogResult,
     ThreadPullCatalogResult,
     _seed_affinity_interactions,
     _seed_resonance_environment_config,
     seed_canonical_affinities,
     seed_canonical_resonances,
     seed_canonical_rituals,
-    seed_cantrip_starter_catalog,
     seed_magic_config,
     seed_magic_dev,
+    seed_starter_gift_catalog,
     seed_starter_magic_story,
     seed_thread_pull_catalog,
 )
@@ -480,16 +482,16 @@ class TestSeedThreadPullCatalogPreservesEdits(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Task 1.8 — seed_cantrip_starter_catalog()
+# #2426 Task 7 — seed_starter_gift_catalog()
 # ---------------------------------------------------------------------------
 
 
-class TestSeedCantripStarterCatalogCreation(TestCase):
-    """First-call assertions: correct counts and archetype×style grid exists."""
+class TestSeedStarterGiftCatalogCreation(TestCase):
+    """First-call assertions: correct counts and the Gift/Technique/grant shape."""
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.result: CantripStarterCatalogResult = seed_cantrip_starter_catalog()
+        cls.result: StarterGiftCatalogResult = seed_starter_gift_catalog()
 
     def test_five_styles_created(self) -> None:
         from world.magic.models import TechniqueStyle
@@ -500,52 +502,43 @@ class TestSeedCantripStarterCatalogCreation(TestCase):
         self.assertEqual(actual_styles, expected_styles)
         self.assertEqual(set(self.result.styles.keys()), expected_styles)
 
-    def test_six_effect_types_created(self) -> None:
+    def test_six_effect_types_created_with_correct_category(self) -> None:
+        from world.magic.constants import TechniqueCategory
         from world.magic.models import EffectType
 
         self.assertEqual(EffectType.objects.count(), 6)
-        expected = {
-            "Weapon Enhancement",
-            "Ranged Attack",
-            "Buff",
-            "Debuff",
-            "Defense",
-            "Utility",
+        expected_categories = {
+            "Weapon Enhancement": TechniqueCategory.BUFF,
+            "Ranged Attack": TechniqueCategory.ATTACK,
+            "Buff": TechniqueCategory.BUFF,
+            "Debuff": TechniqueCategory.DEBUFF,
+            "Defense": TechniqueCategory.DEFENSE,
+            "Utility": TechniqueCategory.UTILITY,
         }
-        actual = set(EffectType.objects.values_list("name", flat=True))
-        self.assertEqual(actual, expected)
-        self.assertEqual(set(self.result.effect_types.keys()), expected)
+        actual = dict(EffectType.objects.values_list("name", "category"))
+        self.assertEqual(actual, expected_categories)
+        self.assertEqual(set(self.result.effect_types.keys()), set(expected_categories))
 
-    def test_twenty_five_cantrips_created(self) -> None:
-        from world.magic.models.cantrips import Cantrip
+    def test_effect_type_category_force_corrected_on_pre_existing_row(self) -> None:
+        """get_or_create alone won't fix a stale category — the seed must (#2426)."""
+        from world.magic.constants import TechniqueCategory
+        from world.magic.models import EffectType
 
-        self.assertEqual(Cantrip.objects.count(), 25)
-        self.assertEqual(len(self.result.cantrips), 25)
+        EffectType.objects.filter(name="Ranged Attack").update(category=TechniqueCategory.UTILITY)
 
-    def test_each_cantrip_has_correct_archetype_and_style(self) -> None:
-        """Every (archetype, style_name) combination must appear exactly once."""
-        from world.magic.constants import CantripArchetype
-        from world.magic.models.cantrips import Cantrip
+        seed_starter_gift_catalog()
 
-        expected_archetypes = {
-            CantripArchetype.ATTACK,
-            CantripArchetype.DEFENSE,
-            CantripArchetype.BUFF,
-            CantripArchetype.DEBUFF,
-            CantripArchetype.UTILITY,
-        }
-        expected_style_names = {"Manifestation", "Subtle", "Performance", "Prayer", "Incantation"}
-
-        # Build (archetype, style_name) pairs from the DB
-        pairs = set(Cantrip.objects.select_related("style").values_list("archetype", "style__name"))
-        expected_pairs = {
-            (arch, style) for arch in expected_archetypes for style in expected_style_names
-        }
         self.assertEqual(
-            pairs,
-            expected_pairs,
-            "Each (archetype, style) pair must appear exactly once",
+            EffectType.objects.get(name="Ranged Attack").category,
+            TechniqueCategory.ATTACK,
+            "Pre-existing EffectType rows must have their category force-corrected",
         )
+
+    def test_no_cantrip_rows_created(self) -> None:
+        """The seed no longer creates Cantrip rows (#2426 Task 7)."""
+        from world.magic.models.cantrips import Cantrip
+
+        self.assertEqual(Cantrip.objects.count(), 0)
 
     def test_five_prospect_paths_created(self) -> None:
         from world.classes.models import Path, PathStage
@@ -561,6 +554,10 @@ class TestSeedCantripStarterCatalogCreation(TestCase):
         actual = set(Path.objects.filter(stage=PathStage.PROSPECT).values_list("name", flat=True))
         self.assertEqual(actual, expected_path_names)
         self.assertEqual(set(self.result.paths.keys()), expected_path_names)
+
+    def test_prospect_paths_have_action_category_set(self) -> None:
+        for path in self.result.paths.values():
+            self.assertTrue(path.action_category, f"{path.name} must have action_category set")
 
     def test_styles_wired_to_paths(self) -> None:
         """Each TechniqueStyle must have exactly one allowed_path matching the canonical mapping."""
@@ -582,62 +579,168 @@ class TestSeedCantripStarterCatalogCreation(TestCase):
                 f"Style '{style_name}' must have '{path_name}' in allowed_paths",
             )
 
-    def test_cantrips_are_active(self) -> None:
-        from world.magic.models.cantrips import Cantrip
+    def test_five_major_gifts_created(self) -> None:
+        from world.magic.constants import GiftKind
+        from world.magic.models import Gift
 
-        inactive = Cantrip.objects.filter(is_active=False).count()
-        self.assertEqual(inactive, 0, "All seeded cantrips must be active")
+        self.assertEqual(Gift.objects.count(), 5)
+        self.assertEqual(len(self.result.gifts), 5)
+        for gift in self.result.gifts.values():
+            self.assertEqual(gift.kind, GiftKind.MAJOR)
 
-    def test_cantrip_default_mechanicals(self) -> None:
-        """All cantrips should have starter-level mechanical values."""
-        from world.magic.models.cantrips import Cantrip
+    def test_twenty_five_techniques_created_five_per_gift(self) -> None:
+        from world.magic.models import Technique
 
-        for cantrip in Cantrip.objects.all():
-            self.assertEqual(cantrip.base_intensity, 1, f"{cantrip.name}: base_intensity")
-            self.assertEqual(cantrip.base_control, 1, f"{cantrip.name}: base_control")
-            self.assertEqual(cantrip.base_anima_cost, 5, f"{cantrip.name}: base_anima_cost")
+        self.assertEqual(Technique.objects.count(), 25)
+        self.assertEqual(len(self.result.techniques), 25)
+        for gift in self.result.gifts.values():
+            self.assertEqual(Technique.objects.filter(gift=gift).count(), 5)
+
+    def test_technique_default_mechanicals(self) -> None:
+        """All starter techniques should have starter-level mechanical values."""
+        from world.magic.seeds_cast import get_standalone_cast_template
+
+        cast_template = get_standalone_cast_template()
+        for technique in self.result.techniques.values():
+            self.assertEqual(technique.level, 1, f"{technique.name}: level")
+            self.assertEqual(technique.intensity, 1, f"{technique.name}: intensity")
+            self.assertEqual(technique.control, 1, f"{technique.name}: control")
+            self.assertEqual(technique.anima_cost, 5, f"{technique.name}: anima_cost")
+            self.assertEqual(technique.action_template_id, cast_template.pk, f"{technique.name}")
+
+    def test_technique_action_category_inherited_from_path(self) -> None:
+        """Every technique's action_category must match its gift's linked path."""
+        style_to_path_name = {
+            "Manifestation": "Path of Steel",
+            "Subtle": "Path of Whispers",
+            "Performance": "Path of Voice",
+            "Prayer": "Path of the Chosen",
+            "Incantation": "Path of Tomes",
+        }
+        for technique in self.result.techniques.values():
+            path_name = style_to_path_name[technique.style.name]
+            path = self.result.paths[path_name]
+            self.assertEqual(
+                technique.action_category,
+                path.action_category,
+                f"{technique.name}: action_category must match {path_name}'s",
+            )
+
+    def test_each_gift_has_five_distinct_effect_types(self) -> None:
+        """Every gift's 5 techniques must be one-per-EffectType (the retired 5-archetype grid).
+
+        Not the same claim as "one per TechniqueCategory": Weapon Enhancement and Buff
+        both categorize as BUFF (#2426's explicit mapping), so Subtle/Prayer — whose
+        "attack" grid row uses Weapon Enhancement — legitimately land 2 BUFF-category
+        techniques and 0 ATTACK-category ones. EffectType-name coverage stays 1-per-gift
+        regardless.
+        """
+        from world.magic.models import Technique
+
+        for gift in self.result.gifts.values():
+            effect_type_names = list(
+                Technique.objects.filter(gift=gift).values_list("effect_type__name", flat=True)
+            )
+            self.assertEqual(
+                len(effect_type_names),
+                len(set(effect_type_names)),
+                f"{gift.name} must have 5 distinct EffectType assignments",
+            )
+            self.assertEqual(len(effect_type_names), 5)
+
+    def test_path_gift_grants_created_with_all_five_starter_techniques(self) -> None:
+        from world.magic.models.grants import PathGiftGrant
+
+        self.assertEqual(PathGiftGrant.objects.count(), 5)
+        self.assertEqual(len(self.result.path_gift_grants), 5)
+        for grant in self.result.path_gift_grants.values():
+            self.assertEqual(grant.starter_techniques.count(), 5)
+            self.assertEqual(
+                set(grant.starter_techniques.values_list("gift_id", flat=True)),
+                {grant.gift_id},
+            )
+
+    def test_unbound_tradition_created(self) -> None:
+        from world.magic.models import Tradition
+
+        self.assertEqual(Tradition.objects.filter(name="Unbound").count(), 1)
+        self.assertEqual(self.result.tradition.name, "Unbound")
+
+    def test_unbound_grants_every_starter_gift_with_no_signatures(self) -> None:
+        from world.magic.models.grants import TraditionGiftGrant
+
+        grants = TraditionGiftGrant.objects.filter(tradition=self.result.tradition)
+        self.assertEqual(grants.count(), 5)
+        self.assertEqual(len(self.result.tradition_gift_grants), 5)
+        for grant in grants:
+            self.assertEqual(grant.signature_techniques.count(), 0)
+
+    def test_gift_options_available_for_every_prospect_path(self) -> None:
+        """The CG catalog service must resolve >=1 gift for every (Prospect path, Unbound) pair."""
+        from world.magic.services.cg_catalog import get_gift_options
+
+        for path in self.result.paths.values():
+            options = get_gift_options(self.result.tradition, path)
+            self.assertEqual(
+                len(options),
+                1,
+                f"{path.name} must have exactly one gift option under Unbound",
+            )
 
 
-class TestSeedCantripStarterCatalogIdempotency(TestCase):
+class TestSeedStarterGiftCatalogIdempotency(TestCase):
     """Second-call assertions: row counts unchanged, same PKs returned."""
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.first: CantripStarterCatalogResult = seed_cantrip_starter_catalog()
-        cls.second: CantripStarterCatalogResult = seed_cantrip_starter_catalog()
+        cls.first: StarterGiftCatalogResult = seed_starter_gift_catalog()
+        cls.second: StarterGiftCatalogResult = seed_starter_gift_catalog()
 
     def _counts(self) -> dict[str, int]:
         from world.classes.models import Path, PathStage
-        from world.magic.models import EffectType, TechniqueStyle
-        from world.magic.models.cantrips import Cantrip
+        from world.magic.models import EffectType, Gift, Technique, TechniqueStyle, Tradition
+        from world.magic.models.grants import PathGiftGrant, TraditionGiftGrant
 
         return {
-            "cantrips": Cantrip.objects.count(),
+            "gifts": Gift.objects.count(),
+            "techniques": Technique.objects.count(),
             "styles": TechniqueStyle.objects.count(),
             "effect_types": EffectType.objects.count(),
             "prospect_paths": Path.objects.filter(stage=PathStage.PROSPECT).count(),
+            "path_gift_grants": PathGiftGrant.objects.count(),
+            "traditions": Tradition.objects.filter(name="Unbound").count(),
+            "tradition_gift_grants": TraditionGiftGrant.objects.count(),
         }
 
     def test_row_counts_unchanged(self) -> None:
         counts = self._counts()
-        self.assertEqual(counts["cantrips"], 25)
+        self.assertEqual(counts["gifts"], 5)
+        self.assertEqual(counts["techniques"], 25)
         self.assertEqual(counts["styles"], 5)
         self.assertEqual(counts["effect_types"], 6)
         self.assertEqual(counts["prospect_paths"], 5)
+        self.assertEqual(counts["path_gift_grants"], 5)
+        self.assertEqual(counts["traditions"], 1)
+        self.assertEqual(counts["tradition_gift_grants"], 5)
 
     def test_same_pks_returned(self) -> None:
-        style_names = {"Manifestation", "Subtle", "Performance", "Prayer", "Incantation"}
-        for name in style_names:
+        for name, style in self.first.styles.items():
             self.assertEqual(
-                self.first.styles[name].pk,
+                style.pk,
                 self.second.styles[name].pk,
                 f"TechniqueStyle '{name}' pk changed on second call",
             )
-        for name, cantrip in self.first.cantrips.items():
+        for name, gift in self.first.gifts.items():
             self.assertEqual(
-                cantrip.pk,
-                self.second.cantrips[name].pk,
-                f"Cantrip '{name}' pk changed on second call",
+                gift.pk,
+                self.second.gifts[name].pk,
+                f"Gift '{name}' pk changed on second call",
+            )
+        for name, technique in self.first.techniques.items():
+            self.assertEqual(
+                technique.pk,
+                self.second.techniques[name].pk,
+                f"Technique '{name}' pk changed on second call",
             )
         for name, et in self.first.effect_types.items():
             self.assertEqual(
@@ -645,44 +748,49 @@ class TestSeedCantripStarterCatalogIdempotency(TestCase):
                 self.second.effect_types[name].pk,
                 f"EffectType '{name}' pk changed on second call",
             )
-        path_names = {
-            "Path of Steel",
-            "Path of Whispers",
-            "Path of Voice",
-            "Path of the Chosen",
-            "Path of Tomes",
-        }
-        for name in path_names:
+        for name, path in self.first.paths.items():
             self.assertEqual(
-                self.first.paths[name].pk,
+                path.pk,
                 self.second.paths[name].pk,
                 f"Path '{name}' pk changed on second call",
             )
+        self.assertEqual(self.first.tradition.pk, self.second.tradition.pk)
 
 
-class TestSeedCantripStarterCatalogPreservesEdits(TestCase):
-    """Staff edits to Cantrip rows survive a re-run (get_or_create semantics)."""
+class TestSeedStarterGiftCatalogPreservesEdits(TestCase):
+    """Staff edits to Gift/Technique rows survive a re-run (get_or_create semantics)."""
 
     def test_edit_preserved_on_rerun(self) -> None:
-        from world.magic.models.cantrips import Cantrip
+        from world.magic.models import Gift, Technique
 
-        first = seed_cantrip_starter_catalog()
-        # Pick the first cantrip alphabetically for determinism
-        cantrip_name = next(iter(sorted(first.cantrips.keys())))
-        cantrip_pk = first.cantrips[cantrip_name].pk
+        first = seed_starter_gift_catalog()
+        # Pick the first gift alphabetically for determinism
+        gift_name = next(iter(sorted(first.gifts.keys())))
+        gift_pk = first.gifts[gift_name].pk
+        technique_name = next(iter(sorted(first.techniques.keys())))
+        technique_pk = first.techniques[technique_name].pk
 
-        # Simulate a staff edit via bulk update (bypasses identity map)
-        Cantrip.objects.filter(pk=cantrip_pk).update(description="staff-edited description")
+        # Simulate staff edits via bulk update (bypasses identity map)
+        Gift.objects.filter(pk=gift_pk).update(description="staff-edited gift description")
+        Technique.objects.filter(pk=technique_pk).update(
+            description="staff-edited technique description"
+        )
 
-        # Re-run the seed — must not overwrite the staff edit
-        seed_cantrip_starter_catalog()
+        # Re-run the seed — must not overwrite either staff edit
+        seed_starter_gift_catalog()
 
         # Use .values() to bypass SharedMemoryModel identity-map cache
-        db_value = Cantrip.objects.filter(pk=cantrip_pk).values("description").get()
+        gift_value = Gift.objects.filter(pk=gift_pk).values("description").get()
+        technique_value = Technique.objects.filter(pk=technique_pk).values("description").get()
         self.assertEqual(
-            db_value["description"],
-            "staff-edited description",
-            "seed_cantrip_starter_catalog() must not overwrite existing rows",
+            gift_value["description"],
+            "staff-edited gift description",
+            "seed_starter_gift_catalog() must not overwrite existing Gift rows",
+        )
+        self.assertEqual(
+            technique_value["description"],
+            "staff-edited technique description",
+            "seed_starter_gift_catalog() must not overwrite existing Technique rows",
         )
 
 
@@ -798,6 +906,7 @@ class TestSeedMagicDev(TestCase):
         from world.magic.models.cantrips import Cantrip
         from world.magic.models.corruption_config import CorruptionConfig
         from world.magic.models.gain_config import ResonanceGainConfig
+        from world.magic.models.grants import PathGiftGrant, TraditionGiftGrant
         from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
 
         # --- Task 1.1: config singletons ---
@@ -819,20 +928,23 @@ class TestSeedMagicDev(TestCase):
         # 4 TRAIT + 16 RELATIONSHIP_TRACK (4 resonances × 4 tiers, #2021) = 20.
         self.assertEqual(ThreadPullEffect.objects.count(), 20)
 
-        # --- Task 1.8: cantrip catalog ---
-        # TechniqueStyle: 5 from cantrip catalog + 1 "Social" from MagicContent.create_all()
+        # --- #2426 Task 7: starter gift catalog ---
+        # TechniqueStyle: 5 from the starter catalog + 1 "Social" from MagicContent.create_all()
         self.assertGreaterEqual(TechniqueStyle.objects.count(), 5)
         self.assertTrue(
             TechniqueStyle.objects.filter(
                 name__in={"Manifestation", "Subtle", "Performance", "Prayer", "Incantation"}
             ).count()
             == 5,
-            "All 5 cantrip-catalog styles must exist",
+            "All 5 starter-catalog styles must exist",
         )
-        # EffectType: 6 from cantrip catalog + 1 "Social Influence" from MagicContent.create_all()
+        # EffectType: 6 from the starter catalog + 1 "Social Influence" from
+        # MagicContent.create_all()
         self.assertGreaterEqual(EffectType.objects.count(), 6)
-        self.assertEqual(Cantrip.objects.count(), 25)
+        self.assertEqual(Cantrip.objects.count(), 0, "No Cantrip rows should be seeded (#2426)")
         self.assertEqual(Path.objects.filter(name__startswith="Path of").count(), 5)
+        self.assertEqual(PathGiftGrant.objects.count(), 5)
+        self.assertTrue(TraditionGiftGrant.objects.filter(tradition__name="Unbound").count() == 5)
 
         # --- author_reference_corruption_content: Wild Hunt + Web of Spiders ---
         self.assertTrue(
