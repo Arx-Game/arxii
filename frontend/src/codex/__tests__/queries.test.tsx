@@ -189,6 +189,8 @@ describe('Codex Query Hooks', () => {
         summary: 'Resonance of giving',
         lore_content: 'Full content',
         mechanics_content: null,
+        lore_links: [],
+        mechanics_links: [],
         is_public: true,
         subject: 1,
         subject_name: 'Celestial',

@@ -294,6 +294,76 @@ class TestCodexEntryAPI(CodexAPITestCase):
         assert data["research_progress"] == 5
         assert data["learn_threshold"] == self.restricted_entry.learn_threshold
 
+    def test_lore_links_in_response_for_public_entry(self):
+        """lore_links field is present and resolved for public entries."""
+        linked_entry = CodexEntryFactory(
+            subject=self.subject,
+            name="Linked Public Entry",
+            lore_content="Linked lore",
+            is_public=True,
+        )
+        entry_with_link = CodexEntryFactory(
+            subject=self.subject,
+            name="Entry With Link",
+            lore_content="See [[Linked Public Entry]] for details.",
+            is_public=True,
+        )
+        response = self.client.get(f"/api/codex/entries/{entry_with_link.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.data
+        assert "lore_links" in data
+        assert "mechanics_links" in data
+        assert len(data["lore_links"]) == 1
+        assert data["lore_links"][0]["entry_id"] == linked_entry.id
+        assert data["lore_links"][0]["accessible"] is True
+
+    def test_links_empty_when_content_gated(self):
+        """lore_links is empty list when content is not visible."""
+        CharacterCodexKnowledgeFactory(
+            roster_entry=self.roster_entry,
+            entry=self.restricted_entry,
+            status=CodexKnowledgeStatus.UNCOVERED,
+        )
+        # Create a new restricted entry with a link (can't .save() existing
+        # entries due to the breadcrumb REFRESH MATERIALIZED VIEW on SQLite)
+        entry_with_link = CodexEntryFactory(
+            subject=self.subject,
+            name="Gated Entry With Link",
+            lore_content="See [[Public Entry]].",
+            is_public=False,
+        )
+        CharacterCodexKnowledgeFactory(
+            roster_entry=self.roster_entry,
+            entry=entry_with_link,
+            status=CodexKnowledgeStatus.UNCOVERED,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(f"/api/codex/entries/{entry_with_link.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.data
+        assert data["lore_content"] is None
+        assert data["lore_links"] == []
+
+    def test_inaccessible_link_does_not_leak_name(self):
+        """Inaccessible link in content returns ??? and no entry_id."""
+        # Public entry links to a restricted entry the reader can't see
+        entry_with_link = CodexEntryFactory(
+            subject=self.subject,
+            name="Entry With Inaccessible Link",
+            lore_content="See [[Restricted Entry]] if you dare.",
+            is_public=True,
+        )
+        response = self.client.get(f"/api/codex/entries/{entry_with_link.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.data
+        assert len(data["lore_links"]) == 1
+        link = data["lore_links"][0]
+        assert link["entry_id"] is None
+        assert link["display_text"] == "???"
+        assert link["accessible"] is False
+        # The real entry name must not appear
+        assert "Restricted Entry" not in link["display_text"]
+
 
 class TestCodexTreeQueryCount(TestCase):
     """Lock the query count on the codex tree endpoint.

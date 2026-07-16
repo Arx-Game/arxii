@@ -233,6 +233,12 @@ class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
             return CodexEntryDetailSerializer
         return CodexEntryListSerializer
 
+    def get_serializer_context(self):
+        """Pass roster_entry so the detail serializer can resolve wikilinks."""
+        context = super().get_serializer_context()
+        context["roster_entry"] = self._get_active_roster_entry()
+        return context
+
     def _get_active_roster_entry(self):
         if not self.request.user.is_authenticated:
             return None

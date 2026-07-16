@@ -49,9 +49,18 @@ export interface CodexEntryListItem {
   knowledge_status: 'known' | 'uncovered' | null;
 }
 
+export interface CodexLinkRef {
+  match_text: string;
+  entry_id: number | null;
+  display_text: string;
+  accessible: boolean;
+}
+
 export interface CodexEntryDetail extends CodexEntryListItem {
   lore_content: string | null;
   mechanics_content: string | null;
+  lore_links: CodexLinkRef[];
+  mechanics_links: CodexLinkRef[];
   learn_threshold: number;
   research_progress: number | null;
 }

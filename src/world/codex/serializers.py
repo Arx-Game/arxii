@@ -13,6 +13,7 @@ from world.codex.models import (
     CodexEntry,
     CodexSubject,
 )
+from world.codex.services import resolve_codex_links
 
 
 class CodexCategorySerializer(serializers.ModelSerializer):
@@ -137,6 +138,8 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
     research_progress = serializers.IntegerField(read_only=True, allow_null=True)
     lore_content = serializers.SerializerMethodField()
     mechanics_content = serializers.SerializerMethodField()
+    lore_links = serializers.SerializerMethodField()
+    mechanics_links = serializers.SerializerMethodField()
 
     class Meta:
         model = CodexEntry
@@ -146,6 +149,8 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
             "summary",
             "lore_content",
             "mechanics_content",
+            "lore_links",
+            "mechanics_links",
             "is_public",
             "subject",
             "subject_name",
@@ -174,3 +179,18 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
     def get_mechanics_content(self, obj: CodexEntry) -> str | None:
         """Return mechanics content only if public or KNOWN."""
         return obj.mechanics_content if self._can_see_content(obj) else None
+
+    def _get_links(self, obj: CodexEntry, content: str | None) -> list[dict]:
+        """Resolve inline wikilinks if the reader can see the content."""
+        if not self._can_see_content(obj) or not content:
+            return []
+        roster_entry = self.context.get("roster_entry")
+        return resolve_codex_links(content, obj.subject, roster_entry)
+
+    def get_lore_links(self, obj: CodexEntry) -> list[dict]:
+        """Return resolved wikilinks from lore_content."""
+        return self._get_links(obj, obj.lore_content)
+
+    def get_mechanics_links(self, obj: CodexEntry) -> list[dict]:
+        """Return resolved wikilinks from mechanics_content."""
+        return self._get_links(obj, obj.mechanics_content)
