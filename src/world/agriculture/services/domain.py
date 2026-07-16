@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import OperationalError, ProgrammingError
+
 if TYPE_CHECKING:
     from world.room_features.models import RoomFeatureInstance
     from world.societies.houses.models import Domain
@@ -22,8 +24,8 @@ def _ancestor_area_ids(area) -> set[int]:
         ancestor_ids = set(
             AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
         )
-    except Exception:  # noqa: BLE001
-        # SQLite test fallback: walk the parent chain manually.
+    except (OperationalError, ProgrammingError):
+        # SQLite test fallback (AreaClosure matview missing): walk the parent chain.
         ancestor_ids = set()
         current = area
         while current is not None:
@@ -77,7 +79,7 @@ def max_food_capacity(domain: Domain) -> int:
                 "descendant_id", flat=True
             )
         )
-    except Exception:  # noqa: BLE001
+    except (OperationalError, ProgrammingError):
         # SQLite test fallback: no descendants table — just use the area itself.
         descendant_ids = {domain_area.pk}
     descendant_ids.add(domain_area.pk)

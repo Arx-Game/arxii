@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from world.scenes.constants import SceneAction
 from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.scenes.models import Persona, Scene
@@ -53,7 +55,7 @@ def persona_for_character(character: Character) -> Persona:
         raise MissingPrimaryPersonaError(character)
     try:
         return sheet.primary_persona
-    except Exception as exc:
+    except ObjectDoesNotExist as exc:
         raise MissingPrimaryPersonaError(character) from exc
 
 

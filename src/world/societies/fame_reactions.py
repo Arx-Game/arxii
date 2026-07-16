@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from world.societies.constants import FAME_TIER_ORDER
@@ -44,9 +45,8 @@ def maybe_emit_fame_reaction(character: ObjectDB, room: ObjectDB) -> bool:
     """
     if character is None or room is None:
         return False
-    try:
-        profile = room.room_profile
-    except Exception:  # noqa: BLE001 — non-room containers have no profile
+    profile = room.room_profile_or_none
+    if profile is None:
         return False
 
     persona = _active_persona(character)
@@ -94,7 +94,8 @@ def _active_persona(character: ObjectDB) -> Persona | None:
         return None
     try:
         return active_persona_for_sheet(sheet)
-    except Exception:  # noqa: BLE001 - silent reaction on any resolution fault
+    except ObjectDoesNotExist:
+        # Broken PRIMARY invariant: skip the cosmetic reaction; real faults raise.
         return None
 
 

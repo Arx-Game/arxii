@@ -10,6 +10,8 @@ board exists, never its names). Raw numbers never leave the server.
 
 from __future__ import annotations
 
+import logging
+
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import serializers, viewsets
 from rest_framework.exceptions import NotFound
@@ -24,6 +26,8 @@ from world.societies.ranking_services import (
     get_society_prestige_top_n,
     viewer_is_member_of_society,
 )
+
+logger = logging.getLogger(__name__)
 
 _MSG_NO_DISPLAY = "No ranking display there."
 
@@ -82,7 +86,8 @@ def _viewer_persona(request: Request):
 
     try:
         puppet = request.user.puppet
-    except (AttributeError, Exception):  # noqa: BLE001
+    except AttributeError:
+        # AnonymousUser has no puppet attribute.
         return None
     if puppet is None:
         return None
@@ -91,7 +96,8 @@ def _viewer_persona(request: Request):
         return None
     try:
         return active_persona_for_sheet(sheet)
-    except Exception:  # noqa: BLE001 - fail closed: any resolution fault → deny
+    except Exception:
+        logger.exception("Persona resolution failed for sheet %s; denying", sheet.pk)
         return None
 
 

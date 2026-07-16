@@ -50,7 +50,7 @@ class CastTechniqueAction(Action):
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
 
-    def execute(  # noqa: PLR0913, C901, PLR0911
+    def execute(  # noqa: PLR0913, PLR0911
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -117,6 +117,8 @@ class CastTechniqueAction(Action):
             except Resonance.DoesNotExist:
                 return ActionResult(success=False, message="Resonance not found.")
 
+        from world.magic.exceptions import MagicError  # noqa: PLC0415
+
         try:
             cast = request_technique_cast(
                 scene=scene,
@@ -129,16 +131,12 @@ class CastTechniqueAction(Action):
                 position_params=position_params,
                 preferred_resonance=preferred_resonance,
             )
-        except Exception as exc:
-            # Surface magic-layer exceptions (e.g. MagicError subclasses for
-            # invalid/inert pull declarations) as clean failure results rather
-            # than propagating as crashes.  Re-raise anything that is not a
-            # MagicError so programming errors are still visible.
-            from world.magic.exceptions import MagicError  # noqa: PLC0415
-
-            if not isinstance(exc, MagicError):
-                raise
-            return ActionResult(success=False, message=str(exc))
+        except MagicError as exc:
+            # Surface magic-layer failures (e.g. invalid/inert pull
+            # declarations) as clean failure results; anything else propagates
+            # so programming errors stay visible. user_message, never str(exc)
+            # (exception detail must not reach players).
+            return ActionResult(success=False, message=exc.user_message)
 
         if cast.soulfray_warning is not None and not confirm_soulfray_risk:
             from commands.pending_actions import PendingCast, register_pending  # noqa: PLC0415

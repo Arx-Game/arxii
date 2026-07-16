@@ -121,8 +121,9 @@ class SecureWebSocketClient(WebSocketClient):
                         ],
                     )
                     active_sessions = same_csession_count + 1  # +1 for current session
-                except Exception:  # noqa: BLE001
-                    # Fallback: always preserve session to be safe
+                except Exception:  # noqa: BLE001 — session-count boundary
+                    # Fallback: always preserve session to be safe.
+                    logger.log_err("session count failed; preserving webclient session")
                     active_sessions = 2
 
             # Only clear webclient auth if this is the last session AND nonce matches

@@ -696,9 +696,8 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
         return None
 
     ritual = rituals[0]
-    try:
-        config = ritual.check_config
-    except Exception:  # noqa: BLE001
+    config = ritual.check_config_or_none
+    if config is None:
         return None
 
     return AnimaRitualSection(

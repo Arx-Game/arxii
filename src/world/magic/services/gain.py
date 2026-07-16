@@ -1094,8 +1094,8 @@ def outfit_trickle_tick() -> int:
         try:
             with transaction.atomic():
                 total_grants += outfit_daily_trickle_for_character(sheet)
-        except Exception:  # noqa: BLE001, S112
-            # TODO: structured log via Evennia logger.
+        except Exception:
+            logger.exception("Outfit resonance trickle failed for sheet %s", sheet.pk)
             continue
 
     return total_grants

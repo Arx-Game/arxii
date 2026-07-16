@@ -1104,9 +1104,8 @@ class RitualSerializer(serializers.ModelSerializer):
 
     def get_check_config(self, obj: Ritual) -> dict | None:
         """Return nested check_config when present, else None."""
-        try:
-            config = obj.check_config
-        except Exception:  # noqa: BLE001
+        config = obj.check_config_or_none
+        if config is None:
             return None
         return RitualCheckConfigSerializer(config).data
 
@@ -1201,9 +1200,8 @@ class RitualPatchSerializer(serializers.ModelSerializer):
         config_data = validated_data.pop("check_config", None)
         ritual = super().update(instance, validated_data)
         if config_data:
-            try:
-                config = instance.check_config
-            except Exception:  # noqa: BLE001
+            config = instance.check_config_or_none
+            if config is None:
                 return ritual
             for field, value in config_data.items():
                 setattr(config, field, value)

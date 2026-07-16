@@ -68,15 +68,15 @@ class MessageContentSerializer(serializers.Serializer):
         }
 
     def _render_template(self, template: str, variables: dict[str, str]) -> str:
-        """Render template with variable substitution."""
-        try:
-            # Simple variable substitution - enhance with proper templating
-            result = template
-            for key, value in variables.items():
-                result = result.replace(f"{{{key}}}", str(value))
-            return result
-        except Exception:  # noqa: BLE001
-            return template
+        """Render template with variable substitution.
+
+        No try/except: ``str.replace`` cannot raise for string inputs — the
+        old broad catch only masked bad-variable-type bugs (#2386 tranche 4).
+        """
+        result = template
+        for key, value in variables.items():
+            result = result.replace(f"{{{key}}}", str(value))
+        return result
 
 
 class ChatMessageSerializer(serializers.Serializer):

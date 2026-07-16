@@ -58,10 +58,10 @@ def _pool_difficulty_bonus(field_instance, _character=None) -> int:
     """
     from world.agriculture.services.production import get_food_config  # noqa: PLC0415
 
-    try:
-        pool = field_instance.field_details.uncollected_pool
-    except Exception:  # noqa: BLE001
+    details = field_instance.field_details_or_none
+    if details is None:
         return 0
+    pool = details.uncollected_pool
 
     config = get_food_config()
     threshold = config.pool_difficulty_threshold

@@ -208,9 +208,8 @@ class TraitHandler:
         from world.mechanics.models import ModifierTarget  # noqa: PLC0415
         from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
-        try:
-            sheet = self.character.sheet_data
-        except Exception:  # noqa: BLE001
+        sheet = self.character.character_sheet
+        if sheet is None:
             return 0
 
         target = ModifierTarget.get_for_trait(trait)

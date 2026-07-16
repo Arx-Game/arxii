@@ -43,6 +43,7 @@ def _has_command_access(command: Any, cmdset_obj: Any, source_name: str) -> bool
             source_name,
             _get_command_key(command),
             e,
+            exc_info=True,
         )
         return False
 
@@ -62,6 +63,7 @@ def _serialize_command(
             source_name,
             _get_command_key(command),
             e,
+            exc_info=True,
         )
 
 

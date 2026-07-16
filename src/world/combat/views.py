@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from http import HTTPMethod
+import logging
 from typing import cast
 
 from django.db.models import Prefetch, Q, QuerySet
@@ -83,6 +84,8 @@ from world.items.models import ItemInstance
 from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.models import Persona, Scene
 from world.stories.pagination import StandardResultsSetPagination
+
+logger = logging.getLogger(__name__)
 
 # Fixed error messages for API responses (never expose raw exception strings).
 _ERR_NOT_PARTICIPANT = "Not a participant in this encounter."
@@ -365,7 +368,10 @@ class CombatEncounterViewSet(ModelViewSet):
                 sheet,
                 covenant_role=covenant_role,
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.exception(
+                "add_participant failed for encounter %s sheet %s", encounter.pk, sheet.pk
+            )
             return Response(
                 {"detail": _ERR_ADD_PARTICIPANT},
                 status=status.HTTP_400_BAD_REQUEST,

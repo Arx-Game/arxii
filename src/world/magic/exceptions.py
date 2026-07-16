@@ -5,7 +5,25 @@ from typing import ClassVar
 
 
 class MagicError(Exception):
+    """Base for player-surfaceable magic failures.
+
+    ``user_message`` is what reaches the player. Raise-sites that pass an
+    explicit message are authoring player-facing text (e.g. "Unknown
+    resonance.") and it becomes the user_message; raising with no args keeps
+    the subclass's class-level message. Never surface ``str(exc)`` of other
+    exception types (#2386 tranche 4).
+    """
+
     user_message = "An error occurred."
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        # Only bare MagicError treats its message as player text (the pull
+        # paths author these). Subclasses raise with INTERNAL detail ("Need
+        # 100 XP … trait_258") and keep their curated class-level
+        # user_message — never leak the internals.
+        if type(self) is MagicError and args and isinstance(args[0], str) and args[0]:
+            self.user_message = args[0]
 
 
 class ResonanceInsufficient(MagicError):

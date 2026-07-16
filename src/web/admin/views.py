@@ -208,7 +208,8 @@ def import_upload(request):
         try:
             content = uploaded_file.read().decode("utf-8")
             analysis = analyze_fixture(content)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
+            logger.exception("Fixture upload parse failed")
             return render(
                 request,
                 "admin/import_upload.html",

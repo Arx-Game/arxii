@@ -3,6 +3,7 @@ Handles Cloudinary integration for tenure media storage."""
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, cast
 import uuid
 
@@ -16,6 +17,8 @@ from django.core.files.uploadedfile import UploadedFile
 from evennia_extensions.models import Artist, PlayerData, PlayerMedia
 from world.roster.models import RosterTenure, TenureMedia
 from world.roster.services.media_scan import MediaScanService
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from world.roster.models import TenureGallery
@@ -133,7 +136,11 @@ class CloudinaryGalleryService:
             cloudinary.uploader.destroy(media.cloudinary_public_id)
             media.delete()
             return True
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.exception(
+                "Cloudinary destroy failed for %s; DB row removed, remote asset orphaned",
+                media.cloudinary_public_id,
+            )
             media.delete()
             return False
 
@@ -178,7 +185,8 @@ class CloudinaryGalleryService:
                     sort_order=index,
                 )
             return True
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.exception("Media reorder failed for tenure %s", tenure.pk)
             return False
 
     @classmethod
