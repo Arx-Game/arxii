@@ -96,6 +96,7 @@ function createAuthStore(authenticated: boolean) {
         id: 1,
         username: 'testuser',
         email: 'test@example.com',
+        available_characters: [{ id: 1, name: 'TestChar' }],
       } as Parameters<typeof authSlice.actions.setAccount>[0])
     );
   }
