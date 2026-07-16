@@ -7,14 +7,16 @@ Create-if-missing; never overwrites; never deletes (the #651 invariant).
 
 Child of #651 / epic #1220 (Phase A). Registered in ``CLUSTER_SEEDERS`` after
 ``magic`` because ``finalize_character`` picks the magic-seeded catalog
-``Gift``/``Technique`` + ``Resonance``/``TechniqueStyle`` at finalize time (#2426) —
-NOT because ``Beginnings`` FKs into magic (it FKs ``starting_area`` -> ``Realm`` and
-an M2M ``allowed_species`` -> ``Species``).
+``Gift``/``Technique`` + ``Resonance``/``TechniqueStyle`` at finalize time (#2426),
+and ``seed_beginning_traditions`` (below) links every seeded ``Beginnings`` to the
+magic-seeded Unbound ``Tradition`` — NOT because ``Beginnings`` FKs into magic (it
+FKs ``starting_area`` -> ``Realm`` and an M2M ``allowed_species`` -> ``Species``).
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
+import logging
 from typing import TYPE_CHECKING
 
 from world.character_creation.constants import (
@@ -44,6 +46,8 @@ from world.traits.models import Trait, TraitType
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+logger = logging.getLogger(__name__)
 
 # The canonical 12 stat names. Mirrors the set FinalizationTestMixin uses; kept
 # here as the single seed-time source (factories-as-seed-data). The test mixin's
@@ -246,6 +250,55 @@ def ensure_tradition_training_distinction() -> None:
     )
 
 
+#: Must match ``_UNBOUND_TRADITION_NAME`` in
+#: ``world.seeds.game_content.magic.seed_starter_gift_catalog`` — that's the
+#: "magic" cluster seeder that creates the row; this module only looks it up by
+#: name (get_or_create ownership stays on the magic seeder).
+_UNBOUND_TRADITION_NAME = "Unbound"
+
+
+def seed_beginning_traditions() -> None:
+    """Seed a BeginningTradition (Unbound, no gate) for every seeded Beginnings row.
+
+    Without this, the CG Tradition step is empty for every Beginning on a fresh
+    Big-Button-only DB: ``TraditionViewSet.get_queryset()`` returns nothing when
+    ``beginning.cached_beginning_traditions`` is empty, and ``select_tradition``
+    independently 400s without a matching ``BeginningTradition`` row — CG is
+    uncompletable, even the tradition-agnostic Unbound path (#2426 whole-branch
+    review finding).
+
+    The Unbound ``Tradition`` row itself is seeded by
+    ``world.seeds.game_content.magic.seed_starter_gift_catalog`` (the "magic"
+    cluster), which runs BEFORE "character_creation" in cluster order
+    (``world.seeds.clusters``) precisely so both sides of this join exist by the
+    time this function runs. ``required_distinction=None`` — Unbound is the
+    tradition-agnostic default, open to every beginning with no gate.
+    Idempotent via get_or_create; never overwrites a staff-adjusted row.
+
+    Skips silently (logged) if the Unbound tradition hasn't been seeded yet —
+    cluster ordering guarantees this can't happen via the Big Button; defensive
+    only, mirrors the per-row skip in ``seed_durance_officiants``
+    (``world.progression.seeds``).
+    """
+    from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+    from world.magic.models import Tradition  # noqa: PLC0415
+
+    unbound = Tradition.objects.filter(name=_UNBOUND_TRADITION_NAME).first()
+    if unbound is None:
+        logger.warning(
+            "Skipping BeginningTradition seeding: %r tradition is not seeded.",
+            _UNBOUND_TRADITION_NAME,
+        )
+        return
+
+    for beginning in Beginnings.objects.all():
+        BeginningTradition.objects.get_or_create(
+            beginning=beginning,
+            tradition=unbound,
+            defaults={"required_distinction": None, "sort_order": 0},
+        )
+
+
 def seed_character_creation_dev() -> None:
     """Seed the CG-world content a fresh DB needs to run character creation.
 
@@ -411,6 +464,7 @@ def seed_character_creation_dev() -> None:
     )
     _seed_cg_explanations()
     ensure_tradition_training_distinction()
+    seed_beginning_traditions()
 
 
 def _seed_cg_explanations() -> None:

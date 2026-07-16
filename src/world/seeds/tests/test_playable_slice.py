@@ -176,3 +176,61 @@ class TestSeededCharacterCreation(TestCase):
         # default_starting_room; finalize_character() never produces
         # location=None on a Big-Button-seeded DB.
         self.assertIsNotNone(character.location)
+
+    def test_tradition_step_completable_for_every_seeded_beginning(self) -> None:
+        """The CG Tradition step is completable, via the real endpoints, for every
+        seeded Beginning (#2426 whole-branch-review finding).
+
+        Without ``seed_beginning_traditions()``,
+        ``TraditionViewSet.get_queryset()`` returns nothing (empty
+        ``cached_beginning_traditions``) and ``select-tradition`` independently
+        400s for every Beginning on a fresh Big-Button-only DB — CG is
+        uncompletable, even the tradition-agnostic Unbound path. This drives the
+        real gates end-to-end (the API endpoint) instead of assigning
+        ``draft.selected_tradition`` directly, which is what let the original gap
+        slip past this test file.
+        """
+        from evennia.accounts.models import AccountDB
+        from rest_framework import status
+        from rest_framework.test import APIClient
+
+        from world.character_creation.models import Beginnings, CharacterDraft
+
+        seed_dev_database()
+
+        beginnings = list(Beginnings.objects.filter(is_active=True))
+        self.assertTrue(
+            beginnings, "character_creation cluster must seed at least one active Beginning"
+        )
+
+        account = AccountDB.objects.create(username="tradition_step_probe")
+        client = APIClient()
+        client.force_authenticate(user=account)
+
+        for beginning in beginnings:
+            # Same list TraditionViewSet.get_queryset() reads (#2426).
+            bts = beginning.cached_beginning_traditions
+            self.assertTrue(
+                bts,
+                f"{beginning.name!r} must have >=1 seeded BeginningTradition (#2426)",
+            )
+            unbound_bt = next((bt for bt in bts if bt.tradition.name == "Unbound"), None)
+            self.assertIsNotNone(
+                unbound_bt, f"{beginning.name!r} must offer the Unbound tradition (#2426)"
+            )
+
+            draft = CharacterDraft.objects.create(account=account, selected_beginnings=beginning)
+
+            response = client.post(
+                f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+                {"tradition_id": unbound_bt.tradition_id},
+                format="json",
+            )
+
+            self.assertEqual(
+                response.status_code,
+                status.HTTP_200_OK,
+                f"select-tradition failed for {beginning.name!r}: {response.data}",
+            )
+            draft.refresh_from_db()
+            self.assertEqual(draft.selected_tradition_id, unbound_bt.tradition_id)

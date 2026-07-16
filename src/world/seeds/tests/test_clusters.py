@@ -96,3 +96,26 @@ class TestClusterRegistry(TestCase):
         CGExplanation.objects.filter(key="origin_heading").update(text="stale")
         seed_character_creation_dev()
         self.assertNotEqual(CGExplanation.objects.get(key="origin_heading").text, "stale")
+
+    def test_every_active_beginning_has_a_seeded_tradition(self) -> None:
+        """Seed-integrity regression net (#2426 whole-branch-review finding).
+
+        Without ``seed_beginning_traditions()``, no ``BeginningTradition`` rows
+        exist on a fresh Big-Button-only DB, so the CG Tradition step is empty
+        for every Beginning — CG is uncompletable. Runs the full Big Button
+        (not just the ``character_creation`` cluster in isolation) since the
+        seeder depends on the "magic" cluster's Unbound Tradition row existing
+        first.
+        """
+        from world.character_creation.models import Beginnings
+        from world.seeds.database import seed_dev_database
+
+        seed_dev_database()
+
+        beginnings = Beginnings.objects.filter(is_active=True)
+        self.assertTrue(beginnings.exists(), "expected at least one active seeded Beginning")
+        for beginning in beginnings:
+            self.assertTrue(
+                beginning.beginning_traditions.exists(),
+                f"{beginning.name!r} has no seeded BeginningTradition row (#2426)",
+            )

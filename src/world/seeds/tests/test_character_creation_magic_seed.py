@@ -5,6 +5,11 @@ ModifierTarget (in the ``character_creation`` ModifierCategory) that
 ``CharacterDraft.starting_technique_picks`` sums a distinction bonus against.
 ``ensure_tradition_training_distinction()`` seeds the "Tradition Training"
 Distinction (+1 pick per rank, max_rank=2) targeting that row.
+
+Also covers ``seed_beginning_traditions()`` (#2426 whole-branch-review fix): the
+join-row seeder that links every seeded ``Beginnings`` to the magic-seeded
+"Unbound" Tradition, without which the CG Tradition step is empty on a fresh
+Big-Button-only DB.
 """
 
 from django.test import TestCase
@@ -13,9 +18,10 @@ from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     STARTING_TECHNIQUE_PICKS_TARGET,
 )
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import BeginningsFactory, CharacterDraftFactory
 from world.seeds.character_creation import (
     ensure_tradition_training_distinction,
+    seed_beginning_traditions,
     wire_starting_technique_picks_target,
 )
 
@@ -99,3 +105,96 @@ class EnsureTraditionTrainingDistinctionTests(TestCase):
         )
 
         self.assertEqual(draft.starting_technique_picks, 3)
+
+
+class SeedBeginningTraditionsTests(TestCase):
+    """Tests for ``seed_beginning_traditions()`` (#2426 whole-branch-review fix).
+
+    Without this seeder, no ``BeginningTradition`` rows ever exist on a fresh
+    Big-Button-only DB, so the CG Tradition step is empty for every Beginning —
+    even the tradition-agnostic Unbound path. See the strengthened
+    ``test_playable_slice.py::TestSeededCharacterCreation`` assertions for the
+    end-to-end (real-endpoint) proof; these tests cover the seeder function
+    directly: creation, idempotency, and the defensive missing-Tradition skip.
+    """
+
+    def test_creates_beginning_tradition_for_unbound(self) -> None:
+        from world.character_creation.models import BeginningTradition
+        from world.magic.factories import TraditionFactory
+
+        TraditionFactory(name="Unbound")
+        beginning = BeginningsFactory()
+
+        seed_beginning_traditions()
+
+        bt = BeginningTradition.objects.get(beginning=beginning, tradition__name="Unbound")
+        self.assertIsNone(bt.required_distinction)
+
+    def test_creates_a_row_for_every_beginning(self) -> None:
+        from world.character_creation.models import BeginningTradition
+        from world.magic.factories import TraditionFactory
+
+        TraditionFactory(name="Unbound")
+        beginnings = [BeginningsFactory() for _ in range(3)]
+
+        seed_beginning_traditions()
+
+        for beginning in beginnings:
+            self.assertTrue(
+                BeginningTradition.objects.filter(
+                    beginning=beginning, tradition__name="Unbound"
+                ).exists(),
+                f"expected a seeded BeginningTradition for {beginning}",
+            )
+
+    def test_idempotent_second_call_creates_no_duplicates(self) -> None:
+        from world.character_creation.models import BeginningTradition
+        from world.magic.factories import TraditionFactory
+
+        TraditionFactory(name="Unbound")
+        BeginningsFactory()
+
+        seed_beginning_traditions()
+        seed_beginning_traditions()
+
+        self.assertEqual(
+            BeginningTradition.objects.filter(tradition__name="Unbound").count(),
+            1,
+        )
+
+    def test_does_not_overwrite_a_staff_adjusted_row(self) -> None:
+        """A staff-set required_distinction on the seeded row survives a re-run."""
+        from world.character_creation.models import BeginningTradition
+        from world.distinctions.factories import DistinctionFactory
+        from world.magic.factories import TraditionFactory
+
+        TraditionFactory(name="Unbound")
+        BeginningsFactory()
+        seed_beginning_traditions()
+
+        distinction = DistinctionFactory()
+        bt = BeginningTradition.objects.get(tradition__name="Unbound")
+        bt.required_distinction = distinction
+        bt.save(update_fields=["required_distinction"])
+
+        seed_beginning_traditions()
+
+        # BeginningTradition is a SharedMemoryModel (idmapper) — re-fetch via
+        # .values() rather than .get() so a stale cached instance can't mask a
+        # regression (mirrors EnsureTraditionTrainingDistinctionTests above).
+        db_value = (
+            BeginningTradition.objects.filter(tradition__name="Unbound")
+            .values("required_distinction_id")
+            .get()
+        )
+        self.assertEqual(db_value["required_distinction_id"], distinction.id)
+
+    def test_skips_silently_when_unbound_tradition_not_seeded(self) -> None:
+        """Defensive skip (logged) when the magic cluster hasn't run yet."""
+        from world.character_creation.models import BeginningTradition
+
+        BeginningsFactory()
+
+        seed_beginning_traditions()
+
+        self.assertEqual(BeginningTradition.objects.count(), 0)
