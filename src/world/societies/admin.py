@@ -216,16 +216,18 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_display = [
         "name",
         "society",
+        "tradition",
         "org_type",
         "member_count",
     ]
     list_filter = ["society__realm", "society", "org_type"]
     search_fields = ["name", "description", "society__name"]
     ordering = ["society", "name"]
+    raw_id_fields = ["tradition"]
     inlines = [OrganizationRankInline, OrganizationMembershipInline, OrganizationGiftGrantInline]
 
     fieldsets = (
-        (None, {"fields": ("name", "society", "org_type", "description")}),
+        (None, {"fields": ("name", "society", "org_type", "tradition", "description")}),
         (
             "Principle Overrides",
             {

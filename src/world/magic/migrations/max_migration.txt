@@ -1,1 +1,1 @@
-0105_effecttype_category_gift_codex_entry_and_more
+0106_remove_tradition_society

@@ -297,10 +297,9 @@ class TraditionCodexGrantInline(admin.TabularInline):
 
 @admin.register(Tradition)
 class TraditionAdmin(admin.ModelAdmin):
-    list_display = ["name", "society", "is_active", "sort_order"]
+    list_display = ["name", "is_active", "sort_order"]
     list_filter = ["is_active"]
     search_fields = ["name", "description"]
-    raw_id_fields = ["society"]
     list_editable = ["sort_order", "is_active"]
     inlines = [TraditionCodexGrantInline]
 
