@@ -12,10 +12,11 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.tarot.constants import SUIT_SINGULAR, ArcanaType, TarotSuit
 
 
-class TarotCard(SharedMemoryModel):
+class TarotCard(NaturalKeyMixin, SharedMemoryModel):
     """
     A single tarot card from the 78-card deck.
 
@@ -65,6 +66,11 @@ class TarotCard(SharedMemoryModel):
             ("arcana_type", "suit", "rank"),
         ]
         ordering: ClassVar[list[str]] = ["arcana_type", "suit", "rank"]
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    objects = NaturalKeyManager()
 
     def __str__(self) -> str:
         return self.name

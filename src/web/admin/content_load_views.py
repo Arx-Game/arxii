@@ -92,8 +92,12 @@ def content_load_run(request: HttpRequest) -> HttpResponse:
         )
         return HttpResponseRedirect(reverse("admin_game_setup"))
     placeholders = sum(result.placeholder_counts.values())
+    skip_msg = f", {len(result.skipped)} skipped" if result.skipped else ""
     messages.success(
         request,
-        f"Content load: {created} created, {updated} updated, {placeholders} placeholder entries",
+        f"Content load: {created} created, {updated} updated, "
+        f"{placeholders} placeholder entries{skip_msg}",
     )
+    for skip in result.skipped:
+        messages.warning(request, skip)
     return HttpResponseRedirect(reverse("admin_game_setup"))

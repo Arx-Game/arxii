@@ -12,13 +12,14 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.traits.models import Trait, TraitType
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 
-class Skill(SharedMemoryModel):
+class Skill(NaturalKeyMixin, SharedMemoryModel):
     """
     Parent skill definition linked to Trait system.
 
@@ -53,6 +54,11 @@ class Skill(SharedMemoryModel):
     def name(self) -> str:
         """Skill name from linked trait."""
         return self.trait.name
+
+    class NaturalKeyConfig:
+        fields = ["trait"]
+
+    objects = NaturalKeyManager()
 
     @property
     def category(self) -> str:

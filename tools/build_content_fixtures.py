@@ -150,8 +150,16 @@ def _run(args: argparse.Namespace) -> int:
     total = len(result.entries)
     for domain, count in sorted(result.placeholder_counts.items()):
         print(f"PLACEHOLDER remaining in {domain}/: {count}")
+    if result.skipped:
+        print(f"\nSkipped {len(result.skipped)} object(s):")
+        for msg in result.skipped:
+            print(f"  {msg}")
     if args.check:
-        print(f"OK: {total} content files validated; nothing written (--check).")
+        total_objs = sum(len(objs) for objs in result.fixtures.values())
+        print(
+            f"OK: {total} content files + {total_objs} fixture objects "
+            f"validated; nothing written (--check)."
+        )
         return 0
 
     written = write_fixtures(result, SRC_ROOT)
@@ -163,6 +171,8 @@ def _run(args: argparse.Namespace) -> int:
         # Upsert path (NOT loaddata — see load_entries docstring).
         created, updated = _load_content(result)
         print(f"loaded: {created} created, {updated} updated.")
+        if result.skipped:
+            print(f"skipped: {len(result.skipped)} object(s) (see above).")
     return 0
 
 
