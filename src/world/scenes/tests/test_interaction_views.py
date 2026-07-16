@@ -427,6 +427,39 @@ class PoseSubmitViewTests(APITestCase):
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_submit_pose_masked_records_worn_face_not_primary(self) -> None:
+        """Authorship is the sheet's ACTIVE persona even when the client sends primary (#981).
+
+        The submitted persona_id only selects the acting character — a client
+        passing the primary persona while an alt/mask is worn must not unmask
+        the disguise in the permanent scene record.
+        """
+        from world.scenes.factories import PersonaFactory
+        from world.scenes.services import set_active_persona
+
+        mask = PersonaFactory(character_sheet=self.identity, name="The Gray Hood")
+        set_active_persona(self.identity, mask)
+
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "A pose while masked."},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        interaction = Interaction.objects.get(pk=response.data["id"])
+        assert interaction.persona_id == mask.pk
+
+    def test_submit_pose_unmasked_records_primary(self) -> None:
+        """With no active face set, authorship stays the primary persona."""
+        response = self.client.post(
+            self.url,
+            {"persona_id": self.persona.pk, "content": "A bare-faced pose."},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        interaction = Interaction.objects.get(pk=response.data["id"])
+        assert interaction.persona_id == self.persona.pk
+
     def test_submit_pose_creates_interaction_in_scene(self) -> None:
         """Providing scene_id attaches the pose to that scene."""
         scene = SceneFactory()

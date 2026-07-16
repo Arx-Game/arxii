@@ -771,6 +771,17 @@ lookup across all rows instead of re-querying per row. Scene poses submitted fro
 `/game` take the REST `submit-pose` path, keyed by `scene_id` — a pose belongs to
 a scene, not a room, so this is unrelated to room id.
 
+**Pose/action authorship is the worn face, derived server-side (#981 audit fix):**
+the client's `persona_id`/`initiator_persona` only *selects the acting character*
+(ownership-validated); `submit_pose`, the action-request create path, and the
+technique-cast create path all re-derive the recorded persona via
+`active_persona_for_sheet`, and `record_interaction`'s no-persona fallback (the
+telnet/WS path) does the same — never `primary_persona` directly, so a client
+passing the primary id can never unmask a worn ESTABLISHED alt or TEMPORARY mask.
+Frontend mirrors this with `actingPersonaId()` (`frontend/src/roster/persona.ts`)
+everywhere a persona id feeds an IC write or self-matching read (attention
+routing, own-pose exclusion).
+
 **Places query room-id vs scene-id (fold-in fix, unrelated to the above):**
 `PlaceBar`'s `sceneId` prop is actually used as the ROOM id by
 `fetchPlaces(?room=)` (confirmed by reading `PlaceBar.tsx` + `actionQueries.ts`)

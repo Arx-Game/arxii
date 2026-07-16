@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { HeartPulse } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAppSelector } from '@/store/hooks';
+import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { extractErrorMessage } from '@/lib/errors';
 import { useTreatmentCandidates } from '../queries';
@@ -44,7 +45,7 @@ export function TreatActionPanel({ sceneId, targetPersonaId }: Props) {
     [myRosterEntries, activeCharacterName]
   );
   const characterId = activeEntry?.character_id ?? null;
-  const initiatorPersonaId = activeEntry?.primary_persona_id ?? null;
+  const initiatorPersonaId = actingPersonaId(activeEntry);
 
   const { data, isLoading } = useTreatmentCandidates(targetPersonaId, characterId);
   const candidates = data?.candidates ?? [];

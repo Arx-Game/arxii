@@ -4,6 +4,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession, startSession } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
 import { ComfortWidget } from '@/comfort/components/ComfortWidget';
@@ -106,7 +107,7 @@ export function GameTopBar({ characters }: GameTopBarProps) {
       ) : null}
 
       {altCharacters.map((char) => {
-        const attention = sessionAttention(sessions[char.name], char.primary_persona_id);
+        const attention = sessionAttention(sessions[char.name], actingPersonaId(char));
         return (
           <button
             key={char.id}

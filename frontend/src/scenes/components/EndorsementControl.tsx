@@ -31,6 +31,7 @@
 
 import { useMemo } from 'react';
 import { useAppSelector } from '@/store/hooks';
+import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import {
   DropdownMenu,
@@ -85,7 +86,7 @@ export function EndorsementControl({ interaction, sceneId, kind }: EndorsementCo
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const viewerPersonaId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.primary_persona_id ?? null,
+    () => actingPersonaId(myRosterEntries.find((e) => e.name === activeCharacterName)),
     [myRosterEntries, activeCharacterName]
   );
 

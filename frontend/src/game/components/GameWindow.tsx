@@ -13,6 +13,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Link } from 'react-router-dom';
+import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { sessionAttention } from '@/game/attention';
 
@@ -195,7 +196,7 @@ export function GameWindow({
       {sessionNames.length >= 2 && (
         <div className="mb-2 flex gap-2 border-b">
           {sessionNames.map((name) => {
-            const personaId = characters.find((c) => c.name === name)?.primary_persona_id ?? null;
+            const personaId = actingPersonaId(characters.find((c) => c.name === name));
             const attention = sessionAttention(sessions[name], personaId);
             return (
               <button

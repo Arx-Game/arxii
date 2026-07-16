@@ -683,9 +683,12 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
 ) -> Interaction | None:
     """Record an IC interaction to the database.
 
-    Reads the character's primary persona from their CharacterSheet, unless an
-    explicit ``persona`` override is supplied (the REST pose path lets the writer
-    pose as any owned persona — established/mask alt included — not just primary).
+    Attributes authorship to the character's **currently-worn face**
+    (``active_persona_for_sheet`` — the active persona when set, else PRIMARY),
+    unless an explicit ``persona`` override is supplied. Never defaults to
+    ``primary_persona`` directly: a character presenting as an ESTABLISHED alt
+    or TEMPORARY mask must be recorded as that face, or the permanent scene
+    record unmasks the disguise (#981 alt-leak rule).
     Skips recording if no persona could be resolved either way.
 
     For public interactions (no place, no receivers), the interaction is
@@ -704,8 +707,10 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     branch (there is no row to attach anything to).
     """
     if persona is None:
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
         try:
-            persona = character.sheet_data.primary_persona
+            persona = active_persona_for_sheet(character.sheet_data)
         except ObjectDoesNotExist:
             return None
 

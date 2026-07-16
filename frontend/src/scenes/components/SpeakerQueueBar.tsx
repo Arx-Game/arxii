@@ -13,6 +13,7 @@ import {
 } from '../actionQueries';
 import type { SpeakerQueue as SpeakerQueueType } from '../actionTypes';
 import { useAppSelector } from '@/store/hooks';
+import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 
 interface Props {
@@ -34,7 +35,7 @@ export function SpeakerQueueBar({ roomId }: Props) {
     () => myRosterEntries.find((e) => e.name === activeCharacter) ?? null,
     [myRosterEntries, activeCharacter]
   );
-  const personaId = activeEntry?.primary_persona_id ?? null;
+  const personaId = actingPersonaId(activeEntry);
 
   const queue = data?.results?.[0] ?? null;
   const myEntry = queue?.entries.find((e) => e.persona === personaId) ?? null;

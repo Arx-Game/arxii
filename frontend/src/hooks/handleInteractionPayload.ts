@@ -4,6 +4,7 @@ import type { InteractionWsPayload } from './types';
 import type { AppDispatch } from '@/store/store';
 import { store } from '@/store/store';
 import { addSceneInteraction, openThreadTab, setActiveSession } from '@/store/gameSlice';
+import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { queryClient } from '@/queryClient';
 import { getThreadKey } from '@/scenes/hooks/useThreading';
@@ -55,7 +56,7 @@ const MAX_TOASTED_WHISPER_IDS = 500;
  */
 function ownPersonaId(character: MyRosterEntry['name']): number | null {
   const rosterEntries = queryClient.getQueryData<MyRosterEntry[]>(['my-roster-entries']);
-  return rosterEntries?.find((entry) => entry.name === character)?.primary_persona_id ?? null;
+  return actingPersonaId(rosterEntries?.find((entry) => entry.name === character));
 }
 
 function maybeToastWhisperAttention(
