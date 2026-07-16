@@ -3,6 +3,7 @@
 from django.urls import path
 
 from web.admin import arx_admin_site
+from web.admin.content_export_views import content_export_preview, content_export_run
 from web.admin.content_load_views import content_load_confirm, content_load_run
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
@@ -45,6 +46,16 @@ urlpatterns = [
     path("_seed_run/", seed_run, name="admin_seed_run"),
     path("_content_load/", content_load_confirm, name="admin_content_load"),
     path("_content_load_run/", content_load_run, name="admin_content_load_run"),
+    path(
+        "_content_export/",
+        content_export_preview,
+        name="admin_content_export",
+    ),
+    path(
+        "_content_export_run/",
+        content_export_run,
+        name="admin_content_export_run",
+    ),
     path("_game_setup/", game_setup, name="admin_game_setup"),
     path("_tuning/", tuning_dashboard, name="admin_tuning"),
     path("_tuning/checks/", tuning_checks_fragment, name="admin_tuning_checks"),

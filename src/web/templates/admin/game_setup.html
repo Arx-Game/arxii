@@ -23,6 +23,10 @@
         <a href="{{ content_load_url }}">Load content repo</a>
         builds and upserts entries from your <code>CONTENT_REPO_PATH</code>
         checkout. Safe to re-run; updates existing rows by natural key.
+        <br>
+        <a href="{% url 'admin_content_export' %}">Export to content repo</a>
+        writes authored content models from the DB back to the
+        <code>CONTENT_REPO_PATH</code> checkout's <code>fixtures/</code> directory.
       {% else %}
         set <code>CONTENT_REPO_PATH</code> in <code>src/.env</code> to enable
         this step. Until then, the
