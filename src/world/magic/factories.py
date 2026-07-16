@@ -60,6 +60,7 @@ from world.magic.models import (
     MotifResonance,
     MotifResonanceAssociation,
     MotifResonanceStyle,
+    PathGiftGrant,
     PendingAlteration,
     PortalAnchor,
     PortalAnchorKind,
@@ -91,6 +92,7 @@ from world.magic.models import (
     ThreadWeavingUnlock,
     ThreadXPLockedLevel,
     Tradition,
+    TraditionGiftGrant,
 )
 from world.magic.models.anima import AnimaConfig
 from world.magic.models.knowledge import CharacterRitualKnowledge
@@ -741,6 +743,16 @@ class CharacterGiftFactory(factory.django.DjangoModelFactory):
     gift = factory.SubFactory(GiftFactory)
 
 
+class PathGiftGrantFactory(factory.django.DjangoModelFactory):
+    """Factory for PathGiftGrant — the (path x gift) CG-availability pool row."""
+
+    class Meta:
+        model = PathGiftGrant
+
+    path = factory.SubFactory("world.classes.factories.PathFactory")
+    gift = factory.SubFactory(GiftFactory)
+
+
 class TraditionFactory(factory.django.DjangoModelFactory):
     """Factory for Tradition."""
 
@@ -752,6 +764,16 @@ class TraditionFactory(factory.django.DjangoModelFactory):
     description = factory.LazyAttribute(lambda o: f"Description of {o.name}.")
     is_active = True
     sort_order = 0
+
+
+class TraditionGiftGrantFactory(factory.django.DjangoModelFactory):
+    """Factory for TraditionGiftGrant — the (tradition x gift) CG-availability pool row."""
+
+    class Meta:
+        model = TraditionGiftGrant
+
+    tradition = factory.SubFactory(TraditionFactory)
+    gift = factory.SubFactory(GiftFactory)
 
 
 class CharacterTraditionFactory(factory.django.DjangoModelFactory):

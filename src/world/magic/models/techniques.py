@@ -22,7 +22,7 @@ from actions.constants import ActionCategory, ActionTargetType
 from core.managers import CachedAllMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
-from world.magic.constants import TechniqueReach
+from world.magic.constants import TechniqueCategory, TechniqueReach
 from world.magic.models.gifts import Gift
 
 
@@ -68,6 +68,14 @@ class EffectType(NaturalKeyMixin, SharedMemoryModel):
     has_power_scaling = models.BooleanField(
         default=True,
         help_text="Whether this effect type uses power scaling.",
+    )
+    category = models.CharField(
+        max_length=16,
+        choices=TechniqueCategory.choices,
+        default=TechniqueCategory.UTILITY,
+        help_text=(
+            "Player-facing grouping (Offense/Defense/...) for CG and category-keyed modifiers."
+        ),
     )
 
     objects = EffectTypeManager()
@@ -444,6 +452,14 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         related_name="travel_techniques",
         help_text="Set = this technique is a portal-travel technique through this "
         "anchor medium (#2222).",
+    )
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="techniques",
+        help_text="Lore entry this technique is bound to, if any.",
     )
 
     class Meta:

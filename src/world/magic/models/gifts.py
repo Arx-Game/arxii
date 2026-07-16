@@ -61,6 +61,14 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         related_name="created_gifts",
         help_text="Character who created this gift.",
     )
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="gifts",
+        help_text="Lore entry this gift is bound to, if any.",
+    )
 
     objects = GiftManager()
 

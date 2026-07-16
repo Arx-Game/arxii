@@ -128,6 +128,7 @@ from world.magic.models.grants import (
     DistinctionRitualGrant,
     PathGiftGrant,
     PathRitualGrant,
+    TraditionGiftGrant,
     TraditionRitualGrant,
 )
 from world.magic.models.knowledge import CharacterRitualKnowledge
@@ -429,6 +430,7 @@ __all__ = [
     # touchstone combat resonance config (#2023)
     "TouchstoneCastConfig",
     "Tradition",
+    "TraditionGiftGrant",
     "TraditionManager",
     "TraditionRitualGrant",
 ]

@@ -7,7 +7,7 @@ from django.test import TestCase
 from actions.factories import ConsequencePoolFactory
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import CantripArchetype, GiftKind
+from world.magic.constants import CantripArchetype, GiftKind, TechniqueCategory
 from world.magic.factories import (
     CharacterTechniqueFactory,
     EffectTypeFactory,
@@ -15,7 +15,10 @@ from world.magic.factories import (
     GiftFactory,
     MishapPoolTierFactory,
     ResonanceFactory,
+    TechniqueFactory,
     TechniqueStyleFactory,
+    TraditionFactory,
+    TraditionGiftGrantFactory,
 )
 from world.magic.models import (
     Cantrip,
@@ -28,6 +31,7 @@ from world.magic.models import (
     MishapPoolTier,
     Reincarnation,
     Technique,
+    TraditionGiftGrant,
 )
 from world.magic.types import (
     AffinityType,
@@ -539,3 +543,33 @@ def test_character_technique_source_default_null():
     ct = CharacterTechniqueFactory()
     ct.refresh_from_db()
     assert ct.source is None  # learned techniques have no source
+
+
+class TraditionGiftGrantTests(TestCase):
+    """Tests for TraditionGiftGrant (#2426) — the (tradition x gift) CG-availability pool."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.tradition = TraditionFactory(name="Test Tradition")
+        cls.gift = GiftFactory(name="Test Gift")
+        cls.other_gift = GiftFactory(name="Other Gift")
+
+    def test_signature_technique_must_belong_to_gift(self):
+        grant = TraditionGiftGrantFactory(tradition=self.tradition, gift=self.gift)
+        stray = TechniqueFactory(gift=self.other_gift)
+        grant.signature_techniques.add(stray)
+        with self.assertRaises(ValidationError):
+            grant.clean()
+
+    def test_unique_per_tradition_gift(self):
+        TraditionGiftGrantFactory(tradition=self.tradition, gift=self.gift)
+        with self.assertRaises(IntegrityError):
+            TraditionGiftGrant.objects.create(tradition=self.tradition, gift=self.gift)
+
+
+class EffectTypeCategoryTests(TestCase):
+    """Tests for EffectType.category (#2426)."""
+
+    def test_category_defaults_to_utility(self):
+        et = EffectTypeFactory(name="Sculpting")
+        self.assertEqual(et.category, TechniqueCategory.UTILITY)

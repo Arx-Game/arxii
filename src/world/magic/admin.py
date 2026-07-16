@@ -73,6 +73,7 @@ from world.magic.models import (
     ThreadXPLockedLevel,
     TouchstoneCastConfig,
     Tradition,
+    TraditionGiftGrant,
 )
 from world.magic.models.dramatic_moment import (
     DramaticMomentSuggestion,
@@ -302,6 +303,14 @@ class TraditionAdmin(admin.ModelAdmin):
     raw_id_fields = ["society"]
     list_editable = ["sort_order", "is_active"]
     inlines = [TraditionCodexGrantInline]
+
+
+@admin.register(TraditionGiftGrant)
+class TraditionGiftGrantAdmin(admin.ModelAdmin):
+    list_display = ["tradition", "gift"]
+    list_filter = ["tradition", "gift"]
+    search_fields = ["tradition__name", "gift__name"]
+    filter_horizontal = ["signature_techniques"]
 
 
 @admin.register(CharacterTradition)

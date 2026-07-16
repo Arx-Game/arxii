@@ -82,13 +82,15 @@ class PathRitualGrant(models.Model):  # noqa: SHARED_MEMORY
 # Idmapper metaclass sets attrs["path"] which shadows the "path" FK.
 # Same pattern as PathRitualGrant above / PathCodexGrant in world.codex.models.
 class PathGiftGrant(models.Model):  # noqa: SHARED_MEMORY
-    """Gift + curated starter technique set granted by crossing into a Path.
+    """Gift + curated starter technique set available to a Path.
 
     The (Path x Gift) -> technique-set leg of ADR-0055 (#1579): the same authored
     Gift yields a different starter set per Path (a warrior-line and a spy-line path
-    can both grant Pyromancy, but grant different techniques from it). Minted as
-    CharacterGift + CharacterTechnique rows on a path crossing by
-    ``world.magic.services.path_magic.grant_path_magic``.
+    can both grant Pyromancy, but grant different techniques from it). As of #2426
+    this row is a (path x gift) *availability pool*, not solely a crossing payload:
+    character creation lets the player pick from it at level 1, and
+    ``world.magic.services.path_magic.grant_path_magic`` still mints CharacterGift +
+    CharacterTechnique rows from it on later path crossings.
     """
 
     path = models.ForeignKey(
@@ -132,6 +134,67 @@ class PathGiftGrant(models.Model):  # noqa: SHARED_MEMORY
 
                 raise ValidationError(
                     {"starter_techniques": ("Every starter technique must belong to this gift.")}
+                )
+
+
+class TraditionGiftGrant(SharedMemoryModel):
+    """Gift + curated signature technique set available to a Tradition (#2426).
+
+    The (Tradition x Gift) sibling of ``PathGiftGrant`` above — the CG-availability
+    pool a player picks from when choosing techniques for a Gift tied to their
+    Tradition. Distinct from ``OrganizationGiftGrant`` (``world.societies`` — a
+    project-acquired org capability granted through play, not an authored CG
+    availability pool).
+    """
+
+    tradition = models.ForeignKey(
+        "magic.Tradition",
+        on_delete=models.CASCADE,
+        related_name="gift_grants",
+    )
+    gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.PROTECT,
+        related_name="tradition_grants",
+    )
+    signature_techniques = models.ManyToManyField(
+        "magic.Technique",
+        blank=True,
+        related_name="granted_by_tradition_gifts",
+        help_text=(
+            "Curated subset of this gift's techniques available to characters "
+            "picking this gift under this tradition."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tradition", "gift"],
+                name="unique_tradition_gift_grant",
+            ),
+        ]
+        verbose_name = "Tradition Gift Grant"
+        verbose_name_plural = "Tradition Gift Grants"
+
+    def __str__(self) -> str:
+        return f"{self.tradition} grants {self.gift}"
+
+    def clean(self) -> None:
+        super().clean()
+        # M2M rows are only queryable once the grant row exists (admin / test
+        # save-then-validate). Every signature technique must belong to this gift.
+        if self.pk:
+            mismatched = [t for t in self.signature_techniques.all() if t.gift_id != self.gift_id]
+            if mismatched:
+                from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+                raise ValidationError(
+                    {
+                        "signature_techniques": (
+                            "Every signature technique must belong to this gift."
+                        )
+                    }
                 )
 
 
