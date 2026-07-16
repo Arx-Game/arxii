@@ -12,14 +12,18 @@ from world.classes.models import PathStage
 from world.forms.models import Build, HeightBand
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
-    CantripFactory,
     EffectTypeFactory,
+    GiftFactory,
+    PathGiftGrantFactory,
     ResonanceFactory,
+    TechniqueFactory,
     TechniqueStyleFactory,
     TraditionFactory,
+    TraditionGiftGrantFactory,
 )
 from world.magic.models.ritual_check_config import RitualCheckConfig
 from world.magic.models.rituals import Ritual
+from world.magic.seeds_cast import get_standalone_cast_template
 from world.magic.seeds_checks import (
     MAGIC_CHECK_CATEGORY_NAME,
     character_magic_check_type_name,
@@ -138,7 +142,16 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
         # Skill needed so provision_player_anima_ritual doesn't log + skip.
         cls.skill = SkillFactory(trait__name="PCProvisionMelee")
 
-        cantrip = CantripFactory(requires_facet=False)
+        # Gift-stage draft contract (#2426): a catalog Gift + Technique the player
+        # picks, granted for this (path, tradition) via PathGiftGrant/TraditionGiftGrant.
+        gift = GiftFactory()
+        gift.resonances.add(cls.resonance)
+        technique = TechniqueFactory(gift=gift, action_template=get_standalone_cast_template())
+        path_grant = PathGiftGrantFactory(path=path, gift=gift)
+        path_grant.starter_techniques.set([technique])
+        TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        cls.anima_stat = Trait.objects.get(name="willpower")
+
         cls.area = area
         cls.beginnings = beginnings
         cls.species = species
@@ -148,7 +161,8 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
         cls.build = build
         cls.path = path
         cls.tradition = tradition
-        cls.cantrip = cantrip
+        cls.gift = gift
+        cls.technique = technique
 
     def setUp(self):
         CharacterSheet.flush_instance_cache()
@@ -180,8 +194,11 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
                 "tarot_card_name": self.tarot.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
-                "selected_cantrip_id": self.cantrip.id,
+                "selected_gift_id": self.gift.id,
+                "selected_technique_ids": [self.technique.id],
                 "selected_gift_resonance_id": self.resonance.id,
+                "anima_check_stat_id": self.anima_stat.id,
+                "anima_check_skill_id": self.skill.id,
                 "skills": {str(self.skill.pk): 20},
             },
         )
@@ -265,7 +282,16 @@ class GetCharacterCastCheckTests(TestCase):
         cls.resonance = ResonanceFactory()
         tradition = TraditionFactory()
         cls.skill = SkillFactory(trait__name="CCProvisionMelee")
-        cantrip = CantripFactory(requires_facet=False)
+
+        # Gift-stage draft contract (#2426): a catalog Gift + Technique the player
+        # picks, granted for this (path, tradition) via PathGiftGrant/TraditionGiftGrant.
+        gift = GiftFactory()
+        gift.resonances.add(cls.resonance)
+        technique = TechniqueFactory(gift=gift, action_template=get_standalone_cast_template())
+        path_grant = PathGiftGrantFactory(path=path, gift=gift)
+        path_grant.starter_techniques.set([technique])
+        TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        cls.anima_stat = Trait.objects.get(name="willpower")
 
         cls.area = area
         cls.beginnings = beginnings
@@ -276,7 +302,8 @@ class GetCharacterCastCheckTests(TestCase):
         cls.build = build
         cls.path = path
         cls.tradition = tradition
-        cls.cantrip = cantrip
+        cls.gift = gift
+        cls.technique = technique
 
     def setUp(self):
         CharacterSheet.flush_instance_cache()
@@ -314,8 +341,11 @@ class GetCharacterCastCheckTests(TestCase):
                 "tarot_card_name": self.tarot.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
-                "selected_cantrip_id": self.cantrip.id,
+                "selected_gift_id": self.gift.id,
+                "selected_technique_ids": [self.technique.id],
                 "selected_gift_resonance_id": self.resonance.id,
+                "anima_check_stat_id": self.anima_stat.id,
+                "anima_check_skill_id": self.skill.id,
                 "skills": {str(self.skill.pk): 20},
             },
         )
