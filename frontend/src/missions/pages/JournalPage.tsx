@@ -16,7 +16,7 @@ import { useState } from 'react';
 
 import { OpportunitiesTab } from '../components/OpportunitiesTab';
 import { PendingInvitesSection } from '../components/PendingInvitesSection';
-import { useJournal, useTellTale } from '../queries';
+import { useJournal, usePendingInvites, useTellTale } from '../queries';
 import type { JournalEntry } from '../types';
 
 export function JournalPage() {
@@ -24,8 +24,10 @@ export function JournalPage() {
   const entries = data?.results ?? [];
   const active = entries.filter((entry) => entry.status === 'active');
   const past = entries.filter((entry) => entry.status !== 'active');
-  // Invites are persona-scoped (not per-entry) — surface the union once.
-  const pendingInvites = entries[0]?.pending_invites ?? [];
+  // Dedicated endpoint (2026-07 audit): reading entries[0].pending_invites
+  // meant a character with an empty journal (a brand-new PC invited to their
+  // first mission) never saw the invite.
+  const { data: pendingInvites = [] } = usePendingInvites();
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-6">

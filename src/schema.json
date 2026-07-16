@@ -19202,6 +19202,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Opportunities'
           description: ''
+  /api/missions/journal/pending-invites/:
+    get:
+      operationId: missions_journal_pending_invites_list
+      description: |-
+        Pending mission invites for the puppet, independent of participations (#audit2).
+
+        The journal list returns nothing for a character with no participations,
+        so a brand-new character invited to their first mission never saw the
+        invite. Invites are persona-scoped, so they get their own endpoint —
+        the web reads this instead of piggybacking on journal entry 0.
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingMissionInvite'
+          description: ''
   /api/missions/journal/respond/:
     post:
       operationId: missions_journal_respond_create

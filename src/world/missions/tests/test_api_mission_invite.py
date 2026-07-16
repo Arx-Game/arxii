@@ -149,6 +149,26 @@ class MissionInviteEndpointTests(TestCase):
             ).exists()
         )
 
+    def test_pending_invites_endpoint_lists_invitees_invite(self) -> None:
+        """GET .../pending-invites/ surfaces an invite for a non-participant (#audit2).
+
+        The invitee has zero participations, so the journal list is empty; the
+        dedicated endpoint must still return their pending invite — the bug was
+        that a brand-new character never saw their first mission invite.
+        """
+        self.client.post(
+            f"/api/missions/journal/{self.instance.pk}/invite/",
+            {"invitee_character_id": self.invitee.pk},
+            format="json",
+        )
+        with mock.patch("world.missions.views._puppet_character", return_value=self.invitee):
+            journal = self.client.get("/api/missions/journal/")
+            invites = self.client.get("/api/missions/journal/pending-invites/")
+        self.assertEqual(journal.json()["results"], [])  # no participations
+        rows = invites.json()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["instance_id"], self.instance.pk)
+
     def test_respond_foreign_invite_is_404(self) -> None:
         """An invite addressed to someone else 404s for the invitee."""
         third = CharacterFactory()

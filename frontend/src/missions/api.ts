@@ -15,6 +15,7 @@ import type {
   BeatView,
   GroupBeatResult,
   JournalEntry,
+  PendingMissionInvite,
   MissionCategory,
   MissionGiver,
   MissionGiverRequest,
@@ -431,6 +432,17 @@ export async function listJournal(): Promise<PaginatedResponse<JournalEntry>> {
     'Failed to load your journal'
   );
   return { count: results.length, next: null, previous: null, results };
+}
+
+/**
+ * Pending mission invites for the puppet — independent of participations (#audit2).
+ * A brand-new character with zero missions has an empty journal, so invites
+ * are read from a dedicated endpoint rather than journal entry 0.
+ */
+export async function listPendingInvites(): Promise<PendingMissionInvite[]> {
+  const res = await apiFetch(`${BASE_URL}/journal/pending-invites/`);
+  if (!res.ok) throw new Error('Failed to load your mission invites');
+  return res.json() as Promise<PendingMissionInvite[]>;
 }
 
 export async function getBeat(instanceId: number): Promise<BeatView | null> {

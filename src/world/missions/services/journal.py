@@ -105,6 +105,17 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
     ]
 
 
+def pending_invites_for_character(character: ObjectDB) -> tuple[JournalInvite, ...]:
+    """PENDING mission invites for a character — independent of participations (#audit2).
+
+    ``journal_for`` returns ``[]`` for a character with no mission participations,
+    which dropped invites entirely for exactly the population most likely to have
+    one: a brand-new character invited to their first mission. Invites are
+    persona-scoped (not per-participation), so they get their own read surface.
+    """
+    return _pending_invites_for(character)
+
+
 def _pending_invites_for(character: ObjectDB) -> tuple[JournalInvite, ...]:
     """PENDING MissionInvites addressed to any of this character's personas (#2049).
 
