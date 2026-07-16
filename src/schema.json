@@ -69,6 +69,18 @@ paths:
         name: character_sheet
         schema:
           type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - achievements
       security:
@@ -78,9 +90,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CharacterAchievement'
+                $ref: '#/components/schemas/PaginatedCharacterAchievementList'
           description: ''
   /api/achievements/character-achievements/{id}/:
     get:
@@ -2495,6 +2505,18 @@ paths:
         description: Which field to use when ordering the results.
         schema:
           type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       - in: query
         name: status
         schema:
@@ -2528,9 +2550,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CanonReview'
+                $ref: '#/components/schemas/PaginatedCanonReviewList'
           description: ''
   /api/canon-reviews/{id}/:
     get:
@@ -47447,6 +47467,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BuildingKind'
+    PaginatedCanonReviewList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CanonReview'
     PaginatedCatalogSuggestionDetailList:
       type: object
       required:
@@ -47562,6 +47605,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChapterList'
+    PaginatedCharacterAchievementList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterAchievement'
     PaginatedCharacterCovenantRoleList:
       type: object
       required:

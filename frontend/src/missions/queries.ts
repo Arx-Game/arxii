@@ -97,7 +97,7 @@ export const missionKeys = {
 const FIVE_MINUTES = 5 * 60 * 1000;
 
 export function useMissionTemplates(
-  filters: MissionTemplateFilters & { page?: number } = {}
+  filters: MissionTemplateFilters & { page?: number; page_size?: number } = {}
 ): UseQueryResult<PaginatedResponse<MissionTemplate>> {
   return useQuery({
     queryKey: missionKeys.templateList(filters),
@@ -294,7 +294,7 @@ export function useMissionCategories(): UseQueryResult<PaginatedResponse<Mission
 // ---------------------------------------------------------------------------
 
 export function useGivers(
-  filters: { giver_kind?: string; is_active?: boolean; name?: string } = {}
+  filters: { giver_kind?: string; is_active?: boolean; name?: string; page_size?: number } = {}
 ): UseQueryResult<PaginatedResponse<MissionGiver>> {
   return useQuery({
     queryKey: missionKeys.giversFor(filters),

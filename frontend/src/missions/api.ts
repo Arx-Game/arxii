@@ -9,6 +9,7 @@
 
 import type { EntitySearchResult } from '@/components/EntitySearchField';
 import { apiFetch } from '@/evennia_replacements/api';
+import { fetchAllPages } from '@/lib/pagination';
 
 import type {
   BeatView,
@@ -82,7 +83,7 @@ function buildQueryString(params: object): string {
 // ---------------------------------------------------------------------------
 
 export async function listMissionTemplates(
-  filters: MissionTemplateFilters & { page?: number } = {}
+  filters: MissionTemplateFilters & { page?: number; page_size?: number } = {}
 ): Promise<PaginatedResponse<MissionTemplate>> {
   const res = await apiFetch(`${BASE_URL}/templates/${buildQueryString(filters)}`);
   if (!res.ok) throw new Error('Failed to load mission templates');
@@ -350,7 +351,13 @@ export async function listPredicateLeaves(): Promise<PredicateLeaf[]> {
 // ---------------------------------------------------------------------------
 
 export async function listGivers(
-  filters: { giver_kind?: string; is_active?: boolean; name?: string; page?: number } = {}
+  filters: {
+    giver_kind?: string;
+    is_active?: boolean;
+    name?: string;
+    page?: number;
+    page_size?: number;
+  } = {}
 ): Promise<PaginatedResponse<MissionGiver>> {
   const res = await apiFetch(`${BASE_URL}/givers/${buildQueryString(filters)}`);
   if (!res.ok) throw new Error('Failed to load mission givers');
@@ -416,9 +423,14 @@ export async function resolveMissionGiverTarget(
 // ---------------------------------------------------------------------------
 
 export async function listJournal(): Promise<PaginatedResponse<JournalEntry>> {
-  const res = await apiFetch(`${BASE_URL}/journal/`);
-  if (!res.ok) throw new Error('Failed to load your journal');
-  return res.json();
+  // Follow every page (2026-07 audit): the journal paginates at 25 and
+  // concluded runs accumulate forever — older entries (and, depending on
+  // ordering, active stories in the StoryTray) silently vanished past page 1.
+  const results = await fetchAllPages<JournalEntry>(
+    `${BASE_URL}/journal/`,
+    'Failed to load your journal'
+  );
+  return { count: results.length, next: null, previous: null, results };
 }
 
 export async function getBeat(instanceId: number): Promise<BeatView | null> {

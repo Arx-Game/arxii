@@ -18,6 +18,7 @@ from world.achievements.serializers import (
     CharacterAchievementSerializer,
     CharacterTitleSerializer,
 )
+from world.stories.pagination import StandardResultsSetPagination
 
 
 class AchievementViewSet(ReadOnlyModelViewSet):
@@ -57,6 +58,9 @@ class CharacterAchievementViewSet(ReadOnlyModelViewSet):
 
     serializer_class = CharacterAchievementSerializer
     permission_classes = [IsAuthenticated]
+    # Paginated (2026-07 audit): the character_sheet filter is optional, so a
+    # bare GET returned every character-achievement row game-wide.
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["character_sheet"]
 

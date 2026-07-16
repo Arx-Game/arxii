@@ -26490,6 +26490,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['BuildingKind'][];
     };
+    PaginatedCanonReviewList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CanonReview'][];
+    };
     PaginatedCatalogSuggestionDetailList: {
       /** @example 123 */
       count: number;
@@ -26564,6 +26579,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['ChapterList'][];
+    };
+    PaginatedCharacterAchievementList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CharacterAchievement'][];
     };
     PaginatedCharacterCovenantRoleList: {
       /** @example 123 */
@@ -35847,6 +35877,10 @@ export interface operations {
     parameters: {
       query?: {
         character_sheet?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
       };
       header?: never;
       path?: never;
@@ -35859,7 +35893,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CharacterAchievement'][];
+          'application/json': components['schemas']['PaginatedCharacterAchievementList'];
         };
       };
     };
@@ -37808,6 +37842,10 @@ export interface operations {
       query?: {
         /** @description Which field to use when ordering the results. */
         ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
         /**
          * @description * `pending` - Pending
          *     * `cleared` - Cleared
@@ -37832,7 +37870,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CanonReview'][];
+          'application/json': components['schemas']['PaginatedCanonReviewList'];
         };
       };
     };
