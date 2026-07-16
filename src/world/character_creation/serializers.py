@@ -26,7 +26,7 @@ from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathStage
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
-from world.magic.models import Tradition
+from world.magic.models import Gift, Technique, Tradition
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.models import Family, KinSlotPool, Kinsperson
 from world.roster.serializers import FamilySerializer
@@ -245,6 +245,48 @@ class TraditionSerializer(serializers.ModelSerializer):
         if bt and bt.required_distinction_id:
             return bt.required_distinction_id
         return None
+
+
+class CGGiftOptionSerializer(serializers.ModelSerializer):
+    """Gift row for the CG gift-options list (#2426).
+
+    Backs ``GET /api/character-creation/gifts/?draft_id=<id>`` — a gift the
+    draft's selected tradition + path make pickable (see
+    ``world.magic.services.cg_catalog.get_gift_options``).
+    """
+
+    codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Gift
+        fields = ["id", "name", "description", "kind", "codex_entry_id"]
+        read_only_fields = fields
+
+
+class CGTechniqueOptionSerializer(serializers.ModelSerializer):
+    """Technique row for the CG technique-options list (#2426).
+
+    Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
+    — the pool ∪ signature availability set for one (path, gift, tradition) pick
+    (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_signature``
+    is resolved from the ``signature_technique_ids`` set the ViewSet places in the
+    serializer context — never attached to the (SharedMemoryModel) ``Technique``
+    instance itself, to avoid leaking one request's filtered flag into another's
+    cached row (see the ``required_distinction_id`` comment above).
+    """
+
+    category = serializers.CharField(source="effect_type.category", read_only=True)
+    codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
+    is_signature = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Technique
+        fields = ["id", "name", "description", "category", "codex_entry_id", "is_signature"]
+        read_only_fields = fields
+
+    def get_is_signature(self, obj: Technique) -> bool:
+        """True when this technique came from the tradition's signature set."""
+        return obj.id in self.context.get("signature_technique_ids", set())
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):

@@ -9,7 +9,9 @@ from world.character_creation.views import (
     BeginningsViewSet,
     CanCreateCharacterView,
     CGExplanationsView,
+    CGGiftOptionViewSet,
     CGPointBudgetViewSet,
+    CGTechniqueOptionViewSet,
     CharacterDraftViewSet,
     ClaimableTitleViewSet,
     DraftApplicationViewSet,
@@ -42,6 +44,8 @@ router.register("applications", DraftApplicationViewSet, basename="application")
 router.register("house-titles", ClaimableTitleViewSet, basename="house-title")
 router.register("tarot-cards", TarotCardViewSet, basename="tarot-card")
 router.register("cantrips", CantripViewSet, basename="cantrip")
+router.register("gifts", CGGiftOptionViewSet, basename="cg-gift-option")
+router.register("technique-options", CGTechniqueOptionViewSet, basename="cg-technique-option")
 
 urlpatterns = [
     # Router-based URLs

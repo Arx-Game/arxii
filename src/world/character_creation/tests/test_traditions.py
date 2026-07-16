@@ -282,9 +282,27 @@ class SelectTraditionTests(TestCase):
         defaults.update(kwargs)
         return CharacterDraftFactory(**defaults)
 
+    def _add_distinction_to_draft(self, draft, distinction):
+        """Helper to add a distinction entry to draft_data (#2426 gate)."""
+        distinctions = draft.draft_data.get("distinctions", [])
+        distinctions.append(
+            {
+                "distinction_id": distinction.id,
+                "distinction_name": distinction.name,
+                "distinction_slug": distinction.slug,
+                "category_slug": distinction.category.slug,
+                "rank": 1,
+                "cost": distinction.calculate_total_cost(1),
+                "notes": "",
+            }
+        )
+        draft.draft_data["distinctions"] = distinctions
+        draft.save(update_fields=["draft_data"])
+
     def test_select_tradition_sets_fk(self):
-        """Selecting a tradition sets the selected_tradition FK."""
+        """Selecting a tradition (with its required distinction held) sets the FK."""
         draft = self._create_draft()
+        self._add_distinction_to_draft(draft, self.distinction)
 
         response = self.client.post(
             f"/api/character-creation/drafts/{draft.id}/select-tradition/",
@@ -295,6 +313,37 @@ class SelectTraditionTests(TestCase):
         assert response.status_code == status.HTTP_200_OK
         draft.refresh_from_db()
         assert draft.selected_tradition == self.tradition
+
+    def test_select_tradition_without_required_distinction_fails(self):
+        """Selecting a tradition whose required distinction the draft lacks returns 400 (#2426)."""
+        draft = self._create_draft()
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": self.tradition.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "formal training" in response.data["detail"]
+        draft.refresh_from_db()
+        assert draft.selected_tradition is None
+
+    def test_select_tradition_without_required_distinction_field_succeeds(self):
+        """A tradition with no required_distinction never gates on distinctions."""
+        open_tradition = TraditionFactory()
+        BeginningTraditionFactory(beginning=self.beginning, tradition=open_tradition)
+        draft = self._create_draft()
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": open_tradition.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        draft.refresh_from_db()
+        assert draft.selected_tradition == open_tradition
 
     def test_clear_tradition(self):
         """Setting tradition_id=None clears selected_tradition."""

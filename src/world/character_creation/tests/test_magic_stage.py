@@ -1,8 +1,11 @@
 """Tests for magic stage validation with cantrip selection."""
 
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APIClient
 
 from actions.constants import ActionCategory
+from evennia_extensions.factories import AccountFactory
 from world.achievements.constants import AccessChangeSource
 from world.character_creation.constants import CG_MODIFIER_CATEGORY, STARTING_TECHNIQUE_PICKS_TARGET
 from world.character_creation.factories import CharacterDraftFactory
@@ -12,7 +15,16 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.fatigue.models import FatiguePool
-from world.magic.factories import CantripFactory, FacetFactory, ResonanceFactory
+from world.magic.factories import (
+    CantripFactory,
+    FacetFactory,
+    GiftFactory,
+    PathGiftGrantFactory,
+    ResonanceFactory,
+    TechniqueFactory,
+    TraditionFactory,
+    TraditionGiftGrantFactory,
+)
 from world.magic.models import CharacterAnima, Technique
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.narrative.constants import NarrativeCategory
@@ -272,3 +284,151 @@ class StartingTechniquePicksTest(TestCase):
             draft_data={"distinctions": [{"distinction_id": distinction.id, "rank": 2}]}
         )
         self.assertEqual(draft.starting_technique_picks, 3)
+
+
+class CGGiftOptionEndpointTest(TestCase):
+    """GET /api/character-creation/gifts/?draft_id=<id> (#2426)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.path = PathFactory()
+        cls.tradition = TraditionFactory()
+
+        cls.available_gift = GiftFactory(name="Shadow Majesty")
+        path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.available_gift)
+        path_grant.starter_techniques.set(TechniqueFactory.create_batch(2, gift=cls.available_gift))
+        TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.available_gift)
+
+        # Authored tradition grant, but neither pool nor signature techniques attached.
+        cls.empty_gift = GiftFactory(name="Nothing Yet")
+        TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.empty_gift)
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def test_empty_before_tradition_and_path_selected(self):
+        """No tradition/path on the draft yet -> empty list, not every Gift."""
+        draft = CharacterDraftFactory(account=self.account)
+
+        response = self.client.get("/api/character-creation/gifts/", {"draft_id": draft.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_lists_available_gifts_excludes_empty_ones(self):
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+        )
+
+        response = self.client.get("/api/character-creation/gifts/", {"draft_id": draft.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        gift_ids = [row["id"] for row in response.data]
+        assert self.available_gift.id in gift_ids
+        assert self.empty_gift.id not in gift_ids
+
+    def test_missing_draft_id_returns_empty_list(self):
+        response = self.client.get("/api/character-creation/gifts/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_other_accounts_draft_is_not_accessible(self):
+        """draft_id scoped to the requesting account (get_object_or_404 account=)."""
+        other_account = AccountFactory()
+        draft = CharacterDraftFactory(
+            account=other_account,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+        )
+
+        response = self.client.get("/api/character-creation/gifts/", {"draft_id": draft.id})
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+class CGTechniqueOptionEndpointTest(TestCase):
+    """GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id> (#2426)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.path = PathFactory()
+        cls.tradition = TraditionFactory()
+        cls.gift = GiftFactory()
+
+        path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
+        cls.pool_techniques = TechniqueFactory.create_batch(2, gift=cls.gift)
+        path_grant.starter_techniques.set(cls.pool_techniques)
+
+        tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
+        cls.signature_technique = TechniqueFactory(gift=cls.gift)
+        tradition_grant.signature_techniques.set([cls.signature_technique])
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def _draft(self, **kwargs):
+        defaults = {
+            "account": self.account,
+            "selected_path": self.path,
+            "selected_tradition": self.tradition,
+        }
+        defaults.update(kwargs)
+        return CharacterDraftFactory(**defaults)
+
+    def test_pool_and_signature_techniques_listed_with_is_signature_flag(self):
+        draft = self._draft()
+
+        response = self.client.get(
+            "/api/character-creation/technique-options/",
+            {"draft_id": draft.id, "gift_id": self.gift.id},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        by_id = {row["id"]: row for row in response.data}
+        assert set(by_id) == {
+            *[t.id for t in self.pool_techniques],
+            self.signature_technique.id,
+        }
+        assert by_id[self.signature_technique.id]["is_signature"] is True
+        for pool_technique in self.pool_techniques:
+            assert by_id[pool_technique.id]["is_signature"] is False
+
+    def test_category_resolved_from_effect_type(self):
+        draft = self._draft()
+        technique = self.pool_techniques[0]
+
+        response = self.client.get(
+            "/api/character-creation/technique-options/",
+            {"draft_id": draft.id, "gift_id": self.gift.id},
+        )
+
+        row = next(row for row in response.data if row["id"] == technique.id)
+        assert row["category"] == technique.effect_type.category
+
+    def test_empty_before_tradition_and_path_selected(self):
+        draft = CharacterDraftFactory(account=self.account)
+
+        response = self.client.get(
+            "/api/character-creation/technique-options/",
+            {"draft_id": draft.id, "gift_id": self.gift.id},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_missing_gift_id_returns_empty_list(self):
+        draft = self._draft()
+
+        response = self.client.get(
+            "/api/character-creation/technique-options/", {"draft_id": draft.id}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
