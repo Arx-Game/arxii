@@ -48,7 +48,10 @@ export function OriginStage({ draft }: OriginStageProps) {
         selected_area_id: area.id,
         ...(shouldClearDependents && {
           selected_beginnings_id: null,
-          species: '',
+          // 2026-07 audit: this was `species: ''` — a field that doesn't
+          // exist on the serializer, so the stale species silently survived
+          // an area switch and rode along to review/submit.
+          selected_species_id: null,
           family_id: null,
         }),
       },

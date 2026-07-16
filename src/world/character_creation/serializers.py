@@ -556,6 +556,20 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(msg)
         return value
 
+    def update(self, instance, validated_data):
+        """Merge ``draft_data`` keys on partial update instead of replacing the blob.
+
+        The wizard's stages save independently (debounced skills, slider commits,
+        navigation-triggered saves) — whole-blob replacement made every PATCH a
+        last-write-wins race over a snapshot of the client cache, silently
+        reverting sibling stages' keys (2026-07 audit). A key set to ``null``
+        still clears it; omitted keys are untouched.
+        """
+        incoming = validated_data.pop("draft_data", None)
+        if incoming is not None:
+            validated_data["draft_data"] = {**instance.draft_data, **incoming}
+        return super().update(instance, validated_data)
+
     def validate_draft_data(self, value):
         """Validate draft_data fields, including stat allocations and goals."""
         if not isinstance(value, dict):

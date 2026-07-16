@@ -60,7 +60,7 @@ import {
   updateTechnique,
   withdrawDraft,
 } from './api';
-import type { CharacterDraftUpdate } from './types';
+import type { CharacterDraft, CharacterDraftUpdate } from './types';
 
 export const characterCreationKeys = {
   all: ['character-creation'] as const,
@@ -203,13 +203,46 @@ export function useCreateDraft() {
   });
 }
 
+/** Shared mutation key so concurrent draft PATCHes can detect each other. */
+const DRAFT_UPDATE_MUTATION_KEY = ['character-creation', 'update-draft'] as const;
+
 export function useUpdateDraft() {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: DRAFT_UPDATE_MUTATION_KEY,
     mutationFn: ({ draftId, data }: { draftId: number; data: CharacterDraftUpdate }) =>
       updateDraft(draftId, data),
+    // Optimistic merge (2026-07 audit): stat +/- clicks and slider drags used
+    // to read the pre-response cache, so rapid inputs computed from stale
+    // values and lost increments; the UI also rubber-banded when responses
+    // landed out of order.
+    onMutate: async ({ data }) => {
+      await queryClient.cancelQueries({ queryKey: characterCreationKeys.draft() });
+      const previous = queryClient.getQueryData<CharacterDraft>(characterCreationKeys.draft());
+      if (previous) {
+        queryClient.setQueryData<CharacterDraft>(characterCreationKeys.draft(), {
+          ...previous,
+          ...data,
+          draft_data: { ...previous.draft_data, ...(data.draft_data ?? {}) },
+        } as CharacterDraft);
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(characterCreationKeys.draft(), context.previous);
+      }
+    },
     onSuccess: (data) => {
-      queryClient.setQueryData(characterCreationKeys.draft(), data);
+      // Apply the server echo only when this is the LAST in-flight draft
+      // mutation — an out-of-order response otherwise snaps newer optimistic
+      // values back to older server state.
+      if (queryClient.isMutating({ mutationKey: DRAFT_UPDATE_MUTATION_KEY }) <= 1) {
+        queryClient.setQueryData(characterCreationKeys.draft(), data);
+      }
+      // Spends recorded in draft_data (species/beginnings/etc.) move the CG
+      // point budget — keep the Review page's numbers honest.
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftCGPoints(data.id) });
     },
   });
 }

@@ -304,6 +304,12 @@ export function useSyncDistinctions(draftId: number) {
       queryClient.invalidateQueries({
         queryKey: ['character-creation', 'draft'],
       });
+      // Distinction spends move the CG point budget (2026-07 audit): without
+      // this, the Review page's "unspent points -> bonus XP" banner and the
+      // submit-confirmation numbers stayed stale for up to 5 minutes.
+      queryClient.invalidateQueries({
+        queryKey: ['character-creation', 'draft-cg-points', draftId],
+      });
     },
   });
 }

@@ -60,7 +60,6 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           selected_cantrip_id: cantripId,
           selected_facet_id: null,
         },
@@ -73,7 +72,6 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           selected_facet_id: parseInt(facetId, 10),
         },
       },
@@ -85,7 +83,6 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           selected_consequence_pool_id: poolId === 'standard' ? null : parseInt(poolId, 10),
         },
       },
@@ -97,7 +94,6 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           selected_gift_resonance_id: parseInt(resonanceId, 10),
         },
       },

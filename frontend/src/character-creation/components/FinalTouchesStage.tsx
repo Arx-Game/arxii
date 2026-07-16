@@ -26,7 +26,7 @@ import type { CharacterDraft, DraftGoal } from '../types';
 
 interface FinalTouchesStageProps {
   draft: CharacterDraft;
-  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
+  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => (() => void) | void;
 }
 
 const BASE_GOAL_POINTS = 30;
@@ -73,7 +73,6 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         draftId: draft.id,
         data: {
           draft_data: {
-            ...draft.draft_data,
             goals: goalsRef.current,
           },
         },
@@ -85,13 +84,15 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       const discard = window.confirm('Failed to save goals. Discard changes and continue anyway?');
       return discard;
     }
-  }, [draft.id, draft.draft_data, updateDraft]);
+  }, [draft.id, updateDraft]);
 
   // Register beforeLeave callback
   useEffect(() => {
-    if (onRegisterBeforeLeave) {
-      onRegisterBeforeLeave(saveGoals);
-    }
+    if (!onRegisterBeforeLeave) return;
+    // Return the unregister as cleanup (2026-07 audit): without it, an
+    // unmounted stage's save closure stayed registered and re-fired on every
+    // later navigation, PATCHing stale values over newer edits.
+    return onRegisterBeforeLeave(saveGoals) ?? undefined;
   }, [onRegisterBeforeLeave, saveGoals]);
 
   const getGoalsForDomain = (domainId: number) => goals.filter((g) => g.domain_id === domainId);
