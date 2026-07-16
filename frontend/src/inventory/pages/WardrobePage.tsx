@@ -56,7 +56,7 @@ import { DeleteOutfitDialog } from '../components/DeleteOutfitDialog';
 import { UndressButton } from '../components/UndressButton';
 import { useEquippedItems, useInventory, inventoryKeys } from '../hooks/useInventory';
 import { useOutfits } from '../hooks/useOutfits';
-import type { ContainerAccessPolicy, ItemInstance, Outfit } from '../types';
+import type { ContainerAccessPolicy, ItemInstance } from '../types';
 
 export function WardrobePage() {
   const activeCharacter = useAppSelector((state) => state.game.active);
@@ -81,9 +81,14 @@ export function WardrobePage() {
 
   const [saveOpen, setSaveOpen] = useState(false);
   const [craftOpen, setCraftOpen] = useState(false);
-  const [editingOutfit, setEditingOutfit] = useState<Outfit | null>(null);
-  const [deletingOutfit, setDeletingOutfit] = useState<Outfit | null>(null);
-  const [detailItem, setDetailItem] = useState<ItemInstance | null>(null);
+  // Selection is held by id, not by a captured object (2026-07 audit): the
+  // detail panel and outfit editor re-derive their live record from the query
+  // caches below, so a mutation that refetches inventory/outfits is reflected
+  // immediately instead of leaving a stale click-time snapshot on screen (e.g.
+  // adding an outfit slot, changing a container's access policy, using a charge).
+  const [editingOutfitId, setEditingOutfitId] = useState<number | null>(null);
+  const [deletingOutfitId, setDeletingOutfitId] = useState<number | null>(null);
+  const [detailItemId, setDetailItemId] = useState<number | null>(null);
   // Item awaiting a recipient/container pick (#1909) — set by the detail
   // panel's Give/Put-in buttons, consumed once the picker dialog confirms.
   const [givingItemId, setGivingItemId] = useState<number | null>(null);
@@ -176,6 +181,15 @@ export function WardrobePage() {
     () => new Set(equippedItems.map((item) => item.id)),
     [equippedItems]
   );
+
+  // Live-derived selections (2026-07 audit) — see the id-state comment above.
+  // Equipped items are hydrated from `inventory`, so `inventoryById` covers
+  // both worn and carried; a null lookup (item left inventory) closes the panel.
+  const detailItem = detailItemId != null ? (inventoryById.get(detailItemId) ?? null) : null;
+  const editingOutfit =
+    editingOutfitId != null ? (outfits.find((o) => o.id === editingOutfitId) ?? null) : null;
+  const deletingOutfit =
+    deletingOutfitId != null ? (outfits.find((o) => o.id === deletingOutfitId) ?? null) : null;
 
   // -------------------------------------------------------------------------
   // Action handlers (websocket)
@@ -328,11 +342,11 @@ export function WardrobePage() {
                 key={outfit.id}
                 outfit={outfit}
                 onWear={() => handleApplyOutfit(outfit.id)}
-                onEdit={() => setEditingOutfit(outfit)}
-                onDelete={() => setDeletingOutfit(outfit)}
+                onEdit={() => setEditingOutfitId(outfit.id)}
+                onDelete={() => setDeletingOutfitId(outfit.id)}
                 onItemClick={(itemId) => {
                   const item = inventoryById.get(itemId);
-                  if (item) setDetailItem(item);
+                  if (item) setDetailItemId(item.id);
                 }}
               />
             ))}
@@ -352,7 +366,7 @@ export function WardrobePage() {
             equipped={equippedDisplay}
             onItemClick={(itemId) => {
               const item = inventoryById.get(itemId);
-              if (item) setDetailItem(item);
+              if (item) setDetailItemId(item.id);
             }}
           />
           <div className="space-y-2">
@@ -360,7 +374,7 @@ export function WardrobePage() {
               <p className="italic text-muted-foreground">Nothing equipped right now.</p>
             ) : (
               equippedItems.map((item) => (
-                <ItemCard key={item.id} item={item} onClick={() => setDetailItem(item)} />
+                <ItemCard key={item.id} item={item} onClick={() => setDetailItemId(item.id)} />
               ))
             )}
           </div>
@@ -376,7 +390,7 @@ export function WardrobePage() {
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {inventory.map((item) => (
-              <ItemCard key={item.id} item={item} onClick={() => setDetailItem(item)} />
+              <ItemCard key={item.id} item={item} onClick={() => setDetailItemId(item.id)} />
             ))}
           </div>
         )}
@@ -386,7 +400,7 @@ export function WardrobePage() {
         item={detailItem}
         open={detailItem !== null}
         onOpenChange={(open) => {
-          if (!open) setDetailItem(null);
+          if (!open) setDetailItemId(null);
         }}
         isEquipped={detailItem ? equippedItemIds.has(detailItem.id) : false}
         characterId={characterId}
@@ -430,7 +444,7 @@ export function WardrobePage() {
         <EditOutfitDialog
           open={editingOutfit !== null}
           onOpenChange={(open) => {
-            if (!open) setEditingOutfit(null);
+            if (!open) setEditingOutfitId(null);
           }}
           outfit={editingOutfit}
           carriedItems={inventory}
@@ -441,7 +455,7 @@ export function WardrobePage() {
         <DeleteOutfitDialog
           open={deletingOutfit !== null}
           onOpenChange={(open) => {
-            if (!open) setDeletingOutfit(null);
+            if (!open) setDeletingOutfitId(null);
           }}
           outfit={deletingOutfit}
         />

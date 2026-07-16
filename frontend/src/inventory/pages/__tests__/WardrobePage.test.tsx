@@ -9,6 +9,9 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Provider } from 'react-redux';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
@@ -502,6 +505,61 @@ describe('WardrobePage', () => {
         target_id: 1044,
         policy: 'owner_only',
       });
+    });
+  });
+
+  describe('live-derived selection (2026-07 audit)', () => {
+    // renderWithProviders wraps the element directly, so RTL's `rerender`
+    // drops the providers. Re-apply them so the mounted WardrobePage instance
+    // (and its open-panel state) survives the re-render.
+    function rerenderWrapped(rerender: (ui: React.ReactElement) => void) {
+      rerender(
+        <Provider store={store}>
+          <QueryClientProvider client={new QueryClient()}>
+            <MemoryRouter>
+              <WardrobePage />
+            </MemoryRouter>
+          </QueryClientProvider>
+        </Provider>
+      );
+    }
+
+    it('reflects fresh inventory in the open detail panel instead of a click-time snapshot', async () => {
+      const user = userEvent.setup();
+      setupHooks({ inventory: [makeItem(11, 'Silk Tunic')] });
+      const { rerender } = renderWithProviders(<WardrobePage />);
+
+      await user.click(screen.getAllByText('Silk Tunic')[0]);
+      // Panel heading shows the selected item's live display_name.
+      expect(screen.getByRole('heading', { name: 'Silk Tunic' })).toBeInTheDocument();
+
+      // Simulate a mutation refetch: same item id, renamed. The panel must
+      // re-derive from the refreshed query, not the object captured on click.
+      vi.mocked(inventoryHooks.useInventory).mockReturnValue(
+        stubQuery([makeItem(11, 'Silk Tunic (mended)')]) as unknown as ReturnType<
+          typeof inventoryHooks.useInventory
+        >
+      );
+      rerenderWrapped(rerender);
+
+      expect(screen.getByRole('heading', { name: 'Silk Tunic (mended)' })).toBeInTheDocument();
+    });
+
+    it('closes the detail panel when the selected item leaves inventory', async () => {
+      const user = userEvent.setup();
+      setupHooks({ inventory: [makeItem(11, 'Silk Tunic')] });
+      const { rerender } = renderWithProviders(<WardrobePage />);
+
+      await user.click(screen.getAllByText('Silk Tunic')[0]);
+      expect(screen.getByRole('heading', { name: 'Silk Tunic' })).toBeInTheDocument();
+
+      // Item dropped/given → gone from the refreshed inventory.
+      vi.mocked(inventoryHooks.useInventory).mockReturnValue(
+        stubQuery([]) as unknown as ReturnType<typeof inventoryHooks.useInventory>
+      );
+      rerenderWrapped(rerender);
+
+      expect(screen.queryByRole('heading', { name: 'Silk Tunic' })).not.toBeInTheDocument();
     });
   });
 });

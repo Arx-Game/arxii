@@ -98,6 +98,11 @@ export function useCreateOutfitSlot() {
     onSuccess: (_slot, variables) => {
       qc.invalidateQueries({ queryKey: outfitKeys.slots(variables.outfit) }).catch(() => {});
       qc.invalidateQueries({ queryKey: outfitKeys.detail(variables.outfit) }).catch(() => {});
+      // Also refresh the list (2026-07 audit): the outfit list rows carry their
+      // slots, and WardrobePage's live-derived editing outfit reads from the
+      // list, so a slot add must invalidate it too or the editor shows stale
+      // slots. `all` matches every ['outfits', <characterSheetId>] list.
+      qc.invalidateQueries({ queryKey: outfitKeys.all }).catch(() => {});
     },
   });
 }
@@ -109,6 +114,8 @@ export function useDeleteOutfitSlot() {
     onSuccess: (_void, variables) => {
       qc.invalidateQueries({ queryKey: outfitKeys.slots(variables.outfitId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: outfitKeys.detail(variables.outfitId) }).catch(() => {});
+      // See useCreateOutfitSlot — keep the list (and its embedded slots) live.
+      qc.invalidateQueries({ queryKey: outfitKeys.all }).catch(() => {});
     },
   });
 }
