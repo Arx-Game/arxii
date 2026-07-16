@@ -478,8 +478,8 @@ describe('Field Components', () => {
 
     it('shows search results after typing and calls onChange with persona id', async () => {
       vi.mocked(searchPersonas).mockResolvedValue([
-        { id: 10, name: 'Aria Voss' },
-        { id: 11, name: 'Kael Dorne' },
+        { id: 10, name: 'Aria Voss', character_sheet: 110 },
+        { id: 11, name: 'Kael Dorne', character_sheet: 111 },
       ]);
       const onChange = vi.fn();
       const Wrapper = createWrapper();

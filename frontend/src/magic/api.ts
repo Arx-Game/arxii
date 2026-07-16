@@ -481,12 +481,12 @@ export async function crossXPLock(
 // ---------------------------------------------------------------------------
 // Imbue Thread
 //
-// Imbuing is a SERVICE ritual — POST /api/magic/rituals/perform/ with kwargs
-// { thread_id, amount }. getImbuingRitualId() looks up the Ritual whose
-// service_function_path contains 'spend_resonance_for_imbuing'.
+// The canonical Rite of Imbuing is CEREMONY-kind; the web is its specialized
+// host UI (Ritual.client_hosted) — POST /api/magic/rituals/perform/ with
+// kwargs { thread_id, amount } performs the ceremony AND applies the imbue in
+// one call (the backend fuses the finisher). getImbuingRitualId() resolves the
+// ritual via the serialized is_imbuing flag.
 // ---------------------------------------------------------------------------
-
-const _IMBUING_SERVICE_PATH = 'spend_resonance_for_imbuing';
 
 /**
  * @internal
@@ -503,7 +503,7 @@ export function __resetImbuingRitualIdCacheForTests(): void {
 }
 
 /**
- * Resolves the Ritual PK whose service_function_path wraps spend_resonance_for_imbuing.
+ * Resolves the Rite of Imbuing's PK via the serialized is_imbuing flag.
  * Result is cached in module scope.
  */
 async function getImbuingRitualId(): Promise<number> {
@@ -512,15 +512,10 @@ async function getImbuingRitualId(): Promise<number> {
   const paginatedList = await getRituals();
   const rituals = paginatedList.results ?? [];
 
-  // The Ritual schema omits service_function_path from generated types (it is
-  // server-internal); cast through unknown to access the field safely.
-  const imbuing = rituals.find((r) => {
-    const raw = r as unknown as { service_function_path?: string };
-    return (
-      typeof raw.service_function_path === 'string' &&
-      raw.service_function_path.includes(_IMBUING_SERVICE_PATH)
-    );
-  });
+  // Serialized is_imbuing flag (2026-07 audit): the old filter matched
+  // service_function_path — a field the serializer never sends — so this
+  // find() always failed and web imbuing was unreachable on every server.
+  const imbuing = rituals.find((r) => r.is_imbuing);
 
   if (!imbuing) {
     throw new Error('Imbuing ritual not found — ensure the Ritual seed exists on this server');

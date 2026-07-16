@@ -93,12 +93,24 @@ export async function removeInvitation(invitationId: number): Promise<void> {
   }
 }
 
-export async function searchPersonas(query: string): Promise<{ id: number; name: string }[]> {
+export interface PersonaSearchResult {
+  /** Persona pk. */
+  id: number;
+  name: string;
+  /** Owning CharacterSheet pk — some callers key on the sheet, not the persona (#audit2). */
+  character_sheet: number | null;
+}
+
+export async function searchPersonas(query: string): Promise<PersonaSearchResult[]> {
   const res = await apiFetch(`/api/personas/?search=${encodeURIComponent(query)}`);
   if (!res.ok) throw new Error('Failed to search personas');
   const data = await res.json();
   const results = Array.isArray(data) ? data : data.results;
-  return results.map((p: { id: number; name: string }) => ({ id: p.id, name: p.name }));
+  return results.map((p: { id: number; name: string; character_sheet: number | null }) => ({
+    id: p.id,
+    name: p.name,
+    character_sheet: p.character_sheet ?? null,
+  }));
 }
 
 export async function searchOrganizations(query: string): Promise<{ id: number; name: string }[]> {

@@ -130,7 +130,13 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 - `retireThread(id)` — DELETE `/api/magic/threads/{id}/` → `void`
 - `crossXPLock(threadId, body)` — POST `/api/magic/threads/{id}/cross_xp_lock/` → `CrossXPLockResponse` (`{thread_id, unlocked_level, xp_spent}`)
 - `imbueThread(body)` — wraps `performRitual` with imbuing ritual id + kwargs
-- `imbueThreadAuto(characterSheetId, threadId, amount)` — resolves ritual id then imbues
+- `imbueThreadAuto(characterSheetId, threadId, amount)` — resolves the Rite of
+  Imbuing via the serialized `is_imbuing` flag (NOT `service_function_path`,
+  which the serializer never sends — the old filter made web imbuing dead on
+  every server, #audit2), then POSTs `rituals/perform/` with
+  `{ thread_id, amount }`. The canonical rite is CEREMONY-kind and the web is
+  its client-hosted UI, so the backend fuses the `imbue` finisher into that
+  one POST (performing the ceremony alone would only mint the pending effect).
 - `previewPull(body)` — POST `/api/magic/thread-pull-preview/` → `PullPreviewResponse`
 
 **Teaching offer mutations:**

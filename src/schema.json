@@ -56999,6 +56999,16 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        is_imbuing:
+          type: boolean
+          description: |-
+            True for the Rite of Imbuing (2026-07 audit).
+
+            Web imbuing resolves the ritual by this flag — the serializer never
+            exposes ``service_function_path`` (server-internal), and the old
+            client-side path filter matched a field that was never sent, so the
+            Imbue button could not succeed on any server.
+          readOnly: true
       required:
       - author_account_id
       - check_config
@@ -57009,6 +57019,7 @@ components:
       - hedge_accessible
       - id
       - input_schema
+      - is_imbuing
       - max_participants
       - min_participants
       - name

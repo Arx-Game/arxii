@@ -430,6 +430,9 @@ export function useCrossXPLock() {
       qc.invalidateQueries({
         queryKey: [...magicKeys.all, 'thread-hub-summary'],
       }).catch(() => {});
+      // Crossing an XP-lock spends account XP (2026-07 audit): without this the
+      // ThreadDetailPage "Available: N XP" affordability stayed stale up to 5min.
+      qc.invalidateQueries({ queryKey: ['account-progression'] }).catch(() => {});
     },
   });
 }
@@ -467,6 +470,8 @@ export function useAcceptTeachingOffer() {
       qc.invalidateQueries({
         queryKey: [...magicKeys.all, 'thread-hub-summary'],
       }).catch(() => {});
+      // Accepting a teaching offer pays XP (2026-07 audit) — refresh the balance.
+      qc.invalidateQueries({ queryKey: ['account-progression'] }).catch(() => {});
     },
   });
 }

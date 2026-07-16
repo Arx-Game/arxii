@@ -115,8 +115,8 @@ describe('ScheduleEventDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(eventsQueries.searchPersonas).mockResolvedValue([
-      { id: 1, name: 'Lady Avaris' },
-      { id: 2, name: 'Lord Brennan' },
+      { id: 1, name: 'Lady Avaris', character_sheet: 501 },
+      { id: 2, name: 'Lord Brennan', character_sheet: 502 },
     ]);
   });
 

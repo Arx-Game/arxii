@@ -20,7 +20,7 @@
  * Internal step state — does NOT use react-router subroutes.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
@@ -358,6 +358,9 @@ export function WeaveThreadWizard({
   const [anchorOptions, setAnchorOptions] = useState<AnchorOption[]>([]);
   const [anchorLoading, setAnchorLoading] = useState(false);
   const [anchorError, setAnchorError] = useState<string | null>(null);
+  // Monotonic token for the anchor/partner fetch — only the newest kind
+  // selection's response may write state (see selectKind, 2026-07 audit).
+  const anchorRequestTokenRef = useRef(0);
   // RELATIONSHIP_TRACK only (#2159): partner candidates for the "with whom"
   // step, fetched once per kind selection (see selectKind below).
   const [partnerOptions, setPartnerOptions] = useState<PartnerOption[]>([]);
@@ -406,6 +409,11 @@ export function WeaveThreadWizard({
     const meta = KIND_META[kind];
     if (!meta?.supported) return;
 
+    // Stale-response guard (2026-07 audit): pick kind A (slow fetch), Back,
+    // pick kind B (fast) — A's response used to resolve last and overwrite
+    // B's anchors, so selecting one submitted a target of the wrong kind.
+    // Only the newest selection's result may write state.
+    const token = ++anchorRequestTokenRef.current;
     setAnchorLoading(true);
     try {
       if (kind === 'RELATIONSHIP_TRACK') {
@@ -413,15 +421,18 @@ export function WeaveThreadWizard({
           characterSheetId == null
             ? []
             : await fetchRelationshipPartnerOptions(characterSheetId, summary);
+        if (token !== anchorRequestTokenRef.current) return;
         setPartnerOptions(options);
       } else {
         const options = await fetchAnchorOptions(kind, summary);
+        if (token !== anchorRequestTokenRef.current) return;
         setAnchorOptions(options);
       }
     } catch (err) {
+      if (token !== anchorRequestTokenRef.current) return;
       setAnchorError(err instanceof Error ? err.message : 'Failed to load options.');
     } finally {
-      setAnchorLoading(false);
+      if (token === anchorRequestTokenRef.current) setAnchorLoading(false);
     }
   }
 
