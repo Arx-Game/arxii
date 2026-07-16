@@ -182,7 +182,9 @@ export function PersonaContextMenu({
       delivery_receiver_ids?: number[];
     }) => createActionRequest(sceneId, params),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+      // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
+      // real key is 'scene-interactions' (useSceneInteractions).
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
     },
   });

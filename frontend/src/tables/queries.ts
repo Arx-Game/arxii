@@ -28,16 +28,33 @@ import type {
 // Query key factory
 // ---------------------------------------------------------------------------
 
+/**
+ * Trailing params are ELIDED when absent (2026-07 audit fix): the old shape
+ * appended the filters slot unconditionally, so `tablesKeys.members(id)` was
+ * `['tables','members',id,undefined]` — which React Query v5 does NOT treat
+ * as a prefix of `['tables','members',id,{table,active:true}]`. Every
+ * invite/remove/leave/bulletin invalidation therefore matched nothing and the
+ * roster/post list stayed stale until a hard refresh.
+ */
 export const tablesKeys = {
   all: ['tables'] as const,
-  list: (filters?: ListTablesParams) => [...tablesKeys.all, 'list', filters] as const,
+  list: (filters?: ListTablesParams) =>
+    filters === undefined
+      ? ([...tablesKeys.all, 'list'] as const)
+      : ([...tablesKeys.all, 'list', filters] as const),
   detail: (id: number) => [...tablesKeys.all, 'detail', id] as const,
   members: (tableId: number, filters?: ListMembershipsParams) =>
-    [...tablesKeys.all, 'members', tableId, filters] as const,
+    filters === undefined
+      ? ([...tablesKeys.all, 'members', tableId] as const)
+      : ([...tablesKeys.all, 'members', tableId, filters] as const),
   bulletinPosts: (params?: ListBulletinPostsParams) =>
-    [...tablesKeys.all, 'bulletin-posts', params] as const,
+    params === undefined
+      ? ([...tablesKeys.all, 'bulletin-posts'] as const)
+      : ([...tablesKeys.all, 'bulletin-posts', params] as const),
   bulletinReplies: (params?: ListBulletinRepliesParams) =>
-    [...tablesKeys.all, 'bulletin-replies', params] as const,
+    params === undefined
+      ? ([...tablesKeys.all, 'bulletin-replies'] as const)
+      : ([...tablesKeys.all, 'bulletin-replies', params] as const),
 };
 
 // ---------------------------------------------------------------------------

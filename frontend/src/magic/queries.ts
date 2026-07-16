@@ -55,7 +55,11 @@ export const magicKeys = {
   threadList: () => [...magicKeys.threads(), 'list'] as const,
   thread: (id: number) => [...magicKeys.threads(), id] as const,
 
-  threadHubSummary: () => [...magicKeys.all, 'thread-hub-summary'] as const,
+  // Scoped by sheet id (2026-07 audit): an unscoped key cached one alt's
+  // balances/prospects and served them to every other character the account
+  // viewed within staleTime. `null` = caller hasn't resolved a sheet yet.
+  threadHubSummary: (characterSheetId?: number) =>
+    [...magicKeys.all, 'thread-hub-summary', characterSheetId ?? null] as const,
 
   characterResonances: () => [...magicKeys.all, 'character-resonances'] as const,
   characterResonanceList: () => [...magicKeys.characterResonances(), 'list'] as const,
@@ -291,7 +295,7 @@ export function useRespondToStageAdvance() {
  */
 export function useThreadHubSummary(characterSheetId?: number) {
   return useQuery({
-    queryKey: magicKeys.threadHubSummary(),
+    queryKey: magicKeys.threadHubSummary(characterSheetId),
     queryFn: () => api.getThreadHubSummary(characterSheetId),
     throwOnError: true,
   });
@@ -343,7 +347,9 @@ export function useWeaveThread() {
     mutationFn: (body: WeaveThreadRequest) => api.weaveThread(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.threadList() }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
+      qc.invalidateQueries({
+        queryKey: [...magicKeys.all, 'thread-hub-summary'],
+      }).catch(() => {});
     },
   });
 }
@@ -373,7 +379,9 @@ export function useRetireThread() {
     mutationFn: (threadId: number) => api.retireThread(threadId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.threadList() }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
+      qc.invalidateQueries({
+        queryKey: [...magicKeys.all, 'thread-hub-summary'],
+      }).catch(() => {});
     },
   });
 }
@@ -400,7 +408,9 @@ export function useImbueThread() {
     }) => api.imbueThreadAuto(characterSheetId, threadId, amount),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
+      qc.invalidateQueries({
+        queryKey: [...magicKeys.all, 'thread-hub-summary'],
+      }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
     },
   });
@@ -417,7 +427,9 @@ export function useCrossXPLock() {
       api.crossXPLock(threadId, body),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
+      qc.invalidateQueries({
+        queryKey: [...magicKeys.all, 'thread-hub-summary'],
+      }).catch(() => {});
     },
   });
 }
@@ -452,7 +464,9 @@ export function useAcceptTeachingOffer() {
       api.acceptTeachingOffer(offerId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.teachingOffers() }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
+      qc.invalidateQueries({
+        queryKey: [...magicKeys.all, 'thread-hub-summary'],
+      }).catch(() => {});
     },
   });
 }
@@ -521,17 +535,19 @@ export function usePriceTechnique() {
 /**
  * Author a technique via the budget policy layer.
  *
- * Invalidates the technique list on success so any downstream technique
- * lists refresh. magicKeys does not have a techniqueList key, so we use
- * a literal ['techniques'] queryKey to match any technique list query.
+ * Invalidates the CG technique list (the only technique-list query) on
+ * success so the builder's downstream pickers refresh.
  */
 export function useAuthorTechnique() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: TechniqueDesignRequest) => api.authorTechnique(body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['techniques'] }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.all }).catch(() => {});
+      // 2026-07 audit: the literal ['techniques'] key matched no query anywhere
+      // (the CG technique list lives under character-creation's factory), and
+      // the magicKeys.all blast refetched every magic query incl. 5s-poll
+      // inboxes. Invalidate the real consumer instead.
+      qc.invalidateQueries({ queryKey: ['character-creation', 'techniques'] }).catch(() => {});
     },
   });
 }

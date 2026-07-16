@@ -22,7 +22,9 @@ export function PlaceBar({ sceneId }: Props) {
     mutationFn: (placeId: number) => joinPlace(sceneId, placeId),
     onSuccess: (_data, placeId) => {
       setCurrentPlaceId(placeId);
-      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+      // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
+      // real key is 'scene-interactions' (useSceneInteractions).
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
     },
   });
 
@@ -30,7 +32,9 @@ export function PlaceBar({ sceneId }: Props) {
     mutationFn: (placeId: number) => leavePlace(sceneId, placeId),
     onSuccess: () => {
       setCurrentPlaceId(null);
-      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+      // 2026-07 audit: 'scene-messages' matched no query anywhere — the feed's
+      // real key is 'scene-interactions' (useSceneInteractions).
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
     },
   });
 

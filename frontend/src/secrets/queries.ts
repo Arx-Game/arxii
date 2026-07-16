@@ -11,8 +11,9 @@ import {
 import type { GossipActionPayload, SubmitGrievancePayload } from './api';
 
 export const secretKeys = {
+  knownAll: ['secrets', 'known'] as const,
   known: (subjectId: number, viewerId: number) =>
-    ['secrets', 'known', subjectId, viewerId] as const,
+    [...secretKeys.knownAll, subjectId, viewerId] as const,
   grievanceOptions: ['secrets', 'grievance-options'] as const,
 };
 
@@ -40,13 +41,14 @@ export function useSubmitGrievanceMutation() {
   return useMutation({
     mutationFn: (payload: SubmitGrievancePayload) => submitGrievance(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['secrets', 'known'] });
+      queryClient.invalidateQueries({ queryKey: secretKeys.knownAll });
     },
   });
 }
 
 export const gossipKeys = {
-  list: (viewerId: number) => ['secrets', 'gossip', viewerId] as const,
+  all: ['secrets', 'gossip'] as const,
+  list: (viewerId: number) => [...gossipKeys.all, viewerId] as const,
 };
 
 /** The active character's spreadable gossip + regional heat. Disabled until there's an active
@@ -65,7 +67,7 @@ export function useGossipActionMutation() {
   return useMutation({
     mutationFn: (payload: GossipActionPayload) => gossipAction(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['secrets', 'gossip'] });
+      queryClient.invalidateQueries({ queryKey: gossipKeys.all });
     },
   });
 }
