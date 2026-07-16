@@ -12,7 +12,7 @@ Character creation is a multi-stage process that guides players through creating
 4. **Distinctions** - Advantages and disadvantages
 5. **Path & Skills** - Class/path selection and skill customization
 6. **Attributes** - Primary stat allocation (cap-aware with distinction/species bonuses)
-7. **Magic** - Cantrip selection, optional facet, aura distribution
+7. **Magic** - Starter Gift + Technique catalog picks, aura distribution
 8. **Appearance** - Height, build, form traits (hair/eye color, etc.)
 9. **Identity** - Name, description, personality, background
 10. **Final Touches** - Goals (optional)
@@ -81,7 +81,7 @@ for the five-branch validation gate this data must satisfy before submission.
   (required by `compute_magic_errors`) and resolved to a `Resonance` row; `None`
   when unset or invalid — `grant_gift_to_character` skips thread provisioning in
   that case (no fallback-to-first-supported-resonance; that fallback only existed
-  in the old unconditional-cantrip-creation path).
+  in the old CG-creates-a-new-technique path).
 - `draft.draft_data["selected_technique_ids"]` names the chosen catalog
   `Technique`s (drawn from the gift's pool ∪ the tradition's signature set); each
   gets a `CharacterTechnique.objects.get_or_create` link. `announce_access_change`

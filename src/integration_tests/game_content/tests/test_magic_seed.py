@@ -14,7 +14,7 @@ Verifies:
 8. Staff edits to ThreadPullEffect survive a re-run (Task 1.3).
 9. Starter gift catalog creates 5 styles, 6 effect types (with correct category), 5 MAJOR
    Gifts, 25 Techniques, 5 PathGiftGrant rows, the Unbound Tradition + its 5
-   TraditionGiftGrant rows — and creates zero Cantrip rows (#2426 Task 7).
+   TraditionGiftGrant rows (#2426 Task 7).
 10. Starter gift catalog seeding is idempotent.
 11. Staff edits to Gift/Technique rows survive a re-run.
 12. seed_starter_magic_story() composes all 8 phases in dependency order (Task 13g).
@@ -534,12 +534,6 @@ class TestSeedStarterGiftCatalogCreation(TestCase):
             "Pre-existing EffectType rows must have their category force-corrected",
         )
 
-    def test_no_cantrip_rows_created(self) -> None:
-        """The seed no longer creates Cantrip rows (#2426 Task 7)."""
-        from world.magic.models.cantrips import Cantrip
-
-        self.assertEqual(Cantrip.objects.count(), 0)
-
     def test_five_prospect_paths_created(self) -> None:
         from world.classes.models import Path, PathStage
 
@@ -903,7 +897,6 @@ class TestSeedMagicDev(TestCase):
             Technique,
             TechniqueStyle,
         )
-        from world.magic.models.cantrips import Cantrip
         from world.magic.models.corruption_config import CorruptionConfig
         from world.magic.models.gain_config import ResonanceGainConfig
         from world.magic.models.grants import PathGiftGrant, TraditionGiftGrant
@@ -941,7 +934,6 @@ class TestSeedMagicDev(TestCase):
         # EffectType: 6 from the starter catalog + 1 "Social Influence" from
         # MagicContent.create_all()
         self.assertGreaterEqual(EffectType.objects.count(), 6)
-        self.assertEqual(Cantrip.objects.count(), 0, "No Cantrip rows should be seeded (#2426)")
         self.assertEqual(Path.objects.filter(name__startswith="Path of").count(), 5)
         self.assertEqual(PathGiftGrant.objects.count(), 5)
         self.assertTrue(TraditionGiftGrant.objects.filter(tradition__name="Unbound").count() == 5)
@@ -985,7 +977,6 @@ class TestSeedMagicDev(TestCase):
             Technique,
             TechniqueStyle,
         )
-        from world.magic.models.cantrips import Cantrip
         from world.magic.models.corruption_config import CorruptionConfig
         from world.magic.models.gain_config import ResonanceGainConfig
         from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
@@ -1004,7 +995,6 @@ class TestSeedMagicDev(TestCase):
                 "thread_pull_effects": ThreadPullEffect.objects.count(),
                 "technique_styles": TechniqueStyle.objects.count(),
                 "effect_types": EffectType.objects.count(),
-                "cantrips": Cantrip.objects.count(),
                 "paths": Path.objects.count(),
                 "condition_templates": ConditionTemplate.objects.count(),
                 "techniques": Technique.objects.count(),

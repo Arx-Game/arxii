@@ -2,21 +2,12 @@ from django.db import models
 
 
 class TechniqueCategory(models.TextChoices):
-    """Player-facing technique grouping (#2426), moved from cantrips.
+    """Player-facing technique grouping (#2426).
 
-    Identical value set to ``CantripArchetype`` below, which stays until
-    Task 8 of the CG magic revamp retires the cantrip archetype grouping in
-    favor of this one.
+    Formerly duplicated on the now-removed CG starter-technique-template
+    model (#2426 Task 8); this is the sole surviving grouping.
     """
 
-    ATTACK = "attack", "Attack"
-    DEFENSE = "defense", "Defense"
-    BUFF = "buff", "Buff"
-    DEBUFF = "debuff", "Debuff"
-    UTILITY = "utility", "Utility"
-
-
-class CantripArchetype(models.TextChoices):
     ATTACK = "attack", "Attack"
     DEFENSE = "defense", "Defense"
     BUFF = "buff", "Buff"

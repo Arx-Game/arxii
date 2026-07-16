@@ -22,7 +22,6 @@ from world.magic.constants import (
     AffinityInteractionKind,
     AlterationKind,
     AlterationTier,
-    CantripArchetype,
     EffectKind,
     GiftKind,
     MagicMilestoneKind,
@@ -870,30 +869,6 @@ class MotifResonanceStyleFactory(factory.django.DjangoModelFactory):
 
     motif_resonance = factory.SubFactory(MotifResonanceFactory)
     style = factory.SubFactory("world.items.factories.StyleFactory")
-
-
-# =============================================================================
-# Cantrip Factories
-# =============================================================================
-
-
-class CantripFactory(factory.django.DjangoModelFactory):
-    """Factory for Cantrip - staff-curated starter technique templates."""
-
-    class Meta:
-        model = "magic.Cantrip"
-
-    name = factory.Sequence(lambda n: f"Cantrip {n}")
-    description = factory.Faker("sentence")
-    archetype = CantripArchetype.ATTACK
-    effect_type = factory.SubFactory(EffectTypeFactory)
-    style = factory.SubFactory(TechniqueStyleFactory)
-    base_intensity = 1
-    base_control = 1
-    base_anima_cost = 5
-    requires_facet = False
-    is_active = True
-    sort_order = factory.Sequence(lambda n: n)
 
 
 class AudereThresholdFactory(factory.django.DjangoModelFactory):
@@ -3278,7 +3253,7 @@ def seed_magic_progression(prospect_paths=None):
             "Developing Techniques",
             False,
             "Techniques are the shaped workings you develop and refine over a magical career.",
-            "Where a cantrip is a first spark, a developed technique is a deliberate,"
+            "Where a starter technique is a first spark, a developed technique is a deliberate,"
             " honed working.",
         ),
         "anima": (

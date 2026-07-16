@@ -727,10 +727,7 @@ class ApproveApplicationIntegrationTests(TestCase):
         """Helper to create complete magic data for a draft (Gift-stage validators, #2426).
 
         Populates the keys ``compute_magic_errors`` requires so ``draft.can_submit()``
-        (the finalize gate) passes. ``finalize_magic_data`` itself still reads the old
-        ``selected_cantrip_id`` draft_data key until #2426 Task 6, so this deliberately
-        leaves that key unset — finalize simply skips technique creation, which none of
-        these tests assert on.
+        (the finalize gate) passes.
         """
         draft.draft_data["selected_gift_id"] = self.gift.id
         draft.draft_data["selected_technique_ids"] = [self.technique.id]

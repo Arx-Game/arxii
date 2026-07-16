@@ -7,7 +7,6 @@ from rest_framework.exceptions import ValidationError
 from actions.models import ConsequencePool
 from world.magic.constants import GainSource, ParticipationRule
 from world.magic.models import (
-    Cantrip,
     CharacterAnima,
     CharacterAura,
     CharacterGift,
@@ -25,10 +24,11 @@ class ConsequencePoolCatalogFilter(django_filters.FilterSet):
     ``action_category=physical`` narrows to the combat offense catalog's flavors;
     any other valid ``ActionCategory`` value narrows to the magic technique-cast
     catalog's; absent keeps the flat union of both (the technique builder's
-    category-agnostic picker default). The CG cantrip picker can pass the draft's
-    derived category so players are only offered flavors their technique can
-    legally keep at finalize time (``resolve_cast_action_template`` enforces the
-    same split at submit/finalize).
+    category-agnostic picker default). A draft-context picker can pass the
+    draft's derived category so players are only offered flavors their
+    technique can legally keep at finalize time
+    (``resolve_cast_action_template`` enforces the same split at
+    submit/finalize).
     """
 
     action_category = django_filters.CharFilter(method="filter_by_action_category")
@@ -51,28 +51,6 @@ class ConsequencePoolCatalogFilter(django_filters.FilterSet):
         if value == ActionCategory.PHYSICAL:
             return queryset.filter(parent=get_melee_offense_pool())
         return queryset.filter(parent=get_standalone_cast_pool())
-
-
-class CantripFilter(django_filters.FilterSet):
-    """Filter for Cantrip list views."""
-
-    path_id = django_filters.NumberFilter(method="filter_by_path")
-
-    class Meta:
-        model = Cantrip
-        fields = ["path_id"]
-
-    def filter_by_path(
-        self, queryset: QuerySet[Cantrip], name: str, value: int
-    ) -> QuerySet[Cantrip]:
-        """Filter cantrips by path's allowed styles."""
-        from world.classes.models import Path  # noqa: PLC0415
-
-        try:
-            Path.objects.get(pk=value, is_active=True)
-        except (Path.DoesNotExist, ValueError, TypeError):
-            raise ValidationError({"path_id": "Invalid or inactive path."}) from None
-        return queryset.filter(style__allowed_paths__id=value)
 
 
 class ThreadFilter(django_filters.FilterSet):

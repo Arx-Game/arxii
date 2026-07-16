@@ -185,26 +185,24 @@ so that web case calls `author_staff_technique()` directly.)
 
 **Exposure:** staff/GM-only. Player self-service is a deferred `needs-design` follow-up.
 
-### Cantrips (CG Technique Templates)
+### CG Starter Gift/Technique Catalog (#2426)
 
-| Model | Purpose | Key Fields |
-|-------|---------|------------|
-| `Cantrip` | Staff-curated starter technique template | `name`, `description`, `archetype`, `effect_type` (FK), `style` (FK), `base_intensity`, `base_control`, `base_anima_cost`, `requires_facet`, `allowed_facets` (M2M) |
+The CG magic stage picks a staff-authored catalog `Gift` + `Technique`s directly
+(`get_gift_options`/`get_technique_options`, `world/magic/services/cg_catalog.py`),
+and `finalize_magic_data` only *links* them
+(`world/character_creation/services.py:_finalize_gift_and_techniques`) — no `Gift`
+or `Technique` row is created at CG time. See `world/magic/CLAUDE.md`'s "Starter
+Gift Catalog (CG Technique Picks, #2426)" section for the seeded catalog shape.
 
-**Superseded at CG finalization (#2426 Task 6):** the CG magic stage no longer picks a
-`Cantrip` template to mint a new `Technique`. It picks a staff-authored catalog `Gift`
-+ `Technique`s directly (`get_gift_options`/`get_technique_options`,
-`world/magic/services/cg_catalog.py`), and `finalize_magic_data` only *links* them
-(`world/character_creation/services.py:_finalize_gift_and_techniques`) — no `Gift` or
-`Technique` row is created at CG time anymore. The `Cantrip` model and this
-template-based description are dead code pending the full removal sweep (#2426 Task 8);
-do not add new callers of the old cantrip-creation path.
+The pre-#2426 design used a staff-curated `Cantrip` starter-technique-template
+model that CG finalization minted into a new `Technique`; that model and its API
+plumbing were fully removed in #2426 Task 8.
 
 ### Standalone Casting — Shared Template + Per-Character Check (#1306) [BUILT & WIRED]
 
 `create_technique` (`services/technique_builder.py`) defaults `action_template` to the
 shared **Technique Cast** `ActionTemplate` seeded by `seeds_cast.ensure_technique_cast_content()`,
-so every technique (including CG cantrips) is castable standalone. Staff may override
+so every technique (including CG starter-catalog techniques) is castable standalone. Staff may override
 per-technique via the FK. Key surfaces:
 
 | Surface | Location | Purpose |
@@ -226,9 +224,10 @@ check into `start_action_resolution` via the `check_type` override (optional kwa
 pool above, a curated **catalog** of pool "flavors" exists as single-depth children of
 that base pool (`ConsequencePool.objects.filter(parent=<base pool>)`, seeded by
 `ensure_technique_catalog_content()`). A technique's author may pick one instead of the
-default: the web technique builder, telnet `technique set consequence_pool=<id>`, or the
-CG cantrip-finalize flow (a `selected_consequence_pool_id` draft-data key — see
-`src/world/character_creation/CLAUDE.md`). `resolve_cast_action_template()` turns the
+default: the web technique builder or telnet `technique set consequence_pool=<id>`. (CG
+finalization does NOT expose this pick — every catalog technique already carries its own
+authored `action_template`; see `src/world/character_creation/CLAUDE.md`'s "Magic
+finalization" section, #2426.) `resolve_cast_action_template()` turns the
 choice (or `None`) into the `ActionTemplate` the Technique's `action_template` FK is set
 to; every catalog `ActionTemplate` shares the base template's `check_type`/`pipeline`/
 `target_type`, so only the consequence pool actually varies.
@@ -1970,7 +1969,8 @@ execute_flow("cast_power", context={
 - **SharedMemoryModel** - All lookup tables + identity rows use Evennia's identity-map cache
 - **Affinity/Resonance are domain models** - First-class models in this app with optional OneToOne links to `ModifierTarget` for modifier integration
 - **Techniques are player-created** - Unlike lookup tables, techniques are unique per character
-- **Cantrips are technique templates** - Staff-curated, produce real Techniques at CG finalization
+- **CG picks from a staff-authored catalog** - the magic stage links a catalog `Gift` +
+  `Technique`s (#2426); it never mints new `Gift`/`Technique` rows at CG time
 - **Intensity/Control** - Base stats on techniques. Runtime values modified by resonance, combat, audere, and thread pull effects
 - **No healing** - Shielding yes, restoration no. Healing is counter to the escalation-based combat design
 - **Technique.target_type** — cardinality field (SELF/SINGLE/AREA/FILTERED_GROUP). The *relationship*

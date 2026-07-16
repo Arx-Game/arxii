@@ -389,14 +389,6 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         ),
     )
 
-    source_cantrip = models.ForeignKey(
-        "magic.Cantrip",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="created_techniques",
-        help_text="The cantrip template this technique was created from, if any.",
-    )
     creator = models.ForeignKey(
         "character_sheets.CharacterSheet",
         on_delete=models.SET_NULL,

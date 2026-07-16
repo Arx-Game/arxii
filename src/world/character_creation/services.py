@@ -931,9 +931,9 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
 def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Step 1: link the CG-chosen catalog Gift + Techniques to the character.
 
-    Replaces the old cantrip-based Gift/Technique *creation* path (#2426): the
-    Gift and Techniques are staff-authored catalog rows the player picked via
-    the CG option endpoints (``get_gift_options``/``get_technique_options``) —
+    Replaces the old CG-creates-a-new-technique path (#2426): the Gift and
+    Techniques are staff-authored catalog rows the player picked via the CG
+    option endpoints (``get_gift_options``/``get_technique_options``) —
     finalize only links them, it never mints new ``Gift``/``Technique`` rows.
     Outcome-flavor consequence-pool selection is dropped entirely (spec
     correction on #2426): every catalog technique already carries its own
@@ -1663,7 +1663,7 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     _apply_character_mechanics(character, draft)
 
     # Finalize magic data (same as player finalize flow — GM-created
-    # characters may have cantrip/tradition/aura selections in the draft).
+    # characters may have gift/technique/tradition/aura selections in the draft).
     finalize_magic_data(draft, sheet)
 
     # NOTE: home and location are intentionally unset. A GM-created character

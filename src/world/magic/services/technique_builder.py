@@ -150,11 +150,10 @@ def create_technique(  # noqa: PLR0913
     level,
     action_category,
     description,
-    source_cantrip=None,
     action_template=None,
 ) -> Technique:
-    """Low-level Technique row writer. Shared by cantrip finalization and
-    build_technique. Does NOT create a CharacterTechnique.
+    """Low-level Technique row writer. Shared by build_technique and the CG
+    starter-gift catalog seed. Does NOT create a CharacterTechnique.
 
     Defaults action_template to the shared 'Technique Cast' template so every
     technique is castable standalone; pass an explicit template to override."""
@@ -173,7 +172,6 @@ def create_technique(  # noqa: PLR0913
         level=level,
         action_category=action_category,
         description=description,
-        source_cantrip=source_cantrip,
         creator=creator,
         action_template=action_template,
     )

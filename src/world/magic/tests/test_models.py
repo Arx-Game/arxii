@@ -7,11 +7,10 @@ from django.test import TestCase
 from actions.factories import ConsequencePoolFactory
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import CantripArchetype, GiftKind, TechniqueCategory
+from world.magic.constants import GiftKind, TechniqueCategory
 from world.magic.factories import (
     CharacterTechniqueFactory,
     EffectTypeFactory,
-    FacetFactory,
     GiftFactory,
     MishapPoolTierFactory,
     ResonanceFactory,
@@ -21,7 +20,6 @@ from world.magic.factories import (
     TraditionGiftGrantFactory,
 )
 from world.magic.models import (
-    Cantrip,
     CharacterAnima,
     CharacterAura,
     CharacterGift,
@@ -366,88 +364,6 @@ class ReincarnationModelTest(TestCase):
             past_life_name="Archmage Valdris",
         )
         self.assertIn("Valdris", str(reincarnation))
-
-
-# =============================================================================
-# Cantrip Model Tests
-# =============================================================================
-
-
-class CantripModelTest(TestCase):
-    """Tests for the Cantrip model."""
-
-    def test_cantrip_str(self):
-        """Test string representation."""
-        cantrip = Cantrip.objects.create(
-            name="Empowered Strike",
-            description="Channel magic into your weapon.",
-            archetype="attack",
-            requires_facet=False,
-            effect_type=EffectTypeFactory(),
-            style=TechniqueStyleFactory(),
-        )
-        assert str(cantrip) == "Empowered Strike"
-
-    def test_cantrip_with_facets(self):
-        """Test cantrip with allowed facets via M2M relationship."""
-        cantrip = Cantrip.objects.create(
-            name="Elemental Strike",
-            description="Imbue your weapon with elemental power.",
-            archetype="attack",
-            requires_facet=True,
-            facet_prompt="Choose your element",
-            effect_type=EffectTypeFactory(),
-            style=TechniqueStyleFactory(),
-        )
-        fire = FacetFactory(name="Fire")
-        ice = FacetFactory(name="Ice")
-        cantrip.allowed_facets.add(fire, ice)
-        assert cantrip.allowed_facets.count() == 2
-
-    def test_innate_cantrip_no_facet_prompt(self):
-        """Test that innate cantrips default to empty facet_prompt."""
-        cantrip = Cantrip.objects.create(
-            name="Danger Sense",
-            description="Supernatural awareness of threats.",
-            archetype="utility",
-            requires_facet=False,
-            effect_type=EffectTypeFactory(),
-            style=TechniqueStyleFactory(),
-        )
-        assert cantrip.facet_prompt == ""
-
-    def test_cantrip_has_mechanical_fields(self) -> None:
-        """Cantrip stores enough mechanical info to produce a Technique."""
-        effect_type = EffectTypeFactory(name="Attack")
-        style = TechniqueStyleFactory(name="Manifestation")
-        cantrip = Cantrip.objects.create(
-            name="Flame Blade",
-            description="Wreathe your weapon in flames.",
-            archetype=CantripArchetype.ATTACK,
-            effect_type=effect_type,
-            style=style,
-            base_intensity=1,
-            base_control=1,
-            base_anima_cost=5,
-        )
-        assert cantrip.effect_type == effect_type
-        assert cantrip.style == style
-        assert cantrip.base_intensity == 1
-        assert cantrip.base_control == 1
-        assert cantrip.base_anima_cost == 5
-
-    def test_cantrip_mechanical_defaults(self) -> None:
-        """Cantrip mechanical fields default to basic values."""
-        cantrip = Cantrip.objects.create(
-            name="Basic Cantrip",
-            description="A basic ability.",
-            archetype=CantripArchetype.UTILITY,
-            effect_type=EffectTypeFactory(),
-            style=TechniqueStyleFactory(),
-        )
-        assert cantrip.base_intensity == 1
-        assert cantrip.base_control == 1
-        assert cantrip.base_anima_cost == 5
 
 
 # =============================================================================

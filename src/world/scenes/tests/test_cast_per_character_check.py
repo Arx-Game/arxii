@@ -1,8 +1,8 @@
-"""End-to-end regression for #1306: a CG-finalized character can cast a cantrip
+"""End-to-end regression for #1306: a CG-finalized character can cast a starter
 technique standalone, and the cast rolls the CASTER'S per-character magic check.
 
 Issue #1306: standalone casts previously raised "Technique is not castable
-standalone" because cantrip-derived techniques carried no action_template, and
+standalone" because starter-catalog techniques carried no action_template, and
 even once they did, the cast rolled the template's fallback check rather than the
 character's personal anima-ritual check.
 
@@ -73,7 +73,7 @@ _STATS = {
 
 
 class CastUsesPerCharacterCheckTests(TestCase):
-    """A finalized character casts a cantrip technique using their personal check."""
+    """A finalized character casts a starter technique using their personal check."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -202,19 +202,20 @@ class CastUsesPerCharacterCheckTests(TestCase):
         return character, sheet, account
 
     def test_finalized_character_casts_with_personal_check(self) -> None:
-        """A CG-finalized character can self-cast their cantrip technique, and the
+        """A CG-finalized character can self-cast their starter technique, and the
         cast rolls their per-character magic check rather than the fallback."""
         character, sheet, _account = self._finalize_caster()
 
-        # The cantrip finalized into a real Technique with the default cast template.
+        # The catalog pick finalized into a linked CharacterTechnique with the
+        # default cast template.
         char_technique = CharacterTechnique.objects.filter(character=sheet).first()
         self.assertIsNotNone(
-            char_technique, "Finalized character should know a cantrip-derived technique"
+            char_technique, "Finalized character should know a starter-catalog technique"
         )
         technique = char_technique.technique
         self.assertIsNotNone(
             technique.action_template_id,
-            "Cantrip-derived technique must carry the default cast template (Task 6)",
+            "Starter-catalog technique must carry the default cast template (Task 6)",
         )
 
         # The personal check exists and is what we expect the cast to roll.

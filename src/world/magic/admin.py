@@ -8,7 +8,6 @@ from world.magic.models import (
     AffinityInteraction,
     AnimaRitualBudgetAward,
     AnimaRitualPerformance,
-    Cantrip,
     CharacterAnima,
     CharacterAura,
     CharacterGift,
@@ -209,12 +208,12 @@ class TechniqueAdmin(admin.ModelAdmin):
         "control",
         "anima_cost",
     ]
-    list_filter = ["style", "effect_type", "gift", "source_cantrip"]
+    list_filter = ["style", "effect_type", "gift"]
     filter_horizontal = ["restrictions", "target_prerequisites"]
     search_fields = ["name", "description"]
     readonly_fields = ["get_tier"]
-    autocomplete_fields = ["gift", "style", "effect_type", "source_cantrip"]
-    list_select_related = ["gift", "style", "effect_type", "source_cantrip"]
+    autocomplete_fields = ["gift", "style", "effect_type"]
+    list_select_related = ["gift", "style", "effect_type"]
     inlines = [TechniqueCapabilityGrantInline, TechniqueRemovedConditionInline]
 
     @admin.display(description="Tier")
@@ -410,27 +409,6 @@ class ReincarnationAdmin(admin.ModelAdmin):
     list_filter = ["character"]
     search_fields = ["past_life_name", "character__character__db_key"]
     raw_id_fields = ["character", "gift"]
-
-
-@admin.register(Cantrip)
-class CantripAdmin(admin.ModelAdmin):
-    list_display = [
-        "name",
-        "archetype",
-        "effect_type",
-        "style",
-        "base_intensity",
-        "base_control",
-        "base_anima_cost",
-        "requires_facet",
-        "is_active",
-        "sort_order",
-    ]
-    list_filter = ["archetype", "effect_type", "style", "requires_facet", "is_active"]
-    filter_horizontal = ["allowed_facets"]
-    search_fields = ["name", "description"]
-    autocomplete_fields = ["effect_type", "style"]
-    list_select_related = ["effect_type", "style"]
 
 
 @admin.register(AudereThreshold)

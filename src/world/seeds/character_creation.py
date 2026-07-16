@@ -121,7 +121,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "Spend your skill points across the specializations your path opens up; "
         "these are the trained competencies your character can already call on."
     ),
-    "magic_heading": "Magic & Cantrips",
+    "magic_heading": "Magic & Gifts",
     "identity_heading": "Name & Identity",
     "identity_intro": (
         "Give your character a name, a guiding concept, and the words and history "

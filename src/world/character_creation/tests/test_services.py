@@ -142,10 +142,7 @@ class FinalizationTestMixin:
         """Create complete magic data for a draft (Gift-stage validators, #2426).
 
         Populates the keys ``compute_magic_errors`` requires so ``draft.can_submit()``
-        (the finalize gate) passes. ``finalize_magic_data`` itself still reads the old
-        ``selected_cantrip_id`` draft_data key until #2426 Task 6, so this deliberately
-        leaves that key unset — finalize simply skips technique creation, which none of
-        these tests assert on.
+        (the finalize gate) passes.
         """
         draft.draft_data["selected_gift_id"] = self.gift.id
         draft.draft_data["selected_technique_ids"] = [self.technique.id]
@@ -1111,8 +1108,9 @@ class FinalizeCharacterDistinctionResonanceTests(FinalizationTestMixin, TestCase
 class FinalizeGiftAndTechniquesTests(TestCase):
     """finalize_magic_data links the CG-chosen catalog Gift/Techniques (#2426 Task 6).
 
-    Supersedes the old cantrip-creation contract: the Gift and Techniques are
-    staff-authored catalog rows the player picked via the CG option endpoints;
+    Supersedes the old CG-creates-a-new-technique contract: the Gift and
+    Techniques are staff-authored catalog rows the player picked via the CG
+    option endpoints;
     finalize only links them (CharacterGift/CharacterTechnique + the latent GIFT
     thread), it never mints new Gift/Technique rows.
     """

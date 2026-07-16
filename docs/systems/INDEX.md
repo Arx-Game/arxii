@@ -15,7 +15,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
-    `Gift`, `CharacterGift`, `Technique`, `CharacterTechnique`, `Cantrip`,
+    `Gift`, `CharacterGift`, `Technique`, `CharacterTechnique`,
     `TechniqueStyle`, `EffectType`, `Restriction`, `IntensityTier`,
     `TechniqueCapabilityGrant`,
     `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition`
@@ -2006,7 +2006,7 @@ gains a discoverable content item for the first time.
     personal to the earner list.
 - **Wired callers of `announce_access_change`:** `world/forms/services.py` (assume/revert
   alternate self), `world/covenants/services.py` (engage/disengage covenant role, via
-  `_announce_capability_diff`), `world/character_creation/services.py` (CG cantrip grant)
+  `_announce_capability_diff`), `world/character_creation/services.py` (CG starter-catalog Gift/Technique grant)
 - **API Endpoints:**
   - `GET /api/achievements/character-titles/?character_sheet=<id>` — earned titles, newest first
 - **Integrates with:** magic (`Technique` inherits `DiscoverableContent`; `discovery_achievement`
@@ -4675,7 +4675,7 @@ Extensions to Evennia models for additional data storage.
 Production-callable seed layer for populating sane defaults on a fresh dev install.
 
 - **Entry Point:** `world.seeds.database.seed_dev_database(*, verbose=False) -> SeedReport` — calls every registered cluster seeder in sequence; idempotent (create-if-missing semantics throughout, never overwrites).
-- **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name, in seed order: `"checks"` (resolution spine, first), `"magic"`, `"items"`, `"combat"`, `"consent"`, `"character_creation"` (CG-world content, last — after `magic`, which provides the cantrip/resonance `finalize_character` picks). Add a new cluster by appending an entry here. `seeded_models()` (flat representative-content list for row-count tracking) and `seeded_models_by_cluster()` (per-cluster inventory for the admin hub) are the two read shapes.
+- **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name, in seed order: `"checks"` (resolution spine, first), `"magic"`, `"items"`, `"combat"`, `"consent"`, `"character_creation"` (CG-world content, last — after `magic`, which provides the starter-Gift/resonance `finalize_character` picks). Add a new cluster by appending an entry here. `seeded_models()` (flat representative-content list for row-count tracking) and `seeded_models_by_cluster()` (per-cluster inventory for the admin hub) are the two read shapes.
 - **Surfaces:**
   - `arx seed dev` — CLI entry point (management command `src/core_management/management/commands/seed.py`; `--verbose` flag prints per-cluster row deltas).
   - Django admin **"Load sane defaults"** button (`src/web/admin/seed_views.py`) — superuser-only; runs `seed_dev_database()` and flashes a success/error message; redirects to the Game Setup hub on success.

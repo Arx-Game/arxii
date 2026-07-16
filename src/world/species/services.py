@@ -130,7 +130,7 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     ``resonance`` is the player's CG-chosen gift resonance (the same value the Major-gift
     block resolves). When None, falls back to each gift's first supported resonance.
 
-    Called from finalize_magic_data after the Major-gift cantrip block so the species
+    Called from finalize_magic_data after the Major-gift block so the species
     gift thread anchors to the same resonance as the player's Major-gift thread.
     """
     from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415

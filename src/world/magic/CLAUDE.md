@@ -103,7 +103,7 @@ The magic system for Arx II. Power flows from identity and connection.
 
 `services/technique_builder.py` provides a three-layer authoring stack:
 
-**Unrestricted core** — `build_technique(design, *, creator)` writes a `Technique` + payload rows (`TechniqueCapabilityGrant`, `TechniqueDamageProfile`, `TechniqueAppliedCondition`) + restriction attachments in one `transaction.atomic`. No gating, no character binding. `create_technique(...)` is the extracted low-level row writer shared with cantrip finalization. When `action_template` is omitted (the default), `create_technique` resolves it to the shared **Technique Cast** `ActionTemplate` seeded by `seeds_cast.py` via `get_standalone_cast_template()` — so every technique is castable standalone out of the box. Staff may pass an explicit template FK to override on a per-technique basis.
+**Unrestricted core** — `build_technique(design, *, creator)` writes a `Technique` + payload rows (`TechniqueCapabilityGrant`, `TechniqueDamageProfile`, `TechniqueAppliedCondition`) + restriction attachments in one `transaction.atomic`. No gating, no character binding. `create_technique(...)` is the extracted low-level row writer shared with the CG starter-gift catalog seed. When `action_template` is omitted (the default), `create_technique` resolves it to the shared **Technique Cast** `ActionTemplate` seeded by `seeds_cast.py` via `get_standalone_cast_template()` — so every technique is castable standalone out of the box. Staff may pass an explicit template FK to override on a per-technique basis.
 
 **Policy layer** — `price_design(design, *, config, budget)` is a pure function that itemizes power cost per dimension and subtracts restriction refunds, returning a `TechniqueCostBreakdown`. It always runs for every author — the breakdown is informational for staff and a gate for players. `AuthoringPolicy` subclasses answer three knobs:
 - `StaffPolicy` — `enforced=False`; budget is advisory; any tier allowed.
@@ -172,8 +172,8 @@ technique-design step or a magical-research unlock — never on-demand) is a def
 - `Ritual` (execution_kind=SCENE_ACTION) + `RitualCheckConfig` sidecar - Personalized recovery ritual (stat + skill + resonance + check_type)
 - `AnimaRitualPerformance` - Historical record of ritual performances
 
-**Note:** During character creation, the magic stage uses a simplified cantrip selection
-system. Anima rituals are set up post-CG. The player-authored `Ritual` row (SCENE_ACTION)
+**Note:** During character creation, the magic stage uses the starter Gift/Technique
+catalog pick (see below). Anima rituals are set up post-CG. The player-authored `Ritual` row (SCENE_ACTION)
 carries check configuration via its `RitualCheckConfig` sidecar (stat, skill, resonance, check_type).
 
 **Anima/severity budget per outcome tier (#1207):** `anima._budget_for_outcome` reads
@@ -211,9 +211,10 @@ casting never hard-fails with "no template." The resolution chain:
 - **Graded consequence pool** — a single "Magic: Technique Cast" `ConsequencePool`
   (seeded by `seeds_cast.py`) routes graded outcomes (failure / partial success / success)
   through the shared consequence machinery. No per-technique pool is required.
-- **Consequence-pool catalog (#1320)** — a technique's author (web builder, telnet
-  `technique set consequence_pool=<id>`, or CG cantrip finalize) may pick a
-  "flavor" from a curated catalog instead of the shared graded pool. The catalog
+- **Consequence-pool catalog (#1320)** — a technique's author (web builder or telnet
+  `technique set consequence_pool=<id>`; CG finalization does NOT expose this pick,
+  #2426) may pick a "flavor" from a curated catalog instead of the shared graded
+  pool. The catalog
   is `ConsequencePool.objects.filter(parent=<base pool>)` — single-depth children
   of the base pool seeded by `seeds_cast.ensure_technique_catalog_content()`. Each
   catalog entry has its own `ActionTemplate` (same `check_type`/`pipeline`/
@@ -308,14 +309,11 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   now forwards `ritual=ritual` to the service function, so technique-granting
   rituals can resolve their `TechniqueGrant` row.
 
-### Cantrips (Character Creation) — SUPERSEDED (#2426)
-
-`Cantrip` is dead code pending full removal (#2426 Task 8) — the model still exists
-but is no longer seeded or used by CG. See "Starter Gift Catalog" below for the live
-mechanism, and `docs/systems/magic.md`'s "Cantrips (CG Technique Templates)" section
-for the supersession note.
-
 ### Starter Gift Catalog (CG Technique Picks, #2426)
+
+The pre-#2426 design used a staff-curated `Cantrip` starter-technique-template model
+that CG finalization minted into a new `Technique`; that model and its API plumbing
+were fully removed in #2426 Task 8. See below for the live mechanism.
 
 The CG magic stage picks a staff-authored catalog `Gift` + `Technique`s directly — no
 `Gift`/`Technique` row is minted at CG time; `finalize_magic_data` only *links* the
@@ -1637,5 +1635,5 @@ not in a standalone pull.
 - Use SharedMemoryModel for lookup tables (via mechanics.ModifierTarget)
 - Technique has intensity (power) and control (safety/precision) as base stats
 - Technique tier is derived from level (1-5=T1, 6-10=T2, etc.)
-- Cantrip is a technique template — creates a real Technique at CG finalization
+- CG links a staff-authored catalog Gift + Techniques — it never mints new rows (#2426)
 - No healing mechanics — shielding yes, restoration no (counter to tension design)

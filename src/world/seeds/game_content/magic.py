@@ -10,9 +10,8 @@ Exports:
 - ``seed_thread_pull_catalog()`` — Task 1.3 — ThreadPullCost + ThreadPullEffect catalog
 - ``seed_starter_gift_catalog()`` — Task 7 (#2426) — 5 style-linked starter Gifts ×
   5 authored Techniques each, PathGiftGrant per (path, gift), the Unbound Tradition
-  + its TraditionGiftGrant rows. Supersedes the retired cantrip-era
-  ``seed_cantrip_starter_catalog()`` (the ``Cantrip`` model itself still exists —
-  see #2426 Task 8 for its removal).
+  + its TraditionGiftGrant rows. Supersedes the retired starter-catalog seed that
+  minted the now-removed template model (#2426 Task 8).
 - ``MagicContent`` — static factory helpers for integration-test technique wiring
 """
 
@@ -1966,8 +1965,8 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
 #
 # 5×5 grid: 5 TechniqueCategory values × 5 TechniqueStyle names = 25 authored
 # Techniques, grouped 5-per-style into one starter Gift per style/path pair.
-# Formerly a 5×5 Cantrip grid (retired — Cantrip rows are no longer seeded;
-# the Cantrip model itself is untouched here, removed in Task 8).
+# Formerly a 5×5 template grid that minted the now-removed starter-technique
+# template model (retired in Task 8, #2426).
 #
 # Style → PROSPECT Path mapping (per CLAUDE.md / magic CLAUDE.md):
 #   Manifestation → Path of Steel
@@ -1985,7 +1984,7 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
 #   UTILITY → Utility
 #
 # Each (category, style) pair maps to exactly one authored Technique with an
-# evocative name (unchanged from the retired Cantrip grid's naming).
+# evocative name (unchanged from the retired template grid's naming).
 #
 
 #: 5 canonical PROSPECT paths, each with minimal required fields.
@@ -2120,11 +2119,11 @@ _EFFECT_TYPES: list[tuple[str, str, int | None, int, str]] = [
 ]
 
 # Mapping: (archetype_value, style_name) → (technique_name, description, effect_type_name)
-# 25 entries covering all 5×5 combinations. Renamed from _CANTRIP_GRID (#2426) — the
-# grid itself is unchanged; its rows now author Technique rows grouped by style into
-# starter Gifts instead of standalone Cantrip rows.
+# 25 entries covering all 5×5 combinations. Renamed from the old template-grid constant
+# (#2426) — the grid itself is unchanged; its rows now author Technique rows grouped by
+# style into starter Gifts instead of standalone template rows.
 _STARTER_GIFT_CATALOG: list[tuple[str, str, str, str, str]] = [
-    # (archetype, style, cantrip_name, description, effect_type)
+    # (archetype, style, technique_name, description, effect_type)
     # --- ATTACK ---
     (
         "attack",
@@ -2616,10 +2615,10 @@ _UNBOUND_TRADITION_DESCRIPTION = (
 def seed_starter_gift_catalog() -> StarterGiftCatalogResult:
     """Lazy-create the starter Gift/Technique catalog + the Unbound Tradition (#2426).
 
-    Supersedes the retired cantrip-era ``seed_cantrip_starter_catalog()`` — the CG
-    magic stage now picks a catalog ``Gift`` + authored ``Technique`` rows instead of
-    a ``Cantrip`` template (the ``Cantrip`` model itself is untouched here; it is
-    removed in Task 8). All writes use ``get_or_create`` so re-running on a
+    Supersedes the retired starter-catalog seed — the CG magic stage now picks a
+    catalog ``Gift`` + authored ``Technique`` rows instead of a template row (the
+    old template model was removed in Task 8, #2426). All writes use
+    ``get_or_create`` so re-running on a
     populated DB is a no-op; staff edits survive repeated calls — natural-keyed on
     ``name`` throughout so richer lore-repo fixture content can upsert over these
     rows later.

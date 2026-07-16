@@ -115,7 +115,7 @@ class TestAccrueCorruptionForCast(TestCase):
     # Abyssal baseline
     # ------------------------------------------------------------------
 
-    def test_abyssal_tier_1_cantrip_stat_bonus_2_yields_2_ticks(self) -> None:
+    def test_abyssal_tier_1_technique_stat_bonus_2_yields_2_ticks(self) -> None:
         """Abyssal, tier 1, stat_bonus=2, no flags → tick = ceil(2 × 1.0 × 1.0 × 1.0) = 2."""
         abyssal_affinity = AffinityFactory(name="Abyssal")
         resonance = ResonanceFactory(name="Abyssal Test", affinity=abyssal_affinity)

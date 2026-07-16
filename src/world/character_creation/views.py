@@ -353,7 +353,7 @@ class CGGiftOptionViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = CGGiftOptionSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None  # Small lookup table, mirrors CantripViewSet.
+    pagination_class = None  # Small lookup table.
     filter_backends = [DjangoFilterBackend]
     filterset_class = CGGiftOptionFilter
 
@@ -412,7 +412,7 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = CGTechniqueOptionSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None  # Small lookup table, mirrors CantripViewSet.
+    pagination_class = None  # Small lookup table.
     filter_backends = [DjangoFilterBackend]
     filterset_class = CGTechniqueOptionFilter
 
