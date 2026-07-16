@@ -68,6 +68,7 @@ from world.scenes.reaction_toggle_services import (
     toggle_interaction_favorite,
     toggle_interaction_reaction,
 )
+from world.scenes.services import active_persona_for_sheet
 
 
 class InteractionCursorPagination(CursorPagination):
@@ -329,7 +330,12 @@ class InteractionViewSet(
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        persona = Persona.objects.get(pk=data["persona_id"])
+        # The submitted persona_id (ownership-validated) only SELECTS the acting
+        # character; authorship is always the character's currently-worn face
+        # (#981 active persona), derived server-side so a client passing the
+        # primary persona can never unmask a worn ESTABLISHED alt or mask.
+        selected = Persona.objects.get(pk=data["persona_id"])
+        persona = active_persona_for_sheet(selected.character_sheet)
         scene: Scene | None = (
             Scene.objects.get(pk=data["scene_id"]) if data.get("scene_id") else None
         )

@@ -12,6 +12,7 @@
 import { useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppSelector } from '@/store/hooks';
+import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { reactToWindow, reactToInteraction } from '../queries';
 import type { ReactionWindowPayload } from '../types';
@@ -31,7 +32,7 @@ export function ReactionStrip({ windows, sceneId, interactionId }: ReactionStrip
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const personaId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.primary_persona_id ?? null,
+    () => actingPersonaId(myRosterEntries.find((e) => e.name === activeCharacterName)),
     [myRosterEntries, activeCharacterName]
   );
   const mutation = useMutation({

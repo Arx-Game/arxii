@@ -460,6 +460,35 @@ class TestRecordInteraction(TestCase):
         assert result is not None
         assert result.persona == identity_a.primary_persona
 
+    def test_masked_character_records_worn_face_not_primary(self) -> None:
+        """The default-persona fallback is the WORN face, never primary (#981 alt-leak).
+
+        The telnet/WS pose path passes no explicit persona — if the fallback
+        read ``primary_persona`` directly, every pose made while masked would
+        unmask the disguise in the permanent scene record.
+        """
+        from world.scenes.factories import PersonaFactory
+        from world.scenes.services import set_active_persona
+
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        identity_a = CharacterSheetFactory(character=char_a)
+        CharacterSheetFactory(character=char_b)
+        mask = PersonaFactory(character_sheet=identity_a, name="The Gray Hood")
+        set_active_persona(identity_a, mask)
+
+        result = record_interaction(
+            character=char_a,
+            content="waves.",
+            mode=InteractionMode.POSE,
+        )
+        assert result is not None
+        assert result.persona == mask
+
     def test_creates_with_place(self) -> None:
         room = ObjectDBFactory(
             db_key="Hall",

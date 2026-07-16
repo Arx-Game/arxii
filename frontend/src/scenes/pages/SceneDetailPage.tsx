@@ -22,6 +22,7 @@ import { CharacterCardDrawer } from '@/game/components/CharacterCardDrawer';
 import type { PoseUnitAvatarClickPersona } from '../components/PoseUnit';
 import type { ActionAttachmentInfo } from '../actionTypes';
 import { useAppSelector } from '@/store/hooks';
+import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { PendingActionAttachments } from '../components/PendingActionAttachments';
 import { usePendingUnlinkedActions } from '../hooks/usePendingUnlinkedActions';
@@ -73,7 +74,7 @@ export function SceneDetailPage() {
     () => myRosterEntries.find((e) => e.name === activeCharacter) ?? null,
     [myRosterEntries, activeCharacter]
   );
-  const personaId = activeEntry?.primary_persona_id ?? null;
+  const personaId = actingPersonaId(activeEntry);
   const characterSheetId = activeEntry?.character_id ?? 0;
   // The active character's own RosterEntry id (#2156 Task 7) — the FriendButton's
   // `viewerEntryId` inside the character-card drawer.

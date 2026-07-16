@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
+import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import {
   fetchAvailableActions,
@@ -106,7 +107,7 @@ export function ActionPanel({ sceneId }: Props) {
     [myRosterEntries, activeCharacterName]
   );
   const characterId = activeEntry?.character_id ?? null;
-  const initiatorPersonaId = activeEntry?.primary_persona_id ?? null;
+  const initiatorPersonaId = actingPersonaId(activeEntry);
 
   const { data, isLoading } = useQuery({
     queryKey: ['available-actions', characterId],

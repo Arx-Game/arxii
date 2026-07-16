@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAppSelector } from '@/store/hooks';
+import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
@@ -217,7 +218,7 @@ export function PoseUnit({
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const viewerPersonaId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.primary_persona_id ?? null,
+    () => actingPersonaId(myRosterEntries.find((e) => e.name === activeCharacterName)),
     [myRosterEntries, activeCharacterName]
   );
   const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;

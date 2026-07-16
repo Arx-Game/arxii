@@ -44,6 +44,7 @@ from world.scenes.action_services import (
 from world.scenes.cast_services import request_technique_cast
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import Persona, Scene
+from world.scenes.services import active_persona_for_sheet
 
 # Repeated API error detail strings. Centralized to avoid the duplicated-literal
 # SonarCloud smell (python:S1192).
@@ -320,7 +321,12 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 {"detail": _INITIATOR_NOT_FOUND_DETAIL},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
+        # The submitted persona only SELECTS the acting character; the recorded
+        # initiator is always that character's currently-worn face (#981), derived
+        # server-side so a client passing the primary persona can never unmask a
+        # worn alt/mask (mirrors the hostile-dispatch path below and telnet).
+        selected_initiator = get_object_or_404(Persona, pk=initiator_persona_id)
+        initiator_persona = active_persona_for_sheet(selected_initiator.character_sheet)
 
         primary_id = target_ids[0] if target_ids else None
         target_persona = (
@@ -609,7 +615,9 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 {"detail": _INITIATOR_NOT_FOUND_DETAIL},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
+        # Same worn-face derivation as the action-request create path (#981).
+        selected_initiator = get_object_or_404(Persona, pk=initiator_persona_id)
+        initiator_persona = active_persona_for_sheet(selected_initiator.character_sheet)
 
         target_persona: Persona | None = None
         if target_persona_id is not None:

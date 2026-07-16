@@ -17,6 +17,7 @@ import { JournalTab } from '@/journals/components/JournalTab';
 import { StatusPanel } from '@/status/components/StatusPanel';
 import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
 import { VoyagePanel } from '@/travel/components/VoyagePanel';
+import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
 import { Link } from 'react-router-dom';
@@ -93,7 +94,7 @@ export function GamePage() {
   const activeCharacterId = activeEntry?.character_id ?? null;
   // Lifted from GameWindow (#2156 review fold-in) — dedupes the roster query
   // that both GamePage and GameWindow used to call independently.
-  const personaId = activeEntry?.primary_persona_id ?? null;
+  const personaId = actingPersonaId(activeEntry);
   // The active character's own RosterEntry id (#2156 Task 7) — the FriendButton's
   // `viewerEntryId` inside the character-card drawer.
   const viewerEntryId = activeEntry?.id ?? null;
