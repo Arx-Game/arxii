@@ -453,7 +453,6 @@ export const mockTechnique: Technique = {
   control: 1,
   anima_cost: 2,
   description: 'A strike from the shadows',
-  source_cantrip: null,
   tier: 1,
 };
 

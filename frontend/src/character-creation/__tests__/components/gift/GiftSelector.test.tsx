@@ -97,4 +97,45 @@ describe('GiftSelector', () => {
       );
     });
   });
+
+  it('clears a stale gift pick once the fetched gift list no longer contains it', async () => {
+    // Simulates a tradition switch: the draft still has a gift pick from the
+    // old tradition's catalog, but the newly fetched gift list (mockCGGiftOptions,
+    // ids 1 and 2) doesn't include it.
+    const draft = createMockDraft({
+      id: 1,
+      selected_tradition: mockTradition,
+      selected_path: mockPath,
+      draft_data: { selected_gift_id: 999, selected_technique_ids: [42] },
+    });
+    renderSelector(draft);
+
+    await waitFor(() => {
+      expect(updateDraftMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          draft_data: expect.objectContaining({
+            selected_gift_id: null,
+            selected_technique_ids: [],
+          }),
+        })
+      );
+    });
+  });
+
+  it('does not mutate when the selected gift is still present in the fetched list', async () => {
+    const draft = createMockDraft({
+      id: 1,
+      selected_tradition: mockTradition,
+      selected_path: mockPath,
+      draft_data: { selected_gift_id: 1, selected_technique_ids: [] },
+    });
+    renderSelector(draft);
+
+    // Let any effects settle, then confirm no defensive-reset mutate fired.
+    await waitFor(() => {
+      expect(screen.getByText('Whispers of Shadow')).toBeInTheDocument();
+    });
+    expect(updateDraftMock).not.toHaveBeenCalled();
+  });
 });

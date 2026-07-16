@@ -528,7 +528,6 @@ export interface Technique {
   control: number;
   anima_cost: number;
   description: string;
-  source_cantrip: number | null;
   tier: number;
 }
 

@@ -608,6 +608,15 @@ export function useSelectTradition() {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
       // Selecting a tradition may auto-add a required distinction, affecting CG points
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftCGPoints(draftId) });
+      // The gift (and downstream technique) catalog is scoped per-tradition — refetch
+      // immediately so GiftSelector's stale-pick reset (and the funnel UI generally)
+      // sees the new tradition's options right away instead of on the next unrelated
+      // refetch. Invalidate the technique-options key by its draftId-scoped prefix
+      // (no giftId yet known here) so every cached (draftId, giftId) entry is covered.
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.cgGifts(draftId) });
+      queryClient.invalidateQueries({
+        queryKey: [...characterCreationKeys.all, 'cg-technique-options', draftId],
+      });
     },
   });
 }
