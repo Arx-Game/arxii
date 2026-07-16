@@ -10,6 +10,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
+import { FieldError, FormErrors } from './FieldError';
 import {
   Dialog,
   DialogContent,
@@ -148,11 +149,7 @@ export function TableFormDialog(props: TableFormDialogProps) {
               required
               aria-describedby={fieldErrors.name ? 'table-name-error' : undefined}
             />
-            {Array.isArray(fieldErrors.name) && (
-              <p id="table-name-error" className="text-sm text-destructive">
-                {(fieldErrors.name as string[]).join(' ')}
-              </p>
-            )}
+            <FieldError errors={fieldErrors} field="name" id="table-name-error" />
           </div>
 
           {/* Description */}
@@ -165,20 +162,11 @@ export function TableFormDialog(props: TableFormDialogProps) {
               placeholder="Brief description of this table's theme or setting"
               rows={3}
             />
-            {Array.isArray(fieldErrors.description) && (
-              <p className="text-sm text-destructive">
-                {(fieldErrors.description as string[]).join(' ')}
-              </p>
-            )}
+            <FieldError errors={fieldErrors} field="description" />
           </div>
 
           {/* Global errors */}
-          {Array.isArray(fieldErrors.non_field_errors) && (
-            <p className="text-sm text-destructive">
-              {(fieldErrors.non_field_errors as string[]).join(' ')}
-            </p>
-          )}
-          {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
+          <FormErrors errors={fieldErrors} />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

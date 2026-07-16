@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
+import { FieldError, FormErrors } from './FieldError';
 import {
   Dialog,
   DialogContent,
@@ -143,20 +144,11 @@ export function InviteToTableDialog({ table, children }: InviteToTableDialogProp
                 </ul>
               )}
             </div>
-            {Array.isArray(fieldErrors.persona) && (
-              <p className="text-sm text-destructive">
-                {(fieldErrors.persona as string[]).join(' ')}
-              </p>
-            )}
+            <FieldError errors={fieldErrors} field="persona" />
           </div>
 
           {/* Global errors */}
-          {Array.isArray(fieldErrors.non_field_errors) && (
-            <p className="text-sm text-destructive">
-              {(fieldErrors.non_field_errors as string[]).join(' ')}
-            </p>
-          )}
-          {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
+          <FormErrors errors={fieldErrors} />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

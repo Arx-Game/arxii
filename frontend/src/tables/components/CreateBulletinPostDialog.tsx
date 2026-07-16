@@ -14,6 +14,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
+import { FieldError, FormErrors } from './FieldError';
 import {
   Dialog,
   DialogContent,
@@ -147,11 +148,7 @@ export function CreateBulletinPostDialog({
               required
               aria-describedby={fieldErrors.title ? 'bp-title-error' : undefined}
             />
-            {Array.isArray(fieldErrors.title) && (
-              <p id="bp-title-error" className="text-sm text-destructive">
-                {(fieldErrors.title as string[]).join(' ')}
-              </p>
-            )}
+            <FieldError errors={fieldErrors} field="title" id="bp-title-error" />
           </div>
 
           {/* Body */}
@@ -166,11 +163,7 @@ export function CreateBulletinPostDialog({
               required
               aria-describedby={fieldErrors.body ? 'bp-body-error' : undefined}
             />
-            {Array.isArray(fieldErrors.body) && (
-              <p id="bp-body-error" className="text-sm text-destructive">
-                {(fieldErrors.body as string[]).join(' ')}
-              </p>
-            )}
+            <FieldError errors={fieldErrors} field="body" id="bp-body-error" />
           </div>
 
           {/* Section selector */}
@@ -189,11 +182,7 @@ export function CreateBulletinPostDialog({
                 ))}
               </SelectContent>
             </Select>
-            {Array.isArray(fieldErrors.story) && (
-              <p className="text-sm text-destructive">
-                {(fieldErrors.story as string[]).join(' ')}
-              </p>
-            )}
+            <FieldError errors={fieldErrors} field="story" />
           </div>
 
           {/* Allow replies */}
@@ -209,12 +198,7 @@ export function CreateBulletinPostDialog({
           </div>
 
           {/* Global errors */}
-          {Array.isArray(fieldErrors.non_field_errors) && (
-            <p className="text-sm text-destructive">
-              {(fieldErrors.non_field_errors as string[]).join(' ')}
-            </p>
-          )}
-          {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
+          <FormErrors errors={fieldErrors} />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

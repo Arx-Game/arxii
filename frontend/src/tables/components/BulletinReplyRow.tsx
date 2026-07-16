@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
+import { FieldError, FormErrors } from './FieldError';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { formatRelativeTime } from '@/lib/relativeTime';
@@ -131,15 +132,8 @@ export function BulletinReplyRow({ reply, isGMOrStaff }: BulletinReplyRowProps) 
               className="text-sm"
               aria-label="Edit reply"
             />
-            {Array.isArray(fieldErrors.body) && (
-              <p className="text-xs text-destructive">{(fieldErrors.body as string[]).join(' ')}</p>
-            )}
-            {Array.isArray(fieldErrors.non_field_errors) && (
-              <p className="text-xs text-destructive">
-                {(fieldErrors.non_field_errors as string[]).join(' ')}
-              </p>
-            )}
-            {fieldErrors.detail && <p className="text-xs text-destructive">{fieldErrors.detail}</p>}
+            <FieldError errors={fieldErrors} field="body" className="text-xs text-destructive" />
+            <FormErrors errors={fieldErrors} className="text-xs text-destructive" />
             <div className="flex gap-2">
               <Button type="submit" size="sm" disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? 'Saving…' : 'Save'}

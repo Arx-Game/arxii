@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
+import { FieldError, FormErrors } from './FieldError';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -95,9 +96,7 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
           maxLength={200}
           required
         />
-        {Array.isArray(fieldErrors.title) && (
-          <p className="text-sm text-destructive">{(fieldErrors.title as string[]).join(' ')}</p>
-        )}
+        <FieldError errors={fieldErrors} field="title" />
       </div>
 
       <div className="space-y-1">
@@ -109,9 +108,7 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
           rows={5}
           required
         />
-        {Array.isArray(fieldErrors.body) && (
-          <p className="text-sm text-destructive">{(fieldErrors.body as string[]).join(' ')}</p>
-        )}
+        <FieldError errors={fieldErrors} field="body" />
       </div>
 
       <div className="flex items-center gap-2">
@@ -125,12 +122,7 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
         <Label htmlFor={`post-allow-replies-${post.id}`}>Allow replies</Label>
       </div>
 
-      {Array.isArray(fieldErrors.non_field_errors) && (
-        <p className="text-sm text-destructive">
-          {(fieldErrors.non_field_errors as string[]).join(' ')}
-        </p>
-      )}
-      {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
+      <FormErrors errors={fieldErrors} />
 
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={!isValid || updateMutation.isPending}>
@@ -189,15 +181,8 @@ function ReplyForm({ postId, onCancel }: ReplyFormProps) {
         rows={3}
         aria-label="Reply body"
       />
-      {Array.isArray(fieldErrors.body) && (
-        <p className="text-sm text-destructive">{(fieldErrors.body as string[]).join(' ')}</p>
-      )}
-      {Array.isArray(fieldErrors.non_field_errors) && (
-        <p className="text-sm text-destructive">
-          {(fieldErrors.non_field_errors as string[]).join(' ')}
-        </p>
-      )}
-      {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
+      <FieldError errors={fieldErrors} field="body" />
+      <FormErrors errors={fieldErrors} />
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={!isValid || createMutation.isPending}>
           {createMutation.isPending ? 'Posting…' : 'Post Reply'}

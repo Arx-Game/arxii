@@ -21411,12 +21411,18 @@ export interface components {
      *     - ``story`` (if set) belongs to ``table`` (story.primary_table == table)
      *     - ``author_persona`` belongs to the requesting user's account
      *
+     *     ``author_persona`` is optional (2026-07 audit): a GM table is account-scoped,
+     *     not tied to a specific character, so the frontend has no in-game persona to
+     *     pass — omit it and the requester's own persona is resolved server-side.
+     *     When supplied, it MUST belong to the requesting account (the ownership check
+     *     the docstring always claimed but never enforced).
+     *
      *     Stores validated model instances in validated_data.
      */
     CreateBulletinPostInput: {
       table: number;
       story?: number | null;
-      author_persona: number;
+      author_persona?: number;
       title: string;
       body: string;
       /** @default true */
@@ -21430,12 +21436,18 @@ export interface components {
      *     - ``story`` (if set) belongs to ``table`` (story.primary_table == table)
      *     - ``author_persona`` belongs to the requesting user's account
      *
+     *     ``author_persona`` is optional (2026-07 audit): a GM table is account-scoped,
+     *     not tied to a specific character, so the frontend has no in-game persona to
+     *     pass — omit it and the requester's own persona is resolved server-side.
+     *     When supplied, it MUST belong to the requesting account (the ownership check
+     *     the docstring always claimed but never enforced).
+     *
      *     Stores validated model instances in validated_data.
      */
     CreateBulletinPostInputRequest: {
       table: number;
       story?: number | null;
-      author_persona: number;
+      author_persona?: number;
       title: string;
       body: string;
       /** @default true */
@@ -21454,7 +21466,7 @@ export interface components {
      */
     CreateBulletinReplyInput: {
       post: number;
-      author_persona: number;
+      author_persona?: number;
       body: string;
     };
     /**
@@ -21470,7 +21482,7 @@ export interface components {
      */
     CreateBulletinReplyInputRequest: {
       post: number;
-      author_persona: number;
+      author_persona?: number;
       body: string;
     };
     /** @description POST body for the #1127 create-established-persona endpoint. */
