@@ -161,8 +161,10 @@ class TutorialChainJourneyE2ETests(TestCase):
         # gate blocks same-session progression through T5/T6/T7 (see module
         # docstring). Seed drift on this must fail loudly, not silently
         # reintroduce a need for cooldown fast-forwarding in this test.
+        # 5 offers: the T3/T5/T6/T7 chain steps + the "Terms of Engagement"
+        # consent primer (#2170), a T1-gated side-step off the same tutor.
         tutor_offers = NPCServiceOffer.objects.filter(role=self.tutor_role)
-        self.assertEqual(tutor_offers.count(), 4)
+        self.assertEqual(tutor_offers.count(), 5)
         for offer in tutor_offers:
             self.assertEqual(
                 offer.mission_offer_details.role_cooldown_duration,
