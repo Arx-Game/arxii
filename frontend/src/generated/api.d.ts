@@ -20648,6 +20648,14 @@ export interface components {
       readonly lore_content: string | null;
       /** @description Return mechanics content only if public or KNOWN. */
       readonly mechanics_content: string | null;
+      /** @description Return resolved wikilinks from lore_content. */
+      readonly lore_links: {
+        [key: string]: unknown;
+      }[];
+      /** @description Return resolved wikilinks from mechanics_content. */
+      readonly mechanics_links: {
+        [key: string]: unknown;
+      }[];
       /** @description If True, visible to everyone including logged-out visitors. If False, only visible to characters who have learned it. */
       is_public?: boolean;
       subject: number;

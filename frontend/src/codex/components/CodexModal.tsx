@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ExternalLink, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useCodexEntry } from '../queries';
@@ -12,10 +13,42 @@ interface CodexModalProps {
 }
 
 export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
-  const { data: entry, isLoading, isError } = useCodexEntry(entryId);
+  const [history, setHistory] = useState<number[]>([entryId]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  const currentEntryId = history[historyIndex];
+  const { data: entry, isLoading, isError } = useCodexEntry(currentEntryId);
+
+  const navigateToEntry = (id: number) => {
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(id);
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
+  const goBack = () => {
+    if (historyIndex > 0) setHistoryIndex(historyIndex - 1);
+  };
+
+  const goForward = () => {
+    if (historyIndex < history.length - 1) setHistoryIndex(historyIndex + 1);
+  };
+
+  const canGoBack = historyIndex > 0;
+  const canGoForward = historyIndex < history.length - 1;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(open) => {
+        if (!open) {
+          // Reset history when modal closes
+          setHistory([entryId]);
+          setHistoryIndex(0);
+        }
+        onOpenChange(open);
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -26,12 +59,50 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
         ) : entry ? (
           <>
             <DialogHeader>
-              <DialogTitle>{entry.name}</DialogTitle>
+              <div className="flex items-center justify-between">
+                <DialogTitle>{entry.name}</DialogTitle>
+                {(canGoBack || canGoForward) && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={goBack}
+                      disabled={!canGoBack}
+                      aria-label="Go back"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={goForward}
+                      disabled={!canGoForward}
+                      aria-label="Go forward"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
             </DialogHeader>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">{entry.summary}</p>
-              {entry.lore_content && <LoreSection content={entry.lore_content} />}
-              {entry.mechanics_content && <OOCSection content={entry.mechanics_content} />}
+              {entry.lore_content && (
+                <LoreSection
+                  content={entry.lore_content}
+                  links={entry.lore_links}
+                  onNavigate={navigateToEntry}
+                />
+              )}
+              {entry.mechanics_content && (
+                <OOCSection
+                  content={entry.mechanics_content}
+                  links={entry.mechanics_links}
+                  onNavigate={navigateToEntry}
+                />
+              )}
               <Button asChild variant="outline" size="sm">
                 <Link to={`/codex?entry=${entry.id}`} onClick={() => onOpenChange(false)}>
                   <ExternalLink className="mr-2 h-4 w-4" />

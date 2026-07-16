@@ -1,4 +1,5 @@
 import { Lock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from './Breadcrumb';
@@ -12,6 +13,13 @@ interface EntryDetailProps {
 
 export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
   const isUncovered = entry.knowledge_status === 'uncovered';
+  const navigate = useNavigate();
+
+  // On the full page, inline links use React Router navigation so browser
+  // back/forward works natively.
+  const handleNavigate = (entryId: number) => {
+    navigate(`/codex?entry=${entryId}`);
+  };
 
   const breadcrumbItems = entry.subject_path.map((segment) => ({
     label: segment.name,
@@ -53,8 +61,20 @@ export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
         )}
         {entry.lore_content || entry.mechanics_content ? (
           <div className="space-y-3">
-            {entry.lore_content && <LoreSection content={entry.lore_content} />}
-            {entry.mechanics_content && <OOCSection content={entry.mechanics_content} />}
+            {entry.lore_content && (
+              <LoreSection
+                content={entry.lore_content}
+                links={entry.lore_links}
+                onNavigate={handleNavigate}
+              />
+            )}
+            {entry.mechanics_content && (
+              <OOCSection
+                content={entry.mechanics_content}
+                links={entry.mechanics_links}
+                onNavigate={handleNavigate}
+              />
+            )}
           </div>
         ) : (
           <div className="italic text-muted-foreground">
