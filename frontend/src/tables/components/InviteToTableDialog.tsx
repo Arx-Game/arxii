@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
 import {
   Dialog,
   DialogContent,
@@ -32,13 +33,6 @@ interface PersonaOption {
   name: string;
 }
 
-interface DRFFieldErrors {
-  table?: string[];
-  persona?: string[];
-  non_field_errors?: string[];
-  detail?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -56,7 +50,7 @@ export function InviteToTableDialog({ table, children }: InviteToTableDialogProp
   const [open, setOpen] = useState(false);
   const [personaQuery, setPersonaQuery] = useState('');
   const [selectedPersona, setSelectedPersona] = useState<PersonaOption | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<BulletinFieldErrors>({});
 
   const inviteMutation = useInviteToTable();
 
@@ -93,14 +87,8 @@ export function InviteToTableDialog({ table, children }: InviteToTableDialogProp
           toast.success(`${selectedPersona.name} invited to ${table.name}`);
           setOpen(false);
         },
-        onError: async (err: unknown) => {
-          const res = (err as { response?: Response })?.response;
-          if (res) {
-            const body = (await res.json()) as DRFFieldErrors;
-            setFieldErrors(body);
-          } else {
-            toast.error('Failed to invite persona');
-          }
+        onError: (err: unknown) => {
+          setFieldErrors(bulletinErrorsFrom(err));
         },
       }
     );
@@ -155,14 +143,18 @@ export function InviteToTableDialog({ table, children }: InviteToTableDialogProp
                 </ul>
               )}
             </div>
-            {fieldErrors.persona && (
-              <p className="text-sm text-destructive">{fieldErrors.persona.join(' ')}</p>
+            {Array.isArray(fieldErrors.persona) && (
+              <p className="text-sm text-destructive">
+                {(fieldErrors.persona as string[]).join(' ')}
+              </p>
             )}
           </div>
 
           {/* Global errors */}
-          {fieldErrors.non_field_errors && (
-            <p className="text-sm text-destructive">{fieldErrors.non_field_errors.join(' ')}</p>
+          {Array.isArray(fieldErrors.non_field_errors) && (
+            <p className="text-sm text-destructive">
+              {(fieldErrors.non_field_errors as string[]).join(' ')}
+            </p>
           )}
           {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
 

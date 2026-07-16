@@ -2400,6 +2400,44 @@ class TableBulletinPostSerializer(serializers.ModelSerializer):
         return TableBulletinReplySerializer(reply_list, many=True).data
 
 
+def resolve_own_bulletin_persona(request: Any, supplied: Persona | None) -> Persona:
+    """Return the persona to author a bulletin as, enforcing account ownership.
+
+    A GM table is account-scoped, not character-scoped (2026-07 audit): the web
+    surface has no in-game persona to pass, so ``supplied`` is normally ``None``
+    and we resolve one of the requester's own personas server-side (the active
+    face of their first character). When a persona IS supplied it must belong to
+    the requesting account — the ownership check the serializer docstrings always
+    claimed but never enforced (a foreign persona would previously have posted
+    successfully).
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.interaction_permissions import get_account_personas  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    if request is None:
+        msg = "Request context is required."
+        raise serializers.ValidationError(msg)
+
+    if supplied is not None:
+        # Staff act administratively and may author as any persona (they already
+        # bypass the table-ownership check); a non-staff caller's supplied
+        # persona must belong to their own account.
+        if not request.user.is_staff:
+            owned_ids = set(get_account_personas(request))
+            if supplied.pk not in owned_ids:
+                msg = "That persona does not belong to your account."
+                raise serializers.ValidationError({"author_persona": msg})
+        return supplied
+
+    entry = RosterEntry.objects.for_account(request.user).first()
+    sheet = entry.character_sheet if entry is not None else None
+    if sheet is None:
+        msg = "You have no character to author a bulletin as."
+        raise serializers.ValidationError({"author_persona": msg})
+    return active_persona_for_sheet(sheet)
+
+
 class CreateBulletinPostInputSerializer(serializers.Serializer):
     """Input for POST /api/table-bulletin-posts/.
 
@@ -2407,6 +2445,12 @@ class CreateBulletinPostInputSerializer(serializers.Serializer):
     - ``table`` exists and user is its Lead GM (or staff)
     - ``story`` (if set) belongs to ``table`` (story.primary_table == table)
     - ``author_persona`` belongs to the requesting user's account
+
+    ``author_persona`` is optional (2026-07 audit): a GM table is account-scoped,
+    not tied to a specific character, so the frontend has no in-game persona to
+    pass — omit it and the requester's own persona is resolved server-side.
+    When supplied, it MUST belong to the requesting account (the ownership check
+    the docstring always claimed but never enforced).
 
     Stores validated model instances in validated_data.
     """
@@ -2418,7 +2462,11 @@ class CreateBulletinPostInputSerializer(serializers.Serializer):
         allow_null=True,
         default=None,
     )
-    author_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    author_persona = serializers.PrimaryKeyRelatedField(
+        queryset=Persona.objects.all(),
+        required=False,
+        default=None,
+    )
     title = serializers.CharField(max_length=200)
     body = serializers.CharField()
     allow_replies = serializers.BooleanField(required=False, default=True)
@@ -2442,12 +2490,15 @@ class CreateBulletinPostInputSerializer(serializers.Serializer):
         return table
 
     def validate(self, attrs: Any) -> Any:  # type: ignore[override]
-        """Validate that story (if set) belongs to the specified table."""
+        """Validate story↔table and resolve/authorize the author persona."""
         table: GMTable = attrs["table"]
         story: Story | None = attrs.get("story")
         if story is not None and story.primary_table_id != table.pk:
             msg = "The selected story is not assigned to this table."
             raise serializers.ValidationError({"story": msg})
+        attrs["author_persona"] = resolve_own_bulletin_persona(
+            self.context.get("request"), attrs.get("author_persona")
+        )
         return attrs
 
 
@@ -2476,7 +2527,11 @@ class CreateBulletinReplyInputSerializer(serializers.Serializer):
     """
 
     post = serializers.PrimaryKeyRelatedField(queryset=TableBulletinPost.objects.all())
-    author_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    author_persona = serializers.PrimaryKeyRelatedField(
+        queryset=Persona.objects.all(),
+        required=False,
+        default=None,
+    )
     body = serializers.CharField()
 
     def validate_post(self, post: TableBulletinPost) -> TableBulletinPost:
@@ -2495,6 +2550,13 @@ class CreateBulletinReplyInputSerializer(serializers.Serializer):
             msg = "You do not have access to this bulletin post."
             raise serializers.ValidationError(msg)
         return post
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        """Resolve/authorize the author persona (optional → own persona, #audit2)."""
+        attrs["author_persona"] = resolve_own_bulletin_persona(
+            self.context.get("request"), attrs.get("author_persona")
+        )
+        return attrs
 
 
 class UpdateBulletinReplyInputSerializer(serializers.Serializer):

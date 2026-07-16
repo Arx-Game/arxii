@@ -19,6 +19,7 @@ from world.gm.factories import (
     GMTableFactory,
     GMTableMembershipFactory,
 )
+from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 from world.stories.constants import StoryScope
 from world.stories.factories import (
@@ -47,6 +48,22 @@ class BulletinViewSetSetup(TestCase):
     - participant_character: ObjectDB for participant_user's StoryParticipation
     """
 
+    @staticmethod
+    def _link(account, persona) -> None:
+        """Tie an account to a persona's character via an active RosterTenure.
+
+        The bulletin author-persona ownership check (#audit2) resolves owned
+        personas the canonical way — roster tenure, not character.db_account —
+        so tests must set up a real tenure for a persona to count as owned.
+        """
+        sheet = persona.character_sheet
+        sheet.character.db_account = account
+        sheet.character.save()
+        RosterTenureFactory(
+            roster_entry__character_sheet=sheet,
+            player_data__account=account,
+        )
+
     @classmethod
     def setUpTestData(cls) -> None:
         # Accounts
@@ -73,18 +90,12 @@ class BulletinViewSetSetup(TestCase):
 
         # Member persona + membership
         cls.member_persona = PersonaFactory()
-        # Override character_sheet.character.db_account to be member_user
-
-        member_sheet = cls.member_persona.character_sheet
-        member_sheet.character.db_account = cls.member_user
-        member_sheet.character.save()
+        cls._link(cls.member_user, cls.member_persona)
         GMTableMembershipFactory(table=cls.table, persona=cls.member_persona)
 
         # Author persona (GM posts as one of their personas)
         cls.lead_gm_persona = PersonaFactory()
-        lead_gm_sheet = cls.lead_gm_persona.character_sheet
-        lead_gm_sheet.character.db_account = cls.lead_gm_user
-        lead_gm_sheet.character.save()
+        cls._link(cls.lead_gm_user, cls.lead_gm_persona)
 
         # Story with primary_table
         cls.story = StoryFactory(
@@ -94,9 +105,8 @@ class BulletinViewSetSetup(TestCase):
 
         # Participant persona + StoryParticipation
         cls.participant_persona = PersonaFactory()
+        cls._link(cls.participant_user, cls.participant_persona)
         participant_sheet = cls.participant_persona.character_sheet
-        participant_sheet.character.db_account = cls.participant_user
-        participant_sheet.character.save()
         cls.story_participation = StoryParticipationFactory(
             story=cls.story,
             character=participant_sheet.character,
@@ -167,6 +177,40 @@ class BulletinPostCreateTests(BulletinViewSetSetup):
         }
         res = self._staff().post("/api/table-bulletin-posts/", payload, format="json")
         self.assertEqual(res.status_code, 201)
+
+    def test_author_persona_optional_resolves_own_persona(self) -> None:
+        """Omitting author_persona authors as the requester's own persona (#audit2).
+
+        A GM table is account-scoped, so the web has no in-game persona to send —
+        the backend resolves one. This was the broken write path: the frontend
+        sent persona id 0, which always 400'd.
+        """
+        payload = {
+            "table": self.table.pk,
+            "title": "No persona supplied",
+            "body": "Backend picks my persona.",
+        }
+        res = self._lead_gm().post("/api/table-bulletin-posts/", payload, format="json")
+        self.assertEqual(res.status_code, 201, res.json())
+        # Resolves to the character's worn face (primary persona here — the
+        # lead_gm's character has no active alt set).
+        resolved = res.json()["author_persona"]
+        owned = set(self.lead_gm_persona.character_sheet.personas.values_list("pk", flat=True))
+        self.assertIn(resolved, owned)
+
+    def test_cannot_author_as_foreign_persona(self) -> None:
+        """A non-staff GM may not author as a persona they don't own (#audit2).
+
+        The ownership check the docstring always claimed but never enforced.
+        """
+        payload = {
+            "table": self.table.pk,
+            "author_persona": self.member_persona.pk,  # belongs to member_user
+            "title": "Impersonation",
+            "body": "Not my persona.",
+        }
+        res = self._lead_gm().post("/api/table-bulletin-posts/", payload, format="json")
+        self.assertEqual(res.status_code, 400, res.json())
 
     def test_non_lead_gm_cannot_create_on_others_table(self) -> None:
         """A GM who is not the Lead GM of the target table cannot post."""

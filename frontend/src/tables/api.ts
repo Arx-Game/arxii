@@ -12,6 +12,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type {
   BulletinPostCreateBody,
   BulletinPostUpdateBody,
@@ -75,13 +76,13 @@ export async function getTables(params?: ListTablesParams): Promise<PaginatedTab
     (params as Record<string, string | number | boolean | undefined>) ?? {}
   );
   const res = await apiFetch(`${TABLES_URL}/${qs}`);
-  if (!res.ok) throw new Error('Failed to load tables');
+  if (!res.ok) await throwApiError(res, 'Failed to load tables');
   return res.json() as Promise<PaginatedTables>;
 }
 
 export async function getTable(id: number): Promise<GMTable> {
   const res = await apiFetch(`${TABLES_URL}/${id}/`);
-  if (!res.ok) throw new Error(`Failed to load table ${id}`);
+  if (!res.ok) await throwApiError(res, `Failed to load table ${id}`);
   return res.json() as Promise<GMTable>;
 }
 
@@ -91,7 +92,7 @@ export async function createTable(data: GMTableCreateBody): Promise<GMTable> {
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to create table');
+  if (!res.ok) await throwApiError(res, 'Failed to create table');
   return res.json() as Promise<GMTable>;
 }
 
@@ -101,7 +102,7 @@ export async function updateTable(id: number, data: GMTableUpdateBody): Promise<
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(`Failed to update table ${id}`);
+  if (!res.ok) await throwApiError(res, `Failed to update table ${id}`);
   return res.json() as Promise<GMTable>;
 }
 
@@ -119,7 +120,7 @@ export async function archiveTable(id: number): Promise<GMTable> {
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) throw new Error(`Failed to archive table ${id}`);
+  if (!res.ok) await throwApiError(res, `Failed to archive table ${id}`);
   return res.json() as Promise<GMTable>;
 }
 
@@ -133,7 +134,7 @@ export async function transferOwnership(id: number, data: GMTableTransferBody): 
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(`Failed to transfer ownership of table ${id}`);
+  if (!res.ok) await throwApiError(res, `Failed to transfer ownership of table ${id}`);
   return res.json() as Promise<GMTable>;
 }
 
@@ -156,7 +157,7 @@ export async function getTableMemberships(
     (params as Record<string, string | number | boolean | undefined>) ?? {}
   );
   const res = await apiFetch(`${MEMBERSHIPS_URL}/${qs}`);
-  if (!res.ok) throw new Error('Failed to load memberships');
+  if (!res.ok) await throwApiError(res, 'Failed to load memberships');
   return res.json() as Promise<PaginatedMemberships>;
 }
 
@@ -170,7 +171,7 @@ export async function inviteToTable(data: GMTableMembershipCreateBody): Promise<
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to invite persona to table');
+  if (!res.ok) await throwApiError(res, 'Failed to invite persona to table');
   return res.json() as Promise<GMTableMembership>;
 }
 
@@ -181,7 +182,7 @@ export async function inviteToTable(data: GMTableMembershipCreateBody): Promise<
  */
 export async function removeMembership(id: number): Promise<void> {
   const res = await apiFetch(`${MEMBERSHIPS_URL}/${id}/`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`Failed to remove membership ${id}`);
+  if (!res.ok) await throwApiError(res, `Failed to remove membership ${id}`);
 }
 
 /**
@@ -215,7 +216,7 @@ export async function getBulletinPosts(
     (params as Record<string, string | number | boolean | undefined>) ?? {}
   );
   const res = await apiFetch(`${BULLETIN_POSTS_URL}/${qs}`);
-  if (!res.ok) throw new Error('Failed to load bulletin posts');
+  if (!res.ok) await throwApiError(res, 'Failed to load bulletin posts');
   return res.json() as Promise<PaginatedBulletinPosts>;
 }
 
@@ -229,7 +230,7 @@ export async function createBulletinPost(data: BulletinPostCreateBody): Promise<
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to create bulletin post');
+  if (!res.ok) await throwApiError(res, 'Failed to create bulletin post');
   return res.json() as Promise<TableBulletinPost>;
 }
 
@@ -246,7 +247,7 @@ export async function updateBulletinPost(
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(`Failed to update bulletin post ${id}`);
+  if (!res.ok) await throwApiError(res, `Failed to update bulletin post ${id}`);
   return res.json() as Promise<TableBulletinPost>;
 }
 
@@ -256,7 +257,7 @@ export async function updateBulletinPost(
  */
 export async function deleteBulletinPost(id: number): Promise<void> {
   const res = await apiFetch(`${BULLETIN_POSTS_URL}/${id}/`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`Failed to delete bulletin post ${id}`);
+  if (!res.ok) await throwApiError(res, `Failed to delete bulletin post ${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +280,7 @@ export async function getBulletinReplies(
     (params as Record<string, string | number | boolean | undefined>) ?? {}
   );
   const res = await apiFetch(`${BULLETIN_REPLIES_URL}/${qs}`);
-  if (!res.ok) throw new Error('Failed to load bulletin replies');
+  if (!res.ok) await throwApiError(res, 'Failed to load bulletin replies');
   return res.json() as Promise<PaginatedBulletinReplies>;
 }
 
@@ -295,7 +296,7 @@ export async function createBulletinReply(
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to create bulletin reply');
+  if (!res.ok) await throwApiError(res, 'Failed to create bulletin reply');
   return res.json() as Promise<TableBulletinReply>;
 }
 
@@ -312,7 +313,7 @@ export async function updateBulletinReply(
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(`Failed to update bulletin reply ${id}`);
+  if (!res.ok) await throwApiError(res, `Failed to update bulletin reply ${id}`);
   return res.json() as Promise<TableBulletinReply>;
 }
 
@@ -322,5 +323,5 @@ export async function updateBulletinReply(
  */
 export async function deleteBulletinReply(id: number): Promise<void> {
   const res = await apiFetch(`${BULLETIN_REPLIES_URL}/${id}/`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`Failed to delete bulletin reply ${id}`);
+  if (!res.ok) await throwApiError(res, `Failed to delete bulletin reply ${id}`);
 }

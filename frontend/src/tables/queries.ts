@@ -28,33 +28,38 @@ import type {
 // Query key factory
 // ---------------------------------------------------------------------------
 
+const TABLES_ROOT = ['tables'] as const;
+
 /**
  * Trailing params are ELIDED when absent (2026-07 audit fix): the old shape
  * appended the filters slot unconditionally, so `tablesKeys.members(id)` was
  * `['tables','members',id,undefined]` — which React Query v5 does NOT treat
  * as a prefix of `['tables','members',id,{table,active:true}]`. Every
  * invite/remove/leave/bulletin invalidation therefore matched nothing and the
- * roster/post list stayed stale until a hard refresh.
+ * roster/post list stayed stale until a hard refresh. The `*All` bare-prefix
+ * keys give invalidations a params-agnostic root to target.
  */
 export const tablesKeys = {
-  all: ['tables'] as const,
+  all: TABLES_ROOT,
   list: (filters?: ListTablesParams) =>
     filters === undefined
-      ? ([...tablesKeys.all, 'list'] as const)
-      : ([...tablesKeys.all, 'list', filters] as const),
-  detail: (id: number) => [...tablesKeys.all, 'detail', id] as const,
+      ? ([...TABLES_ROOT, 'list'] as const)
+      : ([...TABLES_ROOT, 'list', filters] as const),
+  detail: (id: number) => [...TABLES_ROOT, 'detail', id] as const,
   members: (tableId: number, filters?: ListMembershipsParams) =>
     filters === undefined
-      ? ([...tablesKeys.all, 'members', tableId] as const)
-      : ([...tablesKeys.all, 'members', tableId, filters] as const),
+      ? ([...TABLES_ROOT, 'members', tableId] as const)
+      : ([...TABLES_ROOT, 'members', tableId, filters] as const),
+  bulletinPostsAll: [...TABLES_ROOT, 'bulletin-posts'] as const,
   bulletinPosts: (params?: ListBulletinPostsParams) =>
     params === undefined
-      ? ([...tablesKeys.all, 'bulletin-posts'] as const)
-      : ([...tablesKeys.all, 'bulletin-posts', params] as const),
+      ? ([...TABLES_ROOT, 'bulletin-posts'] as const)
+      : ([...TABLES_ROOT, 'bulletin-posts', params] as const),
+  bulletinRepliesAll: [...TABLES_ROOT, 'bulletin-replies'] as const,
   bulletinReplies: (params?: ListBulletinRepliesParams) =>
     params === undefined
-      ? ([...tablesKeys.all, 'bulletin-replies'] as const)
-      : ([...tablesKeys.all, 'bulletin-replies', params] as const),
+      ? ([...TABLES_ROOT, 'bulletin-replies'] as const)
+      : ([...TABLES_ROOT, 'bulletin-replies', params] as const),
 };
 
 // ---------------------------------------------------------------------------
@@ -221,10 +226,11 @@ export function useCreateBulletinPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: BulletinPostCreateBody) => api.createBulletinPost(data),
-    onSuccess: (post) => {
-      qc.invalidateQueries({
-        queryKey: tablesKeys.bulletinPosts({ table: post.table }),
-      }).catch(() => {});
+    onSuccess: () => {
+      // Bare prefix (2026-07 audit): a specific { table } params object never
+      // partial-matched the list query's { table, story } key, so a new/edited
+      // post never appeared until a hard refresh.
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPostsAll }).catch(() => {});
     },
   });
 }
@@ -234,10 +240,11 @@ export function useUpdateBulletinPost() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: BulletinPostUpdateBody; tableId: number }) =>
       api.updateBulletinPost(id, data),
-    onSuccess: (post) => {
-      qc.invalidateQueries({
-        queryKey: tablesKeys.bulletinPosts({ table: post.table }),
-      }).catch(() => {});
+    onSuccess: () => {
+      // Bare prefix (2026-07 audit): a specific { table } params object never
+      // partial-matched the list query's { table, story } key, so a new/edited
+      // post never appeared until a hard refresh.
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPostsAll }).catch(() => {});
     },
   });
 }
@@ -247,10 +254,8 @@ export function useDeleteBulletinPost() {
   return useMutation({
     mutationFn: ({ id, tableId: _tableId }: { id: number; tableId: number }) =>
       api.deleteBulletinPost(id),
-    onSuccess: (_, { tableId }) => {
-      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts({ table: tableId }) }).catch(
-        () => {}
-      );
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPostsAll }).catch(() => {});
     },
   });
 }
@@ -263,12 +268,10 @@ export function useCreateBulletinReply() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: BulletinReplyCreateBody) => api.createBulletinReply(data),
-    onSuccess: (reply) => {
+    onSuccess: () => {
       // Invalidate the post list so the embedded replies_cached refreshes.
-      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() }).catch(() => {});
-      qc.invalidateQueries({
-        queryKey: tablesKeys.bulletinReplies({ post: reply.post }),
-      }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPostsAll }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinRepliesAll }).catch(() => {});
     },
   });
 }
@@ -286,7 +289,7 @@ export function useUpdateBulletinReply() {
       postId: number;
     }) => api.updateBulletinReply(id, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPostsAll }).catch(() => {});
     },
   });
 }
@@ -297,7 +300,7 @@ export function useDeleteBulletinReply() {
     mutationFn: ({ id, postId: _postId }: { id: number; postId: number }) =>
       api.deleteBulletinReply(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tablesKeys.bulletinPostsAll }).catch(() => {});
     },
   });
 }

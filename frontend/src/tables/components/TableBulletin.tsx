@@ -90,11 +90,9 @@ interface SectionContentProps {
   tableId: number;
   storyId: SectionId;
   isGMOrStaff: boolean;
-  /** The viewer's persona PK for reply submission. For GMs this is their GM persona. */
-  viewerPersonaId?: number;
 }
 
-function SectionContent({ tableId, storyId, isGMOrStaff, viewerPersonaId }: SectionContentProps) {
+function SectionContent({ tableId, storyId, isGMOrStaff }: SectionContentProps) {
   const params = storyId !== null ? { table: tableId, story: storyId } : { table: tableId };
 
   const { data, isLoading } = useBulletinPosts(params);
@@ -129,7 +127,6 @@ function SectionContent({ tableId, storyId, isGMOrStaff, viewerPersonaId }: Sect
           post={post}
           isGMOrStaff={isGMOrStaff}
           canReply={post.allow_replies}
-          viewerPersonaId={viewerPersonaId}
         />
       ))}
     </div>
@@ -165,19 +162,13 @@ export function TableBulletin({ table }: TableBulletinProps) {
       <SectionSelector current={resolvedSection} stories={stories} onChange={setActiveSection} />
 
       {/* Post list for selected section */}
-      <SectionContent
-        tableId={table.id}
-        storyId={resolvedSection}
-        isGMOrStaff={isGMOrStaff}
-        viewerPersonaId={undefined}
-      />
+      <SectionContent tableId={table.id} storyId={resolvedSection} isGMOrStaff={isGMOrStaff} />
 
       {/* New Post button — GM/staff only */}
       {isGMOrStaff && (
         <div className="flex justify-start border-t pt-4">
           <CreateBulletinPostDialog
             tableId={table.id}
-            gmPersonaId={0}
             stories={stories}
             initialStoryId={resolvedSection}
           >

@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,21 +33,6 @@ const REPLIES_PREVIEW_COUNT = 3;
 // DRF error shapes
 // ---------------------------------------------------------------------------
 
-interface DRFPostErrors {
-  title?: string[];
-  body?: string[];
-  allow_replies?: string[];
-  non_field_errors?: string[];
-  detail?: string;
-}
-
-interface DRFReplyErrors {
-  body?: string[];
-  post?: string[];
-  non_field_errors?: string[];
-  detail?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -54,12 +40,8 @@ interface DRFReplyErrors {
 interface BulletinPostCardProps {
   post: TableBulletinPost;
   isGMOrStaff: boolean;
-  /** PK of the Lead GM persona (needed when submitting a reply as the GM). */
-  gmPersonaId?: number;
   /** Whether the viewer can reply (they have read access + allow_replies is true). */
   canReply: boolean;
-  /** PK of the viewer's active persona for reply submission. */
-  viewerPersonaId?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +57,7 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
   const [title, setTitle] = useState(post.title);
   const [body, setBody] = useState(post.body);
   const [allowReplies, setAllowReplies] = useState(post.allow_replies);
-  const [fieldErrors, setFieldErrors] = useState<DRFPostErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<BulletinFieldErrors>({});
 
   const updateMutation = useUpdateBulletinPost();
 
@@ -93,12 +75,8 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
           toast.success('Post updated');
           onCancel();
         },
-        onError: async (err: unknown) => {
-          const res = (err as { response?: Response })?.response;
-          if (res) {
-            const errBody = (await res.json()) as DRFPostErrors;
-            setFieldErrors(errBody);
-          }
+        onError: (err: unknown) => {
+          setFieldErrors(bulletinErrorsFrom(err));
         },
       }
     );
@@ -117,8 +95,8 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
           maxLength={200}
           required
         />
-        {fieldErrors.title && (
-          <p className="text-sm text-destructive">{fieldErrors.title.join(' ')}</p>
+        {Array.isArray(fieldErrors.title) && (
+          <p className="text-sm text-destructive">{(fieldErrors.title as string[]).join(' ')}</p>
         )}
       </div>
 
@@ -131,8 +109,8 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
           rows={5}
           required
         />
-        {fieldErrors.body && (
-          <p className="text-sm text-destructive">{fieldErrors.body.join(' ')}</p>
+        {Array.isArray(fieldErrors.body) && (
+          <p className="text-sm text-destructive">{(fieldErrors.body as string[]).join(' ')}</p>
         )}
       </div>
 
@@ -147,8 +125,10 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
         <Label htmlFor={`post-allow-replies-${post.id}`}>Allow replies</Label>
       </div>
 
-      {fieldErrors.non_field_errors && (
-        <p className="text-sm text-destructive">{fieldErrors.non_field_errors.join(' ')}</p>
+      {Array.isArray(fieldErrors.non_field_errors) && (
+        <p className="text-sm text-destructive">
+          {(fieldErrors.non_field_errors as string[]).join(' ')}
+        </p>
       )}
       {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
 
@@ -170,13 +150,12 @@ function EditPostForm({ post, onCancel }: EditPostFormProps) {
 
 interface ReplyFormProps {
   postId: number;
-  viewerPersonaId: number;
   onCancel: () => void;
 }
 
-function ReplyForm({ postId, viewerPersonaId, onCancel }: ReplyFormProps) {
+function ReplyForm({ postId, onCancel }: ReplyFormProps) {
   const [body, setBody] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<DRFReplyErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<BulletinFieldErrors>({});
 
   const createMutation = useCreateBulletinReply();
 
@@ -184,18 +163,16 @@ function ReplyForm({ postId, viewerPersonaId, onCancel }: ReplyFormProps) {
     e.preventDefault();
     setFieldErrors({});
     createMutation.mutate(
-      { post: postId, author_persona: viewerPersonaId, body: body.trim() },
+      // author_persona omitted: the backend authors as the requester's own
+      // persona (a GM table is account-scoped, #audit2).
+      { post: postId, body: body.trim() },
       {
         onSuccess: () => {
           toast.success('Reply posted');
           onCancel();
         },
-        onError: async (err: unknown) => {
-          const res = (err as { response?: Response })?.response;
-          if (res) {
-            const errBody = (await res.json()) as DRFReplyErrors;
-            setFieldErrors(errBody);
-          }
+        onError: (err: unknown) => {
+          setFieldErrors(bulletinErrorsFrom(err));
         },
       }
     );
@@ -212,9 +189,13 @@ function ReplyForm({ postId, viewerPersonaId, onCancel }: ReplyFormProps) {
         rows={3}
         aria-label="Reply body"
       />
-      {fieldErrors.body && <p className="text-sm text-destructive">{fieldErrors.body.join(' ')}</p>}
-      {fieldErrors.non_field_errors && (
-        <p className="text-sm text-destructive">{fieldErrors.non_field_errors.join(' ')}</p>
+      {Array.isArray(fieldErrors.body) && (
+        <p className="text-sm text-destructive">{(fieldErrors.body as string[]).join(' ')}</p>
+      )}
+      {Array.isArray(fieldErrors.non_field_errors) && (
+        <p className="text-sm text-destructive">
+          {(fieldErrors.non_field_errors as string[]).join(' ')}
+        </p>
       )}
       {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
       <div className="flex gap-2">
@@ -233,12 +214,7 @@ function ReplyForm({ postId, viewerPersonaId, onCancel }: ReplyFormProps) {
 // BulletinPostCard
 // ---------------------------------------------------------------------------
 
-export function BulletinPostCard({
-  post,
-  isGMOrStaff,
-  canReply,
-  viewerPersonaId,
-}: BulletinPostCardProps) {
+export function BulletinPostCard({ post, isGMOrStaff, canReply }: BulletinPostCardProps) {
   const [editing, setEditing] = useState(false);
   const [showAllReplies, setShowAllReplies] = useState(false);
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -353,17 +329,7 @@ export function BulletinPostCard({
           {canReply && post.allow_replies && (
             <div className="mt-3 border-t pt-3">
               {showReplyForm ? (
-                viewerPersonaId !== undefined ? (
-                  <ReplyForm
-                    postId={post.id}
-                    viewerPersonaId={viewerPersonaId}
-                    onCancel={() => setShowReplyForm(false)}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No active persona available for replies.
-                  </p>
-                )
+                <ReplyForm postId={post.id} onCancel={() => setShowReplyForm(false)} />
               ) : (
                 <Button
                   type="button"

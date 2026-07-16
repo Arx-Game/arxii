@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
 import {
   Dialog,
   DialogContent,
@@ -28,13 +29,6 @@ import type { GMTable } from '../types';
 // ---------------------------------------------------------------------------
 // DRF error shapes
 // ---------------------------------------------------------------------------
-
-interface DRFFieldErrors {
-  name?: string[];
-  description?: string[];
-  non_field_errors?: string[];
-  detail?: string;
-}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -62,7 +56,7 @@ export function TableFormDialog(props: TableFormDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<BulletinFieldErrors>({});
 
   const createMutation = useCreateTable();
   const updateMutation = useUpdateTable();
@@ -101,12 +95,8 @@ export function TableFormDialog(props: TableFormDialogProps) {
             toast.success('Table updated');
             setOpen(false);
           },
-          onError: async (err: unknown) => {
-            const res = (err as { response?: Response })?.response;
-            if (res) {
-              const body = (await res.json()) as DRFFieldErrors;
-              setFieldErrors(body);
-            }
+          onError: (err: unknown) => {
+            setFieldErrors(bulletinErrorsFrom(err));
           },
         }
       );
@@ -122,12 +112,8 @@ export function TableFormDialog(props: TableFormDialogProps) {
             toast.success('Table created');
             setOpen(false);
           },
-          onError: async (err: unknown) => {
-            const res = (err as { response?: Response })?.response;
-            if (res) {
-              const body = (await res.json()) as DRFFieldErrors;
-              setFieldErrors(body);
-            }
+          onError: (err: unknown) => {
+            setFieldErrors(bulletinErrorsFrom(err));
           },
         }
       );
@@ -162,9 +148,9 @@ export function TableFormDialog(props: TableFormDialogProps) {
               required
               aria-describedby={fieldErrors.name ? 'table-name-error' : undefined}
             />
-            {fieldErrors.name && (
+            {Array.isArray(fieldErrors.name) && (
               <p id="table-name-error" className="text-sm text-destructive">
-                {fieldErrors.name.join(' ')}
+                {(fieldErrors.name as string[]).join(' ')}
               </p>
             )}
           </div>
@@ -179,14 +165,18 @@ export function TableFormDialog(props: TableFormDialogProps) {
               placeholder="Brief description of this table's theme or setting"
               rows={3}
             />
-            {fieldErrors.description && (
-              <p className="text-sm text-destructive">{fieldErrors.description.join(' ')}</p>
+            {Array.isArray(fieldErrors.description) && (
+              <p className="text-sm text-destructive">
+                {(fieldErrors.description as string[]).join(' ')}
+              </p>
             )}
           </div>
 
           {/* Global errors */}
-          {fieldErrors.non_field_errors && (
-            <p className="text-sm text-destructive">{fieldErrors.non_field_errors.join(' ')}</p>
+          {Array.isArray(fieldErrors.non_field_errors) && (
+            <p className="text-sm text-destructive">
+              {(fieldErrors.non_field_errors as string[]).join(' ')}
+            </p>
           )}
           {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
 

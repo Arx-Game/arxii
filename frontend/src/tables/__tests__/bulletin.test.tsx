@@ -326,10 +326,9 @@ describe('BulletinPostCard', () => {
 
   it('shows Reply button when canReply=true and allow_replies=true', () => {
     const post = makePost({ allow_replies: true });
-    render(
-      <BulletinPostCard post={post} isGMOrStaff={false} canReply={true} viewerPersonaId={7} />,
-      { wrapper: createWrapper() }
-    );
+    render(<BulletinPostCard post={post} isGMOrStaff={false} canReply={true} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.getByRole('button', { name: /\+ reply/i })).toBeInTheDocument();
   });
@@ -346,10 +345,9 @@ describe('BulletinPostCard', () => {
   it('shows inline reply form when Reply button is clicked', async () => {
     const user = userEvent.setup();
     const post = makePost({ allow_replies: true });
-    render(
-      <BulletinPostCard post={post} isGMOrStaff={false} canReply={true} viewerPersonaId={7} />,
-      { wrapper: createWrapper() }
-    );
+    render(<BulletinPostCard post={post} isGMOrStaff={false} canReply={true} />, {
+      wrapper: createWrapper(),
+    });
 
     await user.click(screen.getByRole('button', { name: /\+ reply/i }));
 
@@ -374,7 +372,7 @@ describe('CreateBulletinPostDialog', () => {
   it('opens dialog on trigger click', async () => {
     const user = userEvent.setup();
     render(
-      <CreateBulletinPostDialog tableId={1} gmPersonaId={3} stories={[]}>
+      <CreateBulletinPostDialog tableId={1} stories={[]}>
         <button type="button">New Post</button>
       </CreateBulletinPostDialog>,
       { wrapper: createWrapper() }
@@ -388,7 +386,7 @@ describe('CreateBulletinPostDialog', () => {
   it('submit button disabled when title or body is empty', async () => {
     const user = userEvent.setup();
     render(
-      <CreateBulletinPostDialog tableId={1} gmPersonaId={3} stories={[]}>
+      <CreateBulletinPostDialog tableId={1} stories={[]}>
         <button type="button">New Post</button>
       </CreateBulletinPostDialog>,
       { wrapper: createWrapper() }
@@ -403,7 +401,7 @@ describe('CreateBulletinPostDialog', () => {
   it('closes dialog on cancel', async () => {
     const user = userEvent.setup();
     render(
-      <CreateBulletinPostDialog tableId={1} gmPersonaId={3} stories={[]}>
+      <CreateBulletinPostDialog tableId={1} stories={[]}>
         <button type="button">New Post</button>
       </CreateBulletinPostDialog>,
       { wrapper: createWrapper() }
@@ -428,7 +426,7 @@ describe('CreateBulletinPostDialog', () => {
 
     const user = userEvent.setup();
     render(
-      <CreateBulletinPostDialog tableId={1} gmPersonaId={3} stories={[]}>
+      <CreateBulletinPostDialog tableId={1} stories={[]}>
         <button type="button">New Post</button>
       </CreateBulletinPostDialog>,
       { wrapper: createWrapper() }
@@ -442,7 +440,6 @@ describe('CreateBulletinPostDialog', () => {
     expect(mutateFn).toHaveBeenCalledWith(
       expect.objectContaining({
         table: 1,
-        author_persona: 3,
         title: 'Session Tomorrow',
         body: 'We are playing at 7pm',
         story: null,
@@ -456,7 +453,7 @@ describe('CreateBulletinPostDialog', () => {
     const user = userEvent.setup();
     const stories = [makeStory(11, 'Who Am I?'), makeStory(12, 'The Dark Hour')];
     render(
-      <CreateBulletinPostDialog tableId={1} gmPersonaId={3} stories={stories}>
+      <CreateBulletinPostDialog tableId={1} stories={stories}>
         <button type="button">New Post</button>
       </CreateBulletinPostDialog>,
       { wrapper: createWrapper() }

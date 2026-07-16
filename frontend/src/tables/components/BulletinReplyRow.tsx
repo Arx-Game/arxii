@@ -8,6 +8,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { formatRelativeTime } from '@/lib/relativeTime';
@@ -17,12 +18,6 @@ import type { TableBulletinReply } from '../types';
 // ---------------------------------------------------------------------------
 // DRF error shapes
 // ---------------------------------------------------------------------------
-
-interface DRFErrors {
-  body?: string[];
-  non_field_errors?: string[];
-  detail?: string;
-}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -40,7 +35,7 @@ interface BulletinReplyRowProps {
 export function BulletinReplyRow({ reply, isGMOrStaff }: BulletinReplyRowProps) {
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(reply.body);
-  const [fieldErrors, setFieldErrors] = useState<DRFErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<BulletinFieldErrors>({});
 
   const updateMutation = useUpdateBulletinReply();
   const deleteMutation = useDeleteBulletinReply();
@@ -66,12 +61,8 @@ export function BulletinReplyRow({ reply, isGMOrStaff }: BulletinReplyRowProps) 
           setEditing(false);
           toast.success('Reply updated');
         },
-        onError: async (err: unknown) => {
-          const res = (err as { response?: Response })?.response;
-          if (res) {
-            const body = (await res.json()) as DRFErrors;
-            setFieldErrors(body);
-          }
+        onError: (err: unknown) => {
+          setFieldErrors(bulletinErrorsFrom(err));
         },
       }
     );
@@ -140,11 +131,13 @@ export function BulletinReplyRow({ reply, isGMOrStaff }: BulletinReplyRowProps) 
               className="text-sm"
               aria-label="Edit reply"
             />
-            {fieldErrors.body && (
-              <p className="text-xs text-destructive">{fieldErrors.body.join(' ')}</p>
+            {Array.isArray(fieldErrors.body) && (
+              <p className="text-xs text-destructive">{(fieldErrors.body as string[]).join(' ')}</p>
             )}
-            {fieldErrors.non_field_errors && (
-              <p className="text-xs text-destructive">{fieldErrors.non_field_errors.join(' ')}</p>
+            {Array.isArray(fieldErrors.non_field_errors) && (
+              <p className="text-xs text-destructive">
+                {(fieldErrors.non_field_errors as string[]).join(' ')}
+              </p>
             )}
             {fieldErrors.detail && <p className="text-xs text-destructive">{fieldErrors.detail}</p>}
             <div className="flex gap-2">
