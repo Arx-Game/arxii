@@ -35453,6 +35453,20 @@ components:
           nullable: true
           description: Return mechanics content only if public or KNOWN.
           readOnly: true
+        lore_links:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: Return resolved wikilinks from lore_content.
+          readOnly: true
+        mechanics_links:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: Return resolved wikilinks from mechanics_content.
+          readOnly: true
         is_public:
           type: boolean
           description: If True, visible to everyone including logged-out visitors.
@@ -35491,7 +35505,9 @@ components:
       - id
       - knowledge_status
       - lore_content
+      - lore_links
       - mechanics_content
+      - mechanics_links
       - name
       - research_progress
       - subject
