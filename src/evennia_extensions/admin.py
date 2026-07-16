@@ -3,6 +3,7 @@ Django admin configuration for evennia_extensions models.
 """
 
 import contextlib
+import logging
 from typing import ClassVar
 
 from allauth.account.models import EmailAddress, EmailConfirmation
@@ -18,6 +19,8 @@ from evennia_extensions.models import (
     RoomProfile,
     RoomSizeTier,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(PlayerData)
@@ -179,6 +182,7 @@ class EmailAddressAdmin(admin.ModelAdmin):
                 sent_count += 1
 
             except Exception as e:
+                logger.exception("Verification email send failed for %s", email_address.email)
                 error_count += 1
                 self.message_user(
                     request,

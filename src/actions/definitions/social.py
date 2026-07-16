@@ -478,10 +478,9 @@ class EntranceAction(_SocialTemplateAction):
                 confirm_soulfray_risk=confirm_soulfray_risk,
                 originated_as_entrance=True,
             )
-        except Exception as exc:
-            if not isinstance(exc, MagicError):
-                raise
-            return _ActionResult(success=False, message=str(exc))
+        except MagicError as exc:
+            # user_message, never str(exc) — exception detail must not reach players.
+            return _ActionResult(success=False, message=exc.user_message)
 
         if cast.soulfray_warning is not None and not confirm_soulfray_risk:
             return self._register_entrance_soulfray_pending(

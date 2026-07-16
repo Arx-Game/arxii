@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 
@@ -135,7 +137,7 @@ class SceneEntryEndorseAction(Action):
 
         try:
             persona_name = endorsee_sheet.primary_persona.name
-        except Exception:  # noqa: BLE001
+        except ObjectDoesNotExist:
             persona_name = str(endorsee_sheet)
 
         return ActionResult(
@@ -196,7 +198,7 @@ class StylePresentationEndorseAction(Action):
 
         try:
             persona_name = endorsee_sheet.primary_persona.name
-        except Exception:  # noqa: BLE001
+        except ObjectDoesNotExist:
             persona_name = str(endorsee_sheet)
 
         return ActionResult(

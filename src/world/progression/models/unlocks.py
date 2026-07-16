@@ -10,7 +10,7 @@ This module contains models related to unlocks and requirements:
 
 from typing import ClassVar, cast
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -331,7 +331,7 @@ class TraitRequirement(AbstractClassLevelRequirement):
                 f"Need {self.trait.name} {cast(int, self.minimum_value) / RATING_DIVISOR:.1f}, "
                 f"have {trait_value.display_value}",
             )
-        except Exception:  # noqa: BLE001
+        except ObjectDoesNotExist:
             return (
                 False,
                 (
@@ -397,7 +397,7 @@ class ClassLevelRequirement(AbstractClassLevelRequirement):
                 f"Need {self.character_class.name} level {self.minimum_level}, "
                 f"have {class_level.level}",
             )
-        except Exception:  # noqa: BLE001
+        except ObjectDoesNotExist:
             return (
                 False,
                 f"Need {self.character_class.name} level {self.minimum_level}, don't have class",

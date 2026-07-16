@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import TYPE_CHECKING
 
-from evennia.utils.logger import log_err
+from evennia.utils.logger import log_trace
 
 from web.webclient.message_types import MailArrivedPayload
 
@@ -46,4 +46,4 @@ def notify_mail_arrived(recipient_tenure: RosterTenure, mail: PlayerMail) -> Non
         )
         account.msg(mail_arrived=((), payload))
     except Exception:  # noqa: BLE001 — best-effort arrival ping; never break mail send (#2160)
-        log_err(f"mail arrival ping failed for mail={mail.pk}")
+        log_trace(f"mail arrival ping failed for mail={mail.pk}")

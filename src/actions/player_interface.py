@@ -59,6 +59,8 @@ from __future__ import annotations
 import dataclasses
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from actions.constants import ActionBackend, ActionCategory, TargetKind
 from actions.errors import ActionDispatchError
 from actions.registry import get_action
@@ -1353,7 +1355,8 @@ def _tenure_persona_ids(tenure: object) -> set[int]:
     try:
         sheet = tenure.roster_entry.character_sheet  # type: ignore[union-attr]
         return set(sheet.personas.values_list("pk", flat=True))
-    except Exception:  # noqa: BLE001
+    except (AttributeError, ObjectDoesNotExist):
+        # Broken tenure→sheet chain (test/NPC data); read-only helper.
         return set()
 
 

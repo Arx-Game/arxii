@@ -349,7 +349,8 @@ def _find_evennia_processes() -> list[dict]:
         if platform.system() == _WINDOWS:
             return _find_evennia_processes_windows()
         return _find_evennia_processes_unix()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — CLI discovery boundary
+        typer.echo(f"WARNING: process discovery failed: {exc!r}", err=True)
         return []
 
 
@@ -370,7 +371,8 @@ def _kill_process(pid: int) -> bool:
 
         os.kill(pid, signal.SIGKILL)
         return True
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — per-process kill isolation
+        typer.echo(f"WARNING: could not kill pid {pid}: {exc!r}", err=True)
         return False
 
 
@@ -406,7 +408,7 @@ def _cleanup_pid_files() -> list[str]:
             try:
                 pid_file.unlink()
                 removed.append(str(pid_file))
-            except Exception:  # noqa: BLE001, S110
+            except OSError:
                 pass
 
     return removed
@@ -548,7 +550,7 @@ def _get_ngrok_status() -> dict | None:
                             "url": tunnel.get("public_url"),
                             "port": port,
                         }
-    except Exception:  # noqa: BLE001, S110
+    except requests.RequestException:
         pass
     return None
 
@@ -567,7 +569,7 @@ def _kill_ngrok() -> None:
             )
         else:
             subprocess.run(["pkill", "-9", "ngrok"], capture_output=True, check=False)
-    except Exception:  # noqa: BLE001, S110
+    except OSError:
         pass
 
 
@@ -733,8 +735,8 @@ def ngrok(  # noqa: C901, PLR0915
                 typer.echo("\nStopping ngrok tunnel...")
                 pyngrok.disconnect(tunnel.public_url)
                 typer.echo("SUCCESS: Stopped ngrok tunnel")
-            except Exception:  # noqa: BLE001
-                typer.echo("WARNING: Error stopping ngrok")
+            except Exception as exc:  # noqa: BLE001 — atexit cleanup boundary
+                typer.echo(f"WARNING: Error stopping ngrok: {exc!r}", err=True)
 
         _restore_env_file(env_file, env_backup)
 

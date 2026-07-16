@@ -10,6 +10,8 @@ so the UI can show who may spend).
 
 from __future__ import annotations
 
+import logging
+
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import serializers, viewsets
 from rest_framework.exceptions import NotFound, PermissionDenied
@@ -33,6 +35,8 @@ from world.currency.services import (
     get_or_create_treasury,
 )
 from world.roster.models import RosterEntry
+
+logger = logging.getLogger(__name__)
 
 _MSG_NO_ORG = "No such organization."
 _MSG_NOT_MEMBER = "You are not a member of that organization."
@@ -192,7 +196,8 @@ def _viewer_persona(request: Request):
         return None
     try:
         return active_persona_for_sheet(sheet)
-    except Exception:  # noqa: BLE001 - fail closed: any resolution fault → deny
+    except Exception:
+        logger.exception("Persona resolution failed for sheet %s; denying", sheet.pk)
         return None
 
 

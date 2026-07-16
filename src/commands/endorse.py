@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
@@ -75,7 +77,7 @@ class CmdPoses(ArxCommand):
 
         try:
             persona_name = endorsee_sheet.primary_persona.name
-        except Exception:  # noqa: BLE001
+        except ObjectDoesNotExist:
             persona_name = char_name
 
         _PREVIEW_LEN = 80

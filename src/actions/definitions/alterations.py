@@ -10,11 +10,14 @@ returns a user-safe ``ActionResult`` for both surfaces.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.types import ActionResult, TargetType
 from world.magic.types import AlterationResolutionError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -84,7 +87,8 @@ class ResolveAlterationAction(Action):
             )
         except AlterationResolutionError as exc:
             return None, exc.user_message
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.exception("Mage Scar resolution failed")
             return None, "The Mage Scar could not be resolved. Please contact staff."
         return result, ""
 
@@ -157,7 +161,8 @@ class ResolveAlterationAction(Action):
             )
         except AlterationResolutionError as exc:
             return None, exc.user_message
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.exception("Mage Scar resolution failed")
             return None, "The Mage Scar could not be resolved. Please contact staff."
         return result, ""
 

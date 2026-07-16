@@ -18,7 +18,10 @@ the outcome is the meal.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -79,6 +82,7 @@ def maybe_emit_resolution_theater(
     payload = build_roulette_payload(title=title, consequences=consequences, selected=selected)
     try:
         character.msg(roulette_result=((), payload))
-    except Exception:  # noqa: BLE001 - theater must never break resolution
+    except Exception:  # noqa: BLE001 — theater must never break resolution
+        logger.debug("roulette payload delivery failed", exc_info=True)
         return False
     return True

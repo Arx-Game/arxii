@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
@@ -232,7 +234,7 @@ class CmdReact(ArxCommand):
         for w in windows:
             try:
                 chips = ", ".join(c.label for c in get_reaction_kind(w.kind).choices_for(w))
-            except Exception:  # noqa: BLE001
+            except DjangoValidationError:
                 chips = "(unknown)"
             pose_preview = (w.interaction.content or "")[:40]
             lines.append(f"  #{w.kind} {pose_preview}...  choices: {chips}")

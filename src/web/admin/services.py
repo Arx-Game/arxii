@@ -414,7 +414,8 @@ def _analyze_model(
 
     try:
         ma.in_db = model_class.objects.count()
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.exception("analyze_fixture: count() failed for %s", model_class.__name__)
         ma.warnings.append("Could not query existing records.")
         return ma
 
@@ -468,7 +469,8 @@ def _classify_record(
     except model_class.DoesNotExist:
         ma.new_count += 1
         return
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        logger.exception("analyze_fixture: natural-key lookup failed for %s", nk)
         ma.warnings.append(f"Error looking up {nk}: {exc}")
         ma.new_count += 1
         return
@@ -493,7 +495,10 @@ def _find_local_only_records(
             if obj_nk_str not in seen_nk_strs:
                 ma.local_only_count += 1
                 ma.local_only_records.append(obj_nk_str)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        logger.exception(
+            "analyze_fixture: local-only enumeration failed for %s", model_class.__name__
+        )
         ma.warnings.append(f"Could not enumerate local-only records: {exc}")
 
 

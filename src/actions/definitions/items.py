@@ -393,7 +393,10 @@ class ActivatePermitAction(Action):
             PermitValidationError,
             activate_permit,
         )
-        from world.scenes.services import persona_for_character  # noqa: PLC0415
+        from world.scenes.services import (  # noqa: PLC0415
+            MissingPrimaryPersonaError,
+            persona_for_character,
+        )
 
         target = kwargs.get("target")
         if target is None:
@@ -415,7 +418,7 @@ class ActivatePermitAction(Action):
 
         try:
             persona = persona_for_character(actor)
-        except Exception:  # noqa: BLE001
+        except MissingPrimaryPersonaError:
             return ActionResult(
                 success=False,
                 message="You don't have a persona to activate this permit with.",

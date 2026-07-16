@@ -16,6 +16,7 @@ at the giver/board (the tab is the map, not the door).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 from typing import TYPE_CHECKING, cast
 
 from django.db.models import Q
@@ -25,6 +26,8 @@ from world.missions.models import MissionGiver
 from world.missions.services.boards import postings_for_giver
 from world.missions.services.visibility import template_visible_to
 from world.scenes.services import MissingPrimaryPersonaError, persona_for_character
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -109,7 +112,9 @@ def _nearby_givers(character: ObjectDB, room: ObjectDB | None) -> list[Opportuni
 
     try:
         profile = get_room_profile(room)
-    except Exception:  # noqa: BLE001 — room without a profile: no area
+    except Exception:
+        # so anything caught here is a real fault worth a traceback.
+        logger.exception("get_room_profile failed for room %s", room.pk)
         return []
     if profile.area_id is None:
         return []

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from evennia.objects.models import ObjectDB
 
@@ -311,7 +312,7 @@ def calculate_level_up_requirements(
             character_class=character_class,
         )
         current_level = current_class_level.level
-    except Exception:  # noqa: BLE001
+    except ObjectDoesNotExist:
         current_level = 0
 
     if target_level <= current_level:

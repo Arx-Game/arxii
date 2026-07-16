@@ -23,6 +23,8 @@ outcome.
 
 from __future__ import annotations
 
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -30,6 +32,8 @@ from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.models import MissionRewardQueue
 from world.missions.services.rewards import MissionRewardRoutingError
 from world.missions.types import RewardBatchResult
+
+logger = logging.getLogger(__name__)
 
 # Per-sink stub-seal messages. LP references DESIGN §13.3 — the missions
 # design doc section that explains why the LP grant needs a richer payload
@@ -174,7 +178,8 @@ def apply_mission_reward_batch() -> RewardBatchResult:
             _record_failure(row, exc.user_message)
             failed.append(row)
             continue
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
+            logger.exception("Mission reward routing failed for queue row %s", row.pk)
             _record_failure(row, f"{type(exc).__name__}: {exc}")
             failed.append(row)
             continue

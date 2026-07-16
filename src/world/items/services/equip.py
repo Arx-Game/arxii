@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
 from world.items.exceptions import ItemPlacedNotEquippable, SlotConflict, SlotIncompatible
 from world.items.models import EquippedItem, ItemInstance
+
+logger = logging.getLogger(__name__)
 
 
 @transaction.atomic
@@ -100,7 +105,10 @@ def _recompute_body_persona_items_prestige(character_sheet: object) -> None:
 
     try:
         persona = character_sheet.primary_persona
-    except Exception:  # noqa: BLE001 — sheet invariant violated; render no credit.
+    except ObjectDoesNotExist:
+        # Sheet invariant violated (no PRIMARY persona): no prestige credit,
+        # but log it — this is a broken invariant, not an expected state.
+        logger.exception("primary_persona missing for sheet %s", character_sheet.pk)
         return
     if persona is not None:
         recompute_persona_prestige_from_items(persona)

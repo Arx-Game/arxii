@@ -1,7 +1,11 @@
 """Movement-related service functions."""
 
+import logging
+
 from commands.exceptions import CommandError
 from flows.object_states.base_state import BaseState
+
+logger = logging.getLogger(__name__)
 
 
 def move_object(
@@ -121,6 +125,8 @@ def traverse_exit(
         try:
             exit.obj.at_traverse(caller.obj, destination.obj)
         except Exception as e:
+            # Without this log a real traverse bug reads as a locked door.
+            logger.exception("at_traverse failed for exit %s", exit.obj.pk)
             if hasattr(exit.obj, "at_failed_traverse"):
                 exit.obj.at_failed_traverse(caller.obj)
             else:

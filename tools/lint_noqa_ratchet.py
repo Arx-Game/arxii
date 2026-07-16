@@ -32,7 +32,19 @@ PATTERNS: dict[str, str] = {
     # through create_object). The grandfathered remainder is the handful of
     # deliberate production services that build rooms/exits as bare rows.
     "BARE_OBJECTDB_CREATE": r"ObjectDB\.objects\.create\(",
+    # Broad exception handlers in production code (tranche 4, #1164): every
+    # grandfathered site is a classified boundary (per-item isolation, cron
+    # tick, CLI/request boundary) that logs with exc_info. New ones need the
+    # same classification — or a narrower catch.
+    "BROAD_EXCEPT": r"except Exception\b",
 }
+
+# Pattern tokens whose count should skip test files (tests legitimately use
+# broad catches and bare fixtures the production rule forbids... except where
+# another token explicitly covers tests, like BARE_OBJECTDB_CREATE).
+PATTERNS_EXCLUDE_TESTS = {"BROAD_EXCEPT"}
+
+_TEST_PATH_RE = re.compile(r"(^|/)tests?(/|\.py$)|(^|/)test_[^/]*\.py$")
 
 
 def count_token(token: str) -> int:
@@ -48,11 +60,14 @@ def count_token(token: str) -> int:
     return total
 
 
-def count_pattern(regex: str) -> int:
-    """Count regex matches across src/**/*.py."""
+def count_pattern(regex: str, *, exclude_tests: bool = False) -> int:
+    """Count regex matches across src/**/*.py (optionally skipping test files)."""
     pattern = re.compile(regex)
     total = 0
     for path in SRC.rglob("*.py"):
+        rel = path.relative_to(SRC).as_posix()
+        if exclude_tests and _TEST_PATH_RE.search(rel):
+            continue
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -71,7 +86,7 @@ def main() -> int:
         allowed = int(allowed_str)
         if token.startswith("pattern:"):
             name = token.removeprefix("pattern:")
-            actual = count_pattern(PATTERNS[name])
+            actual = count_pattern(PATTERNS[name], exclude_tests=name in PATTERNS_EXCLUDE_TESTS)
         else:
             actual = count_token(token)
         if actual > allowed:

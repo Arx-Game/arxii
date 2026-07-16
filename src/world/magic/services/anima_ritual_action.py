@@ -48,10 +48,8 @@ def _resolve_anima_ritual(
         return  # silently no-op on malformed request
 
     # Ensure the config is loaded (may already be via select_related above).
-    try:
-        _ = ritual.check_config
-    except Exception:  # noqa: BLE001
-        return  # SCENE_ACTION ritual missing config — silently skip
+    if ritual.check_config_or_none is None:
+        return  # SCENE_ACTION ritual missing config — skip
 
     main_result = result.action_resolution.main_result
     if main_result is None or main_result.check_result is None:

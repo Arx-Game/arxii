@@ -304,10 +304,9 @@ def _route_crime_watch(
 
 def _deliver_immediate_money(line: MissionDeedRewardLine) -> None:
     """Deliver an IMMEDIATE MONEY line, falling back to the stub when sheet-less."""
-    try:
-        sheet = line.recipient.sheet_data
-    except Exception:  # noqa: BLE001 - sheet-less recipient: keep stub fallback
-        sheet = None
+    # character_sheet is the safe accessor: sheet-less recipient → None (stub
+    # fallback); genuine faults propagate instead of misrouting to the stub.
+    sheet = line.recipient.character_sheet
     if sheet is not None:
         deliver_mission_money(recipient_sheet=sheet, amount=line.amount, ref=line.ref)
     else:

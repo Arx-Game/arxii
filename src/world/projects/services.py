@@ -140,13 +140,17 @@ def _maybe_grant_project_contribution_resonance(
         )
         return
     try:
-        grant_resonance(
-            contributor_persona.character_sheet,
-            project.resonance,
-            award.resonance_award_amount,
-            source=GainSource.PROJECT_CONTRIBUTION,
-            project=project,
-        )
+        # Savepoint: without it, a DATABASE error inside the grant would mark
+        # the enclosing add_contribution/donate_to_project transaction as
+        # rolled-back even though we swallow the exception here (#2386 t4).
+        with transaction.atomic():
+            grant_resonance(
+                contributor_persona.character_sheet,
+                project.resonance,
+                award.resonance_award_amount,
+                source=GainSource.PROJECT_CONTRIBUTION,
+                project=project,
+            )
     except Exception:
         # A failed bonus forfeits only the bonus, never the contribution it's
         # layered on top of (see docstring above). This runs inside

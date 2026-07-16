@@ -115,7 +115,7 @@ def notify_friends_of_status(character: ObjectDB, *, online: bool) -> None:
     count (a friender who re-rostered away no longer watches). Best-effort: a notification failure
     must never break login/logout.
     """
-    from evennia.utils.logger import log_err  # noqa: PLC0415
+    from evennia.utils.logger import log_trace  # noqa: PLC0415
 
     from world.roster.models import RosterTenure  # noqa: PLC0415
 
@@ -141,4 +141,4 @@ def notify_friends_of_status(character: ObjectDB, *, online: bool) -> None:
             seen.add(account.pk)
             account.msg(message)
     except Exception:  # noqa: BLE001 — best-effort watch alert; never break the login hook (#1164)
-        log_err(f"friend watch-alert failed for {character}")
+        log_trace(f"friend watch-alert failed for {character}")
