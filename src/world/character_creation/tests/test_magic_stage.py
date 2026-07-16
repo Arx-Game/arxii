@@ -4,14 +4,17 @@ from django.test import TestCase
 
 from actions.constants import ActionCategory
 from world.achievements.constants import AccessChangeSource
+from world.character_creation.constants import CG_MODIFIER_CATEGORY, STARTING_TECHNIQUE_PICKS_TARGET
 from world.character_creation.factories import CharacterDraftFactory
 from world.character_creation.services import finalize_magic_data
 from world.character_creation.validators import compute_magic_errors
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
+from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.fatigue.models import FatiguePool
 from world.magic.factories import CantripFactory, FacetFactory, ResonanceFactory
 from world.magic.models import CharacterAnima, Technique
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
 
@@ -250,3 +253,22 @@ class CantripGrantNotificationTest(TestCase):
             ability_deliveries,
             "No ABILITY message should be queued when no cantrip is selected.",
         )
+
+
+class StartingTechniquePicksTest(TestCase):
+    """CharacterDraft.starting_technique_picks — base 1 + distinction bonus (#2426)."""
+
+    def test_no_distinctions_defaults_to_one(self):
+        draft = CharacterDraftFactory()
+        self.assertEqual(draft.starting_technique_picks, 1)
+
+    def test_distinction_bonus_adds_to_base(self):
+        category = ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY)
+        target = ModifierTargetFactory(name=STARTING_TECHNIQUE_PICKS_TARGET, category=category)
+        distinction = DistinctionFactory()
+        DistinctionEffectFactory(distinction=distinction, target=target, value_per_rank=1)
+
+        draft = CharacterDraftFactory(
+            draft_data={"distinctions": [{"distinction_id": distinction.id, "rank": 2}]}
+        )
+        self.assertEqual(draft.starting_technique_picks, 3)

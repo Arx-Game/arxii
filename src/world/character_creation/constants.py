@@ -23,6 +23,13 @@ AGE_MAX = 65
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 
+# CG technique pick budget (#2426): ModifierTarget/ModifierCategory names read by
+# CharacterDraft.starting_technique_picks via _get_distinction_bonus(). The
+# ModifierTarget row itself is seeded in Task 7 — these constants are the shared
+# contract between this app and that seed data.
+STARTING_TECHNIQUE_PICKS_TARGET = "starting_technique_picks"
+CG_MODIFIER_CATEGORY = "character_creation"
+
 # Canonical fallback starting room (#2121). Seeded by
 # ``world.seeds.character_creation.ensure_canonical_fallback_room`` and wired onto
 # the dev-seeded "Arx City" StartingArea's ``default_starting_room``. Also the

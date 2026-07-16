@@ -26,7 +26,9 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.character_creation.constants import (
     AGE_MAX,
     AGE_MIN,
+    CG_MODIFIER_CATEGORY,
     REQUIRED_STATS,
+    STARTING_TECHNIQUE_PICKS_TARGET,
     STAT_DEFAULT_VALUE,
     STAT_DISPLAY_DIVISOR,
     ApplicationStatus,
@@ -826,6 +828,18 @@ class CharacterDraft(SharedMemoryModel):
         ).select_related("target")
 
         return sum(effect.get_value_at_rank(entries[effect.distinction_id]) for effect in effects)
+
+    @property
+    def starting_technique_picks(self) -> int:
+        """How many techniques the player may pick at CG magic stage.
+
+        Base of 1, plus any distinction bonus targeting the
+        ``starting_technique_picks`` ModifierTarget in the
+        ``character_creation`` ModifierCategory (#2426).
+        """
+        return 1 + self._get_distinction_bonus(
+            STARTING_TECHNIQUE_PICKS_TARGET, CG_MODIFIER_CATEGORY
+        )
 
     def calculate_stat_budget(self) -> int:
         """Total stat points = default * stat_count + net bonuses."""
