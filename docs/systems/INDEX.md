@@ -296,7 +296,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     the retired `Cantrip.archetype`; `Gift.codex_entry` / `Technique.codex_entry`
     (nullable FKs → `codex.CodexEntry`) back the expanding-card → lore-modal pattern
     (#2410) on every CG catalog card. Read service (`world/magic/services/cg_catalog.py`):
-    `get_gift_options(draft)` / `get_technique_options(draft, gift)`. The rankable
+    `get_gift_options(tradition, path) -> list[Gift]` /
+    `get_technique_options(path, gift, tradition) -> TechniqueOptions` (callers pass
+    `draft.selected_tradition` / `draft.selected_path`). The rankable
     **Tradition Training** distinction (`ModifierTarget` "Starting Technique Picks")
     adds +1 CG technique pick per rank above the Unbound baseline of 1, read via
     `CharacterDraft._get_distinction_bonus`. `Organization.tradition` (nullable FK →
