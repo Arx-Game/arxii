@@ -6,7 +6,7 @@ from django.test import TestCase
 from evennia.utils.idmapper import models as idmapper_models
 
 from actions.definitions.endorsements import PoseEndorseAction
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -25,9 +25,7 @@ def _char_with_account():
 class PoseEndorseActionTests(TestCase):
     def setUp(self):
         idmapper_models.flush_cache()
-        self.room = __import__(
-            "evennia.objects.models", fromlist=["ObjectDB"]
-        ).ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="TestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

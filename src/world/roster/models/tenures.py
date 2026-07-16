@@ -11,6 +11,7 @@ from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.descriptors import ReverseOneToOneOrNone
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.roster.managers import RosterTenureManager
 
@@ -21,6 +22,12 @@ class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
     Players are identified only as "1st player", "2nd player", etc.
     Links to RosterEntry to keep all roster-related data together.
     """
+
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    social_consent_preference_or_none = ReverseOneToOneOrNone("social_consent_preference")
+
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    display_settings_or_none = ReverseOneToOneOrNone("display_settings")
 
     player_data = models.ForeignKey(
         "evennia_extensions.PlayerData",

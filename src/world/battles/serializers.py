@@ -209,6 +209,8 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         # #2196: use prefetched conditions if available (battles view prefetches
         # them on the character to avoid per-participant N+1).
         cached_conditions = (
+            # Suppression justified: mutating condition set on identity-mapped ObjectDB; (#2401)
+            # context-over-cache.
             getattr(character, "cached_active_conditions", None)  # noqa: GETATTR_LITERAL
             if character is not None
             else None

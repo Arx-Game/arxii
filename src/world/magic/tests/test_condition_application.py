@@ -14,6 +14,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.test.utils import tag
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.types import AppliedConditionResult, ApplyConditionResult
@@ -248,12 +249,10 @@ class ApplyTechniqueConditionsPostgresTest(TestCase):
     """
 
     def setUp(self) -> None:
-        from evennia.objects.models import ObjectDB
-
         self.sheet = CharacterSheetFactory()
         # Ensure the caster has an ObjectDB location so bulk_apply_conditions
         # can resolve context without errors.
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="TestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

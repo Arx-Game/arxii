@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
 from world.battles.constants import (
     DEFAULT_MORALE,
@@ -222,6 +223,9 @@ class BattleSide(SharedMemoryModel):
 class BattlePlace(SharedMemoryModel):
     """A named front or zone within a battle (e.g. 'The Main Gates')."""
 
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    vehicle_or_none = ReverseOneToOneOrNone("vehicle")
+
     battle = models.ForeignKey(
         Battle,
         on_delete=models.CASCADE,
@@ -369,6 +373,9 @@ class Fortification(SharedMemoryModel):
 
 class BattleUnit(SharedMemoryModel):
     """An abstract typed force (enemy or friendly) at a particular front."""
+
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    vehicle_or_none = ReverseOneToOneOrNone("vehicle")
 
     battle = models.ForeignKey(
         Battle,

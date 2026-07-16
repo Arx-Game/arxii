@@ -131,6 +131,7 @@ def who_listing(viewer_account: object | None = None) -> list[WhoEntry]:
         puppet = session.puppet
         if puppet is None:
             continue
+        # Suppression justified: Evennia ServerSession internal (third-party duck seam).
         last = getattr(session, "cmd_last_visible", None)  # noqa: GETATTR_LITERAL
         idle = now - last if last else 0.0
         if puppet.id not in idle_by_puppet or idle < idle_by_puppet[puppet.id]:

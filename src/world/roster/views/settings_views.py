@@ -53,7 +53,7 @@ class VisibilitySettingsView(APIView):
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Return the active character's current ``appear_offline`` value."""
         tenure = self._current_tenure(request)
-        settings_obj = getattr(tenure, "display_settings", None)  # noqa: GETATTR_LITERAL
+        settings_obj = tenure.display_settings_or_none
         appear_offline = bool(settings_obj.appear_offline) if settings_obj is not None else False
         return Response(VisibilitySettingsSerializer({"appear_offline": appear_offline}).data)
 

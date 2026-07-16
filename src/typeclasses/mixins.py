@@ -84,6 +84,7 @@ class ObjectParent:
     # missing row is a hard bug; use world.areas.services.get_room_profile when
     # you want get-or-create.
     room_profile_or_none = ReverseOneToOneOrNone("room_profile")
+    item_instance_or_none = ReverseOneToOneOrNone("item_instance")
 
     @cached_property
     def positions_cached(self: Union[Self, "DefaultObject"]) -> list:
@@ -223,6 +224,7 @@ class ObjectParent:
         if looker is not None and not self.at_examined(looker):
             return ""
         base = super().return_appearance(looker, **kwargs)  # type: ignore[misc]
+        # Suppression justified: set only by the at_examined hook (reset-on-entry contract).
         sections: list[str] = getattr(self, "_examine_sections", [])  # noqa: GETATTR_LITERAL
         ranking = _maybe_render_ranking_display(self, looker)
         if ranking is not None:

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from django.test import TestCase, tag
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
@@ -252,10 +253,8 @@ class BleedOutProgressionTests(TestCase):
         cls.resist_check = CheckTypeFactory(name="bleed-resist")
 
     def setUp(self) -> None:
-        from evennia.objects.models import ObjectDB
-
         # A bare ObjectDB has db_account=None → classified as NPC → death_is_permitted True.
-        self.npc = ObjectDB.objects.create(db_key="BleedOutTestNPC")
+        self.npc = ObjectDBFactory(db_key="BleedOutTestNPC")
 
     def _build_terminal_bleed_out(self) -> world.conditions.models.ConditionTemplate:  # type: ignore[name-defined]
         """Create a Bleeding-Out template with exactly one stage (terminal by definition)."""

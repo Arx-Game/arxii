@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.assets.constants import (
     AssetAcquisitionSource,
     AssetRoleContext,
@@ -27,9 +28,7 @@ class IntroductionJourneyTests(TestCase):
     """Full-journey E2E for #2295 co-ownership."""
 
     def setUp(self) -> None:
-        from evennia.objects.models import ObjectDB
-
-        self.room = ObjectDB.objects.create(db_key="Journey Room")
+        self.room = ObjectDBFactory(db_key="Journey Room")
         self.promoter_sheet = CharacterSheetFactory()
         self.promoter = self.promoter_sheet.primary_persona
         self.ally_sheet = CharacterSheetFactory()

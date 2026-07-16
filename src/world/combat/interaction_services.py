@@ -262,8 +262,13 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
         "Kira’s Frost Bolt misses the Pyromancer — the ward turns it aside."
         "Garruk uses Guard Stance."
     """
+    from world.combat.types import OpponentDamageResult  # noqa: PLC0415
+
     total_damage = sum(dr.damage_dealt for dr in outcome.damage_results)
-    defeated = any(getattr(dr, "defeated", False) for dr in outcome.damage_results)  # noqa: GETATTR_LITERAL
+    # Only opponent results carry `defeated`; participant results never do.
+    defeated = any(
+        isinstance(dr, OpponentDamageResult) and dr.defeated for dr in outcome.damage_results
+    )
     knocked_out = any(c.knocked_out for c in outcome.damage_consequences)
     dying = any(c.dying for c in outcome.damage_consequences)
     wounds = [ct.name for c in outcome.damage_consequences for ct in c.wounds_applied]

@@ -38,11 +38,16 @@ _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "c
 
 
 def _advancement_error_message(exc: Exception) -> str:
-    """Return a caller-safe error string from a ``ClassLevelAdvancementError``."""
-    failed = getattr(exc, "failed", None)  # noqa: GETATTR_LITERAL
-    if failed:
-        return "; ".join(failed)
-    return getattr(exc, "user_message", "This advancement could not be completed.")  # noqa: GETATTR_LITERAL
+    """Return a caller-safe error string from a ``ClassLevelAdvancementError``.
+
+    Only ``AdvancementRequirementsNotMet`` carries the per-requirement
+    ``failed`` list — explicit dispatch, not a getattr default (#2386).
+    """
+    from world.progression.exceptions import AdvancementRequirementsNotMet  # noqa: PLC0415
+
+    if isinstance(exc, AdvancementRequirementsNotMet) and exc.failed:
+        return "; ".join(exc.failed)
+    return exc.user_message
 
 
 def _tokenize_draft_args(rest: str) -> tuple[str, list[str], dict[str, str]]:
@@ -474,7 +479,7 @@ class CmdRitual(ArxCommand):
         """Collect ItemInstance rows for the caller's carried items."""
         components = []
         for obj in self.caller.contents:
-            instance = getattr(obj, "item_instance", None)  # noqa: GETATTR_LITERAL
+            instance = obj.item_instance_or_none
             if instance is not None:
                 components.append(instance)
         return components

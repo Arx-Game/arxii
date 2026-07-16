@@ -1,7 +1,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory
 from world.combat.models import CombatEncounter
@@ -25,7 +25,7 @@ class RoundEnumTests(TestCase):
 
 class SceneRoundModelTests(TestCase):
     def setUp(self):
-        self.room = ObjectDB.objects.create(db_key="TestRoom")
+        self.room = ObjectDBFactory(db_key="TestRoom")
 
     def test_create_scene_round_defaults(self):
         rnd = SceneRound.objects.create(room=self.room)

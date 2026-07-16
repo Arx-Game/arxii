@@ -75,7 +75,7 @@ def _has_sunlight_drawback(sheet) -> bool:
     """Whether the sheet's species (or an ancestor) grants a Sunlight-Exposure drawback."""
     from world.species.factories import SUNLIGHT_EXPOSURE_NAME  # noqa: PLC0415
 
-    if getattr(sheet, "species_id", None) is None:  # noqa: GETATTR_LITERAL
+    if sheet.species_id is None:
         return False
     species_pks = [s.pk for s in _species_and_ancestors(sheet.species)]
     return SpeciesGiftGrant.objects.filter(

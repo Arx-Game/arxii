@@ -1,8 +1,8 @@
 """Tests for the shared tick_round_for_targets orchestrator (Task 4 / #520)."""
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
@@ -11,7 +11,7 @@ from world.vitals.services import tick_round_for_targets
 
 class TickRoundForTargetsTests(TestCase):
     def test_end_timing_decrements_condition_rounds(self):
-        target = ObjectDB.objects.create(db_key="T1")
+        target = ObjectDBFactory(db_key="T1")
         CharacterSheetFactory(character=target)
         template = ConditionTemplateFactory(
             default_duration_type=DurationType.ROUNDS, default_duration_value=3

@@ -11,8 +11,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import ActionCategory, OpponentTier
 from world.combat.factories import (
@@ -77,7 +77,7 @@ def _setup_combat_scenario():
     CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
     anima = CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
     CharacterEngagementFactory(character=sheet.character)
-    room = ObjectDB.objects.create(
+    room = ObjectDBFactory(
         db_key="TestRoom",
         db_typeclass_path="typeclasses.rooms.Room",
     )

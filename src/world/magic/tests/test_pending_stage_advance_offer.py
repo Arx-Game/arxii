@@ -22,6 +22,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.magic.constants import TargetKind
 from world.magic.exceptions import StageAdvanceBonusError
 from world.magic.factories import (
@@ -305,11 +306,9 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
     """soul_tether_stage_advance_prompt writes a PendingStageAdvanceOffer row (Task 1.7 Step 3)."""
 
     def setUp(self) -> None:
-        from evennia.objects.models import ObjectDB
-
         wire_soul_tether_content()
 
-        self.room = ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="Room_SAPromptDB",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -462,11 +461,9 @@ class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
     recorded so the Sineater can respond via the @reply path if they wish."""
 
     def setUp(self) -> None:
-        from evennia.objects.models import ObjectDB
-
         wire_soul_tether_content()
 
-        self.room = ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="Room_SAPromptNoScene",
             db_typeclass_path="typeclasses.rooms.Room",
         )

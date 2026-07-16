@@ -261,6 +261,7 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
         ``query_params`` returns the id as a string, but Evennia's identity
         map keys instances by int pk; cast explicitly so the cache hits.
         """
+        # Suppression justified: DRF .request absent during drf-spectacular schema generation.
         request = getattr(self, "request", None)  # noqa: GETATTR_LITERAL
         raw = (
             request.query_params.get("beginning_id")  # noqa: USE_FILTERSET

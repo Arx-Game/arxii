@@ -15,7 +15,7 @@ from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
 from actions.errors import ActionDispatchError
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.areas.positioning.services import (
     connect_positions,
     create_position,
@@ -266,10 +266,8 @@ class DispatchOutOfReachReturns400Tests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia.objects.models import ObjectDB
-
         cls.account = AccountFactory()
-        cls.character = ObjectDB.objects.create(db_key="ReachDispatchChar")
+        cls.character = ObjectDBFactory(db_key="ReachDispatchChar")
         cls.tenure = RosterTenureFactory(
             roster_entry__character_sheet__character=cls.character,
             player_data__account=cls.account,

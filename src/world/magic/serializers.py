@@ -2557,7 +2557,7 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
 
     def get_intended_path_id(self, obj: object) -> int | None:
         """Return the PathIntent's intended_path_id if it is among eligible paths, else None."""
-        intent = getattr(obj.character_sheet, "path_intent", None)  # noqa: GETATTR_LITERAL
+        intent = obj.character_sheet.path_intent_or_none
         if intent is None:
             return None
         eligible_pks = {p.pk for p in self._eligible_paths_for_obj(obj)}
@@ -2840,7 +2840,7 @@ class RitualSessionListSerializer(serializers.ModelSerializer):
         """Return the presented persona name of the initiator sheet (#981)."""
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        initiator = getattr(obj, "initiator", None)  # noqa: GETATTR_LITERAL
+        initiator = obj.initiator
         if initiator is None:
             return ""
         return active_persona_for_sheet(initiator).name
@@ -2850,11 +2850,9 @@ class RitualSessionListSerializer(serializers.ModelSerializer):
         from world.magic.constants import ParticipantState  # noqa: PLC0415
 
         # Use participants_cached (populated by Prefetch to_attr) when available.
-        cached = obj.participants_cached
-        if cached is not None:
-            participants = cached
-        else:
-            participants = list(getattr(obj, "participants", None).all())  # noqa: GETATTR_LITERAL
+        # participants_cached is a cached_property (never None) — the shared
+        # Prefetch/query interface, #2386.
+        participants = obj.participants_cached
         return {
             "invited": sum(1 for p in participants if p.state == ParticipantState.INVITED),
             "accepted": sum(1 for p in participants if p.state == ParticipantState.ACCEPTED),
@@ -2868,16 +2866,13 @@ class RitualSessionListSerializer(serializers.ModelSerializer):
         if request is None or not request.user.is_authenticated:
             return {"role": "unknown", "state": None}
         user = request.user
-        initiator = getattr(obj, "initiator", None)  # noqa: GETATTR_LITERAL
+        initiator = obj.initiator
         # Check if initiator's sheet belongs to this user.
         my_sheet_ids = set(RosterEntry.objects.for_account(user).character_ids())
         if initiator is not None and initiator.pk in my_sheet_ids:
             return {"role": "initiator", "state": None}
         # Check participant rows. Use participants_cached when prefetched.
-        cached = obj.participants_cached
-        participants_iter = (
-            cached if cached is not None else getattr(obj, "participants", None).all()  # noqa: GETATTR_LITERAL
-        )
+        participants_iter = obj.participants_cached
         for participant in participants_iter:
             if participant.character_sheet_id in my_sheet_ids:
                 return {"role": "participant", "state": participant.state}
@@ -2922,7 +2917,7 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
     def get_initiator_name(self, obj: object) -> str:
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        initiator = getattr(obj, "initiator", None)  # noqa: GETATTR_LITERAL
+        initiator = obj.initiator
         if initiator is None:
             return ""
         return active_persona_for_sheet(initiator).name
@@ -2930,19 +2925,11 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
     def get_session_references(self, obj: object) -> list[dict[str, object]]:
         """Summarise session-level references (participant=None).
 
-        Uses references_cached (populated by Prefetch to_attr) when available,
-        filtering in Python. Falls back to a DB .filter() query.
+        references_cached is a cached_property (never None) — the shared
+        Prefetch/query interface, #2386 — so we always filter in Python.
         """
         result = []
-        # Prefer prefetched list; fall back to DB query.
-        cached = getattr(obj, "references_cached", None)  # noqa: GETATTR_LITERAL
-        if cached is not None:
-            refs_iter = [r for r in cached if r.participant_id is None]
-        else:
-            refs = getattr(obj, "references", None)  # noqa: GETATTR_LITERAL
-            if refs is None:
-                return result
-            refs_iter = refs.filter(participant__isnull=True)
+        refs_iter = [r for r in obj.references_cached if r.participant_id is None]
         for ref in refs_iter:
             entry: dict[str, object] = {"kind": ref.kind}
             if ref.ref_covenant_id is not None:

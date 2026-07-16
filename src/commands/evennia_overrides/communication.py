@@ -172,6 +172,7 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
             character_appears_offline,
         )
 
+        # Suppression justified: Evennia cmdhandler sets .session at runtime.
         session = getattr(self, "session", None)  # noqa: GETATTR_LITERAL
         sender_char = session.puppet if session is not None else None
         # (a) A hidden character can only page people on their own allowlist — so they never

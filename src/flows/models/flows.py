@@ -31,7 +31,7 @@ def _resolve_emit_location(flow_execution: "FlowExecution") -> Any:
     character is in). Returns ``None`` when no dispatchable location can
     be resolved — callers should skip the emit in that case.
     """
-    owner = getattr(flow_execution.flow_stack, "owner", None)  # noqa: GETATTR_LITERAL
+    owner = flow_execution.flow_stack.owner
     if owner is None:
         return None
     from evennia.objects.objects import DefaultRoom  # noqa: PLC0415
@@ -537,6 +537,7 @@ class FlowStepDefinition(SharedMemoryModel):
         op = params["op"]
         value = params["value"]
 
+        # Suppression justified: dynamic field name from step params; no default, loud on typo.
         current = getattr(payload, field)  # noqa: GETATTR_LITERAL
         if op == "set":  # noqa: STRING_LITERAL
             new_value = value
@@ -551,6 +552,7 @@ class FlowStepDefinition(SharedMemoryModel):
         else:
             msg = f"Unknown modify_payload op: {op}"
             raise ValueError(msg)
+        # Suppression justified: dynamic field name from step params; no default, loud on typo.
         setattr(payload, field, new_value)  # noqa: GETATTR_LITERAL
         return flow_execution.get_next_child(self)
 

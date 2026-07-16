@@ -415,9 +415,7 @@ def _branch_for_column(
     the plain default within `column` when no branch matches — preserves
     pre-#1760 single-branch-per-column content unchanged.
     """
-    resolutions = getattr(stake, "prefetched_resolutions", None)  # noqa: GETATTR_LITERAL
-    if resolutions is None:
-        resolutions = list(stake.resolutions.all())
+    resolutions = stake.prefetched_resolutions
     if prefer_lifecycle_state:
         matched = next(
             (r for r in resolutions if r.machine_match_lifecycle_state == prefer_lifecycle_state),
@@ -939,11 +937,9 @@ def _apply_stake_rewards(
 
 
 def _reward_lines_for(resolution: StakeResolution) -> list[StakeRewardLine]:
-    """The branch's reward lines, from the nested prefetch when present."""
-    lines = getattr(resolution, "prefetched_reward_lines", None)  # noqa: GETATTR_LITERAL
-    if lines is None:
-        lines = list(resolution.reward_lines.all())
-    return lines
+    """The branch's reward lines — prefetched_reward_lines is the shared
+    Prefetch/query interface (a cached_property, never None; #2386)."""
+    return resolution.prefetched_reward_lines
 
 
 def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Stake) -> None:

@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.emit import emit_event
@@ -35,7 +35,7 @@ SELF_FILTER = {"path": "target", "op": "==", "value": "self"}
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:
-    return ObjectDB.objects.create(
+    return ObjectDBFactory(
         db_key=key,
         db_typeclass_path="typeclasses.rooms.Room",
     )

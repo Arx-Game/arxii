@@ -1,10 +1,10 @@
 """Tests for apply_pool_deterministically() consequence resolution."""
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from actions.models import ConsequencePoolEntry
+from evennia_extensions.factories import ObjectDBFactory
 from world.checks.consequence_resolution import apply_pool_deterministically
 from world.checks.factories import ConsequenceFactory
 from world.checks.types import ResolutionContext
@@ -16,7 +16,7 @@ class ApplyPoolDeterministicallyTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="DeterministicChar")
+        cls.character = ObjectDBFactory(db_key="DeterministicChar")
 
     def _make_context(self) -> ResolutionContext:
         return ResolutionContext(character=self.character)

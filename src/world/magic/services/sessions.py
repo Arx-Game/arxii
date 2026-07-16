@@ -109,6 +109,7 @@ def draft_session(  # noqa: PLR0913
             )
         if ritual.draft_validator_path:
             module_path, _, attr = ritual.draft_validator_path.rpartition(".")
+            # Suppression justified: dynamic importlib resolution from DB config; no default, loud.
             validator = getattr(importlib.import_module(module_path), attr)  # noqa: GETATTR_LITERAL
             validator(session=session)
         return session
@@ -216,7 +217,7 @@ def fire_session(*, session: RitualSession) -> object:
         # Resolve the dispatched service via importlib:
         module_path, _, fn_name = locked.ritual.service_function_path.rpartition(".")
         module = importlib.import_module(module_path)
-        fn = getattr(module, fn_name)  # noqa: GETATTR_LITERAL
+        fn = getattr(module, fn_name)  # noqa: GETATTR_LITERAL — dynamic importlib resolution; loud
         # Call the dispatched service. If it raises, transaction rolls back
         # and the session stays alive for the initiator to retry or cancel.
         result = fn(session=locked)

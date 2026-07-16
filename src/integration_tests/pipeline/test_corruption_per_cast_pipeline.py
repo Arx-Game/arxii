@@ -42,6 +42,8 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
+
 
 class TestCorruptionPerCastPipeline(TestCase):
     """Per-cast corruption hook pipeline — Audere, multi-resonance, stacked multipliers.
@@ -388,7 +390,6 @@ class TestCorruptionPerCastPipeline(TestCase):
         Uses a single Abyssal resonance with intensity=5, level=1.
         Expected: 1 CORRUPTION_ACCRUING + 1 CORRUPTION_ACCRUED emitted.
         """
-        from evennia.objects.models import ObjectDB
 
         from flows.constants import EventName
         from world.character_sheets.factories import CharacterSheetFactory
@@ -405,7 +406,7 @@ class TestCorruptionPerCastPipeline(TestCase):
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
 
         # Give the character a location so emit_event fires (skipped when location is None).
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="CorruptionPipelineTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

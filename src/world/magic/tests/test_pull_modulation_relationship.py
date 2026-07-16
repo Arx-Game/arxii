@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.factories import ThreadFactory, ThreadPullEffectFactory
@@ -310,8 +311,6 @@ class RelationshipBondModulationNoResolutionPrivacyGateTests(TestCase):
     future reader doesn't mistake the absence of a gate here for an oversight."""
 
     def test_indirect_trigger_applies_even_when_owner_cannot_perceive_x(self) -> None:
-        from evennia.objects.models import ObjectDB
-
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(
@@ -342,10 +341,8 @@ class RelationshipBondModulationNoResolutionPrivacyGateTests(TestCase):
         # Put owner's character and X's character in different, unconnected rooms.
         # If resolution were gated on can_perceive, this would leave scaled_value=4;
         # since it isn't, the bonus applies exactly as in the perceivable case.
-        owner_room = ObjectDB.objects.create(
-            db_key="OwnerRoom", db_typeclass_path="typeclasses.rooms.Room"
-        )
-        x_room = ObjectDB.objects.create(db_key="XRoom", db_typeclass_path="typeclasses.rooms.Room")
+        owner_room = ObjectDBFactory(db_key="OwnerRoom", db_typeclass_path="typeclasses.rooms.Room")
+        x_room = ObjectDBFactory(db_key="XRoom", db_typeclass_path="typeclasses.rooms.Room")
         owner.character.location = owner_room
         x_sheet.character.location = x_room
 

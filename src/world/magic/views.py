@@ -2280,7 +2280,7 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
             result_kind = "capstone"
         else:
             result_kind = "unknown"
-        result_id = getattr(result, "pk", None)  # noqa: GETATTR_LITERAL
+        result_id = result.pk if result is not None else None
         return Response(
             {"result_kind": result_kind, "result_id": result_id},
             status=status.HTTP_200_OK,

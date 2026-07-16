@@ -12,25 +12,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from flows.object_states.base_state import unwrap_objectdb
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
-
-
-def _unwrap_objectdb(obj: ObjectDB) -> ObjectDB:
-    """Unwrap a BaseState wrapper to its underlying ObjectDB.
-
-    The flow execution layer may pass a ``BaseState`` (e.g., ``CharacterState``)
-    rather than a raw ``ObjectDB`` when the parameter is resolved via
-    ``_resolve_service_param``.  ``BaseState`` exposes the raw object on its
-    ``.obj`` attribute; raw ``ObjectDB`` instances have no such attribute.
-
-    Args:
-        obj: A raw ``ObjectDB`` or a ``BaseState`` wrapping one.
-
-    Returns:
-        The underlying ``ObjectDB``.
-    """
-    return getattr(obj, "obj", obj)  # noqa: GETATTR_LITERAL
 
 
 def flow_apply_condition(
@@ -51,7 +36,7 @@ def flow_apply_condition(
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
 
-    raw_target = _unwrap_objectdb(target)
+    raw_target = unwrap_objectdb(target)
     condition = ConditionTemplate.get_by_name(condition_name)
     apply_condition(target=raw_target, condition=condition)
 
@@ -76,7 +61,7 @@ def flow_perform_check(
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
 
-    raw_character = _unwrap_objectdb(character)
+    raw_character = unwrap_objectdb(character)
     check_type = CheckType.objects.get(name=check_type_name)
     result = perform_check(
         character=raw_character,

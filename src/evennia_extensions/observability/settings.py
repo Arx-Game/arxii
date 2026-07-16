@@ -31,6 +31,8 @@ def observability_config() -> ObservabilityConfig:
             or safe defaults (disabled, port 9109).
     """
     return ObservabilityConfig(
+        # Suppression justified: Django optional-setting read.
         enabled=bool(getattr(settings, "OBSERVABILITY_ENABLED", False)),  # noqa: GETATTR_LITERAL
+        # Suppression justified: Django optional-setting read.
         port=int(getattr(settings, "OBSERVABILITY_PORT", 9109)),  # noqa: GETATTR_LITERAL
     )

@@ -3,14 +3,13 @@
 from decimal import Decimal
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
 from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.factories import ActionTemplateFactory
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
@@ -760,7 +759,7 @@ class DeclareAndResolveE2ETest(TestCase):
         CharacterEngagementFactory(character=self.player_character)
 
         # Room location for the caster character (required by use_technique)
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="E2ETestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

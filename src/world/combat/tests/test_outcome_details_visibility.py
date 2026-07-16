@@ -68,13 +68,12 @@ class CanViewEncounterEffectsHelperTest(TestCase):
         self.assertFalse(can_view_encounter_effects(self.outsider, self.encounter))
 
     def test_unauthenticated_cannot_view(self) -> None:
-        """An anonymous-user-like object with no is_authenticated attribute returns False."""
+        """AnonymousUser (is_authenticated False) returns False."""
+        from django.contrib.auth.models import AnonymousUser
+
         from world.combat.permissions import can_view_encounter_effects
 
-        class _Anon:
-            pass
-
-        self.assertFalse(can_view_encounter_effects(_Anon(), self.encounter))
+        self.assertFalse(can_view_encounter_effects(AnonymousUser(), self.encounter))
 
 
 class OutcomeEndpointNonViewerDegradationTest(APITestCase):

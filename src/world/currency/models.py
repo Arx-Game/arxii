@@ -16,6 +16,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.descriptors import ReverseOneToOneOrNone
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.currency.constants import (
     GRAFT_DEFAULT_PCT,
@@ -232,6 +233,9 @@ class OrgIncomeStream(SharedMemoryModel):
     collected aggregate; the gross/net pair is recorded for declared-vs-
     actual obligations at collection time.
     """
+
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    domain_holding_or_none = ReverseOneToOneOrNone("domain_holding")
 
     organization = models.ForeignKey(
         ORGANIZATION_MODEL,

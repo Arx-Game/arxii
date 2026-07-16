@@ -323,7 +323,7 @@ class AllSocialCommandsRegisteredTests(TestCase):
     def test_ritual_command_has_no_perform_alias(self) -> None:
         from commands.ritual import CmdRitual
 
-        self.assertNotIn("perform", getattr(CmdRitual, "aliases", []))  # noqa: GETATTR_LITERAL
+        self.assertNotIn("perform", CmdRitual.aliases)
 
 
 class PullParsingOnConsentCommandsTests(TestCase):

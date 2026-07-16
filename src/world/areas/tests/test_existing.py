@@ -3,9 +3,8 @@ from unittest.mock import MagicMock
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile
 from flows.service_functions.serializers.room_state import RoomStatePayloadSerializer
 from world.areas.constants import AreaLevel
@@ -262,7 +261,7 @@ class RoomProfileTests(TestCase):
     def setUpTestData(cls):
         cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY)
         cls.building = AreaFactory(name="Tavern", level=AreaLevel.BUILDING, parent=cls.city)
-        cls.room_obj = ObjectDB.objects.create(
+        cls.room_obj = ObjectDBFactory(
             db_key="Main Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -329,19 +328,19 @@ class SubtreeQueryTests(TestCase):
             name="Dockside Pub", level=AreaLevel.BUILDING, parent=cls.other_ward
         )
 
-        cls.room1 = ObjectDB.objects.create(
+        cls.room1 = ObjectDBFactory(
             db_key="Tavern Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        cls.room2 = ObjectDB.objects.create(
+        cls.room2 = ObjectDBFactory(
             db_key="Tavern Kitchen",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        cls.room3 = ObjectDB.objects.create(
+        cls.room3 = ObjectDBFactory(
             db_key="Dock Bar",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        cls.room_no_area = ObjectDB.objects.create(
+        cls.room_no_area = ObjectDBFactory(
             db_key="Wilderness",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -445,7 +444,7 @@ class RoomStateAncestryTests(TestCase):
         )
         cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.kingdom)
         cls.building = AreaFactory(name="The Stag", level=AreaLevel.BUILDING, parent=cls.city)
-        cls.room_obj = ObjectDB.objects.create(
+        cls.room_obj = ObjectDBFactory(
             db_key="Main Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -474,7 +473,7 @@ class RoomStateAncestryTests(TestCase):
 class GetRoomProfileTests(TestCase):
     def test_get_room_profile_creates_if_missing(self):
         """get_room_profile creates a RoomProfile for non-Room ObjectDB instances."""
-        room_obj = ObjectDB.objects.create(
+        room_obj = ObjectDBFactory(
             db_key="New Room",
             db_typeclass_path="typeclasses.objects.Object",
         )
@@ -485,7 +484,7 @@ class GetRoomProfileTests(TestCase):
 
     def test_get_room_profile_returns_existing(self):
         building = AreaFactory(name="Building", level=AreaLevel.BUILDING)
-        room_obj = ObjectDB.objects.create(
+        room_obj = ObjectDBFactory(
             db_key="Existing Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -504,7 +503,7 @@ class PayloadIntegrationTests(TestCase):
         cls.realm = Realm.objects.create(name="Arx", theme="arx")
         cls.kingdom = AreaFactory(name="Compact", level=AreaLevel.KINGDOM, realm=cls.realm)
         cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.kingdom)
-        cls.room_obj = ObjectDB.objects.create(
+        cls.room_obj = ObjectDBFactory(
             db_key="Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -530,7 +529,7 @@ class PayloadIntegrationTests(TestCase):
 
 def _make_room_in_area(area):
     """Create a room ObjectDB and point its RoomProfile at the given area."""
-    room_obj = ObjectDB.objects.create(
+    room_obj = ObjectDBFactory(
         db_key="Test Room",
         db_typeclass_path="typeclasses.rooms.Room",
     )
@@ -612,7 +611,7 @@ class SocietiesForSceneTests(TestCase):
         assert result == [self.society_b]
 
     def test_no_area_returns_empty(self):
-        room_obj = ObjectDB.objects.create(
+        room_obj = ObjectDBFactory(
             db_key="Placeless Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -647,11 +646,11 @@ class SocietiesForSceneTests(TestCase):
 
 class PositionModelTests(TestCase):
     def setUp(self):
-        self.room = ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="Plaza",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.room2 = ObjectDB.objects.create(
+        self.room2 = ObjectDBFactory(
             db_key="Alley",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -668,10 +667,10 @@ class PositionModelTests(TestCase):
 
     def test_object_position_is_one_to_one(self):
         a = Position.objects.create(room=self.room, name="a_oto", kind=PositionKind.FEATURE)
-        obj = ObjectDB.objects.create(
+        obj = ObjectDBFactory(
             db_key="Pat",
             db_typeclass_path="typeclasses.characters.Character",
-            db_location=self.room,
+            location=self.room,
         )
         ObjectPosition.objects.create(objectdb=obj, position=a)
         b = Position.objects.create(room=self.room, name="b_oto", kind=PositionKind.FEATURE)

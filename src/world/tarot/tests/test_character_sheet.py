@@ -1,8 +1,8 @@
 """Test tarot fields on CharacterSheet."""
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.models import CharacterSheet
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -13,7 +13,7 @@ class CharacterSheetTarotTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDB.objects.create(db_key="TarotTestChar")
+        cls.character = ObjectDBFactory(db_key="TarotTestChar")
         cls.card = TarotCard.objects.create(
             name="The Fool",
             arcana_type=ArcanaType.MAJOR,

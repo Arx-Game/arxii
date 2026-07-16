@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
@@ -73,7 +74,7 @@ _room_counter = 0
 def _create_room() -> ObjectDB:
     global _room_counter  # noqa: PLW0603
     _room_counter += 1
-    return ObjectDB.objects.create(
+    return ObjectDBFactory(
         db_key=f"TetherIntegRoom_{_room_counter}",
         db_typeclass_path="typeclasses.rooms.Room",
     )

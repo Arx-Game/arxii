@@ -22,6 +22,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC = REPO_ROOT / "src"
 BASELINE_FILE = REPO_ROOT / "tools" / "noqa_ratchet_baseline.txt"
 
+# Non-noqa ratcheted patterns: baseline tokens prefixed "pattern:" count regex
+# matches across src/**/*.py instead of noqa suppressions. Same rule: the
+# count may only go down.
+PATTERNS: dict[str, str] = {
+    # Bare ObjectDB rows lack the ObjectParent mixin (no trigger_handler /
+    # character_sheet / positions_cached) and cannot exist in production —
+    # tests must use evennia_extensions.factories.ObjectDBFactory (which goes
+    # through create_object). The grandfathered remainder is the handful of
+    # deliberate production services that build rooms/exits as bare rows.
+    "BARE_OBJECTDB_CREATE": r"ObjectDB\.objects\.create\(",
+}
+
 
 def count_token(token: str) -> int:
     """Count occurrences of ``# noqa: <token>`` under src/ (comments only)."""
@@ -36,6 +48,19 @@ def count_token(token: str) -> int:
     return total
 
 
+def count_pattern(regex: str) -> int:
+    """Count regex matches across src/**/*.py."""
+    pattern = re.compile(regex)
+    total = 0
+    for path in SRC.rglob("*.py"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        total += len(pattern.findall(text))
+    return total
+
+
 def main() -> int:
     failures: list[str] = []
     for raw in BASELINE_FILE.read_text(encoding="utf-8").splitlines():
@@ -44,7 +69,11 @@ def main() -> int:
             continue
         token, _, allowed_str = line.partition(" ")
         allowed = int(allowed_str)
-        actual = count_token(token)
+        if token.startswith("pattern:"):
+            name = token.removeprefix("pattern:")
+            actual = count_pattern(PATTERNS[name])
+        else:
+            actual = count_token(token)
         if actual > allowed:
             failures.append(
                 f"{token}: {actual} suppressions in src/ exceeds the baseline of {allowed}.\n"

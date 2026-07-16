@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 import pytest
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
 from world.distinctions.models import CharacterDistinction, DistinctionEffect
@@ -40,9 +41,7 @@ class TraitModelTests(TestCase):
             },
         )
 
-        from evennia.objects.models import ObjectDB
-
-        self.character = ObjectDB.objects.create(
+        self.character = ObjectDBFactory(
             db_key="testchar",
             db_typeclass_path="typeclasses.characters.Character",
         )
@@ -205,9 +204,8 @@ class TraitHandlerTests(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        from evennia.objects.models import ObjectDB
 
-        self.character = ObjectDB.objects.create(
+        self.character = ObjectDBFactory(
             db_key="testchar",
             db_typeclass_path="typeclasses.characters.Character",
         )
@@ -364,9 +362,8 @@ class StatHandlerTests(TestCase):
 
     def setUp(self):
         """Set up test data for stats."""
-        from evennia.objects.models import ObjectDB
 
-        self.character = ObjectDB.objects.create(
+        self.character = ObjectDBFactory(
             db_key="testchar",
             db_typeclass_path="typeclasses.characters.Character",
         )
@@ -645,9 +642,8 @@ class TraitHandlerStatModifierTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data including character with sheet and strength trait."""
-        from evennia.objects.models import ObjectDB
 
-        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.character = ObjectDBFactory(db_key="TestChar")
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         # Create the strength trait as a stat
@@ -799,9 +795,8 @@ class TraitHandlerStatModifierTests(TestCase):
 
     def test_trait_value_no_sheet_returns_base(self):
         """Characters without sheet get unmodified trait values."""
-        from evennia.objects.models import ObjectDB
 
-        character_no_sheet = ObjectDB.objects.create(db_key="NoSheetChar")
+        character_no_sheet = ObjectDBFactory(db_key="NoSheetChar")
         CharacterTraitValueFactory(
             character=character_no_sheet,
             trait=self.strength_trait,
@@ -832,9 +827,8 @@ class GiantsBloodModifierCreationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        from evennia.objects.models import ObjectDB
 
-        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.character = ObjectDBFactory(db_key="TestChar")
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         # Create the Giant's Blood distinction with its effects

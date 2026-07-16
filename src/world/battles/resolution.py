@@ -797,7 +797,7 @@ def _resolve_reposition_success(
     from world.conditions.models import CapabilityType  # noqa: PLC0415
 
     place = declaration.target_place
-    vehicle = getattr(place, "vehicle", None)  # noqa: GETATTR_LITERAL
+    vehicle = place.vehicle_or_none
     if vehicle is None:
         return
     dx = declaration.reposition_dx or 0

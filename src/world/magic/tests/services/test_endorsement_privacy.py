@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.test import TestCase
 from evennia.utils.idmapper import models as idmapper_models
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.exceptions import EndorsementValidationError
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
@@ -39,11 +39,8 @@ class WhisperEndorsementTests(TestCase):
 
     def setUp(self):
         idmapper_models.flush_cache()
-        from evennia.objects.models import ObjectDB
 
-        self.room = ObjectDB.objects.create(
-            db_key="TestRoom", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        self.room = ObjectDBFactory(db_key="TestRoom", db_typeclass_path="typeclasses.rooms.Room")
         self.scene = SceneFactory(location=self.room, is_active=True)
 
         self.endorser_char, self.endorser_sheet, self.endorser_account = _char_with_account()
@@ -86,11 +83,8 @@ class VeryPrivateEndorsementTests(TestCase):
 
     def setUp(self):
         idmapper_models.flush_cache()
-        from evennia.objects.models import ObjectDB
 
-        self.room = ObjectDB.objects.create(
-            db_key="TestRoom2", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        self.room = ObjectDBFactory(db_key="TestRoom2", db_typeclass_path="typeclasses.rooms.Room")
         self.scene = SceneFactory(location=self.room, is_active=True)
 
         self.endorser_char, self.endorser_sheet, self.endorser_account = _char_with_account()
@@ -129,11 +123,8 @@ class GetEndorseablePosesTests(TestCase):
 
     def setUp(self):
         idmapper_models.flush_cache()
-        from evennia.objects.models import ObjectDB
 
-        self.room = ObjectDB.objects.create(
-            db_key="TestRoom3", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        self.room = ObjectDBFactory(db_key="TestRoom3", db_typeclass_path="typeclasses.rooms.Room")
         self.scene = SceneFactory(location=self.room, is_active=True)
 
         self.endorser_char, self.endorser_sheet, self.endorser_account = _char_with_account()

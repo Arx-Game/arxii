@@ -1,11 +1,10 @@
 """Tests for RelationshipBumpAction (#1699): backfill anchoring + both doors' kwargs."""
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
 from actions.definitions.relationships import RelationshipBumpAction
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import BumpValence, TrackSign, TrackSystemKey
 from world.relationships.factories import RelationshipTrackFactory
@@ -40,9 +39,7 @@ class RelationshipBumpActionTests(TestCase):
         RelationshipTrackFactory(
             name="Friction", sign=TrackSign.NEGATIVE, system_key=TrackSystemKey.FRICTION
         )
-        self.room = ObjectDB.objects.create(
-            db_key="TestRoom", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        self.room = ObjectDBFactory(db_key="TestRoom", db_typeclass_path="typeclasses.rooms.Room")
         self.scene = SceneFactory(location=self.room, is_active=True)
         self.actor, self.actor_sheet, self.actor_account = _char_with_account(self.room)
         self.target, self.target_sheet, self.target_account = _char_with_account(self.room)

@@ -1,8 +1,8 @@
 """Tests for cast-time position FK fields on ConditionInstance (#2019)."""
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.areas.positioning.factories import PositionFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
@@ -14,7 +14,7 @@ class ConditionInstancePositionFieldsTest(TestCase):
     """
 
     def setUp(self) -> None:
-        self.target = ObjectDB.objects.create(db_key="test_char")
+        self.target = ObjectDBFactory(db_key="test_char")
         self.template = ConditionTemplateFactory()
         self.pos = PositionFactory()
 

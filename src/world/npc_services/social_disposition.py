@@ -67,10 +67,16 @@ def apply_social_disposition_delta(actor, target_persona_id, result) -> str | No
     return f"{target_name}'s regard for you warms {disposition_shift_band(delta)}."
 
 
-def _success_level(result) -> int:
-    main = getattr(result, "main_result", None)  # noqa: GETATTR_LITERAL
-    if main is not None and getattr(main, "check_result", None) is not None:  # noqa: GETATTR_LITERAL
-        return main.check_result.success_level or 0
+def _success_level(result: object) -> int:
+    """Success level from a resolution result, 0 when unrolled.
+
+    Only ``PendingActionResolution`` carries ``main_result`` (a ``StepResult``,
+    whose ``check_result`` is non-optional) — type dispatch, not probing (#2386).
+    """
+    from actions.types import PendingActionResolution  # noqa: PLC0415
+
+    if isinstance(result, PendingActionResolution) and result.main_result is not None:
+        return result.main_result.check_result.success_level or 0
     return 0
 
 

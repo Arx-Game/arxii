@@ -15,10 +15,10 @@
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 from evennia.utils.test_resources import EvenniaTestCase
 
 from actions.factories import ActionTemplateFactory
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.constants import ActionCategory, OpponentTier
@@ -280,7 +280,7 @@ class EntranceDeclarationSuggestsOnResolutionTests(TestCase):
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="EntranceSuggestionRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

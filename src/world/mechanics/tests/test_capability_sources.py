@@ -3,8 +3,8 @@
 from decimal import Decimal
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import (
@@ -84,7 +84,7 @@ class TraitSourceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="TraitTestChar")
+        cls.character = ObjectDBFactory(db_key="TraitTestChar")
         cls.capability = CapabilityTypeFactory(name="physical_force")
         cls.trait = Trait.objects.create(
             name="test_strength_src",
@@ -117,7 +117,7 @@ class TraitSourceTests(TestCase):
 
     def test_zero_trait_value_excluded(self) -> None:
         """Trait with value 0 produces no source."""
-        char2 = ObjectDB.objects.create(db_key="NoTraitChar")
+        char2 = ObjectDBFactory(db_key="NoTraitChar")
         CharacterTraitValue.objects.create(
             character=char2,
             trait=self.trait,

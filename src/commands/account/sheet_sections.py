@@ -437,7 +437,7 @@ def _render_status_section(command: Command) -> list[str]:
     )
     lines.append(f"  Fatigue: {zones}")
 
-    anima = getattr(character, "anima", None)  # noqa: GETATTR_LITERAL
+    anima = character.anima_or_none
     if anima is not None:
         lines.append(f"  Anima: {anima_band_for(anima.current, anima.maximum)}")
 

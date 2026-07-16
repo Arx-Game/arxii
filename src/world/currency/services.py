@@ -310,7 +310,7 @@ def accrue_income_stream(stream: OrgIncomeStream) -> int:
     # A domain holding's yield rides its domain's prosperity (#2238): a thriving
     # domain amasses more per cycle, a collapsed one (prosperity 0) nothing.
     # ``domain_holding`` is the reverse OneToOne — absent for non-domain streams.
-    holding = getattr(stream, "domain_holding", None)  # noqa: GETATTR_LITERAL
+    holding = stream.domain_holding_or_none
     if holding is not None:
         gross = int(gross * holding.domain.income_multiplier)
     stream.uncollected_pool = stream.uncollected_pool + gross

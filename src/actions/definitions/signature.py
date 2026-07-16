@@ -43,7 +43,6 @@ _SIGNATURE_SET_EXCEPTIONS = (
     TechniqueNotOwned,
 )
 _MSG_NO_ACTIVE_CHARACTER = "No active character."
-_MSG_OPERATION_FAILED = "Operation failed."
 
 
 @dataclass
@@ -93,7 +92,7 @@ class SignatureSetAction(SignatureActionBase):
         try:
             set_signature_bonus(thread, bonus)
         except _SIGNATURE_SET_EXCEPTIONS as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message=f"Signature bonus '{bonus.name}' set on {thread.name}.",
@@ -122,7 +121,7 @@ class SignatureClearAction(SignatureActionBase):
         try:
             clear_signature_bonus(thread)
         except _SIGNATURE_SET_EXCEPTIONS as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message=f"Signature bonus cleared from {thread.name}.",

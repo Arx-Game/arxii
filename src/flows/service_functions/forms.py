@@ -12,25 +12,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from flows.object_states.base_state import unwrap_objectdb
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
-
-
-def _unwrap_objectdb(obj: ObjectDB) -> ObjectDB:
-    """Unwrap a BaseState wrapper to its underlying ObjectDB.
-
-    The flow execution layer may pass a ``BaseState`` (e.g., ``CharacterState``)
-    rather than a raw ``ObjectDB`` when the parameter is resolved via
-    ``_resolve_service_param``.  ``BaseState`` exposes the raw object on its
-    ``.obj`` attribute; raw ``ObjectDB`` instances have no such attribute.
-
-    Args:
-        obj: A raw ``ObjectDB`` or a ``BaseState`` wrapping one.
-
-    Returns:
-        The underlying ``ObjectDB``.
-    """
-    return getattr(obj, "obj", obj)  # noqa: GETATTR_LITERAL
 
 
 def flow_trigger_transformation(
@@ -62,7 +47,7 @@ def flow_trigger_transformation(
     from world.forms.models import AlternateSelf, CharacterForm  # noqa: PLC0415
     from world.forms.services.transformation import trigger_transformation  # noqa: PLC0415
 
-    raw_character = _unwrap_objectdb(character)
+    raw_character = unwrap_objectdb(character)
     sheet = raw_character.sheet_data
     form = CharacterForm.objects.get(name=form_name)
     alt = AlternateSelf.objects.get(character=sheet, form=form)

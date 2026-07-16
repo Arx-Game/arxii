@@ -26,6 +26,7 @@ from actions.factories import (
     ConsequencePoolFactory,
 )
 from actions.services import get_effective_consequences, start_action_resolution
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import (
@@ -120,7 +121,7 @@ class PipelineTestMixin:
         # === 1. Character layer ===
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
-        cls.location = ObjectDB.objects.create(db_key="TestRoom")
+        cls.location = ObjectDBFactory(db_key="TestRoom")
 
         # === 2. Magic identity ===
         cls.flame_resonance = ResonanceFactory(name="Flame")

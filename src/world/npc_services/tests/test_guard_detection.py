@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
@@ -64,10 +64,9 @@ class CheckGuardDetectionTests(TestCase):
 
     def test_no_profile_short_circuits(self):
         """Room with no RoomProfile → no detection."""
-        from evennia.objects.models import ObjectDB
 
         char = CharacterFactory(db_key="wanderer")
-        bare_room = ObjectDB.objects.create(db_key="bare-room")
+        bare_room = ObjectDBFactory(db_key="bare-room")
         check_guard_detection(char, bare_room)
 
     def test_sheetless_character_skipped(self):

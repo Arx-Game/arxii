@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from evennia_extensions.models import ObjectDisplayData, RoomProfile, RoomSizeTier
 from evennia_extensions.seeds import ensure_room_size_tiers
 from world.areas.constants import AreaLevel
@@ -19,9 +20,7 @@ from world.scenes.factories import PersonaFactory
 
 
 def _room_in(area, *, size=None, grid=(None, None, 0), name="A Room"):
-    from evennia.objects.models import ObjectDB
-
-    room = ObjectDB.objects.create(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
+    room = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
     profile, _ = RoomProfile.objects.update_or_create(
         objectdb=room,
         defaults={

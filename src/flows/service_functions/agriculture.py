@@ -13,25 +13,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from flows.object_states.base_state import unwrap_objectdb
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
-
-
-def _unwrap_objectdb(obj: ObjectDB) -> ObjectDB:
-    """Unwrap a BaseState wrapper to its underlying ObjectDB.
-
-    The flow execution layer may pass a ``BaseState`` (e.g., ``CharacterState``)
-    rather than a raw ``ObjectDB`` when the parameter is resolved via
-    ``_resolve_service_param``.  ``BaseState`` exposes the raw object on its
-    ``.obj`` attribute; raw ``ObjectDB`` instances have no such attribute.
-
-    Args:
-        obj: A raw ``ObjectDB`` or a ``BaseState`` wrapping one.
-
-    Returns:
-        The underlying ``ObjectDB``.
-    """
-    return getattr(obj, "obj", obj)  # noqa: GETATTR_LITERAL
 
 
 def flow_food_collection_difficulty(
@@ -59,9 +44,9 @@ def flow_food_collection_difficulty(
         _pool_difficulty_bonus,
     )
 
-    raw_character = _unwrap_objectdb(character)
+    raw_character = unwrap_objectdb(character)
     # field_instance may arrive as a BaseState, a RoomFeatureInstance, or a pk.
-    raw_field = getattr(field_instance, "obj", field_instance)  # noqa: GETATTR_LITERAL
+    raw_field = unwrap_objectdb(field_instance)
 
     bonus = _pool_difficulty_bonus(raw_field, raw_character)
     return {

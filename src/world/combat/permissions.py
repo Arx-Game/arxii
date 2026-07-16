@@ -16,10 +16,9 @@ def can_view_encounter_effects(user: object, encounter: CombatEncounter) -> bool
     spectating the scene.
     """
 
-    # Suppression justified: user is deliberately duck-typed (object) — tests
-    # exercise this with bare non-user objects, and absence of the attribute
-    # is the "not authenticated" signal itself.
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    # Every Django user-like (User AND AnonymousUser) defines is_authenticated;
+    # a non-user object failing loudly here is correct (#2386 tranche 3).
+    if not user.is_authenticated:
         return False
     if user.is_staff:
         return True

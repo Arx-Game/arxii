@@ -86,6 +86,7 @@ def _resolve_affinity_coefficient(resonance: Resonance, config: CorruptionConfig
 def _resolve_tier_coefficient(tier: int, config: CorruptionConfig) -> int:
     """Return the integer-tenths tier coefficient for a technique tier (1–5)."""
     attr = _TIER_COEF_ATTRS.get(tier, "tier_5_coefficient")
+    # Suppression justified: dynamic tier-coefficient field name; no default, loud.
     return getattr(config, attr)  # noqa: GETATTR_LITERAL
 
 

@@ -183,6 +183,8 @@ class CombatEncounter(AbstractRound):
         flee. Cache-aware: uses prefetched ``opponents_cached`` when present
         so the detail serializer adds no query.
         """
+        # Suppression justified: live combat state on identity-mapped encounter; (#2401)
+        # context-over-cache.
         cached = getattr(self, "opponents_cached", None)  # noqa: GETATTR_LITERAL
         if cached is not None:
             return any(

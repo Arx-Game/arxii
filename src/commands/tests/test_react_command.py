@@ -15,7 +15,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
 from commands.react import CmdReact
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -48,9 +48,7 @@ def _wire_account(sheet):
 class CmdReactTests(TestCase):
     def setUp(self) -> None:
         idmapper_models.flush_cache()
-        self.room = ObjectDB.objects.create(
-            db_key="ReactRoom", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        self.room = ObjectDBFactory(db_key="ReactRoom", db_typeclass_path="typeclasses.rooms.Room")
         self.scene = SceneFactory(location=self.room, is_active=True)
         # Actor
         self.actor = _make_char_in_room(self.room)

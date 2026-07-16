@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from actions.registry import get_action
+from evennia_extensions.factories import ObjectDBFactory
 from world.assets.constants import AssetAcquisitionSource, AssetRoleContext
 from world.assets.factories import NPCAssetFactory
 from world.assets.models import NPCAsset
@@ -22,7 +23,6 @@ class IntroduceAssetActionTests(TestCase):
 
     def test_successful_introduction_via_action_run(self) -> None:
         """action.run() creates a co-owner NPCAsset for the ally."""
-        from evennia.objects.models import ObjectDB
 
         from world.character_sheets.factories import CharacterSheetFactory
 
@@ -40,7 +40,7 @@ class IntroduceAssetActionTests(TestCase):
         )
 
         # Place introducer and ally in the same room.
-        room = ObjectDB.objects.create(db_key="Intro Room")
+        room = ObjectDBFactory(db_key="Intro Room")
         introducer_char = introducer_sheet.character
         introducer_char.db_location = room
         introducer_char.save()

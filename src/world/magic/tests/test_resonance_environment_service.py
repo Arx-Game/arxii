@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
-from evennia_extensions.factories import RoomProfileFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
@@ -754,7 +754,7 @@ class RefreshResonanceAlignmentTest(ResonanceCacheIsolationMixin, TestCase):
         self.assertEqual(len(self._boon_instances_on(self.sheet.character)), 1)
 
         # Now move character to an ObjectDB room that has no RoomProfile
-        bare_room = ObjectDB.objects.create(
+        bare_room = ObjectDBFactory(
             db_key="BareRoom",
             db_typeclass_path="typeclasses.objects.Object",
         )
@@ -918,10 +918,9 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
         No ConditionInstance should be created. This is the "bare room" guard: the
         orchestrator must handle RoomProfile.DoesNotExist without propagating it.
         """
-        from evennia.objects.models import ObjectDB
 
         # Create a bare room ObjectDB with no RoomProfile attached
-        bare_room = ObjectDB.objects.create(
+        bare_room = ObjectDBFactory(
             db_key="BareRoomT8",
             db_typeclass_path="typeclasses.rooms.Room",
         )

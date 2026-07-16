@@ -6,8 +6,8 @@ passive_decay_blocked_in_engagement and passive_decay_max_severity.
 """
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
@@ -122,7 +122,7 @@ class DecayAllConditionsTickTests(TestCase):
         )
         stage = ConditionStageFactory(condition=template, severity_threshold=1)
 
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="AnchorRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

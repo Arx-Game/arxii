@@ -552,15 +552,27 @@ def _resolve_check_result(
     check_result: CheckResult | None,
     resolution_result: Any,
 ) -> CheckResult | None:
-    """Return the explicit check_result, else pull it from the resolution result."""
+    """Return the explicit check_result, else pull it from the resolution result.
+
+    Two resolve_fn contracts. The combat leg is STRUCTURAL by ratified spec
+    (2026-04-30-combat-magic-pipeline-integration-design, quoted in
+    ``CombatTechniqueResolution``'s docstring): the extractor accepts any
+    result shape exposing top-level ``check_result`` — so that leg is a
+    deliberate duck probe, not a silent-fail trap (pinned by
+    ``test_extractor_reads_top_level_check_result``). The non-combat leg is
+    our own ``PendingActionResolution`` and dispatches nominally.
+    """
+    from actions.types import PendingActionResolution  # noqa: PLC0415
+
     if check_result is not None:
         return check_result
+    # Suppression justified: structural spec contract (see docstring).
     result = getattr(resolution_result, "check_result", None)  # noqa: GETATTR_LITERAL
     if result is not None:
         return result
-    main = getattr(resolution_result, "main_result", None)  # noqa: GETATTR_LITERAL
-    if main is not None:
-        return getattr(main, "check_result", None)  # noqa: GETATTR_LITERAL
+    if isinstance(resolution_result, PendingActionResolution):
+        main = resolution_result.main_result
+        return main.check_result if main is not None else None
     return None
 
 

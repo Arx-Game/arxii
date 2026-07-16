@@ -5,7 +5,6 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
-from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import (
     CharacterFactory,
@@ -48,11 +47,12 @@ class WebAPITests(TestCase):
     @patch("web.api.views.general_views.SESSION_HANDLER")
     def test_status_api_returns_counts(self, mock_session_handler):
         mock_session_handler.account_count.return_value = 2
-        character = ObjectDB.objects.create(
+        character = ObjectDBFactory(
             db_key="Char",
             db_typeclass_path="typeclasses.characters.Character",
-            db_account=self.account,
         )
+        character.db_account = self.account
+        character.save()
         from world.character_sheets.models import CharacterSheet
 
         sheet, _ = CharacterSheet.objects.get_or_create(character=character)
@@ -62,7 +62,7 @@ class WebAPITests(TestCase):
         )
         entry.last_puppeted = timezone.now()
         entry.save()
-        ObjectDB.objects.create(
+        ObjectDBFactory(
             db_key="Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -134,7 +134,7 @@ class WebAPITests(TestCase):
         assert data["email"]
 
     def test_roster_detail_api_returns_data(self):
-        character = ObjectDB.objects.create(
+        character = ObjectDBFactory(
             db_key="Hero",
             db_typeclass_path="typeclasses.characters.Character",
         )
@@ -161,7 +161,7 @@ class WebAPITests(TestCase):
         self.client.logout()
 
     def test_roster_application_api_accepts_message(self):
-        character = ObjectDB.objects.create(
+        character = ObjectDBFactory(
             db_key="Hero",
             db_typeclass_path="typeclasses.characters.Character",
         )
@@ -199,8 +199,9 @@ class WebAPITests(TestCase):
             db_key="Alice",
             db_typeclass_path="typeclasses.characters.Character",
             location=room,
-            db_account=self.account,
         )
+        caller.db_account = self.account
+        caller.save()
         target = ObjectDBFactory(
             db_key="Bob",
             db_typeclass_path="typeclasses.characters.Character",

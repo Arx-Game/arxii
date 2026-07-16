@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.captivity.constants import CaptivityStatus
@@ -225,7 +224,7 @@ class CaptureHandlerTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.site = ObjectDB.objects.create(
+        cls.site = ObjectDBFactory(
             db_key="Ambush Site",
             db_typeclass_path="typeclasses.rooms.Room",
         )

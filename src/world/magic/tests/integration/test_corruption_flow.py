@@ -14,6 +14,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
@@ -52,7 +53,7 @@ _room_counter = 0
 def _create_room() -> ObjectDB:
     global _room_counter  # noqa: PLW0603
     _room_counter += 1
-    return ObjectDB.objects.create(
+    return ObjectDBFactory(
         db_key=f"CorruptionTestRoom_{_room_counter}",
         db_typeclass_path="typeclasses.rooms.Room",
     )
@@ -613,7 +614,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         _resonance, _gift, technique = _make_abyssal_gift_and_technique(
             intensity=2, control=10, anima_cost=2, level=1
         )
-        character = ObjectDB.objects.create(
+        character = ObjectDBFactory(
             db_key="NPCTestChar",
             db_typeclass_path="typeclasses.characters.Character",
         )

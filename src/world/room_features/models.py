@@ -15,6 +15,7 @@ from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.descriptors import ReverseOneToOneOrNone
 from core.mixins import DiscriminatorMixin
 from world.locations.constants import HolderType
 from world.room_features.constants import (
@@ -197,6 +198,12 @@ class RoomFeatureInstance(SharedMemoryModel):
     Dissolution is a soft-delete — the row and all story-significant data are
     preserved. Use ``.active()`` on the queryset to exclude dissolved instances.
     """
+
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    field_details_or_none = ReverseOneToOneOrNone("field_details")
+
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    sanctum_details_or_none = ReverseOneToOneOrNone("sanctum_details")
 
     room_profile = models.OneToOneField(
         ROOM_PROFILE_MODEL,

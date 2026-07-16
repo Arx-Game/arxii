@@ -261,6 +261,7 @@ class _RespondCommand(ArxCommand):
         if request is None:
             self.msg(_NO_PENDING_MSG)
             return
+        # Suppression justified: Evennia cmdhandler sets .switches at parse time.
         switches = getattr(self, "switches", None) or []  # noqa: GETATTR_LITERAL
         difficulty = next((sw for sw in switches if sw in _DIFFICULTY_SWITCHES), None)
         blacklist_actor = self.decision == ConsentDecision.DENY and bool(

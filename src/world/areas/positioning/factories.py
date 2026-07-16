@@ -28,7 +28,7 @@ class PositionFactory(factory.django.DjangoModelFactory):
     By default creates a fresh Room for each position. For tests that need two
     positions in the same room, pass ``room=some_room`` explicitly:
 
-        room = ObjectDB.objects.create(...)
+        room = ObjectDBFactory(...)
         a = PositionFactory(room=room, name="ground")
         b = PositionFactory(room=room, name="balcony")
     """

@@ -1,8 +1,8 @@
 """Tests for living-barrier ramparts (#2209)."""
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.areas.positioning.constants import RampartCrackState, RampartSignature
 from world.areas.positioning.factories import (
     PositionFactory,
@@ -25,7 +25,7 @@ class RaiseRampartTest(TestCase):
     """raise_rampart creates a Rampart row and (for SEAL_EDGES) seals adjacent edges."""
 
     def setUp(self) -> None:
-        self.room = ObjectDB.objects.create(db_key="test_room")
+        self.room = ObjectDBFactory(db_key="test_room")
         self.pos = PositionFactory(room=self.room, name="courtyard")
         self.neighbor = PositionFactory(room=self.room, name="gate")
         self.edge = connect_positions(self.pos, self.neighbor, is_passable=True)
@@ -133,7 +133,7 @@ class ExpireTeardownTest(TestCase):
     """expire_rampart_rounds / teardown_ramparts restore/remove ramparts in a room."""
 
     def setUp(self) -> None:
-        self.room = ObjectDB.objects.create(db_key="test_room")
+        self.room = ObjectDBFactory(db_key="test_room")
         self.pos = PositionFactory(room=self.room, name="courtyard")
 
     def test_expire_decrements_and_deletes_at_zero(self) -> None:

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from evennia.objects.models import ObjectDB
 from evennia.utils.test_resources import EvenniaTestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from flows.constants import EventName
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
@@ -38,7 +39,7 @@ from world.vitals.models import CharacterVitals
 
 
 def _create_room() -> ObjectDB:
-    return ObjectDB.objects.create(
+    return ObjectDBFactory(
         db_key="TestRoom",
         db_typeclass_path="typeclasses.rooms.Room",
     )

@@ -3,6 +3,7 @@
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.services import create_character_with_sheet
 from world.conditions.models import ConditionTemplate
 from world.conditions.services import apply_condition
@@ -24,19 +25,19 @@ class GetDreamSpaceTests(TestCase):
         ensure_dream_room()
 
     def test_returns_reflection_dream_room_when_exists(self):
-        waking = ObjectDB.objects.create(db_key="Waking Room")
-        dream = ObjectDB.objects.create(db_key="Dream Room")
+        waking = ObjectDBFactory(db_key="Waking Room")
+        dream = ObjectDBFactory(db_key="Dream Room")
         DreamReflection.objects.create(waking_room=waking, dream_room=dream)
         result = get_dream_space(room=waking)
         assert result == dream
 
     def test_falls_back_to_liminal_when_no_reflection(self):
-        room = ObjectDB.objects.create(db_key="No Reflection")
+        room = ObjectDBFactory(db_key="No Reflection")
         result = get_dream_space(room=room)
         assert result == get_dream_room()
 
     def test_falls_back_to_none_when_unseeded(self):
-        room = ObjectDB.objects.create(db_key="Unseeded Room")
+        room = ObjectDBFactory(db_key="Unseeded Room")
         # Delete the liminal room to simulate unseeded state
         from world.vitals.constants import DREAM_ROOM_TAG, DREAM_ROOM_TAG_CATEGORY
 

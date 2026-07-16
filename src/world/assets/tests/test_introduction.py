@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.assets.constants import (
     AssetAcquisitionSource,
     AssetRoleContext,
@@ -102,9 +103,8 @@ class IntroduceAssetTests(TestCase):
 
     def _place_in_same_room(self, *personas: Persona) -> None:
         """Place the characters for the given personas in the same room."""
-        from evennia.objects.models import ObjectDB
 
-        room = ObjectDB.objects.create(db_key="Test Room")
+        room = ObjectDBFactory(db_key="Test Room")
         for persona in personas:
             character = persona.character_sheet.character
             character.location = room

@@ -46,7 +46,7 @@ def field_production_tick() -> dict[str, int]:
     food_accrued = 0
 
     for instance in instances:
-        field_details = getattr(instance, "field_details", None)  # noqa: GETATTR_LITERAL
+        field_details = instance.field_details_or_none
         if field_details is None:
             continue
         try:

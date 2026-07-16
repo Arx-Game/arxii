@@ -17,6 +17,17 @@ if TYPE_CHECKING:
     from world.scenes.models import Scene
 
 
+def unwrap_objectdb(obj: "BaseState | ObjectDB") -> "ObjectDB":
+    """Unwrap a BaseState wrapper to its underlying ObjectDB.
+
+    The flow execution layer may pass a ``BaseState`` (e.g. ``CharacterState``)
+    rather than a raw ``ObjectDB`` when a parameter is resolved via
+    ``_resolve_service_param``. Explicit isinstance dispatch — a getattr
+    default here would silently swallow genuine attribute bugs (#2386).
+    """
+    return obj.obj if isinstance(obj, BaseState) else obj
+
+
 class BaseState:
     """Ephemeral wrapper around an Evennia object.
 

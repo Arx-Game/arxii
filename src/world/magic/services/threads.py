@@ -493,7 +493,7 @@ def _has_weaving_unlock(
             return handler.has_unlock_for_gift(target.gift)  # type: ignore[union-attr]
         case TargetKind.RELATIONSHIP_TRACK | TargetKind.RELATIONSHIP_CAPSTONE:
             # Both RelationshipTrackProgress and RelationshipCapstone expose .track
-            track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL
+            track = target.track  # type: ignore[union-attr]
             return handler.has_unlock_for_track(track)
         # Kind-level unlocks: any unlock of that target_kind suffices.
         case TargetKind.FACET | TargetKind.SANCTUM | TargetKind.ORGANIZATION:

@@ -120,7 +120,7 @@ def resolve_fury(*, character, tier, anchor, check_result) -> FuryResolution:
     cfg = _config()
     # Mirrors StrainConfig singleton read in world/fatigue/services.py.
     bonus = realized.intensity_bonus * (100 + cfg.bonus_scale_per_cap_point * cap) // 100
-    grade = getattr(check_result, "success_level", 0)  # noqa: GETATTR_LITERAL
+    grade = check_result.success_level if check_result is not None else 0
     berserk = 0 if grade >= realized.lucid_grade_floor else realized.berserk_severity
     return FuryResolution(realized, realized.control_penalty, bonus, berserk)
 
