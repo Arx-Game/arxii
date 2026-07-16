@@ -22,6 +22,9 @@ vi.mock('@/roster/queries', () => ({
 }));
 vi.mock('@/friends/queries', () => ({
   useAddFriendMutation: vi.fn(),
+  useRivalsQuery: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
+  useDeclareRivalMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  useWithdrawRivalMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
 }));
 vi.mock('@/relationships/queries', () => ({
   useMyRelationshipToTarget: vi.fn(),

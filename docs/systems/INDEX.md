@@ -1195,12 +1195,17 @@ so web and telnet converge on the same write path.
 - **ConsentMode (#1698):** `EVERYONE` / `ALL_BUT_BLACKLIST` / `FRIENDS_WHITELIST` (OOC friends via
   `scenes.Friendship`) / `RIVALS` (declared **mutual** rivals via `scenes.Rivalry`, double
   opt-in — #2170; `friend_services.is_rival` + `declare_rival`/`undeclare_rival`, telnet
-  `rival`/`unrival`/`rivals`) / `ALLOWLIST`. Settable at any tree node; `CONSENT_MODE_GUIDANCE`
+  `rival`/`unrival`/`rivals`, web `RivalryViewSet` `/api/scenes/rivals/` + the sheet/card
+  `RivalButton`) / `ALLOWLIST`. Settable at any tree node; `CONSENT_MODE_GUIDANCE`
   + `consent_mode_guidance()` (constants) give the per-mode pros/cons copy the settings page /
-  telnet `consent modes` / `GET /api/consent/categories/modes/` render (PLACEHOLDER, #2170)
+  telnet `consent modes` / `GET /api/consent/categories/modes/` render (PLACEHOLDER, #2170).
+  Onboarding: the "Terms of Engagement" tutorial side-step (tutor-offered, gated on T1;
+  `world/seeds/game_content/tutorial.py`) walks a new player to the consent tree
 - **Consent tree (#2170):** seed builds an **All Antagonism** root (`FRIENDS_WHITELIST`) with
-  `hostile` + `blackmail` parented under it (`world/seeds/consent.py`); `theft` stays its own
-  `ALLOWLIST` root (preserves the #1909 steal gate). `effective_consent_mode(pref, category)`
+  every detriment-capable category — `hostile`, `blackmail`, `manipulative`, `theft` —
+  parented under it (`world/seeds/consent.py`); theft's effective default becomes the root's
+  `FRIENDS_WHITELIST` (its own `ALLOWLIST` survives only as the unseeded `theft_category()`
+  fallback / orphaned-row case). `effective_consent_mode(pref, category)`
   is the shared walk-up (nearest rule wins, else root default) — ADR-0113
 - **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()` (thin delegator
   to `consent_blocks_targeting`, #1909), `decide_consent_block()` (takes `is_rival`),

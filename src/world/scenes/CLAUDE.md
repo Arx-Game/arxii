@@ -249,7 +249,7 @@ Key service functions for scene round lifecycle:
     `persona profile <name> …` (#1270).
 - **`SceneSummaryRevisionViewSet`**: Summary revision management
 
-### `friend_views.py` (#1727)
+### `friend_views.py` (#1727, #2170)
 - **`FriendshipViewSet`**: the web face of the OOC friends list (`friend_services.py`) —
   list/add/remove. `list` returns the player's friendships (made by any of their characters).
   `create` takes **`viewer`/`friend` as `RosterEntry` pks** (web clients speak character ids, not
@@ -257,6 +257,14 @@ Key service functions for scene round lifecycle:
   calls `add_friend` / `add_friend_all_characters`. Tenure-scoped + alt-private, mirroring the
   Block/Mute control API. Telnet parity is `CmdFriend`/`CmdUnfriend`/`CmdFriends`. React surface:
   `frontend/src/friends/` (`FriendsTab` self-only tab + `FriendButton` on other sheets).
+- **`RivalryViewSet`** (#2170): the web face of rival declarations (`/api/scenes/rivals/`) —
+  list/declare/withdraw, same shape as friendships (`viewer`/`rival` as `RosterEntry` pks,
+  resolved to tenures server-side, calling `declare_rival`). Double opt-in: the list queryset
+  annotates `is_mutual` (an `Exists` on the reciprocal row) and the create response stamps it,
+  so the client can render "mutual rivals" vs "awaiting their declaration"; a DELETE removes
+  only your own side. Telnet parity is `CmdRival`/`CmdUnrival`/`CmdRivals`. React surface:
+  `RivalButton` (`frontend/src/friends/components/`) on another character's sheet page + card
+  drawer, next to the `FriendButton`.
 
 ### `interaction_views.py`
 - **`InteractionViewSet`**: Interaction read + delete + mark_private

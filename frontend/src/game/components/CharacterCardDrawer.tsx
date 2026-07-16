@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { BackgroundSection, StatsSection, CharacterLink } from '@/components/character';
 import { FriendButton } from '@/friends/components/FriendButton';
+import { RivalButton } from '@/friends/components/RivalButton';
 import { useRosterEntryByNameQuery, useRosterEntryQuery } from '@/roster/queries';
 import { useMyRelationshipToTarget } from '@/relationships/queries';
 import { RelationshipWriteupDialog } from '@/relationships/components/RelationshipWriteupDialog';
@@ -126,6 +127,13 @@ export function CharacterCardDrawer({
             <div className="mt-4 flex flex-wrap items-center gap-3">
               {matchId != null && (
                 <FriendButton
+                  viewerEntryId={viewerEntryId}
+                  targetEntryId={matchId}
+                  targetName={persona.name}
+                />
+              )}
+              {matchId != null && (
+                <RivalButton
                   viewerEntryId={viewerEntryId}
                   targetEntryId={matchId}
                   targetName={persona.name}

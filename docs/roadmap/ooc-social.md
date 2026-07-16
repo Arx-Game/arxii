@@ -159,7 +159,9 @@ Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" se
   tutorial chain (`docs/roadmap/missions.md`'s "Tutorial arc / External-Act Beats" entry) walks
   a fresh character through the level-1 loops (room-trigger/examine grants, a crafted-power
   beat, a Notice Board pickup, a covenant vow, a Legend-Risk Floor finale) on both web and
-  telnet, over the ordinary mission engine — no dedicated tutorial UI or engine. Still open:
+  telnet, over the ordinary mission engine — no dedicated tutorial UI or engine. #2170 added
+  the "Terms of Engagement" side-step (tutor-offered, gated on T1): a consent-tree primer so
+  the antagonism Friends+whitelist default is a chosen starting point. Still open:
   the chain's prose is placeholder-quality in-world copy (content polish, explicitly deferred
   inside #1035's scope), no dedicated web-side "you're new here" surfacing beyond the standard
   `JournalPage`/`BeatCard`. The web registration→application funnel polish — ✅ **shipped

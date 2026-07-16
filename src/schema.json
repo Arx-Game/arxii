@@ -24772,6 +24772,80 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/rivals/:
+    get:
+      operationId: rivals_list
+      description: |-
+        The requesting player's rival declarations: list, declare, withdraw (#2170).
+
+        Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
+        RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
+        removes only your own side.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - rivals
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRivalryList'
+          description: ''
+    post:
+      operationId: rivals_create
+      description: |-
+        The requesting player's rival declarations: list, declare, withdraw (#2170).
+
+        Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
+        RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
+        removes only your own side.
+      tags:
+      - rivals
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RivalryCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RivalryCreate'
+          description: ''
+  /api/rivals/{id}/:
+    delete:
+      operationId: rivals_destroy
+      description: |-
+        The requesting player's rival declarations: list, declare, withdraw (#2170).
+
+        Double opt-in — a declaration here is one side's intent; ``is_mutual`` flips true (and the
+        RIVALS consent gate opens) only once the other side declares back. Withdrawing (DELETE)
+        removes only your own side.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - rivals
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/room-features/defenses/fund-ward/:
     post:
       operationId: room_features_defenses_fund_ward_create
@@ -49778,6 +49852,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ritual'
+    PaginatedRivalryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rivalry'
     PaginatedRoomAlarmDetailsList:
       type: object
       required:
@@ -57128,6 +57225,82 @@ components:
       - character_sheet_id
       - responded_at
       - state
+    Rivalry:
+      type: object
+      description: |-
+        One of your rival declarations — target name, which character declared, mutual or pending.
+
+        ``is_mutual`` reports the #2170 double-opt-in state: True only once the other side has
+        declared you back (the list queryset annotates it; the create path stamps it explicitly).
+        ``rivaler_entry`` / ``rival_entry`` expose the RosterEntry pks web clients speak.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        rivaler_tenure:
+          type: integer
+          readOnly: true
+          description: The declarer's tenure (this player's run of the character that
+            named a rival).
+        rival_tenure:
+          type: integer
+          readOnly: true
+          description: The named rival's tenure (a specific player's run of that character).
+        rivaler_entry:
+          type: integer
+          readOnly: true
+        rival_entry:
+          type: integer
+          readOnly: true
+        rival_name:
+          type: string
+          readOnly: true
+        is_mutual:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - is_mutual
+      - rival_entry
+      - rival_name
+      - rival_tenure
+      - rivaler_entry
+      - rivaler_tenure
+    RivalryCreate:
+      type: object
+      description: |-
+        Declare a rival by character (web-friendly): your declaring character + the target.
+
+        ``viewer`` / ``rival`` are ``RosterEntry`` pks; the view resolves each to its current tenure
+        (rivalries are tenure-based, mirroring ``FriendshipCreateSerializer``).
+      properties:
+        viewer:
+          type: integer
+        rival:
+          type: integer
+      required:
+      - rival
+      - viewer
+    RivalryCreateRequest:
+      type: object
+      description: |-
+        Declare a rival by character (web-friendly): your declaring character + the target.
+
+        ``viewer`` / ``rival`` are ``RosterEntry`` pks; the view resolves each to its current tenure
+        (rivalries are tenure-based, mirroring ``FriendshipCreateSerializer``).
+      properties:
+        viewer:
+          type: integer
+        rival:
+          type: integer
+      required:
+      - rival
+      - viewer
     RoleContextEnum:
       enum:
       - informant
