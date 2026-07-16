@@ -10,7 +10,7 @@ Character creation is a multi-stage process that guides players through creating
 2. **Heritage** - Special heritage (Sleeper/Misbegotten) or normal → Species → Gender/Pronouns → Age
 3. **Lineage** - Family selection (or "Unknown" for special heritage)
 4. **Distinctions** - Advantages and disadvantages
-5. **Path** - Class/path selection (tradition selection moves here in a follow-up task)
+5. **Path** - Class/path selection
 6. **Gift** - Tradition, Gift + Technique catalog picks, gift resonance, and Anima Check
    stat/skill (renders the `GiftStage` funnel component; #2426 Task 10)
 7. **Attributes & Skills** - Primary stat allocation (cap-aware with distinction/species

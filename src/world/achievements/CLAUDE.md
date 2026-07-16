@@ -145,13 +145,13 @@ Called whenever any mechanism changes what techniques/capabilities a character c
 - Sends one `NarrativeCategory.ABILITY` message listing what was gained/lost.
 - For each gained item with a non-null `discovery_achievement`, calls `grant_achievement` and then
   `announce_achievement` (gamewide first-ever body if it's a Discovery, personal otherwise).
-- **Never branches on source** — covenant, form shapeshift, and CG cantrip are all identical.
+- **Never branches on source** — covenant, form shapeshift, and CG gift/technique grant are all identical.
 - `source` is an `AccessChangeSource` TextChoices value (drives the lead-in text label).
 
 Current callers:
 - `world/forms/services.py` — assume / revert alternate self
 - `world/covenants/services.py` — `_announce_capability_diff` (engage / disengage covenant role)
-- `world/character_creation/services.py` — CG cantrip grant
+- `world/character_creation/services.py` — CG gift/technique grant (`AccessChangeSource.CHARACTER_CREATION`)
 
 ### `announce_achievement(earners, *, is_first, first_body, personal_body, category)`
 

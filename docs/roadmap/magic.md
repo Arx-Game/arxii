@@ -197,6 +197,31 @@ complete. Both a live-officiant ceremony (`ritual draft` → inductee `ritual jo
 and a site-convened session (`durance convene` → inductee `ritual join`, auto-fires) are
 supported. See `docs/roadmap/character-progression.md` and ADR-0065 for the full build record.
 
+## CG magic acquisition — Path → Tradition → Gift → Technique (#2426 — BUILT)
+
+CG no longer lets a player author a personal cantrip; it links a character to
+staff-authored catalog content instead:
+
+- **Tradition is a real mechanical layer.** Every character has exactly one
+  Tradition, including the self-taught `Unbound` tradition (no NULL-tradition
+  special-casing). `TraditionGiftGrant` (tradition × gift → signature technique
+  extras) drives the CG gift list; `BeginningTradition.required_distinction`
+  hard-gates non-Unbound traditions at tradition selection.
+- **`PathGiftGrant.starter_techniques`** (unchanged schema) is reinterpreted as
+  the CG *availability pool*, not an automatic grant — the same rows
+  `grant_path_magic` mints from at the level-3 Durance semi-crossing (ADR-0063,
+  unaffected). CG picks 1 + `Tradition Training` distinction rank from the
+  pool ∪ the tradition's signature extras.
+- **The Anima Check replaces a silent default.** CG's Gift stage now closes
+  with an explicit stat + skill pick (`provision_player_anima_ritual` gained
+  parameters instead of hardcoding Willpower + highest skill) and a ritual
+  name — see the glossary entry (not "Signature"; ADR-0072 owns that term).
+- **Removed:** `Cantrip` model + full stack, CG facet selection, custom gift
+  name/description, and the CG Outcome Flavor pick.
+- Rationale + rejected alternative: ADR-0136. Stage/flow detail:
+  `docs/roadmap/character-creation.md`, `docs/systems/character_creation.md`,
+  `docs/systems/magic.md`.
+
 ---
 
 ## Deeper design & history

@@ -354,7 +354,6 @@ This scope converts the flat modules into topically-split packages. Every existi
 | `anima.py` | `CharacterAnima`, `CharacterAnimaRitual`, `AnimaRitualPerformance`, **new** `AnimaConfig` |
 | `gifts.py` | `Gift`, `CharacterGift`, `Tradition`, `CharacterTradition` |
 | `techniques.py` | `EffectType`, `TechniqueStyle`, `Restriction`, `IntensityTier`, `Technique`, `TechniqueCapabilityGrant`, `CharacterTechnique`, `TechniqueOutcomeModifier` |
-| `cantrips.py` | `Cantrip` |
 | `motifs.py` | `Facet`, `CharacterFacet`, `Motif`, `MotifResonance`, `MotifResonanceAssociation` |
 | `soulfray.py` | `SoulfrayConfig` (+ new ritual-budget fields), `MishapPoolTier` |
 | `alterations.py` | `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent` |

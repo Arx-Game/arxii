@@ -284,6 +284,26 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     used by **both** `cross_threshold` (Audere Majora) **and** the Ritual of the Durance level-3
     POTENTIAL semi-crossing (`_maybe_semi_cross_into_potential_path`, ADR-0063 — no Audere Majora).
     Proven by `test_path_crossing_grant_e2e.py` + `test_advancement.py::DuranceSemiCrossingTests`.
+  - **CG catalog magic — Path → Tradition → Gift → Technique (#2426, ADR-0136):**
+    `TraditionGiftGrant` (`world/magic/models/grants.py`, per `(tradition, gift)`
+    grant with a `signature_techniques` M2M — a tradition's CG gift list; the
+    self-taught `Unbound` tradition carries the common starter set, no extras).
+    `PathGiftGrant.starter_techniques` is now read as CG pick *availability*
+    (pool ∪ tradition signature extras), not an automatic grant — `grant_path_magic`
+    still mints from the same rows at the level-3 Durance semi-crossing (ADR-0063,
+    unchanged). `EffectType.category` (`TechniqueCategory` choices — Offense/Defense/
+    Enhancement/Affliction/Utility) is the player-facing archetype grouping, replacing
+    the retired `Cantrip.archetype`; `Gift.codex_entry` / `Technique.codex_entry`
+    (nullable FKs → `codex.CodexEntry`) back the expanding-card → lore-modal pattern
+    (#2410) on every CG catalog card. Read service (`world/magic/services/cg_catalog.py`):
+    `get_gift_options(draft)` / `get_technique_options(draft, gift)`. The rankable
+    **Tradition Training** distinction (`ModifierTarget` "Starting Technique Picks")
+    adds +1 CG technique pick per rank above the Unbound baseline of 1, read via
+    `CharacterDraft._get_distinction_bonus`. `Organization.tradition` (nullable FK →
+    `magic.Tradition`, specific→general per ADR-0010) marks an org as a tradition's
+    teaching structure; `Tradition.society` (no live consumer) was dropped. The `Cantrip`
+    model + its full API/admin/frontend stack were removed. See `docs/systems/magic.md`
+    and `docs/systems/character_creation.md` for the CG stage/endpoint detail.
   - Soul Tether config: `get_soul_tether_config() -> SoulTetherConfig` (lazy pk=1 singleton)
   - Soul Tether events: `SOUL_TETHER_DISSOLVED` emitted by `dissolve_soul_tether`
   - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater

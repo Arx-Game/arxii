@@ -186,6 +186,7 @@ treat those names as hints to confirm, not gospel.
 - [0064 — Dispel is a technique payload row, not an EffectKind (thread-pull) entry](0064-dispel-is-a-technique-payload-not-an-effectkind.md)
 - [0065 — A trainer-of-record bound to a room (DuranceTrainingSite) enables automated self-conduct of the Ritual of the Durance from telnet](0065-durance-trainer-of-record-enables-automated-self-conduct.md)
 - [0113 — A technique-driven entrance carries the cast: one check, not two](0113-entrance-carries-the-cast.md)
+- [0136 — Cantrips retired for authored CG catalogs; tradition-gated magic selection](0136-cantrips-retired-for-authored-cg-catalogs-tradition-gated-magic-selection.md) (extends ADR-0063, ADR-0055, ADR-0072; #2426)
 
 ### Story & stakes
 - [0067 — Beat.risk is the stakes-wager declaration](0067-beat-risk-is-the-stakes-wager-declaration.md)
