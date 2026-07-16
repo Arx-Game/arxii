@@ -92,7 +92,6 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           selected_gift_resonance_id: parseInt(resonanceId, 10),
         },
       },
@@ -114,7 +113,6 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
         draftId: draft.id,
         data: {
           draft_data: {
-            ...draft.draft_data,
             ...getValues(),
           },
         },
@@ -123,7 +121,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
     } catch {
       return window.confirm('Failed to save. Discard changes and continue?');
     }
-  }, [draft.id, draft.draft_data, updateDraft, formState.isDirty, getValues]);
+  }, [draft.id, updateDraft, formState.isDirty, getValues]);
 
   useEffect(() => {
     if (onRegisterBeforeLeave) {

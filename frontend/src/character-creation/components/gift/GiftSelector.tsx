@@ -29,7 +29,6 @@ export function GiftSelector({ draft }: GiftSelectorProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           selected_gift_id: giftId,
           // Techniques are scoped to the chosen gift's catalog — clear stale picks.
           selected_technique_ids: [],
@@ -53,7 +52,6 @@ export function GiftSelector({ draft }: GiftSelectorProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           selected_gift_id: null,
           selected_technique_ids: [],
         },

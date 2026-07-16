@@ -79,7 +79,6 @@ export function AnimaCheckStep({ draft, ritualNameField }: AnimaCheckStepProps) 
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           anima_check_stat_id: Number(value),
         },
       },
@@ -91,7 +90,6 @@ export function AnimaCheckStep({ draft, ritualNameField }: AnimaCheckStepProps) 
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           anima_check_skill_id: Number(value),
         },
       },

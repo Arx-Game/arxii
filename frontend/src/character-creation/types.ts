@@ -688,7 +688,7 @@ export interface DraftData {
   aura_primal?: number;
   aura_abyssal?: number;
   // Magic fields - Gift/technique picks (GiftStage funnel, #2426 Task 10)
-  selected_gift_id?: number;
+  selected_gift_id?: number | null;
   selected_technique_ids?: number[];
   // Magic fields - Anima Check (the stat + skill every cast rolls, #2426)
   anima_check_stat_id?: number | null;

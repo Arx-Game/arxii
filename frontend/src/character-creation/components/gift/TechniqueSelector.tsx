@@ -54,7 +54,6 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
         draftId: draft.id,
         data: {
           draft_data: {
-            ...draft.draft_data,
             selected_technique_ids: filtered,
           },
         },
@@ -92,7 +91,6 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           selected_technique_ids: next,
         },
       },
