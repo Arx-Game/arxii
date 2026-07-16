@@ -551,10 +551,11 @@ export function useAuthorTechnique() {
  */
 export function usePendingAlterations() {
   const account = useAppSelector((s) => s.auth.account);
+  const hasCharacters = (account?.available_characters?.length ?? 0) > 0;
   return useQuery({
     queryKey: magicKeys.pendingAlterations(),
     queryFn: () => api.getPendingAlterations(),
-    enabled: !!account,
+    enabled: !!account && hasCharacters,
     staleTime: 30_000,
     refetchInterval: 30_000,
   });

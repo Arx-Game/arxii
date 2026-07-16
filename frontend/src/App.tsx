@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { GuestOnlyRoute } from './components/GuestOnlyRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { RequireCharacter } from './components/RequireCharacter';
 import { StaffRoute } from './components/StaffRoute';
 import { Skeleton } from './components/ui/skeleton';
 import { HomePage } from './evennia_replacements/HomePage';
@@ -389,7 +390,9 @@ function App() {
           path="/xp-kudos"
           element={
             <ProtectedRoute>
-              <XpKudosPage />
+              <RequireCharacter>
+                <XpKudosPage />
+              </RequireCharacter>
             </ProtectedRoute>
           }
         />
@@ -919,7 +922,9 @@ function App() {
           element={
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
-                <ThreadHubPage />
+                <RequireCharacter>
+                  <ThreadHubPage />
+                </RequireCharacter>
               </ProtectedRoute>
             </Suspense>
           }
@@ -929,7 +934,9 @@ function App() {
           element={
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
-                <WeavingTeachingOffersPage />
+                <RequireCharacter>
+                  <WeavingTeachingOffersPage />
+                </RequireCharacter>
               </ProtectedRoute>
             </Suspense>
           }
@@ -939,7 +946,9 @@ function App() {
           element={
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
-                <ThreadDetailPage />
+                <RequireCharacter>
+                  <ThreadDetailPage />
+                </RequireCharacter>
               </ProtectedRoute>
             </Suspense>
           }
@@ -949,7 +958,9 @@ function App() {
           element={
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
-                <SanctumDashboardPage />
+                <RequireCharacter>
+                  <SanctumDashboardPage />
+                </RequireCharacter>
               </ProtectedRoute>
             </Suspense>
           }
@@ -977,7 +988,9 @@ function App() {
           element={
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
-                <MagicProgressionPage />
+                <RequireCharacter>
+                  <MagicProgressionPage />
+                </RequireCharacter>
               </ProtectedRoute>
             </Suspense>
           }
