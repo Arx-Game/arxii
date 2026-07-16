@@ -351,6 +351,8 @@ export interface CharacterDraft {
   has_existing_characters: boolean;
   stats_points_remaining: number;
   stats_budget: number;
+  /** Gift-stage technique pick budget (base 1 + distinction bonus, #2426). */
+  starting_technique_picks: number;
 }
 
 export interface Stats {
@@ -408,24 +410,32 @@ export interface Tradition {
 }
 
 // =============================================================================
-// Cantrip Types (Character Creation Magic Stage)
+// CG Gift/Technique Option Types (GiftStage funnel, #2426 Task 10)
 // =============================================================================
 
-export interface CantripFacet {
-  id: number;
-  name: string;
-}
-
-export interface Cantrip {
+/**
+ * Gift row for the CG gift-options list.
+ * From GET /api/character-creation/gifts/?draft_id=<id>
+ */
+export interface CGGiftOption {
   id: number;
   name: string;
   description: string;
-  archetype: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
-  requires_facet: boolean;
-  facet_prompt: string;
-  allowed_facets: CantripFacet[];
-  sort_order: number;
-  style_id: number;
+  kind: string;
+  codex_entry_id: number | null;
+}
+
+/**
+ * Technique row for the CG technique-options list (pool ∪ signature).
+ * From GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>
+ */
+export interface CGTechniqueOption {
+  id: number;
+  name: string;
+  description: string;
+  category: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
+  codex_entry_id: number | null;
+  is_signature: boolean;
 }
 
 // =============================================================================
@@ -678,12 +688,13 @@ export interface DraftData {
   aura_celestial?: number;
   aura_primal?: number;
   aura_abyssal?: number;
-  // Magic fields - Cantrip selection
-  selected_cantrip_id?: number;
-  selected_facet_id?: number | null;
-  selected_consequence_pool_id?: number | null;
-  custom_gift_name?: string;
-  custom_gift_description?: string;
+  // Magic fields - Gift/technique picks (GiftStage funnel, #2426 Task 10)
+  selected_gift_id?: number;
+  selected_technique_ids?: number[];
+  // Magic fields - Anima Check (the stat + skill every cast rolls, #2426)
+  anima_check_stat_id?: number | null;
+  anima_check_skill_id?: number | null;
+  anima_ritual_name?: string;
   motif_description?: string;
   // The Glimpse story
   glimpse_story?: string;

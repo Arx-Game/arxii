@@ -25,10 +25,10 @@ import {
   AttributesStage,
   DistinctionsStage,
   FinalTouchesStage,
+  GiftStage,
   HeritageStage,
   IdentityStage,
   LineageStage,
-  MagicStage,
   OriginStage,
   PathStage,
   ReviewStage,
@@ -196,8 +196,7 @@ export function CharacterCreationPage() {
       case Stage.DISTINCTIONS:
         return <DistinctionsStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.GIFT:
-        // TODO(#2426 Task 10): swap for the new GiftStage component.
-        return <MagicStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
+        return <GiftStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.APPEARANCE:
         return (
           <AppearanceStage

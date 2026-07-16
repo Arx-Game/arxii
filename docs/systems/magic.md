@@ -790,7 +790,7 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
   character-creation finalization, idempotent on `(owner, gift)` and write-once on resonance.
   Wires from `finalize_magic_data` after `CharacterGift` creation, reading the chosen
   `selected_gift_resonance_id` from `draft.draft_data` (frontend picker is built #1620;
-  the `CantripSelector` component writes the key; `compute_magic_errors` requires it.
+  the `GiftStage` funnel writes the key, #2426 Task 10; `compute_magic_errors` requires it.
   Legacy/absent draft data falls back to `gift.resonances.first()`).
 - **Weaving commits resonance** — `weave_thread(target_kind=GIFT)` commits/chooses a
   resonance onto the existing latent thread rather than creating a new one (validates the

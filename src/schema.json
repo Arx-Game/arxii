@@ -3175,60 +3175,6 @@ paths:
       responses:
         '200':
           description: No response body
-  /api/character-creation/cantrips/:
-    get:
-      operationId: character_creation_cantrips_list
-      description: |-
-        List active cantrips for character creation.
-
-        Returns all active cantrips with their allowed facets.
-        Accepts optional ``?path_id=<int>`` to filter by Path's allowed styles.
-        Registered under /api/character-creation/ since it's used during CG.
-      parameters:
-      - in: query
-        name: path_id
-        schema:
-          type: integer
-      tags:
-      - character-creation
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Cantrip'
-          description: ''
-  /api/character-creation/cantrips/{id}/:
-    get:
-      operationId: character_creation_cantrips_retrieve
-      description: |-
-        List active cantrips for character creation.
-
-        Returns all active cantrips with their allowed facets.
-        Accepts optional ``?path_id=<int>`` to filter by Path's allowed styles.
-        Registered under /api/character-creation/ since it's used during CG.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this Cantrip.
-        required: true
-      tags:
-      - character-creation
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Cantrip'
-          description: ''
   /api/character-creation/cg-budgets/:
     get:
       operationId: character_creation_cg_budgets_list
@@ -3635,7 +3581,15 @@ paths:
   /api/character-creation/drafts/{id}/select-tradition/:
     post:
       operationId: character_creation_drafts_select_tradition_create
-      description: Select a tradition for the draft.
+      description: |-
+        Select a tradition for the draft.
+
+        Gates on ``BeginningTradition.required_distinction`` (#2426): a tradition
+        that requires formal training may only be selected once the draft already
+        holds that distinction (added via the distinctions app). There is no
+        auto-attach — `world.distinctions.views` only *clears* the selected
+        tradition when its required distinction is later removed
+        (`_clear_tradition_if_required_distinction_removed`); it never adds one.
       parameters:
       - in: path
         name: id
@@ -3891,6 +3845,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Gender'
+          description: ''
+  /api/character-creation/gifts/:
+    get:
+      operationId: character_creation_gifts_list
+      description: |-
+        List gifts pickable for a draft's chosen tradition + path during CG (#2426).
+
+        Query params:
+            draft_id: The caller's CharacterDraft (required — empty list without it).
+
+        Empty list until the draft has both a selected tradition and a selected path.
+        Delegates availability resolution to ``world.magic.services.cg_catalog
+        .get_gift_options`` — a gift with zero combined (path pool ∪ tradition
+        signature) techniques for this path is excluded.
+      parameters:
+      - in: query
+        name: draft_id
+        schema:
+          type: integer
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGGiftOption'
+          description: ''
+  /api/character-creation/gifts/{id}/:
+    get:
+      operationId: character_creation_gifts_retrieve
+      description: |-
+        List gifts pickable for a draft's chosen tradition + path during CG (#2426).
+
+        Query params:
+            draft_id: The caller's CharacterDraft (required — empty list without it).
+
+        Empty list until the draft has both a selected tradition and a selected path.
+        Delegates availability resolution to ``world.magic.services.cg_catalog
+        .get_gift_options`` — a gift with zero combined (path pool ∪ tradition
+        signature) techniques for this path is excluded.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this gift.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CGGiftOption'
           description: ''
   /api/character-creation/house-titles/:
     get:
@@ -4165,6 +4181,76 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TarotCard'
+          description: ''
+  /api/character-creation/technique-options/:
+    get:
+      operationId: character_creation_technique_options_list
+      description: |-
+        List technique options (pool U signature) for a draft's (path, gift, tradition)
+        pick during CG (#2426).
+
+        Query params:
+            draft_id: The caller's CharacterDraft (required).
+            gift_id: The Gift being picked techniques for (required).
+
+        Empty list until both params resolve to a draft with tradition + path selected.
+        Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
+        returned row's ``is_signature`` reflects membership in the tradition's curated
+        signature set (as opposed to the path's starter pool).
+      parameters:
+      - in: query
+        name: draft_id
+        schema:
+          type: integer
+      - in: query
+        name: gift_id
+        schema:
+          type: integer
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGTechniqueOption'
+          description: ''
+  /api/character-creation/technique-options/{id}/:
+    get:
+      operationId: character_creation_technique_options_retrieve
+      description: |-
+        List technique options (pool U signature) for a draft's (path, gift, tradition)
+        pick during CG (#2426).
+
+        Query params:
+            draft_id: The caller's CharacterDraft (required).
+            gift_id: The Gift being picked techniques for (required).
+
+        Empty list until both params resolve to a draft with tradition + path selected.
+        Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
+        returned row's ``is_signature`` reflects membership in the tradition's curated
+        signature set (as opposed to the path's starter pool).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Technique.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CGTechniqueOption'
           description: ''
   /api/character-creation/traditions/:
     get:
@@ -15202,8 +15288,8 @@ paths:
         children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
         list by default. An optional ``?action_category=`` query param narrows to
         the category-matching catalog (physical → combat flavors, anything else →
-        magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
-        path-derived category) only offer flavors the technique can legally keep —
+        magic flavors) so pickers with draft context (e.g. a path-derived category)
+        only offer flavors the technique can legally keep —
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
@@ -15234,8 +15320,8 @@ paths:
         children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
         list by default. An optional ``?action_category=`` query param narrows to
         the category-matching catalog (physical → combat flavors, anything else →
-        magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
-        path-derived category) only offer flavors the technique can legally keep —
+        magic flavors) so pickers with draft context (e.g. a path-derived category)
+        only offer flavors the technique can legally keep —
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
@@ -31599,6 +31685,16 @@ components:
       description: |-
         * `major` - Major Arcana
         * `minor` - Minor Arcana
+    ArchetypeEnum:
+      enum:
+      - sword
+      - shield
+      - crown
+      type: string
+      description: |-
+        * `sword` - Sword
+        * `shield` - Shield
+        * `crown` - Crown
     ArchitecturalStyle:
       type: object
       description: |-
@@ -33366,6 +33462,53 @@ components:
       - building
       - exits
       - rooms
+    CGGiftOption:
+      type: object
+      description: |-
+        Gift row for the CG gift-options list (#2426).
+
+        Backs ``GET /api/character-creation/gifts/?draft_id=<id>`` — a gift the
+        draft's selected tradition + path make pickable (see
+        ``world.magic.services.cg_catalog.get_gift_options``).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Display name for this gift.
+        description:
+          type: string
+          readOnly: true
+          description: Player-facing description of this gift.
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/CGGiftOptionKindEnum'
+          readOnly: true
+          description: |-
+            Major: the one CG-chosen gift. Minor: shared/acquirable gifts that species abilities and in-play powers are delivered as (ADR-0050).
+
+            * `MAJOR` - Major (CG-chosen)
+            * `MINOR` - Minor (shared, acquirable)
+        codex_entry_id:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - codex_entry_id
+      - description
+      - id
+      - kind
+      - name
+    CGGiftOptionKindEnum:
+      enum:
+      - MAJOR
+      - MINOR
+      type: string
+      description: |-
+        * `MAJOR` - Major (CG-chosen)
+        * `MINOR` - Minor (shared, acquirable)
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -33393,6 +33536,50 @@ components:
           description: Whether this budget is currently active
       required:
       - id
+    CGTechniqueOption:
+      type: object
+      description: |-
+        Technique row for the CG technique-options list (#2426).
+
+        Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
+        — the pool ∪ signature availability set for one (path, gift, tradition) pick
+        (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_signature``
+        is resolved from the ``signature_technique_ids`` set the ViewSet places in the
+        serializer context — never attached to the (SharedMemoryModel) ``Technique``
+        instance itself, to avoid leaking one request's filtered flag into another's
+        cached row (see the ``required_distinction_id`` comment above).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Name of the technique (not unique - different characters can
+            have same name).
+        description:
+          type: string
+          readOnly: true
+          description: Description of what this technique does.
+        category:
+          type: string
+          readOnly: true
+        codex_entry_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        is_signature:
+          type: boolean
+          description: True when this technique came from the tradition's signature
+            set.
+          readOnly: true
+      required:
+      - category
+      - codex_entry_id
+      - description
+      - id
+      - is_signature
+      - name
     CanonReview:
       type: object
       description: |-
@@ -33451,83 +33638,6 @@ components:
         * `pending` - Pending
         * `cleared` - Cleared
         * `changes_requested` - Changes requested
-    Cantrip:
-      type: object
-      description: |-
-        Serializer for Cantrip lookup records with allowed facets.
-
-        Mechanical fields (intensity, control, anima cost) are intentionally
-        hidden — the player only sees name, description, archetype, and facets.
-        style_id is exposed for path-based filtering.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          readOnly: true
-        description:
-          type: string
-          readOnly: true
-        archetype:
-          allOf:
-          - $ref: '#/components/schemas/CantripArchetypeEnum'
-          readOnly: true
-          description: |-
-            Player-facing category for CG grouping: attack, defense, buff, debuff, utility.
-
-            * `attack` - Attack
-            * `defense` - Defense
-            * `buff` - Buff
-            * `debuff` - Debuff
-            * `utility` - Utility
-        requires_facet:
-          type: boolean
-          readOnly: true
-          description: If true, player must pick a facet (element/damage type) from
-            allowed_facets.
-        facet_prompt:
-          type: string
-          readOnly: true
-          description: Player-facing dropdown label, e.g. "Choose your element". Only
-            used when requires_facet=True.
-        allowed_facets:
-          type: array
-          items:
-            type: object
-            additionalProperties: {}
-          description: Get allowed facets using cached property.
-          readOnly: true
-        sort_order:
-          type: integer
-          readOnly: true
-        style_id:
-          type: integer
-          readOnly: true
-      required:
-      - allowed_facets
-      - archetype
-      - description
-      - facet_prompt
-      - id
-      - name
-      - requires_facet
-      - sort_order
-      - style_id
-    CantripArchetypeEnum:
-      enum:
-      - attack
-      - defense
-      - buff
-      - debuff
-      - utility
-      type: string
-      description: |-
-        * `attack` - Attack
-        * `defense` - Defense
-        * `buff` - Buff
-        * `debuff` - Debuff
-        * `utility` - Utility
     CapabilityType:
       type: object
       description: Serializer for capability types.
@@ -34655,9 +34765,9 @@ components:
             * `2` - Heritage
             * `3` - Lineage
             * `4` - Distinctions
-            * `5` - Path & Skills
-            * `6` - Attributes
-            * `7` - Magic
+            * `5` - Path
+            * `6` - Gift
+            * `7` - Attributes & Skills
             * `8` - Appearance
             * `9` - Identity
             * `10` - Final Touches
@@ -34776,6 +34886,9 @@ components:
           type: integer
           description: Get total stat point budget (base + bonuses).
           readOnly: true
+        starting_technique_picks:
+          type: integer
+          readOnly: true
       required:
       - build
       - cg_points_remaining
@@ -34796,6 +34909,7 @@ components:
       - selected_tradition
       - stage_completion
       - stage_errors
+      - starting_technique_picks
       - stat_bonuses
       - stats_budget
       - stats_points_remaining
@@ -34822,9 +34936,9 @@ components:
             * `2` - Heritage
             * `3` - Lineage
             * `4` - Distinctions
-            * `5` - Path & Skills
-            * `6` - Attributes
-            * `7` - Magic
+            * `5` - Path
+            * `6` - Gift
+            * `7` - Attributes & Skills
             * `8` - Appearance
             * `9` - Identity
             * `10` - Final Touches
@@ -36747,7 +36861,7 @@ components:
           readOnly: true
         archetype:
           allOf:
-          - $ref: '#/components/schemas/CovenantRoleArchetypeEnum'
+          - $ref: '#/components/schemas/ArchetypeEnum'
           readOnly: true
           description: |-
             Foundational archetype: Sword (offense), Shield (defense), Crown (support).
@@ -36783,16 +36897,6 @@ components:
       - parent_role
       - slug
       - speed_rank
-    CovenantRoleArchetypeEnum:
-      enum:
-      - sword
-      - shield
-      - crown
-      type: string
-      description: |-
-        * `sword` - Sword
-        * `shield` - Shield
-        * `crown` - Crown
     CovenantTypeEnum:
       enum:
       - durance
@@ -37189,9 +37293,9 @@ components:
         * `2` - Heritage
         * `3` - Lineage
         * `4` - Distinctions
-        * `5` - Path & Skills
-        * `6` - Attributes
-        * `7` - Magic
+        * `5` - Path
+        * `6` - Gift
+        * `7` - Attributes & Skills
         * `8` - Appearance
         * `9` - Identity
         * `10` - Final Touches
@@ -51545,9 +51649,9 @@ components:
             * `2` - Heritage
             * `3` - Lineage
             * `4` - Distinctions
-            * `5` - Path & Skills
-            * `6` - Attributes
-            * `7` - Magic
+            * `5` - Path
+            * `6` - Gift
+            * `7` - Attributes & Skills
             * `8` - Appearance
             * `9` - Identity
             * `10` - Final Touches
@@ -53272,10 +53376,6 @@ components:
         description:
           type: string
           description: Description of what this technique does.
-        source_cantrip:
-          type: integer
-          nullable: true
-          description: The cantrip template this technique was created from, if any.
         reach:
           allOf:
           - $ref: '#/components/schemas/TechniqueReachEnum'
@@ -61966,10 +62066,6 @@ components:
         description:
           type: string
           description: Description of what this technique does.
-        source_cantrip:
-          type: integer
-          nullable: true
-          description: The cantrip template this technique was created from, if any.
         target_type:
           allOf:
           - $ref: '#/components/schemas/TechniqueTargetTypeEnum'
@@ -62112,10 +62208,6 @@ components:
         description:
           type: string
           description: Description of what this technique does.
-        source_cantrip:
-          type: integer
-          nullable: true
-          description: The cantrip template this technique was created from, if any.
         reach:
           allOf:
           - $ref: '#/components/schemas/TechniqueReachEnum'

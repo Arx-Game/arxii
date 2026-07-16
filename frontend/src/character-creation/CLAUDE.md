@@ -22,15 +22,19 @@ character-creation/
     ├── PathStage.tsx        # Stage 5: Path selection
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection)
-    ├── MagicStage.tsx       # Stage 6 (Gift): cantrip selection + aura — temporary,
-    │                        #   pending the #2426 Task 10 GiftStage swap
+    ├── GiftStage.tsx        # Stage 6 (Gift): vertical funnel — Tradition → Gift →
+    │                        #   Techniques → Gift Resonance → Anima Check, plus
+    │                        #   always-visible Motif/Glimpse textareas (#2426 Task 10)
     ├── AppearanceStage.tsx  # Stage 8: Appearance
     ├── IdentityStage.tsx    # Stage 9: Identity
     ├── FinalTouchesStage.tsx # Stage 10: Goals
     ├── ReviewStage.tsx      # Stage 11: Review and submit
-    └── magic/
-        ├── index.ts         # Magic sub-component exports
-        └── CantripSelector.tsx # Cantrip card selection with facet picker
+    ├── TraditionPicker.tsx  # Tradition card grid — mounted inside gift/TraditionStep
+    └── gift/                # GiftStage funnel steps (#2426 Task 10)
+        ├── TraditionStep.tsx    # Wraps TraditionPicker
+        ├── GiftSelector.tsx     # Gift catalog cards (GET .../gifts/?draft_id=)
+        ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
+        └── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
 ```
 
 ## Key Features
@@ -50,7 +54,8 @@ character-creation/
 - `GET /api/character-creation/drafts/` - List user's drafts (returns array with 0-1 items)
 - `POST /api/character-creation/drafts/` - Create new draft
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Draft detail operations
-- `GET /api/character-creation/cantrips/?path_id=X` - List cantrips filtered by path (omit param for all)
+- `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's tradition + path
+- `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
 

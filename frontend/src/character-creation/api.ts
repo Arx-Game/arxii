@@ -11,9 +11,10 @@ import type {
   ApplicationComment,
   Beginnings,
   Build,
-  Cantrip,
+  CGGiftOption,
   CGPointBudget,
   CGPointsBreakdown,
+  CGTechniqueOption,
   CharacterDraft,
   CharacterDraftUpdate,
   DraftApplication,
@@ -358,14 +359,26 @@ export async function getGift(giftId: number): Promise<GiftDetail> {
 }
 
 // =============================================================================
-// Cantrip API (Character Creation)
+// CG Gift/Technique Option API (GiftStage funnel, #2426 Task 10)
 // =============================================================================
 
-export async function getCantrips(pathId?: number): Promise<Cantrip[]> {
-  const params = pathId ? `?path_id=${pathId}` : '';
-  const res = await apiFetch(`${BASE_URL}/cantrips/${params}`);
+export async function getCGGifts(draftId: number): Promise<CGGiftOption[]> {
+  const res = await apiFetch(`${BASE_URL}/gifts/?draft_id=${draftId}`);
   if (!res.ok) {
-    throw new Error('Failed to load cantrips');
+    throw new Error('Failed to load gift options');
+  }
+  return res.json();
+}
+
+export async function getCGTechniqueOptions(
+  draftId: number,
+  giftId: number
+): Promise<CGTechniqueOption[]> {
+  const res = await apiFetch(
+    `${BASE_URL}/technique-options/?draft_id=${draftId}&gift_id=${giftId}`
+  );
+  if (!res.ok) {
+    throw new Error('Failed to load technique options');
   }
   return res.json();
 }

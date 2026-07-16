@@ -419,6 +419,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     stage_errors = serializers.SerializerMethodField()
     stats_points_remaining = serializers.SerializerMethodField()
     stats_budget = serializers.SerializerMethodField()
+    # Gift-stage technique pick budget (#2426 Task 10) — CharacterDraft property,
+    # base 1 + any distinction bonus; the GiftStage funnel's technique picker
+    # needs it for the "n of m chosen" budget banner.
+    starting_technique_picks = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = CharacterDraft
@@ -463,6 +467,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stage_errors",
             "stats_points_remaining",
             "stats_budget",
+            "starting_technique_picks",
         ]
         read_only_fields = [
             "id",
@@ -474,6 +479,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stage_errors",
             "stats_points_remaining",
             "stats_budget",
+            "starting_technique_picks",
         ]
 
     def get_has_existing_characters(self, obj: CharacterDraft) -> bool:
