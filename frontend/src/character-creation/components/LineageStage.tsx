@@ -121,14 +121,14 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
     if (familyId === 'orphan') {
       updateDraft.mutate({
         draftId: draft.id,
-        data: { family_id: null, draft_data: { ...draft.draft_data, lineage_is_orphan: true } },
+        data: { family_id: null, draft_data: { lineage_is_orphan: true } },
       });
     } else {
       updateDraft.mutate({
         draftId: draft.id,
         data: {
           family_id: parseInt(familyId, 10),
-          draft_data: { ...draft.draft_data, lineage_is_orphan: false },
+          draft_data: { lineage_is_orphan: false },
         },
       });
     }
@@ -175,7 +175,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
                     updateDraft.mutate({
                       draftId: draft.id,
                       data: {
-                        draft_data: { ...draft.draft_data, lineage_is_orphan: false },
+                        draft_data: { lineage_is_orphan: false },
                       },
                     });
                   }
@@ -687,7 +687,6 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           tarot_card_name: cardName,
           tarot_reversed: reversed,
         },

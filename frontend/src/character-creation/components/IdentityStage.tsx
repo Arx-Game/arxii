@@ -24,7 +24,7 @@ const NONE_VALUE = 'none';
 
 interface IdentityStageProps {
   draft: CharacterDraft;
-  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
+  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => (() => void) | void;
 }
 
 interface IdentityFormValues {
@@ -51,7 +51,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
     });
   };
 
-  const { register, watch, getValues, formState } = useForm<IdentityFormValues>({
+  const { register, watch, getValues, reset, formState } = useForm<IdentityFormValues>({
     defaultValues: {
       first_name: draftData.first_name ?? '',
       concept: draftData.concept ?? '',
@@ -69,21 +69,24 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
         draftId: draft.id,
         data: {
           draft_data: {
-            ...draft.draft_data,
             ...getValues(),
           },
         },
       });
+      // Clear isDirty so a re-registered save doesn't resend unchanged values.
+      reset(getValues());
       return true;
     } catch {
       return window.confirm('Failed to save. Discard changes and continue?');
     }
-  }, [draft.id, draft.draft_data, updateDraft, formState.isDirty, getValues]);
+  }, [draft.id, updateDraft, formState.isDirty, getValues, reset]);
 
   useEffect(() => {
-    if (onRegisterBeforeLeave) {
-      onRegisterBeforeLeave(saveFields);
-    }
+    if (!onRegisterBeforeLeave) return;
+    // Return the unregister as cleanup (2026-07 audit): without it, an
+    // unmounted stage's save closure stayed registered and re-fired on every
+    // later navigation, PATCHing stale values over newer edits.
+    return onRegisterBeforeLeave(saveFields) ?? undefined;
   }, [onRegisterBeforeLeave, saveFields]);
 
   const localFirstName = watch('first_name');

@@ -52,7 +52,6 @@ export function AttributesStage({ draft }: AttributesStageProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           stats: {
             ...stats,
             [statName]: newValue,

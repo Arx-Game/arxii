@@ -31,7 +31,7 @@ import { CGPointsWidget } from './CGPointsWidget';
 
 interface DistinctionsStageProps {
   draft: CharacterDraft;
-  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
+  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => (() => void) | void;
 }
 
 const ALL_CATEGORY_SLUG = '__all__';
@@ -132,7 +132,10 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
       }
     };
 
-    onRegisterBeforeLeave(saveBeforeLeave);
+    // Return the unregister as cleanup (2026-07 audit): without it, this
+    // stage's save closure stayed registered after unmount and re-fired on
+    // every later navigation, syncing stale selections over newer edits.
+    return onRegisterBeforeLeave(saveBeforeLeave) ?? undefined;
   }, [onRegisterBeforeLeave, hasChanges, localSelections, syncDistinctions]);
 
   // Build categories list with "All" option prepended
@@ -174,7 +177,6 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
         draftId: draft.id,
         data: {
           draft_data: {
-            ...draft.draft_data,
             traits_complete: hasSelections,
           },
         },

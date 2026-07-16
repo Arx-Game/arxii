@@ -22,7 +22,7 @@ import { CantripSelector } from './magic';
 
 interface MagicStageProps {
   draft: CharacterDraft;
-  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
+  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => (() => void) | void;
 }
 
 interface MagicFormValues {
@@ -44,7 +44,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const { register, getValues, formState } = useForm<MagicFormValues>({
+  const { register, getValues, reset, formState } = useForm<MagicFormValues>({
     defaultValues: {
       custom_gift_name: draftData.custom_gift_name ?? '',
       custom_gift_description: draftData.custom_gift_description ?? '',
@@ -60,21 +60,24 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
         draftId: draft.id,
         data: {
           draft_data: {
-            ...draft.draft_data,
             ...getValues(),
           },
         },
       });
+      // Clear isDirty so a re-registered save doesn't resend unchanged values.
+      reset(getValues());
       return true;
     } catch {
       return window.confirm('Failed to save. Discard changes and continue?');
     }
-  }, [draft.id, draft.draft_data, updateDraft, formState.isDirty, getValues]);
+  }, [draft.id, updateDraft, formState.isDirty, getValues, reset]);
 
   useEffect(() => {
-    if (onRegisterBeforeLeave) {
-      onRegisterBeforeLeave(saveFormFields);
-    }
+    if (!onRegisterBeforeLeave) return;
+    // Return the unregister as cleanup (2026-07 audit): without it, an
+    // unmounted stage's save closure stayed registered and re-fired on every
+    // later navigation, PATCHing stale values over newer edits.
+    return onRegisterBeforeLeave(saveFormFields) ?? undefined;
   }, [onRegisterBeforeLeave, saveFormFields]);
 
   // Clear stale cantrip selection when path changes and selected cantrip is no longer available

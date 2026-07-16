@@ -147,6 +147,44 @@ class CharacterDraftSerializerValidationTests(TestCase):
             selected_area=self.area,
         )
 
+    def test_partial_update_merges_draft_data_keys(self):
+        """A PATCH merges draft_data keys instead of replacing the blob (2026-07 audit).
+
+        The wizard's stages save independently — whole-blob replacement made
+        every PATCH a last-write-wins race that silently reverted sibling
+        stages' keys (e.g. a debounced skills save landing after a navigation
+        save wiped the skills).
+        """
+        self.draft.draft_data = {"first_name": "Vex", "stats": {"strength": 3}}
+        self.draft.save(update_fields=["draft_data"])
+
+        serializer = CharacterDraftSerializer(
+            instance=self.draft,
+            data={"draft_data": {"description": "A wary courier."}},
+            partial=True,
+        )
+        assert serializer.is_valid(), serializer.errors
+        updated = serializer.save()
+
+        assert updated.draft_data["first_name"] == "Vex"
+        assert updated.draft_data["stats"] == {"strength": 3}
+        assert updated.draft_data["description"] == "A wary courier."
+
+    def test_partial_update_null_key_still_clears(self):
+        """An explicit null value overwrites (clears) a merged key."""
+        self.draft.draft_data = {"tarot_card_name": None, "first_name": "Vex"}
+        self.draft.save(update_fields=["draft_data"])
+
+        serializer = CharacterDraftSerializer(
+            instance=self.draft,
+            data={"draft_data": {"first_name": None}},
+            partial=True,
+        )
+        assert serializer.is_valid(), serializer.errors
+        updated = serializer.save()
+
+        assert updated.draft_data["first_name"] is None
+
     def test_validate_draft_data_invalid_stat_name(self):
         """Test validation fails with invalid stat name."""
         data = {

@@ -31,7 +31,6 @@ export function PlaceholderStage({
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           [completionKey]: checked,
         },
       },

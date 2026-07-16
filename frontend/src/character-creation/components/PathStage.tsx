@@ -246,6 +246,10 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
       }
       setSkillValues(initialSkills);
       setSpecValues({});
+      // Persist the reset (2026-07 audit): the UI showed the new path's
+      // suggestions but the server kept the OLD path's allocation — clicking
+      // Next without touching a skill submitted data the UI never showed.
+      saveToBackend(initialSkills, {});
       initializedPathRef.current = currentPathId;
       setIsInitialized(true);
       return;
@@ -322,7 +326,6 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
           draftId: draft.id,
           data: {
             draft_data: {
-              ...draft.draft_data,
               skills: skillsData,
               specializations: specsData,
             },
@@ -330,7 +333,7 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
         });
       }, 300);
     },
-    [draft.id, draft.draft_data, updateDraft]
+    [draft.id, updateDraft]
   );
 
   // Calculate total spent

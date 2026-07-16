@@ -59,13 +59,13 @@ export function FamilySelection({ draft, areaId }: FamilySelectionProps) {
         draftId: draft.id,
         data: {
           family_id: null,
-          draft_data: { ...draft.draft_data, lineage_is_orphan: true },
+          draft_data: { lineage_is_orphan: true },
         },
       });
     } else {
       updateDraft.mutate({
         draftId: draft.id,
-        data: { draft_data: { ...draft.draft_data, lineage_is_orphan: false } },
+        data: { draft_data: { lineage_is_orphan: false } },
       });
     }
   };
@@ -75,7 +75,7 @@ export function FamilySelection({ draft, areaId }: FamilySelectionProps) {
       draftId: draft.id,
       data: {
         family_id: parseInt(familyId, 10),
-        draft_data: { ...draft.draft_data, lineage_is_orphan: false },
+        draft_data: { lineage_is_orphan: false },
       },
     });
   };
@@ -87,7 +87,6 @@ export function FamilySelection({ draft, areaId }: FamilySelectionProps) {
       draftId: draft.id,
       data: {
         draft_data: {
-          ...draft.draft_data,
           pending_family: {
             name: newFamilyName,
             description: newFamilyDescription,

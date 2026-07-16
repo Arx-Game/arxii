@@ -32,7 +32,7 @@ import type { Build, CharacterDraft, FormTraitWithOptions, HeightBand } from '..
 interface AppearanceStageProps {
   draft: CharacterDraft;
   isStaff?: boolean;
-  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
+  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => (() => void) | void;
 }
 
 interface AppearanceFormValues {
@@ -57,7 +57,7 @@ export function AppearanceStage({
   );
   const draftData = draft.draft_data;
 
-  const { register, getValues, formState } = useForm<AppearanceFormValues>({
+  const { register, getValues, reset, formState } = useForm<AppearanceFormValues>({
     defaultValues: {
       description: draftData.description ?? '',
     },
@@ -70,7 +70,6 @@ export function AppearanceStage({
         draftId: draft.id,
         data: {
           draft_data: {
-            ...draft.draft_data,
             description: getValues('description'),
           },
         },
@@ -79,12 +78,14 @@ export function AppearanceStage({
     } catch {
       return window.confirm('Failed to save description. Discard changes and continue?');
     }
-  }, [draft.id, draft.draft_data, updateDraft, formState.isDirty, getValues]);
+  }, [draft.id, updateDraft, formState.isDirty, getValues, reset]);
 
   useEffect(() => {
-    if (onRegisterBeforeLeave) {
-      onRegisterBeforeLeave(saveDescription);
-    }
+    if (!onRegisterBeforeLeave) return;
+    // Return the unregister as cleanup (2026-07 audit): without it, an
+    // unmounted stage's save closure stayed registered and re-fired on every
+    // later navigation, PATCHing stale values over newer edits.
+    return onRegisterBeforeLeave(saveDescription) ?? undefined;
   }, [onRegisterBeforeLeave, saveDescription]);
 
   const [localAge, setLocalAge] = useState(String(draft.age ?? AGE_DEFAULT));
@@ -122,7 +123,11 @@ export function AppearanceStage({
     });
   };
 
-  const handleHeightInchesChange = (value: number[]) => {
+  // Local thumb position while dragging; null = track the draft value.
+  const [heightDraft, setHeightDraft] = useState<number | null>(null);
+
+  const handleHeightInchesCommit = (value: number[]) => {
+    setHeightDraft(null);
     updateDraft.mutate({
       draftId: draft.id,
       data: { height_inches: value[0] },
@@ -232,16 +237,23 @@ export function AppearanceStage({
             <div className="flex justify-between text-sm">
               <span>{formatHeight(draft.height_band.min_inches)}</span>
               <span className="font-semibold">
-                {draft.height_inches ? formatHeight(draft.height_inches) : '—'}
+                {(heightDraft ?? draft.height_inches)
+                  ? formatHeight(heightDraft ?? draft.height_inches!)
+                  : '—'}
               </span>
               <span>{formatHeight(draft.height_band.max_inches)}</span>
             </div>
             <Slider
-              value={[draft.height_inches ?? draft.height_band.min_inches]}
+              value={[heightDraft ?? draft.height_inches ?? draft.height_band.min_inches]}
               min={draft.height_band.min_inches}
               max={draft.height_band.max_inches}
               step={1}
-              onValueChange={handleHeightInchesChange}
+              // Commit-only PATCH (2026-07 audit): onValueChange fired one
+              // request per drag tick — a request storm whose out-of-order
+              // responses rubber-banded the thumb. Local state keeps the
+              // thumb tracking during the drag.
+              onValueChange={(value) => setHeightDraft(value[0])}
+              onValueCommit={handleHeightInchesCommit}
             />
             <p className="text-xs text-muted-foreground">
               Other characters will see you as "{draft.height_band.display_name}" rather than your
