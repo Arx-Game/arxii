@@ -53,7 +53,6 @@ import type {
   ResolveEpisodeBody,
   StoryCreateBody,
   StoryNoteRequest,
-  Transition,
   TransitionRequiredOutcome,
 } from './types';
 
@@ -736,28 +735,6 @@ export function useTransitionList(params?: ListTransitionsParams) {
     queryKey: storiesKeys.transitionList(params),
     queryFn: () => api.listTransitions(params),
     throwOnError: true,
-  });
-}
-
-export function useCreateTransition() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Parameters<typeof api.createTransition>[0]) => api.createTransition(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: storiesKeys.transitionList() }).catch(() => {});
-    },
-  });
-}
-
-export function useUpdateTransition() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Transition> }) =>
-      api.updateTransition(id, data),
-    onSuccess: (_, { id }) => {
-      qc.invalidateQueries({ queryKey: storiesKeys.transition(id) }).catch(() => {});
-      qc.invalidateQueries({ queryKey: storiesKeys.transitionList() }).catch(() => {});
-    },
   });
 }
 

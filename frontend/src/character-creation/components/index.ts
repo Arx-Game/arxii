@@ -15,9 +15,7 @@ export { StageErrorBoundary } from './StageErrorBoundary';
 export { StageStepper } from './StageStepper';
 export { StartingAreaCard } from './StartingAreaCard';
 export { StatCard } from './StatCard';
-export { StatCategory } from './StatCategory';
 export { StatModal } from './StatModal';
-export { StatSlider } from './StatSlider';
 export { TraditionPicker } from './TraditionPicker';
 
 // Magic components

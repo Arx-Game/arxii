@@ -9,18 +9,16 @@ export const ROUTES = {
   CHARACTERS: '/characters',
   SCENES: '/scenes',
   EVENTS: '/events',
-  ROSTER: '/roster', // Legacy - use CHARACTERS instead
+  ROSTER: '/roster', // The character-browse route (bare /characters is a 404)
 } as const;
 
 // URL generation functions
 export const urls = {
   // Character URLs
   character: (id: number | string) => `${ROUTES.CHARACTERS}/${id}`,
-  characterEdit: (id: number | string) => `${ROUTES.CHARACTERS}/${id}/edit`,
 
   // Scene URLs
   scene: (id: number | string) => `${ROUTES.SCENES}/${id}`,
-  sceneEdit: (id: number | string) => `${ROUTES.SCENES}/${id}/edit`,
 
   // Event URLs
   event: (id: number | string) => `${ROUTES.EVENTS}/${id}`,
@@ -29,13 +27,5 @@ export const urls = {
   eventsList: () => ROUTES.EVENTS,
 
   // List views
-  charactersList: () => ROUTES.CHARACTERS,
   scenesList: () => ROUTES.SCENES,
 } as const;
-
-// Type-safe route parameters
-export type RouteParams = {
-  characterId: string;
-  sceneId: string;
-  eventId: string;
-};

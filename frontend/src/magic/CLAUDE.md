@@ -400,12 +400,6 @@ Dialog for accepting a teaching offer. Shows XP cost and calls `useAcceptTeachin
 
 3 tests for the `AlterationGateAlert` rendered within `XpKudosPage`: alert is shown when `usePendingAlterations` returns open alterations, names the affected character(s), and is absent when the list is empty.
 
-### `components/ThreadList.tsx` (legacy)
-
-Early thread list component — renders a flat list of threads filtered by optional `targetKind`.
-No longer imported by any page or component; retained for its unit test coverage. Candidate
-for removal once the hub/detail pages are confirmed stable.
-
 ### `components/PathIntentCard.tsx` (#954)
 
 Card rendered on `MagicProgressionPage` that shows the character's current Path and lets

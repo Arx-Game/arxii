@@ -706,26 +706,6 @@ export async function getTransition(id: number): Promise<Transition> {
   return res.json() as Promise<Transition>;
 }
 
-export async function createTransition(data: Partial<Transition>): Promise<Transition> {
-  const res = await apiFetch('/api/transitions/', {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error('Failed to create transition');
-  return res.json() as Promise<Transition>;
-}
-
-export async function updateTransition(id: number, data: Partial<Transition>): Promise<Transition> {
-  const res = await apiFetch(`/api/transitions/${id}/`, {
-    method: 'PATCH',
-    headers: jsonHeaders(),
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error(`Failed to update transition ${id}`);
-  return res.json() as Promise<Transition>;
-}
-
 export async function deleteTransition(id: number): Promise<void> {
   const res = await apiFetch(`/api/transitions/${id}/`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Failed to delete transition ${id}`);

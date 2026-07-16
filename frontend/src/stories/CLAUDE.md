@@ -18,7 +18,9 @@ endpoint family:
 - **Story / chapter / episode / beat / transition CRUD:** `getStory()`,
   `listChapters()`, `listEpisodes()`, `listBeats()`, `listTransitions()`,
   `createStory()` / `updateStory()` / `deleteStory()` and equivalents for
-  Chapter, Episode, Beat, Transition
+  Chapter, Episode, Beat (Transition writes go through the atomic
+  `saveTransitionWithOutcomes()` only — the two-step create/patch pair was
+  removed in the 2026-07 audit cleanup)
 - **Progress reads:** `getStoryLog()`, `listGroupStoryProgress()`,
   `listGlobalStoryProgress()`
 - **Action endpoints:** `resolveEpisode()`, `markBeat()`, `contributeToBeat()`,
