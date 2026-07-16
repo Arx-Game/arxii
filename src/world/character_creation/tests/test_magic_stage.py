@@ -1,4 +1,4 @@
-"""Tests for magic stage validation with cantrip selection."""
+"""Tests for magic stage validation (Gift-stage picks, #2426) and cantrip finalization."""
 
 from django.test import TestCase
 from rest_framework import status
@@ -17,7 +17,6 @@ from world.distinctions.factories import DistinctionEffectFactory, DistinctionFa
 from world.fatigue.models import FatiguePool
 from world.magic.factories import (
     CantripFactory,
-    FacetFactory,
     GiftFactory,
     PathGiftGrantFactory,
     ResonanceFactory,
@@ -29,6 +28,8 @@ from world.magic.models import CharacterAnima, Technique
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
+from world.skills.factories import SkillFactory
+from world.traits.factories import SkillTraitFactory, StatTraitFactory
 
 
 class MagicFinalizationActionCategoryTest(TestCase):
@@ -48,95 +49,126 @@ class MagicFinalizationActionCategoryTest(TestCase):
 
 
 class MagicStageValidationTest(TestCase):
-    """Test compute_magic_errors with cantrip-based validation."""
+    """Test compute_magic_errors — Gift-stage validation (#2426).
+
+    Error branches, in return-first order: tradition -> gift -> techniques ->
+    gift resonance -> anima check (stat + skill).
+    """
 
     @classmethod
     def setUpTestData(cls):
-        cls.innate_cantrip = CantripFactory(
-            name="Danger Sense",
-            requires_facet=False,
-        )
-        cls.manifested_cantrip = CantripFactory(
-            name="Elemental Strike",
-            requires_facet=True,
-            facet_prompt="Choose your element",
-        )
-        fire = FacetFactory(name="Fire")
-        ice = FacetFactory(name="Ice")
-        cls.manifested_cantrip.allowed_facets.add(fire, ice)
-        cls.fire = fire
-        cls.unrelated_facet = FacetFactory(name="Wolf")
+        cls.path = PathFactory()
+        cls.tradition = TraditionFactory()
+        cls.gift = GiftFactory(name="Shadow Majesty")
+
+        path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
+        cls.pool_techniques = TechniqueFactory.create_batch(2, gift=cls.gift)
+        path_grant.starter_techniques.set(cls.pool_techniques)
+
+        tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
+        cls.signature_technique = TechniqueFactory(gift=cls.gift)
+        tradition_grant.signature_techniques.set([cls.signature_technique])
+
+        # A gift with no TraditionGiftGrant for this tradition — never a valid pick.
+        cls.other_gift = GiftFactory(name="Not Granted")
+
+        # A technique belonging to the gift but attached to neither the pool nor
+        # the signature set — outside the (path, gift, tradition) availability set.
+        cls.unavailable_technique = TechniqueFactory(gift=cls.gift)
+
         cls.resonance = ResonanceFactory()
+        cls.stat_trait = StatTraitFactory(name="strength")
+        cls.other_trait = SkillTraitFactory(name="not a stat")
+        cls.skill = SkillFactory()
+        cls.inactive_skill = SkillFactory(is_active=False)
 
-    def test_no_cantrip_selected_returns_error(self):
-        draft = CharacterDraftFactory()
-        errors = compute_magic_errors(draft)
-        assert "Select a cantrip" in errors
-
-    def test_innate_cantrip_selected_passes(self):
-        draft = CharacterDraftFactory(
-            draft_data={
-                "selected_cantrip_id": self.innate_cantrip.id,
-                "selected_gift_resonance_id": self.resonance.id,
-            },
+    def _draft(self, **draft_data_overrides):
+        draft_data = {
+            "selected_gift_id": self.gift.id,
+            "selected_technique_ids": [self.pool_techniques[0].id],
+            "selected_gift_resonance_id": self.resonance.id,
+            "anima_check_stat_id": self.stat_trait.id,
+            "anima_check_skill_id": self.skill.id,
+        }
+        draft_data.update(draft_data_overrides)
+        return CharacterDraftFactory(
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+            draft_data=draft_data,
         )
+
+    def test_no_tradition_selected_returns_error(self):
+        draft = CharacterDraftFactory(selected_tradition=None)
+        errors = compute_magic_errors(draft)
+        assert errors == ["Select a tradition"]
+
+    def test_no_gift_selected_returns_error(self):
+        draft = CharacterDraftFactory(
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+            draft_data={},
+        )
+        errors = compute_magic_errors(draft)
+        assert errors == ["Select a gift"]
+
+    def test_gift_not_available_for_tradition_fails(self):
+        draft = self._draft(selected_gift_id=self.other_gift.id)
+        errors = compute_magic_errors(draft)
+        assert errors == ["Select a valid gift for your tradition"]
+
+    def test_no_techniques_selected_returns_error(self):
+        draft = self._draft(selected_technique_ids=[])
+        errors = compute_magic_errors(draft)
+        assert errors == ["Select at least one technique"]
+
+    def test_technique_outside_availability_set_fails(self):
+        draft = self._draft(selected_technique_ids=[self.unavailable_technique.id])
+        errors = compute_magic_errors(draft)
+        assert errors == ["Selected technique is not available"]
+
+    def test_signature_technique_is_available(self):
+        """Signature techniques (tradition grant) are pickable, not just pool ones."""
+        draft = self._draft(selected_technique_ids=[self.signature_technique.id])
         errors = compute_magic_errors(draft)
         assert errors == []
 
-    def test_manifested_cantrip_without_facet_fails(self):
-        draft = CharacterDraftFactory(
-            draft_data={"selected_cantrip_id": self.manifested_cantrip.id},
+    def test_too_many_techniques_fails(self):
+        """starting_technique_picks defaults to 1 — picking 2 is over budget."""
+        draft = self._draft(
+            selected_technique_ids=[t.id for t in self.pool_techniques],
         )
         errors = compute_magic_errors(draft)
-        assert any(
-            "element" in e.lower() or "facet" in e.lower() or "type" in e.lower() for e in errors
-        )
+        assert errors == ["You may select at most 1 techniques"]
 
-    def test_manifested_cantrip_with_valid_facet_passes(self):
-        draft = CharacterDraftFactory(
-            draft_data={
-                "selected_cantrip_id": self.manifested_cantrip.id,
-                "selected_facet_id": self.fire.id,
-                "selected_gift_resonance_id": self.resonance.id,
-            },
-        )
-        errors = compute_magic_errors(draft)
-        assert errors == []
-
-    def test_manifested_cantrip_with_invalid_facet_fails(self):
-        draft = CharacterDraftFactory(
-            draft_data={
-                "selected_cantrip_id": self.manifested_cantrip.id,
-                "selected_facet_id": self.unrelated_facet.id,
-            },
-        )
-        errors = compute_magic_errors(draft)
-        assert len(errors) > 0
-
-    def test_inactive_cantrip_fails(self):
-        inactive = CantripFactory(is_active=False)
-        draft = CharacterDraftFactory(
-            draft_data={"selected_cantrip_id": inactive.id},
-        )
-        errors = compute_magic_errors(draft)
-        assert len(errors) > 0
-
-    def test_cantrip_without_resonance_fails(self):
+    def test_no_gift_resonance_fails(self):
         """Resonance is required — anchors the latent GIFT thread (#1620)."""
-        draft = CharacterDraftFactory(
-            draft_data={"selected_cantrip_id": self.innate_cantrip.id},
-        )
+        draft = self._draft(selected_gift_resonance_id=None)
         errors = compute_magic_errors(draft)
-        assert "Select a gift resonance" in errors
+        assert errors == ["Select a gift resonance"]
 
-    def test_cantrip_with_resonance_passes(self):
-        """Valid cantrip + facet + resonance produces no errors."""
-        draft = CharacterDraftFactory(
-            draft_data={
-                "selected_cantrip_id": self.innate_cantrip.id,
-                "selected_gift_resonance_id": self.resonance.id,
-            },
-        )
+    def test_no_anima_check_stat_fails(self):
+        draft = self._draft(anima_check_stat_id=None)
+        errors = compute_magic_errors(draft)
+        assert errors == ["Choose the stat and skill your magic rolls (your Anima Check)"]
+
+    def test_anima_check_stat_wrong_trait_type_fails(self):
+        """anima_check_stat_id must reference a Trait with trait_type=STAT."""
+        draft = self._draft(anima_check_stat_id=self.other_trait.id)
+        errors = compute_magic_errors(draft)
+        assert errors == ["Choose the stat and skill your magic rolls (your Anima Check)"]
+
+    def test_no_anima_check_skill_fails(self):
+        draft = self._draft(anima_check_skill_id=None)
+        errors = compute_magic_errors(draft)
+        assert errors == ["Choose the stat and skill your magic rolls (your Anima Check)"]
+
+    def test_inactive_anima_check_skill_fails(self):
+        draft = self._draft(anima_check_skill_id=self.inactive_skill.id)
+        errors = compute_magic_errors(draft)
+        assert errors == ["Choose the stat and skill your magic rolls (your Anima Check)"]
+
+    def test_fully_valid_draft_passes(self):
+        draft = self._draft()
         errors = compute_magic_errors(draft)
         assert errors == []
 

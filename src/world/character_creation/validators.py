@@ -184,36 +184,66 @@ def get_identity_errors(draft: CharacterDraft) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def compute_magic_errors(draft: CharacterDraft) -> list[str]:
-    """Compute validation errors for the Magic stage.
+def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: PLR0911
+    """Compute validation errors for the Magic stage (Gift/technique picks, #2426).
 
-    Cantrip-based validation:
-    - Must have selected_cantrip_id in draft_data
-    - If cantrip requires_facet, must have selected_facet_id that is in allowed_facets
-    - Must have selected_gift_resonance_id (anchors the latent GIFT thread, #1620)
+    Gift-stage validation, in order (return-first style):
+    1. Must have selected_tradition.
+    2. Must have selected_gift_id, and it must be one of the gifts available for
+       the draft's (tradition, path) per ``cg_catalog.get_gift_options``.
+    3. Must have >=1 selected_technique_ids, each drawn from the chosen gift's
+       pool ∪ signature availability set, and no more than
+       ``draft.starting_technique_picks``.
+    4. Must have selected_gift_resonance_id (anchors the latent GIFT thread, #1620).
+    5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
+       valid anima_check_skill_id (an active Skill) — the character's Anima Check.
     """
-    from world.magic.models import Cantrip  # noqa: PLC0415
+    from world.magic.services.cg_catalog import (  # noqa: PLC0415
+        get_gift_options,
+        get_technique_options,
+    )
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
-    cantrip_id = draft.draft_data.get("selected_cantrip_id")
-    if not cantrip_id:
-        return ["Select a cantrip"]
+    if not draft.selected_tradition:
+        return ["Select a tradition"]
 
-    try:
-        cantrip = Cantrip.objects.get(pk=cantrip_id, is_active=True)
-    except Cantrip.DoesNotExist:
-        return ["Select a valid cantrip"]
+    gift_id = draft.draft_data.get("selected_gift_id")
+    if not gift_id:
+        return ["Select a gift"]
 
-    if cantrip.requires_facet:
-        facet_id = draft.draft_data.get("selected_facet_id")
-        if not facet_id:
-            prompt = cantrip.facet_prompt or "Choose your element"
-            return [prompt]
-        if not cantrip.allowed_facets.filter(pk=facet_id).exists():
-            return ["Selected option is not valid for this cantrip"]
+    gift_options = get_gift_options(draft.selected_tradition, draft.selected_path)
+    gift = next((g for g in gift_options if g.id == gift_id), None)
+    if gift is None:
+        return ["Select a valid gift for your tradition"]
+
+    technique_ids = draft.draft_data.get("selected_technique_ids") or []
+    if not technique_ids:
+        return ["Select at least one technique"]
+
+    technique_options = get_technique_options(draft.selected_path, gift, draft.selected_tradition)
+    available_ids = {t.id for t in technique_options.pool} | {
+        t.id for t in technique_options.signature
+    }
+    if any(technique_id not in available_ids for technique_id in technique_ids):
+        return ["Selected technique is not available"]
+
+    picks = draft.starting_technique_picks
+    if len(technique_ids) > picks:
+        return [f"You may select at most {picks} techniques"]
 
     # Resonance is required — anchors the latent GIFT thread (#1620)
     resonance_id = draft.draft_data.get("selected_gift_resonance_id")
     if not resonance_id:
         return ["Select a gift resonance"]
+
+    stat_id = draft.draft_data.get("anima_check_stat_id")
+    skill_id = draft.draft_data.get("anima_check_skill_id")
+    stat_valid = (
+        bool(stat_id) and Trait.objects.filter(pk=stat_id, trait_type=TraitType.STAT).exists()
+    )
+    skill_valid = bool(skill_id) and Skill.objects.filter(pk=skill_id, is_active=True).exists()
+    if not (stat_valid and skill_valid):
+        return ["Choose the stat and skill your magic rolls (your Anima Check)"]
 
     return []

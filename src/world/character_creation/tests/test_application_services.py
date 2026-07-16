@@ -34,10 +34,15 @@ from world.classes.factories import PathFactory
 from world.classes.models import PathStage
 from world.magic.factories import (
     EffectTypeFactory,
+    GiftFactory,
+    PathGiftGrantFactory,
     ResonanceFactory,
+    TechniqueFactory,
     TechniqueStyleFactory,
     TraditionFactory,
+    TraditionGiftGrantFactory,
 )
+from world.skills.factories import SkillFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 
@@ -698,6 +703,18 @@ class ApproveApplicationIntegrationTests(TestCase):
         cls.resonance = ResonanceFactory()
         cls.tradition = TraditionFactory()
 
+        # Gift-stage validator fixtures (#2426): a gift available for (tradition, path)
+        # with a pool technique, plus a Skill and the STAT trait for the anima check.
+        cls.gift = GiftFactory(name="Approve Integration Gift")
+        path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
+        cls.technique = TechniqueFactory(
+            gift=cls.gift, style=cls.technique_style, effect_type=cls.effect_type
+        )
+        path_grant.starter_techniques.set([cls.technique])
+        TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
+        cls.skill = SkillFactory()
+        cls.stat_trait = Trait.objects.get(name="strength")
+
     def setUp(self):
         from world.traits.models import CharacterTraitValue, Trait
 
@@ -707,12 +724,19 @@ class ApproveApplicationIntegrationTests(TestCase):
         self.account = AccountFactory()
 
     def _create_complete_magic(self, draft):
-        """Helper to create complete magic data for a draft (cantrip + resonance in draft_data)."""
-        from world.magic.factories import CantripFactory
+        """Helper to create complete magic data for a draft (Gift-stage validators, #2426).
 
-        cantrip = CantripFactory(requires_facet=False)
-        draft.draft_data["selected_cantrip_id"] = cantrip.id
+        Populates the keys ``compute_magic_errors`` requires so ``draft.can_submit()``
+        (the finalize gate) passes. ``finalize_magic_data`` itself still reads the old
+        ``selected_cantrip_id`` draft_data key until #2426 Task 6, so this deliberately
+        leaves that key unset — finalize simply skips technique creation, which none of
+        these tests assert on.
+        """
+        draft.draft_data["selected_gift_id"] = self.gift.id
+        draft.draft_data["selected_technique_ids"] = [self.technique.id]
         draft.draft_data["selected_gift_resonance_id"] = self.resonance.id
+        draft.draft_data["anima_check_stat_id"] = self.stat_trait.id
+        draft.draft_data["anima_check_skill_id"] = self.skill.id
         draft.save(update_fields=["draft_data"])
 
     def _create_approved_application(self):
