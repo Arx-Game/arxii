@@ -74,7 +74,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "forms.speciesformtrait",
         # magic
         "magic.affinity",
-        "magic.cantrip",
         "magic.effecttype",
         "magic.facet",
         "magic.intensitytier",
