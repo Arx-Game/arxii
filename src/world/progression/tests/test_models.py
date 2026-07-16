@@ -5,9 +5,9 @@ Tests for progression models.
 from django.core.exceptions import ValidationError
 from django.test import TestCase, tag
 from evennia.accounts.models import AccountDB
-from evennia.objects.models import ObjectDB
 import pytest
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.models import CharacterSheet
 from world.progression.factories import (
     DevelopmentPointsFactory,
@@ -101,7 +101,7 @@ class DevelopmentPointsModelTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.character = ObjectDBFactory(db_key="TestChar")
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
 
     def test_development_points_creation(self):
@@ -163,7 +163,7 @@ class CharacterUnlockModelTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.character = ObjectDBFactory(db_key="TestChar")
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         # Create a class unlock for testing instead
         from world.classes.factories import CharacterClassFactory

@@ -1,8 +1,8 @@
 """Tests for conjured obstacle lifecycle (#2019)."""
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.models import PositionEdge
 from world.areas.positioning.services import (
@@ -17,7 +17,7 @@ class ObstacleLifecycleTest(TestCase):
     """Conjured obstacles get duration, owner, and restore-on-teardown (#2019)."""
 
     def setUp(self) -> None:
-        self.room = ObjectDB.objects.create(db_key="test_room")
+        self.room = ObjectDBFactory(db_key="test_room")
         self.pos_a = PositionFactory(room=self.room, name="alpha")
         self.pos_b = PositionFactory(room=self.room, name="bravo")
         self.sheet = CharacterSheetFactory()

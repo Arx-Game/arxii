@@ -409,7 +409,7 @@ class ActivatePermitAction(Action):
         item_instance = resolve_item_instance(target)
         if item_instance is None:
             return ActionResult(success=False, message="That can't be activated.")
-        permit_details = getattr(item_instance, "building_permit_details", None)  # noqa: GETATTR_LITERAL
+        permit_details = item_instance.building_permit_details_or_none
         if permit_details is None:
             return ActionResult(success=False, message="That's not a building permit.")
 
@@ -602,7 +602,7 @@ class GrantItemAction(Action):
                 message=f"No item template found named '{template_name}'.",
             )
 
-        granted_by = getattr(actor, "account", None)  # noqa: GETATTR_LITERAL
+        granted_by = actor.account
         grant_touchstone_item_to_character(
             character_sheet=sheet, template=template, granted_by=granted_by
         )

@@ -46,7 +46,7 @@ def announce_achievement(
 
 def _names(items):
     """Return a comma-separated display string of item names."""
-    return ", ".join(getattr(i, "name", str(i)) for i in items)  # noqa: GETATTR_LITERAL
+    return ", ".join(i.name for i in items)
 
 
 def announce_access_change(character_sheet, *, gained, lost, source):
@@ -74,7 +74,11 @@ def announce_access_change(character_sheet, *, gained, lost, source):
             sender_account=None,
         )
     for item in gained:
-        ach = getattr(item, "discovery_achievement", None)  # noqa: GETATTR_LITERAL
+        # Only DiscoverableContent subclasses carry discovery_achievement;
+        # CapabilityType grants never do.
+        from world.achievements.models import DiscoverableContent  # noqa: PLC0415
+
+        ach = item.discovery_achievement if isinstance(item, DiscoverableContent) else None
         if ach is None:
             continue
         from world.achievements.models import CharacterAchievement  # noqa: PLC0415
@@ -85,7 +89,7 @@ def announce_access_change(character_sheet, *, gained, lost, source):
             continue
         is_first = not CharacterAchievement.objects.filter(achievement=ach).exists()
         grant_achievement(ach, [character_sheet])
-        name = getattr(item, "name", str(item))  # noqa: GETATTR_LITERAL
+        name = item.name
         announce_achievement(
             [character_sheet],
             is_first=is_first,

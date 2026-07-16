@@ -2,9 +2,9 @@
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 import pytest
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.progression.models import CharacterXP, CharacterXPTransaction
 from world.progression.types import ProgressionReason
 
@@ -14,7 +14,7 @@ class CharacterXPModelTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.character = ObjectDBFactory(db_key="TestChar")
 
     def test_create_locked_xp(self):
         """Test creating locked (non-transferable) XP record."""
@@ -115,7 +115,7 @@ class CharacterXPTransactionModelTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDB.objects.create(db_key="TestChar2")
+        cls.character = ObjectDBFactory(db_key="TestChar2")
 
     def test_create_cg_conversion_transaction(self):
         """Test creating a CG conversion transaction."""
@@ -154,7 +154,7 @@ class AwardCGConversionXPTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDB.objects.create(db_key="ConvertChar")
+        cls.character = ObjectDBFactory(db_key="ConvertChar")
 
     def test_awards_correct_xp(self):
         """Test conversion awards remaining * rate XP."""

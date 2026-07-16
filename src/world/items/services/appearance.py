@@ -122,9 +122,7 @@ def visible_worn_items_for(
 def _slot_for_row(row: EquippedItem) -> TemplateSlot | None:
     """Return the TemplateSlot for ``row``'s template at the row's region+layer."""
     template = row.item_instance.template
-    slots = getattr(template, "cached_slots", None)  # noqa: GETATTR_LITERAL
-    if slots is None:
-        slots = list(template.slots.all())
+    slots = template.cached_slots
     for slot in slots:
         if slot.body_region == row.body_region and slot.equipment_layer == row.equipment_layer:
             return slot

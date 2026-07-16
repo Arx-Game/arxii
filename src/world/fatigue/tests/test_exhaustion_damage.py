@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from actions.constants import ActionCategory
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import StrainConfigFactory
 from world.conditions.models import DamageType
@@ -221,9 +222,8 @@ class RoundResolutionCollapseTriggerTests(TestCase):
 
     def test_non_character_target_is_skipped(self):
         """A round target with no traits handler (NPC/object) is skipped, not crashed."""
-        from evennia.objects.models import ObjectDB
 
-        bare = ObjectDB.objects.create(db_key="NPC-prop")
+        bare = ObjectDBFactory(db_key="NPC-prop")
         CharacterVitalsFactory(
             character_sheet=CharacterSheetFactory(character=bare),
             health=100,

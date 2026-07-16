@@ -15,6 +15,7 @@ from __future__ import annotations
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType
 from world.covenants.factories import (
@@ -42,7 +43,7 @@ def _context(target_persona_id: int | None) -> PullActionContext:
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:
-    return ObjectDB.objects.create(
+    return ObjectDBFactory(
         db_key=key,
         db_typeclass_path="typeclasses.rooms.Room",
     )

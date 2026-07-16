@@ -16,6 +16,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Prefetch, Q
 
+from typeclasses.characters import Character
 from world.checks.services import chart_has_success_outcomes, preview_check_difficulty
 from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
@@ -399,7 +400,7 @@ def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
     char = sheet.character
     # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
     # Character typeclass handlers. Skip the walk gracefully.
-    if not hasattr(char, "threads") or not hasattr(char, "equipped_items"):
+    if not isinstance(char, Character):  # threads/equipped_items are Character-only
         return 0
     total = 0
     for thread in char.threads.threads_of_kind(TargetKind.FACET):
@@ -436,7 +437,7 @@ def passive_facet_crossing_bonuses(sheet: object, target: ModifierTarget) -> int
     from world.magic.models.crossing import CrossingChoice  # noqa: PLC0415
 
     char = sheet.character
-    if not hasattr(char, "threads") or not hasattr(char, "equipped_items"):  # noqa: GETATTR_LITERAL
+    if not isinstance(char, Character):  # threads/equipped_items are Character-only
         return 0
     total = 0
     for thread in char.threads.threads_of_kind(TargetKind.FACET):
@@ -480,7 +481,7 @@ def passive_mantle_bonuses(sheet: object, target: ModifierTarget) -> int:
     char = sheet.character
     # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
     # Character typeclass handlers. Skip the walk gracefully.
-    if not hasattr(char, "threads"):
+    if not isinstance(char, Character):  # threads/equipped_items are Character-only
         return 0
     total = 0
     for thread in char.threads.threads_of_kind(TargetKind.MANTLE):
@@ -509,7 +510,7 @@ def passive_mantle_crossing_bonuses(sheet: object, target: ModifierTarget) -> in
     from world.magic.models.crossing import CrossingChoice  # noqa: PLC0415
 
     char = sheet.character
-    if not hasattr(char, "threads"):  # noqa: GETATTR_LITERAL
+    if not isinstance(char, Character):  # threads/equipped_items are Character-only
         return 0
     total = 0
     for thread in char.threads.threads_of_kind(TargetKind.MANTLE):

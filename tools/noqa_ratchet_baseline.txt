@@ -1,5 +1,8 @@
-# Maximum allowed `# noqa: <TOKEN>` suppressions under src/, per token.
-# Enforced by tools/lint_noqa_ratchet.py (pre-commit + CI). May only go DOWN
-# as audit tranches retire grandfathered sites; bumping it up is a deliberate,
+# Maximum allowed counts under src/, per token. Enforced by
+# tools/lint_noqa_ratchet.py (pre-commit + CI). May only go DOWN as audit
+# tranches retire grandfathered sites; bumping a number up is a deliberate,
 # reviewed exception — justify it in the commit message.
-GETATTR_LITERAL 137
+# Plain tokens count '# noqa: <TOKEN>' suppressions; 'pattern:' tokens count
+# the regexes defined in lint_noqa_ratchet.py's PATTERNS map.
+GETATTR_LITERAL 61
+pattern:BARE_OBJECTDB_CREATE 4

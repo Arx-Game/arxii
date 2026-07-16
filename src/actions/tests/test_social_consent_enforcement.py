@@ -17,6 +17,7 @@ from __future__ import annotations
 import django.test
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.consent.constants import ConsentMode
 from world.consent.factories import (
     SocialConsentBlacklistFactory,
@@ -246,7 +247,7 @@ class SocialConsentExclusionsIntegrationTest(django.test.TestCase):
             SceneParticipationFactory,
         )
 
-        self.room = ObjectDB.objects.create(db_key="ConsentTestRoom")
+        self.room = ObjectDBFactory(db_key="ConsentTestRoom")
 
         # Actor character (has a RosterTenure so actor_tenure is resolved)
         self.actor_sheet = CharacterSheetFactory()
@@ -327,7 +328,7 @@ class SocialConsentExclusionsQueryBudgetTest(django.test.TestCase):
         from world.roster.factories import RosterEntryFactory, RosterTenureFactory
         from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
-        room = ObjectDB.objects.create(db_key=f"BudgetRoom{num_targets}")
+        room = ObjectDBFactory(db_key=f"BudgetRoom{num_targets}")
 
         actor_sheet = CharacterSheetFactory()
         actor_char = actor_sheet.character

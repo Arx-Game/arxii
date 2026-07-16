@@ -7,13 +7,12 @@ objects can't survive Django's per-test deepcopy).
 """
 
 from django.test import tag
-from evennia.objects.models import ObjectDB
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from actions.registry import get_action
 from evennia_extensions.constants import RoomEnclosure
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
@@ -34,7 +33,7 @@ HEARTH = "Great Hearth"
 
 
 def _room_in(area, *, name="A Room", enclosure=RoomEnclosure.WALLED):
-    room = ObjectDB.objects.create(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
+    room = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
     RoomProfile.objects.update_or_create(
         objectdb=room, defaults={"area": area, "enclosure": enclosure}
     )

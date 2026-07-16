@@ -28,10 +28,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, tag
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ActionCategory,
@@ -115,7 +115,7 @@ class NoncombatCastPullChangesCheckModifierE2ETests(TestCase):
 
         self.action_template = ensure_technique_cast_content()
 
-        self.room = ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="PullOutcomeTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -319,7 +319,7 @@ class CombatCastPullFlatBonusReadPathE2ETests(TestCase):
         )
 
         # Place the character in a room so location-dependent queries don't fail.
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="CombatCastPullRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -470,7 +470,7 @@ class CombatClashPullIntensityReadPathE2ETests(TestCase):
             character_sheet=self.sheet, health=100, max_health=100, base_max_health=100
         )
 
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="ClashPullRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -583,7 +583,7 @@ class RefuseWithoutChargeE2ETests(TestCase):
 
         self.action_template = ensure_technique_cast_content()
 
-        self.room = ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="RefuseTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

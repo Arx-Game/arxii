@@ -6,11 +6,10 @@ for-room resolver the RoomPanel button uses, and the two public catalogs
 """
 
 from django.test import tag
-from evennia.objects.models import ObjectDB
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile, RoomSizeTier
 from evennia_extensions.seeds import ensure_room_size_tiers
 from world.areas.constants import AreaLevel
@@ -34,7 +33,7 @@ from world.roster.factories import (
 
 
 def _room_in(area, *, size=None, grid=(None, None, 0), name="A Room"):
-    room = ObjectDB.objects.create(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
+    room = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
     RoomProfile.objects.update_or_create(
         objectdb=room,
         defaults={
@@ -87,17 +86,17 @@ class ManagerApiBase(APITestCase):
         self.attic = _room_in(area, size=self.snug, grid=(0, 0, 1), name="Attic")
 
         # One exit pair entry <-> study.
-        self.exit_out = ObjectDB.objects.create(
+        self.exit_out = ObjectDBFactory(
             db_key="east",
             db_typeclass_path="typeclasses.exits.Exit",
-            db_location=self.entry,
-            db_destination=self.study,
+            location=self.entry,
+            destination=self.study,
         )
-        self.exit_back = ObjectDB.objects.create(
+        self.exit_back = ObjectDBFactory(
             db_key="west",
             db_typeclass_path="typeclasses.exits.Exit",
-            db_location=self.study,
-            db_destination=self.entry,
+            location=self.study,
+            destination=self.entry,
         )
 
         # A tenant with a primary home in the study.

@@ -99,9 +99,8 @@ def resolve_crossing_offer(
     )
 
     # Invalidate the thread cache so passive read paths pick up the new choice
-    character = thread.owner.character
-    if hasattr(character, "threads"):  # noqa: GETATTR_LITERAL
-        character.threads.invalidate()
+    # (threads is an unconditional cached_property on Character, #2386).
+    thread.owner.character.threads.invalidate()
 
     return CrossingResult(
         option_name=option.name,
@@ -133,8 +132,7 @@ def active_crossing_effects(character: Character) -> list[CrossingEffectInfo]:
         thread = choice.thread
         if thread.target_kind == TargetKind.FACET:
             # Wear-gate: only active if wearing an item with the anchor facet
-            if not hasattr(character, "equipped_items"):  # noqa: GETATTR_LITERAL
-                continue
+            # (equipped_items is an unconditional cached_property on Character).
             matching = character.equipped_items.item_facets_for(thread.target_facet)
             if not matching:
                 continue

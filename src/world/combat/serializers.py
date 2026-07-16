@@ -79,6 +79,8 @@ def _serialize_active_conditions(
     Falls back to ``get_active_conditions`` for callers that build the
     serializer directly (e.g. unit tests).
     """
+    # Suppression justified: live/time-derived set on identity-mapped parent; context-over-cache —
+    # (#2401) never a cached_property.
     cached = getattr(target, ACTIVE_CONDITIONS_CACHE_ATTR, None)  # noqa: GETATTR_LITERAL
     if cached is not None:
         instances = [
@@ -205,6 +207,8 @@ class OpponentSerializer(serializers.ModelSerializer):
                 character = None
             target = character or obj.objectdb
             # #2196: use prefetched conditions from the view (on objectdb)
+            # Suppression justified: live/time-derived set on identity-mapped parent; (#2401) — a
+            # context-over-cache never cached_property.
             cached_conditions = getattr(obj.objectdb, "active_condition_instances", None)  # noqa: GETATTR_LITERAL
             return resolve_thumbnail(
                 target,
@@ -486,6 +490,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
             return None
         # #2196: use the view's prefetched conditions (ACTIVE_CONDITIONS_CACHE_ATTR)
         # to avoid N+1 when serializing multiple participants.
+        # Suppression justified: live/time-derived set on identity-mapped parent; (#2401) — never
+        # context-over-cache a cached_property.
         cached_conditions = getattr(character, "active_condition_instances", None)  # noqa: GETATTR_LITERAL
         return resolve_thumbnail(character, persona=persona, cached_conditions=cached_conditions)
 
@@ -1041,6 +1047,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         Falls back to a direct filter for callers that don't use the viewset
         (e.g. unit tests that call the serializer directly).
         """
+        # Suppression justified: live/time-derived set on identity-mapped parent; (#2401) — never
+        # context-over-cache a cached_property.
         clashes = getattr(obj, "clashes_cached", None)  # noqa: GETATTR_LITERAL
         if clashes is None:
             clashes = (
@@ -1064,6 +1072,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         serialization. Falls back to a direct filter for callers that don't
         use the viewset (e.g. unit tests that call the serializer directly).
         """
+        # Suppression justified: live/time-derived set on identity-mapped parent; (#2401) — never
+        # context-over-cache a cached_property.
         locks = getattr(obj, "engagement_locks_cached", None)  # noqa: GETATTR_LITERAL
         if locks is None:
             from world.combat.constants import EngagementLockStatus  # noqa: PLC0415

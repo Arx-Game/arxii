@@ -85,6 +85,8 @@ def _flush_sharedmemorymodel_caches() -> None:
         # Abstract subclasses or those without a concrete ``__dbclass__``
         # may not implement ``flush_instance_cache`` cleanly; skip them
         # rather than fail the entire teardown.
+        # Suppression justified: duck-typed SharedMemoryModel subclass-tree walk; abstract classes
+        # lack it.
         flusher = getattr(cls, "flush_instance_cache", None)  # noqa: GETATTR_LITERAL
         if flusher is not None:
             with contextlib.suppress(AttributeError, TypeError):
@@ -126,6 +128,8 @@ def _flush_arx_manager_caches() -> None:
         if cls in seen:
             continue
         seen.add(cls)
+        # Suppression justified: duck-typed SharedMemoryModel subclass-tree walk; abstract classes
+        # lack it.
         mgr = getattr(cls, "objects", None)  # noqa: GETATTR_LITERAL
         if isinstance(mgr, CachedAllMixin):
             mgr.flush_all_cache()

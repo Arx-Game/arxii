@@ -33,7 +33,7 @@ from actions.constants import ResolutionPhase
 from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from commands.consent import CmdAccept, CmdIntimidate
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_models import SceneActionRequest
@@ -97,7 +97,7 @@ class ConsentTelnetE2ETests(TestCase):
 
         # Room both characters share; the scene is located here so the telnet
         # command's get_active_scene(location) finds it.
-        self.room = ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="TestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

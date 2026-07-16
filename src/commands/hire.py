@@ -79,7 +79,11 @@ class CmdHire(ArxCommand):
             self.msg(str(err))
 
     def _session(self) -> Any | None:
-        """Return the in-flight InteractionSession, if any."""
+        """Return the in-flight InteractionSession, if any.
+
+        ndb returns None natively for a missing attribute; the dynamic
+        attribute name is why this is getattr at all.
+        """
         return getattr(self.caller.session.ndb, self._SESSION_KEY, None)
 
     def _set_session(self, session: Any) -> None:

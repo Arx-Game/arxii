@@ -17,13 +17,12 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
-from evennia.objects.models import ObjectDB
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from actions.factories import ActionTemplateFactory
 from actions.models import ActionEnhancement
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
@@ -59,7 +58,7 @@ class UnifiedPlayerActionsEndpointShapeTests(TestCase):
             end_date=None,
         )
 
-        cls.room = ObjectDB.objects.create(db_key="UnifiedActionsShapeRoom")
+        cls.room = ObjectDBFactory(db_key="UnifiedActionsShapeRoom")
 
         # Seed a social template with a matching enhancement so an action surfaces.
         _make_social_template("Intimidate")
@@ -134,7 +133,7 @@ class UnifiedPlayerActionsQueryBudgetTests(TestCase):
             end_date=None,
         )
 
-        cls.room = ObjectDB.objects.create(db_key="UnifiedActionsBudgetRoom")
+        cls.room = ObjectDBFactory(db_key="UnifiedActionsBudgetRoom")
 
         # Three social templates (the action_keys that the enhancements link to).
         for action_key in ("intimidate", "persuade", "flirt"):

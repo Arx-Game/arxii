@@ -49,9 +49,9 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
@@ -217,7 +217,7 @@ class CourtJourneyEndToEndTests(TestCase):
         # ==============================================================
         # STEP 2 — Mission-gated engagement (both directions).
         # ==============================================================
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="CourtJourneyRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

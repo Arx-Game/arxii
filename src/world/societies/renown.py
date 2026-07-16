@@ -329,9 +329,11 @@ def _archetype_dot_product(archetypes: Sequence, society: object) -> int:
     delta = 0
     for principle in PRINCIPLE_FIELD_NAMES:
         archetype_axis_sum = sum(
+            # Suppression justified: dynamic principle-axis field name; no default, loud.
             getattr(arch, f"{principle}_delta")  # noqa: GETATTR_LITERAL
             for arch in archetypes
         )
+        # Suppression justified: dynamic principle-axis field name; no default, loud.
         society_value = getattr(society, principle)  # noqa: GETATTR_LITERAL
         delta += archetype_axis_sum * society_value
     return delta

@@ -28,6 +28,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.checks.constants import ModifierSourceKind
 
 
@@ -36,9 +37,7 @@ class EquipmentWalkInChecksTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:  # noqa: PLR0915 - end-to-end fixture spans many rows
-        from evennia.objects.models import ObjectDB
-
-        from evennia_extensions.factories import CharacterFactory
+        from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
         from world.areas.constants import AreaLevel
         from world.areas.factories import AreaFactory
         from world.character_sheets.factories import CharacterSheetFactory
@@ -206,7 +205,7 @@ class EquipmentWalkInChecksTests(TestCase):
             realm=cls.realm,
             dominant_society=cls.society,
         )
-        cls.room_obj = ObjectDB.objects.create(
+        cls.room_obj = ObjectDBFactory(
             db_key="EquipWalkChecksRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -265,11 +264,9 @@ class EquipmentWalkMockCheckTypeTests(TestCase):
     """A MagicMock check_type must not hit the DB (mirrors combat-resolver tests)."""
 
     def setUp(self) -> None:
-        from evennia.objects.models import ObjectDB
-
         from world.character_sheets.factories import CharacterSheetFactory
 
-        self.target = ObjectDB.objects.create(db_key="EquipWalkMockTarget")
+        self.target = ObjectDBFactory(db_key="EquipWalkMockTarget")
         self.sheet = CharacterSheetFactory(character=self.target)
 
     def test_mock_check_type_does_not_raise_and_no_equipment(self) -> None:

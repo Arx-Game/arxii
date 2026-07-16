@@ -64,6 +64,8 @@ class InteractionActionLinkSerializer(serializers.ModelSerializer):
         # cached_round_actions is a Prefetch(to_attr=...) attribute set by the
         # interaction_views queryset; getattr with a default keeps serialization
         # safe if this serializer is ever used without that prefetch.
+        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
+        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
         round_actions = getattr(action_interaction, "cached_round_actions", [])  # noqa: GETATTR_LITERAL
         for round_action in round_actions:
             opponent = round_action.focused_opponent_target
@@ -370,6 +372,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
         sheet = obj.persona.character_sheet
         if sheet is None:
             return []
+        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
+        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
         resonances = getattr(sheet, "cached_resonances", None)  # noqa: GETATTR_LITERAL
         if resonances is None:
             resonances = list(sheet.resonances.select_related("resonance"))
@@ -383,6 +387,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
         ``cached_primary_persona`` (another nested Prefetch).
         """
         out = []
+        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
+        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
         for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
             persona = next(iter(e.endorser_sheet.cached_primary_persona), None)
             if persona is None:
@@ -404,6 +410,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
         each cached endorsement's ``endorser_sheet_id``.
         """
         sheet_ids: set[int] = self.context.get("character_sheet_ids", set())
+        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
+        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
         for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
             if e.endorser_sheet_id in sheet_ids:
                 return {

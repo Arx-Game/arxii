@@ -53,7 +53,7 @@ class ObjectStateSerializer(serializers.Serializer):
         viewer_can_see_hidden = looker is not None and looker.obj == instance.obj
         return resolve_thumbnail(
             instance.obj,
-            persona=getattr(instance, "_resolved_persona", None),  # noqa: GETATTR_LITERAL
+            persona=instance._resolved_persona,  # noqa: SLF001 — BaseState seam, set in __init__
             viewer_can_see_hidden=viewer_can_see_hidden,
         )
 

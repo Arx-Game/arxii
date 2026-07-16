@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
@@ -41,7 +42,7 @@ SELF_FILTER = {"path": "caster", "op": "==", "value": "self"}
 
 
 def _create_room(key: str = "PowerTestRoom") -> ObjectDB:
-    return ObjectDB.objects.create(
+    return ObjectDBFactory(
         db_key=key,
         db_typeclass_path="typeclasses.rooms.Room",
     )

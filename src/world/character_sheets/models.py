@@ -658,6 +658,8 @@ class CharacterSheet(SharedMemoryModel):
     roster_entry_or_none = ReverseOneToOneOrNone("roster_entry")
     vitals_or_none = ReverseOneToOneOrNone("vitals")
     fatigue_or_none = ReverseOneToOneOrNone("fatigue")
+    active_alternate_self_or_none = ReverseOneToOneOrNone("active_alternate_self")
+    path_intent_or_none = ReverseOneToOneOrNone("path_intent")
 
     @cached_property
     def primary_persona(self) -> Persona:

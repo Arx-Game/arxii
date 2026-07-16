@@ -45,7 +45,7 @@ def materialize_item_game_object(
     a defensive guard; ``CharacterSheet.character`` is the PK so a live sheet
     always has one.
     """
-    character = getattr(holder_sheet, "character", None)  # noqa: GETATTR_LITERAL
+    character = holder_sheet.character
     if character is None:
         return None
     game_object = create_object(

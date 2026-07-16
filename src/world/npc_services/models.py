@@ -21,6 +21,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
 from core.mixins import DiscriminatorMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
@@ -282,6 +283,9 @@ class NPCServiceOffer(SharedMemoryModel):
     Progressive disclosure happens through how staff author predicates, not
     through a separate visibility layer.
     """
+
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    permit_offer_details_or_none = ReverseOneToOneOrNone("permit_offer_details")
 
     role = models.ForeignKey(
         NPCRole,

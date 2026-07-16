@@ -121,9 +121,8 @@ class FindServantTests(TestCase):
 
     def test_no_profile_returns_none(self):
         """Room with no RoomProfile → None."""
-        from evennia.objects.models import ObjectDB
 
-        bare_room = ObjectDB.objects.create(db_key="bare-room")
+        bare_room = ObjectDBFactory(db_key="bare-room")
         self.assertIsNone(find_servant(bare_room))
 
 

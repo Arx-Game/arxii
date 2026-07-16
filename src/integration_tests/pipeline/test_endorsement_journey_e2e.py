@@ -23,7 +23,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
 from commands.endorse import CmdEndorse, CmdPoses
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
 from world.magic.models import PoseEndorsement, SceneEntryEndorsement
@@ -63,7 +63,7 @@ class EndorsementJourneyE2ETests(TestCase):
     def setUp(self) -> None:
         idmapper_models.flush_cache()
 
-        self.room = ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="EndorseTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -189,7 +189,7 @@ class EndorsementJourneyE2ETests(TestCase):
         """``poses`` outside an active scene sends a CommandError message."""
         # Move both characters to a room with no active scene so search succeeds
         # but get_active_scene returns None.
-        empty_room = ObjectDB.objects.create(
+        empty_room = ObjectDBFactory(
             db_key="EmptyRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

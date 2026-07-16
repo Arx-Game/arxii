@@ -80,11 +80,12 @@ class Room(ObjectParent, DefaultRoom):
 
     @property
     def active_scene(self) -> Scene | None:
-        """Scene currently running in this room."""
-        try:
-            return self.ndb.active_scene
-        except AttributeError:
-            return None
+        """Scene currently running in this room.
+
+        Evennia's ndb holder returns None natively for a missing attribute —
+        no defensive guard needed (silent-fail audit, holder hunt).
+        """
+        return self.ndb.active_scene
 
     @active_scene.setter
     def active_scene(self, value: Scene | None) -> None:

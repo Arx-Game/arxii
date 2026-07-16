@@ -27,6 +27,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
 from commands.combat import CmdClashCommit
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ActionCategory,
@@ -141,7 +142,7 @@ class CombatClashTelnetE2ETests(TestCase):
         CharacterEngagementFactory(character=self.character)
 
         # Place the character in a room so location-dependent queries don't fail.
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="TestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

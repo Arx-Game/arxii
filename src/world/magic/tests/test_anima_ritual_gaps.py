@@ -145,6 +145,7 @@ class AnimaRecoverySerializerFieldTests(TestCase):
             )
 
         self.assertIsNotNone(result)
+        # Suppression justified: asserts the transient side-channel stash exists.
         payload = getattr(action_request, "_anima_recovery_payload", None)  # noqa: GETATTR_LITERAL
         self.assertIsNotNone(payload)
         # success budget=6, anima goes from 2 to 8

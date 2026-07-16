@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from evennia_extensions.models import ObjectDisplayData, RoomProfile
 from world.character_sheets.factories import CharacterSheetFactory
 from world.instances.constants import InstanceStatus
@@ -20,11 +21,11 @@ class InstancedRoomModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.room = ObjectDB.objects.create(
+        cls.room = ObjectDBFactory(
             db_key="Instance Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        cls.return_room = ObjectDB.objects.create(
+        cls.return_room = ObjectDBFactory(
             db_key="Town Square",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -60,15 +61,15 @@ class InstancedRoomValidationTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.room = ObjectDB.objects.create(
+        cls.room = ObjectDBFactory(
             db_key="Validation Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        cls.valid_return = ObjectDB.objects.create(
+        cls.valid_return = ObjectDBFactory(
             db_key="Valid Return",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        cls.non_room_obj = ObjectDB.objects.create(
+        cls.non_room_obj = ObjectDBFactory(
             db_key="A Sword",
             db_typeclass_path="typeclasses.objects.Object",
         )
@@ -100,7 +101,7 @@ class InstancedRoomCascadeTests(TestCase):
 
     def test_cascade_on_room_delete(self):
         """Deleting the room ObjectDB cascades to delete the InstancedRoom."""
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="Temp Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -113,7 +114,7 @@ class InstancedRoomCascadeTests(TestCase):
 
     def test_set_null_on_owner_delete(self):
         """Deleting the CharacterSheet sets owner to null."""
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="Owner Test Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -129,11 +130,11 @@ class InstancedRoomCascadeTests(TestCase):
 
     def test_set_null_on_return_location_delete(self):
         """Deleting the return_location ObjectDB sets it to null."""
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="Return Test Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        return_loc = ObjectDB.objects.create(
+        return_loc = ObjectDBFactory(
             db_key="Return Loc",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -152,7 +153,7 @@ class SpawnInstancedRoomTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.return_room = ObjectDB.objects.create(
+        cls.return_room = ObjectDBFactory(
             db_key="Tavern",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -207,7 +208,7 @@ class CompleteInstancedRoomTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.return_room = ObjectDB.objects.create(
+        cls.return_room = ObjectDBFactory(
             db_key="Town Square",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -325,8 +326,8 @@ class InstancedRoomReverseLookupTests(TestCase):
 
     def test_owned_instances_reverse_lookup(self):
         """CharacterSheet.owned_instances returns all instances owned by the character."""
-        room1 = ObjectDB.objects.create(db_key="Room A", db_typeclass_path="typeclasses.rooms.Room")
-        room2 = ObjectDB.objects.create(db_key="Room B", db_typeclass_path="typeclasses.rooms.Room")
+        room1 = ObjectDBFactory(db_key="Room A", db_typeclass_path="typeclasses.rooms.Room")
+        room2 = ObjectDBFactory(db_key="Room B", db_typeclass_path="typeclasses.rooms.Room")
         InstancedRoom.objects.create(room=room1, owner=self.sheet)
         InstancedRoom.objects.create(room=room2, owner=self.sheet)
 
@@ -334,9 +335,7 @@ class InstancedRoomReverseLookupTests(TestCase):
 
     def test_instance_data_reverse_lookup(self):
         """ObjectDB.instance_data returns the linked InstancedRoom."""
-        room = ObjectDB.objects.create(
-            db_key="Reverse Room", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        room = ObjectDBFactory(db_key="Reverse Room", db_typeclass_path="typeclasses.rooms.Room")
         instance = InstancedRoom.objects.create(room=room, source_key="test.reverse")
 
         assert room.instance_data == instance

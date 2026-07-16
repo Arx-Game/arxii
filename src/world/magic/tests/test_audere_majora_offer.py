@@ -3,8 +3,8 @@
 import importlib
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.classes.models import CharacterClassLevel, PathStage
 from world.magic.audere import AUDERE_CONDITION_NAME
 from world.magic.audere_majora import (
@@ -192,7 +192,7 @@ class AudereMajoraOfferServiceTests(TestCase):
         assert Interaction.objects.filter(mode=InteractionMode.EMIT).count() == 0
 
     def test_npc_without_sheet_returns_none(self) -> None:
-        npc = ObjectDB.objects.create(db_key="majora_npc_no_sheet_t3")
+        npc = ObjectDBFactory(db_key="majora_npc_no_sheet_t3")
         assert maybe_create_audere_majora_offer(npc, self.passing_intensity) is None
 
     def test_sheet_without_primary_persona_skips_broadcast(self) -> None:
@@ -226,6 +226,6 @@ class AudereMajoraEligibilityQueryCountTests(TestCase):
         Only 1 query: CharacterSheet.objects.filter(...).first(). No threshold,
         Soulfray, engagement, or path queries fire.
         """
-        npc = ObjectDB.objects.create(db_key="majora_query_count_npc")
+        npc = ObjectDBFactory(db_key="majora_query_count_npc")
         with self.assertNumQueries(1):
             check_audere_majora_eligibility(npc, runtime_intensity=20)

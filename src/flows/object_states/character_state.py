@@ -79,6 +79,7 @@ class CharacterState(BaseState):
         Cached on the state so listing a room's occupants resolves the looker's context once, not
         once per occupant.
         """
+        # Suppression justified: lazy memoization slot, absent until first compute.
         if getattr(self, "_viewer_persona_ctx", None) is None:  # noqa: GETATTR_LITERAL
             from world.scenes.persona_display import viewer_context_for_account  # noqa: PLC0415
 

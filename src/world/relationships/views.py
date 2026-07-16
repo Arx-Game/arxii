@@ -159,6 +159,7 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
         # drf-spectacular introspects the filterset by calling get_queryset()
         # with an anonymous dummy request; without this guard the user-filter
         # makes introspection fail and the filter params vanish from the schema.
+        # Suppression justified: drf-spectacular swagger_fake_view probe (documented idiom).
         if getattr(self, "swagger_fake_view", False):  # noqa: GETATTR_LITERAL
             return CharacterRelationship.objects.none()
         user = self.request.user

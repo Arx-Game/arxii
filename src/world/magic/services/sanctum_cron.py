@@ -72,7 +72,7 @@ def sanctum_resonance_generation_tick() -> dict[str, int]:
     bonus_recipients_accrued = 0
 
     for instance in instances:
-        sanctum = getattr(instance, "sanctum_details", None)  # noqa: GETATTR_LITERAL
+        sanctum = instance.sanctum_details_or_none
         if sanctum is None:
             continue
         try:

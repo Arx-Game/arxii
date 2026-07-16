@@ -2362,6 +2362,11 @@ class Stake(SubjectMixin, SharedMemoryModel):
     contracts.
     """
 
+    @cached_property
+    def prefetched_resolutions(self) -> list:
+        """Authored resolutions — the Prefetch/query shared interface (#2386)."""
+        return list(self.resolutions.all())
+
     beat = models.ForeignKey(STORY_BEAT_MODEL, on_delete=models.CASCADE, related_name="stakes")
     template = models.ForeignKey(
         "stories.StakeTemplate",
@@ -2395,6 +2400,11 @@ class StakeResolution(SharedMemoryModel):
     not player-held; PC removal must route through peril (escalates_to_risk +
     consequence pools -> process_damage_consequences).
     """
+
+    @cached_property
+    def prefetched_reward_lines(self) -> list:
+        """Authored reward_lines — the Prefetch/query shared interface (#2386)."""
+        return list(self.reward_lines.all())
 
     stake = models.ForeignKey(STAKE_MODEL, on_delete=models.CASCADE, related_name="resolutions")
     column = models.CharField(max_length=12, choices=StakeResolutionColumn.choices)

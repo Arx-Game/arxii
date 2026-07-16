@@ -215,7 +215,7 @@ class CmdSanctum(DispatchCommand):
         """
         components = []
         for obj in self.caller.contents:
-            instance = getattr(obj, "item_instance", None)  # noqa: GETATTR_LITERAL
+            instance = obj.item_instance_or_none
             if instance is not None:
                 components.append(instance)
         return components

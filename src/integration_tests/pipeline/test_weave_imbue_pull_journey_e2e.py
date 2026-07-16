@@ -30,13 +30,13 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
 from commands.combat import CmdDeclareTechnique
 from commands.imbue import CmdImbue
 from commands.ritual import CmdRitual
 from commands.weave import CmdWeaveThread
+from evennia_extensions.factories import ObjectDBFactory
 from integration_tests.game_content.magic import seed_thread_pull_catalog
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import EffectKind, TargetKind
@@ -178,7 +178,7 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         CheckSystemSetupFactory.create()
 
         # Room + scene for the non-combat cast path.
-        self.room = ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="JourneyPullTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

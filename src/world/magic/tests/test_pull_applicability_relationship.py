@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import EffectKind, InapplicabilityReason, TargetKind
 from world.magic.factories import ThreadFactory, ThreadPullEffectFactory
@@ -149,8 +150,6 @@ class RelationshipNoStakePrivacyTests(TestCase):
     when the owner can't perceive X."""
 
     def test_no_leak_when_owner_cannot_perceive_hostile_target(self) -> None:
-        from evennia.objects.models import ObjectDB
-
         owner = CharacterSheetFactory()
         threaded_sheet = CharacterSheetFactory()
         thread = _relationship_track_thread(owner=owner, threaded_sheet=threaded_sheet)
@@ -169,12 +168,10 @@ class RelationshipNoStakePrivacyTests(TestCase):
         RelationshipTrackProgressFactory(
             relationship=hostile, track=negative_track, developed_points=5
         )
-        owner_room = ObjectDB.objects.create(
+        owner_room = ObjectDBFactory(
             db_key="OwnerRoom2", db_typeclass_path="typeclasses.rooms.Room"
         )
-        x_room = ObjectDB.objects.create(
-            db_key="XRoom2", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        x_room = ObjectDBFactory(db_key="XRoom2", db_typeclass_path="typeclasses.rooms.Room")
         owner.character.location = owner_room
         x_sheet.character.location = x_room
         context = _context(active_persona_for_sheet(x_sheet).pk)

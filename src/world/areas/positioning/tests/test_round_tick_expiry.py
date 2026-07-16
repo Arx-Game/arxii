@@ -1,8 +1,8 @@
 """Tests for round-tick expiry of conjured obstacles (#2019)."""
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.models import PositionEdge
 from world.areas.positioning.services import create_conjured_obstacle, expire_obstacle_rounds
@@ -13,7 +13,7 @@ class RoundTickExpiryTest(TestCase):
     """expire_obstacle_rounds decrements duration and restores at 0 (#2019)."""
 
     def setUp(self) -> None:
-        self.room = ObjectDB.objects.create(db_key="room")
+        self.room = ObjectDBFactory(db_key="room")
         self.pos_a = PositionFactory(room=self.room, name="alpha")
         self.pos_b = PositionFactory(room=self.room, name="bravo")
         self.sheet = CharacterSheetFactory()

@@ -871,7 +871,7 @@ def _validate_unit_place_overlap(
     vehicle's own unit is gated the same as a BREACH against its hull.
     """
     target_unit_place = target_unit.place
-    if target_unit_place is None and hasattr(target_unit, "vehicle"):  # noqa: GETATTR_LITERAL
+    if target_unit_place is None and target_unit.vehicle_or_none is not None:
         target_unit_place = target_unit.vehicle.place
     if (
         target_unit_place is not None
@@ -891,7 +891,7 @@ def _validate_fortification_place_overlap(
     if (
         action_kind == BattleActionKind.BREACH
         and target_fortification is not None
-        and hasattr(target_fortification.place, "vehicle")  # noqa: GETATTR_LITERAL
+        and target_fortification.place.vehicle_or_none is not None
         and participant.place_id is not None
         and target_fortification.place_id != participant.place_id
         and not places_overlap(target_fortification.place, participant.place)
@@ -941,7 +941,7 @@ def _validate_vehicle_command(
     """
     if target_place is None:
         raise MissingScopeTargetError
-    vehicle = getattr(target_place, "vehicle", None)  # noqa: GETATTR_LITERAL
+    vehicle = target_place.vehicle_or_none
     if vehicle is None or vehicle.unit.military_unit.commander_id != participant.character_sheet_id:
         raise NotVehicleCommanderError
 

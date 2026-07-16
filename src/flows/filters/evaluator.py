@@ -127,6 +127,7 @@ def _walk_dotted(obj: Any, dotted: str) -> Any:
             # None propagates (optional-chaining semantics): None.anything → None.
             # The subsequent comparison (e.g. None == "Celestial") evaluates False.
             return None
+        # Suppression justified: dynamic DSL path segment; SENTINEL default raises loudly.
         result = getattr(current, part, SENTINEL)  # noqa: GETATTR_LITERAL
         if result is SENTINEL:
             msg = f"Cannot resolve '{part}' on {type(current).__name__} (full path: {dotted})"

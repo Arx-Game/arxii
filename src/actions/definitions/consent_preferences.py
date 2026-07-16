@@ -224,7 +224,7 @@ class AddSocialConsentWhitelistAction(Action):
         if error is not None:
             return error
         tenure, category, allowed_tenure = targets
-        preference = getattr(tenure, "social_consent_preference", None)  # noqa: GETATTR_LITERAL
+        preference = tenure.social_consent_preference_or_none
         if preference is None:
             set_social_consent_preference(tenure, True)
         add_social_consent_whitelist(tenure, allowed_tenure, category)
@@ -300,7 +300,7 @@ class AddSocialConsentBlacklistAction(Action):
         if error is not None:
             return error
         tenure, category, blocked_tenure = targets
-        preference = getattr(tenure, "social_consent_preference", None)  # noqa: GETATTR_LITERAL
+        preference = tenure.social_consent_preference_or_none
         if preference is None:
             set_social_consent_preference(tenure, True)
         add_social_consent_blacklist(tenure, blocked_tenure, category)

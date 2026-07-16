@@ -3,8 +3,8 @@
 from unittest.mock import patch
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
 from world.mechanics.factories import (
@@ -44,8 +44,8 @@ class ActionGenerationTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="ActionChar")
-        cls.location = ObjectDB.objects.create(db_key="ActionRoom")
+        cls.character = ObjectDBFactory(db_key="ActionChar")
+        cls.location = ObjectDBFactory(db_key="ActionRoom")
 
         cls.capability = CapabilityTypeFactory(name="fire_control_ag")
         cls.prop_flammable = PropertyFactory(name="flammable_ag")
@@ -149,8 +149,8 @@ class EffectPropertyFilterTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="EffectChar")
-        cls.location = ObjectDB.objects.create(db_key="EffectRoom")
+        cls.character = ObjectDBFactory(db_key="EffectChar")
+        cls.location = ObjectDBFactory(db_key="EffectRoom")
 
         cls.prop_flammable = PropertyFactory(name="flammable_epf")
         cls.prop_fire = PropertyFactory(name="fire_effect_epf")
@@ -216,8 +216,8 @@ class DifficultyIndicatorForCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="DiffChar")
-        cls.location = ObjectDB.objects.create(db_key="DiffRoom")
+        cls.character = ObjectDBFactory(db_key="DiffChar")
+        cls.location = ObjectDBFactory(db_key="DiffRoom")
 
         cls.capability = CapabilityTypeFactory(name="diff_check_cap")
         cls.prop = PropertyFactory(name="diff_check_prop")

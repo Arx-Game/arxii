@@ -276,9 +276,10 @@ class CastableTechniqueSerializer(serializers.Serializer):
         if isinstance(obj, Technique):
             return is_technique_hostile(obj)
         # obj may be a CharacterTechnique — fall back to its technique.
-        technique = getattr(obj, "technique", None)  # noqa: GETATTR_LITERAL
-        if isinstance(technique, Technique):
-            return is_technique_hostile(technique)
+        from world.magic.models.techniques import CharacterTechnique  # noqa: PLC0415
+
+        if isinstance(obj, CharacterTechnique):
+            return is_technique_hostile(obj.technique)
         return False
 
     def get_target_spec(self, obj: object) -> dict | None:
@@ -288,15 +289,17 @@ class CastableTechniqueSerializer(serializers.Serializer):
         cardinalities, returns the same shape as actions.serializers.TargetSpecSerializer.
         """
         from actions.player_interface import _target_spec_for_technique_action  # noqa: PLC0415
-        from world.magic.models.techniques import Technique  # noqa: PLC0415
+        from world.magic.models.techniques import (  # noqa: PLC0415
+            CharacterTechnique,
+            Technique,
+        )
 
         if isinstance(obj, Technique):
             technique_id = obj.pk
+        elif isinstance(obj, CharacterTechnique):
+            technique_id = obj.technique_id
         else:
-            technique = getattr(obj, "technique", None)  # noqa: GETATTR_LITERAL
-            if not isinstance(technique, Technique):
-                return None
-            technique_id = technique.pk
+            return None
 
         spec = _target_spec_for_technique_action(technique_id)
         if spec is None:
@@ -639,6 +642,7 @@ class EnhancedSceneActionResultSerializer(serializers.Serializer):
         initiator_account = action_request.initiator_persona.character_sheet.character.db_account
         if initiator_account is None or request.user != initiator_account:
             return None
+        # Suppression justified: transient side-channel stash from the anima resolver.
         payload = getattr(action_request, "_anima_recovery_payload", None)  # noqa: GETATTR_LITERAL
         return AnimaRecoverySerializer(payload).data if payload is not None else None
 

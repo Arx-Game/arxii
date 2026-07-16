@@ -3,6 +3,7 @@
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.captivity.constants import CaptivityStatus
 from world.captivity.exceptions import AlreadyCapturedError, NotHeldError
 from world.captivity.models import Captivity, CaptivityConfig
@@ -25,7 +26,7 @@ from world.scenes.factories import SceneFactory
 class CaptureCharacterTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.return_room = ObjectDB.objects.create(
+        cls.return_room = ObjectDBFactory(
             db_key="Capture Site",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -114,7 +115,7 @@ class CaptureGroupKeyTests(TestCase):
 class ResolveCaptivityTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.return_room = ObjectDB.objects.create(
+        cls.return_room = ObjectDBFactory(
             db_key="Home Square",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -301,11 +302,11 @@ class BrigHoldingRoomCaptureTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.brig_room = ObjectDB.objects.create(
+        cls.brig_room = ObjectDBFactory(
             db_key="Ship Brig",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        cls.return_room = ObjectDB.objects.create(
+        cls.return_room = ObjectDBFactory(
             db_key="Capture Site",
             db_typeclass_path="typeclasses.rooms.Room",
         )

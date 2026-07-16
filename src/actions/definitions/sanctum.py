@@ -43,7 +43,6 @@ if TYPE_CHECKING:
 
 
 _MSG_NO_ACTIVE_CHARACTER = "No active character."
-_MSG_OPERATION_FAILED = "Operation failed."
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +187,7 @@ class SanctumInstallAction(SanctumActionBase):
         except RitualComponentError as exc:
             return self._fail(exc.user_message)
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         if result.fizzled:
             return ActionResult(
                 success=True,
@@ -232,7 +231,7 @@ class SanctumHomecomingAction(SanctumActionBase):
                 narrative_text=kwargs.get("narrative_text", ""),
             )
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message="The Homecoming ritual is complete.",
@@ -267,7 +266,7 @@ class SanctumPurgingAction(SanctumActionBase):
                 kwargs["resonance_sacrificed"],
             )
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message="The Purging ritual is complete.",
@@ -298,7 +297,7 @@ class SanctumWeaveAction(SanctumActionBase):
                 kwargs["sanctum"], persona.character_sheet, kwargs["slot_kind"]
             )
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message="You weave a thread into the Sanctum.",
@@ -321,7 +320,7 @@ class SanctumDissolveAction(SanctumActionBase):
         try:
             result = perform_dissolution(kwargs["sanctum"], persona)
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message="The Sanctum is dissolved.",
@@ -350,7 +349,7 @@ class SanctumAbsorbAction(SanctumActionBase):
         try:
             result = absorb_sanctum_pool(kwargs["sanctum"], persona)
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message="You absorb the Sanctum's resonance pool.",
@@ -378,7 +377,7 @@ class SanctumSeverAction(SanctumActionBase):
         try:
             sever_sanctum_thread(kwargs["thread"])
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message="You sever the thread.",

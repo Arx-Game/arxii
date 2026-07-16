@@ -6,10 +6,9 @@ and wrong-name paths return before the service call and run on SQLite too.
 """
 
 from django.test import TestCase, tag
-from evennia.objects.models import ObjectDB
 
 from actions.registry import get_action
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
@@ -21,7 +20,7 @@ from world.projects.constants import ProjectKind
 
 
 def _room_in(area, *, name="A Room"):
-    room = ObjectDB.objects.create(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
+    room = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
     RoomProfile.objects.update_or_create(objectdb=room, defaults={"area": area})
     return room
 
@@ -81,9 +80,7 @@ class RenovationCommissionTests(TestCase):
         # The actor owns a *non-building* room — the owner prerequisite passes,
         # but the room isn't part of any building, so the action reports that.
         area = AreaFactory()
-        bare_room = ObjectDB.objects.create(
-            db_key="Void", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        bare_room = ObjectDBFactory(db_key="Void", db_typeclass_path="typeclasses.rooms.Room")
         RoomProfile.objects.update_or_create(objectdb=bare_room, defaults={"area": area})
         persona = self.actor.sheet_data.primary_persona
         LocationOwnership.objects.create(

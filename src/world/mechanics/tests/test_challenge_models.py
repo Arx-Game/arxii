@@ -3,8 +3,8 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.models import ConsequenceEffect
@@ -225,8 +225,8 @@ class SituationChallengeLinkTests(TestCase):
 class InstanceModelTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.room = ObjectDB.objects.create(db_key="Test Room")
-        cls.character = ObjectDB.objects.create(db_key="Test Character")
+        cls.room = ObjectDBFactory(db_key="Test Room")
+        cls.character = ObjectDBFactory(db_key="Test Character")
         cls.situation_template = SituationTemplateFactory(name="Siege")
         cls.challenge_template = ChallengeTemplateFactory(name="Barricade")
         cls.situation_instance = SituationInstance.objects.create(
@@ -307,7 +307,7 @@ class ChallengeTemplatePropertyTests(TestCase):
 class ObjectPropertyTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.obj = ObjectDB.objects.create(db_key="Iron Door")
+        cls.obj = ObjectDBFactory(db_key="Iron Door")
         cls.prop = PropertyFactory(name="rusty")
         cls.op = ObjectPropertyFactory(object=cls.obj, property=cls.prop)
 

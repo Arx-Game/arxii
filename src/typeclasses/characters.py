@@ -67,6 +67,9 @@ class Character(ObjectParent, DefaultCharacter):
     #: on ObjectParent (CharacterFormState.character is limited to Characters).
     form_state_or_none = ReverseOneToOneOrNone("form_state")
 
+    #: Reverse-OneToOne safe accessor (#2386): the CharacterAnima row, or None.
+    anima_or_none = ReverseOneToOneOrNone("anima")
+
     # Example typeclass defaults for item_data fallbacks
     # These provide sensible defaults when data objects don't exist
     default_height_inches = 70  # 5'10" default height

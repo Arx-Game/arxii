@@ -4,9 +4,9 @@ Tests for progression services.
 
 from django.test import TestCase, tag
 from evennia.accounts.models import AccountDB
-from evennia.objects.models import ObjectDB
 import pytest
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.models import CharacterSheet
 from world.classes.factories import CharacterClassLevelFactory
 from world.progression.factories import ExperiencePointsDataFactory
@@ -86,10 +86,9 @@ class UnlockServiceTest(TestCase):
             username="testplayer",
             email="test@test.com",
         )
-        cls.character = ObjectDB.objects.create(
-            db_key="TestChar",
-            db_account=cls.account,
-        )
+        cls.character = ObjectDBFactory(db_key="TestChar")
+        cls.character.db_account = cls.account
+        cls.character.save()
 
         # Give character a class level
         cls.class_level = CharacterClassLevelFactory(character=cls.character, level=3)
@@ -210,7 +209,7 @@ class DevelopmentServiceTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.character = ObjectDBFactory(db_key="TestChar")
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
 
     def test_award_development_points(self):
@@ -252,7 +251,7 @@ class DevelopmentRateModifierTest(TestCase):
         from world.traits.factories import TraitFactory
         from world.traits.models import TraitCategory, TraitType
 
-        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.character = ObjectDBFactory(db_key="TestChar")
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
 
         cls.physical_trait = TraitFactory(
@@ -344,7 +343,7 @@ class LevelUpRequirementsTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.character = ObjectDBFactory(db_key="TestChar")
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.class_level = CharacterClassLevelFactory(
             character=cls.character,
@@ -404,7 +403,7 @@ class LevelUpRequirementsTest(TestCase):
 
     def test_calculate_level_up_no_class(self):
         """Test level up calculation for character with no class."""
-        character_no_class = ObjectDB.objects.create(db_key="NoClass")
+        character_no_class = ObjectDBFactory(db_key="NoClass")
 
         from world.classes.factories import CharacterClassFactory
 

@@ -65,7 +65,7 @@ def _gather_triggers(event_name: str, location: Any) -> list[Any]:
         # room to gather triggers from — the old getattr-default hid this case.
         return []
     owners: list[Any] = [location]
-    contents = getattr(location, "contents", None) or []  # noqa: GETATTR_LITERAL
+    contents = location.contents or []
     owners.extend(contents)
 
     gathered: list[Any] = []

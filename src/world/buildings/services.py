@@ -129,7 +129,7 @@ def issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     from world.items.models import ItemInstance, ItemTemplate, OwnershipEvent  # noqa: PLC0415
     from world.npc_services.effects import EffectResult  # noqa: PLC0415
 
-    details = getattr(offer, "permit_offer_details", None)  # noqa: GETATTR_LITERAL
+    details = offer.permit_offer_details_or_none
     if details is None:
         msg = f"NPCServiceOffer {offer.pk} (kind=PERMIT) has no PermitOfferDetails row."
         raise PermitIssuanceError(msg)
@@ -156,8 +156,7 @@ def issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         crafter_persona_display=persona,
         charges=1,
     )
-    persona_name = getattr(persona, "display_ic", None)  # noqa: GETATTR_LITERAL
-    holder_persona_name = persona_name() if callable(persona_name) else str(persona)
+    holder_persona_name = persona.display_ic()
     permit = BuildingPermitDetails.objects.create(
         item_instance=instance,
         holder_persona_name=holder_persona_name,
@@ -235,7 +234,7 @@ def validate_permit_site(
 
     room_profile = site_room.room_profile_or_none
     if room_profile is None:
-        msg = f"Site {getattr(site_room, 'pk', '?')} has no RoomProfile (not a room)."  # noqa: GETATTR_LITERAL
+        msg = f"Site {site_room.pk} has no RoomProfile (not a room)."
         raise PermitSiteNotOutdoorError(msg)
     if not room_profile.is_outdoor:
         msg = f"Site {site_room.pk} is not an outdoor room."

@@ -9,8 +9,8 @@ reimplementing get_check_modifier's logic.
 from decimal import Decimal
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
@@ -28,7 +28,7 @@ class ConditionContributionsTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="ContribTarget")
+        cls.target = ObjectDBFactory(db_key="ContribTarget")
         CharacterSheetFactory(character=cls.target)
         cls.combat_attack = CheckTypeFactory(name="combat-attack-contrib")
 
@@ -104,7 +104,7 @@ class ConditionContributionsWithStageTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.target = ObjectDB.objects.create(db_key="StageContribTarget")
+        cls.target = ObjectDBFactory(db_key="StageContribTarget")
         CharacterSheetFactory(character=cls.target)
         cls.combat_attack = CheckTypeFactory(name="combat-attack-stage-contrib")
 

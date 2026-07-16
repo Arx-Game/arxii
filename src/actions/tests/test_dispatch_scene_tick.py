@@ -16,6 +16,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from actions.constants import ActionBackend
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
@@ -95,7 +96,7 @@ class TestChallengeDispatchTicksSceneRound(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.room = ObjectDB.objects.create(db_key="SceneTickRoom")
+        cls.room = ObjectDBFactory(db_key="SceneTickRoom")
         cls.sheet = CharacterSheetFactory()
         cls.character = _set_character_location(cls.sheet.character, cls.room)
 
@@ -156,7 +157,7 @@ class TestRegistryDispatchDoesNotTickSceneRound(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.room = ObjectDB.objects.create(db_key="RegistryTickRoom")
+        cls.room = ObjectDBFactory(db_key="RegistryTickRoom")
         cls.sheet = CharacterSheetFactory()
         cls.character = _set_character_location(cls.sheet.character, cls.room)
 

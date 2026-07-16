@@ -40,8 +40,11 @@ def create_obstacle(*, payload: Any) -> None:
     """
     a = Position.objects.get(pk=payload.position_a_id)
     b = Position.objects.get(pk=payload.position_b_id)
+    # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     blocks_flight = getattr(payload, "blocks_flight", False)  # noqa: GETATTR_LITERAL
+    # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     caster_sheet = getattr(payload, "caster_sheet", None)  # noqa: GETATTR_LITERAL
+    # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     duration_rounds = getattr(payload, "duration_rounds", None)  # noqa: GETATTR_LITERAL
 
     if caster_sheet is not None:
@@ -261,6 +264,7 @@ def summon_ally(*, payload: Any) -> None:
        strength from ``max_health``, quality/properties/capabilities from the
        payload (or defaults), summoned_by=caster sheet.
     """
+    # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     if getattr(payload, "military", False):  # noqa: GETATTR_LITERAL
         _summon_military_unit(payload=payload)
         return
@@ -289,7 +293,9 @@ def summon_ally(*, payload: Any) -> None:
     caster_sheet = participant.character_sheet
 
     threat_pool = ThreatPool.objects.get(pk=payload.threat_pool_id)
+    # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     max_health: int = getattr(payload, "max_health", 30)  # noqa: GETATTR_LITERAL
+    # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     bond_rounds: int | None = getattr(payload, "bond_rounds", None)  # noqa: GETATTR_LITERAL
 
     # Reuse the canonical opponent-creation primitive (anti-reinvention, ADR-0016).
@@ -342,11 +348,15 @@ def _summon_military_unit(*, payload: Any) -> None:
         return  # Caster is not an active battle participant — nothing to summon into.
 
     caster_sheet = participant.character_sheet
+    # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     max_health: int = getattr(payload, "max_health", 30)  # noqa: GETATTR_LITERAL
+    # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     quality: str = getattr(payload, "quality", UnitQuality.TRAINED)  # noqa: GETATTR_LITERAL
+    # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     property_names: list[str] = getattr(payload, "properties", [])  # noqa: GETATTR_LITERAL
     capability_magnitudes: dict[str, int] = getattr(
         payload,
+        # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
         "capabilities",  # noqa: GETATTR_LITERAL
         {},
     )

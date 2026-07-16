@@ -21,6 +21,7 @@ from evennia.objects.models import ObjectDB
 
 from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.constants import ParticipantStatus
@@ -122,7 +123,7 @@ class TestGetPlayerActionsChallengeBackend(django.test.TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.room = ObjectDB.objects.create(db_key="ChallengeRoom")
+        cls.room = ObjectDBFactory(db_key="ChallengeRoom")
         cls.sheet = CharacterSheetFactory()
         # Set character location (bypasses Evennia's at_db_location_postsave hook).
         cls.character = _set_character_location(cls.sheet.character, cls.room)
@@ -441,7 +442,7 @@ class TestGetPlayerActionsRecomputedEachCall(django.test.TestCase):
             TechniqueFactory,
         )
 
-        cls.room = ObjectDB.objects.create(db_key="RecomputeRoom")
+        cls.room = ObjectDBFactory(db_key="RecomputeRoom")
         cls.sheet = CharacterSheetFactory()
         cls.character = _set_character_location(cls.sheet.character, cls.room)
 
@@ -527,7 +528,7 @@ class TestGetPlayerActionsNoCharacterSheet(django.test.TestCase):
         from actions.player_interface import get_player_actions
 
         # Create a bare ObjectDB with no CharacterSheet attached.
-        character = ObjectDB.objects.create(db_key="SheetlessCharacter")
+        character = ObjectDBFactory(db_key="SheetlessCharacter")
         try:
             actions = get_player_actions(character)
             self.assertEqual(
@@ -555,7 +556,7 @@ class TestDispatchPlayerActionChallengeImmediate(django.test.TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.room = ObjectDB.objects.create(db_key="DispatchChallengeRoom")
+        cls.room = ObjectDBFactory(db_key="DispatchChallengeRoom")
         cls.sheet = CharacterSheetFactory()
         cls.character = _set_character_location(cls.sheet.character, cls.room)
 
@@ -775,7 +776,7 @@ class TestDispatchPlayerActionChallengeDeferred(django.test.TestCase):
         )
 
         # Put the character in the room with the challenge
-        cls.room = ObjectDB.objects.create(db_key="DeferredChallengeRoom")
+        cls.room = ObjectDBFactory(db_key="DeferredChallengeRoom")
         _set_character_location(cls.character, cls.room)
 
         cls.challenge_instance, cls.approach, cls.capability, cls.check_type = (
@@ -832,7 +833,7 @@ class TestDispatchPlayerActionUnknownRef(django.test.TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.room = ObjectDB.objects.create(db_key="StaleRefRoom")
+        cls.room = ObjectDBFactory(db_key="StaleRefRoom")
         cls.sheet = CharacterSheetFactory()
         cls.character = _set_character_location(cls.sheet.character, cls.room)
 

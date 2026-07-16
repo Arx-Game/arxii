@@ -139,6 +139,7 @@ class EraSerializer(serializers.ModelSerializer):
         (``Count("stories_created_in_era")``). Falls back to a direct query only
         when the annotation is absent (e.g. in non-viewset serializer calls).
         """
+        # Suppression justified: queryset annotation probe; absent outside the annotating viewset.
         annotated = getattr(obj, "story_count", None)  # noqa: GETATTR_LITERAL
         if annotated is not None:
             return int(annotated)
@@ -2392,6 +2393,7 @@ class TableBulletinPostSerializer(serializers.ModelSerializer):
 
     def get_replies(self, obj: Any) -> list[Any]:
         """Return cached replies (from Prefetch to_attr) or query the DB."""
+        # Suppression justified: queryset annotation probe; absent outside the annotating viewset.
         reply_list = getattr(obj, "replies_cached", None)  # noqa: GETATTR_LITERAL
         if reply_list is None:
             reply_list = list(obj.replies.select_related("author_persona").all())

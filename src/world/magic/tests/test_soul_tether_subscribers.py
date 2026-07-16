@@ -32,6 +32,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import (
@@ -75,7 +76,7 @@ from world.relationships.factories import (
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:
     """Return a bare ObjectDB room for event dispatch."""
-    return ObjectDB.objects.create(
+    return ObjectDBFactory(
         db_key=key,
         db_typeclass_path="typeclasses.rooms.Room",
     )

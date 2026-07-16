@@ -14,7 +14,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.factories import ItemInstanceFactory
 from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
@@ -1027,7 +1027,6 @@ class ThreadPullPreviewTests(APITestCase):
         relationship facts about personas the requester cannot perceive
         (mirrors pull_applicability.py's can_perceive gates, ADR-0086).
         """
-        from evennia.objects.models import ObjectDB
 
         rt_thread, threaded_sheet = self._build_relationship_track_pull(
             threaded_sheet_db_key="ThreadedY3"
@@ -1036,10 +1035,10 @@ class ThreadPullPreviewTests(APITestCase):
 
         # Put the requester's and the target's characters in different,
         # unconnected rooms so can_perceive returns False.
-        owner_room = ObjectDB.objects.create(
+        owner_room = ObjectDBFactory(
             db_key="PreviewOwnerRoom", db_typeclass_path="typeclasses.rooms.Room"
         )
-        target_room = ObjectDB.objects.create(
+        target_room = ObjectDBFactory(
             db_key="PreviewTargetRoom", db_typeclass_path="typeclasses.rooms.Room"
         )
         self.sheet.character.location = owner_room

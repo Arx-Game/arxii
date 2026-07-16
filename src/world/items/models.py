@@ -18,6 +18,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import TargetKind
+from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.forms.models import ConcealmentLevel, DisguiseKind
@@ -535,6 +536,9 @@ class ItemInstance(SharedMemoryModel):
     References an ItemTemplate for base properties, with per-instance overrides
     for custom names, descriptions, quality, and state.
     """
+
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    building_permit_details_or_none = ReverseOneToOneOrNone("building_permit_details")
 
     template = models.ForeignKey(
         ItemTemplate,

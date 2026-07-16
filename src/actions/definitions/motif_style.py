@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 
 _BIND_EXCEPTIONS = (StyleResonanceUnclaimed, StyleBindingCapExceeded)
 _MSG_NO_ACTIVE_CHARACTER = "No active character."
-_MSG_OPERATION_FAILED = "Operation failed."
 
 
 @dataclass
@@ -70,7 +69,7 @@ class BindMotifStyleAction(MotifStyleActionBase):
         try:
             binding = bind_motif_style(sheet, style, resonance)
         except _BIND_EXCEPTIONS as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message=f"'{style.name}' is now bound to your {resonance.name} resonance.",
@@ -96,7 +95,7 @@ class UnbindMotifStyleAction(MotifStyleActionBase):
         try:
             unbind_motif_style(sheet, style)
         except StyleNotBound as exc:
-            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
+            return self._fail(exc.user_message)
         return ActionResult(
             success=True,
             message=f"'{style.name}' is no longer bound.",

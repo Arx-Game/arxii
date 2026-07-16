@@ -9,6 +9,7 @@ from actions.factories import (
     ConsequencePoolEntryFactory,
     ConsequencePoolFactory,
 )
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
@@ -224,7 +225,7 @@ class KnockoutDeathProcessingTest(TestCase):
         )
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="TestRoomKO",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -321,7 +322,7 @@ class KnockoutDeathProcessingTest(TestCase):
         )
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="TestRoomDying",
             db_typeclass_path="typeclasses.rooms.Room",
         )
@@ -529,7 +530,7 @@ class NpcActionInteractionLazyCreationTests(TestCase):
         )
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key=f"LazyNPCRoom-{pc_health}-{npc_damage}",
             db_typeclass_path="typeclasses.rooms.Room",
         )

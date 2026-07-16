@@ -6,10 +6,9 @@ walks the ``AreaClosure`` materialized view. Setup mirrors
 """
 
 from django.test import TestCase, tag
-from evennia.objects.models import ObjectDB
 
 from actions.registry import get_action
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
@@ -25,7 +24,7 @@ from world.locations.models import LocationOwnership
 
 
 def _room_in(area, *, name="A Room"):
-    room = ObjectDB.objects.create(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
+    room = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
     RoomProfile.objects.update_or_create(objectdb=room, defaults={"area": area})
     return room
 

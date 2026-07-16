@@ -20,7 +20,7 @@ from evennia.objects.models import ObjectDB
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.factories import (
@@ -119,7 +119,7 @@ class AvailableActionsViewOwnerTests(TestCase):
             end_date=None,
         )
 
-        cls.room = ObjectDB.objects.create(db_key="AvailActionsRoom")
+        cls.room = ObjectDBFactory(db_key="AvailActionsRoom")
         cls.other_account = AccountFactory()
         cls.staff_account = AccountFactory(is_staff=True)
 
@@ -272,7 +272,7 @@ class AvailableActionsViewChallengeShapeTests(TestCase):
             end_date=None,
         )
 
-        cls.room = ObjectDB.objects.create(db_key="ChallengeShapeRoom")
+        cls.room = ObjectDBFactory(db_key="ChallengeShapeRoom")
 
         cls.challenge_instance, cls.approach, cls.capability, cls.check_type, _, _ = (
             _make_challenge_setup(cls.sheet, cls.room)
@@ -387,7 +387,7 @@ class DispatchActionViewPermissionTests(TestCase):
             end_date=None,
         )
 
-        cls.room = ObjectDB.objects.create(db_key="DispatchPermRoom")
+        cls.room = ObjectDBFactory(db_key="DispatchPermRoom")
         cls.other_account = AccountFactory()
         cls.staff_account = AccountFactory(is_staff=True)
 
@@ -453,7 +453,7 @@ class DispatchActionViewChallengeTests(TestCase):
             end_date=None,
         )
 
-        cls.room = ObjectDB.objects.create(db_key="DispatchChallengeRoom")
+        cls.room = ObjectDBFactory(db_key="DispatchChallengeRoom")
 
         (
             cls.challenge_instance,
@@ -750,7 +750,7 @@ class DispatchActionViewSuccessFieldTests(TestCase):
             end_date=None,
         )
 
-        cls.room = ObjectDB.objects.create(db_key="DispatchSuccessFieldRoom")
+        cls.room = ObjectDBFactory(db_key="DispatchSuccessFieldRoom")
 
     def setUp(self) -> None:
         self.client = APIClient()

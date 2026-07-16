@@ -27,6 +27,7 @@ from evennia.utils.idmapper import models as idmapper_models
 from actions.constants import ActionBackend
 from actions.types import ActionRef
 from commands.command import DispatchCommand
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import CapabilityTypeFactory
@@ -93,7 +94,7 @@ class ChallengeTelnetDispatchE2ETests(TestCase):
     def setUp(self) -> None:
         idmapper_models.flush_cache()
 
-        self.room = ObjectDB.objects.create(db_key="ChallengeTelnetTestRoom")
+        self.room = ObjectDBFactory(db_key="ChallengeTelnetTestRoom")
         self.sheet = CharacterSheetFactory()
         self.character = _set_character_location(self.sheet.character, self.room)
 

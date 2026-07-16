@@ -7,8 +7,8 @@ The SCENE branch is exercised via scene= in collect_check_modifiers().
 """
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
@@ -78,7 +78,7 @@ class SceneContributionCollectionTest(TestCase):
         )
 
     def setUp(self):
-        self.target = ObjectDB.objects.create(db_key="SceneCollectTarget")
+        self.target = ObjectDBFactory(db_key="SceneCollectTarget")
         self.sheet = CharacterSheetFactory(character=self.target)
 
     def test_scene_contribution_present(self):

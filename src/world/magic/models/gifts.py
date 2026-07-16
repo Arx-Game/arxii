@@ -135,6 +135,14 @@ class Tradition(NaturalKeyMixin, SharedMemoryModel):
     A tradition may be associated with a society but can also exist independently.
     """
 
+    @cached_property
+    def cached_codex_grants(self) -> list:
+        """Codex grants — the Prefetch/query shared interface (#2386).
+
+        Authored content: negligible staleness on the identity-mapped row.
+        """
+        return list(self.codex_grants.all())
+
     name = models.CharField(
         max_length=200,
         unique=True,

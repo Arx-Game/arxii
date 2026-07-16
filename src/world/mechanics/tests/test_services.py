@@ -2,7 +2,7 @@
 
 from django.test import TestCase, tag
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import DamageTypeFactory
 from world.distinctions.factories import (
@@ -950,13 +950,11 @@ class EquipmentWalkRawObjectDBSafetyTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia.objects.models import ObjectDB
-
         from world.character_sheets.factories import CharacterSheetFactory
         from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
         # Mirror the trait test fixture: raw ObjectDB, no Character typeclass.
-        cls.character = ObjectDB.objects.create(db_key="RawChar")
+        cls.character = ObjectDBFactory(db_key="RawChar")
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.target = ModifierTargetFactory(
             category=ModifierCategoryFactory(name="raw_stat"),

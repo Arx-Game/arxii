@@ -3,8 +3,8 @@
 from unittest.mock import MagicMock
 
 from django.test import TestCase, tag
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
@@ -35,7 +35,7 @@ class LegendAwardHandlerCreateEventTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="HandlerTestChar")
+        cls.character = ObjectDBFactory(db_key="HandlerTestChar")
         cls.source_type = LegendSourceTypeFactory()
         cls.persona_a = PersonaFactory()
         cls.persona_b = PersonaFactory()
@@ -117,7 +117,7 @@ class LegendAwardHandlerParticipantMissingTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="MissingParticipantChar")
+        cls.character = ObjectDBFactory(db_key="MissingParticipantChar")
         cls.source_type = LegendSourceTypeFactory()
 
     def test_none_participants_raises_error(self) -> None:
@@ -144,7 +144,7 @@ class LegendAwardDescriptionFallbackTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="DescFallbackChar")
+        cls.character = ObjectDBFactory(db_key="DescFallbackChar")
         cls.source_type = LegendSourceTypeFactory()
         cls.persona = PersonaFactory()
 
@@ -228,7 +228,7 @@ class LegendAwardHandlerCovenantFanOutTests(TestCase):
         # PersonaFactory defaults to ESTABLISHED, which is valid for legend.
         persona = PersonaFactory(character_sheet=sheet)
 
-        character = ObjectDB.objects.create(db_key="FanOutChar")
+        character = ObjectDBFactory(db_key="FanOutChar")
         source_type = LegendSourceTypeFactory()
         consequence = ConsequenceFactory()
         effect = _make_legend_effect(consequence, source_type, template="Fan-out deed.")
@@ -256,7 +256,7 @@ class LegendAwardRiskTierScalingTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         """Shared character/source_type/persona fixtures for all scaling scenarios."""
-        cls.character = ObjectDB.objects.create(db_key="RiskTierScalingChar")
+        cls.character = ObjectDBFactory(db_key="RiskTierScalingChar")
         cls.source_type = LegendSourceTypeFactory()
         cls.persona = PersonaFactory()
 

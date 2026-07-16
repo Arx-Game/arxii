@@ -332,7 +332,13 @@ def declare_support(
 
     # Emit per-actor STORY + room ambient stir (outside atomic, like group
     # resolution so narrative side-effects don't roll back with a retry).
-    move_label = getattr(move, "name", "") or move.flavor_template or "Support"  # noqa: GETATTR_LITERAL
+    from world.missions.models import MissionAssistPattern  # noqa: PLC0415
+
+    move_label = (
+        (move.name if isinstance(move, MissionAssistPattern) else "")
+        or move.flavor_template
+        or "Support"
+    )
     story_text = move.flavor_template or f"Support declared: {move_label}"
     try:
         sheet = character.sheet_data

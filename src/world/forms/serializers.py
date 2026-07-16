@@ -134,11 +134,7 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
             # (handles AnonymousUser and truthy non-character puppets).
             request = self.context.get("request")
             sheet = puppeted_sheet_for(request.user) if request is not None else None
-            active = (
-                getattr(sheet, "active_alternate_self", None)  # noqa: GETATTR_LITERAL
-                if sheet is not None
-                else None
-            )
+            active = sheet.active_alternate_self_or_none if sheet is not None else None
             self._active_alternate_self_id = (
                 active.alternate_self_id if active is not None else None
             )

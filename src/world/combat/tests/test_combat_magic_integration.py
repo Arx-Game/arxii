@@ -9,9 +9,9 @@ rather than internal call patterns.
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
 from actions.constants import ActionTargetType
+from evennia_extensions.factories import ObjectDBFactory
 from flows.constants import EventName
 from flows.events.payloads import TechniqueCastPayload, TechniquePreCastPayload
 from world.character_sheets.factories import CharacterSheetFactory
@@ -79,7 +79,7 @@ def _setup_pc_attacking_mook(
     )
     anima = CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
     CharacterEngagementFactory(character=sheet.character)
-    room = ObjectDB.objects.create(
+    room = ObjectDBFactory(
         db_key="TestRoom",
         db_typeclass_path="typeclasses.rooms.Room",
     )
@@ -686,9 +686,7 @@ class CombatAoETargetPrerequisitesPreFlightTest(TestCase):
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
-        room = ObjectDB.objects.create(
-            db_key="TestRoom", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        room = ObjectDBFactory(db_key="TestRoom", db_typeclass_path="typeclasses.rooms.Room")
         sheet.character.location = room
         sheet.character.save()
 

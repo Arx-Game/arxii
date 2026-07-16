@@ -15,6 +15,7 @@ from world.stories.models import (
     Beat,
     CustodyClearance,
     Episode,
+    GroupStoryProgress,
     Story,
     StoryNote,
     StoryParticipation,
@@ -1314,7 +1315,7 @@ def _story_log_user_has_access(
 
     # GROUP scope: user is an active member of the GMTable with progress.
     if story.scope == StoryScope.GROUP and progress is not None:
-        gm_table = getattr(progress, "gm_table", None)  # noqa: GETATTR_LITERAL
+        gm_table = progress.gm_table if isinstance(progress, GroupStoryProgress) else None
         if gm_table is not None:
             return (
                 cast(Any, gm_table)

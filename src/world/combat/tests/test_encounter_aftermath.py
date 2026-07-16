@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
@@ -13,7 +12,7 @@ from actions.factories import (
     ConsequencePoolEntryFactory,
     ConsequencePoolFactory,
 )
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from flows.constants import EventName
 from world.achievements.models import StatDefinition
 from world.character_sheets.factories import CharacterSheetFactory
@@ -464,7 +463,7 @@ class ResolveRoundCompletionTests(TestCase):
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         CharacterEngagementFactory(character=sheet.character)
-        room = ObjectDB.objects.create(
+        room = ObjectDBFactory(
             db_key="AftermathCompletionRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )

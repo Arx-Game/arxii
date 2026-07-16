@@ -166,9 +166,7 @@ class DefensiveFashionWiringTests(TestCase):
     """
 
     def setUp(self) -> None:
-        from evennia.objects.models import ObjectDB
-
-        from evennia_extensions.factories import CharacterFactory
+        from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
         from evennia_extensions.models import RoomProfile
         from world.areas.constants import AreaLevel
         from world.areas.factories import AreaFactory
@@ -232,7 +230,7 @@ class DefensiveFashionWiringTests(TestCase):
             realm=realm,
             dominant_society=self.society,
         )
-        area_room = ObjectDB.objects.create(
+        area_room = ObjectDBFactory(
             db_key="Defense Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )

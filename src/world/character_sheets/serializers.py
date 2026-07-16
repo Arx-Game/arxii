@@ -687,6 +687,8 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
 
     rituals: list[Ritual] = getattr(
         account,
+        # Suppression justified: mutating prefetch on identity-mapped parent; context-over-cache
+        # (#2401).
         "cached_scene_action_rituals",  # noqa: GETATTR_LITERAL
         None,
     )
@@ -893,6 +895,8 @@ def _build_personas(
     """
     if privileged:
         # #2196: use prefetched conditions from the character (avoids N+1 per persona).
+        # Suppression justified: mutating prefetch on identity-mapped parent; context-over-cache
+        # (#2401).
         cached_conditions = getattr(sheet.character, "cached_active_conditions", None)  # noqa: GETATTR_LITERAL
         return [
             PersonaEntry(

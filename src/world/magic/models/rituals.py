@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.descriptors import ReverseOneToOneOrNone
 from world.magic.constants import ParticipationRule, RitualExecutionKind, TargetKind
 from world.magic.models.ritual_check_config import RitualCheckConfig
 
@@ -58,6 +59,9 @@ class Ritual(SharedMemoryModel):
     (SCENE_ACTION requires a RitualCheckConfig; other kinds may carry one)
     is enforced in clean() only since DB CHECK constraints cannot span tables.
     """
+
+    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    check_config_or_none = ReverseOneToOneOrNone("check_config")
 
     name = models.CharField(max_length=120, unique=True)
     description = models.TextField()

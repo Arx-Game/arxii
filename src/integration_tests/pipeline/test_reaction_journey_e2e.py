@@ -16,7 +16,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
 from commands.react import CmdReact
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility
@@ -46,7 +46,7 @@ class ReactionJourneyE2ETests(TestCase):
 
     def setUp(self) -> None:
         idmapper_models.flush_cache()
-        self.room = ObjectDB.objects.create(
+        self.room = ObjectDBFactory(
             db_key="ReactionE2ERoom", db_typeclass_path="typeclasses.rooms.Room"
         )
         self.scene = SceneFactory(location=self.room, is_active=True)
@@ -102,7 +102,7 @@ class ReactionJourneyE2ETests(TestCase):
         self.assertEqual(WindowReaction.objects.count(), 1)
 
     def test_react_no_active_scene_shows_error(self) -> None:
-        empty_room = ObjectDB.objects.create(
+        empty_room = ObjectDBFactory(
             db_key="EmptyRoom2", db_typeclass_path="typeclasses.rooms.Room"
         )
         self.reactor_char.location = empty_room

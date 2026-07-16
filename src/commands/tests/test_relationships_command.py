@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 
 from commands.relationships import CmdRelationship, _parse_name_and_kwargs
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import TrackSign, UpdateVisibility
 from world.relationships.factories import (
@@ -491,7 +491,6 @@ class CmdRelationshipBumpTests(TestCase):
     """``relationship plus|neg <name>`` (+ switch form) runs the bump Action (#1699)."""
 
     def setUp(self) -> None:
-        from evennia.objects.models import ObjectDB
         from evennia.utils.idmapper.models import flush_cache
 
         from world.relationships.constants import TrackSystemKey
@@ -504,9 +503,7 @@ class CmdRelationshipBumpTests(TestCase):
         RelationshipTrackFactory(
             name="Friction", sign=TrackSign.NEGATIVE, system_key=TrackSystemKey.FRICTION
         )
-        self.room = ObjectDB.objects.create(
-            db_key="BumpRoom", db_typeclass_path="typeclasses.rooms.Room"
-        )
+        self.room = ObjectDBFactory(db_key="BumpRoom", db_typeclass_path="typeclasses.rooms.Room")
         self.scene = SceneFactory(location=self.room, is_active=True)
         self.caller = CharacterFactory()
         self.caller.location = self.room

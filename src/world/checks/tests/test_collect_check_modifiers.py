@@ -15,8 +15,8 @@ ConditionCheckModifier) live in setUpTestData for speed.
 """
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
@@ -44,7 +44,7 @@ class CollectCheckModifiersTest(TestCase):
 
     def setUp(self):
         # Mutable per-test: fresh ObjectDB + CharacterSheet (rollmod=0 default).
-        self.target = ObjectDB.objects.create(db_key="CollectModTarget")
+        self.target = ObjectDBFactory(db_key="CollectModTarget")
         self.sheet = CharacterSheetFactory(character=self.target)
 
     def test_condition_and_rollmod_combined_total(self):
@@ -147,7 +147,7 @@ class CollectCheckModifiersMockCheckTypeTest(TestCase):
     """
 
     def setUp(self):
-        self.target = ObjectDB.objects.create(db_key="MockCheckTypeTarget")
+        self.target = ObjectDBFactory(db_key="MockCheckTypeTarget")
         self.sheet = CharacterSheetFactory(character=self.target)
 
     def test_mock_check_type_does_not_raise(self):
@@ -181,7 +181,6 @@ class CharacterSourceTests(TestCase):
 
     def setUp(self):
         # Mutable per-test: fresh ObjectDB + CharacterSheet (matches the module's pattern).
-        from evennia.objects.models import ObjectDB
 
         from world.character_sheets.factories import CharacterSheetFactory
         from world.checks.factories import CheckTypeFactory
@@ -197,7 +196,7 @@ class CharacterSourceTests(TestCase):
             ModifierTargetFactory,
         )
 
-        self.target_obj = ObjectDB.objects.create(db_key="CharacterSourceTarget")
+        self.target_obj = ObjectDBFactory(db_key="CharacterSourceTarget")
         self.sheet = CharacterSheetFactory(character=self.target_obj)
         self.check_type = CheckTypeFactory(name="Warded Strike")
         self.scoped_target = ModifierTargetFactory(

@@ -54,9 +54,7 @@ class MantleCombatPipelineTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:  # noqa: PLR0915 - end-to-end fixture spans many rows
-        from evennia.objects.models import ObjectDB
-
-        from evennia_extensions.factories import CharacterFactory
+        from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
         from world.areas.constants import AreaLevel
         from world.areas.factories import AreaFactory
         from world.character_sheets.factories import CharacterSheetFactory
@@ -188,7 +186,7 @@ class MantleCombatPipelineTests(TestCase):
             realm=cls.realm,
             dominant_society=cls.society,
         )
-        cls.room_obj = ObjectDB.objects.create(
+        cls.room_obj = ObjectDBFactory(
             db_key="MantleCombatRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
