@@ -191,11 +191,14 @@ so that web case calls `author_staff_technique()` directly.)
 |-------|---------|------------|
 | `Cantrip` | Staff-curated starter technique template | `name`, `description`, `archetype`, `effect_type` (FK), `style` (FK), `base_intensity`, `base_control`, `base_anima_cost`, `requires_facet`, `allowed_facets` (M2M) |
 
-Cantrips are baby techniques. At CG finalization, a cantrip creates a real Technique
-(intensity=base_intensity, control=base_control, etc.) in the character's Gift.
-Mechanical fields are hidden from the player — they only see name, description,
-archetype grouping, and optional facet selection. Filtered by Path (cantrip's style
-must be in Path's allowed_styles).
+**Superseded at CG finalization (#2426 Task 6):** the CG magic stage no longer picks a
+`Cantrip` template to mint a new `Technique`. It picks a staff-authored catalog `Gift`
++ `Technique`s directly (`get_gift_options`/`get_technique_options`,
+`world/magic/services/cg_catalog.py`), and `finalize_magic_data` only *links* them
+(`world/character_creation/services.py:_finalize_gift_and_techniques`) — no `Gift` or
+`Technique` row is created at CG time anymore. The `Cantrip` model and this
+template-based description are dead code pending the full removal sweep (#2426 Task 8);
+do not add new callers of the old cantrip-creation path.
 
 ### Standalone Casting — Shared Template + Per-Character Check (#1306) [BUILT & WIRED]
 

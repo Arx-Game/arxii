@@ -1,10 +1,9 @@
-"""Tests for magic stage validation (Gift-stage picks, #2426) and cantrip finalization."""
+"""Tests for magic stage validation (Gift-stage picks, #2426) and finalize linking."""
 
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from actions.constants import ActionCategory
 from evennia_extensions.factories import AccountFactory
 from world.achievements.constants import AccessChangeSource
 from world.character_creation.constants import CG_MODIFIER_CATEGORY, STARTING_TECHNIQUE_PICKS_TARGET
@@ -16,7 +15,6 @@ from world.classes.factories import PathFactory
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.fatigue.models import FatiguePool
 from world.magic.factories import (
-    CantripFactory,
     GiftFactory,
     PathGiftGrantFactory,
     ResonanceFactory,
@@ -24,28 +22,12 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
-from world.magic.models import CharacterAnima, Technique
+from world.magic.models import CharacterAnima
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
 from world.skills.factories import SkillFactory
 from world.traits.factories import SkillTraitFactory, StatTraitFactory
-
-
-class MagicFinalizationActionCategoryTest(TestCase):
-    """finalize_magic_data derives the technique's action_category from the Path."""
-
-    def test_technique_action_category_derives_from_path(self):
-        path = PathFactory(action_category=ActionCategory.MENTAL)
-        cantrip = CantripFactory()
-        sheet = CharacterSheetFactory()
-        draft = CharacterDraftFactory(
-            selected_path=path,
-            draft_data={"selected_cantrip_id": cantrip.id},
-        )
-        finalize_magic_data(draft, sheet)
-        technique = Technique.objects.get(source_cantrip=cantrip, creator=sheet)
-        self.assertEqual(technique.action_category, ActionCategory.MENTAL)
 
 
 class MagicStageValidationTest(TestCase):
@@ -177,11 +159,10 @@ class MagicFinalizationCGSeedingTest(TestCase):
     """finalize_magic_data seeds CharacterAnima and FatiguePool at CG completion (Phase 12)."""
 
     def _make_draft_and_sheet(self):
-        cantrip = CantripFactory()
         sheet = CharacterSheetFactory()
-        draft = CharacterDraftFactory(
-            draft_data={"selected_cantrip_id": cantrip.id},
-        )
+        # CharacterTradition creation is unconditional (#2426) — a tradition is
+        # required even though this test only cares about the Anima/Fatigue seeding.
+        draft = CharacterDraftFactory(selected_tradition=TraditionFactory())
         return draft, sheet
 
     def test_finalize_seeds_character_anima_row(self):
@@ -234,20 +215,29 @@ class MagicFinalizationCGSeedingTest(TestCase):
         self.assertEqual(FatiguePool.objects.filter(character_sheet=sheet).count(), 1)
 
 
-class CantripGrantNotificationTest(TestCase):
-    """Cantrip grant during magic-stage finalization queues an ABILITY NarrativeMessage (#1606)."""
+class GiftGrantNotificationTest(TestCase):
+    """Gift/technique grant during magic-stage finalization queues an ABILITY
+    NarrativeMessage (#1606, updated to the catalog gift/technique contract #2426).
+    """
 
     def _make_draft_and_sheet(self):
-        cantrip = CantripFactory(name="Phantom Step")
+        gift = GiftFactory(name="Umbral Sight")
+        technique = TechniqueFactory(gift=gift, name="Phantom Step")
+        resonance = ResonanceFactory()
         sheet = CharacterSheetFactory()
         draft = CharacterDraftFactory(
-            draft_data={"selected_cantrip_id": cantrip.id},
+            selected_tradition=TraditionFactory(),
+            draft_data={
+                "selected_gift_id": gift.id,
+                "selected_technique_ids": [technique.id],
+                "selected_gift_resonance_id": resonance.id,
+            },
         )
-        return draft, sheet, cantrip
+        return draft, sheet, technique
 
-    def test_cantrip_grant_queues_ability_narrative_message(self):
-        """finalize_magic_data with a cantrip queues an ABILITY message naming the technique."""
-        draft, sheet, cantrip = self._make_draft_and_sheet()
+    def test_gift_grant_queues_ability_narrative_message(self):
+        """finalize_magic_data with a gift queues an ABILITY message naming the technique."""
+        draft, sheet, technique = self._make_draft_and_sheet()
         finalize_magic_data(draft, sheet)
 
         deliveries = NarrativeMessageDelivery.objects.filter(recipient_character_sheet=sheet)
@@ -260,14 +250,14 @@ class CantripGrantNotificationTest(TestCase):
         )
         body = ability_deliveries[0].message.body
         self.assertIn(
-            cantrip.name,
+            technique.name,
             body,
-            f"Expected technique name '{cantrip.name}' in message body: {body!r}",
+            f"Expected technique name '{technique.name}' in message body: {body!r}",
         )
 
-    def test_cantrip_grant_message_has_character_creation_source_label(self):
+    def test_gift_grant_message_has_character_creation_source_label(self):
         """The queued message body references the CHARACTER_CREATION source label."""
-        draft, sheet, _cantrip = self._make_draft_and_sheet()
+        draft, sheet, _technique = self._make_draft_and_sheet()
         finalize_magic_data(draft, sheet)
 
         deliveries = NarrativeMessageDelivery.objects.filter(recipient_character_sheet=sheet)
@@ -283,10 +273,10 @@ class CantripGrantNotificationTest(TestCase):
             f"Expected source label '{source_label}' in message body: {body!r}",
         )
 
-    def test_no_cantrip_produces_no_ability_message(self):
-        """finalize_magic_data without a cantrip produces no ABILITY NarrativeMessage."""
+    def test_no_gift_selected_produces_no_ability_message(self):
+        """finalize_magic_data without a selected gift produces no ABILITY NarrativeMessage."""
         sheet = CharacterSheetFactory()
-        draft = CharacterDraftFactory(draft_data={})
+        draft = CharacterDraftFactory(selected_tradition=TraditionFactory(), draft_data={})
         finalize_magic_data(draft, sheet)
 
         deliveries = NarrativeMessageDelivery.objects.filter(recipient_character_sheet=sheet)
@@ -295,7 +285,7 @@ class CantripGrantNotificationTest(TestCase):
         ]
         self.assertFalse(
             ability_deliveries,
-            "No ABILITY message should be queued when no cantrip is selected.",
+            "No ABILITY message should be queued when no gift is selected.",
         )
 
 

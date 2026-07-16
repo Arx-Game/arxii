@@ -11,6 +11,7 @@ from rest_framework.test import APITestCase
 
 from world.character_creation.factories import CharacterDraftFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
+from world.magic.factories import TraditionFactory
 from world.roster.models import RosterEntry
 from world.roster.models.choices import CreationProvenance
 
@@ -27,6 +28,9 @@ class GMFinalizeViewTests(APITestCase):
     def _draft(self, account=None):
         return CharacterDraftFactory(
             account=account or self.gm.account,
+            # CharacterTradition creation is unconditional in finalize_magic_data
+            # (#2426) — a tradition is required even for GM-created drafts.
+            selected_tradition=TraditionFactory(),
             draft_data={"first_name": "Aurelius"},
         )
 

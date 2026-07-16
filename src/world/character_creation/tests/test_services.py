@@ -1108,94 +1108,149 @@ class FinalizeCharacterDistinctionResonanceTests(FinalizationTestMixin, TestCase
         ).exists()
 
 
-class FinalizeMagicDataCantripTests(TestCase):
-    """Test that finalize_magic_data creates magic models from cantrip selection."""
+class FinalizeGiftAndTechniquesTests(TestCase):
+    """finalize_magic_data links the CG-chosen catalog Gift/Techniques (#2426 Task 6).
+
+    Supersedes the old cantrip-creation contract: the Gift and Techniques are
+    staff-authored catalog rows the player picked via the CG option endpoints;
+    finalize only links them (CharacterGift/CharacterTechnique + the latent GIFT
+    thread), it never mints new Gift/Technique rows.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.magic.factories import CantripFactory, ResonanceFactory, TraditionFactory
-
-        cls.cantrip = CantripFactory(name="Danger Sense", requires_facet=False)
-        cls.resonance = ResonanceFactory()
-        cls.tradition = TraditionFactory()
-
-    def test_gift_created_from_cantrip(self) -> None:
-        """finalize_magic_data creates a Gift named after the cantrip."""
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import Gift
-
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft(cantrip=self.cantrip)
-
-        finalize_magic_data(draft, sheet)
-
-        gift = Gift.objects.get(name="Danger Sense")
-        assert gift.creator == sheet
-
-        from world.magic.constants import GiftKind
-
-        assert gift.kind == GiftKind.MAJOR
-
-    def test_character_gift_links_character_to_gift(self) -> None:
-        """finalize_magic_data creates CharacterGift linking sheet to new gift."""
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import CharacterGift
-
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft(cantrip=self.cantrip)
-
-        finalize_magic_data(draft, sheet)
-
-        char_gift = CharacterGift.objects.get(character=sheet)
-        assert char_gift.gift.name == "Danger Sense"
-
-    def test_custom_gift_name_used_when_provided(self) -> None:
-        """custom_gift_name in draft_data overrides the cantrip name."""
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import Gift
-
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft(
-            cantrip=self.cantrip,
-            custom_gift_name="My Special Sense",
-            custom_gift_description="A personalized danger sense.",
+        from world.magic.factories import (
+            GiftFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+            TraditionFactory,
         )
+        from world.skills.factories import SkillFactory
+        from world.traits.factories import StatTraitFactory
+
+        cls.tradition = TraditionFactory()
+        cls.resonance = ResonanceFactory()
+        cls.other_resonance = ResonanceFactory()
+        cls.gift = GiftFactory(name="Shadow Majesty")
+        cls.gift.resonances.add(cls.resonance, cls.other_resonance)
+        cls.technique_one = TechniqueFactory(gift=cls.gift, name="Umbral Step")
+        cls.technique_two = TechniqueFactory(gift=cls.gift, name="Umbral Veil")
+        cls.stat_trait = StatTraitFactory(name="Focus")
+        cls.skill = SkillFactory()
+
+    def test_character_gift_links_catalog_gift_without_creating_new_row(self) -> None:
+        """CharacterGift links the existing catalog Gift; no new Gift row is minted."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import CharacterGift, Gift
+
+        gift_count_before = Gift.objects.count()
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft()
 
         finalize_magic_data(draft, sheet)
 
-        gift = Gift.objects.get(name="My Special Sense")
-        assert gift.description == "A personalized danger sense."
-        assert gift.creator == sheet
+        assert Gift.objects.count() == gift_count_before
+        char_gift = CharacterGift.objects.get(character=sheet)
+        assert char_gift.gift == self.gift
 
-    def test_character_tradition_created_when_selected(self) -> None:
-        """finalize_magic_data creates CharacterTradition when tradition is set."""
+    def test_character_technique_rows_created_for_each_selected_technique(self) -> None:
+        """CharacterTechnique links every selected catalog Technique — no others."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import CharacterTechnique
+
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft(technique_ids=[self.technique_one.id, self.technique_two.id])
+
+        finalize_magic_data(draft, sheet)
+
+        linked = set(
+            CharacterTechnique.objects.filter(character=sheet).values_list(
+                "technique_id", flat=True
+            )
+        )
+        assert linked == {self.technique_one.id, self.technique_two.id}
+
+    def test_latent_gift_thread_carries_chosen_resonance(self) -> None:
+        """The provisioned latent GIFT thread's resonance matches the CG pick."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import TargetKind
+        from world.magic.models import Thread
+
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft(resonance=self.other_resonance)
+
+        finalize_magic_data(draft, sheet)
+
+        thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=self.gift)
+        assert thread.resonance == self.other_resonance
+
+    def test_ritual_check_config_matches_anima_check_choice(self) -> None:
+        """The provisioned anima Ritual's check_config stat/skill match the CG pick."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models.ritual_check_config import RitualCheckConfig
+        from world.roster.factories import RosterEntryFactory
+
+        sheet = CharacterSheetFactory()
+        RosterEntryFactory(character_sheet=sheet)
+        draft = self._create_draft()
+
+        finalize_magic_data(draft, sheet)
+
+        config = RitualCheckConfig.objects.get(ritual__author_account=draft.account)
+        assert config.stat == self.stat_trait
+        assert config.skill == self.skill
+
+    def test_ritual_name_honors_anima_ritual_name(self) -> None:
+        """draft_data['anima_ritual_name'], when set, names the provisioned Ritual."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models.rituals import Ritual
+        from world.roster.factories import RosterEntryFactory
+
+        sheet = CharacterSheetFactory()
+        RosterEntryFactory(character_sheet=sheet)
+        draft = self._create_draft(anima_ritual_name="Sunrise Devotions")
+
+        finalize_magic_data(draft, sheet)
+
+        ritual = Ritual.objects.get(author_account=draft.account)
+        assert ritual.name == "Sunrise Devotions"
+
+    def test_ritual_name_defaults_to_first_name_possessive(self) -> None:
+        """Without anima_ritual_name, the Ritual falls back to "<first_name>'s Anima Ritual"."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models.rituals import Ritual
+        from world.roster.factories import RosterEntryFactory
+
+        sheet = CharacterSheetFactory()
+        RosterEntryFactory(character_sheet=sheet)
+        draft = self._create_draft()
+        draft.draft_data["first_name"] = "Marcus"
+        draft.save(update_fields=["draft_data"])
+
+        finalize_magic_data(draft, sheet)
+
+        ritual = Ritual.objects.get(author_account=draft.account)
+        assert ritual.name == "Marcus's Anima Ritual"
+
+    def test_character_tradition_created_unconditionally(self) -> None:
+        """CharacterTradition is always created — compute_magic_errors requires it."""
         from world.character_creation.services import finalize_magic_data
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.models import CharacterTradition
 
         sheet = CharacterSheetFactory()
-        draft = self._create_draft(cantrip=self.cantrip, tradition=self.tradition)
+        draft = self._create_draft()
 
         finalize_magic_data(draft, sheet)
 
         char_tradition = CharacterTradition.objects.get(character=sheet)
         assert char_tradition.tradition == self.tradition
-
-    def test_no_tradition_created_when_not_selected(self) -> None:
-        """No CharacterTradition created when draft has no tradition."""
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import CharacterTradition
-
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft(cantrip=self.cantrip, tradition=None)
-
-        finalize_magic_data(draft, sheet)
-
-        assert not CharacterTradition.objects.filter(character=sheet).exists()
 
     def test_aura_created_with_defaults(self) -> None:
         """finalize_magic_data creates CharacterAura with default values."""
@@ -1204,7 +1259,7 @@ class FinalizeMagicDataCantripTests(TestCase):
         from world.magic.models import CharacterAura
 
         sheet = CharacterSheetFactory()
-        draft = self._create_draft(cantrip=self.cantrip)
+        draft = self._create_draft()
 
         finalize_magic_data(draft, sheet)
 
@@ -1221,193 +1276,58 @@ class FinalizeMagicDataCantripTests(TestCase):
         from world.magic.models import CharacterAura
 
         sheet = CharacterSheetFactory()
-        draft = self._create_draft(
-            cantrip=self.cantrip,
-            glimpse_story="I first saw the threads at age twelve.",
-        )
+        draft = self._create_draft(glimpse_story="I first saw the threads at age twelve.")
 
         finalize_magic_data(draft, sheet)
 
         aura = CharacterAura.objects.get(character=sheet.character)
         assert aura.glimpse_story == "I first saw the threads at age twelve."
 
-    def test_technique_created_from_cantrip(self) -> None:
-        """finalize_magic_data creates a Technique with cantrip's mechanical values."""
+    def test_no_gift_selected_no_ops_gift_and_technique_linking(self) -> None:
+        """Legacy/test-only draft_data missing selected_gift_id links nothing."""
         from world.character_creation.services import finalize_magic_data
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import CharacterGift, CharacterTechnique, Technique
+        from world.magic.models import CharacterGift, CharacterTechnique
 
         sheet = CharacterSheetFactory()
-        draft = self._create_draft(cantrip=self.cantrip)
+        draft = self._create_draft()
+        draft.draft_data.pop("selected_gift_id")
+        draft.save(update_fields=["draft_data"])
 
         finalize_magic_data(draft, sheet)
 
-        gift = CharacterGift.objects.get(character=sheet).gift
-        technique = Technique.objects.get(gift=gift)
-        assert technique.name == "Danger Sense"
-        assert technique.style == self.cantrip.style
-        assert technique.effect_type == self.cantrip.effect_type
-        assert technique.intensity == self.cantrip.base_intensity
-        assert technique.control == self.cantrip.base_control
-        assert technique.anima_cost == self.cantrip.base_anima_cost
-        assert technique.level == 1
-        assert technique.source_cantrip == self.cantrip
-        assert technique.creator == sheet
-        assert CharacterTechnique.objects.filter(character=sheet, technique=technique).exists()
-
-    def test_technique_uses_custom_name(self) -> None:
-        """Technique uses custom gift name when provided."""
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import CharacterGift, Technique
-
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft(
-            cantrip=self.cantrip,
-            custom_gift_name="Flames of the Defiant",
-            custom_gift_description="A revolutionary's fire.",
-        )
-
-        finalize_magic_data(draft, sheet)
-
-        gift = CharacterGift.objects.get(character=sheet).gift
-        technique = Technique.objects.get(gift=gift)
-        assert technique.name == "Flames of the Defiant"
-        assert technique.description == "A revolutionary's fire."
-
-    def test_technique_uses_catalog_consequence_pool(self) -> None:
-        """finalize_magic_data assigns the chosen catalog pool's ActionTemplate.
-
-        A magic catalog pool requires a non-physical derived category (#1995), so
-        the draft's path authors action_category=mental."""
-        from actions.constants import ActionCategory
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.classes.factories import PathFactory
-        from world.magic.models import CharacterGift, Technique
-        from world.magic.seeds_cast import ensure_technique_catalog_content
-
-        catalog_templates = ensure_technique_catalog_content()
-        chosen = catalog_templates[0]
-        sheet = CharacterSheetFactory()
-        mental_path = PathFactory(name="Mental Test Path", action_category=ActionCategory.MENTAL)
-        draft = self._create_draft(
-            cantrip=self.cantrip,
-            consequence_pool_id=chosen.consequence_pool_id,
-            path=mental_path,
-        )
-
-        finalize_magic_data(draft, sheet)
-
-        gift = CharacterGift.objects.get(character=sheet).gift
-        technique = Technique.objects.get(gift=gift)
-        self.assertEqual(technique.action_template_id, chosen.pk)
-
-    def test_technique_uses_combat_catalog_pool_for_physical_draft(self) -> None:
-        """A PHYSICAL-derived draft (no path → PHYSICAL default) picking a combat
-        offense flavor keeps it: technique.action_template is that combat flavor
-        template (#1995)."""
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.combat.seeds_offense import ensure_combat_offense_catalog_content
-        from world.magic.models import CharacterGift, Technique
-
-        combat_templates = ensure_combat_offense_catalog_content()
-        chosen = combat_templates[0]
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft(
-            cantrip=self.cantrip, consequence_pool_id=chosen.consequence_pool_id
-        )
-
-        finalize_magic_data(draft, sheet)
-
-        gift = CharacterGift.objects.get(character=sheet).gift
-        technique = Technique.objects.get(gift=gift)
-        self.assertEqual(technique.action_template_id, chosen.pk)
-        self.assertEqual(technique.action_template.name, "Melee Attack: Brutal")
-
-    def test_technique_falls_back_to_default_on_invalid_pool_id(self) -> None:
-        """A stale/invalid selected_consequence_pool_id degrades to the
-        category-appropriate default rather than crashing finalization (mirrors
-        the resonance fallback)."""
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import CharacterGift, Technique
-
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft(cantrip=self.cantrip, consequence_pool_id=999999)
-
-        finalize_magic_data(draft, sheet)
-
-        gift = CharacterGift.objects.get(character=sheet).gift
-        technique = Technique.objects.get(gift=gift)
-        # No selected path → derived action_category=PHYSICAL → combat template (#1706).
-        self.assertEqual(technique.action_template.name, "Melee Attack")
-
-    def test_no_gift_created_without_cantrip(self) -> None:
-        """No Gift, CharacterGift, or Technique created when no cantrip is selected."""
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import CharacterGift, CharacterTechnique, Gift
-
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft(cantrip=None)
-
-        finalize_magic_data(draft, sheet)
-
-        assert not Gift.objects.filter(creator=sheet).exists()
         assert not CharacterGift.objects.filter(character=sheet).exists()
         assert not CharacterTechnique.objects.filter(character=sheet).exists()
 
-    def test_inactive_cantrip_raises(self) -> None:
-        """Deactivated cantrip raises DoesNotExist during finalization."""
-        from world.character_creation.services import finalize_magic_data
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import Cantrip
-
-        sheet = CharacterSheetFactory()
-        draft = self._create_draft(cantrip=self.cantrip)
-
-        # Deactivate the cantrip after draft was created
-        self.cantrip.is_active = False
-        self.cantrip.save()
-
-        with self.assertRaises(Cantrip.DoesNotExist):
-            finalize_magic_data(draft, sheet)
-
-    def _create_draft(  # noqa: PLR0913
+    def _create_draft(
         self,
         *,
-        cantrip: Cantrip | None,
         tradition: object | None = None,
-        custom_gift_name: str = "",
-        custom_gift_description: str = "",
+        technique_ids: list[int] | None = None,
+        resonance: object | None = None,
         glimpse_story: str = "",
-        consequence_pool_id: int | None = None,
-        path: object | None = None,
+        anima_ritual_name: str = "",
     ) -> CharacterDraft:
-        """Create a minimal draft with cantrip data for finalize_magic_data testing."""
+        """Create a minimal draft with catalog gift/technique picks for testing."""
         from evennia_extensions.factories import AccountFactory
         from world.character_creation.factories import CharacterDraftFactory
 
-        draft_data: dict = {}
-        if cantrip is not None:
-            draft_data["selected_cantrip_id"] = cantrip.id
-            draft_data["selected_gift_resonance_id"] = self.resonance.id
-        if custom_gift_name:
-            draft_data["custom_gift_name"] = custom_gift_name
-        if custom_gift_description:
-            draft_data["custom_gift_description"] = custom_gift_description
+        draft_data: dict = {
+            "selected_gift_id": self.gift.id,
+            "selected_technique_ids": technique_ids or [self.technique_one.id],
+            "selected_gift_resonance_id": (resonance or self.resonance).id,
+            "anima_check_stat_id": self.stat_trait.id,
+            "anima_check_skill_id": self.skill.id,
+        }
         if glimpse_story:
             draft_data["glimpse_story"] = glimpse_story
-        if consequence_pool_id is not None:
-            draft_data["selected_consequence_pool_id"] = consequence_pool_id
+        if anima_ritual_name:
+            draft_data["anima_ritual_name"] = anima_ritual_name
 
         return CharacterDraftFactory(
             account=AccountFactory(),
             draft_data=draft_data,
-            selected_tradition=tradition,
-            selected_path=path,
+            selected_tradition=self.tradition if tradition is None else tradition,
         )
 
 
@@ -1567,6 +1487,9 @@ class FinalizeGMCharacterTests(TestCase):
             "target_table": self.table,
             "story_title": "The Grand Design",
             "story_description": "A story of intrigue and power.",
+            # CharacterTradition creation is unconditional in finalize_magic_data
+            # (#2426) — a tradition is required even for GM-created drafts.
+            "selected_tradition": TraditionFactory(),
             "draft_data": {"first_name": "Aurelius"},
         }
         defaults.update(overrides)

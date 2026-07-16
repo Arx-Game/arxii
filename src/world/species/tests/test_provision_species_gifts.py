@@ -13,7 +13,7 @@ from world.character_creation.factories import CharacterDraftFactory
 from world.character_creation.services import finalize_magic_data
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GiftKind, TargetKind
-from world.magic.factories import CantripFactory, GiftFactory, ResonanceFactory
+from world.magic.factories import CantripFactory, GiftFactory, ResonanceFactory, TraditionFactory
 from world.magic.models import Thread
 from world.magic.models.gifts import CharacterGift
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
@@ -147,11 +147,13 @@ class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
         cls.species = SpeciesFactory(name="TestFinalizeElven")
         SpeciesGiftGrantFactory(species=cls.species, gift=cls.minor_gift, drawback_condition=None)
         cls.cantrip = CantripFactory()
+        cls.tradition = TraditionFactory()
 
     def test_finalize_grants_minor_gift_at_cg_resonance(self):
         """finalize_magic_data provisions species Minor Gift at the CG-chosen resonance."""
         sheet = CharacterSheetFactory(species=self.species)
         draft = CharacterDraftFactory(
+            selected_tradition=self.tradition,
             draft_data={
                 "selected_cantrip_id": self.cantrip.id,
                 "selected_gift_resonance_id": self.resonance.id,
