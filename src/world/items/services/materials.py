@@ -58,14 +58,16 @@ def gather_consumable_pks(
     *,
     available: Iterable[ItemInstance],
     requirements: Iterable[object],
-) -> list[int]:
-    """Validate that ``available`` satisfies ``requirements`` and return PKs to consume.
+) -> list[tuple[ItemInstance, int]]:
+    """Validate that ``available`` satisfies ``requirements`` and return allocations.
 
     For each requirement, scans ``available`` for instances matching the required
     item template and quality tier, sums their quantities, and greedily records
-    the minimum set of PKs needed to cover the requirement.
+    the minimum set of (instance, amount) pairs needed to cover the requirement
+    exactly — a requirement of 1 against a stack of 5 returns ``[(inst, 1)]``,
+    not the whole stack.
 
-    An instance PK already allocated to a prior requirement is excluded from
+    An instance already allocated to a prior requirement is excluded from
     consideration for later ones (prevents double-spending).
 
     Args:
@@ -75,7 +77,7 @@ def gather_consumable_pks(
             ``min_quality_tier``, and ``quantity``.
 
     Returns:
-        Flat list of ItemInstance PKs to pass to ``consume_pks``.
+        List of ``(ItemInstance, amount)`` tuples to pass to ``consume_materials``.
 
     Raises:
         InsufficientMaterials: On the first unsatisfied requirement.
@@ -84,7 +86,8 @@ def gather_consumable_pks(
     """
     # Materialise available once so we can iterate it multiple times.
     available_list = list(available)
-    consumed_pks: list[int] = []
+    consumed: list[tuple[ItemInstance, int]] = []
+    allocated_pks: set[int] = set()
 
     for req in requirements:
         # Candidates: right template, meets quality tier, not already allocated.
@@ -93,7 +96,7 @@ def gather_consumable_pks(
             for inst in available_list
             if inst.template_id == req.item_template_id
             and meets_quality_tier(inst, req)
-            and inst.pk not in consumed_pks
+            and inst.pk not in allocated_pks
         ]
 
         total_qty = sum(inst.quantity for inst in candidates)
@@ -105,19 +108,34 @@ def gather_consumable_pks(
         for inst in candidates:
             if remaining <= 0:
                 break
-            consumed_pks.append(inst.pk)
-            remaining -= inst.quantity
+            take = min(inst.quantity, remaining)
+            consumed.append((inst, take))
+            allocated_pks.add(inst.pk)
+            remaining -= take
 
-    return consumed_pks
+    return consumed
 
 
-def consume_pks(pks: list[int]) -> None:
-    """Delete ItemInstance rows identified by ``pks``.
+def consume_materials(allocations: list[tuple[ItemInstance, int]]) -> None:
+    """Decrement quantity on each allocated ItemInstance, deleting depleted rows.
+
+    Follows the codebase's canonical SharedMemoryModel mutation pattern (ADR-0008):
+    mutate the Python attribute, then ``.save(update_fields=)`` or ``.delete()``.
+    Never uses ``F("quantity") - n`` with ``.update()`` — that would leave
+    in-memory cached instances stale.
 
     Args:
-        pks: List of ItemInstance primary keys to delete. A no-op for an
-            empty list (avoids a pointless DB round-trip).
+        allocations: List of ``(ItemInstance, amount)`` tuples from
+            ``gather_consumable_pks``. A no-op for an empty list.
     """
-    if not pks:
+    if not allocations:
         return
-    ItemInstance.objects.filter(pk__in=pks).delete()
+    from django.db import transaction  # noqa: PLC0415
+
+    with transaction.atomic():
+        for inst, amount in allocations:
+            inst.quantity -= amount
+            if inst.quantity <= 0:
+                inst.delete()
+            else:
+                inst.save(update_fields=["quantity"])

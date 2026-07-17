@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from world.items.crafting.constants import PARTIAL_FRACTION, CostConsumption
 from world.items.exceptions import CraftingCostUnaffordable, InsufficientMaterials
 from world.items.models import ItemInstance
-from world.items.services.materials import consume_pks, gather_consumable_pks
+from world.items.services.materials import consume_materials, gather_consumable_pks
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -40,12 +40,12 @@ class StagedCost:
     Attributes:
         action_points: AP required by the recipe.
         anima: Anima required by the recipe.
-        material_pks: Primary keys of ``ItemInstance`` rows to consume.
+        material_allocations: ``(ItemInstance, amount)`` tuples to consume.
     """
 
     action_points: int
     anima: int
-    material_pks: list[int] = field(default_factory=list)
+    material_allocations: list[tuple[ItemInstance, int]] = field(default_factory=list)
 
 
 def stage_and_assert_affordable(
@@ -110,7 +110,7 @@ def stage_and_assert_affordable(
     )
 
     try:
-        material_pks = gather_consumable_pks(available=available, requirements=requirements)
+        material_allocations = gather_consumable_pks(available=available, requirements=requirements)
     except InsufficientMaterials as exc:
         msg = "You do not have the required materials."
         raise CraftingCostUnaffordable(msg) from exc
@@ -118,7 +118,7 @@ def stage_and_assert_affordable(
     return StagedCost(
         action_points=ap_cost,
         anima=anima_cost,
-        material_pks=material_pks,
+        material_allocations=material_allocations,
     )
 
 
@@ -181,8 +181,8 @@ def consume_cost(
         deduct_anima(crafter_character, anima_to_spend, lethal=False)
 
     # Consume materials (PARTIAL and FULL both consume ALL materials)
-    materials_consumed = len(staged.material_pks)
-    consume_pks(staged.material_pks)
+    materials_consumed = len(staged.material_allocations)
+    consume_materials(staged.material_allocations)
 
     return {
         "action_points": ap_to_spend,

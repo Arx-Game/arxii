@@ -31,7 +31,7 @@ rather than discovered in production profiling.
      b. anima sufficiency guard (filter.first) — 1 query (#1243; symmetric with the AP
         path, asserts the staged anima is still affordable before deducting)
      c. deduct_anima → anima GET + unique check + UPDATE — 3 queries
-     d. consume_pks → Django cascade collect (batched IN-lists per FK) + DELETE — ~14 q
+     d. consume_materials → per-instance .save(update_fields) or .delete() — ~2 q
   7. apply_resolution → apply_all_effects — 0 queries for a consequence with no effects
   8. resolve_capped_tier:
      a. CraftingSkillCap.for_skill — 1 query (single ORDER BY + LIMIT, not per-row)
@@ -246,7 +246,14 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # BOTH vendors — the old exact-per-vendor pins broke every time
             # the CI shard groupings changed. The guard's purpose is catching
             # per-row N+1s, and those add ≥3 (3 consequence rows), which blows
-            # past the band. Observed: 92 (warm identity map) / 93 (cold).
+            # past the band. Observed: 74 (cold identity map) / 75 (warm).
+            #
+            # #2454: consume_materials replaced the wholesale DELETE cascade
+            # (14+ cascade-collect queries per material ItemInstance) with a
+            # per-instance .save(update_fields=["quantity"]) — the test setup
+            # uses quantity=2 materials with quantity=1 requirements, so the
+            # common case is now a partial-consume (save, not delete). The band
+            # dropped from 91-94 to 74-76.
             with CaptureQueriesContext(connection) as ctx:
                 result = craft_attach_facet(
                     crafter_account=self.account,
@@ -256,9 +263,9 @@ class CraftAttachFacetQueryCountTests(TestCase):
                 )
             executed = len(ctx.captured_queries)
             self.assertTrue(
-                91 <= executed <= 94,
-                f"{executed} queries executed, expected 92-93 ±1 identity-map "
-                f"wobble (band 91-94). A jump of >=3 means a per-row N+1.",
+                74 <= executed <= 76,
+                f"{executed} queries executed, expected 75 ±1 identity-map "
+                f"wobble (band 74-76). A jump of >=3 means a per-row N+1.",
             )
 
         self.assertTrue(result.attached)

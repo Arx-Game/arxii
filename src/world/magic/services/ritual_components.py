@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.items.exceptions import InsufficientMaterials
-from world.items.services.materials import consume_pks, gather_consumable_pks
+from world.items.services.materials import consume_materials, gather_consumable_pks
 from world.magic.exceptions import RitualComponentError
 
 if TYPE_CHECKING:
@@ -27,7 +27,7 @@ def _resolve_touchstone_pks(
     performer_sheet: CharacterSheet,
     resonance_context: Resonance | None,
     already_allocated: set[int],
-) -> list[int]:
+) -> list[ItemInstance]:
     """Resolve touchstone-mode requirements against ``available``.
 
     An instance satisfies a requirement when: it's attuned to
@@ -36,12 +36,15 @@ def _resolve_touchstone_pks(
     ``tied_resonance`` matches either ``resonance_context`` (when given) or
     any ``CharacterResonance`` the performer holds (the general case).
 
+    Returns:
+        List of matched ``ItemInstance`` objects (one per requirement).
+
     Raises:
         RitualComponentError: On the first unsatisfied requirement.
     """
     from world.magic.models import CharacterResonance  # noqa: PLC0415
 
-    matched_pks: list[int] = []
+    matched_instances: list[ItemInstance] = []
     claimed_resonance_ids = set(
         CharacterResonance.objects.filter(character_sheet=performer_sheet).values_list(
             "resonance_id", flat=True
@@ -53,7 +56,7 @@ def _resolve_touchstone_pks(
             inst
             for inst in available
             if inst.pk not in already_allocated
-            and inst.pk not in matched_pks
+            and inst.pk not in {i.pk for i in matched_instances}
             and inst.attuned_to_character_sheet_id == performer_sheet.pk
             and inst.template.tied_resonance_id is not None
             and inst.template.resonance_tier_id is not None
@@ -71,9 +74,9 @@ def _resolve_touchstone_pks(
                 f"(tier >= {req.min_touchstone_tier.name}) that you don't have."
             )
             raise exc
-        matched_pks.append(candidates[0].pk)
+        matched_instances.append(candidates[0])
 
-    return matched_pks
+    return matched_instances
 
 
 def resolve_and_consume_ritual_components(
@@ -113,7 +116,9 @@ def resolve_and_consume_ritual_components(
     touchstone_reqs = [r for r in requirements if r.min_touchstone_tier_id is not None]
 
     try:
-        template_pks = gather_consumable_pks(available=components, requirements=template_reqs)
+        template_allocations = gather_consumable_pks(
+            available=components, requirements=template_reqs
+        )
     except InsufficientMaterials as exc:
         req = exc.requirement
         component_exc = RitualComponentError()
@@ -123,12 +128,14 @@ def resolve_and_consume_ritual_components(
         )
         raise component_exc from exc
 
-    touchstone_pks = _resolve_touchstone_pks(
+    touchstone_instances = _resolve_touchstone_pks(
         available=components,
         requirements=touchstone_reqs,
         performer_sheet=performer_sheet,
         resonance_context=resonance_context,
-        already_allocated=set(template_pks),
+        already_allocated={inst.pk for inst, _ in template_allocations},
     )
 
-    consume_pks(list({*template_pks, *touchstone_pks}))
+    # Touchstones are non-stackable (quantity=1); consuming amount=1 decrements to 0 → delete.
+    all_allocations = [*template_allocations, *((inst, 1) for inst in touchstone_instances)]
+    consume_materials(all_allocations)
