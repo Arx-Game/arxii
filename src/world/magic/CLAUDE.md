@@ -16,7 +16,9 @@ The magic system for Arx II. Power flows from identity and connection.
   in Phase 4 of the resonance pivot.
 - **Resonance currency**: `CharacterResonance.balance` is spendable currency
   earned via `grant_resonance` (Spec C surfaces will write here) and spent
-  via `spend_resonance_for_imbuing` (advances Thread level) or
+  via `spend_resonance_for_imbuing` (advances Thread level — also charges a flat
+  AP cost, with the Unbound +50% surcharge applying via the same
+  `magic_learning_ap_cost` modifier as technique learning, #2467) or
   `spend_resonance_for_pull` (low-level spend called by the pull helpers).
   `lifetime_earned` is monotonic audit. **Thread pulls are declaration modifiers**
   on `cast`/`clash` — the shared commit path lives in `world/combat/pull_helpers.py`:
@@ -303,6 +305,10 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   `current_path_for_character(learner.character)`.
 - `GiftAcquisitionConfig.major_gift_ap_multiplier` — staff-tunable AP multiplier
   for MAJOR-gift techniques on the `has_gift` branch of `accept_technique_offer`.
+- `GiftAcquisitionConfig.imbue_ap_cost` — staff-tunable flat AP cost per Rite of
+  Imbuing (#2467). The Unbound +50% surcharge applies on top via
+  `magic_learning_ap_cost_surcharge_percent`. Default 2 (cheaper than the
+  technique-learning base of 5).
 - `charge_and_learn(learner, technique, *, base_ap_cost, source, gold_cost=0,
   gold_treasury=None, teacher_tenure=None, teacher_banked_ap=0)`
   (`services/gift_acquisition.py`, #2440) — the shared charge+acquire core
