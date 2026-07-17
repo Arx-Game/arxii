@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
-    from world.scenes.models import Persona
 
 _EXIT_TYPECLASS = "typeclasses.exits.Exit"
 _CHARACTER_TYPECLASS = "typeclasses.characters.Character"
@@ -86,9 +85,56 @@ def _has_character_occupants(room: ObjectDB) -> bool:
     return any(obj.is_typeclass(_CHARACTER_TYPECLASS, exact=False) for obj in room.contents)
 
 
+def _has_non_exit_contents(room: ObjectDB) -> bool:
+    """Any character or item still in ``room`` — exits don't count.
+
+    Exits are cleaned up as part of removal itself (see ``StaffRemoveRoomAction``),
+    so they're not "contents" blocking it; a character or a stray item is.
+    """
+    return any(not obj.is_typeclass(_EXIT_TYPECLASS, exact=False) for obj in room.contents)
+
+
+def _resolve_authored_area(area_id: Any) -> tuple[Area | None, str | None]:
+    """Resolve ``area_id`` to an AUTHORED area, or an error message.
+
+    Collapses "no such area" and "area isn't AUTHORED yet" into one call so
+    ``StaffDigRoomAction.execute`` doesn't need two separate early returns
+    for what's really one precondition (stays under the return-count lint).
+    """
+    from world.areas.constants import GridOrigin  # noqa: PLC0415
+
+    area = _resolve_area(area_id)
+    if area is None:
+        return None, "No such area."
+    if area.origin != GridOrigin.AUTHORED:
+        return None, "This area must be AUTHORED before rooms can be dug into it."
+    return area, None
+
+
+def _parse_dig_room_grid(kwargs: dict[str, Any]) -> tuple[int | None, int | None, int] | None:
+    """Parse ``grid_x``/``grid_y``/``floor`` ints out of ``kwargs``.
+
+    Returns ``None`` on any malformed value instead of letting ``int()`` raise
+    past ``execute()`` into an unhandled exception (#2449 review finding).
+    """
+    grid_x_raw = kwargs.get("grid_x")
+    grid_y_raw = kwargs.get("grid_y")
+    try:
+        grid_x = int(grid_x_raw) if grid_x_raw is not None else None
+        grid_y = int(grid_y_raw) if grid_y_raw is not None else None
+        floor = int(kwargs.get("floor") or 0)
+    except (KeyError, TypeError, ValueError):
+        return None
+    return grid_x, grid_y, floor
+
+
 def _stranded_occupied_room(rooms: set[ObjectDB], dropped_exit_ids: set[int]) -> ObjectDB | None:
     """The first room in ``rooms`` that would be left exit-less AND occupied."""
     for room in rooms:
+        if room is None:
+            # A dangling one-way exit can have a null db_location/db_destination
+            # (nullable FKs) — nothing to strand there.
+            continue
         remaining = (
             ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_location=room)
             .exclude(pk__in=dropped_exit_ids)
@@ -97,25 +143,6 @@ def _stranded_occupied_room(rooms: set[ObjectDB], dropped_exit_ids: set[int]) ->
         if not remaining and _has_character_occupants(room):
             return room
     return None
-
-
-def _staff_persona(actor: ObjectDB) -> Persona | None:
-    """Best-effort persona for the acting staffer.
-
-    ``set_room_display_data``'s ``persona`` kwarg goes unused when
-    ``bypass_ownership=True`` but the parameter isn't optional; this resolves
-    *a* persona for the call without imposing ``HasCharacterSheetPrerequisite``
-    on the whole world-builder family — a bare staff/GM puppet with no sheet
-    simply can't touch the name/description/public fields.
-    """
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
-    try:
-        return active_persona_for_sheet(actor.sheet_data)
-    except (AttributeError, ObjectDoesNotExist):
-        return None
 
 
 @dataclass
@@ -182,8 +209,9 @@ class CreateAreaAction(_WorldBuilderAction):
 class EditAreaAction(_WorldBuilderAction):
     """Edit an area. Kwargs: ``area_id``, optional ``name``/``slug``/``level``/``parent_id``.
 
-    A slug change on an already-exported (AUTHORED + keyed) area is refused —
-    keys are permanent once set (mirrors ``promote_to_authored``'s guard).
+    A slug change on an already-keyed area is refused — keys are permanent
+    once set (shares ``ensure_slug_change_allowed`` with
+    ``promote_to_authored``'s guard).
     """
 
     key: str = "edit_area"
@@ -198,22 +226,15 @@ class EditAreaAction(_WorldBuilderAction):
     ) -> ActionResult:
         from django.core.exceptions import ValidationError  # noqa: PLC0415
 
-        from world.areas.constants import GridOrigin  # noqa: PLC0415
+        from world.areas.grid_services import ensure_slug_change_allowed  # noqa: PLC0415
 
         area = _resolve_area(kwargs.get("area_id"))
         if area is None:
             return ActionResult(success=False, message="No such area.")
         new_slug = kwargs.get("slug")
-        if (
-            new_slug is not None
-            and area.origin == GridOrigin.AUTHORED
-            and area.slug is not None
-            and new_slug != area.slug
-        ):
-            return ActionResult(
-                success=False,
-                message="This area already has a different slug; keys are permanent once set.",
-            )
+        refusal = ensure_slug_change_allowed(area, new_slug)
+        if refusal is not None:
+            return ActionResult(success=False, message=refusal)
         if kwargs.get("name") is not None:
             area.name = kwargs["name"]
         if new_slug is not None:
@@ -262,14 +283,9 @@ class StaffDigRoomAction(_WorldBuilderAction):
             suggest_fixture_key,
         )
 
-        area = _resolve_area(kwargs.get("area_id"))
-        if area is None:
-            return ActionResult(success=False, message="No such area.")
-        if area.origin != GridOrigin.AUTHORED:
-            return ActionResult(
-                success=False,
-                message="This area must be AUTHORED before rooms can be dug into it.",
-            )
+        area, area_error = _resolve_authored_area(kwargs.get("area_id"))
+        if area_error is not None:
+            return ActionResult(success=False, message=area_error)
         room_name = (kwargs.get("name") or "").strip()
         if not room_name:
             return ActionResult(success=False, message="Name the room.")
@@ -288,16 +304,18 @@ class StaffDigRoomAction(_WorldBuilderAction):
                 fixture_key = suggest_fixture_key(area, room_name)
             except GridServiceError as exc:
                 return ActionResult(success=False, message=exc.user_message)
-        grid_x = kwargs.get("grid_x")
-        grid_y = kwargs.get("grid_y")
+        parsed_grid = _parse_dig_room_grid(kwargs)
+        if parsed_grid is None:
+            return ActionResult(success=False, message="Grid position and floor must be numbers.")
+        grid_x, grid_y, floor = parsed_grid
         profile = create_room(
             area=area,
             name=room_name,
             description=kwargs.get("description") or "",
             size=size,
-            grid_x=int(grid_x) if grid_x is not None else None,
-            grid_y=int(grid_y) if grid_y is not None else None,
-            floor=int(kwargs.get("floor") or 0),
+            grid_x=grid_x,
+            grid_y=grid_y,
+            floor=floor,
             origin=GridOrigin.AUTHORED,
             fixture_key=fixture_key,
         )
@@ -332,13 +350,10 @@ class StaffEditRoomAction(_WorldBuilderAction):
         description = kwargs.get("description")
         is_public = kwargs.get("is_public")
         if display_name is not None or description is not None or is_public is not None:
-            persona = _staff_persona(actor)
-            if persona is None:
-                return ActionResult(success=False, message="You have no active character sheet.")
             try:
                 set_room_display_data(
                     room=profile.objectdb,
-                    persona=persona,
+                    persona=None,
                     name=display_name,
                     description=description,
                     is_public=is_public,
@@ -513,11 +528,12 @@ class StaffPlaceRoomAction(_WorldBuilderAction):
 class StaffRemoveRoomAction(_WorldBuilderAction):
     """Remove a world room. Kwarg: ``room_id``.
 
-    Refuses when occupied (characters present), when it has an installed
-    ``RoomFeatureInstance``, or when it's already exported (``fixture_key``
-    set + ``origin=AUTHORED`` — those come out via the report-never-delete
-    pipeline, not the canvas). Else deletes exits pointing in/out, then the
-    room itself.
+    Refuses when the room has any contents (characters or items — empty it
+    first, so an item is never silently orphaned with ``db_location=NULL``),
+    when it has an installed ``RoomFeatureInstance``, or when it's already
+    exported (``fixture_key`` set + ``origin=AUTHORED`` — those come out via
+    the report-never-delete pipeline, not the canvas). Else deletes exits
+    pointing in/out, then the room itself, atomically.
     """
 
     key: str = "staff_remove_room"
@@ -530,6 +546,8 @@ class StaffRemoveRoomAction(_WorldBuilderAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from django.db import transaction  # noqa: PLC0415
+
         from world.areas.constants import GridOrigin  # noqa: PLC0415
         from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
 
@@ -537,8 +555,8 @@ class StaffRemoveRoomAction(_WorldBuilderAction):
         if profile is None:
             return ActionResult(success=False, message="No such room.")
         room = profile.objectdb
-        if _has_character_occupants(room):
-            return ActionResult(success=False, message="This room has characters in it.")
+        if _has_non_exit_contents(room):
+            return ActionResult(success=False, message="This room isn't empty; empty it first.")
         if RoomFeatureInstance.objects.filter(room_profile=profile).active().exists():
             return ActionResult(
                 success=False, message="This room has an installed feature; remove that first."
@@ -549,9 +567,10 @@ class StaffRemoveRoomAction(_WorldBuilderAction):
                 message="Exported rooms are removed via the report-never-delete pipeline, "
                 "not the canvas.",
             )
-        ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_location=room).delete()
-        ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_destination=room).delete()
-        room.delete()
+        with transaction.atomic():
+            ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_location=room).delete()
+            ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_destination=room).delete()
+            room.delete()
         return ActionResult(success=True, message="Room removed.")
 
 

@@ -64,6 +64,15 @@ class SetRoomDisplayDataTests(TestCase):
             set_room_display_data(room=self.room, persona=stranger, name="Hijacked")
         assert not ObjectDisplayData.objects.filter(object=self.room).exists()
 
+    def test_no_persona_and_no_bypass_is_refused(self) -> None:
+        """``persona`` defaults to ``None`` now (#2449); without a bypass, that's
+
+        still an unowned edit and must raise rather than crash on ``None.pk``.
+        """
+        with self.assertRaises(RoomEditError):
+            set_room_display_data(room=self.room, name="Ghostwritten")
+        assert not ObjectDisplayData.objects.filter(object=self.room).exists()
+
     def test_cannot_make_public_while_a_non_public_scene_is_active(self) -> None:
         self.profile.is_public = False
         self.profile.save(update_fields=["is_public"])

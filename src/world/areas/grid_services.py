@@ -263,13 +263,29 @@ def _promote_room_to_authored(room_profile: RoomProfile, key: str) -> None:
     room_profile.save(update_fields=["origin", "fixture_key"])
 
 
+def ensure_slug_change_allowed(area: Area, new_slug: str | None) -> str | None:
+    """Refusal message when ``new_slug`` would re-slug an already-keyed area.
+
+    Once an area has a slug, changing it is refused outright — regardless of
+    the area's current ``origin``. An edit can touch ``slug`` without touching
+    ``origin`` at all, so ``origin`` alone isn't a reliable "already exported"
+    signal; the stricter, origin-independent rule is what actually protects an
+    exported area's permanent key (shared by ``promote_to_authored`` and
+    ``EditAreaAction``, #2449). Returns ``None`` when the change is allowed: no
+    slug set yet, ``new_slug`` is ``None``, or it matches the existing slug.
+    """
+    if new_slug is None or area.slug is None or new_slug == area.slug:
+        return None
+    return "This area already has a different slug; keys are permanent once set."
+
+
 def _promote_area_to_authored(area: Area, key: str) -> None:
     if not _is_slug_segment(key):
         msg = f"{key!r} is not a valid area slug."
         raise GridServiceError(msg)
-    if area.slug is not None and area.slug != key:
-        msg = "This area already has a different slug; keys are permanent once set."
-        raise GridServiceError(msg)
+    refusal = ensure_slug_change_allowed(area, key)
+    if refusal is not None:
+        raise GridServiceError(refusal)
     area.origin = GridOrigin.AUTHORED
     area.slug = key
     area.save(update_fields=["origin", "slug"])

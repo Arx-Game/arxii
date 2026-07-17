@@ -13,7 +13,12 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.constants import RoomEnclosure
-from evennia_extensions.factories import AccountFactory, CharacterFactory, RoomProfileFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from evennia_extensions.models import ObjectDisplayData, RoomProfile
 from world.areas.constants import AreaLevel, GridOrigin
 from world.areas.factories import AreaFactory
@@ -37,6 +42,15 @@ def _player_actor(db_key: str) -> ObjectDB:
     """A Character whose account is NOT staff."""
     char = CharacterFactory(db_key=db_key)
     account = AccountFactory(username=f"acct_{db_key}", is_staff=False)
+    char.db_account = account
+    char.save()
+    return char
+
+
+def _staff_actor_without_sheet(db_key: str) -> ObjectDB:
+    """A Character whose account is staff, with NO CharacterSheet."""
+    char = CharacterFactory(db_key=db_key)
+    account = AccountFactory(username=f"acct_{db_key}", is_staff=True)
     char.db_account = account
     char.save()
     return char
@@ -119,6 +133,21 @@ class EditAreaActionTests(TestCase):
         self.area.refresh_from_db()
         assert self.area.slug == "old-name"
 
+    def test_parent_level_violation_surfaces_as_failure_message(self) -> None:
+        from actions.definitions.world_builder import EditAreaAction
+
+        sibling = AreaFactory(name="Sibling Ward", level=AreaLevel.WARD)
+        result = EditAreaAction().run(self.staff, area_id=self.area.pk, parent_id=sibling.pk)
+        assert not result.success
+        assert result.message
+        # ``.refresh_from_db()`` doesn't reliably clear a SharedMemoryModel
+        # instance's in-memory FK mutation (idmapper identity-map quirk) — query
+        # the column value directly to prove nothing was actually persisted.
+        raw_parent_id = (
+            Area.objects.filter(pk=self.area.pk).values_list("parent_id", flat=True).first()
+        )
+        assert raw_parent_id is None
+
 
 class StaffDigRoomActionTests(TestCase):
     def setUp(self) -> None:
@@ -160,6 +189,18 @@ class StaffDigRoomActionTests(TestCase):
         assert not result.success
         assert not RoomProfile.objects.filter(area=self.story_area).exists()
 
+    def test_malformed_grid_x_fails_gracefully(self) -> None:
+        from actions.definitions.world_builder import StaffDigRoomAction
+
+        result = StaffDigRoomAction().run(
+            self.staff,
+            area_id=self.authored_area.pk,
+            name="Should Not Exist",
+            grid_x="abc",
+        )
+        assert not result.success
+        assert not RoomProfile.objects.filter(area=self.authored_area).exists()
+
 
 class StaffEditRoomActionTests(TestCase):
     def setUp(self) -> None:
@@ -195,6 +236,21 @@ class StaffEditRoomActionTests(TestCase):
         )
         assert not result.success
         assert not ObjectDisplayData.objects.filter(object=self.profile.objectdb).exists()
+
+    def test_staff_without_sheet_can_edit_room(self) -> None:
+        from actions.definitions.world_builder import StaffEditRoomAction
+
+        staff_no_sheet = _staff_actor_without_sheet("EditRoomStaffNoSheet")
+        result = StaffEditRoomAction().run(
+            staff_no_sheet,
+            room_id=self.profile.objectdb_id,
+            name="Bare Staff Hall",
+            description="No sheet needed.",
+        )
+        assert result.success
+        display = ObjectDisplayData.objects.get(object=self.profile.objectdb)
+        assert display.longname == "Bare Staff Hall"
+        assert display.permanent_description == "No sheet needed."
 
 
 class StaffLinkRoomsActionTests(TestCase):
@@ -278,6 +334,19 @@ class StaffUnlinkRoomsActionTests(TestCase):
         assert not result.success
         assert ObjectDB.objects.filter(pk=self.forward.pk).exists()
         assert occupant.db_location_id == self.room_b.objectdb_id
+
+    def test_unlinks_a_dangling_one_way_exit_without_crashing(self) -> None:
+        from actions.definitions.world_builder import StaffUnlinkRoomsAction
+
+        # Null the destination directly to simulate a dangling one-way exit
+        # (nullable FK) — the None side of the pair must not blow up the
+        # stranding guard.
+        self.forward.db_destination = None
+        self.forward.save(update_fields=["db_destination"])
+
+        result = StaffUnlinkRoomsAction().run(self.staff, exit_id=self.forward.pk)
+        assert result.success
+        assert not ObjectDB.objects.filter(pk=self.forward.pk).exists()
 
 
 class StaffRenameExitActionTests(TestCase):
@@ -373,6 +442,18 @@ class StaffRemoveRoomActionTests(TestCase):
         from actions.definitions.world_builder import StaffRemoveRoomAction
 
         CharacterFactory(db_key="Occupant", location=self.profile.objectdb)
+        result = StaffRemoveRoomAction().run(self.staff, room_id=self.profile.objectdb_id)
+        assert not result.success
+        assert RoomProfile.objects.filter(objectdb_id=self.profile.objectdb_id).exists()
+
+    def test_room_with_item_contents_refused(self) -> None:
+        from actions.definitions.world_builder import StaffRemoveRoomAction
+
+        ObjectDBFactory(
+            db_key="Loose Chair",
+            db_typeclass_path="typeclasses.objects.Object",
+            location=self.profile.objectdb,
+        )
         result = StaffRemoveRoomAction().run(self.staff, room_id=self.profile.objectdb_id)
         assert not result.success
         assert RoomProfile.objects.filter(objectdb_id=self.profile.objectdb_id).exists()

@@ -1578,7 +1578,7 @@ def _has_active_non_public_scene(room: DefaultObject) -> bool:
 def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to the owner-edit surface
     *,
     room: DefaultObject,
-    persona: Persona,
+    persona: Persona | None = None,
     name: str | None = None,
     description: str | None = None,
     is_public: bool | None = None,
@@ -1592,14 +1592,16 @@ def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to th
     ``permanent_description``, listing → ``RoomProfile.is_public``. Idempotent;
     only the provided fields are touched.
 
-    ``bypass_ownership=True`` (staff world-builder, #2449) skips ONLY the
-    ``is_owner`` raise below — the #1287 scene-privacy re-check still runs
-    unconditionally, so staff can never force a room public over a live
+    ``persona`` is only ever consulted when ``bypass_ownership=False`` — the
+    owner-facing caller always has one. ``bypass_ownership=True`` (staff
+    world-builder, #2449) skips the ownership check entirely, so ``persona``
+    may be omitted (``None``) there; the #1287 scene-privacy re-check still
+    runs unconditionally, so staff can never force a room public over a live
     non-public scene.
     """
     from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
 
-    if not bypass_ownership and not is_owner(persona, room):
+    if not bypass_ownership and (persona is None or not is_owner(persona, room)):
         msg = "You don't own this room."
         raise RoomEditError(msg)
     if is_public is True and _has_active_non_public_scene(room):
