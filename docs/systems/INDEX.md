@@ -5064,7 +5064,12 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   so `core_management.content_fixtures.load_world_content(content_root) ->
   WorldLoadResult` sequences (1) content fixtures with `load_entries(...,
   defer_unresolved=True)` — an unresolved natural-key FK is queued, not fatal — (2)
-  `load_grid_bundles()`, (3) a retry of the deferred queue with deferral off. Both
+  `load_grid_bundles()`, (3) retries the deferred queue to a FIXED POINT (#2474
+  review fix) — a multi-hop natural-key chain (e.g. a grant naming a technique that
+  itself names a still-deferred gift) can need more than one retry pass, since
+  alphabetical file-encounter order isn't dependency order; retrying stops once a
+  pass resolves nothing new, at which point one final deferral-off pass turns every
+  still-stuck object into a diagnosed skip. Both
   `tools/build_content_fixtures.py --load` and the admin Load view call this driver,
   not a bare `load_entries`. `core_management.content_repo` (`resolve_content_root()`/
   `load_dotenv_content_path()`) is the one canonical content-repo path resolver every

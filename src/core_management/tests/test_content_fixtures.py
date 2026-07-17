@@ -529,6 +529,50 @@ class FixtureJsonLoadTests(TestCase):
         created, updated = load_entries(build_all(self.root))
         assert (created, updated) == (1, 0)
 
+    def test_stale_fixture_field_skips_row_without_crashing_the_load(self) -> None:
+        """A fixture field no longer on the model must skip-and-continue (#2474 review).
+
+        ``_pop_m2m_fields`` (added #2474 for m2m natural-key handling) calls
+        ``model._meta.get_field(field_name)`` over every remaining fixture field
+        BEFORE the guarded try/except in ``_upsert_fixture_object`` — a stale
+        field name (removed/renamed model field left in an old fixture) raised
+        ``FieldDoesNotExist``, which escaped everything and crashed the entire
+        ``load_entries`` run for every object, not just the offending row. Two
+        objects in one file: the first carries a stale field, the second is
+        good — the fix must skip only the first and still load the second.
+        """
+        _write(
+            self.root,
+            "fixtures/magic/effects.json",
+            json.dumps(
+                [
+                    {
+                        "model": "magic.effecttype",
+                        "fields": {
+                            "name": "Bad Field Effect",
+                            "no_longer_on_model": "stale value",
+                        },
+                    },
+                    {
+                        "model": "magic.effecttype",
+                        "fields": {
+                            "name": "Good Effect",
+                            "description": "This one is fine.",
+                        },
+                    },
+                ]
+            ),
+        )
+        result = build_all(self.root)
+        created, updated = load_entries(result)
+        assert (created, updated) == (1, 0)
+        assert any("no_longer_on_model" in s or "Bad Field Effect" in s for s in result.skipped)
+
+        from world.magic.models import EffectType
+
+        assert EffectType.objects.filter(name="Good Effect").exists()
+        assert not EffectType.objects.filter(name="Bad Field Effect").exists()
+
     def test_stale_model_label_skipped_with_warning(self) -> None:
         """A fixture referencing a renamed/removed model is skipped, not fatal."""
         _write(

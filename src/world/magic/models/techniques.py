@@ -472,6 +472,12 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         dependencies = ["magic.Gift"]
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gift", "name"],
+                name="unique_technique_gift_name",
+            ),
+        ]
         verbose_name = "Technique"
         verbose_name_plural = "Techniques"
 
