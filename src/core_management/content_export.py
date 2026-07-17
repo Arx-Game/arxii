@@ -38,6 +38,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
     {
         # character_creation
         "character_creation.beginningtradition",
+        "character_creation.startingarea",
         # character_sheets
         "character_sheets.gender",
         # classes
@@ -66,6 +67,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "distinctions.distinctioncategory",
         "distinctions.distinctioneffect",
         "distinctions.distinctiontag",
+        # evennia_extensions
+        "evennia_extensions.roomsizetier",
         # forms
         "forms.build",
         "forms.formtrait",
@@ -93,6 +96,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # traits
         "traits.trait",
         # weather
+        "weather.climate",
         "weather.feastday",
         "weather.weatheremit",
         "weather.weathertype",

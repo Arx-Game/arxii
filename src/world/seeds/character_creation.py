@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
+    FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
     STARTING_TECHNIQUE_PICKS_TARGET,
@@ -160,6 +161,11 @@ def ensure_canonical_fallback_room() -> ObjectDB:
     ``filter().first()`` for idempotency. Callable independently of cluster
     order: any seeder needing "the" canonical starting room (character_creation,
     missions, progression) calls this and gets the same row back.
+
+    Also marks the room's ``RoomProfile`` identity idempotently (#2448): AUTHORED
+    origin + the reserved ``FALLBACK_STARTING_ROOM_FIXTURE_KEY``, so this row is
+    stable-identity and included in the grid export. Never clobbers a staff-edited
+    ``fixture_key`` on re-run.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
     from evennia.utils import create as evennia_create  # noqa: PLC0415
@@ -169,12 +175,23 @@ def ensure_canonical_fallback_room() -> ObjectDB:
         db_typeclass_path=FALLBACK_STARTING_ROOM_TYPECLASS,
     ).first()
     if existing is not None:
-        return existing
-    return evennia_create.create_object(
-        typeclass=FALLBACK_STARTING_ROOM_TYPECLASS,
-        key=FALLBACK_STARTING_ROOM_KEY,
-        nohome=True,
-    )
+        room = existing
+    else:
+        room = evennia_create.create_object(
+            typeclass=FALLBACK_STARTING_ROOM_TYPECLASS,
+            key=FALLBACK_STARTING_ROOM_KEY,
+            nohome=True,
+        )
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.areas.constants import GridOrigin  # noqa: PLC0415
+
+    profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+    if profile.fixture_key is None:
+        profile.fixture_key = FALLBACK_STARTING_ROOM_FIXTURE_KEY
+        profile.origin = GridOrigin.AUTHORED
+        profile.save(update_fields=["fixture_key", "origin"])
+    return room
 
 
 def wire_starting_technique_picks_target():
@@ -342,10 +359,10 @@ def seed_character_creation_dev() -> None:
     # #2121 — every seeded StartingArea must resolve to a real room (never a
     # silent None spawn). Never overwrite an already-wired room (staff edit).
     if area.default_starting_room_id is None:
-        area.default_starting_room = ensure_canonical_fallback_room()
+        area.default_starting_room = ensure_canonical_fallback_room().room_profile
         area.save(update_fields=["default_starting_room"])
     if area_luxen.default_starting_room_id is None:
-        area_luxen.default_starting_room = ensure_canonical_fallback_room()
+        area_luxen.default_starting_room = ensure_canonical_fallback_room().room_profile
         area_luxen.save(update_fields=["default_starting_room"])
     species, _ = Species.objects.get_or_create(
         name="Human",
