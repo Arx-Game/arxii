@@ -137,13 +137,13 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
         help_text="Cloudinary URL for crest/flag image. Leave blank for gradient placeholder.",
     )
     default_starting_room = models.ForeignKey(
-        ObjectDB,
+        "evennia_extensions.RoomProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="starting_area_default",
-        help_text="Default Evennia room where characters from this area start. "
-        "A staff config gap if unset — get_starting_room() falls back to the "
+        help_text="Default room (via its RoomProfile) where characters from this area "
+        "start. A staff config gap if unset — get_starting_room() falls back to the "
         "canonical seeded room (#2121).",
     )
     is_active = models.BooleanField(
@@ -740,7 +740,7 @@ class CharacterDraft(SharedMemoryModel):
             return self.selected_beginnings.starting_room_override
 
         if self.selected_area and self.selected_area.default_starting_room:
-            return self.selected_area.default_starting_room
+            return self.selected_area.default_starting_room.objectdb
 
         from world.character_creation.constants import (  # noqa: PLC0415
             FALLBACK_STARTING_ROOM_KEY,

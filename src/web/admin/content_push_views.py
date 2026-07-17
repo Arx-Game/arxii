@@ -12,7 +12,6 @@ commit + push.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import subprocess
 
@@ -24,18 +23,9 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
+from core_management.content_repo import resolve_content_root
+
 GIT_TRUE = "true"
-
-
-def _resolve_content_root() -> Path | None:
-    """Return the configured content-repo path if set and a real directory."""
-    raw = os.environ.get("CONTENT_REPO_PATH")
-    if not raw:
-        return None
-    path = Path(raw).expanduser()
-    if not path.is_dir():
-        return None
-    return path
 
 
 def _git(repo: Path, *args: str) -> tuple[int, str, str]:
@@ -63,7 +53,7 @@ def content_push_preview(request: HttpRequest) -> HttpResponse:
     if not request.user.is_superuser:
         raise PermissionDenied
 
-    content_root = _resolve_content_root()
+    content_root = resolve_content_root()
     context = {
         "title": "Push content to lore repo",
         "content_repo_configured": bool(content_root),

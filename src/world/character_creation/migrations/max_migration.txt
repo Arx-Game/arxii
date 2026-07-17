@@ -1,1 +1,1 @@
-0009_alter_characterdraft_current_stage
+0010_alter_startingarea_default_starting_room

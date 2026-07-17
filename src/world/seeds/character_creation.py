@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
+    FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
     STARTING_TECHNIQUE_PICKS_TARGET,
@@ -48,6 +49,13 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 logger = logging.getLogger(__name__)
+
+# Reserved slug for the AUTHORED Area that houses the canonical fallback
+# starting room (#2448) — a room with no area is silently unexportable
+# (export_grid_bundles only visits rooms via AUTHORED areas), so the fallback
+# room must live somewhere AUTHORED too. Never assigned a realm here — this
+# helper must stay callable independent of cluster order.
+RESERVED_FALLBACK_AREA_SLUG = "arx"
 
 # The canonical 12 stat names. Mirrors the set FinalizationTestMixin uses; kept
 # here as the single seed-time source (factories-as-seed-data). The test mixin's
@@ -160,6 +168,19 @@ def ensure_canonical_fallback_room() -> ObjectDB:
     ``filter().first()`` for idempotency. Callable independently of cluster
     order: any seeder needing "the" canonical starting room (character_creation,
     missions, progression) calls this and gets the same row back.
+
+    Also marks the room's ``RoomProfile`` identity idempotently (#2448): AUTHORED
+    origin + the reserved ``FALLBACK_STARTING_ROOM_FIXTURE_KEY``, so this row is
+    stable-identity and included in the grid export. Never clobbers a staff-edited
+    ``fixture_key`` on re-run.
+
+    Also houses the room in a reserved AUTHORED Area (``RESERVED_FALLBACK_AREA_SLUG``,
+    #2448): an AUTHORED room whose area is NULL or non-AUTHORED is silently
+    unexportable (``export_grid_bundles`` only visits rooms via AUTHORED areas), so
+    a room marked AUTHORED with no home area would export a StartingArea fixture
+    referencing a room no bundle ever contains. Never overwrites an already-set
+    ``area`` (staff edit wins), and never reassigns the reserved area if it already
+    exists with a non-AUTHORED origin (staff edit wins there too — just warns).
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
     from evennia.utils import create as evennia_create  # noqa: PLC0415
@@ -169,12 +190,45 @@ def ensure_canonical_fallback_room() -> ObjectDB:
         db_typeclass_path=FALLBACK_STARTING_ROOM_TYPECLASS,
     ).first()
     if existing is not None:
-        return existing
-    return evennia_create.create_object(
-        typeclass=FALLBACK_STARTING_ROOM_TYPECLASS,
-        key=FALLBACK_STARTING_ROOM_KEY,
-        nohome=True,
+        room = existing
+    else:
+        room = evennia_create.create_object(
+            typeclass=FALLBACK_STARTING_ROOM_TYPECLASS,
+            key=FALLBACK_STARTING_ROOM_KEY,
+            nohome=True,
+        )
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.areas.constants import AreaLevel, GridOrigin  # noqa: PLC0415
+    from world.areas.models import Area  # noqa: PLC0415
+
+    reserved_area, area_created = Area.objects.get_or_create(
+        slug=RESERVED_FALLBACK_AREA_SLUG,
+        defaults={"name": "Arx", "level": AreaLevel.CITY, "origin": GridOrigin.AUTHORED},
     )
+    if not area_created and reserved_area.origin != GridOrigin.AUTHORED:
+        logger.warning(
+            "Reserved fallback area (slug=%r) exists with origin=%r, not AUTHORED — "
+            "leaving it alone. The canonical fallback room will not be assigned to it, "
+            "which means it stays unexportable until a staff member fixes the area's "
+            "origin.",
+            RESERVED_FALLBACK_AREA_SLUG,
+            reserved_area.origin,
+        )
+        reserved_area = None
+
+    profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+    update_fields = []
+    if profile.fixture_key is None:
+        profile.fixture_key = FALLBACK_STARTING_ROOM_FIXTURE_KEY
+        profile.origin = GridOrigin.AUTHORED
+        update_fields.extend(["fixture_key", "origin"])
+    if profile.area_id is None and reserved_area is not None:
+        profile.area = reserved_area
+        update_fields.append("area")
+    if update_fields:
+        profile.save(update_fields=update_fields)
+    return room
 
 
 def wire_starting_technique_picks_target():
@@ -342,10 +396,10 @@ def seed_character_creation_dev() -> None:
     # #2121 — every seeded StartingArea must resolve to a real room (never a
     # silent None spawn). Never overwrite an already-wired room (staff edit).
     if area.default_starting_room_id is None:
-        area.default_starting_room = ensure_canonical_fallback_room()
+        area.default_starting_room = ensure_canonical_fallback_room().room_profile
         area.save(update_fields=["default_starting_room"])
     if area_luxen.default_starting_room_id is None:
-        area_luxen.default_starting_room = ensure_canonical_fallback_room()
+        area_luxen.default_starting_room = ensure_canonical_fallback_room().room_profile
         area_luxen.save(update_fields=["default_starting_room"])
     species, _ = Species.objects.get_or_create(
         name="Human",

@@ -25,7 +25,7 @@ from world.locations.constants import StatKey
 _CODEX_SUBJECT_FK = "codex.CodexSubject"
 
 
-class Climate(SharedMemoryModel):
+class Climate(NaturalKeyMixin, SharedMemoryModel):
     """An authorable regional climate: a flat temperature/moisture baseline (#1522).
 
     Designated on a region ``Area`` (``Area.climate``) and resolved most-specific-wins down
@@ -64,6 +64,11 @@ class Climate(SharedMemoryModel):
         default=True,
         help_text="Whether this climate can be assigned to regions.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["name"]

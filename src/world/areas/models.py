@@ -3,11 +3,12 @@ from django.db import connection, models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.areas.constants import AreaLevel
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.areas.constants import AreaLevel, GridOrigin
 from world.buildings.constants import PermitEligibility
 
 
-class Area(SharedMemoryModel):
+class Area(NaturalKeyMixin, SharedMemoryModel):
     """A spatial hierarchy node representing a named area at a specific level."""
 
     name = models.CharField(max_length=200)
@@ -93,6 +94,28 @@ class Area(SharedMemoryModel):
             "never routing); units are parent-local cells, meaningful only among siblings."
         ),
     )
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text=(
+            "Permanent stable identifier for authored (exported) areas (#2448). "
+            "Required when origin=AUTHORED; NULL for runtime areas."
+        ),
+    )
+    origin = models.CharField(
+        max_length=16,
+        choices=GridOrigin.choices,
+        default=GridOrigin.PLAYER,
+        db_index=True,
+        help_text="Who authored this area — only AUTHORED areas export (#2448).",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["slug"]
 
     class Meta:
         verbose_name = "Area"

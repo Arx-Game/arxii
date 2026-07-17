@@ -1772,7 +1772,7 @@ class FinalizeResidenceTests(FinalizationTestMixin, TestCase):
         from world.locations.models import LocationTenancy
 
         room_profile = RoomProfileFactory()
-        self.area.default_starting_room = room_profile.objectdb
+        self.area.default_starting_room = room_profile
         self.area.grants_residence_tenancy = True
         self.area.save()
         draft = self._create_base_draft()
@@ -1795,7 +1795,7 @@ class FinalizeResidenceTests(FinalizationTestMixin, TestCase):
         from world.locations.models import LocationTenancy
 
         room_profile = RoomProfileFactory()
-        self.area.default_starting_room = room_profile.objectdb
+        self.area.default_starting_room = room_profile
         self.area.grants_residence_tenancy = False
         self.area.save()
         draft = self._create_base_draft()

@@ -45,7 +45,7 @@ class GetStartingRoomFallbackTests(TestCase):
         from evennia_extensions.factories import ObjectDBFactory
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        area = StartingAreaFactory(default_starting_room=room)
+        area = StartingAreaFactory(default_starting_room=room.room_profile)
         draft = CharacterDraftFactory(selected_area=area, selected_beginnings=None)
         self.assertEqual(draft.get_starting_room(), room)
 
@@ -65,6 +65,45 @@ class GetStartingRoomFallbackTests(TestCase):
         draft = CharacterDraftFactory(selected_area=area, selected_beginnings=None)
 
         self.assertIsNone(draft.get_starting_room())
+
+    def test_default_starting_room_is_room_profile_and_resolves_to_objectdb(self) -> None:
+        """StartingArea.default_starting_room is a RoomProfile FK (#2448); resolves to ObjectDB."""
+        from evennia.utils import create as evennia_create
+
+        room = evennia_create.create_object(
+            typeclass="typeclasses.rooms.Room", key="Spawn Plaza", nohome=True
+        )
+        area = StartingAreaFactory(default_starting_room=room.room_profile)
+        draft = CharacterDraftFactory(selected_area=area, selected_beginnings=None)
+        self.assertEqual(draft.get_starting_room().pk, room.pk)
+
+
+class EnsureCanonicalFallbackRoomAuthoredTests(TestCase):
+    """ensure_canonical_fallback_room() marks its room AUTHORED with a reserved key (#2448)."""
+
+    def test_fallback_room_profile_is_authored_with_reserved_key(self) -> None:
+        from world.areas.constants import GridOrigin
+        from world.character_creation.constants import FALLBACK_STARTING_ROOM_FIXTURE_KEY
+        from world.seeds.character_creation import ensure_canonical_fallback_room
+
+        room = ensure_canonical_fallback_room()
+        profile = room.room_profile
+        self.assertEqual(profile.origin, GridOrigin.AUTHORED)
+        self.assertEqual(profile.fixture_key, FALLBACK_STARTING_ROOM_FIXTURE_KEY)
+
+    def test_never_clobbers_staff_edited_fixture_key(self) -> None:
+        """A staff-edited fixture_key is never overwritten on re-run."""
+        from world.seeds.character_creation import ensure_canonical_fallback_room
+
+        room = ensure_canonical_fallback_room()
+        profile = room.room_profile
+        profile.fixture_key = "staff/custom-key"
+        profile.save(update_fields=["fixture_key"])
+
+        room_again = ensure_canonical_fallback_room()
+        profile.refresh_from_db()
+        self.assertEqual(room_again.pk, room.pk)
+        self.assertEqual(profile.fixture_key, "staff/custom-key")
 
 
 class AppearanceStageCompletionTest(TestCase):

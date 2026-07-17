@@ -3,6 +3,23 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-07-17, epic #2436 slice 1 / #2448 — grid foundation + export/import)
+
+Staff world-building has a durable content pipeline now, ahead of any authoring UI:
+`Area`/`RoomProfile` carry a permanent `slug`/`fixture_key` identity plus a
+`GridOrigin` (AUTHORED/STORY/PLAYER) marking who built each row, and
+`core_management.grid_export`/`grid_import` round-trip authored areas (with their
+rooms, exits, and authored sidecar values) to the private lore repo as reviewable
+per-area JSON bundles — see `docs/roadmap/rooms-and-estates.md`'s matching "Built"
+entry and ADR-0138 for the format and rejected alternatives. No staff-facing canvas
+exists yet (Django admin + `@dig`/`@open`/`@link` remain the only way to author grid
+content); that's slice 2. The epic's remaining slices are filed as separate
+sub-issues, not designed here: **#2449** (staff world-builder canvas — the drag/drop
+authoring surface this document's "GM dashboard UI" / "Staff world management" items
+below actually need), **#2450** (GM story areas — `STORY`-origin, never exported),
+**#2451** (discovery/portal authoring — clue placement + portal anchors from the
+canvas), **#2452** (player building via projects, `needs-design`).
+
 ## Overview
 Tools for players, GMs, and staff to interact with and manage the game world. Player tools focus on building and customizing spaces. GM tools are granular and level-gated — GMs can only do what their trust level allows. Staff tools are unrestricted for the one staffer coordinating the entire game.
 
@@ -18,7 +35,9 @@ Tools for players, GMs, and staff to interact with and manage the game world. Pl
 ## What Exists
 - **Commands:** Room building commands (door creation, exit commands, room descriptors), movement commands, perception commands, character switching/sheet commands
 - **Staff frontend:** Staff application detail page, extensive Django admin configuration
-- **Areas system:** Room creation infrastructure exists through the areas app
+- **Areas system:** Room creation infrastructure exists through the areas app;
+  authored/runtime identity + grid export/import round-trip now exists (#2436/#2448,
+  see "Built" above) but no authoring UI sits on top of it yet
 - **No GM-specific tooling** — no level-gated commands or GM dashboard
 
 ## What's Needed for MVP
@@ -29,9 +48,9 @@ Tools for players, GMs, and staff to interact with and manage the game world. Pl
 - Player room purchase flow — economic room acquisition with IC construction
 - Decoration system — furnishing rooms with items that provide stats and bonuses
 - Room stat calculation — how decorations and upgrades translate to room properties
-- Staff world management — tools for the coordinating staffer to manage world state
+- Staff world management — tools for the coordinating staffer to manage world state (#2449)
 - GM dashboard UI — web interface for GMs to manage their tables, NPCs, and active sessions
-- Player building UI — web interface for room customization and decoration
+- Player building UI — web interface for room customization and decoration (#2452, needs-design)
 - Builder documentation — in-game help for room creation and management
 
 ## Testing Infrastructure

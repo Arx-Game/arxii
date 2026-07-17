@@ -7,8 +7,9 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile
 from flows.service_functions.serializers.room_state import RoomStatePayloadSerializer
-from world.areas.constants import AreaLevel
+from world.areas.constants import AreaLevel, GridOrigin
 from world.areas.factories import AreaFactory
+from world.areas.models import Area
 from world.areas.positioning.constants import PositionKind
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
 from world.areas.positioning.factories import (
@@ -81,6 +82,14 @@ class AreaModelTests(TestCase):
         realm = Realm.objects.create(name="Test Realm")
         area = AreaFactory(name="Kingdom", level=AreaLevel.KINGDOM, realm=realm)
         assert area.realm == realm
+
+
+class AreaIdentityTest(TestCase):
+    def test_area_slug_natural_key_and_origin_default(self):
+        area = Area.objects.create(name="Arx City", level=AreaLevel.CITY, slug="arx-city")
+        self.assertEqual(area.origin, GridOrigin.PLAYER)
+        self.assertEqual(Area.objects.get_by_natural_key("arx-city").pk, area.pk)
+        self.assertEqual(area.natural_key(), ("arx-city",))
 
 
 class AreaValidationTests(TestCase):

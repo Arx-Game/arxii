@@ -65,6 +65,16 @@ cache mid-deserialization.
 - Don't build cache-flush workarounds; upsert is the standing answer (the
   identity map is load-bearing — see the `sharedmemory-model` skill).
 
+**Grid bundles follow the same upsert discipline, sequenced after content
+fixtures (#2436/#2448):** `core_management.grid_import.load_grid_bundles()`
+upserts areas/rooms/exits by their permanent `slug`/`fixture_key` identity,
+never `loaddata`. Because a content fixture (e.g. `StartingArea`) can name a
+room by natural key before the grid bundle that creates it has loaded, the
+combined driver `core_management.content_fixtures.load_world_content()` loads
+content fixtures first with an unresolved-natural-key FK **deferred** (not
+fatal), then the grid bundles, then retries the deferred entries — see
+`docs/systems/INDEX.md`'s "Grid content export/import" entry and ADR-0138.
+
 ### Migration-number collisions on sync-with-main
 
 When `sync-with-main.sh` conflicts on `migrations/max_migration.txt` for an app, both branches added an independent field-add migration at the same sequence number. Resolve by keeping HEAD's stable and renumbering main's:

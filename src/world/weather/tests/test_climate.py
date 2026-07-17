@@ -16,6 +16,7 @@ from world.game_clock.factories import GameClockFactory
 from world.locations.constants import StatKey
 from world.weather.constants import MONTH_TEMPERATURE_SHIFT
 from world.weather.factories import ClimateFactory
+from world.weather.models import Climate
 from world.weather.services import (
     climate_exposure_base,
     current_temperature_shift,
@@ -108,3 +109,11 @@ class SeasonalShiftTests(TestCase):
         january = datetime(1010, 1, 15, 12, 0, tzinfo=UTC)
         GameClockFactory(anchor_ic_time=january, paused=True)
         assert current_temperature_shift() == MONTH_TEMPERATURE_SHIFT[1]
+
+
+class ClimateNaturalKeyTests(TestCase):
+    """Climate carries a name natural key (#2448), like WeatherType."""
+
+    def test_get_by_natural_key(self) -> None:
+        climate = Climate.objects.create(name="Temperate-Test")
+        assert Climate.objects.get_by_natural_key("Temperate-Test").pk == climate.pk

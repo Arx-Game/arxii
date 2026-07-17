@@ -21,19 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_ROOT = REPO_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
 
-
-def _load_dotenv_path() -> str | None:
-    """Read CONTENT_REPO_PATH from the environment, falling back to src/.env."""
-    value = os.environ.get("CONTENT_REPO_PATH")
-    if value:
-        return value
-    env_file = SRC_ROOT / ".env"
-    if env_file.is_file():
-        for raw_line in env_file.read_text(encoding="utf-8").splitlines():
-            stripped = raw_line.strip()
-            if stripped.startswith("CONTENT_REPO_PATH="):
-                return stripped.split("=", 1)[1].strip().strip('"').strip("'")
-    return None
+from core_management.content_repo import load_dotenv_content_path  # noqa: E402
 
 
 def _configure_django() -> None:
@@ -59,7 +47,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    content_path = args.content_path or _load_dotenv_path()
+    content_path = args.content_path or load_dotenv_content_path()
     if not content_path:
         print(
             "CONTENT_REPO_PATH is not set. Add it to src/.env pointing at your "
@@ -74,14 +62,21 @@ def main() -> int:
 
     _configure_django()
 
-    from core_management.content_export import (  # noqa: PLC0415
-        CONTENT_MODELS,
-        export_to_content_repo,
-    )
+    from core_management.content_export import CONTENT_MODELS  # noqa: PLC0415
 
     if args.check:
         _run_check(CONTENT_MODELS)
+        _run_grid_check()
         return 0
+
+    model_ok = _run_model_export(content_root)
+    grid_ok = _run_grid_export(content_root)
+    return 0 if (model_ok and grid_ok) else 1
+
+
+def _run_model_export(content_root: Path) -> bool:
+    """Export content models; print the report. Returns True iff no errors."""
+    from core_management.content_export import export_to_content_repo  # noqa: PLC0415
 
     result = export_to_content_repo(content_root)
     for path in result.written:
@@ -95,7 +90,29 @@ def main() -> int:
         for err in result.errors:
             print(f"  {err}", file=sys.stderr)
     print(f"OK: {result.total_records} records -> {len(result.written)} file(s).")
-    return 0 if not result.errors else 1
+    return not result.errors
+
+
+def _run_grid_export(content_root: Path) -> bool:
+    """Export grid bundles; print the report. Returns True iff no errors."""
+    from core_management.grid_export import export_grid_bundles  # noqa: PLC0415
+
+    grid_result = export_grid_bundles(content_root)
+    for path in grid_result.written:
+        print(f"wrote {path.relative_to(content_root)}")
+    if grid_result.reports:
+        print(f"\nGrid export reports ({len(grid_result.reports)}):")
+        for line in grid_result.reports:
+            print(f"  {line}")
+    if grid_result.errors:
+        print(f"\nGrid export errors ({len(grid_result.errors)}):")
+        for err in grid_result.errors:
+            print(f"  {err}", file=sys.stderr)
+    print(
+        f"OK: grid — {grid_result.area_count} area(s), {grid_result.room_count} room(s) -> "
+        f"{len(grid_result.written)} file(s)."
+    )
+    return not grid_result.errors
 
 
 def _run_check(content_models: frozenset[str]) -> None:
@@ -117,6 +134,37 @@ def _run_check(content_models: frozenset[str]) -> None:
         else:
             print(f"  {model_label}: 0 rows (skip)")
     print(f"\nTotal: {total} records across {len(content_models)} content models.")
+    print("Nothing written (--check).")
+
+
+def _run_grid_check() -> None:
+    """Dry-run: count authored areas/rooms, write nothing."""
+    from django.db.models import Count  # noqa: PLC0415
+
+    from core_management.grid_export import find_unhoused_authored_rooms  # noqa: PLC0415
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.areas.constants import GridOrigin  # noqa: PLC0415
+    from world.areas.models import Area  # noqa: PLC0415
+
+    areas = list(Area.objects.filter(origin=GridOrigin.AUTHORED).order_by("slug"))
+    print(f"\nGrid: {len(areas)} authored area(s):")
+    room_counts_by_area = {
+        row["area_id"]: row["n"]
+        for row in RoomProfile.objects.filter(area__in=areas, origin=GridOrigin.AUTHORED)
+        .values("area_id")
+        .annotate(n=Count("pk"))
+    }
+    for area in areas:
+        room_count = room_counts_by_area.get(area.pk, 0)
+        slug = area.slug or "MISSING SLUG"
+        print(f"  {slug}: {room_count} authored room(s) -> fixtures/grid/{slug}.json")
+
+    unhoused = find_unhoused_authored_rooms()
+    if unhoused:
+        print(f"\nWARNING: {len(unhoused)} unhoused AUTHORED room(s) — export will FAIL:")
+        for line in unhoused:
+            print(f"  {line}", file=sys.stderr)
+
     print("Nothing written (--check).")
 
 

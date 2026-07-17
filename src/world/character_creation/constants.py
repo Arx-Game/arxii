@@ -41,6 +41,10 @@ CG_MODIFIER_CATEGORY = "character_creation"
 FALLBACK_STARTING_ROOM_KEY = "The Wanderer's Rest"
 FALLBACK_STARTING_ROOM_TYPECLASS = "typeclasses.rooms.Room"
 
+# Reserved RoomProfile.fixture_key for the canonical fallback room above (#2448),
+# marking it AUTHORED so it is stable-identity and included in the grid export.
+FALLBACK_STARTING_ROOM_FIXTURE_KEY = "arx/fallback-starting-room"
+
 
 class Stage(models.IntegerChoices):
     """Character creation stages."""

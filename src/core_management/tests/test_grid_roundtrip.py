@@ -1,0 +1,89 @@
+"""Full export -> mutate -> import journey test for the grid pipeline (#2436/#2448).
+
+``test_grid_export.py``/``test_grid_import.py`` cover each half of the pipeline in
+isolation; ``test_load_sequencing.py`` (Task 5) covers the ``StartingArea`` ->
+grid-bundle deferral edge case specifically. This file's distinct value is the full
+round trip through the real public entry points — ``export_to_content_repo`` +
+``export_grid_bundles`` write what a live game would write, then
+``load_world_content`` reads it back into a DB that has since drifted — proving the
+whole pipeline is a fixed point: export -> mutate -> reload always converges back
+to the exported state, never duplicating or losing rows.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+import tempfile
+
+from django.test import TestCase
+from evennia.objects.models import ObjectDB
+
+from core_management.content_export import export_to_content_repo
+from core_management.content_fixtures import load_world_content
+from core_management.grid_export import export_grid_bundles
+from core_management.tests._grid_fixtures import build_sample_grid
+from evennia_extensions.models import ObjectDisplayData
+from world.areas.models import Area
+from world.character_creation.models import StartingArea
+
+_ROOM_TYPECLASS = "typeclasses.rooms.Room"
+
+
+class GridRoundTripJourneyTests(TestCase):
+    """Export the authored grid + a StartingArea, mutate the DB, reload, compare."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.grid = build_sample_grid()
+        cls.starting_area = StartingArea.objects.create(
+            name="Arx",
+            description="The city where every story begins.",
+            default_starting_room=cls.grid.taproom,
+        )
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_export_mutate_reload_converges_to_exported_state(self) -> None:
+        """export -> mutate DB -> load_world_content -> DB matches the export again."""
+        original_description = ObjectDisplayData.objects.get(
+            object=self.grid.taproom_obj
+        ).permanent_description
+        original_city_name = self.grid.city.name
+        fixture_key = self.grid.taproom.fixture_key
+        room_count_before = ObjectDB.objects.filter(db_typeclass_path=_ROOM_TYPECLASS).count()
+
+        export_to_content_repo(self.root)
+        export_grid_bundles(self.root)
+
+        # Drift the DB away from what was just exported.
+        display = ObjectDisplayData.objects.get(object=self.grid.taproom_obj)
+        display.permanent_description = "A ruin, long abandoned."
+        display.save()
+        self.grid.city.name = "Somewhere Else"
+        self.grid.city.save()
+
+        world_result = load_world_content(self.root)
+
+        self.assertEqual(world_result.skipped, [])
+
+        # Room description restored to the exported value, same ObjectDB row.
+        restored_display = ObjectDisplayData.objects.get(object=self.grid.taproom_obj)
+        self.assertEqual(restored_display.permanent_description, original_description)
+
+        # Area name restored, same Area row (looked up by slug, not recreated).
+        restored_city = Area.objects.get(slug=self.grid.city.slug)
+        self.assertEqual(restored_city.name, original_city_name)
+        self.assertEqual(restored_city.pk, self.grid.city.pk)
+
+        # StartingArea -> room link survives the round trip intact.
+        restored_starting_area = StartingArea.objects.get(name="Arx")
+        self.assertIsNotNone(restored_starting_area.default_starting_room)
+        self.assertEqual(restored_starting_area.default_starting_room.fixture_key, fixture_key)
+        self.assertEqual(restored_starting_area.default_starting_room_id, self.grid.taproom.pk)
+
+        # No duplicate rooms were created by the reload.
+        room_count_after = ObjectDB.objects.filter(db_typeclass_path=_ROOM_TYPECLASS).count()
+        self.assertEqual(room_count_after, room_count_before)

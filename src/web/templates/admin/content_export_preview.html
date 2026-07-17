@@ -41,6 +41,47 @@
       </tbody>
     </table>
 
+    <h2>Grid (areas/rooms/exits)</h2>
+    <p>
+      This will also export the graph-shaped grid — <strong>{{ grid_area_count }}
+      authored area(s)</strong> totalling <strong>{{ grid_room_count }} authored
+      room(s)</strong> — to <code>fixtures/grid/&lt;area-slug&gt;.json</code>. Only
+      areas/rooms marked <code>AUTHORED</code> are captured; GM- and player-built
+      grid state never exports.
+    </p>
+
+    {% if grid_unhoused_rooms %}
+    <div class="errornote">
+      <strong>{{ grid_unhoused_rooms|length }} AUTHORED room(s) are unhoused and
+      will make the export FAIL</strong> — an AUTHORED room's area must itself be
+      AUTHORED (never NULL or GM/player-owned):
+      <ul>
+        {% for line in grid_unhoused_rooms %}
+        <li>{{ line }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <table>
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>Rooms</th>
+          <th>Output file</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in grid_areas %}
+        <tr>
+          <td><code>{{ a.slug|default:"(missing slug)" }}</code> — {{ a.name }}</td>
+          <td>{{ a.room_count }}</td>
+          <td><code>{{ a.output|default:"—" }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
     <form method="post" action="{% url 'admin_content_export_run' %}">
       {% csrf_token %}
       <p>

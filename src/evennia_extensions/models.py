@@ -13,9 +13,11 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.constants import ExitKind, RoomEnclosure
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from server.conf.serversession import ServerSession
+from world.areas.constants import GridOrigin
 from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication
 
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
@@ -354,7 +356,7 @@ class PlayerAllowList(SharedMemoryModel):
 # by the #1271 privacy tiers.
 
 
-class RoomSizeTier(SharedMemoryModel):
+class RoomSizeTier(NaturalKeyMixin, SharedMemoryModel):
     """A rung on the shared room-size unit ladder (#670; PLACEHOLDER magnitudes).
 
     Rooms spend these units from their building's space budget. The unit
@@ -364,6 +366,11 @@ class RoomSizeTier(SharedMemoryModel):
 
     name = models.CharField(max_length=40, unique=True)
     units = models.PositiveIntegerField(unique=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["units"]
@@ -384,7 +391,7 @@ def room_is_publicly_listed(room: ObjectDB) -> bool:
         return False
 
 
-class RoomProfile(SharedMemoryModel):
+class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
     """Links an Evennia room to the spatial hierarchy.
 
     Thin extension model — only area FK for now. Future game systems
@@ -473,6 +480,29 @@ class RoomProfile(SharedMemoryModel):
         related_name="rooms_defaulting",
         help_text="Default terrain layout applied when this room initialises a position grid.",
     )
+    fixture_key = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text=(
+            "Permanent stable identifier for authored (exported) rooms, e.g. "
+            "'arx-city/golden-hart-taproom' (#2448). Required when origin=AUTHORED; "
+            "NULL for player/instance rooms."
+        ),
+    )
+    origin = models.CharField(
+        max_length=16,
+        choices=GridOrigin.choices,
+        default=GridOrigin.PLAYER,
+        db_index=True,
+        help_text="Who authored this room — only AUTHORED rooms export (#2448).",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["fixture_key"]
 
     class Meta:
         verbose_name = "Room Profile"
