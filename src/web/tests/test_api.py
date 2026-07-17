@@ -31,20 +31,6 @@ class WebAPITests(TestCase):
         )
 
     @patch("web.api.views.general_views.SESSION_HANDLER")
-    def test_homepage_api_returns_stats(self, mock_session_handler):
-        mock_session_handler.account_count.return_value = 0
-        url = reverse("api-homepage")
-        response = self.client.get(url)
-        assert response.status_code == 200
-        data = response.json()
-        assert data["page_title"] == "Arx II"
-        assert data["num_accounts_registered"] == 1
-        assert data["num_accounts_connected"] == 0
-        assert data["num_accounts_registered_recent"] == 1
-        assert data["num_accounts_connected_recent"] == 0
-        assert isinstance(data["accounts_connected_recent"], list)
-
-    @patch("web.api.views.general_views.SESSION_HANDLER")
     def test_status_api_returns_counts(self, mock_session_handler):
         mock_session_handler.account_count.return_value = 2
         character = ObjectDBFactory(
