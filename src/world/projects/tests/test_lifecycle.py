@@ -14,12 +14,17 @@ from world.projects.factories import ProjectFactory
 from world.projects.services import (
     clear_kind_handlers,
     register_kind_handler,
+    restore_registries,
     scan_active_projects,
+    snapshot_registries,
 )
 
 
 class SingleThresholdLifecycleTests(TestCase):
     def setUp(self) -> None:
+        # Registries are process-global app-ready state — snapshot before
+        # clearing so tests that run after this module see them intact.
+        self.addCleanup(restore_registries, snapshot_registries())
         clear_kind_handlers()
         register_kind_handler(ProjectKind.TEST_KIND, lambda _project, _tier: None)
 
@@ -65,6 +70,7 @@ class SingleThresholdLifecycleTests(TestCase):
 
 class TieredPeriodLifecycleTests(TestCase):
     def setUp(self) -> None:
+        self.addCleanup(restore_registries, snapshot_registries())
         clear_kind_handlers()
         register_kind_handler(ProjectKind.TEST_KIND, lambda _project, _tier: None)
 

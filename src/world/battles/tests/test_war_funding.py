@@ -39,11 +39,11 @@ from world.covenants.factories import (
 from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus
 from world.projects.factories import ProjectFactory
 from world.projects.services import (
-    clear_kind_handlers,
-    clear_tiered_resolvers,
     register_kind_handler,
     register_tiered_resolver,
+    restore_registries,
     scan_active_projects,
+    snapshot_registries,
 )
 from world.scenes.factories import PersonaFactory
 from world.traits.factories import CheckOutcomeFactory
@@ -255,12 +255,11 @@ class GetWarFundingBonusTests(TestCase):
 
 class ScanJourneyTests(TestCase):
     def setUp(self) -> None:
+        # Registries are process-global app-ready state — restore, never
+        # leave them cleared for tests that run after this module.
+        self.addCleanup(restore_registries, snapshot_registries())
         register_kind_handler(ProjectKind.WAR_FUNDING, complete_war_funding)
         register_tiered_resolver(ProjectKind.WAR_FUNDING, resolve_war_funding)
-
-    def tearDown(self) -> None:
-        clear_kind_handlers()
-        clear_tiered_resolvers()
 
     def test_full_journey_grade_and_verify_bonus(self) -> None:
         covenant = CovenantFactory()

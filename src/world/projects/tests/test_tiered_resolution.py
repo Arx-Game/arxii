@@ -18,15 +18,17 @@ from world.projects.services import (
     clear_tiered_resolvers,
     get_tiered_resolver,
     register_tiered_resolver,
+    restore_registries,
     scan_active_projects,
+    snapshot_registries,
 )
 
 
 class TieredResolverRegistryTests(TestCase):
     def setUp(self) -> None:
-        clear_tiered_resolvers()
-
-    def tearDown(self) -> None:
+        # Registries are process-global app-ready state — snapshot before
+        # clearing so tests that run after this module see them intact.
+        self.addCleanup(restore_registries, snapshot_registries())
         clear_tiered_resolvers()
 
     def test_register_and_lookup(self) -> None:
@@ -42,13 +44,8 @@ class TieredResolverRegistryTests(TestCase):
 
 class ScanWiringTests(TestCase):
     def setUp(self) -> None:
+        self.addCleanup(restore_registries, snapshot_registries())
         clear_tiered_resolvers()
-
-    def tearDown(self) -> None:
-        clear_tiered_resolvers()
-        from world.projects.services import clear_kind_handlers
-
-        clear_kind_handlers()
 
     def test_scan_calls_registered_resolver_after_transition(self) -> None:
         project = ProjectFactory(
