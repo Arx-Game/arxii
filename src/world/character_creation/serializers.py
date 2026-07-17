@@ -24,9 +24,10 @@ from world.character_creation.models import (
 from world.character_creation.types import StageValidationErrors
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathStage
+from world.distinctions.models import Distinction
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
-from world.magic.models import Gift, Technique, Tradition
+from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.models import Family, KinSlotPool, Kinsperson
 from world.roster.serializers import FamilySerializer
@@ -287,6 +288,46 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
     def get_is_signature(self, obj: Technique) -> bool:
         """True when this technique came from the tradition's signature set."""
         return obj.id in self.context.get("signature_technique_ids", set())
+
+
+class CGGlimpseTagSuggestedDistinctionSerializer(serializers.ModelSerializer):
+    """Distinction stub embedded in a glimpse tag's suggestion list (#2427)."""
+
+    class Meta:
+        model = Distinction
+        fields = ["id", "name"]
+        read_only_fields = fields
+
+
+class CGGlimpseTagSerializer(serializers.ModelSerializer):
+    """Glimpse tag row for the CG guided flow (#2427).
+
+    Backs ``GET /api/character-creation/glimpse-tags/``. Curated distinction
+    suggestions are embedded per tag (prefetched); the client dedupes across
+    the chosen tag set.
+    """
+
+    suggested_distinctions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GlimpseTag
+        fields = [
+            "id",
+            "axis",
+            "name",
+            "slug",
+            "description",
+            "example",
+            "sort_order",
+            "suggested_distinctions",
+        ]
+        read_only_fields = fields
+
+    def get_suggested_distinctions(self, obj: GlimpseTag) -> list[dict]:
+        rows = obj.cached_distinction_suggestions  # Prefetch(to_attr=...), ordered
+        return CGGlimpseTagSuggestedDistinctionSerializer(
+            [row.distinction for row in rows], many=True
+        ).data
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):

@@ -3919,6 +3919,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/CGGiftOption'
           description: ''
+  /api/character-creation/glimpse-tags/:
+    get:
+      operationId: character_creation_glimpse_tags_list
+      description: |-
+        List active glimpse tags for the CG guided glimpse flow (#2427).
+
+        Global authored catalog — not draft-dependent, so it also serves the
+        post-CG "finish your glimpse later" surface on the character sheet.
+      parameters:
+      - in: query
+        name: axis
+        schema:
+          type: string
+          enum:
+          - CONSEQUENCE
+          - SENSORY
+          - TONE
+          - WITNESS
+        description: |-
+          Which guided step this tag belongs to.
+
+          * `TONE` - Tone
+          * `CONSEQUENCE` - Consequence
+          * `WITNESS` - Witness & Secrecy
+          * `SENSORY` - Sensory & Discovery
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGGlimpseTag'
+          description: ''
+  /api/character-creation/glimpse-tags/{id}/:
+    get:
+      operationId: character_creation_glimpse_tags_retrieve
+      description: |-
+        List active glimpse tags for the CG guided glimpse flow (#2427).
+
+        Global authored catalog — not draft-dependent, so it also serves the
+        post-CG "finish your glimpse later" surface on the character sheet.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Glimpse Tag.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CGGlimpseTag'
+          description: ''
   /api/character-creation/house-titles/:
     get:
       operationId: character_creation_house_titles_list
@@ -14944,6 +15008,115 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/magic/character-auras/{id}/link-glimpse-distinction/:
+    post:
+      operationId: magic_character_auras_link_glimpse_distinction_create
+      description: Mark one of the character's distinctions as born in the Glimpse
+        (#2427).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterAuraRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterAura'
+          description: ''
+  /api/magic/character-auras/{id}/set-glimpse-prose/:
+    post:
+      operationId: magic_character_auras_set_glimpse_prose_create
+      description: Write the aura's glimpse story prose (#2427).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterAuraRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterAura'
+          description: ''
+  /api/magic/character-auras/{id}/set-glimpse-tags/:
+    post:
+      operationId: magic_character_auras_set_glimpse_tags_create
+      description: Replace the aura's glimpse tags for one axis (#2427).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterAuraRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterAura'
+          description: ''
+  /api/magic/character-auras/{id}/unlink-glimpse-distinction/:
+    post:
+      operationId: magic_character_auras_unlink_glimpse_distinction_create
+      description: Clear a distinction's Glimpse provenance (#2427).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterAuraRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterAura'
+          description: ''
   /api/magic/character-gifts/:
     get:
       operationId: magic_character_gifts_list
@@ -32102,6 +32275,18 @@ components:
       - soulfray_warning
       - technique_id
       - technique_name
+    AxisEnum:
+      enum:
+      - TONE
+      - CONSEQUENCE
+      - WITNESS
+      - SENSORY
+      type: string
+      description: |-
+        * `TONE` - Tone
+        * `CONSEQUENCE` - Consequence
+        * `WITNESS` - Witness & Secrecy
+        * `SENSORY` - Sensory & Discovery
     BattleBindingEnum:
       enum:
       - standing
@@ -33617,6 +33802,65 @@ components:
       description: |-
         * `MAJOR` - Major (CG-chosen)
         * `MINOR` - Minor (shared, acquirable)
+    CGGlimpseTag:
+      type: object
+      description: |-
+        Glimpse tag row for the CG guided flow (#2427).
+
+        Backs ``GET /api/character-creation/glimpse-tags/``. Curated distinction
+        suggestions are embedded per tag (prefetched); the client dedupes across
+        the chosen tag set.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        axis:
+          allOf:
+          - $ref: '#/components/schemas/AxisEnum'
+          readOnly: true
+          description: |-
+            Which guided step this tag belongs to.
+
+            * `TONE` - Tone
+            * `CONSEQUENCE` - Consequence
+            * `WITNESS` - Witness & Secrecy
+            * `SENSORY` - Sensory & Discovery
+        name:
+          type: string
+          readOnly: true
+          description: Player-facing tag name.
+        slug:
+          type: string
+          readOnly: true
+          description: Natural key.
+          pattern: ^[-a-zA-Z0-9_]+$
+        description:
+          type: string
+          readOnly: true
+          description: What choosing this tag says about the glimpse.
+        example:
+          type: string
+          readOnly: true
+          description: Short illustrative sentence shown in the guided step.
+        sort_order:
+          type: integer
+          readOnly: true
+          description: Display order within the axis.
+        suggested_distinctions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+      required:
+      - axis
+      - description
+      - example
+      - id
+      - name
+      - slug
+      - sort_order
+      - suggested_distinctions
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -34640,6 +34884,16 @@ components:
           type: string
           description: Return the display label for the dominant affinity.
           readOnly: true
+        glimpse_state:
+          allOf:
+          - $ref: '#/components/schemas/GlimpseStateEnum'
+          readOnly: true
+          description: |-
+            Deferral/progress state of the Glimpse (#2427). Cache of prose+tag truth — maintained by world.magic.services.glimpse, never written directly.
+
+            * `NOT_STARTED` - Not started
+            * `TAGS_ONLY` - Tags chosen, story unwritten
+            * `COMPLETE` - Complete
         updated_at:
           type: string
           format: date-time
@@ -34648,6 +34902,7 @@ components:
       - character
       - dominant_affinity
       - dominant_affinity_display
+      - glimpse_state
       - id
       - updated_at
     CharacterAuraRequest:
@@ -41592,6 +41847,16 @@ components:
         * `environmental_detail` - Environmental Detail
         * `room_trigger` - Room Trigger
         * `board` - Notice Board
+    GlimpseStateEnum:
+      enum:
+      - NOT_STARTED
+      - TAGS_ONLY
+      - COMPLETE
+      type: string
+      description: |-
+        * `NOT_STARTED` - Not started
+        * `TAGS_ONLY` - Tags chosen, story unwritten
+        * `COMPLETE` - Complete
     GlobalStoryProgress:
       type: object
       description: Serializer for GlobalStoryProgress — singleton metaplot progress

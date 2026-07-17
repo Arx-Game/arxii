@@ -47,6 +47,7 @@ from world.character_creation.serializers import (
     BeginningsSerializer,
     CGExplanationsSerializer,
     CGGiftOptionSerializer,
+    CGGlimpseTagSerializer,
     CGPointBudgetSerializer,
     CGTechniqueOptionSerializer,
     CharacterDraftCreateSerializer,
@@ -81,7 +82,13 @@ from world.character_creation.services import (
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
 from world.forms.services import get_cg_form_options
-from world.magic.models import Gift, Technique, Tradition
+from world.magic.models import (
+    Gift,
+    GlimpseTag,
+    GlimpseTagDistinctionSuggestion,
+    Technique,
+    Tradition,
+)
 from world.magic.services.cg_catalog import get_gift_options, get_technique_options
 from world.magic.types.cg_catalog import TechniqueOptions
 from world.roster.models import Family
@@ -493,6 +500,30 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
             {t.id for t in options.signature} if options is not None else set()
         )
         return context
+
+
+class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    List active glimpse tags for the CG guided glimpse flow (#2427).
+
+    Global authored catalog — not draft-dependent, so it also serves the
+    post-CG "finish your glimpse later" surface on the character sheet.
+    """
+
+    serializer_class = CGGlimpseTagSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table.
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["axis"]
+
+    def get_queryset(self) -> QuerySet[GlimpseTag]:
+        return GlimpseTag.objects.filter(is_active=True).prefetch_related(
+            Prefetch(
+                "distinction_suggestions",
+                queryset=GlimpseTagDistinctionSuggestion.objects.select_related("distinction"),
+                to_attr="cached_distinction_suggestions",
+            )
+        )
 
 
 class CanCreateCharacterView(APIView):

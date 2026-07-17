@@ -31,6 +31,7 @@ from world.character_sheets.serializers import (
     _build_theming,
     get_character_sheet_queryset,
 )
+from world.character_sheets.types import SheetVisibility
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
@@ -43,14 +44,16 @@ from world.forms.factories import (
 )
 from world.forms.models import FormType
 from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
-from world.magic.constants import RitualExecutionKind
+from world.magic.constants import GlimpseState, GlimpseTagAxis, RitualExecutionKind
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterGiftFactory,
+    CharacterGlimpseTagFactory,
     CharacterResonanceFactory,
     CharacterTechniqueFactory,
     FacetFactory,
     GiftFactory,
+    GlimpseTagFactory,
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
@@ -61,6 +64,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueStyleFactory,
 )
+from world.magic.models import CharacterAura
 from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import (
     FamilyFactory,
@@ -1248,6 +1252,66 @@ class TestMagicSectionFull(TestCase):
         magic = self._get_magic()
         assert magic["aura"]["glimpse_story"] == "A vision of iron chains."
 
+    def test_aura_id(self) -> None:
+        """Aura entry contains its own id, so the frontend can address aura actions (#2427)."""
+        magic = self._get_magic()
+        assert magic["aura"]["id"] == self.aura.pk
+
+    def test_aura_glimpse_state_and_tags(self) -> None:
+        """Aura entry contains glimpse_state and chosen glimpse_tags (#2427)."""
+        tag = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="ms-tone")
+        CharacterGlimpseTagFactory(aura=self.aura, tag=tag)
+        self.aura.glimpse_state = GlimpseState.TAGS_ONLY
+        self.aura.save()
+        # self.aura is SharedMemoryModel-identity-mapped and shared (class-scoped)
+        # with every other test in this class; an earlier test's GET already
+        # populated its ``cached_glimpse_tags`` Prefetch(to_attr=...) attribute
+        # (empty, since no CharacterGlimpseTag existed yet) — Django's prefetch
+        # machinery skips re-fetching an attribute that's already present on the
+        # instance, so the stale empty list would otherwise win here.
+        CharacterAura.flush_instance_cache()
+
+        magic = self._get_magic()
+        assert magic["aura"]["glimpse_state"] == GlimpseState.TAGS_ONLY
+        tags = magic["aura"]["glimpse_tags"]
+        assert len(tags) == 1
+        assert tags[0]["id"] == tag.pk
+        assert tags[0]["axis"] == GlimpseTagAxis.TONE
+        assert tags[0]["name"] == tag.name
+        assert tags[0]["description"] == tag.description
+
+    def test_aura_can_finish_glimpse_true_for_owner_when_unfinished(self) -> None:
+        """Owner sees can_finish_glimpse=True while the glimpse is unfinished (#2427)."""
+        self.aura.glimpse_state = GlimpseState.TAGS_ONLY
+        self.aura.save()
+
+        magic = self._get_magic()
+        assert magic["aura"]["can_finish_glimpse"] is True
+
+    def test_aura_can_finish_glimpse_false_when_complete(self) -> None:
+        """Even the owner sees can_finish_glimpse=False once the glimpse is complete (#2427)."""
+        self.aura.glimpse_state = GlimpseState.COMPLETE
+        self.aura.save()
+
+        magic = self._get_magic()
+        assert magic["aura"]["can_finish_glimpse"] is False
+
+    def test_aura_can_finish_glimpse_false_for_non_privileged_viewer(self) -> None:
+        """A non-owner viewer who can see the section never sees can_finish_glimpse=True (#2427)."""
+        self.aura.glimpse_state = GlimpseState.TAGS_ONLY
+        self.aura.save()
+        self.sheet.magic_visibility = SheetVisibility.PUBLIC
+        self.sheet.save(update_fields=["magic_visibility"])
+
+        viewer = AccountFactory()
+        client = APIClient()
+        client.force_authenticate(user=viewer)
+        response = client.get(f"/api/character-sheets/{self.character.pk}/")
+
+        assert response.status_code == 200
+        assert response.data["magic"]["aura"]["glimpse_state"] == GlimpseState.TAGS_ONLY
+        assert response.data["magic"]["aura"]["can_finish_glimpse"] is False
+
     # --- Resonance balance tests (#2032) ---
 
     def test_resonances_list_length(self) -> None:
@@ -2013,9 +2077,12 @@ class TestCharacterSheetQueryCount(TestCase):
          31.   character condition_instances prefetch (#2196 — dynamic thumbnail
                 resolution; prefetched so resolve_thumbnail() doesn't fire
                 per-persona queries in _build_personas)
+         32.   aura glimpse_tags prefetch (#2427 — chosen glimpse tags for the
+                guided-flow "finish your glimpse" affordance; one join query,
+                select_related onto the catalog tag)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(31):
+        with self.assertNumQueries(32):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

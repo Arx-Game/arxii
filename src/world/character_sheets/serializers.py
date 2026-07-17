@@ -29,6 +29,7 @@ from world.character_sheets.types import (
     DistinctionEntry,
     FormTraitEntry,
     GiftEntry,
+    GlimpseTagEntry,
     GoalEntry,
     IdentitySection,
     IdNameRef,
@@ -58,10 +59,11 @@ from world.forms.models import (
     PersonaTraitDescriptor,
 )
 from world.goals.models import CharacterGoal
-from world.magic.constants import RitualExecutionKind
+from world.magic.constants import GlimpseState, RitualExecutionKind
 from world.magic.models import (
     CharacterAura,
     CharacterGift,
+    CharacterGlimpseTag,
     CharacterTechnique,
     Motif,
     MotifResonance,
@@ -616,6 +618,11 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         ),
         to_attr="cached_resonances",
     ),
+    Prefetch(
+        "character__aura__glimpse_tags",
+        queryset=CharacterGlimpseTag.objects.select_related("tag"),
+        to_attr="cached_glimpse_tags",
+    ),
 )
 
 
@@ -708,21 +715,44 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
     )
 
 
-def _build_magic_aura(character: ObjectDB) -> AuraData | None:
+def _build_magic_aura(character: ObjectDB, *, privileged: bool) -> AuraData | None:
     """Build the aura sub-section (OneToOne to ObjectDB, not CharacterSheet).
 
-    Returns ``None`` when the character has no aura.
+    Returns ``None`` when the character has no aura. Glimpse tags share the
+    prose's visibility (the whole section is already tier-gated); only the
+    ``can_finish_glimpse`` affordance is privileged-only (#2427).
     """
     try:
         aura = character.aura
     except CharacterAura.DoesNotExist:
         return None
 
+    tag_rows: list[CharacterGlimpseTag] = getattr(
+        aura,
+        # Suppression justified: mutating prefetch on identity-mapped parent; context-over-cache
+        # (#2401).
+        "cached_glimpse_tags",  # noqa: GETATTR_LITERAL
+        None,
+    )
+    if tag_rows is None:
+        tag_rows = aura.glimpse_tags.select_related("tag")
     return AuraData(
+        id=aura.pk,
         celestial=aura.celestial,
         primal=aura.primal,
         abyssal=aura.abyssal,
         glimpse_story=aura.glimpse_story,
+        glimpse_state=aura.glimpse_state,
+        glimpse_tags=[
+            GlimpseTagEntry(
+                id=row.tag.pk,
+                axis=row.tag.axis,
+                name=row.tag.name,
+                description=row.tag.description,
+            )
+            for row in tag_rows
+        ],
+        can_finish_glimpse=privileged and aura.glimpse_state != GlimpseState.COMPLETE,
     )
 
 
@@ -746,7 +776,7 @@ def _build_magic_resonances(character: ObjectDB) -> list[ResonanceBalanceEntry]:
     return entries
 
 
-def _build_magic(sheet: CharacterSheet) -> MagicSection | None:
+def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSection | None:
     """Build the magic section with gifts, motif, anima ritual, aura, and resonances.
 
     Returns ``None`` when the character has no magic data at all (no gifts,
@@ -757,7 +787,7 @@ def _build_magic(sheet: CharacterSheet) -> MagicSection | None:
     gifts = _build_magic_gifts(sheet)
     motif_data = _build_magic_motif(sheet)
     anima_ritual_data = _build_magic_anima_ritual(sheet)
-    aura_data = _build_magic_aura(character)
+    aura_data = _build_magic_aura(character, privileged=privileged)
     resonances = _build_magic_resonances(character)
 
     # Return None if no magic data exists at all
@@ -1098,7 +1128,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),
-            "magic": _build_magic(sheet) if show_magic else None,
+            "magic": _build_magic(sheet, privileged=privileged) if show_magic else None,
             # Story reads from the presented face's profile (cover identities show their own).
             "story": _build_story(bio_profile=bio_profile),
             "goals": _build_goals(sheet) if show_goals else [],

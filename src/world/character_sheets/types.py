@@ -169,13 +169,26 @@ class AnimaRitualSection(TypedDict):
     description: str
 
 
+class GlimpseTagEntry(TypedDict):
+    """One chosen glimpse tag on the character sheet (#2427)."""
+
+    id: int
+    axis: str
+    name: str
+    description: str
+
+
 class AuraData(TypedDict):
     """Full aura data including glimpse story (used in magic section)."""
 
+    id: int
     celestial: Decimal
     primal: Decimal
     abyssal: Decimal
     glimpse_story: str
+    glimpse_state: str
+    glimpse_tags: list[GlimpseTagEntry]
+    can_finish_glimpse: bool
 
 
 class AuraThemingData(TypedDict):
