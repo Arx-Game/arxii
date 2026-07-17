@@ -286,12 +286,20 @@ class CovenantSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_member_count(self, obj: Covenant) -> int:
+        # Prefer the page aggregate the viewset precomputed (2026-07 audit);
+        # fall back to a direct count for callers outside CovenantViewSet.list.
+        aggregate = self.context.get("covenant_aggregates", {}).get(obj.pk)
+        if aggregate is not None:
+            return aggregate["member_count"]
         return obj.memberships.filter(left_at__isnull=True).count()
 
     def get_is_active(self, obj: Covenant) -> bool:
         return obj.dissolved_at is None
 
     def get_legend_total(self, obj: Covenant) -> int:
+        aggregate = self.context.get("covenant_aggregates", {}).get(obj.pk)
+        if aggregate is not None:
+            return aggregate["legend_total"]
         from world.societies.services import get_covenant_legend_total  # noqa: PLC0415
 
         return get_covenant_legend_total(obj)

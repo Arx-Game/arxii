@@ -471,6 +471,28 @@ def get_covenant_legend_total(covenant: Covenant) -> int:
     return result[0] if result else 0
 
 
+def get_covenant_legend_totals(covenant_ids: list[int]) -> dict[int, int]:
+    """Bulk sibling of ``get_covenant_legend_total`` — one query for a page of covenants.
+
+    Args:
+        covenant_ids: Covenant pks to look up.
+
+    Returns:
+        ``{covenant_id: legend_total}``. Covenants with no view row are absent
+        (callers default to 0).
+
+    Note: Like the single-covenant version, uses ``values_list`` to bypass the
+    SharedMemoryModel identity-map cache, which would otherwise return stale
+    totals after a view refresh.
+    """
+    if not covenant_ids:
+        return {}
+    rows = CovenantLegendSummary.objects.filter(pk__in=covenant_ids).values_list(
+        "pk", "legend_total"
+    )
+    return dict(rows)
+
+
 def get_character_role_legend(
     *,
     character_sheet: CharacterSheet,
