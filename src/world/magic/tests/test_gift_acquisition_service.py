@@ -452,3 +452,236 @@ class AcceptTechniqueOfferTest(TestCase):
         )
         with self.assertRaises(TechniqueCapExceeded):
             accept_technique_offer(self.sheet, offer4)
+
+
+class ChargeAndLearnGoldCostTest(TestCase):
+    """The shared core's gold-charge branch (#2440) — no player-teacher offer
+
+    exercises ``gold_cost``/``gold_treasury`` today (TechniqueTeachingOffer's
+    own gold_cost field is still unwired), so this is covered directly here
+    rather than only indirectly through the npc_services TRAIN offer tests.
+    """
+
+    def setUp(self):
+        from evennia_extensions.factories import AccountFactory
+        from world.action_points.models import ActionPointPool
+        from world.currency.services import get_or_create_purse, get_or_create_treasury
+        from world.magic.constants import TargetKind
+        from world.magic.factories import (
+            CharacterGiftFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+        )
+        from world.magic.models import Thread
+        from world.societies.factories import OrganizationFactory
+
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.sheet = CharacterSheetFactory()
+        self.account = AccountFactory()
+        self.sheet.character.account = self.account
+        self.sheet.character.save()
+        # Already-owned gift + provisioned thread — sidesteps the XP-unlock
+        # gate and the technique cap so this test stays focused on gold.
+        CharacterGiftFactory(character=self.sheet, gift=self.gift)
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=10,
+        )
+        self.technique = TechniqueFactory(gift=self.gift)
+        self.ap_pool = ActionPointPool.get_or_create_for_character(self.sheet.character)
+        self.ap_pool.current = 200
+        self.ap_pool.save()
+        self.purse = get_or_create_purse(self.sheet)
+        self.purse.balance = 1000
+        self.purse.save()
+        self.org = OrganizationFactory()
+        self.treasury = get_or_create_treasury(self.org)
+
+    def test_gold_cost_transfers_purse_to_treasury(self):
+        from world.achievements.constants import AccessChangeSource
+        from world.magic.services.gift_acquisition import charge_and_learn
+
+        ct = charge_and_learn(
+            self.sheet,
+            self.technique,
+            base_ap_cost=5,
+            source=AccessChangeSource.ACADEMY_TRAINING,
+            gold_cost=100,
+            gold_treasury=self.treasury,
+        )
+        self.assertEqual(ct.technique, self.technique)
+        self.purse.refresh_from_db()
+        self.treasury.refresh_from_db()
+        self.assertEqual(self.purse.balance, 900)
+        self.assertEqual(self.treasury.balance, 100)
+
+    def test_zero_gold_cost_does_not_touch_purse(self):
+        from world.achievements.constants import AccessChangeSource
+        from world.magic.services.gift_acquisition import charge_and_learn
+
+        charge_and_learn(
+            self.sheet,
+            self.technique,
+            base_ap_cost=5,
+            source=AccessChangeSource.ACADEMY_TRAINING,
+        )
+        self.purse.refresh_from_db()
+        self.assertEqual(self.purse.balance, 1000)
+
+
+class UnboundMagicLearningApSurchargeTest(TestCase):
+    """The Unbound magic-learning AP surcharge (#2442) on the PC-teaching-accept
+    door (``accept_technique_offer``). TIME, not power — resonance is untouched;
+    only the AP charged at the shared ``charge_and_learn`` seam scales."""
+
+    def setUp(self):
+        from evennia_extensions.factories import AccountFactory
+        from world.action_points.models import ActionPointPool
+        from world.magic.constants import TargetKind
+        from world.magic.factories import CharacterGiftFactory, ResonanceFactory
+        from world.magic.models import Thread
+        from world.roster.factories import RosterTenureFactory
+        from world.seeds.character_creation import ensure_unbound_drawback_distinction
+
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.sheet = CharacterSheetFactory()
+        self.account = AccountFactory()
+        self.sheet.character.account = self.account
+        self.sheet.character.save()
+        # Already-owned gift + provisioned thread — sidesteps the XP-unlock gate
+        # and the technique cap so these tests stay focused on the surcharge.
+        CharacterGiftFactory(character=self.sheet, gift=self.gift)
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=10,
+        )
+        self.teacher_tenure = RosterTenureFactory()
+        self.learner_ap = ActionPointPool.get_or_create_for_character(self.sheet.character)
+        self.learner_ap.current = 200
+        self.learner_ap.save()
+        self.teacher_ap = ActionPointPool.get_or_create_for_character(self.teacher_tenure.character)
+        self.teacher_ap.current = 200
+        self.teacher_ap.save()
+        self.unbound_distinction = ensure_unbound_drawback_distinction()
+
+    def _grant_unbound(self):
+        from world.distinctions.services import grant_distinction
+        from world.distinctions.types import DistinctionOrigin
+
+        grant_distinction(
+            self.sheet,
+            self.unbound_distinction,
+            origin=DistinctionOrigin.CHARACTER_CREATION,
+        )
+
+    def test_unbound_learner_pays_surcharge(self):
+        from world.magic.factories import TechniqueFactory
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        self._grant_unbound()
+        technique = TechniqueFactory(gift=self.gift)
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=technique,
+            pitch="Unbound, but eager to learn",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+
+        ct = accept_technique_offer(self.sheet, offer)
+
+        self.assertEqual(ct.technique, technique)
+        self.learner_ap.refresh_from_db()
+        # Gift already owned (MINOR) -> base AP 5, then ceil(5 * 1.5) = 8.
+        self.assertEqual(self.learner_ap.current, 200 - 8)
+
+    def test_non_unbound_learner_unaffected(self):
+        from world.magic.factories import TechniqueFactory
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        technique = TechniqueFactory(gift=self.gift)
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=technique,
+            pitch="Trained and true",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+
+        accept_technique_offer(self.sheet, offer)
+
+        self.learner_ap.refresh_from_db()
+        self.assertEqual(self.learner_ap.current, 200 - 5)
+
+    def test_surcharge_reapplies_after_leaving_a_living_tradition(self):
+        """Mirror of ``test_surcharge_disappears_after_joining_a_living_tradition``
+        (review-requested, Minor): a member of a living tradition pays base AP;
+        ``leave_tradition`` re-applies the REAL seeded "unbound" drawback
+        (``ensure_unbound_drawback_distinction`` in ``setUp``, #2441 ruling 4 / #2442
+        Task 9), and the very next acquisition is charged the surcharge again."""
+        from world.magic.factories import TechniqueFactory, TraditionFactory
+        from world.magic.services.gift_acquisition import accept_technique_offer
+        from world.magic.services.tradition_membership import join_tradition, leave_tradition
+
+        tradition = TraditionFactory(name="The Caretakers")
+        join_tradition(self.sheet, tradition)
+
+        technique_before = TechniqueFactory(gift=self.gift)
+        offer_before = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=technique_before,
+            pitch="Trained and true",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        accept_technique_offer(self.sheet, offer_before)
+        self.learner_ap.refresh_from_db()
+        self.assertEqual(self.learner_ap.current, 200 - 5)
+
+        leave_tradition(self.sheet)
+
+        technique_after = TechniqueFactory(gift=self.gift)
+        offer_after = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=technique_after,
+            pitch="Traditionless once more",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        accept_technique_offer(self.sheet, offer_after)
+
+        self.learner_ap.refresh_from_db()
+        # base AP (5) already spent above; this second charge is ceil(5 * 1.5) = 8.
+        self.assertEqual(self.learner_ap.current, 200 - 5 - 8)
+
+    def test_surcharge_disappears_after_joining_a_living_tradition(self):
+        """Integration with #2441 Task 8 — join_tradition sheds the Unbound
+        drawback; its ModifierSource/CharacterModifier rows cascade-delete
+        (ModifierSource.character_distinction is CASCADE), so the next
+        acquisition is charged at the un-surcharged rate."""
+        from world.magic.factories import TechniqueFactory, TraditionFactory
+        from world.magic.services.gift_acquisition import accept_technique_offer
+        from world.magic.services.tradition_membership import join_tradition
+
+        self._grant_unbound()
+        join_tradition(self.sheet, TraditionFactory(name="The Caretakers"))
+
+        technique = TechniqueFactory(gift=self.gift)
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=technique,
+            pitch="No longer Unbound",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+
+        accept_technique_offer(self.sheet, offer)
+
+        self.learner_ap.refresh_from_db()
+        self.assertEqual(self.learner_ap.current, 200 - 5)

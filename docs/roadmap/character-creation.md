@@ -20,6 +20,24 @@
   (#2462, grid epic #2436), Arvani Common + elf/Daeva form traits (#2463 —
   `Language` has zero rows anywhere yet).
 
+## Built (2026-07-17, #2428 — Academy sponsorship: Golden Hare entrance obligations)
+
+CG finalize now gives every character a Shroudwatch Academy entrance record
+(`societies.OrganizationObligation`, ADR-0137): the self-taught `Unbound` start `OWED` one
+`currency.FavorTokenDetails` ("Golden Hare") — no Tradition sponsor covered their entrance
+fee — while every other character starts `SETTLED_BY_SPONSOR`, because their Tradition
+literally spent a Hare on their behalf (a lore-recorded deed-coin transaction, not a minted
+item at CG time). `_finalize_academy_entrance_obligation` resolves the "Shroudwatch Academy"
+`Organization` by name (`world.seeds.character_creation.ensure_shroudwatch_academy`,
+`tradition=None`) and is `get_or_create`-idempotent. Orphaned Traditions (no living trainer)
+carry an "Orphaned Tradition" drawback `Distinction` via `BeginningTradition
+.required_distinction` — the same authored-data mechanism as the Unbound drawback — so a
+recovery quest restoring a tradition's teachers is a staff row edit, not a code change. Paying
+down the obligation, in-play tradition switching, and the in-play technique-training loop that
+consumes it are built in `world/magic` and `world/npc_services` — see
+`docs/roadmap/magic.md`'s "Tradition sponsorship, Academy training, and the in-play loop"
+section for the full #2428/#2440/#2441/#2442 build record.
+
 ## Built (2026-07-16, #2426 — CG magic revamp: Path → Tradition → Gift → Technique)
 
 - The old "Magic" stage (freeform cantrip creation) is retired. Stage 5 **Path** is

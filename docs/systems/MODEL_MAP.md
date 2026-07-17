@@ -1399,6 +1399,7 @@
   - story_progress <- stories.StoryProgress
   - alternate_selves <- forms.AlternateSelf
   - active_alternate_self <- forms.ActiveAlternateSelf
+  - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
   - treasured_by <- boundaries.TreasuredSubject
@@ -2791,6 +2792,13 @@
 **Foreign Keys:**
   - item_instance -> items.ItemInstance [OneToOne]
 
+### FavorTokenDetails
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [OneToOne]
+  - issuing_organization -> societies.Organization [FK]
+**Pointed to by:**
+  - settled_obligations <- societies.OrganizationObligation
+
 ### OrgEconomicsProfile
 **Foreign Keys:**
   - organization -> societies.Organization [OneToOne]
@@ -2873,10 +2881,12 @@
 - `get_or_create_treasury(organization: 'Organization') -> 'OrganizationTreasury'`
 - `improve_org_domain(*, organization: 'Organization', character) -> 'ImprovementResult' — One domain-investment attempt (#930): Scholarship/Economics against the ledgers.`
 - `invest_in_business(business: 'Business', *, amount: 'int') -> 'Business' — Sink owner money into a venture (#929); investment raises the level.`
+- `mint_favor_token(org: 'Organization', recipient_character: 'CharacterSheet', *, provenance_note: 'str') -> 'FavorTokenDetails' — Mint a Golden Hare: one deed done for ``org``, now a physical coin (#2428).`
 - `mint_instrument(*, denomination: 'str', holder_sheet: 'CharacterSheet', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None) -> 'ItemInstance' — Convert ledger money into a physical coin (face value + mint fee).`
 - `mint_loose_cache(*, amount: 'int', holder_sheet: 'CharacterSheet', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None) -> 'ItemInstance' — Convert ledger money into a loose-coin cache item (#1909).`
 - `process_income_stream(stream: 'OrgIncomeStream', amount: 'int', *, declared_amount: 'int | None' = None) -> 'IncomeDeclaration' — Land ``amount`` collected coppers from one stream (#926, reshaped by #930).`
 - `record_contribution(*, persona: 'Persona', organization: 'Organization', amount: 'int', reason: 'str' = '') -> 'ContributionRecord' — A member pays into the org treasury, on the books (#926).`
+- `redeem_favor_token(token: 'FavorTokenDetails', *, redeemer_org: 'Organization') -> 'None' — Surrender a Golden Hare: the deed is called in, once (#2428).`
 - `redeem_instrument(*, instance: 'ItemInstance', to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' — Convert a physical coin back into ledger money (fee-free).`
 - `repay_principal(debt: 'DebtInstrument', amount: 'int') -> 'CurrencyTransfer' — Pay down (or off) a debt's principal, treasury→treasury (#927).`
 - `run_business_week(business: 'Business', *, fortune: 'int') -> 'int' — One week's business result (#929). ``fortune`` is -100..100.`
@@ -3246,6 +3256,7 @@
 **Pointed to by:**
   - applied_disguise_overlays <- forms.CharacterFormState
   - currency_instrument <- currency.CurrencyInstrumentDetails
+  - favor_token <- currency.FavorTokenDetails
   - crime_evidence <- justice.CrimeEvidence
   - contents <- items.ItemInstance
   - equipped_slots <- items.EquippedItem
@@ -3718,6 +3729,7 @@
   - ritual_grants <- magic.TraditionRitualGrant
   - teaching_organizations <- societies.Organization
   - codex_grants <- codex.TraditionCodexGrant
+  - teaching_npc_roles <- npc_services.NPCRole
 
 ### CharacterTradition
 **Foreign Keys:**
@@ -3790,6 +3802,7 @@
   - conditions_caused <- conditions.ConditionInstance
   - battle_declarations <- battles.BattleActionDeclaration
   - battle_property_affinities <- battles.TechniquePropertyAffinity
+  - train_offers <- npc_services.TrainOfferDetails
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**
@@ -3922,6 +3935,7 @@
   - legendrequirement_requirements <- progression.LegendRequirement
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
+  - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
 
 ### DramaticMomentType
 **Foreign Keys:**
@@ -5100,6 +5114,7 @@
 ### NPCRole
 **Foreign Keys:**
   - faction_affiliation -> societies.Organization [FK] (nullable)
+  - teaches_tradition -> magic.Tradition [FK] (nullable)
 **Pointed to by:**
   - distinction_grants <- assets.DistinctionAssetGrant
   - missions_reported_to <- missions.MissionTemplate
@@ -5128,6 +5143,7 @@
   - mission_offer_details <- npc_services.MissionOfferDetails
   - permit_offer_details <- npc_services.PermitOfferDetails
   - loan_offer_details <- npc_services.LoanOfferDetails
+  - train_offer_details <- npc_services.TrainOfferDetails
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
   - summonses <- npc_services.OfferSummons
 
@@ -5159,6 +5175,11 @@
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [OneToOne]
   - creditor_organization -> societies.Organization [FK] (nullable)
+
+### TrainOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - technique -> magic.Technique [FK]
 
 ### NpcRegard
 **Foreign Keys:**
@@ -5363,6 +5384,7 @@
   - legendrequirement_requirements <- progression.LegendRequirement
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
+  - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
 
 ### TraitRatingUnlock
 **Foreign Keys:**
@@ -5427,6 +5449,11 @@
   - item_template -> items.ItemTemplate [FK] (nullable)
   - min_touchstone_tier -> magic.ResonanceTier [FK] (nullable)
   - min_quality_tier -> items.QualityTier [FK] (nullable)
+
+### MajorGiftTechniqueRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
 
 ### CharacterUnlock
 **Foreign Keys:**
@@ -6574,6 +6601,7 @@
   - offices <- societies.OrganizationOffice
   - reputations <- societies.OrganizationReputation
   - gang_turf_projects <- societies.GangTurfDetails
+  - personal_obligations_owed <- societies.OrganizationObligation
   - fealty <- societies.FealtyEdge
   - vassal_edges <- societies.FealtyEdge
   - titles <- societies.Title
@@ -6585,6 +6613,7 @@
   - features <- societies.OrganizationFeature
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
   - treasury <- currency.OrganizationTreasury
+  - issued_favor_tokens <- currency.FavorTokenDetails
   - economics <- currency.OrgEconomicsProfile
   - income_streams <- currency.OrgIncomeStream
   - obligations_owed <- currency.OrgObligation
@@ -6791,6 +6820,12 @@
   - project -> projects.Project [OneToOne]
   - source_tier -> societies.PropagandaCampaignTier [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
+
+### OrganizationObligation
+**Foreign Keys:**
+  - debtor -> character_sheets.CharacterSheet [FK]
+  - creditor -> societies.Organization [FK]
+  - settled_by_token -> currency.FavorTokenDetails [FK] (nullable)
 
 ### NobiliaryParticle
 **Foreign Keys:**

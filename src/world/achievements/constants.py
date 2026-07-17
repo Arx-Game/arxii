@@ -48,3 +48,4 @@ class AccessChangeSource(models.TextChoices):
     PATH_ADVANCEMENT = "path_advancement", "advancing into a new path"
     GIFT_ACQUISITION = "gift_acquisition", "acquiring a new gift"
     TECHNIQUE_GRANT = "technique_grant", "studying a technique source"
+    ACADEMY_TRAINING = "academy_training", "training at the Academy"

@@ -70,6 +70,44 @@ subject's **fame** (`apply_spread_fame_bump` — fast, larger, and it decays) an
 room traffic, so it amplifies both. Fame tier separately acts as a display
 multiplier on prestige.
 
+### Obligations (#2428)
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `OrganizationObligation` | A personal debt of one Golden Hare owed by a character to an org (e.g. an Unbound Prospect's unpaid Academy entrance) | `debtor` (FK to `character_sheets.CharacterSheet`, CASCADE, `related_name="org_obligations"`), `creditor` (FK to `Organization`, PROTECT, `related_name="personal_obligations_owed"` — **not** `obligations_owed`, which `currency.OrgObligation.from_organization` already claims for its unrelated org-to-org tithe/tax concept), `origin` (`ObligationOrigin`: `ACADEMY_ENTRANCE`/`OTHER`), `state` (`ObligationState`: `OWED`/`SETTLED`/`SETTLED_BY_SPONSOR`), `created_at`, `settled_at`, `settled_by_token` (FK to `currency.FavorTokenDetails`, SET_NULL, string ref) |
+
+Rows are never deleted — a settled obligation is permanent history, not a
+cleared flag. `obligation_services.py`:
+
+- `settle_obligation(obligation, token)` — redeems `token` via
+  `currency.redeem_favor_token(token, redeemer_org=obligation.creditor)` (Task
+  1's typed surface: raises `ValidationError` if the token is already redeemed
+  or not issued by the creditor), then flips `OWED` → `SETTLED` and stamps
+  `settled_at`/`settled_by_token`. Raises `ObligationNotOwedError` if the
+  obligation isn't `OWED`. Live caller: `world.npc_services.effects.
+  run_settle_obligation_offer` (the `OfferKind.SETTLE_OBLIGATION` effect handler),
+  reached via the Academy Registrar's ungated offer
+  (`world.npc_services.seeds.ensure_academy_registrar_role`) — the whole-branch-fix
+  front door that lets a debtor actually pay this off in play.
+- `has_open_obligation(sheet, org)` — read-only gate: `True` iff `sheet` has
+  an `OWED` row against `org`. Consumed by the Academy training gate (#2440).
+
+**CG-finalize hook (#2428 Task 3):** `world.character_creation.services.finalize_magic_data`
+resolves the "Shroudwatch Academy" `Organization` by name (seeded by
+`world.seeds.character_creation.ensure_shroudwatch_academy`, `tradition=None` —
+deliberate NULL, #2426 ruling) and creates one `ACADEMY_ENTRANCE` obligation row
+per character: `OWED` when `draft.selected_tradition.name == "Unbound"`, else
+`SETTLED_BY_SPONSOR` with `settled_at` stamped and `settled_by_token` left `NULL`
+(the sponsor's Hare is lore-recorded, not a minted item at CG time). Defensive
+logged skip (no row created) if the Academy isn't seeded yet, mirroring
+`seed_beginning_traditions`'s Unbound-tradition skip. `get_or_create`-idempotent.
+
+FK direction (ADR-0010): societies is the dependent side of this edge (an
+obligation is a societies concept that happens to be settled with a currency
+instrument), so `settled_by_token` uses the string ref
+`"currency.FavorTokenDetails"` and `obligation_services.py` deferred-imports
+`world.currency.services` at call time rather than at module load.
+
 **Audere Majora crossing → deed.** When a character completes an Audere Majora
 threshold crossing (`world/magic/audere_majora.py`), `_mint_crossing_deed` calls
 `fire_renown_award` using the threshold's authored `RenownAwardConfig` fields

@@ -2251,9 +2251,20 @@ export interface paths {
      *     Gates on ``BeginningTradition.required_distinction`` (#2426): a tradition
      *     that requires formal training may only be selected once the draft already
      *     holds that distinction (added via the distinctions app). There is no
-     *     auto-attach — `world.distinctions.views` only *clears* the selected
+     *     general auto-attach — `world.distinctions.views` only *clears* the selected
      *     tradition when its required distinction is later removed
      *     (`_clear_tradition_if_required_distinction_removed`); it never adds one.
+     *
+     *     **One deliberate exception (#2442):** the "Unbound" drawback distinction
+     *     (``UNBOUND_DRAWBACK_DISTINCTION_SLUG``) IS auto-added when missing, instead
+     *     of rejecting the request. Unbound is CG's tradition-agnostic default (#2426)
+     *     — unlike Orphaned Tradition (a deliberate story pick, #2428 Task 5), a
+     *     player must not be forced to already know about this one specific drawback
+     *     before CG can complete; see
+     *     ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
+     *     .test_tradition_step_completable_for_every_seeded_beginning`` for the
+     *     "CG must remain completable via the Unbound path with zero manual steps"
+     *     regression proof #2426 shipped, which this exception preserves.
      */
     post: operations['character_creation_drafts_select_tradition_create'];
     delete?: never;
@@ -25723,6 +25734,8 @@ export interface components {
        *     * `minor_ally` - Minor Ally
        *     * `asset_task_intel` - Asset Task: Intel
        *     * `asset_task_collect` - Asset Task: Collect
+       *     * `train` - Train
+       *     * `settle_obligation` - Settle Obligation
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -25766,6 +25779,8 @@ export interface components {
      *     * `minor_ally` - Minor Ally
      *     * `asset_task_intel` - Asset Task: Intel
      *     * `asset_task_collect` - Asset Task: Collect
+     *     * `train` - Train
+     *     * `settle_obligation` - Settle Obligation
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -25782,7 +25797,9 @@ export interface components {
       | 'fan'
       | 'minor_ally'
       | 'asset_task_intel'
-      | 'asset_task_collect';
+      | 'asset_task_collect'
+      | 'train'
+      | 'settle_obligation';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -25802,6 +25819,8 @@ export interface components {
        *     * `minor_ally` - Minor Ally
        *     * `asset_task_intel` - Asset Task: Intel
        *     * `asset_task_collect` - Asset Task: Collect
+       *     * `train` - Train
+       *     * `settle_obligation` - Settle Obligation
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -29736,6 +29755,8 @@ export interface components {
        *     * `minor_ally` - Minor Ally
        *     * `asset_task_intel` - Asset Task: Intel
        *     * `asset_task_collect` - Asset Task: Collect
+       *     * `train` - Train
+       *     * `settle_obligation` - Settle Obligation
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */

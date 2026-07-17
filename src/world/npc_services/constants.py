@@ -25,7 +25,14 @@ class OfferKind(models.TextChoices):
     ASSET_TASK_INTEL = "asset_task_intel", "Asset Task: Intel"
     # #2294 — PC collects accumulated income from an owned asset.
     ASSET_TASK_COLLECT = "asset_task_collect", "Asset Task: Collect"
-    # Future kinds: training/marriage/attunement.
+    # #2440 — Academy/Great Archive trainer teaches a technique for AP + coin
+    # + a Golden Hare (see world.npc_services.effects.run_train_offer).
+    TRAIN = "train", "Train"
+    # #2428 whole-branch fix — the Academy Registrar clears a learner's OWED
+    # entrance obligation by redeeming a Golden Hare (see
+    # world.npc_services.effects.run_settle_obligation_offer).
+    SETTLE_OBLIGATION = "settle_obligation", "Settle Obligation"
+    # Future kinds: marriage/attunement.
 
 
 class DrawMode(models.TextChoices):

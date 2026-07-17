@@ -18,11 +18,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.npc_services.constants import OfferKind
 
 if TYPE_CHECKING:
-    from world.npc_services.models import NPCServiceOffer
+    from world.character_sheets.models import CharacterSheet
+    from world.currency.models import FavorTokenDetails
+    from world.magic.models import Technique
+    from world.npc_services.models import NPCRole, NPCServiceOffer
     from world.scenes.models import Persona
+    from world.societies.models import Organization
 
 
 @dataclass(frozen=True)
@@ -155,6 +161,67 @@ class AmbiguousDebtorError(LookupError):
             if count
             else "You don't hold the spending authority for any house's books."
         )
+
+
+class NoAvailableFavorTokenError(LookupError):
+    """No unredeemed Golden Hare issued by ``academy``, held by the learner (#2440)."""
+
+    def __init__(self, academy_name: str) -> None:
+        super().__init__(f"No unredeemed Golden Hare issued by {academy_name!r} in learner's hand")
+        self.user_message = f"You carry no Golden Hare for {academy_name} to call in."
+
+
+class TrainOfferMisconfiguredError(RuntimeError):
+    """A TRAIN-kind ``NPCServiceOffer`` was authored with a nonzero ``ap_cost`` (#2440).
+
+    TRAIN's AP charge flows entirely through ``charge_and_learn``'s has-gift/
+    major-gift multiplier logic (driven by ``TrainOfferDetails.learn_ap_cost``).
+    ``NPCServiceOffer.ap_cost`` must stay 0 for TRAIN offers — otherwise the
+    generic pre-dispatch charge in ``services._charge_offer_ap`` silently
+    double-charges the learner's AP pool before this handler even runs.
+    ``TrainOfferDetails.clean()`` is the authoring-time guard; this is the
+    runtime backstop, since no admin/serializer surface currently calls
+    ``full_clean()`` on ``TrainOfferDetails`` rows.
+    """
+
+    def __init__(self, offer_pk: int, ap_cost: int) -> None:
+        super().__init__(
+            f"TRAIN offer pk={offer_pk} has ap_cost={ap_cost} (must be 0) — "
+            "_charge_offer_ap would double-charge AP on top of charge_and_learn."
+        )
+
+
+def _resolve_unredeemed_hare(sheet: CharacterSheet, academy: Organization) -> FavorTokenDetails:
+    """The learner's one unredeemed Golden Hare issued by ``academy`` (#2440).
+
+    Exactly one Hare is charged per TRAIN acceptance — the first matching row
+    (deterministic by pk) when several happen to be held. Raises
+    ``NoAvailableFavorTokenError`` when the learner holds none.
+
+    ``select_for_update()`` locks the matching rows for the lifetime of the
+    caller's transaction, closing the TOCTOU where two concurrent TRAIN
+    accepts both resolve the same unredeemed Hare before either redeems it
+    (the row lock serializes the second caller behind the first's commit —
+    it then re-queries and either finds a different Hare or raises
+    ``NoAvailableFavorTokenError``). Must be called inside a
+    ``transaction.atomic()`` block — see ``run_train_offer``.
+    """
+    from world.currency.models import FavorTokenDetails  # noqa: PLC0415
+
+    token = (
+        FavorTokenDetails.objects.select_for_update()
+        .filter(
+            issuing_organization=academy,
+            redeemed_at__isnull=True,
+            item_instance__holder_character_sheet=sheet,
+            item_instance__destroyed_at__isnull=True,
+        )
+        .order_by("pk")
+        .first()
+    )
+    if token is None:
+        raise NoAvailableFavorTokenError(academy.name)
+    return token
 
 
 def _resolve_authority_org(persona: Persona):
@@ -415,3 +482,266 @@ def run_improvement(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
 
 OFFER_EFFECT_HANDLERS[OfferKind.COLLECTION.value] = run_collection
 OFFER_EFFECT_HANDLERS[OfferKind.IMPROVEMENT.value] = run_improvement
+
+
+def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per gate
+    offer: NPCServiceOffer, persona: Persona
+) -> EffectResult:
+    """TRAIN effect handler (#2440): Academy trainer teaches a technique.
+
+    One offer row per teachable technique (``TrainOfferDetails.technique`` —
+    see that model's docstring for why). Flow: resolve the Academy (the
+    role's ``faction_affiliation`` — TRAIN offers are always fronted by an
+    org, unlike LOAN's optional per-offer override) -> obligation gate
+    (``has_open_obligation``, #2428) -> availability gate (learner's own
+    (Path × Gift) pool ∪ their Tradition's signature list, signatures
+    members-only — ruling 3 on #2440) -> resolve exactly one unredeemed
+    Golden Hare issued by the Academy and held by the learner -> charge AP +
+    coin + the Hare -> acquire via the shared ``charge_and_learn`` seam
+    (the same core ``accept_technique_offer`` uses).
+
+    The Hare is redeemed to the ACADEMY regardless of the trainer's own
+    ``teaches_tradition`` — Hares are Academy-specific venue tokens, not
+    per-tradition (ruling 2026-07-17 on #2428; ``redeem_favor_token``'s
+    issuer-match stands unchanged).
+
+    Hare resolution + ``charge_and_learn`` + ``redeem_favor_token`` run
+    inside one outer ``transaction.atomic()`` — all-or-nothing regardless
+    of what the caller wraps this in. Without it, ``charge_and_learn``'s
+    own ``@transaction.atomic`` commits independently before
+    ``redeem_favor_token`` runs; a race between two concurrent TRAIN
+    accepts resolving the same Hare would then leave the loser charged
+    AP + coin + a technique with no Hare spent. ``_resolve_unredeemed_hare``
+    additionally locks the Hare row (``select_for_update()``) so the race
+    itself can't happen — the second caller serializes behind the first's
+    commit and either finds a different Hare or gets a clean
+    ``NoAvailableFavorTokenError`` refusal.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.currency.services import (  # noqa: PLC0415
+        get_or_create_treasury,
+        redeem_favor_token,
+    )
+    from world.magic.exceptions import MagicError  # noqa: PLC0415
+    from world.magic.services.gift_acquisition import charge_and_learn  # noqa: PLC0415
+    from world.societies.obligation_services import has_open_obligation  # noqa: PLC0415
+
+    if offer.ap_cost != 0:
+        raise TrainOfferMisconfiguredError(offer.pk, offer.ap_cost)
+
+    sheet = persona.character_sheet
+    details = offer.train_offer_details
+    technique = details.technique
+
+    academy = offer.role.faction_affiliation
+    if academy is None:
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message="This trainer has no house to teach for. (Authoring error.)",
+            payload={"offer_pk": offer.pk},
+        )
+
+    if has_open_obligation(sheet, academy):
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message=f"{academy.name} won't take you on further until your debt is settled.",
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+
+    if not _technique_available_to_learner(sheet, offer.role, technique):
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message="This isn't yours to learn here.",
+            payload={"offer_pk": offer.pk, "technique_pk": technique.pk},
+        )
+
+    try:
+        with transaction.atomic():
+            token = _resolve_unredeemed_hare(sheet, academy)
+            character_technique = charge_and_learn(
+                sheet,
+                technique,
+                base_ap_cost=details.learn_ap_cost,
+                source=AccessChangeSource.ACADEMY_TRAINING,
+                gold_cost=details.gold_cost,
+                gold_treasury=get_or_create_treasury(academy),
+            )
+            redeem_favor_token(token, redeemer_org=academy)
+    except NoAvailableFavorTokenError as exc:
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+    except MagicError as exc:
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk},
+        )
+    except ValueError:
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message=f"You already know {technique.name}.",
+            payload={"offer_pk": offer.pk, "technique_pk": technique.pk},
+        )
+    except ValidationError:
+        # redeem_favor_token lost the race after charge_and_learn already
+        # ran in this transaction's savepoint — the whole atomic block above
+        # rolled back (AP, coin, and the CharacterTechnique are all undone).
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message="Someone else called in that Hare before you finished.",
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+
+    return EffectResult(
+        kind=OfferKind.TRAIN.value,
+        object_pk=character_technique.pk,
+        object_label=technique.name,
+        message=f"{academy.name}'s trainer walks you through {technique.name}.",
+        payload={
+            "character_technique_pk": character_technique.pk,
+            "organization_pk": academy.pk,
+            "favor_token_pk": token.pk,
+        },
+    )
+
+
+def _technique_available_to_learner(
+    sheet: CharacterSheet, role: NPCRole, technique: Technique
+) -> bool:
+    """Whether ``technique`` is in ``sheet``'s TRAIN availability via ``role`` (#2440).
+
+    Availability = the learner's own (Path × Gift) pool ∪ their Tradition's
+    signature list (ruling 3 on #2440). The pool half is tradition-agnostic
+    (any Academy trainer can teach it); the signature half is members-only —
+    offerable only when the trainer's own ``role.teaches_tradition`` matches the
+    learner's currently ACTIVE ``CharacterTradition`` membership
+    (``left_at__isnull=True``). #2441 Task 8 gave ``CharacterTradition`` history
+    (``left_at``) and an active-row constraint, so "current tradition" is now a
+    real, singular concept — this seam was upgraded from the old
+    membership-*set* read (any row ever held, matching
+    ``world.magic.services.ritual_knowledge``'s "all traditions in history" walk,
+    which is deliberately unchanged — ritual knowledge is learned-is-learned) to
+    an active-only read: a former tradition's signature techniques stop being
+    offerable the moment the learner switches or leaves, per ruling 3.
+    """
+    from world.progression.selectors import current_path_for_character  # noqa: PLC0415
+
+    path = current_path_for_character(sheet.character)
+    if path is None:
+        return False
+
+    from world.magic.services.cg_catalog import get_technique_options  # noqa: PLC0415
+
+    gift = technique.gift
+    trainer_tradition = role.teaches_tradition
+    # get_technique_options' pool half never reads `tradition` (it's sourced
+    # from PathGiftGrant(path, gift) only) — safe to pass trainer_tradition
+    # (even None) as the query arg; only the signature half is scoped by it.
+    options = get_technique_options(path, gift, trainer_tradition)
+    if technique in options.pool:
+        return True
+    if technique not in options.signature:
+        return False
+    if trainer_tradition is None:
+        return False
+    return sheet.character_traditions.filter(
+        tradition=trainer_tradition, left_at__isnull=True
+    ).exists()
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.TRAIN.value] = run_train_offer
+
+
+def run_settle_obligation_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """SETTLE_OBLIGATION effect handler (#2428 whole-branch fix): the Academy Registrar
+    clears a learner's OWED entrance obligation.
+
+    ``settle_obligation`` (``world.societies.obligation_services``) was authored in an
+    earlier task on this cluster but shipped with no live caller — an Unbound Prospect
+    had no in-game way to ever pay off their Academy entrance debt. This handler is
+    that caller: resolve the offer's org (the role's ``faction_affiliation``, same
+    convention as ``run_train_offer``) -> fetch the learner's OWED
+    ``OrganizationObligation`` against it (the row ``has_open_obligation`` only
+    ``.exists()``-checks) -> no OWED row is a typed refusal, not an error -> resolve
+    exactly one unredeemed Golden Hare issued by the org and held by the learner
+    (reuses ``_resolve_unredeemed_hare``, same row-lock TOCTOU protection as TRAIN)
+    -> ``settle_obligation`` redeems it and flips the row to SETTLED.
+
+    Hare resolution + ``settle_obligation`` run inside one outer
+    ``transaction.atomic()`` for the same reason ``run_train_offer`` wraps its own
+    charge sequence: without it, a race between two concurrent settle attempts could
+    resolve the same Hare before either redemption commits.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.societies.constants import ObligationState  # noqa: PLC0415
+    from world.societies.exceptions import ObligationNotOwedError  # noqa: PLC0415
+    from world.societies.models import OrganizationObligation  # noqa: PLC0415
+    from world.societies.obligation_services import settle_obligation  # noqa: PLC0415
+
+    sheet = persona.character_sheet
+    academy = offer.role.faction_affiliation
+    if academy is None:
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message="This registrar keeps no house's books. (Authoring error.)",
+            payload={"offer_pk": offer.pk},
+        )
+
+    obligation = OrganizationObligation.objects.filter(
+        debtor=sheet, creditor=academy, state=ObligationState.OWED
+    ).first()
+    if obligation is None:
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message=f"You owe {academy.name} nothing.",
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+
+    try:
+        with transaction.atomic():
+            token = _resolve_unredeemed_hare(sheet, academy)
+            settle_obligation(obligation, token)
+    except NoAvailableFavorTokenError as exc:
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+    except ObligationNotOwedError as exc:
+        # Someone else settled this exact row (or it was settled by a sponsor)
+        # between the query above and the lock inside settle_obligation.
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+    except ValidationError:
+        # redeem_favor_token (inside settle_obligation) lost the race for this
+        # Hare after _resolve_unredeemed_hare picked it — the whole atomic
+        # block above rolled back, obligation still OWED.
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message="Someone else called in that Hare before you finished.",
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+
+    return EffectResult(
+        kind=OfferKind.SETTLE_OBLIGATION.value,
+        object_pk=obligation.pk,
+        object_label=f"Obligation to {academy.name} settled",
+        message=f"The registrar marks your debt to {academy.name} paid in full.",
+        payload={
+            "obligation_pk": obligation.pk,
+            "organization_pk": academy.pk,
+            "favor_token_pk": token.pk,
+        },
+    )
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.SETTLE_OBLIGATION.value] = run_settle_obligation_offer

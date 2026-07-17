@@ -479,3 +479,14 @@ def is_imbuing_ritual(*, name: str, service_function_path: str) -> bool:
     return name.casefold() == IMBUING_RITUAL_NAME.casefold() or (
         service_function_path == IMBUING_SERVICE_PATH
     )
+
+
+# Unbound magic-learning AP surcharge (#2442). Shared contract between the seed
+# (world.seeds.character_creation.wire_magic_learning_ap_cost_target /
+# ensure_unbound_drawback_distinction) and the live read at the technique-acquisition
+# seam (world.magic.services.gift_acquisition.charge_and_learn). Lives here (not
+# world.character_creation.constants) so the magic app — the more general/foundational
+# side per ADR-0010's FK-direction rule — doesn't depend on character_creation to
+# resolve its own live-play modifier.
+MAGIC_LEARNING_AP_COST_TARGET_NAME = "magic_learning_ap_cost"
+MAGIC_MODIFIER_CATEGORY_NAME = "magic"

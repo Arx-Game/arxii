@@ -22,6 +22,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from actions.constants import ActionCategory
+from world.character_creation.constants import UNBOUND_TRADITION_NAME
 from world.magic.constants import TechniqueCategory
 from world.magic.seeds_checks import MagicCheckContentResult
 
@@ -2603,7 +2604,8 @@ def ensure_portal_travel_content() -> None:
         _ensure_mirror_anchor(mirror_kind, room, anchor_name)
 
 
-_UNBOUND_TRADITION_NAME = "Unbound"
+# Canonical name: world.character_creation.constants.UNBOUND_TRADITION_NAME (#2428).
+_UNBOUND_TRADITION_NAME = UNBOUND_TRADITION_NAME
 _UNBOUND_TRADITION_DESCRIPTION = (
     "PLACEHOLDER: The tradition-less path — practitioners who answer to no school, "
     "carrying whatever techniques their Path opens to them. A richer authored "

@@ -14,6 +14,7 @@ from world.progression.models import (
     ClassXPCost,
     ItemRequirement,
     LevelRequirement,
+    MajorGiftTechniqueRequirement,
     MultiClassLevel,
     MultiClassRequirement,
     RelationshipRequirement,
@@ -255,6 +256,15 @@ class TierRequirementAdmin(admin.ModelAdmin):
 
     list_display = ["minimum_tier", "class_level_unlock", "is_active"]
     list_filter = ["minimum_tier", "is_active", "class_level_unlock__character_class"]
+    search_fields = ["description", "class_level_unlock__character_class__name"]
+
+
+@admin.register(MajorGiftTechniqueRequirement)
+class MajorGiftTechniqueRequirementAdmin(admin.ModelAdmin):
+    """Admin interface for MajorGiftTechniqueRequirement (#2440)."""
+
+    list_display = ["minimum_techniques", "class_level_unlock", "is_active"]
+    list_filter = ["is_active", "class_level_unlock__character_class"]
     search_fields = ["description", "class_level_unlock__character_class__name"]
 
 

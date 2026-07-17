@@ -27,6 +27,7 @@ class TestClusterRegistry(TestCase):
                 "missions",
                 "tutorial",
                 "progression",
+                "npc_services",
                 "justice",
                 "governance",
                 "scandal",

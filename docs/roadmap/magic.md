@@ -222,6 +222,65 @@ staff-authored catalog content instead:
   `docs/roadmap/character-creation.md`, `docs/systems/character_creation.md`,
   `docs/systems/magic.md`.
 
+## Tradition sponsorship, Academy training, and the in-play loop (#2428/#2440/#2441/#2442 — BUILT)
+
+The in-play training loop #2426's roadmap entries deferred as a follow-up is now real —
+a character no longer needs to complete their starter Gift pool at CG; they finish it at
+Shroudwatch Academy, or via a trainer of their own Tradition, in play.
+
+**Content-dependency caveat.** The mechanical substrate below (Hares, obligations,
+`OfferKind.TRAIN`/`SETTLE_OBLIGATION`, the availability gate) is dev-complete and
+fully wired, but the *NPCRole* content that fronts it is not: real Academy trainer
+curricula (which techniques, which tradition, how many, room prose) are lore-repo
+authored content, not this cluster's job. What ships in this repo is a
+dev-minimum seed — the Academy Registrar (settles the entrance debt) and one
+ungated generalist trainer (teaches the shared starter pool) — just enough that a
+freshly seeded DB can complete the loop end to end without lore-repo content
+present. Staff/content replace or extend these seeded rows freely; the seeds
+never overwrite a staff-adjusted row.
+
+- **Golden Hares** (`currency.FavorTokenDetails`, ADR-0137) — a physical, tradeable,
+  org-issued deed token (one Hare = one deed done for the issuing org), NOT an abstract
+  ledger. Minted via `mint_favor_token` (GM adjudication `award_type="favor_token"`,
+  #2428 Task 4), surrendered via `redeem_favor_token` (issuer-match enforced — a Hare
+  only ever redeems to the org that issued it).
+- **Academy sponsorship is a real spend, not a waiver.** `societies.OrganizationObligation`
+  gives every CG-finalized character a Shroudwatch Academy entrance record: `OWED` one
+  Hare for the Unbound (no Tradition to cover it), `SETTLED_BY_SPONSOR` for everyone else
+  (the sponsor literally spent a Hare on the Prospect's behalf, lore-recorded at CG time).
+  `settle_obligation` clears an `OWED` row by redeeming a real Hare later in play,
+  reached through the Academy Registrar's `OfferKind.SETTLE_OBLIGATION` offer
+  (`run_settle_obligation_offer`) — an ungated, always-visible NPCRole offer, since
+  a Prospect who owes the debt must always be able to find someone to pay it to.
+- **Academy training (#2440)** — `npc_services.OfferKind.TRAIN` teaches a technique for
+  AP + coin + 1 Golden Hare, gated on the obligation above being settled and on the
+  learner's own (Path × Gift) pool ∪ their active Tradition's signature list
+  (`magic.services.cg_catalog.get_technique_options`). Delegates acquisition to the same
+  `charge_and_learn` core player-to-player `TechniqueTeachingOffer` accepts use — one
+  seam, two front doors. **Great Archive self-study** is the same TRAIN shape, gated on a
+  quest-completion `Achievement`. It teaches the learner's own (Path × Gift) shared
+  starter pool only — it does **not** restore an orphaned tradition's signature
+  technique list; recovering a lost tradition's own curriculum is story content, not
+  a mechanical unlock this seam provides. A second, ungated generalist trainer seeds
+  the same shared-pool techniques without the achievement gate, so a fresh-DB
+  Prospect always has ≥1 reachable TRAIN offer even before any quest content exists.
+  **Level 2 requires knowing ≥3 techniques of the character's major Gift**
+  (`progression.MajorGiftTechniqueRequirement`) — a count, not a completeness bar.
+- **Tradition membership lifecycle (#2441)** — `CharacterTradition.left_at` makes
+  membership history-preserving (mirrors `OrganizationMembership.left_at`).
+  `join_tradition`/`leave_tradition` (`magic.services.tradition_membership`) switch
+  membership; joining a tradition through its teaching org's membership-offer accept
+  flow auto-sheds the Unbound/Orphaned-Tradition drawback. Learned techniques are never
+  revoked on switch — only future signature-list access changes.
+- **The Unbound penalty is TIME, not power (#2442).** The "unbound" drawback
+  `Distinction` carries a +50% Action Point surcharge on magic-learning activities
+  (`magic_learning_ap_cost` `ModifierTarget`) — self-taught mages develop just as
+  strong, only slower. Resonance earning and spending are untouched (see ADR-0137 for
+  the rejected resonance-halving alternative).
+- Rationale + rejected alternatives: ADR-0137. Full model/service detail:
+  `docs/systems/magic.md`, `docs/systems/societies.md`, `docs/systems/INDEX.md`
+  ("NPC Services", "Currency", "Societies" entries).
+
 ---
 
 ## Deeper design & history

@@ -234,3 +234,85 @@ class TestSeededCharacterCreation(TestCase):
             )
             draft.refresh_from_db()
             self.assertEqual(draft.selected_tradition_id, unbound_bt.tradition_id)
+
+
+class TestAcademyTrainingLoopReachable(TestCase):
+    """#2428 whole-branch fix (Important finding): a fresh-seeded DB must not
+    dead-end a Prospect's training loop before any lore-repo trainer content
+    exists. The ungated Academy generalist trainer (``ensure_academy_
+    generalist_trainer_role``) is the dev-minimum guarantee — every PROSPECT
+    Path must have >=1 TRAIN offer that is genuinely GRANTABLE (not merely
+    listed by ``available_offers`` — TRAIN offers carry no path/gift-specific
+    ``eligibility_rule``; availability is enforced at grant time inside
+    ``run_train_offer`` via ``_technique_available_to_learner``)."""
+
+    def test_every_prospect_path_has_a_reachable_train_offer(self) -> None:
+        from world.action_points.models import ActionPointPool
+        from world.currency.services import get_or_create_purse, mint_favor_token
+        from world.magic.factories import ResonanceFactory
+        from world.magic.specialization.services import grant_gift_to_character
+        from world.npc_services.constants import OfferKind
+        from world.npc_services.effects import run_train_offer
+        from world.npc_services.models import NPCRole, NPCServiceOffer
+        from world.npc_services.seeds import ACADEMY_GENERALIST_TRAINER_ROLE_NAME
+        from world.progression.factories import CharacterPathHistoryFactory
+        from world.scenes.factories import PersonaFactory
+        from world.seeds.character_creation import ensure_shroudwatch_academy
+        from world.seeds.game_content.magic import seed_starter_gift_catalog
+
+        seed_dev_database()
+        academy = ensure_shroudwatch_academy()
+        catalog = seed_starter_gift_catalog()
+        role = NPCRole.objects.get(name=ACADEMY_GENERALIST_TRAINER_ROLE_NAME)
+
+        self.assertGreaterEqual(len(catalog.path_gift_grants), 5)
+
+        for grant in catalog.path_gift_grants.values():
+            path = grant.path
+            gift = grant.gift
+
+            offer = NPCServiceOffer.objects.filter(
+                role=role,
+                kind=OfferKind.TRAIN,
+                train_offer_details__technique__gift=gift,
+            ).first()
+            self.assertIsNotNone(
+                offer, f"generalist trainer has no TRAIN offer for {path.name}'s pool"
+            )
+            technique = offer.train_offer_details.technique
+            self.assertIn(
+                technique,
+                grant.starter_techniques.all(),
+                f"{path.name}'s offered technique isn't in its own starter pool",
+            )
+
+            persona = PersonaFactory()
+            sheet = persona.character_sheet
+            character = sheet.character
+            CharacterPathHistoryFactory(character=character, path=path)
+            # Mirrors CG's own `_finalize_magic_data` call shape: a real Prospect
+            # always already owns their one Path-matched major Gift (with a
+            # provisioned, resonance-anchored GIFT thread) by the time they can
+            # ever see an Academy trainer — seed_starter_gift_catalog's MAJOR
+            # gifts carry no `resonances` M2M of their own, so leaving this
+            # ungranted would hit charge_and_learn's implicit-acquisition path,
+            # which cannot resolve a resonance and never provisions a thread —
+            # not a real player state, just a test-only bare persona artifact.
+            grant_gift_to_character(sheet, gift, resonance=ResonanceFactory())
+            pool = ActionPointPool.get_or_create_for_character(character)
+            pool.current = 200
+            pool.save()
+            purse = get_or_create_purse(sheet)
+            purse.balance = 1000
+            purse.save()
+            # TRAIN always spends a Hare regardless of the obligation gate (which
+            # this bare factory persona has no row for at all, so it's already
+            # open) — mint one so the acquisition itself can complete.
+            mint_favor_token(academy, sheet, provenance_note="test rig: Hare for TRAIN")
+
+            result = run_train_offer(offer, persona)
+
+            self.assertIsNotNone(
+                result.object_pk,
+                f"{path.name}'s generalist TRAIN offer was not grantable: {result.message}",
+            )

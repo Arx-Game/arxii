@@ -7,6 +7,11 @@ and must contain no data seeding (ADR-0013).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world.progression.models import ClassLevelUnlock
+
 
 def seed_social_engagement_kudos_category() -> None:
     """Seed the social_engagement KudosSourceCategory.
@@ -249,3 +254,59 @@ def seed_durance_officiants() -> list:
         sites.append(site)
 
     return sites
+
+
+# --- Level-2 major-gift-technique gate (#2440 ruling 4) --------------------
+
+#: N in "knows >= N techniques of your major gift" — matches CG's upper end
+#: (1 + Tradition Training rank of starter picks; see MajorGiftTechniqueRequirement's
+#: docstring for the full rationale).
+_MAJOR_GIFT_TECHNIQUE_LEVEL_REQUIREMENT_COUNT = 3
+
+
+def seed_major_gift_technique_level_requirement() -> ClassLevelUnlock:
+    """Seed the level-2 ClassLevelUnlock + its MajorGiftTechniqueRequirement (#2440 ruling 4).
+
+    Level 2 requires knowing >= 3 techniques of the character's MAJOR gift —
+    CG hands out only 1-3 starter picks from the (Path x Gift) pool; the rest
+    are meant to be filled out in play via Academy/Archive TRAIN offers before
+    crossing to level 2. No ``ClassLevelUnlock`` row exists for any
+    (class, level) pair anywhere in the codebase yet (verified against code —
+    this content is staff/admin-authored, never seeded) — this is the first.
+
+    Reuses the same PLACEHOLDER ``_DURANCE_OFFICIANT_CLASS_NAME`` ("Adventurer")
+    class ``seed_durance_officiants`` stamps on its officiants: per that
+    function's own docstring, ``assert_can_officiate`` and the Durance gate
+    read ``current_level``/Path lineage, never a specific ``CharacterClass``
+    name, so the same one shared class is the correct generic anchor for the
+    level-2 gate too. Idempotent via get_or_create; never overwrites a
+    staff-adjusted row (an existing ``MajorGiftTechniqueRequirement`` for this
+    unlock is left untouched, including a staff-retuned ``minimum_techniques``).
+
+    Returns:
+        The level-2 ``ClassLevelUnlock`` (created or fetched).
+    """
+    from world.classes.models import CharacterClass  # noqa: PLC0415
+    from world.progression.models import (  # noqa: PLC0415
+        ClassLevelUnlock,
+        MajorGiftTechniqueRequirement,
+    )
+
+    character_class, _ = CharacterClass.objects.get_or_create(
+        name=_DURANCE_OFFICIANT_CLASS_NAME,
+        defaults={
+            "description": "PLACEHOLDER class stamped on seeded Durance training officiants.",
+        },
+    )
+    unlock, _ = ClassLevelUnlock.objects.get_or_create(
+        character_class=character_class, target_level=2
+    )
+    MajorGiftTechniqueRequirement.objects.get_or_create(
+        class_level_unlock=unlock,
+        defaults={
+            "minimum_techniques": _MAJOR_GIFT_TECHNIQUE_LEVEL_REQUIREMENT_COUNT,
+            "description": "Know at least 3 techniques of your major gift.",
+            "is_active": True,
+        },
+    )
+    return unlock

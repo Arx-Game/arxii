@@ -4,6 +4,7 @@ from world.currency.models import (
     CharacterPurse,
     CurrencyInstrumentDetails,
     CurrencyTransfer,
+    FavorTokenDetails,
     OrganizationTreasury,
 )
 
@@ -44,3 +45,18 @@ class CurrencyInstrumentDetailsAdmin(admin.ModelAdmin):
     list_display = ("denomination", "face_value", "item_instance")
     list_filter = ("denomination",)
     raw_id_fields = ("item_instance",)
+
+
+@admin.register(FavorTokenDetails)
+class FavorTokenDetailsAdmin(admin.ModelAdmin):
+    list_display = (
+        "issuing_organization",
+        "provenance_note",
+        "minted_at",
+        "redeemed_at",
+        "item_instance",
+    )
+    list_filter = ("issuing_organization",)
+    search_fields = ("provenance_note", "issuing_organization__name")
+    raw_id_fields = ("item_instance", "issuing_organization")
+    date_hierarchy = "minted_at"

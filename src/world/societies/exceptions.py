@@ -144,3 +144,24 @@ class NotAGenericOrganizationError(OrganizationMembershipError):
     SAFE_MESSAGES = frozenset(
         {"This organization uses a covenant membership lifecycle, not the generic one."}
     )
+
+
+class ObligationError(Exception):
+    """Base for typed :class:`~world.societies.models.OrganizationObligation` exceptions.
+
+    Carries a safe ``user_message`` and an allowlist so callers can surface
+    errors to end-users without leaking internal details, mirroring
+    ``OrganizationMembershipError``'s convention.
+    """
+
+    user_message: str = "An organization obligation error occurred."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"An organization obligation error occurred."}
+    )
+
+
+class ObligationNotOwedError(ObligationError):
+    """Raised when settling an obligation that is not in the OWED state."""
+
+    user_message = "This obligation has already been settled."
+    SAFE_MESSAGES = frozenset({"This obligation has already been settled."})

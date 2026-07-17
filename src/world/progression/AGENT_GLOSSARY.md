@@ -10,8 +10,12 @@ An authored advancement target a character can spend XP to acquire — e.g. `Cla
 _Avoid_: perk, purchase, upgrade.
 
 **Requirement**:
-An authored gate attached to an Unlock, evaluated per character through `is_met_by_character(character) -> (bool, str)`. Concrete kinds include Trait, Level, ClassLevel, MultiClass, Tier, Achievement, Relationship, and Legend requirements.
+An authored gate attached to an Unlock, evaluated per character through `is_met_by_character(character) -> (bool, str)`. Concrete kinds include Trait, Level, ClassLevel, MultiClass, Tier, Achievement, Relationship, Legend, Item, and MajorGiftTechnique requirements. New kinds MUST be added to the hardcoded `requirement_types` list in `services/spends.py` — an omitted entry silently never evaluates (see `reference-requirement-types-hardcoded-list`).
 _Avoid_: prerequisite, condition (reserve "condition" for the conditions system).
+
+**MajorGiftTechniqueRequirement** (#2440 ruling 4):
+The level-2 Durance gate: a character must know >= `minimum_techniques` (default 3) techniques of their single MAJOR gift (`Gift.kind == GiftKind.MAJOR`, resolved via `CharacterGift`) — a COUNT, not completeness (a gift can grow many, several level-gated, techniques over a character's life). Minor-gift techniques never count. Seeded onto the level-2 `ClassLevelUnlock` by `seed_major_gift_technique_level_requirement` (`world.progression.seeds`).
+_Avoid_: "starter pool complete" (CG only hands out 1-3 picks; the rest are meant to be filled out in play via Academy/Archive TRAIN offers, #2440).
 
 **ClassLevelAdvancement**:
 The receipt for a single within-tier class-level advance performed through the Ritual of the Durance; it records level_before/after, officiant, ritual, and scene, and survives character death. Its tier-crossing sibling is `AudereMajoraCrossing`, both sharing `AbstractClassLevelAdvancement`.

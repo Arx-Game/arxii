@@ -186,8 +186,20 @@ class CharacterTradition(SharedMemoryModel):
     """
     Links a character to a tradition they belong to.
 
-    Characters may join traditions during creation or through play.
-    A character cannot belong to the same tradition twice.
+    Characters may join traditions during creation or through play. History is
+    preserved (#2441 ruling 2): switching or leaving a tradition sets ``left_at``
+    on the old row rather than deleting it — the record of having been Unbound,
+    or a member of a since-abandoned tradition, persists. A character has at
+    most one ACTIVE (``left_at IS NULL``) row at a time, enforced by
+    ``unique_active_tradition_per_character`` below — mirrors
+    ``OrganizationMembership.left_at`` + its active-row constraint
+    (``world.societies.models``). ``unique_together`` on (character, tradition)
+    was deliberately dropped: rejoining a tradition after having left it must be
+    able to create a second historical row for the same pair, which a
+    character+tradition unique key would forbid. ``world.magic.services.
+    tradition_membership.join_tradition``/``leave_tradition`` are the only
+    writers of this row outside CG finalization (which creates the character's
+    first, unconditionally-active row) and Django admin.
     """
 
     character = models.ForeignKey(
@@ -206,11 +218,26 @@ class CharacterTradition(SharedMemoryModel):
         auto_now_add=True,
         help_text="When the character joined this tradition.",
     )
+    left_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the character left this tradition, voluntarily or via a switch "
+            "to another tradition (#2441). Null = this is the character's "
+            "currently active tradition."
+        ),
+    )
 
     class Meta:
-        unique_together = ["character", "tradition"]
         verbose_name = "Character Tradition"
         verbose_name_plural = "Character Traditions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character"],
+                condition=models.Q(left_at__isnull=True),
+                name="unique_active_tradition_per_character",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.tradition} on {self.character}"

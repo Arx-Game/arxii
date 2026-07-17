@@ -45,6 +45,33 @@ FALLBACK_STARTING_ROOM_TYPECLASS = "typeclasses.rooms.Room"
 # marking it AUTHORED so it is stable-identity and included in the grid export.
 FALLBACK_STARTING_ROOM_FIXTURE_KEY = "arx/fallback-starting-room"
 
+# Golden Hare CG entrance obligation (#2428): shared contract between the magic
+# finalize hook (services.py's finalize_magic_data) and the Academy org seed
+# (world.seeds.character_creation.ensure_shroudwatch_academy). Resolved by
+# name at finalize time — the Academy is a deliberate NULL-tradition
+# ``Organization`` (#2426 ruling), not a Tradition itself.
+SHROUDWATCH_ACADEMY_NAME = "Shroudwatch Academy"
+
+# Tradition identifying the tradition-agnostic default CG pick (#2426). There is
+# no boolean "is Unbound" field on ``Tradition`` — every existing caller (the
+# magic seed, ``seed_beginning_traditions`` above) matches by name, so the
+# finalize hook does the same rather than inventing a new marker.
+UNBOUND_TRADITION_NAME = "Unbound"
+
+# Slug of the "Unbound" drawback Distinction (#2442) — seeded by
+# ``world.seeds.character_creation.ensure_unbound_drawback_distinction`` and
+# wired onto Unbound's own ``BeginningTradition.required_distinction`` (same
+# seeder, ``seed_beginning_traditions``). Read by ``select_tradition``
+# (views.py) to special-case Unbound's auto-add UX: unlike Orphaned Tradition
+# (a deliberate opt-in pick, #2428 Task 5), Unbound is CG's tradition-agnostic
+# default — a player must not be forced to already know about this specific
+# drawback before CG can complete (see
+# ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
+# .test_tradition_step_completable_for_every_seeded_beginning``, the existing
+# "CG must remain completable via the Unbound path with zero manual steps"
+# regression proof #2426 shipped).
+UNBOUND_DRAWBACK_DISTINCTION_SLUG = "unbound"
+
 
 class Stage(models.IntegerChoices):
     """Character creation stages."""

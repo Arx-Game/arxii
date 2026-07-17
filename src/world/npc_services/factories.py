@@ -19,6 +19,7 @@ from world.npc_services.models import (
     NPCStanding,
     OfferCooldown,
     PermitOfferDetails,
+    TrainOfferDetails,
 )
 
 # Factory-path string for the Persona sub-factory, referenced by multiple
@@ -106,6 +107,18 @@ class PermitOfferDetailsFactory(DjangoModelFactory):
         model = PermitOfferDetails
 
     offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.PERMIT)
+
+
+class TrainOfferDetailsFactory(DjangoModelFactory):
+    """Per-offer TRAIN details (#2440) — one row per teachable technique."""
+
+    class Meta:
+        model = TrainOfferDetails
+
+    offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.TRAIN)
+    technique = factory.SubFactory("world.magic.factories.TechniqueFactory")
+    learn_ap_cost = 5
+    gold_cost = 0
 
 
 class NPCRoleCooldownFactory(DjangoModelFactory):

@@ -938,8 +938,9 @@ Mechanical regional climate + transient weather feeding the #1514 comfort substr
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 
-- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank`, `OrganizationMembership`, `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
+- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank`, `OrganizationMembership`, `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
 - **Office services** (`office_services.py`, #2239): `appoint_office` / `vacate_office` / `office_holder` / `holds_office`
+- **Obligation services** (`obligation_services.py`, #2428): `settle_obligation(obligation, token)` (redeems the Hare via `currency.redeem_favor_token`, flips `OWED` → `SETTLED`, stamps `settled_at`/`settled_by_token`; raises `ObligationNotOwedError` if not `OWED`) / `has_open_obligation(sheet, org)` (read-only gate for training/entrance flows)
 - **Enums:** `ReputationTier`, `OrganizationMembershipOffer.Kind`, `OrganizationMembershipOffer.Status`
 - **Key Services:** `ensure_default_rank_ladder`, `join_organization`, `leave_organization`, `invite_to_organization`, `apply_to_organization`, `accept_invitation`, `decline_invitation`, `accept_application`, `decline_application`, `promote_member`, `demote_member`, `expel_member`
 - **Action Keys:** `org_invite`, `org_apply`, `org_join`, `org_leave`, `org_promote`, `org_demote`, `org_expel`
@@ -969,7 +970,7 @@ Social structures, organizations, reputation, and legend tracking.
 - **`Organization`/`Society` as `NpcRegard` target (#1717):** either can now be the *target* (not
   holder) of a notable NPC's external opinion — see the Regard bullet in the NPC Services
   section above.
-- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam), battles (consumer — `world.battles.legend_wiring` calls `create_legend_event`/`create_solo_deed` from a battle-conclusion hook, win-gated Legend, #2184; FK direction battles→societies, ADR-0010 — this app never imports `world.battles`)
+- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity; `OrganizationObligation.debtor` FK, #2428), currency (`OrganizationObligation.settled_by_token` → `FavorTokenDetails`, string FK + `obligation_services.py` deferred-imports `redeem_favor_token`; FK direction societies→currency, ADR-0010 — currency never imports societies for this), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam), battles (consumer — `world.battles.legend_wiring` calls `create_legend_event`/`create_solo_deed` from a battle-conclusion hook, win-gated Legend, #2184; FK direction battles→societies, ADR-0010 — this app never imports `world.battles`)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
 
@@ -1528,10 +1529,13 @@ GM at a given level may author (#2000, ADR-0097).
   integer difficulty or a consequence-pool reference), `GMAwardAction` (key
   `gm_award_progression` — `award_xp`/`award_development_points` with
   `ProgressionReason.GM_AWARD`, gated additionally on `MinimumGMLevelPrerequisite(GMLevel
-  .JUNIOR)`), `GMApplyConditionAction` (key `gm_apply_condition` — `apply_condition` against an
+  .JUNIOR)`; `award_type="favor_token"` (#2428) mints a Golden Hare from an org via
+  `currency.mint_favor_token`, resolving `org_ref` pk-or-name against `societies.Organization`
+  and requiring a non-empty `description` as the token's `provenance_note`),
+  `GMApplyConditionAction` (key `gm_apply_condition` — `apply_condition` against an
   authored `ConditionTemplate` via `get_by_name`, same JUNIOR floor). Telnet: `gm check [find
   <term>]` / `gm check <char> <check-type>=<band> [edge=<reason>|setback=<reason>]`, `gm award
-  <char> xp=<amount>|dev=<trait> amount=<n> [reason=<text>]`, `gm condition <char>
+  <char> xp=<amount>|dev=<trait> amount=<n>|hare=<organization> reason=<text>`, `gm condition <char>
   condition=<name> [severity=<n>] [duration=<n>] [note=<text>]` (`commands/gm_ops.py`'s
   `CmdGMDashboard`).
 - **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
@@ -2070,16 +2074,124 @@ register as additional kinds.
   `hire <name>` prefers a co-located Functionary, falling back to a global role lookup; staff place
   them with the `functionary place/remove` command (`commands/functionary.py`); they surface on
   `look` (`Room.return_appearance`).
-- **Constants:** `OfferKind` (PERMIT / MISSION / LOAN / COLLECTION / IMPROVEMENT (#930);
-  future TRAINING/POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL). `NPCServiceOffer.ap_cost`
-  (#930) charges the resolving character before any effect dispatches
-  (`InsufficientAPError` rolls the grant back) — a generic knob on every kind.
+- **Constants:** `OfferKind` (PERMIT / MISSION / LOAN / COLLECTION / IMPROVEMENT (#930) /
+  INFORMANT / CONTACT / PERSONAL_FAVOR / GUARD / FAN / MINOR_ALLY / ASSET_TASK_INTEL /
+  ASSET_TASK_COLLECT / TRAIN (#2440) / SETTLE_OBLIGATION (#2428 whole-branch fix);
+  future POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL).
+  `NPCServiceOffer.ap_cost` (#930) charges the resolving character before any effect
+  dispatches (`InsufficientAPError` rolls the grant back) — a generic knob on every kind;
+  TRAIN offers leave it at 0 and charge AP through the technique-acquisition multiplier
+  seam instead (see below).
 - **Effect dispatch:** `OFFER_EFFECT_HANDLERS: dict[str, Callable]` in
   `world.npc_services.effects` — keyed on `OfferKind`: `issue_permit` (buildings),
-  MISSION (registered by `MissionsConfig.ready`), `grant_loan`, and the #930
+  MISSION (registered by `MissionsConfig.ready`), `grant_loan`, the #930
   domain-running pair `run_collection` / `run_improvement` (over
   `currency.collect_org_income` / `improve_org_domain`; org resolved via the shared
-  `_resolve_authority_org` single-treasury-authority rule).
+  `_resolve_authority_org` single-treasury-authority rule), and `run_train_offer` (#2440,
+  below).
+- **TRAIN offers — Academy training (#2440):** `NPCRole.teaches_tradition` (nullable FK →
+  `magic.Tradition`, `SET_NULL`) scopes which tradition's signature techniques a trainer
+  role can teach; `TrainOfferDetails` (1:1 per-offer details — `technique` FK, `learn_ap_cost`,
+  `gold_cost`) authors **one offer row per teachable technique** (mirrors how MISSION/PERMIT
+  enumerate per-template/per-kind rows — the smallest shape consistent with MENU/POOL
+  selection; MENU-mode already lists every eligible offer as its own menu line). Handler
+  (`run_train_offer`): resolve the Academy (`offer.role.faction_affiliation`) → obligation
+  gate (`societies.obligation_services.has_open_obligation`, #2428 — an OWED Academy debt
+  blocks further training) → availability gate (the learner's own (Path × Gift) pool
+  (`PathGiftGrant`) ∪ their ACTIVE `CharacterTradition` membership's signature list
+  (`TraditionGiftGrant`, `left_at__isnull=True` since #2441 Task 8 — see "Tradition
+  membership lifecycle" below) via `magic.services.cg_catalog.get_technique_options`; a
+  signature technique is teachable only when the trainer's own `teaches_tradition` matches
+  the learner's currently active tradition — pool techniques are teachable by any Academy
+  trainer regardless of tradition) → resolve exactly one unredeemed Golden Hare (`currency.FavorTokenDetails`)
+  issued by the Academy and held by the learner (`NoAvailableFavorTokenError` if none) →
+  charge AP + coin + the Hare → acquire via `magic.services.gift_acquisition
+  .charge_and_learn` — the extracted shared charge+acquire core `accept_technique_offer`
+  (#1587, player-to-player teaching) also delegates to; one seam, two front doors. The Hare
+  is always redeemed to the ACADEMY (not the trainer's own taught tradition) — Hares are
+  Academy-specific venue tokens (ruling on #2428). The generic `hire` command/
+  `InteractionSession` loop lists and resolves TRAIN offers with no command-layer changes —
+  the offer kind is fully expressible through the existing eligibility/dispatch machinery.
+- **Great Archive self-study (#2440 ruling 5):** the post-Vanishing path for orphaned
+  traditions — a quest-completion flag unlocks self-teaching, mechanically a TRAIN offer
+  set on a "Great Archive Librarian" `NPCRole` (`faction_affiliation` = Shroudwatch
+  Academy — same Hare/coin seam as any other Academy trainer; `teaches_tradition=None`,
+  shared pool only). Gate mechanism: reuses `NPCServiceOffer.eligibility_rule` — already
+  THE offer visibility/selectability predicate — with the existing `has_achievement` leaf
+  (`world.predicates.predicates`) rather than a new FK; no migration needed for the gate
+  itself. Seeded by `ensure_great_archive_librarian_role()` (`world.npc_services.seeds`),
+  which also get-or-creates the PLACEHOLDER `Achievement` row
+  (`GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG`) the offers gate on — granting it to a
+  character is the lore-repo quest's job, not this seed's. Self-study teaches the shared
+  (Path × Gift) pool only — it does **not** restore an orphaned tradition's own signature
+  technique list; that recovery is story content, not a mechanical unlock.
+- **SETTLE_OBLIGATION — the Academy Registrar (#2428 whole-branch fix):** closes the gap
+  where `societies.obligation_services.settle_obligation` (Task 1) shipped with no live
+  caller — an Unbound Prospect had no in-game way to ever pay off their Academy entrance
+  debt. Handler `run_settle_obligation_offer`: resolve the offer's org
+  (`offer.role.faction_affiliation`) → fetch the learner's OWED `OrganizationObligation`
+  against it (`None` → typed refusal, not an error) → resolve one unredeemed Golden Hare
+  (reuses `_resolve_unredeemed_hare`, same row-lock as TRAIN) → `settle_obligation`
+  redeems it and flips the row to SETTLED, inside one outer `transaction.atomic()`.
+  Seeded by `ensure_academy_registrar_role()` (`world.npc_services.seeds`) as an
+  ungated, always-visible offer on a class-1 "Academy Registrar" bursar role — a debtor
+  must always be able to find someone to pay. A second seed,
+  `ensure_academy_generalist_trainer_role()`, mirrors the Great Archive librarian's shape
+  (same one-technique-per-starter-Gift sample) but with no achievement gate, so a
+  fresh-DB Prospect has ≥1 reachable TRAIN offer immediately, without needing the
+  Archive's not-yet-authored quest content. Both are PLACEHOLDER-flagged dev-minimum
+  content — real Academy trainer curricula are lore-repo authored.
+- **Tradition membership lifecycle (#2441 Task 8):** `magic.CharacterTradition` gained
+  `left_at` (nullable) + a partial-unique `unique_active_tradition_per_character`
+  constraint (`character` WHERE `left_at IS NULL`) — mirrors
+  `societies.OrganizationMembership.left_at`. `unique_together` on `(character,
+  tradition)` was dropped (a character may rejoin a tradition they previously left,
+  creating a second historical row for the same pair). `world.magic.services.
+  tradition_membership`: `join_tradition(sheet, tradition, *, via_membership=None)` —
+  ends the active row (`left_at`), creates a new one, and — when the joined tradition
+  is not orphaned (`_tradition_is_orphaned`, reading `character_creation.
+  BeginningTradition.required_distinction__slug="orphaned-tradition"`, the only place
+  "no living teachers" is recorded in the schema, per Task 5/#2428) — deletes any held
+  `unbound`/`orphaned-tradition` drawback `CharacterDistinction` row (direct queryset
+  delete; `grant_distinction` has no removal counterpart, see
+  `world/distinctions/CLAUDE.md`). Raises `AlreadyInTraditionError` on a no-op re-join.
+  `leave_tradition(sheet)` — `left_at` only, no replacement row; re-applies the
+  `unbound` drawback via `grant_distinction(origin=DistinctionOrigin.GAMEPLAY)`
+  (defensive no-op, logged, if the "unbound" `Distinction` isn't seeded yet — Task 9
+  ships it), catching `DistinctionExclusionError`. Raises `NoActiveTraditionError` if
+  already traditionless. **Wired trigger:** `societies.membership_services.
+  _maybe_join_tradition`, called from both `accept_invitation` and `accept_application`
+  when `organization.tradition_id` is set (ruling 1 on #2441 — a tradition is joined
+  through its teaching org's membership-offer accept flow); swallows
+  `AlreadyInTraditionError` so re-accepting an org invite never fails the membership
+  accept. `leave_tradition` has no live caller yet — a symmetric
+  `leave_organization`/`expel_member` hook is a natural future wiring point, deliberately
+  left undecided by this task. Learned techniques are never revoked on switch (ruling 3,
+  "learned is learned") — only the TRAIN-offer signature-list *access* gate
+  (`npc_services.effects._technique_available_to_learner`) was upgraded to read
+  `left_at__isnull=True`; `magic.services.ritual_knowledge.reconcile_ritual_knowledge`'s
+  "all traditions in history" walk is deliberately unchanged (a different, intentionally
+  permanent grant).
+- **Unbound magic-learning AP surcharge (#2442):** the "Unbound" drawback `Distinction`
+  (slug `unbound`, seeded by `world.seeds.character_creation
+  .ensure_unbound_drawback_distinction`, mirroring Task 5's `orphaned-tradition` shape —
+  `cost_per_rank=-2`, `max_rank=1`, category "Arcane") carries a +50 `DistinctionEffect` on
+  the new `magic_learning_ap_cost` `ModifierTarget` (category `magic`, seeded by
+  `wire_magic_learning_ap_cost_target`). `charge_and_learn` (`magic.services
+  .gift_acquisition`) reads it live via `world.mechanics.services.get_modifier_total` (the
+  post-CG `CharacterModifier` resolution path — NOT the CG-draft `_get_distinction_bonus`
+  helper) and scales AP: `ceil(ap_cost × (100 + surcharge%) / 100)`, applied identically to
+  both `charge_and_learn` front doors (accept + TRAIN). TIME, not power — resonance
+  earning/spending is untouched (a corrected-in-review alternative: taxing resonance would
+  have made the Unbound weaker, not slower). Every Unbound `BeginningTradition` row now
+  carries `required_distinction=<Unbound drawback>` (was `None` pre-#2442); unlike Orphaned
+  Tradition's deliberate "must already hold it" gate, `select_tradition`
+  (`character_creation.views`) auto-adds the Unbound drawback to the draft when missing — a
+  one-off exception preserving CG completability now that Unbound (CG's tradition-agnostic
+  default) carries a gate. Shed by `join_tradition`/re-applied by `leave_tradition` above —
+  the `CharacterModifier` row cascade-deletes with the `CharacterDistinction` row
+  (`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge
+  disappears automatically, no separate cleanup.
 - **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
   `(pc_persona, npc_persona)`) is atomically accumulated by
   `adjust_npc_affection(pc_persona, npc_persona, delta=...)` via `F()`. Social action
@@ -2141,8 +2253,12 @@ register as additional kinds.
   → `end_interaction(session)` (persists new affection for class-2+ NPCs).
 - **Predicate engine reuse:** `world.predicates` (shared utility — see entry below).
   `min_npc_standing` and persona-scoped `has_item` leaves live there.
-- **Seeding:** `ensure_builders_guild_clerk_role()` in `world.npc_services.seeds` —
-  idempotent get_or_create; NOT a committed fixture (per #683).
+- **Seeding:** `ensure_builders_guild_clerk_role()`, `ensure_great_archive_librarian_role()`
+  (#2440), `ensure_great_archive_self_study_achievement()` (#2440) in
+  `world.npc_services.seeds` — idempotent get_or_create; NOT a committed fixture (per #683).
+  The Archive seed rides the Big Button via the `"npc_services"` cluster
+  (`world.seeds.clusters`), after `"progression"` (Shroudwatch Academy org + starter
+  Gift/Technique catalog it depends on).
 - **API:** `/api/npc-services/standings/`, `/api/npc-services/roles/`, `/api/npc-services/offers/`,
   `/api/npc-services/cooldowns/`, `/api/npc-services/permit-details/` — staff CRUD.
   `/api/npc-services/interactions/{start,resolve,end}/` — player-facing interaction state machine
@@ -2278,6 +2394,34 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
     `actions/definitions/currency.py`. Telnet: `withdraw coins <amount>` (via the existing
     `CmdWithdraw`), `deposit <item>` (`CmdDeposit`), `give <amount>` (via `CmdGive`,
     auto-detected through `parse_coppers`).
+- **Golden Hares / favor tokens (#2428):** an org-issued deed token — a gold coin bearing
+  a rabbit with emerald eyes, one Hare = one deed done for `issuing_organization`.
+  Deliberately NOT coppers-denominated (a distinct instrument from `CurrencyInstrumentDetails`);
+  tradeable as an ordinary item via existing give/trade (no market machinery). Deed-provenance
+  is story-significant, so redemption never hard-deletes: `FavorTokenDetails` (`item_instance`
+  OneToOne, `issuing_organization` FK, `provenance_note`, `minted_at`, `redeemed_at`) rows and
+  their `ItemInstance` both survive redemption.
+  - **Key functions:** `mint_favor_token(org, recipient_character, *, provenance_note) ->
+    FavorTokenDetails` (mirrors the coin-mint item-creation shape, no ledger transfer/fee);
+    `redeem_favor_token(token, *, redeemer_org) -> None` — only the issuing org may redeem its
+    own Hare; soft-disposes the item (stamps `ItemInstance.destroyed_at`, relocates the
+    game_object out of play, logs a CONSUMED `OwnershipEvent`) rather than hard-deleting it,
+    mirroring the items app's provenance-preserving soft-delete norm
+    (`consume_item_charges`'s preserve branch / `forfeit_item_instance`), not
+    `redeem_instrument`'s hard-delete.
+  - Substrate for the tradition-sponsorship cluster (#2428/#2440/#2441/#2442): Academy
+    training costs a Hare; sponsorship is a Hare spent on the Prospect's behalf at CG.
+  - **Minting hook (Task 4, #2428):** `GMAwardAction` (`gm_award_progression`, see the
+    GM Adjudication Toolkit entry below) gains `award_type="favor_token"` — thin over
+    `mint_favor_token`, resolving `org_ref` (pk-or-name) against `societies.Organization`
+    and requiring a non-empty `description` (becomes the token's `provenance_note`).
+    Same JUNIOR-tier GM-fiat trust bar as the existing `xp`/`development` award types.
+    Missions have an authored per-route reward surface (`MissionOptionRouteReward` /
+    `DeedRewardSink`), but no sink resolves to an `Organization` today and adding one
+    (`FAVOR_TOKEN` sink + an org FK on the reward template) is a schema change — out of
+    scope here. Until that lands, mission-triggered Hares are GM-tool + authored-content
+    driven (a GM hands one out via this action mid-scene), not an automatic completion
+    payout.
 - **Source:** `src/world/currency/`
 
 ### Predicates (shared rule engine)

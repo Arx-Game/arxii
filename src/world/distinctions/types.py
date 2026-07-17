@@ -49,10 +49,15 @@ def build_distinction_entry(
 class DistinctionOrigin(models.TextChoices):
     """How a character acquired a distinction.
 
-    ``GAMEPLAY`` is vestigial (#2037) — kept for schema stability, but no
-    production writer assigns it. The four values below are the ratified
-    post-CG acquisition sources; every in-play grant goes through
-    ``world.distinctions.services.grant_distinction`` and stamps one of them.
+    ``GAMEPLAY`` was vestigial from #2037 through #2441 — kept for schema
+    stability, no production writer assigned it. #2441 Task 8 became its first
+    production writer: ``world.magic.services.tradition_membership.
+    leave_tradition`` stamps it when re-applying the Unbound drawback, an
+    automatic system consequence of the player's own leave-tradition action that
+    doesn't fit any of the other four sources (no GM, achievement, consequence
+    pool, or endorsement threshold involved). Every in-play grant goes through
+    ``world.distinctions.services.grant_distinction`` and stamps one of these
+    six values.
     """
 
     CHARACTER_CREATION = "character_creation", "Character Creation"

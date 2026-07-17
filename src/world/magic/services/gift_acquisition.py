@@ -1,12 +1,18 @@
 """Post-CG gift acquisition services (#1587).
 
 spend_xp_on_gift_unlock: the XP gate (ADR-0053 — gate removal only).
-accept_technique_offer: the acquisition step (implicitly acquires the
-gift on the first technique learned from it).
+charge_and_learn: the shared charge+acquire core (implicitly acquires the
+gift on the first technique learned) — one seam, two front doors:
+accept_technique_offer (player-to-player teaching, #1587) and the Academy
+TRAIN offer handler (world.npc_services.effects.run_train_offer, #2440).
+charge_and_learn also applies the Unbound magic-learning AP surcharge (#2442,
+_magic_learning_ap_cost_surcharge_percent) — TIME, not power; resonance
+earning/spending is untouched.
 """
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -26,7 +32,9 @@ from world.progression.services.awards import get_or_create_xp_tracker
 from world.progression.types import ProgressionReason
 
 if TYPE_CHECKING:
+    from world.achievements.constants import AccessChangeSource
     from world.character_sheets.models import CharacterSheet
+    from world.currency.models import OrganizationTreasury
     from world.magic.models import (
         CharacterTechnique,
         Gift,
@@ -34,6 +42,7 @@ if TYPE_CHECKING:
         Technique,
         TechniqueTeachingOffer,
     )
+    from world.roster.models import RosterTenure
 
 
 def get_gift_acquisition_config() -> GiftAcquisitionConfig:
@@ -231,21 +240,85 @@ def _resolve_resonance_for(gift: Gift, claimed_ids: set[int]):
     return next((r for r in supported if r.pk in claimed_ids), supported[0])
 
 
+def _magic_learning_ap_cost_surcharge_percent(learner: CharacterSheet) -> int:
+    """Live AP surcharge percent for magic-learning activities (#2442).
+
+    Resolves the learner's ``magic_learning_ap_cost`` modifier through the live
+    post-CG ``CharacterModifier`` resolution path
+    (``world.mechanics.services.get_modifier_total``) — the same seam every other
+    distinction-authored modifier is read through, NOT the CG-draft
+    ``CharacterDraft._get_distinction_bonus`` helper (that only reads a draft's
+    in-progress ``draft_data``, never a committed ``CharacterDistinction``). The
+    "Unbound" drawback distinction (``world.seeds.character_creation
+    .ensure_unbound_drawback_distinction``) is the sole authored source today
+    (+50); 0 for a learner who has shed it (or never held it — e.g. via
+    ``world.magic.services.tradition_membership.join_tradition``) and 0 (no
+    surcharge) if the seed target row doesn't exist yet on this DB — mirrors the
+    defensive-tolerance convention elsewhere in the #2441/#2442 cluster (e.g.
+    ``tradition_membership._reapply_unbound_drawback``).
+    """
+    from world.magic.constants import (  # noqa: PLC0415
+        MAGIC_LEARNING_AP_COST_TARGET_NAME,
+        MAGIC_MODIFIER_CATEGORY_NAME,
+    )
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    target = ModifierTarget.objects.filter(
+        name=MAGIC_LEARNING_AP_COST_TARGET_NAME,
+        category__name=MAGIC_MODIFIER_CATEGORY_NAME,
+    ).first()
+    if target is None:
+        return 0
+    return get_modifier_total(learner, target)
+
+
 @transaction.atomic
-def accept_technique_offer(
+def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; params co-equal
     learner: CharacterSheet,
-    offer: TechniqueTeachingOffer,
+    technique: Technique,
+    *,
+    base_ap_cost: int,
+    source: AccessChangeSource,
+    gold_cost: int = 0,
+    gold_treasury: OrganizationTreasury | None = None,
+    teacher_tenure: RosterTenure | None = None,
+    teacher_banked_ap: int = 0,
 ) -> CharacterTechnique:
-    """Accept a TechniqueTeachingOffer — the acquisition step (#1587).
+    """Shared charge+acquire core for technique acquisition (#1587, #2440).
+
+    One seam, two front doors: ``accept_technique_offer`` (player-to-player
+    teaching) and the Academy TRAIN offer handler
+    (``world.npc_services.effects.run_train_offer``) both delegate here.
 
     If the learner doesn't yet have the technique's gift, this implicitly
     acquires it (via grant_gift_to_character). The first technique from
     a not-yet-acquired gift costs more AP (config.first_technique_ap_multiplier)
     and requires a CharacterGiftUnlock receipt (the XP gate).
 
+    After the has-gift/major-gift multiplier, the Unbound magic-learning AP
+    surcharge (#2442) scales the result: ``ceil(ap_cost × (100 + surcharge%) /
+    100)``, where ``surcharge%`` is the learner's live ``magic_learning_ap_cost``
+    modifier total (``_magic_learning_ap_cost_surcharge_percent``, +50 while the
+    "Unbound" drawback distinction is held, 0 once shed via
+    ``world.magic.services.tradition_membership.join_tradition``).
+
     Args:
-        learner: The character accepting the offer.
-        offer: The TechniqueTeachingOffer being accepted.
+        learner: The character learning the technique.
+        technique: The technique being learned.
+        base_ap_cost: AP cost before the has-gift/major-gift multiplier is
+            applied (``TechniqueTeachingOffer.learn_ap_cost`` /
+            ``TrainOfferDetails.learn_ap_cost``).
+        source: The AccessChangeSource for the announce message.
+        gold_cost: Coin charged to the learner's purse (0 = free). Credited
+            to ``gold_treasury`` via ``currency.transfer``.
+        gold_treasury: Destination treasury for ``gold_cost``. Required
+            (non-None) whenever ``gold_cost`` > 0.
+        teacher_tenure: The player teacher whose banked AP is consumed
+            (teaching-offer path only). None for NPC-trained acquisition —
+            no banked-AP consumption happens.
+        teacher_banked_ap: AP consumed from ``teacher_tenure``'s pool.
+            Meaningless when ``teacher_tenure`` is None.
 
     Returns:
         The new CharacterTechnique.
@@ -253,17 +326,24 @@ def accept_technique_offer(
     Raises:
         GiftUnlockMissing: First technique from a gift with no receipt.
         TechniqueCapExceeded: At the cap for this gift at current thread level.
+        TechniqueStyleForbidden: Learner's path doesn't permit the style.
+        MagicError: Insufficient action points.
+        ValueError: Learner already knows this technique.
     """
-    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
     from world.magic.exceptions import (  # noqa: PLC0415
         GiftUnlockMissing,
+        MagicError,
         TechniqueCapExceeded,
+        TechniqueStyleForbidden,
     )
     from world.magic.models import (  # noqa: PLC0415
         CharacterGift,
         CharacterResonance,
         CharacterTechnique,
+    )
+    from world.magic.services.technique_acquisition import (  # noqa: PLC0415
+        learn_technique,
     )
     from world.magic.specialization.services import (  # noqa: PLC0415
         grant_gift_to_character,
@@ -272,7 +352,6 @@ def accept_technique_offer(
     # Lock the learner's sheet row to serialize first-acquisition (concurrency).
     sheet = CharacterSheet.objects.select_for_update().get(pk=learner.pk)
 
-    technique = offer.technique
     gift = technique.gift
 
     # 1. Check learner doesn't already know this technique.
@@ -282,8 +361,6 @@ def accept_technique_offer(
 
     # 1b. Check path-style restriction (shared gate).
     if not can_learn_technique(sheet, technique):
-        from world.magic.exceptions import TechniqueStyleForbidden  # noqa: PLC0415
-
         raise TechniqueStyleForbidden
 
     # 2. Check if learner has the gift.
@@ -295,11 +372,18 @@ def accept_technique_offer(
         # Check the XP gate (CharacterGiftUnlock receipt).
         if not CharacterGiftUnlock.objects.filter(character=sheet, unlock__gift=gift).exists():
             raise GiftUnlockMissing
-        ap_cost = offer.learn_ap_cost * config.first_technique_ap_multiplier
+        ap_cost = base_ap_cost * config.first_technique_ap_multiplier
     elif gift.kind == GiftKind.MAJOR:
-        ap_cost = offer.learn_ap_cost * config.major_gift_ap_multiplier
+        ap_cost = base_ap_cost * config.major_gift_ap_multiplier
     else:
-        ap_cost = offer.learn_ap_cost
+        ap_cost = base_ap_cost
+
+    # 3b. Unbound magic-learning AP surcharge (#2442) — TIME, not power; applies
+    # identically to both front doors (accept_technique_offer and #2440 TRAIN),
+    # since both delegate here. ceil() so a fractional surcharge never rounds down
+    # to a free ride.
+    surcharge_percent = _magic_learning_ap_cost_surcharge_percent(sheet)
+    ap_cost = math.ceil(ap_cost * (100 + surcharge_percent) / 100)
 
     # 4. Implicit gift acquisition (first technique).
     if not has_gift:
@@ -317,31 +401,77 @@ def accept_technique_offer(
     if current_count >= cap:
         raise TechniqueCapExceeded
 
-    # 6. Spend learner AP. Consume teacher's banked AP.
-    # Gold transfer deferred — mirrors TODO in CodexTeachingOffer
-    # and accept_thread_weaving_unlock; no economy system exists yet.
+    # 6. Spend learner AP. Consume teacher's banked AP (teaching path only).
     learner_pool = ActionPointPool.get_or_create_for_character(sheet.character)
     if not learner_pool.can_afford(ap_cost):
-        from world.magic.exceptions import MagicError  # noqa: PLC0415
-
         msg = f"Insufficient action points (need {ap_cost}, have {learner_pool.current})."
         raise MagicError(msg)
     learner_pool.spend(ap_cost)
-    teacher_pool = ActionPointPool.get_or_create_for_character(offer.teacher.character)
-    teacher_pool.consume_banked(offer.banked_ap)
+    if teacher_tenure is not None:
+        teacher_pool = ActionPointPool.get_or_create_for_character(teacher_tenure.character)
+        teacher_pool.consume_banked(teacher_banked_ap)
+
+    # 6b. Spend learner gold (Academy TRAIN path only — teaching-offer gold
+    # is still deferred, mirrors TODO in CodexTeachingOffer and
+    # accept_thread_weaving_unlock; no economy system existed until #2428).
+    if gold_cost > 0:
+        from world.currency.services import (  # noqa: PLC0415
+            get_or_create_purse,
+            transfer,
+        )
+
+        transfer(
+            amount=gold_cost,
+            reason=f"Technique training: {technique.name}",
+            from_purse=get_or_create_purse(sheet),
+            to_treasury=gold_treasury,
+        )
 
     # 7-8. Delegate mint + announce to the shared commit seam.
     # AP is already spent above (step 6); learn_technique receives ap_cost=0.
     # The gift-owned check in learn_technique passes because step 4 acquired
     # the gift if needed. The gate/cap/duplicate checks re-run idempotently.
-    from world.magic.services.technique_acquisition import (  # noqa: PLC0415
-        learn_technique,
-    )
-
     return learn_technique(
         sheet,
         technique,
-        source=AccessChangeSource.GIFT_ACQUISITION,
+        source=source,
         ap_cost=0,
         location=sheet.character.location,
+    )
+
+
+def accept_technique_offer(
+    learner: CharacterSheet,
+    offer: TechniqueTeachingOffer,
+) -> CharacterTechnique:
+    """Accept a TechniqueTeachingOffer — the acquisition step (#1587).
+
+    If the learner doesn't yet have the technique's gift, this implicitly
+    acquires it (via grant_gift_to_character). The first technique from
+    a not-yet-acquired gift costs more AP (config.first_technique_ap_multiplier)
+    and requires a CharacterGiftUnlock receipt (the XP gate).
+
+    Delegates the charge+acquire core to ``charge_and_learn`` — the same
+    seam the Academy TRAIN offer handler uses (#2440).
+
+    Args:
+        learner: The character accepting the offer.
+        offer: The TechniqueTeachingOffer being accepted.
+
+    Returns:
+        The new CharacterTechnique.
+
+    Raises:
+        GiftUnlockMissing: First technique from a gift with no receipt.
+        TechniqueCapExceeded: At the cap for this gift at current thread level.
+    """
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+
+    return charge_and_learn(
+        learner,
+        offer.technique,
+        base_ap_cost=offer.learn_ap_cost,
+        source=AccessChangeSource.GIFT_ACQUISITION,
+        teacher_tenure=offer.teacher,
+        teacher_banked_ap=offer.banked_ap,
     )

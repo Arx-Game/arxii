@@ -423,7 +423,10 @@ actions, backends, and service functions.
   <check-type>=<band> [edge=<reason>|setback=<reason>]` (`InvokeCatalogCheckAction` — a
   multi-word check-type name must be referenced by pk, since the check-type name IS the
   key token and can't be pre-registered as a multiword key), `gm award <character>
-  xp=<amount>|dev=<trait> amount=<n> [reason=<text>]` (`GMAwardAction`), `gm condition
+  xp=<amount>|dev=<trait> amount=<n>|hare=<organization> reason=<text>` (`GMAwardAction`
+  — `hare=` mints a Golden Hare from the named org via `mint_favor_token`, #2428; org name
+  resolves by pk-or-name, and `reason=` is required — it becomes the token's
+  `provenance_note`), `gm condition
   <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]`
   (`GMApplyConditionAction`). `gm suggest <kind>=<text>` (#2127 — `kind` one of
   `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`) dispatches

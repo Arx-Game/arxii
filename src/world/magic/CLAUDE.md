@@ -303,6 +303,18 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   `current_path_for_character(learner.character)`.
 - `GiftAcquisitionConfig.major_gift_ap_multiplier` — staff-tunable AP multiplier
   for MAJOR-gift techniques on the `has_gift` branch of `accept_technique_offer`.
+- `charge_and_learn(learner, technique, *, base_ap_cost, source, gold_cost=0,
+  gold_treasury=None, teacher_tenure=None, teacher_banked_ap=0)`
+  (`services/gift_acquisition.py`, #2440) — the shared charge+acquire core
+  extracted from `accept_technique_offer`: duplicate/path-style gates →
+  has-gift/major-gift AP multiplier → implicit gift acquisition → cap check →
+  AP spend (+ teacher banked-AP consumption when `teacher_tenure` is set) →
+  gold spend (learner purse → `gold_treasury`, when `gold_cost` > 0) → mint +
+  announce via `learn_technique`. Two front doors: `accept_technique_offer`
+  (player-to-player teaching, `teacher_tenure` set, no gold) and the Academy
+  TRAIN offer handler (`world.npc_services.effects.run_train_offer`, AP + gold
+  + a Golden Hare, no `teacher_tenure`) — one seam, never a forked acquisition
+  path.
 - `AccessChangeSource.TECHNIQUE_GRANT` — provenance value for non-teaching
   technique acquisition.
 - Ritual SERVICE dispatch (`_dispatch_service` in `actions/definitions/ritual.py`)

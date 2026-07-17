@@ -147,6 +147,10 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   `GMApplyConditionAction` (`gm_apply_condition`) round out the toolkit, both
   additionally gated on `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`. Telnet: `gm
   check`/`gm award`/`gm condition` on `CmdGMDashboard` (`commands/gm_ops.py`).
+  `GMAwardAction` gained a third `award_type="favor_token"` (#2428) — mints a Golden
+  Hare from an authored `Organization` via `currency.mint_favor_token`, same JUNIOR
+  fiat trust bar as `xp`/`development`; telnet `gm award <char> hare=<org>
+  reason=<text>`.
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system

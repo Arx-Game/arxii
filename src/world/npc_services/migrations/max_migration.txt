@@ -1,1 +1,1 @@
-0022_alter_npcserviceoffer_kind
+0024_alter_npcserviceoffer_kind

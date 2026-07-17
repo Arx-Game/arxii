@@ -186,6 +186,20 @@ class NPCRole(NaturalKeyMixin, SharedMemoryModel):
             "Builders Guild Organization). Used by org-scoped permission filters."
         ),
     )
+    teaches_tradition = models.ForeignKey(
+        "magic.Tradition",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="teaching_npc_roles",
+        help_text=(
+            "Optional: the Tradition this role's trainer teaches signature "
+            "techniques for (#2440). Gates TRAIN-offer signature-technique "
+            "availability to learners who belong to the same Tradition "
+            "(CharacterTradition membership). Blank = the role only trains "
+            "shared (Path × Gift) pool techniques, no tradition signatures."
+        ),
+    )
     is_active = models.BooleanField(
         default=True,
         help_text=(
@@ -702,6 +716,77 @@ class LoanOfferDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"LoanOffer: {self.offer.label} ({self.principal} @ {self.interest_bps_monthly}bps)"
+
+
+class TrainOfferDetails(SharedMemoryModel):
+    """Per-kind details for ``NPCServiceOffer`` rows of kind=TRAIN (#2440).
+
+    One offer row per teachable technique — the smallest shape consistent
+    with the existing MENU/POOL selection modes: a role's Academy trainer
+    authors one TRAIN offer (mirroring how MISSION/PERMIT rows enumerate one
+    row per template/kind) for each technique they can teach, and
+    ``available_offers``' normal eligibility-rule filtering already handles
+    per-learner availability (whether the technique is in that character's
+    (Path × Gift) pool or their Tradition's signature list — see
+    ``world.npc_services.effects.run_train_offer``). No richer per-offer
+    parameterization (a picker of several techniques on one offer) is
+    needed: MENU-mode already surfaces every eligible offer as its own menu
+    line, one per technique, which reads naturally as "the trainer's
+    curriculum."
+
+    ``learn_ap_cost``/``gold_cost`` mirror ``TechniqueTeachingOffer``'s
+    fields — the same shared ``charge_and_learn`` seam
+    (``world.magic.services.gift_acquisition``) consumes both. Unlike the
+    teaching-offer path, TRAIN also always charges exactly one unredeemed
+    Golden Hare (``currency.FavorTokenDetails``) issued by the Academy —
+    the venue, per the #2428 ruling that Hares are Academy-specific
+    regardless of the trainer's own taught Tradition. Deliberately does
+    NOT use ``NPCServiceOffer.ap_cost`` (the generic pre-dispatch AP charge
+    used by COLLECTION/IMPROVEMENT, applied unconditionally by
+    ``services._charge_offer_ap`` before the handler runs) — the
+    has-gift/major-gift AP multiplier logic in ``charge_and_learn`` would
+    double-charge against that flat knob, so TRAIN offers are authored with
+    ``NPCServiceOffer.ap_cost=0`` (``clean()`` below enforces it; see also
+    ``world.npc_services.effects.TrainOfferMisconfiguredError``, the
+    runtime backstop for authoring paths that skip ``full_clean()``).
+    """
+
+    offer = models.OneToOneField(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="train_offer_details",
+        help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
+    )
+    technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.PROTECT,
+        related_name="train_offers",
+        help_text="The technique this trainer teaches on this offer.",
+    )
+    learn_ap_cost = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Base AP the learner pays to accept, before the has-gift/"
+            "major-gift multiplier (mirrors TechniqueTeachingOffer.learn_ap_cost)."
+        ),
+    )
+    gold_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Coin charged to the learner's purse, credited to the Academy's treasury.",
+    )
+
+    def clean(self) -> None:
+        """Reject a nonzero ``offer.ap_cost`` — see the class docstring."""
+        if self.offer_id is not None and self.offer.ap_cost != 0:
+            msg = (
+                "TRAIN offers must author NPCServiceOffer.ap_cost=0 — the AP charge "
+                "flows entirely through learn_ap_cost via charge_and_learn; a nonzero "
+                "ap_cost would double-charge the learner."
+            )
+            raise ValidationError({"offer": msg})
+
+    def __str__(self) -> str:
+        return f"TrainOffer: {self.offer.label} teaches {self.technique.name}"
 
 
 REGARD_MIN = -1000
