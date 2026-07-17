@@ -1603,6 +1603,78 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         aura = CharacterAura.objects.get(character=character)
         assert aura.glimpse_story == ""
 
+    def test_finalize_persists_glimpse_tags_and_state(self):
+        """glimpse_tag_ids from draft_data become CharacterGlimpseTag rows."""
+        from world.magic.constants import GlimpseState, GlimpseTagAxis
+        from world.magic.factories import GlimpseTagFactory
+        from world.magic.models import CharacterAura, CharacterGlimpseTag
+
+        tone = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="fin-tone")
+        consequence = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="fin-consequence")
+        draft = self._create_draft(glimpse_tag_ids=[tone.pk, consequence.pk])
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character)
+        assert aura.glimpse_state == GlimpseState.TAGS_ONLY
+        assert CharacterGlimpseTag.objects.filter(aura=aura).count() == 2
+
+    def test_finalize_with_tags_and_prose_is_complete(self):
+        """Both tags and prose present should compute COMPLETE glimpse_state."""
+        from world.magic.constants import GlimpseState, GlimpseTagAxis
+        from world.magic.factories import GlimpseTagFactory
+        from world.magic.models import CharacterAura
+
+        tone = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="fin-tone-2")
+        draft = self._create_draft(
+            glimpse_tag_ids=[tone.pk],
+            glimpse_story="I burned the barn down.",
+        )
+        character = finalize_character(draft, add_to_roster=True)
+        aura = CharacterAura.objects.get(character=character)
+        assert aura.glimpse_state == GlimpseState.COMPLETE
+
+    def test_finalize_links_glimpse_distinctions(self):
+        """Chosen distinctions listed in glimpse_linked_distinction_ids get from_glimpse."""
+        from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
+        from world.distinctions.models import CharacterDistinction
+        from world.magic.models import CharacterAura
+
+        category = DistinctionCategoryFactory(name="Glimpse Test Category")
+        distinction = DistinctionFactory(
+            name="Glimpse Test Distinction",
+            category=category,
+            cost_per_rank=5,
+            max_rank=1,
+            is_active=True,
+        )
+        draft = self._create_draft(
+            distinctions=[
+                {
+                    "distinction_id": distinction.id,
+                    "distinction_name": distinction.name,
+                    "distinction_slug": distinction.slug,
+                    "category_slug": category.slug,
+                    "rank": 1,
+                    "cost": 5,
+                    "notes": "",
+                },
+            ],
+            glimpse_linked_distinction_ids=[distinction.pk],
+        )
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character)
+        cd = CharacterDistinction.objects.get(character=character, distinction=distinction)
+        assert cd.from_glimpse_id == aura.pk
+
+    def test_finalize_ignores_unknown_linked_distinction_ids(self):
+        """Ids that never materialized as CharacterDistinction rows are skipped."""
+        from world.magic.models import CharacterAura
+
+        draft = self._create_draft(glimpse_linked_distinction_ids=[999999])
+        character = finalize_character(draft, add_to_roster=True)
+        assert CharacterAura.objects.filter(character=character).exists()
+
 
 class FinalizeGMCharacterTests(TestCase):
     @classmethod
