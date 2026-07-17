@@ -30,6 +30,10 @@ A school of magical practice. Every character has exactly one — the self-taugh
 **Tradition Training**:
 A rankable distinction that scales a character's CG starting-technique-pick budget: baseline (Unbound, no distinction) is 1 pick, and each rank of Tradition Training adds +1 (rank 1 → 2 picks, rank 2 → 3). Data-modeled as a `ModifierTarget` ("Starting Technique Picks") + `DistinctionEffect`, read at draft time via the existing `CharacterDraft._get_distinction_bonus` — no new mechanism. Real (non-Unbound) traditions require this distinction at CG via `BeginningTradition.required_distinction`. (#2426, ADR-0136.)
 
+**Unbound (drawback)**:
+The `Distinction` (slug `unbound`, negative `cost_per_rank`) auto-carried by picking the Unbound Tradition — CG's own `select_tradition` endpoint auto-adds it to the draft when missing, a one-off exception to the normal "must already hold the required distinction first" gate (Orphaned Tradition keeps that normal gate; Unbound is CG's tradition-agnostic default and must stay completable with zero manual steps). Its `DistinctionEffect` carries a +50% surcharge on the `magic_learning_ap_cost` `ModifierTarget`: self-taught mages pay more Action Points to learn techniques (`charge_and_learn`'s AP scale, both front doors) — TIME, not power; resonance is untouched. Shed automatically on joining a living Tradition (`join_tradition`), re-applied on leaving one (`leave_tradition`) — the underlying `CharacterModifier` cascade-deletes with the distinction, so the surcharge tracks membership with no separate cleanup. (#2441, #2442.)
+_Avoid_: conflating this with the `Unbound` Tradition row itself (see "Tradition" above) — the Tradition is the school-of-practice entity; this is the drawback distinction a traditionless character carries while in it.
+
 **Gift-thread**:
 The Thread woven into a Gift: its level sets the Gift's strength (more and stronger techniques) and its resonance sets the Gift's affinity. The costliest thread kind, because it gates magical power. (ADR-0051, ADR-0052.)
 

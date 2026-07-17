@@ -22,7 +22,10 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.views import APIView
 
-from world.character_creation.constants import ApplicationStatus
+from world.character_creation.constants import (
+    UNBOUND_DRAWBACK_DISTINCTION_SLUG,
+    ApplicationStatus,
+)
 from world.character_creation.filters import (
     CGGiftOptionFilter,
     CGTechniqueOptionFilter,
@@ -712,10 +715,23 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         Gates on ``BeginningTradition.required_distinction`` (#2426): a tradition
         that requires formal training may only be selected once the draft already
         holds that distinction (added via the distinctions app). There is no
-        auto-attach — `world.distinctions.views` only *clears* the selected
+        general auto-attach — `world.distinctions.views` only *clears* the selected
         tradition when its required distinction is later removed
         (`_clear_tradition_if_required_distinction_removed`); it never adds one.
+
+        **One deliberate exception (#2442):** the "Unbound" drawback distinction
+        (``UNBOUND_DRAWBACK_DISTINCTION_SLUG``) IS auto-added when missing, instead
+        of rejecting the request. Unbound is CG's tradition-agnostic default (#2426)
+        — unlike Orphaned Tradition (a deliberate story pick, #2428 Task 5), a
+        player must not be forced to already know about this one specific drawback
+        before CG can complete; see
+        ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
+        .test_tradition_step_completable_for_every_seeded_beginning`` for the
+        "CG must remain completable via the Unbound path with zero manual steps"
+        regression proof #2426 shipped, which this exception preserves.
         """
+        from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
+
         draft = self.get_object()
         tradition_id = request.data.get("tradition_id")
 
@@ -735,22 +751,28 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 {"detail": "This tradition is not available for the selected beginning."}
             )
 
+        update_fields = ["selected_tradition"]
         if bt.required_distinction_id:
-            held_distinction_ids = {
-                entry.get("distinction_id") for entry in draft.draft_data.get("distinctions", [])
-            }
+            distinctions = draft.draft_data.get("distinctions", [])
+            held_distinction_ids = {entry.get("distinction_id") for entry in distinctions}
             if bt.required_distinction_id not in held_distinction_ids:
-                raise ValidationError(
-                    {
-                        "detail": (
-                            "This tradition requires formal training (take its distinction first)."
-                        )
-                    }
-                )
+                if bt.required_distinction.slug == UNBOUND_DRAWBACK_DISTINCTION_SLUG:
+                    distinctions.append(build_distinction_entry(bt.required_distinction, rank=1))
+                    draft.draft_data["distinctions"] = distinctions
+                    update_fields.append("draft_data")
+                else:
+                    raise ValidationError(
+                        {
+                            "detail": (
+                                "This tradition requires formal training "
+                                "(take its distinction first)."
+                            )
+                        }
+                    )
 
         tradition = get_object_or_404(Tradition, pk=tradition_id, is_active=True)
         draft.selected_tradition = tradition
-        draft.save(update_fields=["selected_tradition"])
+        draft.save(update_fields=update_fields)
 
         serializer = self.get_serializer(draft)
         return Response(serializer.data)

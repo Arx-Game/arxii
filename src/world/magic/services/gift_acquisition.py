@@ -5,10 +5,14 @@ charge_and_learn: the shared charge+acquire core (implicitly acquires the
 gift on the first technique learned) — one seam, two front doors:
 accept_technique_offer (player-to-player teaching, #1587) and the Academy
 TRAIN offer handler (world.npc_services.effects.run_train_offer, #2440).
+charge_and_learn also applies the Unbound magic-learning AP surcharge (#2442,
+_magic_learning_ap_cost_surcharge_percent) — TIME, not power; resonance
+earning/spending is untouched.
 """
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -236,6 +240,39 @@ def _resolve_resonance_for(gift: Gift, claimed_ids: set[int]):
     return next((r for r in supported if r.pk in claimed_ids), supported[0])
 
 
+def _magic_learning_ap_cost_surcharge_percent(learner: CharacterSheet) -> int:
+    """Live AP surcharge percent for magic-learning activities (#2442).
+
+    Resolves the learner's ``magic_learning_ap_cost`` modifier through the live
+    post-CG ``CharacterModifier`` resolution path
+    (``world.mechanics.services.get_modifier_total``) — the same seam every other
+    distinction-authored modifier is read through, NOT the CG-draft
+    ``CharacterDraft._get_distinction_bonus`` helper (that only reads a draft's
+    in-progress ``draft_data``, never a committed ``CharacterDistinction``). The
+    "Unbound" drawback distinction (``world.seeds.character_creation
+    .ensure_unbound_drawback_distinction``) is the sole authored source today
+    (+50); 0 for a learner who has shed it (or never held it — e.g. via
+    ``world.magic.services.tradition_membership.join_tradition``) and 0 (no
+    surcharge) if the seed target row doesn't exist yet on this DB — mirrors the
+    defensive-tolerance convention elsewhere in the #2441/#2442 cluster (e.g.
+    ``tradition_membership._reapply_unbound_drawback``).
+    """
+    from world.magic.constants import (  # noqa: PLC0415
+        MAGIC_LEARNING_AP_COST_TARGET_NAME,
+        MAGIC_MODIFIER_CATEGORY_NAME,
+    )
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    target = ModifierTarget.objects.filter(
+        name=MAGIC_LEARNING_AP_COST_TARGET_NAME,
+        category__name=MAGIC_MODIFIER_CATEGORY_NAME,
+    ).first()
+    if target is None:
+        return 0
+    return get_modifier_total(learner, target)
+
+
 @transaction.atomic
 def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; params co-equal
     learner: CharacterSheet,
@@ -258,6 +295,13 @@ def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; 
     acquires it (via grant_gift_to_character). The first technique from
     a not-yet-acquired gift costs more AP (config.first_technique_ap_multiplier)
     and requires a CharacterGiftUnlock receipt (the XP gate).
+
+    After the has-gift/major-gift multiplier, the Unbound magic-learning AP
+    surcharge (#2442) scales the result: ``ceil(ap_cost × (100 + surcharge%) /
+    100)``, where ``surcharge%`` is the learner's live ``magic_learning_ap_cost``
+    modifier total (``_magic_learning_ap_cost_surcharge_percent``, +50 while the
+    "Unbound" drawback distinction is held, 0 once shed via
+    ``world.magic.services.tradition_membership.join_tradition``).
 
     Args:
         learner: The character learning the technique.
@@ -333,6 +377,13 @@ def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; 
         ap_cost = base_ap_cost * config.major_gift_ap_multiplier
     else:
         ap_cost = base_ap_cost
+
+    # 3b. Unbound magic-learning AP surcharge (#2442) — TIME, not power; applies
+    # identically to both front doors (accept_technique_offer and #2440 TRAIN),
+    # since both delegate here. ceil() so a fractional surcharge never rounds down
+    # to a free ride.
+    surcharge_percent = _magic_learning_ap_cost_surcharge_percent(sheet)
+    ap_cost = math.ceil(ap_cost * (100 + surcharge_percent) / 100)
 
     # 4. Implicit gift acquisition (first technique).
     if not has_gift:

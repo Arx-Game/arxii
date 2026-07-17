@@ -605,3 +605,123 @@ class OrphanedTraditionSelectionTests(TestCase):
         assert response.status_code == status.HTTP_200_OK
         draft.refresh_from_db()
         assert draft.selected_tradition == self.tradition
+
+
+class UnboundTraditionSelectionTests(TestCase):
+    """End-to-end: the seeded Unbound tradition carries its own "Unbound"
+    drawback distinction, auto-added by the real select-tradition endpoint
+    (#2442).
+
+    Reuses #2426's ``BeginningTradition.required_distinction`` gate, now wired
+    onto Unbound's own seeded row (``seed_beginning_traditions()``,
+    ``required_distinction=<Unbound drawback>`` — was ``None`` pre-#2442).
+
+    **CG-UX finding (per the #2442 task brief's "verify the UX" instruction):**
+    the generic gate (``OrphanedTraditionSelectionTests`` above) rejects a
+    selection when the draft doesn't already hold the required distinction —
+    that's correct and unchanged for Orphaned Tradition/Metallic Order, a
+    deliberate story pick (#2428 Task 5). Naively reusing that same "requires,
+    never auto-adds" behavior for Unbound would have been a real CG-completion
+    regression: Unbound is CG's tradition-agnostic *default*, seeded with zero
+    gate for every Beginning since #2426 (see
+    ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
+    .test_tradition_step_completable_for_every_seeded_beginning``, which drives
+    the real endpoint with a draft holding NO distinctions at all and asserts
+    200). Silently making Unbound require a distinction the player has no
+    reason to know about would deadlock CG for anyone who doesn't take it.
+
+    So ``select_tradition`` special-cases exactly the "Unbound" drawback slug
+    (``UNBOUND_DRAWBACK_DISTINCTION_SLUG``): missing → auto-added to the draft's
+    ``draft_data["distinctions"]`` (via the same ``build_distinction_entry``
+    shape the real distinctions-add endpoint writes) rather than rejected.
+    Every other ``required_distinction`` (Orphaned Tradition included) keeps the
+    original "must already hold it" behavior — this is a one-off exception, not
+    a general auto-attach.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.distinctions.models import Distinction
+        from world.seeds.character_creation import seed_beginning_traditions
+
+        cls.account = AccountFactory()
+        cls.unbound = TraditionFactory(name="Unbound")
+        cls.beginning = BeginningsFactory()
+
+        seed_beginning_traditions()
+        cls.distinction = Distinction.objects.get(slug="unbound")
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def _create_draft(self, **kwargs):
+        defaults = {
+            "account": self.account,
+            "selected_beginnings": self.beginning,
+        }
+        defaults.update(kwargs)
+        return CharacterDraftFactory(**defaults)
+
+    def _add_distinction_to_draft(self, draft, distinction):
+        distinctions = draft.draft_data.get("distinctions", [])
+        distinctions.append(
+            {
+                "distinction_id": distinction.id,
+                "distinction_name": distinction.name,
+                "distinction_slug": distinction.slug,
+                "category_slug": distinction.category.slug,
+                "rank": 1,
+                "cost": distinction.calculate_total_cost(1),
+                "notes": "",
+            }
+        )
+        draft.draft_data["distinctions"] = distinctions
+        draft.save(update_fields=["draft_data"])
+
+    def test_seed_wires_required_distinction(self):
+        """Sanity: seed_beginning_traditions() now gates Unbound on its own drawback."""
+        bt = BeginningTradition.objects.get(beginning=self.beginning, tradition=self.unbound)
+        assert bt.required_distinction_id == self.distinction.id
+
+    def test_selectable_without_the_drawback_and_auto_adds_it(self):
+        """Unbound stays selectable with zero manual steps (no CG regression) —
+        the drawback is auto-added to the draft rather than rejected."""
+        draft = self._create_draft()
+        assert draft.draft_data.get("distinctions", []) == []
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": self.unbound.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        draft.refresh_from_db()
+        assert draft.selected_tradition == self.unbound
+        distinction_ids = {
+            entry.get("distinction_id") for entry in draft.draft_data.get("distinctions", [])
+        }
+        assert self.distinction.id in distinction_ids
+
+    def test_selectable_once_the_draft_already_holds_the_drawback(self):
+        """A draft that already holds the drawback selects Unbound without
+        duplicating the entry."""
+        draft = self._create_draft()
+        self._add_distinction_to_draft(draft, self.distinction)
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": self.unbound.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        draft.refresh_from_db()
+        assert draft.selected_tradition == self.unbound
+        matching = [
+            entry
+            for entry in draft.draft_data.get("distinctions", [])
+            if entry.get("distinction_id") == self.distinction.id
+        ]
+        assert len(matching) == 1

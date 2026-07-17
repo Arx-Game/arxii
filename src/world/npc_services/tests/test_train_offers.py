@@ -1,5 +1,6 @@
 """TRAIN offer kind (#2440): Academy trainers teach techniques for AP + coin + a Hare."""
 
+import math
 from unittest import mock
 
 from django.core.exceptions import ValidationError
@@ -402,3 +403,85 @@ class TrainOfferApCostGuardTests(TestCase):
         result = run_train_offer(offer, self.persona)
         self.assertIsNone(result.object_pk)
         self.assertIn("isn't yours to learn", result.message)
+
+
+class TrainOfferUnboundSurchargeTests(TestCase):
+    """The Unbound magic-learning AP surcharge (#2442) on the Academy TRAIN
+    door — the other of ``charge_and_learn``'s two front doors (#2440), proving
+    the surcharge applies identically here as it does on the PC-teaching-accept
+    door (see world.magic.tests.test_gift_acquisition_service
+    .UnboundMagicLearningApSurchargeTest)."""
+
+    def setUp(self) -> None:
+        from world.action_points.models import ActionPointPool
+        from world.seeds.character_creation import ensure_unbound_drawback_distinction
+
+        self.academy = OrganizationFactory(name="Shroudwatch Academy")
+        self.persona = PersonaFactory()
+        self.sheet = self.persona.character_sheet
+        self.character = self.sheet.character
+
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.gift.resonances.add(ResonanceFactory())
+        self.technique = TechniqueFactory(gift=self.gift)
+        self.path = PathFactory()
+        CharacterPathHistoryFactory(character=self.character, path=self.path)
+        grant = PathGiftGrantFactory(path=self.path, gift=self.gift)
+        grant.starter_techniques.add(self.technique)
+
+        CharacterGiftUnlockFactory(character=self.sheet, unlock=GiftUnlockFactory(gift=self.gift))
+
+        self.role = NPCRoleFactory(faction_affiliation=self.academy)
+        self.offer = NPCServiceOfferFactory(
+            role=self.role, kind=OfferKind.TRAIN, label="Learn a technique", is_final=True
+        )
+        self.details = TrainOfferDetailsFactory(
+            offer=self.offer, technique=self.technique, learn_ap_cost=5, gold_cost=0
+        )
+
+        self.ap_pool = ActionPointPool.get_or_create_for_character(self.character)
+        self.ap_pool.current = 200
+        self.ap_pool.save()
+        self.purse = get_or_create_purse(self.sheet)
+        self.purse.balance = 1000
+        self.purse.save()
+        self.token = mint_favor_token(self.academy, self.sheet, provenance_note="Cleared the trial")
+
+        self.unbound_distinction = ensure_unbound_drawback_distinction()
+
+    def test_unbound_learner_pays_surcharge_on_train(self) -> None:
+        from world.distinctions.services import grant_distinction
+        from world.distinctions.types import DistinctionOrigin
+        from world.magic.services.gift_acquisition import get_gift_acquisition_config
+
+        grant_distinction(
+            self.sheet, self.unbound_distinction, origin=DistinctionOrigin.CHARACTER_CREATION
+        )
+
+        result = run_train_offer(self.offer, self.persona)
+
+        known = CharacterTechnique.objects.filter(character=self.sheet, technique=self.technique)
+        self.assertTrue(known.exists())
+        self.assertIsNotNone(result.object_pk)
+
+        config = get_gift_acquisition_config()
+        # gift not yet owned -> first_technique_ap_multiplier applies, THEN the
+        # +50% Unbound surcharge (ceil).
+        base = self.details.learn_ap_cost * config.first_technique_ap_multiplier
+        expected_ap = math.ceil(base * 1.5)
+        self.ap_pool.refresh_from_db()
+        self.assertEqual(self.ap_pool.current, 200 - expected_ap)
+
+    def test_non_unbound_learner_unaffected_on_train(self) -> None:
+        from world.magic.services.gift_acquisition import get_gift_acquisition_config
+
+        result = run_train_offer(self.offer, self.persona)
+
+        known = CharacterTechnique.objects.filter(character=self.sheet, technique=self.technique)
+        self.assertTrue(known.exists())
+        self.assertIsNotNone(result.object_pk)
+
+        config = get_gift_acquisition_config()
+        expected_ap = self.details.learn_ap_cost * config.first_technique_ap_multiplier
+        self.ap_pool.refresh_from_db()
+        self.assertEqual(self.ap_pool.current, 200 - expected_ap)

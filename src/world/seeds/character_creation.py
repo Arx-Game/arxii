@@ -25,6 +25,7 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
     STARTING_TECHNIQUE_PICKS_TARGET,
+    UNBOUND_DRAWBACK_DISTINCTION_SLUG,
     UNBOUND_TRADITION_NAME,
 )
 from world.character_creation.models import Beginnings, StartingArea
@@ -319,6 +320,13 @@ _UNBOUND_TRADITION_NAME = UNBOUND_TRADITION_NAME
 #: tests resolves this by name; the CG-finalize hook never reads it.
 _ORPHANED_TRADITION_DISTINCTION_SLUG = "orphaned-tradition"
 
+#: Canonical name: ``world.character_creation.constants.UNBOUND_DRAWBACK_DISTINCTION_SLUG``
+#: (#2442). Also referenced by name (this exact string) in
+#: ``world.magic.services.tradition_membership`` (the
+#: ``_SHED_ON_JOIN_SLUGS``/``_REAPPLY_ON_LEAVE_SLUG`` constants, #2441 Task 8/9) —
+#: keep in sync if this ever changes.
+_UNBOUND_DRAWBACK_DISTINCTION_SLUG = UNBOUND_DRAWBACK_DISTINCTION_SLUG
+
 #: Name for the one example orphaned Arx tradition seeded alongside the
 #: drawback (#2428 Task 5). Richer lore ("ancient Traditions for the Metallic
 #: Order and the Fractals of the Abyss" per the #2428 vision) is a lore-repo
@@ -326,8 +334,116 @@ _ORPHANED_TRADITION_DISTINCTION_SLUG = "orphaned-tradition"
 _METALLIC_ORDER_TRADITION_NAME = "Metallic Order"
 
 
+def wire_magic_learning_ap_cost_target():
+    """Seed the 'magic_learning_ap_cost' ModifierTarget (#2442).
+
+    A live-play percent AP surcharge on magic-learning activities: the "Unbound"
+    drawback distinction (``ensure_unbound_drawback_distinction`` below) authors a
+    +50 ``DistinctionEffect`` targeting this row. Read at the technique-acquisition
+    seam (``world.magic.services.gift_acquisition.charge_and_learn``) via
+    ``world.mechanics.services.get_modifier_total`` — the live post-CG
+    ``CharacterModifier`` resolution path every other distinction-authored modifier
+    uses, NOT the CG-draft ``CharacterDraft._get_distinction_bonus`` helper (that
+    reads a draft's in-progress ``draft_data``, never a committed
+    ``CharacterDistinction``). Idempotent via get_or_create on (category, name) —
+    mirrors ``wire_starting_technique_picks_target`` above.
+    """
+    from world.magic.constants import (  # noqa: PLC0415
+        MAGIC_LEARNING_AP_COST_TARGET_NAME,
+        MAGIC_MODIFIER_CATEGORY_NAME,
+    )
+    from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+
+    category, _ = ModifierCategory.objects.get_or_create(name=MAGIC_MODIFIER_CATEGORY_NAME)
+    target, _ = ModifierTarget.objects.get_or_create(
+        name=MAGIC_LEARNING_AP_COST_TARGET_NAME,
+        category=category,
+        defaults={
+            "description": (
+                "Percent AP surcharge on magic-learning activities (technique "
+                "acquisition — teaching-offer accepts and #2440 TRAIN offers)."
+            ),
+        },
+    )
+    return target
+
+
+def ensure_unbound_drawback_distinction():
+    """Seed the 'Unbound' drawback distinction (#2442).
+
+    Marks a character as self-taught/traditionless-in-play: a +50%-AP-cost
+    surcharge on magic-learning activities (the "uphill battle" the Unbound codex
+    lore describes — TIME, not power; resonance earning/spending is untouched, per
+    the 2026-07-17 spec correction). Wired onto the Unbound ``BeginningTradition``
+    row via ``required_distinction`` (``seed_beginning_traditions`` below) — the
+    same #2426 gate ``ensure_tradition_training_distinction``/
+    ``ensure_orphaned_tradition_distinction`` use, so selecting Unbound at CG
+    requires the drawback already be in the draft (no auto-attach — mirrors
+    Orphaned Tradition's shape exactly; ``world.character_creation.views
+    .TraditionViewSet.select_tradition``'s gate is generic and was not changed by
+    this task).
+
+    ``cost_per_rank=-2`` mirrors ``ensure_orphaned_tradition_distinction``'s
+    convention (a modest CG point refund; the drawback's teeth are the AP
+    surcharge, not the refund). Shed automatically on joining a living tradition
+    and re-applied on leaving one (``world.magic.services.tradition_membership``,
+    #2441 Task 8/9) — this seed only authors the row; the shed/reapply lifecycle
+    lives there.
+
+    "Arcane" reuses the magic-flavored ``DistinctionCategory`` first seeded by
+    ``ensure_tradition_training_distinction`` (get_or_create is a no-op on a
+    second creation regardless of call order). Idempotent via get_or_create /
+    update_or_create; never overwrites a staff-adjusted ``Distinction`` row (the
+    ``DistinctionEffect`` value is re-synced on every run, same as
+    ``ensure_tradition_training_distinction``'s).
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionEffect,
+    )
+
+    target = wire_magic_learning_ap_cost_target()
+
+    category, _ = DistinctionCategory.objects.get_or_create(
+        slug="arcane",
+        defaults={
+            "name": "Arcane",
+            "description": (
+                "Distinctions tied to a character's magical tradition, practice, or gifts."
+            ),
+        },
+    )
+    distinction, _ = Distinction.objects.get_or_create(
+        slug=_UNBOUND_DRAWBACK_DISTINCTION_SLUG,
+        defaults={
+            "name": "Unbound",
+            "category": category,
+            "description": (
+                "PLACEHOLDER: self-taught, with no living tradition to formally guide "
+                "your practice — your magic develops just as strong as anyone "
+                "else's, only slower. Shed automatically the moment you join a "
+                "tradition. Content-overridable — real lore lives in the private "
+                "lore repo."
+            ),
+            "cost_per_rank": -2,
+            "max_rank": 1,
+        },
+    )
+    DistinctionEffect.objects.update_or_create(
+        distinction=distinction,
+        target=target,
+        defaults={
+            "value_per_rank": 50,
+            "description": "+50% AP cost on magic-learning activities.",
+        },
+    )
+    return distinction
+
+
 def seed_beginning_traditions() -> None:
-    """Seed a BeginningTradition (Unbound, no gate) for every seeded Beginnings row.
+    """Seed a BeginningTradition (Unbound, gated on the "Unbound" drawback) for
+    every seeded Beginnings row.
 
     Without this, the CG Tradition step is empty for every Beginning on a fresh
     Big-Button-only DB: ``TraditionViewSet.get_queryset()`` returns nothing when
@@ -340,9 +456,14 @@ def seed_beginning_traditions() -> None:
     ``world.seeds.game_content.magic.seed_starter_gift_catalog`` (the "magic"
     cluster), which runs BEFORE "character_creation" in cluster order
     (``world.seeds.clusters``) precisely so both sides of this join exist by the
-    time this function runs. ``required_distinction=None`` — Unbound is the
-    tradition-agnostic default, open to every beginning with no gate.
-    Idempotent via get_or_create; never overwrites a staff-adjusted row.
+    time this function runs. ``required_distinction=<Unbound drawback>`` (#2442,
+    was ``None`` pre-#2442) — selecting Unbound now requires the draft already
+    hold the "Unbound" drawback distinction, exactly the same gate shape
+    ``seed_metallic_order_tradition`` uses for its orphaned-tradition example
+    (no auto-attach anywhere in the stack; see ``ensure_unbound_drawback_
+    distinction``'s docstring). Idempotent via get_or_create; never overwrites a
+    staff-adjusted row — an already-seeded pre-#2442 row keeps
+    ``required_distinction=None`` until staff (or a fresh DB) re-seeds it.
 
     Skips silently (logged) if the Unbound tradition hasn't been seeded yet —
     cluster ordering guarantees this can't happen via the Big Button; defensive
@@ -360,11 +481,13 @@ def seed_beginning_traditions() -> None:
         )
         return
 
+    unbound_drawback = ensure_unbound_drawback_distinction()
+
     for beginning in Beginnings.objects.all():
         BeginningTradition.objects.get_or_create(
             beginning=beginning,
             tradition=unbound,
-            defaults={"required_distinction": None, "sort_order": 0},
+            defaults={"required_distinction": unbound_drawback, "sort_order": 0},
         )
 
 

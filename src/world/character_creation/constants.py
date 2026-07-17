@@ -58,6 +58,20 @@ SHROUDWATCH_ACADEMY_NAME = "Shroudwatch Academy"
 # finalize hook does the same rather than inventing a new marker.
 UNBOUND_TRADITION_NAME = "Unbound"
 
+# Slug of the "Unbound" drawback Distinction (#2442) — seeded by
+# ``world.seeds.character_creation.ensure_unbound_drawback_distinction`` and
+# wired onto Unbound's own ``BeginningTradition.required_distinction`` (same
+# seeder, ``seed_beginning_traditions``). Read by ``select_tradition``
+# (views.py) to special-case Unbound's auto-add UX: unlike Orphaned Tradition
+# (a deliberate opt-in pick, #2428 Task 5), Unbound is CG's tradition-agnostic
+# default — a player must not be forced to already know about this specific
+# drawback before CG can complete (see
+# ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
+# .test_tradition_step_completable_for_every_seeded_beginning``, the existing
+# "CG must remain completable via the Unbound path with zero manual steps"
+# regression proof #2426 shipped).
+UNBOUND_DRAWBACK_DISTINCTION_SLUG = "unbound"
+
 
 class Stage(models.IntegerChoices):
     """Character creation stages."""

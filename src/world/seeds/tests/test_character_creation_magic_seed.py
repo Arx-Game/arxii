@@ -10,6 +10,14 @@ Also covers ``seed_beginning_traditions()`` (#2426 whole-branch-review fix): the
 join-row seeder that links every seeded ``Beginnings`` to the magic-seeded
 "Unbound" Tradition, without which the CG Tradition step is empty on a fresh
 Big-Button-only DB.
+
+Also covers ``wire_magic_learning_ap_cost_target()`` + ``ensure_unbound_drawback_
+distinction()`` (#2442): the "Unbound" drawback distinction (+50% AP surcharge on
+magic-learning activities) now wired onto Unbound's own ``BeginningTradition`` rows
+via ``required_distinction`` — see ``world.magic.tests.test_gift_acquisition_service``
+and ``world.npc_services.tests.test_train_offers`` for the surcharge's live-play read,
+and ``world.character_creation.tests.test_traditions.UnboundTraditionSelectionTests``
+for the CG select-tradition endpoint behavior this gate produces.
 """
 
 from django.test import TestCase
@@ -29,8 +37,10 @@ from world.seeds.character_creation import (
     ensure_orphaned_tradition_distinction,
     ensure_shroudwatch_academy,
     ensure_tradition_training_distinction,
+    ensure_unbound_drawback_distinction,
     seed_beginning_traditions,
     seed_metallic_order_tradition,
+    wire_magic_learning_ap_cost_target,
     wire_starting_technique_picks_target,
 )
 
@@ -56,6 +66,39 @@ class WireStartingTechniquePicksTargetTests(TestCase):
     def test_idempotent_second_call_returns_same_row(self) -> None:
         first = wire_starting_technique_picks_target()
         second = wire_starting_technique_picks_target()
+
+        self.assertEqual(first.pk, second.pk)
+
+
+class WireMagicLearningApCostTargetTests(TestCase):
+    """First-call + idempotency assertions for the 'magic_learning_ap_cost'
+    ModifierTarget row (#2442)."""
+
+    def test_creates_modifier_target_in_magic_category(self) -> None:
+        from world.magic.constants import (
+            MAGIC_LEARNING_AP_COST_TARGET_NAME,
+            MAGIC_MODIFIER_CATEGORY_NAME,
+        )
+        from world.mechanics.models import ModifierCategory, ModifierTarget
+
+        target = wire_magic_learning_ap_cost_target()
+
+        self.assertEqual(target.name, MAGIC_LEARNING_AP_COST_TARGET_NAME)
+        self.assertEqual(target.category.name, MAGIC_MODIFIER_CATEGORY_NAME)
+        self.assertEqual(
+            ModifierCategory.objects.filter(name=MAGIC_MODIFIER_CATEGORY_NAME).count(), 1
+        )
+        self.assertEqual(
+            ModifierTarget.objects.filter(
+                name=MAGIC_LEARNING_AP_COST_TARGET_NAME,
+                category__name=MAGIC_MODIFIER_CATEGORY_NAME,
+            ).count(),
+            1,
+        )
+
+    def test_idempotent_second_call_returns_same_row(self) -> None:
+        first = wire_magic_learning_ap_cost_target()
+        second = wire_magic_learning_ap_cost_target()
 
         self.assertEqual(first.pk, second.pk)
 
@@ -116,6 +159,51 @@ class EnsureTraditionTrainingDistinctionTests(TestCase):
         self.assertEqual(draft.starting_technique_picks, 3)
 
 
+class EnsureUnboundDrawbackDistinctionTests(TestCase):
+    """First-call, idempotency, edit-preservation, and the +50% AP effect
+    shape for the 'Unbound' drawback distinction (#2442)."""
+
+    def test_creates_distinction_with_expected_shape(self) -> None:
+        from world.distinctions.models import Distinction, DistinctionEffect
+        from world.magic.constants import MAGIC_LEARNING_AP_COST_TARGET_NAME
+
+        ensure_unbound_drawback_distinction()
+
+        distinction = Distinction.objects.get(slug="unbound")
+        self.assertEqual(distinction.name, "Unbound")
+        self.assertEqual(distinction.max_rank, 1)
+        self.assertEqual(
+            distinction.cost_per_rank,
+            -2,
+            "Mirrors ensure_orphaned_tradition_distinction's -2 refund convention.",
+        )
+        self.assertEqual(distinction.category.slug, "arcane")
+
+        effect = DistinctionEffect.objects.get(distinction=distinction)
+        self.assertEqual(effect.target.name, MAGIC_LEARNING_AP_COST_TARGET_NAME)
+        self.assertEqual(effect.value_per_rank, 50)
+
+    def test_idempotent_second_call_creates_no_duplicates(self) -> None:
+        from world.distinctions.models import Distinction, DistinctionEffect
+
+        ensure_unbound_drawback_distinction()
+        ensure_unbound_drawback_distinction()
+
+        self.assertEqual(Distinction.objects.filter(slug="unbound").count(), 1)
+        self.assertEqual(DistinctionEffect.objects.filter(distinction__slug="unbound").count(), 1)
+
+    def test_staff_edit_to_distinction_survives_rerun(self) -> None:
+        from world.distinctions.models import Distinction
+
+        ensure_unbound_drawback_distinction()
+        Distinction.objects.filter(slug="unbound").update(description="staff-edited description")
+
+        ensure_unbound_drawback_distinction()
+
+        db_value = Distinction.objects.filter(slug="unbound").values("description").get()
+        self.assertEqual(db_value["description"], "staff-edited description")
+
+
 class SeedBeginningTraditionsTests(TestCase):
     """Tests for ``seed_beginning_traditions()`` (#2426 whole-branch-review fix).
 
@@ -137,7 +225,11 @@ class SeedBeginningTraditionsTests(TestCase):
         seed_beginning_traditions()
 
         bt = BeginningTradition.objects.get(beginning=beginning, tradition__name="Unbound")
-        self.assertIsNone(bt.required_distinction)
+        # #2442: Unbound now gates on its own "Unbound" drawback distinction —
+        # was required_distiction=None pre-#2442 (see EnsureUnboundDrawbackDistinctionTests
+        # for the drawback row's own shape).
+        self.assertIsNotNone(bt.required_distinction)
+        self.assertEqual(bt.required_distinction.slug, "unbound")
 
     def test_creates_a_row_for_every_beginning(self) -> None:
         from world.character_creation.models import BeginningTradition
@@ -440,4 +532,6 @@ class SeedMetallicOrderTraditionTests(TestCase):
             unbound_bt_count_before,
         )
         unbound_bt = BeginningTradition.objects.get(beginning=beginning, tradition=unbound)
-        self.assertIsNone(unbound_bt.required_distinction_id)
+        # #2442: Unbound's own row now gates on the "Unbound" drawback (not None).
+        self.assertIsNotNone(unbound_bt.required_distinction_id)
+        self.assertEqual(unbound_bt.required_distinction.slug, "unbound")

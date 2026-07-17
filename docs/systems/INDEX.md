@@ -2153,6 +2153,26 @@ register as additional kinds.
   `left_at__isnull=True`; `magic.services.ritual_knowledge.reconcile_ritual_knowledge`'s
   "all traditions in history" walk is deliberately unchanged (a different, intentionally
   permanent grant).
+- **Unbound magic-learning AP surcharge (#2442):** the "Unbound" drawback `Distinction`
+  (slug `unbound`, seeded by `world.seeds.character_creation
+  .ensure_unbound_drawback_distinction`, mirroring Task 5's `orphaned-tradition` shape —
+  `cost_per_rank=-2`, `max_rank=1`, category "Arcane") carries a +50 `DistinctionEffect` on
+  the new `magic_learning_ap_cost` `ModifierTarget` (category `magic`, seeded by
+  `wire_magic_learning_ap_cost_target`). `charge_and_learn` (`magic.services
+  .gift_acquisition`) reads it live via `world.mechanics.services.get_modifier_total` (the
+  post-CG `CharacterModifier` resolution path — NOT the CG-draft `_get_distinction_bonus`
+  helper) and scales AP: `ceil(ap_cost × (100 + surcharge%) / 100)`, applied identically to
+  both `charge_and_learn` front doors (accept + TRAIN). TIME, not power — resonance
+  earning/spending is untouched (a corrected-in-review alternative: taxing resonance would
+  have made the Unbound weaker, not slower). Every Unbound `BeginningTradition` row now
+  carries `required_distinction=<Unbound drawback>` (was `None` pre-#2442); unlike Orphaned
+  Tradition's deliberate "must already hold it" gate, `select_tradition`
+  (`character_creation.views`) auto-adds the Unbound drawback to the draft when missing — a
+  one-off exception preserving CG completability now that Unbound (CG's tradition-agnostic
+  default) carries a gate. Shed by `join_tradition`/re-applied by `leave_tradition` above —
+  the `CharacterModifier` row cascade-deletes with the `CharacterDistinction` row
+  (`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge
+  disappears automatically, no separate cleanup.
 - **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
   `(pc_persona, npc_persona)`) is atomically accumulated by
   `adjust_npc_affection(pc_persona, npc_persona, delta=...)` via `F()`. Social action

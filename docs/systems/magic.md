@@ -881,6 +881,29 @@ See `docs/systems/INDEX.md`'s "NPC Services" entry (and
 `world/npc_services/AGENT_GLOSSARY.md`) for the full TRAIN-offer flow (obligation gate,
 tradition-signature members-only availability, `NPCRole.teaches_tradition`).
 
+**Unbound magic-learning AP surcharge (#2442):** `charge_and_learn` applies one more scale
+after the has-gift/major-gift multiplier: `ap_cost = ceil(ap_cost × (100 + surcharge%) / 100)`,
+where `surcharge%` is the learner's live `magic_learning_ap_cost` modifier total
+(`_magic_learning_ap_cost_surcharge_percent`, resolved via `world.mechanics.services
+.get_modifier_total` — the post-CG `CharacterModifier` path, not the CG-draft
+`CharacterDraft._get_distinction_bonus` helper used during character creation). TIME, not
+power — resonance earning/spending is untouched; a self-taught mage develops just as strong,
+only slower. The "Unbound" drawback `Distinction` (slug `unbound`, seeded by
+`world.seeds.character_creation.ensure_unbound_drawback_distinction`) is the sole authored
+source today: a +50 `DistinctionEffect` on the `magic_learning_ap_cost` `ModifierTarget`
+(category `magic`, seeded by `wire_magic_learning_ap_cost_target`). Applies identically to
+both `charge_and_learn` front doors (accept + TRAIN) — one read, no duplication. Every seeded
+Unbound `BeginningTradition` row now carries `required_distinction=<Unbound drawback>`
+(`seed_beginning_traditions`, was `None` pre-#2442); `select_tradition`
+(`world.character_creation.views`) auto-adds the drawback to the draft when selecting Unbound
+without it already held — a one-off exception to #2426's normal "must already hold it" gate,
+needed because Unbound is CG's tradition-agnostic default (Orphaned Tradition/Metallic Order
+keep the un-auto-added behavior — that gate is a deliberate story pick, #2428 Task 5). Shed
+automatically via `world.magic.services.tradition_membership.join_tradition` and re-applied by
+`leave_tradition` (#2441 Task 8/9) — the underlying `CharacterModifier` row cascade-deletes with
+the `CharacterDistinction` row (`ModifierSource.character_distinction` is `on_delete=CASCADE`),
+so the surcharge disappears the moment the drawback is shed, no separate cleanup needed.
+
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
 Poll-able offer created on a successful Entrance social action; the entrant picks one
