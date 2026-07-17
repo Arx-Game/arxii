@@ -389,6 +389,10 @@ from actions.definitions.story_builder import (
     RemoveStoryAreaAction,
     StoryDigRoomAction,
     StoryEditRoomAction,
+    StoryLinkRoomsAction,
+    StoryPlaceRoomAction,
+    StoryRemoveRoomAction,
+    StoryUnlinkRoomsAction,
 )
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
@@ -804,6 +808,10 @@ _ALL_ACTIONS: list[Action] = [
     RemoveStoryAreaAction(),
     StoryDigRoomAction(),
     StoryEditRoomAction(),
+    StoryLinkRoomsAction(),
+    StoryUnlinkRoomsAction(),
+    StoryPlaceRoomAction(),
+    StoryRemoveRoomAction(),
 ]
 
 # Lookup by key

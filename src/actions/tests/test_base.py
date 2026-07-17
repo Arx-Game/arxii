@@ -507,6 +507,10 @@ class ActionRegistryTests(TestCase):
             "remove_story_area",
             "story_dig_room",
             "story_edit_room",
+            "story_link_rooms",
+            "story_unlink_rooms",
+            "story_place_room",
+            "story_remove_room",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

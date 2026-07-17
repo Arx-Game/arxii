@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from world.areas.models import Area
     from world.gm.models import GMProfile
 
+_EXIT_TYPECLASS = "typeclasses.exits.Exit"
+
 
 def _gm_profile_for(actor: ObjectDB) -> GMProfile | None:
     from world.gm.models import GMProfile  # noqa: PLC0415
@@ -105,6 +107,58 @@ def _parse_dig_room_grid(kwargs: dict[str, Any]) -> tuple[int | None, int | None
     except (KeyError, TypeError, ValueError):
         return None
     return grid_x, grid_y, floor
+
+
+def _resolve_exit(exit_id: Any) -> ObjectDB | None:
+    """Deliberately duplicated from ``world_builder.py:64`` — see module docstring."""
+    if not exit_id:
+        return None
+    return ObjectDB.objects.filter(pk=exit_id, db_typeclass_path=_EXIT_TYPECLASS).first()
+
+
+def _exit_pair(exit_obj: ObjectDB) -> list[ObjectDB]:
+    """The exit and its reverse-direction sibling (if one exists).
+
+    Deliberately duplicated from ``world_builder.py:70`` — see module docstring.
+    """
+    pair = [exit_obj]
+    reverse = ObjectDB.objects.filter(
+        db_typeclass_path=_EXIT_TYPECLASS,
+        db_location=exit_obj.db_destination,
+        db_destination=exit_obj.db_location,
+    ).first()
+    if reverse is not None:
+        pair.append(reverse)
+    return pair
+
+
+def _stranded_occupied_room(rooms: set[ObjectDB], dropped_exit_ids: set[int]) -> ObjectDB | None:
+    """The first room in ``rooms`` that would be left exit-less AND occupied.
+
+    Deliberately duplicated from ``world_builder.py:117`` — see module docstring.
+    """
+    from world.areas.grid_services import has_character_occupants  # noqa: PLC0415
+
+    for room in rooms:
+        if room is None:
+            # A dangling one-way exit can have a null db_location/db_destination
+            # (nullable FKs) — nothing to strand there.
+            continue
+        remaining = (
+            ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_location=room)
+            .exclude(pk__in=dropped_exit_ids)
+            .exists()
+        )
+        if not remaining and has_character_occupants(room):
+            return room
+    return None
+
+
+def _parse_aliases(raw: Any) -> tuple[str, ...]:
+    """Comma-separated alias string -> a tuple, empty when ``raw`` is falsy."""
+    if not raw:
+        return ()
+    return tuple(part.strip() for part in str(raw).split(",") if part.strip())
 
 
 @dataclass
@@ -295,3 +349,155 @@ class StoryEditRoomAction(_StoryBuilderAction):
             except RoomEditError as exc:
                 return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, message=f"{room_profile.objectdb.db_key} updated.")
+
+
+@dataclass
+class StoryLinkRoomsAction(_StoryBuilderAction):
+    """Link two owned story rooms with a named exit pair.
+
+    Kwargs: ``room_a_id``, ``room_b_id``, ``name``, ``reverse_name``, optional
+    ``alias``/``reverse_alias`` (comma-separated). Both rooms are resolved via
+    ``_resolve_owned_story_room`` — a canonical AUTHORED room or another GM's
+    story room fails resolution, which is what enforces "story rooms never
+    link into the canonical grid."
+    """
+
+    key: str = "story_link_rooms"
+    name: str = "Link Story Rooms"
+    icon: str = "link"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.areas.grid_services import create_exit_pair  # noqa: PLC0415
+
+        room_a, error = _resolve_owned_story_room(actor, kwargs.get("room_a_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+        room_b, error = _resolve_owned_story_room(actor, kwargs.get("room_b_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+        exit_name = (kwargs.get("name") or "").strip()
+        reverse_name = (kwargs.get("reverse_name") or "").strip()
+        if not exit_name or not reverse_name:
+            return ActionResult(
+                success=False, message="Both exit names are needed (one for each direction)."
+            )
+        create_exit_pair(
+            name=exit_name,
+            aliases=_parse_aliases(kwargs.get("alias")),
+            reverse_name=reverse_name,
+            reverse_aliases=_parse_aliases(kwargs.get("reverse_alias")),
+            room_a=room_a.objectdb,
+            room_b=room_b.objectdb,
+        )
+        return ActionResult(
+            success=True,
+            message=f"Linked {room_a.objectdb.db_key} <-> {room_b.objectdb.db_key}.",
+        )
+
+
+@dataclass
+class StoryUnlinkRoomsAction(_StoryBuilderAction):
+    """Remove an exit and its reverse sibling between owned story rooms. Kwarg: ``exit_id``.
+
+    Refuses only when the removal would leave an occupied room with zero
+    remaining exits, same guard as ``StaffUnlinkRoomsAction``.
+    """
+
+    key: str = "story_unlink_rooms"
+    name: str = "Unlink Story Rooms"
+    icon: str = "unlink"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        exit_obj = _resolve_exit(kwargs.get("exit_id"))
+        if exit_obj is None:
+            return ActionResult(success=False, message="No such exit.")
+        _room_profile, error = _resolve_owned_story_room(actor, exit_obj.db_location_id)
+        if error is not None:
+            return ActionResult(success=False, message=error)
+        pair = _exit_pair(exit_obj)
+        rooms = {exit_obj.db_location, exit_obj.db_destination}
+        stranded = _stranded_occupied_room(rooms, {e.pk for e in pair})
+        if stranded is not None:
+            return ActionResult(
+                success=False,
+                message=f"Removing that exit would strand {stranded.db_key}, which has "
+                "characters in it.",
+            )
+        for e in pair:
+            e.delete()
+        return ActionResult(success=True, message="Exit removed.")
+
+
+@dataclass
+class StoryPlaceRoomAction(_StoryBuilderAction):
+    """Place an owned story room on its area's map grid (cosmetic; canvas drag).
+
+    Kwargs: ``room_id``, ``grid_x``, ``grid_y``, optional ``floor``.
+    """
+
+    key: str = "story_place_room"
+    name: str = "Place Story Room"
+    icon: str = "move"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.areas.grid_services import GridServiceError, place_room_on_grid  # noqa: PLC0415
+
+        room_profile, error = _resolve_owned_story_room(actor, kwargs.get("room_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+        try:
+            grid_x, grid_y = int(kwargs["grid_x"]), int(kwargs["grid_y"])
+        except (KeyError, TypeError, ValueError):
+            return ActionResult(success=False, message="Pick a spot on the map.")
+        floor = kwargs.get("floor")
+        try:
+            place_room_on_grid(
+                profile=room_profile,
+                grid_x=grid_x,
+                grid_y=grid_y,
+                floor=int(floor) if floor is not None else room_profile.floor,
+            )
+        except GridServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message="Room placed.")
+
+
+@dataclass
+class StoryRemoveRoomAction(_StoryBuilderAction):
+    """Remove an owned story room. Kwarg: ``room_id``.
+
+    Refuses when the room has any contents (characters or items — empty it
+    first). No exported-room guard is needed — story rooms are always
+    ``origin=STORY`` and never carry a ``fixture_key`` by construction, so the
+    ``StaffRemoveRoomAction`` export check would never trigger here. Deletes
+    exits pointing in/out, then the room itself, atomically.
+    """
+
+    key: str = "story_remove_room"
+    name: str = "Remove Story Room"
+    icon: str = "trash"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from django.db import transaction  # noqa: PLC0415
+
+        from world.areas.grid_services import has_non_exit_contents  # noqa: PLC0415
+
+        room_profile, error = _resolve_owned_story_room(actor, kwargs.get("room_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+        room = room_profile.objectdb
+        if has_non_exit_contents(room):
+            return ActionResult(success=False, message="Empty the room first.")
+        with transaction.atomic():
+            ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_location=room).delete()
+            ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_destination=room).delete()
+            room.delete()
+        return ActionResult(success=True, message="Room removed.")

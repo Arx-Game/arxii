@@ -15,7 +15,9 @@ from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory, RoomProfileFactory
 from evennia_extensions.models import ObjectDisplayData, RoomProfile
-from world.areas.constants import GridOrigin
+from world.areas.constants import AreaLevel, GridOrigin
+from world.areas.factories import AreaFactory
+from world.areas.grid_services import create_exit_pair
 from world.areas.models import Area
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, StoryAreaFactory, seed_default_gm_level_caps
@@ -254,3 +256,217 @@ class StoryEditRoomActionTests(TestCase):
         assert not ObjectDisplayData.objects.filter(
             object=self.profile.objectdb, longname="Hijacked"
         ).exists()
+
+
+class StoryLinkRoomsActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.gm_actor, self.gm_profile = _gm_actor("LinkRoomsGM")
+        self.story = StoryAreaFactory(gm=self.gm_profile)
+        self.room_a = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+        self.room_b = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+
+    def test_gm_links_own_story_rooms(self) -> None:
+        from actions.definitions.story_builder import StoryLinkRoomsAction
+
+        result = StoryLinkRoomsAction().run(
+            self.gm_actor,
+            room_a_id=self.room_a.objectdb_id,
+            room_b_id=self.room_b.objectdb_id,
+            name="North Door",
+            reverse_name="South Door",
+        )
+        assert result.success
+        assert ObjectDB.objects.filter(
+            db_typeclass_path="typeclasses.exits.Exit",
+            db_location=self.room_a.objectdb,
+            db_destination=self.room_b.objectdb,
+        ).exists()
+        assert ObjectDB.objects.filter(
+            db_typeclass_path="typeclasses.exits.Exit",
+            db_location=self.room_b.objectdb,
+            db_destination=self.room_a.objectdb,
+        ).exists()
+
+    def test_link_to_canonical_room_fails(self) -> None:
+        from actions.definitions.story_builder import StoryLinkRoomsAction
+
+        canonical_area = AreaFactory(level=AreaLevel.WARD)
+        canonical_room = RoomProfileFactory(area=canonical_area, origin=GridOrigin.AUTHORED)
+        result = StoryLinkRoomsAction().run(
+            self.gm_actor,
+            room_a_id=self.room_a.objectdb_id,
+            room_b_id=canonical_room.objectdb_id,
+            name="North Door",
+            reverse_name="South Door",
+        )
+        assert not result.success
+        assert not ObjectDB.objects.filter(
+            db_typeclass_path="typeclasses.exits.Exit", db_location=self.room_a.objectdb
+        ).exists()
+
+    def test_link_to_foreign_gm_room_fails(self) -> None:
+        from actions.definitions.story_builder import StoryLinkRoomsAction
+
+        _other_gm_actor, other_gm_profile = _gm_actor("LinkRoomsOtherGM")
+        other_story = StoryAreaFactory(gm=other_gm_profile)
+        other_room = RoomProfileFactory(area=other_story.area, origin=GridOrigin.STORY)
+        result = StoryLinkRoomsAction().run(
+            self.gm_actor,
+            room_a_id=self.room_a.objectdb_id,
+            room_b_id=other_room.objectdb_id,
+            name="North Door",
+            reverse_name="South Door",
+        )
+        assert not result.success
+        assert not ObjectDB.objects.filter(
+            db_typeclass_path="typeclasses.exits.Exit", db_location=self.room_a.objectdb
+        ).exists()
+
+
+class StoryUnlinkRoomsActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.gm_actor, self.gm_profile = _gm_actor("UnlinkRoomsGM")
+        self.story = StoryAreaFactory(gm=self.gm_profile)
+        self.room_a = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+        self.room_b = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+        self.forward, self.backward = create_exit_pair(
+            name="North",
+            aliases=(),
+            reverse_name="South",
+            reverse_aliases=(),
+            room_a=self.room_a.objectdb,
+            room_b=self.room_b.objectdb,
+        )
+
+    def test_gm_unlinks_own_story_rooms(self) -> None:
+        from actions.definitions.story_builder import StoryUnlinkRoomsAction
+
+        result = StoryUnlinkRoomsAction().run(self.gm_actor, exit_id=self.forward.pk)
+        assert result.success
+        assert not ObjectDB.objects.filter(pk=self.forward.pk).exists()
+        assert not ObjectDB.objects.filter(pk=self.backward.pk).exists()
+
+    def test_refuses_to_strand_an_occupied_room(self) -> None:
+        from actions.definitions.story_builder import StoryUnlinkRoomsAction
+
+        occupant = CharacterFactory(db_key="StoryStranded", location=self.room_b.objectdb)
+        result = StoryUnlinkRoomsAction().run(self.gm_actor, exit_id=self.forward.pk)
+        assert not result.success
+        assert ObjectDB.objects.filter(pk=self.forward.pk).exists()
+        assert occupant.db_location_id == self.room_b.objectdb_id
+
+
+class StoryPlaceRoomActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.gm_actor, self.gm_profile = _gm_actor("PlaceRoomGM")
+        self.story = StoryAreaFactory(gm=self.gm_profile)
+        self.profile = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+
+    def test_gm_moves_own_room(self) -> None:
+        from actions.definitions.story_builder import StoryPlaceRoomAction
+
+        result = StoryPlaceRoomAction().run(
+            self.gm_actor, room_id=self.profile.objectdb_id, grid_x=3, grid_y=4
+        )
+        assert result.success
+        self.profile.refresh_from_db()
+        assert (self.profile.grid_x, self.profile.grid_y) == (3, 4)
+
+    def test_foreign_gm_rejected(self) -> None:
+        from actions.definitions.story_builder import StoryPlaceRoomAction
+
+        other_gm_actor, _ = _gm_actor("PlaceRoomOtherGM")
+        result = StoryPlaceRoomAction().run(
+            other_gm_actor, room_id=self.profile.objectdb_id, grid_x=3, grid_y=4
+        )
+        assert not result.success
+        self.profile.refresh_from_db()
+        assert self.profile.grid_x is None
+
+
+class StoryRemoveRoomActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.gm_actor, self.gm_profile = _gm_actor("RemoveRoomGM")
+        self.story = StoryAreaFactory(gm=self.gm_profile)
+        self.profile = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+
+    def test_story_room_has_no_fixture_key_by_construction(self) -> None:
+        assert self.profile.fixture_key is None
+        assert self.profile.origin == GridOrigin.STORY
+
+    def test_gm_removes_own_empty_room(self) -> None:
+        from actions.definitions.story_builder import StoryRemoveRoomAction
+
+        room_id = self.profile.objectdb_id
+        result = StoryRemoveRoomAction().run(self.gm_actor, room_id=room_id)
+        assert result.success
+        assert not RoomProfile.objects.filter(objectdb_id=room_id).exists()
+
+    def test_occupied_room_refused(self) -> None:
+        from actions.definitions.story_builder import StoryRemoveRoomAction
+
+        CharacterFactory(db_key="StoryOccupant", location=self.profile.objectdb)
+        result = StoryRemoveRoomAction().run(self.gm_actor, room_id=self.profile.objectdb_id)
+        assert not result.success
+        assert RoomProfile.objects.filter(objectdb_id=self.profile.objectdb_id).exists()
+
+    def test_remove_deletes_room_and_exits(self) -> None:
+        from actions.definitions.story_builder import StoryRemoveRoomAction
+
+        other_room = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+        forward, backward = create_exit_pair(
+            name="North",
+            aliases=(),
+            reverse_name="South",
+            reverse_aliases=(),
+            room_a=self.profile.objectdb,
+            room_b=other_room.objectdb,
+        )
+        room_id = self.profile.objectdb_id
+        result = StoryRemoveRoomAction().run(self.gm_actor, room_id=room_id)
+        assert result.success
+        assert not RoomProfile.objects.filter(objectdb_id=room_id).exists()
+        assert not ObjectDB.objects.filter(pk=forward.pk).exists()
+        assert not ObjectDB.objects.filter(pk=backward.pk).exists()
+        assert RoomProfile.objects.filter(objectdb_id=other_room.objectdb_id).exists()
+
+
+class StoryBuilderNonGMRejectionTests(TestCase):
+    """One non-GM rejects the four link/unlink/place/remove keys (#2450 task 6)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.player = _player_actor("StoryBuilderRejectionPlayer")
+
+    def test_non_gm_rejected_on_each_key(self) -> None:
+        from actions.registry import get_action
+
+        for key in (
+            "story_link_rooms",
+            "story_unlink_rooms",
+            "story_place_room",
+            "story_remove_room",
+        ):
+            action = get_action(key)
+            assert action is not None, key
+            result = action.run(self.player)
+            assert not result.success, key
