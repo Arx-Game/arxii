@@ -15,6 +15,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type {
   AggregateBeatContribution,
   ApproveClaimBody,
@@ -1118,10 +1119,7 @@ export async function advanceEra(id: number): Promise<Era> {
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(body.detail ?? `Failed to advance era ${id}`);
-  }
+  if (!res.ok) await throwApiError(res, `Failed to advance era ${id}`);
   return res.json() as Promise<Era>;
 }
 
@@ -1136,10 +1134,7 @@ export async function archiveEra(id: number): Promise<Era> {
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(body.detail ?? `Failed to archive era ${id}`);
-  }
+  if (!res.ok) await throwApiError(res, `Failed to archive era ${id}`);
   return res.json() as Promise<Era>;
 }
 

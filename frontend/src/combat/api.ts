@@ -6,6 +6,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type { components } from '@/generated/api';
 import type { PowerLedger } from '@/magic/types';
 import type {
@@ -148,18 +149,7 @@ export async function postJoin(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ character_sheet_id: characterSheetId }),
   });
-  if (!res.ok) {
-    let detail = 'Failed to join encounter';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep generic
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to join encounter');
   return res.json() as Promise<EncounterDetail>;
 }
 
@@ -177,18 +167,7 @@ export async function postLeave(encounterId: number): Promise<EncounterDetail> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    let detail = 'Failed to leave encounter';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep generic
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to leave encounter');
   return res.json() as Promise<EncounterDetail>;
 }
 
@@ -206,18 +185,7 @@ export async function postFlee(encounterId: number): Promise<EncounterDetail> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    let detail = 'Failed to declare flee';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep generic
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to declare flee');
   return res.json() as Promise<EncounterDetail>;
 }
 
@@ -235,18 +203,7 @@ export async function postEndEncounter(encounterId: number): Promise<EncounterDe
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    let detail = 'Failed to end encounter';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep generic
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to end encounter');
   return res.json() as Promise<EncounterDetail>;
 }
 
@@ -269,18 +226,7 @@ export async function postCover(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ally_participant_id: allyParticipantId }),
   });
-  if (!res.ok) {
-    let detail = 'Failed to declare cover';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep generic
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to declare cover');
   return res.json() as Promise<EncounterDetail>;
 }
 
@@ -383,17 +329,6 @@ export async function postDispatchAction(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    let detail = 'Failed to dispatch action';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep generic
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to dispatch action');
   return res.json() as Promise<DispatchResult>;
 }

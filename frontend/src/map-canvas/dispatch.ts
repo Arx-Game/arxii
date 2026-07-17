@@ -8,6 +8,7 @@
  * compile-time key checking per app (Sonar dedup fix pass, #2449).
  */
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 
 /**
  * Result of a REGISTRY dispatch. `success` mirrors `DispatchResultSerializer`
@@ -40,18 +41,7 @@ export async function dispatchCanvasAction(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ref: { backend: 'registry', registry_key: registryKey }, kwargs }),
   });
-  if (!res.ok) {
-    let detail = 'The action failed.';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep the generic message
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'The action failed.');
   const data = (await res.json()) as { message?: string | null; success?: boolean | null };
   return { message: data.message ?? 'Done.', success: data.success ?? null };
 }

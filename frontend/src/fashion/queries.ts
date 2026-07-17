@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type { PaginatedResponse } from '@/shared/types';
 import type { FashionPresentation, JudgementPayload, PresentationPayload } from './types';
 
@@ -7,17 +8,6 @@ const PRESENTATIONS_KEY = 'fashion-presentations';
 
 function eventPresentationsKey(eventId: number) {
   return [PRESENTATIONS_KEY, eventId];
-}
-
-/** Pull the API's ``detail`` message off a non-2xx response, with a fallback. */
-async function readDetail(res: Response, fallback: string): Promise<string> {
-  try {
-    const data = (await res.json()) as { detail?: string };
-    if (data.detail) return data.detail;
-  } catch {
-    // non-JSON body — fall through to the generic message
-  }
-  return fallback;
 }
 
 async function fetchEventPresentations(eventId: number): Promise<FashionPresentation[]> {
@@ -35,7 +25,7 @@ async function presentOutfit(payload: PresentationPayload): Promise<FashionPrese
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(await readDetail(res, 'Failed to present your look.'));
+    await throwApiError(res, 'Failed to present your look.');
   }
   return res.json();
 }
@@ -46,7 +36,7 @@ async function judgePresentation(payload: JudgementPayload): Promise<void> {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(await readDetail(res, 'Failed to record your judgement.'));
+    await throwApiError(res, 'Failed to record your judgement.');
   }
 }
 
