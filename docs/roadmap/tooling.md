@@ -49,7 +49,7 @@ Tools for players, GMs, and staff to interact with and manage the game world. Pl
 - Decoration system — furnishing rooms with items that provide stats and bonuses
 - Room stat calculation — how decorations and upgrades translate to room properties
 - Staff world management — tools for the coordinating staffer to manage world state (#2449)
-- GM dashboard UI — web interface for GMs to manage their tables, NPCs, and active sessions (#2450)
+- GM dashboard UI — web interface for GMs to manage their tables, NPCs, and active sessions
 - Player building UI — web interface for room customization and decoration (#2452, needs-design)
 - Builder documentation — in-game help for room creation and management
 
