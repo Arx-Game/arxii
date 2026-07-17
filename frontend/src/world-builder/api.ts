@@ -50,17 +50,31 @@ export function fetchAreaManager(areaId: number): Promise<WorldBuilderAreaManage
 }
 
 /**
+ * Result of a REGISTRY dispatch. `success` mirrors `DispatchResultSerializer`
+ * (`src/actions/serializers.py:270-275`): the view always returns HTTP 200 for
+ * a business-rule refusal, so `success === false` is the wire signal callers
+ * must check to distinguish an honest failure from a real success — `null`
+ * means the backend detail wasn't an `ActionResult` (not expected for the
+ * REGISTRY-backed world-builder actions this dispatches, but treated as
+ * success so a null never silently swallows a real failure toast).
+ */
+export interface DispatchResult {
+  message: string;
+  success: boolean | null;
+}
+
+/**
  * Dispatch a staff world-builder REGISTRY action (#2449 Task 3 keys) for
  * `characterId`. Mirrors `dispatchRoomBuilder`
  * (`frontend/src/buildings/api.ts:109-133`) — same wire shape, different key
- * union. Returns the action's human-readable result message; throws with the
- * server `detail` on 4xx.
+ * union. Returns the action's human-readable result message plus its
+ * `success` flag; throws with the server `detail` on 4xx.
  */
 export async function dispatchWorldBuilder(
   characterId: number,
   registryKey: WorldBuilderActionKey,
   kwargs: Record<string, unknown>
-): Promise<string> {
+): Promise<DispatchResult> {
   const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -78,6 +92,6 @@ export async function dispatchWorldBuilder(
     }
     throw new Error(detail);
   }
-  const data = (await res.json()) as { message?: string | null };
-  return data.message ?? 'Done.';
+  const data = (await res.json()) as { message?: string | null; success?: boolean | null };
+  return { message: data.message ?? 'Done.', success: data.success ?? null };
 }

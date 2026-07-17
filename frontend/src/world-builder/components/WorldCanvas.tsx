@@ -4,10 +4,12 @@
  * Structural mirror of `BuilderCanvas` (#670, `@/buildings/components/BuilderCanvas`)
  * over the `WorldBuilderAreaManager` shape instead of `BuildingManagerPayload`.
  *
- * Reuses `ghostCells`/`GhostNode` from `@/buildings` as-is rather than forking
- * them — both are already generic over any `{grid_x,grid_y,floor}` room shape
- * and dig-specific only in the sense of "empty adjacent cell", which applies
- * here unchanged (implementer's call for this slice — see task-6 report).
+ * Reuses `ghostCells`/`GhostNode` from `@/map-canvas` (#2449 fix pass —
+ * promoted out of `@/buildings` since both canvases are already generic over
+ * any `{grid_x,grid_y,floor}` room shape and dig-specific only in the sense
+ * of "empty adjacent cell", which applies here unchanged). This canvas
+ * supplies its own cell-based ghost tooltip label ("Dig room here") rather
+ * than buildings' direction-based one ("Dig <direction>").
  *
  * Cross-area exits (`to_room_id === null`) are excluded from edge computation
  * — they render on the far side's own canvas, not as a dangling edge here;
@@ -17,10 +19,10 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { type Edge, type Node, useNodesState } from '@xyflow/react';
 
-import { GhostNode } from '@/buildings/components/RoomNode';
-import { ghostCells, type GhostCell } from '@/buildings/gridMath';
 import { CELL, cellToPosition, positionToCell } from '@/map-canvas/coords';
 import { exitEdges, type ExitEdge, type ExitRecord } from '@/map-canvas/edges';
+import { GhostNode } from '@/map-canvas/GhostNode';
+import { ghostCells, type GhostCell } from '@/map-canvas/ghosts';
 import { MapCanvasShell } from '@/map-canvas/MapCanvasShell';
 
 import type { WorldBuilderActionKey, WorldBuilderAreaManager } from '../types';
@@ -88,7 +90,7 @@ export function WorldCanvas({
             id: `ghost-${ghost.x}-${ghost.y}`,
             type: 'ghost',
             position: cellToPosition(ghost),
-            data: { ghost, onDig: onDigAt },
+            data: { ghost, onDig: onDigAt, label: 'Dig room here' },
             draggable: false,
             selectable: false,
           })

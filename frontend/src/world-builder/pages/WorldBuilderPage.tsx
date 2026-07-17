@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { GhostCell } from '@/buildings/gridMath';
+import type { GhostCell } from '@/map-canvas/ghosts';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useAppSelector } from '@/store/hooks';
 
@@ -28,6 +28,7 @@ import { AreaTreePanel } from '../components/AreaTreePanel';
 import { CreateAreaDialog } from '../components/CreateAreaDialog';
 import { DigRoomDialog } from '../components/DigRoomDialog';
 import { LinkRoomsDialog } from '../components/LinkRoomsDialog';
+import { PromoteAreaButton } from '../components/PromoteAreaButton';
 import { RoomDetailPanel } from '../components/RoomDetailPanel';
 import { WorldCanvas } from '../components/WorldCanvas';
 import { useAreaManagerQuery, useWorldBuilderAction } from '../queries';
@@ -68,7 +69,10 @@ export function WorldBuilderPage() {
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col gap-2 p-2" data-testid="world-builder-page">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">World Builder</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold">World Builder</h1>
+          {manager && <PromoteAreaButton area={manager.area} runAction={runAction} />}
+        </div>
         {manager && (
           <Select value={String(floor)} onValueChange={(value) => setFloor(Number(value))}>
             <SelectTrigger className="w-32">

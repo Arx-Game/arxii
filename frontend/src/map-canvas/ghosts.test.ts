@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ghostCells, type PlacedRoom } from './gridMath';
+import { ghostCells, type PlacedRoom } from './ghosts';
 
 const room = (id: number, x: number | null, y: number | null, floor = 0): PlacedRoom => ({
   id,

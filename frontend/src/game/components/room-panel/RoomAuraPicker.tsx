@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { dispatchRoomBuilder } from '@/buildings/api';
+import { dispatchRoomBuilder, type DispatchResult } from '@/buildings/api';
 import { buildingKeys } from '@/buildings/queries';
 import { useCharacterResonances } from '@/magic/queries';
 
@@ -43,7 +43,11 @@ export function RoomAuraPicker({ characterId, roomId }: RoomAuraPickerProps) {
   const queryClient = useQueryClient();
   const [resonanceId, setResonanceId] = useState<number | ''>('');
 
-  const invalidateAndToast = (message: string) => {
+  const invalidateAndToast = ({ message, success }: DispatchResult) => {
+    if (success === false) {
+      toast.error(message);
+      return;
+    }
     toast.success(message);
     queryClient.invalidateQueries({ queryKey: buildingKeys.forRoom(roomId) });
   };

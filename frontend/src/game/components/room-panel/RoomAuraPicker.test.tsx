@@ -78,7 +78,10 @@ describe('RoomAuraPicker', () => {
 
   it('dispatches tag_room_resonance with the selected resonance_id', async () => {
     setupMocks();
-    vi.mocked(dispatchRoomBuilder).mockResolvedValue('You tag this room with Starfire.');
+    vi.mocked(dispatchRoomBuilder).mockResolvedValue({
+      message: 'You tag this room with Starfire.',
+      success: true,
+    });
     renderWithProviders(<RoomAuraPicker characterId={10} roomId={7} />);
 
     await userEvent.selectOptions(screen.getByTestId('room-aura-select'), '3');
@@ -93,7 +96,10 @@ describe('RoomAuraPicker', () => {
 
   it('dispatches untag_room_resonance with the selected resonance_id when Clear Aura is clicked', async () => {
     setupMocks();
-    vi.mocked(dispatchRoomBuilder).mockResolvedValue('You clear this room of Starfire.');
+    vi.mocked(dispatchRoomBuilder).mockResolvedValue({
+      message: 'You clear this room of Starfire.',
+      success: true,
+    });
     renderWithProviders(<RoomAuraPicker characterId={10} roomId={7} />);
 
     await userEvent.selectOptions(screen.getByTestId('room-aura-select'), '5');

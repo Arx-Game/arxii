@@ -3,7 +3,7 @@
  *
  * Design call (see task-6 report): rather than porting BuilderCanvas's
  * ghost-ring ("+" cells around every placed room, one dig direction each"),
- * this canvas's ghost cells (reused from `@/buildings`'s `ghostCells`) just
+ * this canvas's ghost cells (reused from `@/map-canvas`'s `ghostCells`) just
  * prefill `grid_x`/`grid_y` here — a plain "Dig room" toolbar button opens
  * the same dialog with the fields left blank for manual entry. One dialog,
  * two entry points; no separate direction concept (world rooms place by

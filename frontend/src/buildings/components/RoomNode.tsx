@@ -1,10 +1,10 @@
 /**
- * Custom React Flow nodes for the building builder canvas (#670).
+ * Custom React Flow node for the building builder canvas (#670).
  *
  * `RoomNode` — one placed (or tray-parked unplaced) room. One cell per room:
- * size renders as a badge, never as footprint. `GhostNode` — an empty cell
- * adjacent to a placed room; clicking it starts a dig prefilled with the
- * direction from its source room.
+ * size renders as a badge, never as footprint. The ghost-cell node
+ * (`GhostNode`) moved to `@/map-canvas/GhostNode` (#2449 fix pass) — shared
+ * with the staff world-builder canvas.
  */
 
 import { memo } from 'react';
@@ -14,7 +14,6 @@ import type { Node, NodeProps } from '@xyflow/react';
 import { Badge } from '@/components/ui/badge';
 import { useMapNodeInteraction } from '@/map-canvas/useMapNodeInteraction';
 
-import type { GhostCell } from '../gridMath';
 import type { ManagerRoom } from '../types';
 
 export interface RoomNodeData extends Record<string, unknown> {
@@ -57,26 +56,3 @@ function RoomNodeComponent({ data }: NodeProps<RoomNodeType>) {
 }
 
 export const RoomNode = memo(RoomNodeComponent);
-
-export interface GhostNodeData extends Record<string, unknown> {
-  ghost: GhostCell;
-  onDig: (ghost: GhostCell) => void;
-}
-
-export type GhostNodeType = Node<GhostNodeData>;
-
-function GhostNodeComponent({ data }: NodeProps<GhostNodeType>) {
-  return (
-    <button
-      type="button"
-      className="flex h-[104px] w-[104px] items-center justify-center rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 text-2xl text-muted-foreground/50 transition-colors hover:border-primary/60 hover:text-primary"
-      onClick={() => data.onDig(data.ghost)}
-      title={`Dig ${data.ghost.direction}`}
-      data-testid="builder-ghost-node"
-    >
-      +
-    </button>
-  );
-}
-
-export const GhostNode = memo(GhostNodeComponent);

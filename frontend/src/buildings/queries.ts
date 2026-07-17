@@ -121,14 +121,21 @@ export interface RoomBuilderActionInput {
 
 /**
  * The one mutation every builder verb goes through: dispatch by registry
- * key, toast the action's message, refresh the manager payload.
+ * key, toast the action's message, refresh the manager payload. A
+ * `success: false` dispatch (a business-rule refusal — HTTP 200, see
+ * `DispatchResult` in `./api`) toasts an error and skips every cache
+ * invalidation instead, so a refused action never looks like it landed.
  */
 export function useRoomBuilderAction(characterId: number, buildingId: number | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ key, kwargs }: RoomBuilderActionInput) =>
       dispatchRoomBuilder(characterId, key, kwargs),
-    onSuccess: (message: string) => {
+    onSuccess: ({ message, success }) => {
+      if (success === false) {
+        toast.error(message);
+        return;
+      }
       toast.success(message);
       if (buildingId != null) {
         queryClient.invalidateQueries({ queryKey: buildingKeys.manager(buildingId) });

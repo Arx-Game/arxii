@@ -13,12 +13,13 @@ import { type Edge, type Node, useNodesState } from '@xyflow/react';
 
 import { CELL, cellToPosition, positionToCell } from '@/map-canvas/coords';
 import { exitEdges, type ExitEdge } from '@/map-canvas/edges';
+import { GhostNode } from '@/map-canvas/GhostNode';
+import { ghostCells, type GhostCell } from '@/map-canvas/ghosts';
 import { MapCanvasShell } from '@/map-canvas/MapCanvasShell';
 
-import { ghostCells, type GhostCell } from '../gridMath';
 import type { BuildingManagerPayload } from '../types';
 import type { RoomBuilderActionKey } from '../types';
-import { GhostNode, RoomNode } from './RoomNode';
+import { RoomNode } from './RoomNode';
 
 const nodeTypes = { room: RoomNode, ghost: GhostNode };
 
@@ -82,7 +83,7 @@ export function BuilderCanvas({
             id: `ghost-${ghost.x}-${ghost.y}`,
             type: 'ghost',
             position: cellToPosition(ghost),
-            data: { ghost, onDig: onDigAt },
+            data: { ghost, onDig: onDigAt, label: `Dig ${ghost.direction}` },
             draggable: false,
             selectable: false,
           })

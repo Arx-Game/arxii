@@ -101,16 +101,31 @@ export async function searchPersonas(term: string): Promise<PersonaSearchResult[
 }
 
 /**
+ * Result of a REGISTRY dispatch. `success` mirrors `DispatchResultSerializer`
+ * (`src/actions/serializers.py:270-275`): the view always returns HTTP 200 for
+ * a business-rule refusal, so `success === false` is the wire signal callers
+ * must check to distinguish an honest failure from a real success — `null`
+ * means the backend detail wasn't an `ActionResult` (not expected for the
+ * REGISTRY-backed builder actions this dispatches, but treated as success so
+ * a null never silently swallows a real failure toast).
+ */
+export interface DispatchResult {
+  message: string;
+  success: boolean | null;
+}
+
+/**
  * Dispatch a Room Builder REGISTRY action for `characterId` (the #1470
  * `editRoom` shape, generalized). Kwargs carry the explicit `room_id`
  * anchor so the canvas can operate building-wide. Returns the action's
- * human-readable result message; throws with the server `detail` on 4xx.
+ * human-readable result message plus its `success` flag; throws with the
+ * server `detail` on 4xx.
  */
 export async function dispatchRoomBuilder(
   characterId: number,
   registryKey: RoomBuilderActionKey,
   kwargs: Record<string, unknown>
-): Promise<string> {
+): Promise<DispatchResult> {
   const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -128,6 +143,6 @@ export async function dispatchRoomBuilder(
     }
     throw new Error(detail);
   }
-  const data = (await res.json()) as { message?: string | null };
-  return data.message ?? 'Done.';
+  const data = (await res.json()) as { message?: string | null; success?: boolean | null };
+  return { message: data.message ?? 'Done.', success: data.success ?? null };
 }

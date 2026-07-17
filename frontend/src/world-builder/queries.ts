@@ -59,13 +59,20 @@ const AREA_TREE_KEYS: WorldBuilderActionKey[] = ['create_area', 'edit_area', 'pr
  * (pattern: `buildings/queries.ts:126-142`). Area-tree-shaping actions
  * additionally invalidate the areas list/detail — the key factory's
  * `['world-builder', 'areas']` prefix matches every cached params variant.
+ * A `success: false` dispatch (a business-rule refusal — HTTP 200, see
+ * `DispatchResult` in `./api`) toasts an error and skips every cache
+ * invalidation instead, so a refused action never looks like it landed.
  */
 export function useWorldBuilderAction(characterId: number, areaId: number | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ key, kwargs }: WorldBuilderActionInput) =>
       dispatchWorldBuilder(characterId, key, kwargs),
-    onSuccess: (message: string, { key }) => {
+    onSuccess: ({ message, success }, { key }) => {
+      if (success === false) {
+        toast.error(message);
+        return;
+      }
       toast.success(message);
       if (areaId != null) {
         queryClient.invalidateQueries({ queryKey: worldBuilderKeys.manager(areaId) });

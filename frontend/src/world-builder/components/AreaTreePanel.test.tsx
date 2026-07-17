@@ -85,7 +85,7 @@ describe('AreaTreePanel', () => {
     expect(onCreateArea).toHaveBeenCalledWith(null);
   });
 
-  it('requests a new child area via a node`s +', async () => {
+  it("requests a new child area via a node's +", async () => {
     const onCreateArea = vi.fn();
     renderWithProviders(
       <AreaTreePanel selectedAreaId={null} onSelectArea={vi.fn()} onCreateArea={onCreateArea} />
