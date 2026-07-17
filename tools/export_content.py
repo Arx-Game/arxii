@@ -151,15 +151,22 @@ def _run_check(content_models: frozenset[str]) -> None:
 
 def _run_grid_check() -> None:
     """Dry-run: count authored areas/rooms, write nothing."""
+    from django.db.models import Count  # noqa: PLC0415
+
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
     from world.areas.constants import GridOrigin  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
 
-    areas = Area.objects.filter(origin=GridOrigin.AUTHORED).order_by("slug")
-    area_count = areas.count()
-    print(f"\nGrid: {area_count} authored area(s):")
+    areas = list(Area.objects.filter(origin=GridOrigin.AUTHORED).order_by("slug"))
+    print(f"\nGrid: {len(areas)} authored area(s):")
+    room_counts_by_area = {
+        row["area_id"]: row["n"]
+        for row in RoomProfile.objects.filter(area__in=areas, origin=GridOrigin.AUTHORED)
+        .values("area_id")
+        .annotate(n=Count("pk"))
+    }
     for area in areas:
-        room_count = RoomProfile.objects.filter(area=area, origin=GridOrigin.AUTHORED).count()
+        room_count = room_counts_by_area.get(area.pk, 0)
         slug = area.slug or "MISSING SLUG"
         print(f"  {slug}: {room_count} authored room(s) -> fixtures/grid/{slug}.json")
     print("Nothing written (--check).")

@@ -135,6 +135,9 @@ def _serialize_exits(exit_qs, room_fixture_by_objectdb_id: dict, reports: list[s
             {
                 "source": source_fixture_key,
                 "key": exit_obj.db_key,
+                # Evennia's AliasHandler has no batch-fetch API — this per-exit read is a
+                # deliberate, bounded exception to the batch-query discipline (exit counts
+                # per area are small; see sharedmemory-model skill for the general rule).
                 "aliases": sorted(exit_obj.aliases.all()),
                 "destination": dest_fixture_key,
                 "exit_kind": exit_kind,

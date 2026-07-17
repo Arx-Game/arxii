@@ -74,6 +74,8 @@ def _grid_preview_context() -> dict:
     Read-only mirror of ``core_management.grid_export.export_grid_bundles``'s
     selection query — never calls it directly, since that writes files.
     """
+    from django.db.models import Count  # noqa: PLC0415
+
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
     from world.areas.constants import GridOrigin  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
@@ -83,10 +85,17 @@ def _grid_preview_context() -> dict:
     except (DatabaseError, OperationalError):
         return {"grid_areas": [], "grid_area_count": 0, "grid_room_count": 0}
 
+    room_counts_by_area = {
+        row["area_id"]: row["n"]
+        for row in RoomProfile.objects.filter(area__in=areas, origin=GridOrigin.AUTHORED)
+        .values("area_id")
+        .annotate(n=Count("pk"))
+    }
+
     grid_areas = []
     grid_room_count = 0
     for area in areas:
-        room_count = RoomProfile.objects.filter(area=area, origin=GridOrigin.AUTHORED).count()
+        room_count = room_counts_by_area.get(area.pk, 0)
         grid_room_count += room_count
         grid_areas.append(
             {
