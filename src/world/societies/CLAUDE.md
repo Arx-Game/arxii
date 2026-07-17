@@ -36,6 +36,11 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 ### `membership_services.py`
 - **`ensure_default_rank_ladder()`**: Create the default five-tier `OrganizationRank` ladder for a generic organization (covenants are skipped)
 
+### `obligation_services.py` (#2428)
+- **`settle_obligation(obligation, token)`**: settle an OWED `OrganizationObligation` by redeeming a Golden Hare (`currency.FavorTokenDetails`) to the creditor org; stamps `settled_at`/`settled_by_token`. Settled rows are history — never deleted.
+- **`has_open_obligation(sheet, org)`**: cheap `.exists()` gate used by training/access flows (#2440).
+- `OrganizationObligation` (models.py) is a **character→org personal debt** (e.g. Academy entrance); distinct from `currency.OrgObligation`, the org↔org percent-of-income tithe (#926).
+
 ### `office_services.py` (#2239)
 - **`appoint_office(*, organization, slug, holder, title="", feeds_check=None)`**: install/replace an office holder (idempotent per org+slug)
 - **`vacate_office(*, organization, slug)`**: clear the holder (no-op when absent)
