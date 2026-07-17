@@ -12,8 +12,11 @@ class AuthoringFieldExposureTests(APITestCase):
     def setUpTestData(cls):
         cls.staff = AccountFactory(is_staff=True)
         cls.story = StoryFactory(owners=[cls.staff])
-        cls.chapter = ChapterFactory(story=cls.story)
-        cls.episode = EpisodeFactory(chapter=cls.chapter)
+        # order pinned: the factories' process-global Sequence can reach 99
+        # in a full-suite run, colliding with the order=99 these create tests
+        # POST (the create serializers reject a duplicate order with a 400).
+        cls.chapter = ChapterFactory(story=cls.story, order=1)
+        cls.episode = EpisodeFactory(chapter=cls.chapter, order=1)
 
     def setUp(self):
         self.client.force_authenticate(user=self.staff)
