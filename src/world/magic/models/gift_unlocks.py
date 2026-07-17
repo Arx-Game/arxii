@@ -190,6 +190,14 @@ class GiftAcquisitionConfig(SharedMemoryModel):
         default=1,
         help_text="AP cost multiplier for techniques from a MAJOR gift (1 = same as Minor).",
     )
+    imbue_ap_cost = models.PositiveIntegerField(
+        default=2,
+        help_text=(
+            "Base AP cost per Rite of Imbuing. Cheaper than technique learning "
+            "(base 5) because imbuing is routine ongoing development. The Unbound "
+            "surcharge is applied on top via the magic_learning_ap_cost modifier."
+        ),
+    )
 
     class Meta:
         verbose_name = "Gift Acquisition Config"

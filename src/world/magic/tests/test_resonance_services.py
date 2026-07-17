@@ -798,3 +798,128 @@ class CrossingThresholdImbuingTests(TestCase):
         result = self.spend(self.sheet, thread, 1)
         assert result.blocked_by == "NONE"
         assert result.new_level == 3
+
+
+# =============================================================================
+# Gate 11 — Imbuing AP charge (#2467)
+# =============================================================================
+
+
+class ImbueApChargeTests(TestCase):
+    """spend_resonance_for_imbuing charges AP alongside resonance (#2467).
+
+    The Unbound magic-learning AP surcharge (#2442) applies automatically via
+    the same magic_learning_ap_cost modifier resolution technique learning
+    uses. Insufficient AP blocks the rite atomically (no resonance deducted).
+    """
+
+    def setUp(self) -> None:
+        from world.action_points.models import ActionPointPool
+        from world.magic.services import spend_resonance_for_imbuing
+
+        self.spend = spend_resonance_for_imbuing
+        self.sheet = CharacterSheetFactory()
+        self.account = AccountFactory()
+        self.sheet.character.account = self.account
+        self.sheet.character.save()
+        self.resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=self.sheet, resonance=self.resonance, balance=9999
+        )
+        self.ap_pool = ActionPointPool.get_or_create_for_character(self.sheet.character)
+        self.ap_pool.current = 200
+        self.ap_pool.save()
+
+    def _make_thread_at_level(self, level: int) -> Thread:
+        """Create a TRAIT thread at the given level with enough dp to advance."""
+        return ThreadFactory(
+            owner=self.sheet,
+            resonance=self.resonance,
+            level=level,
+            developed_points=0,
+            _trait_value=999,
+        )
+
+    def test_ap_deducted_on_successful_imbue(self) -> None:
+        """A successful imbue deducts AP alongside resonance."""
+        from world.magic.models import GiftAcquisitionConfig
+
+        thread = self._make_thread_at_level(0)
+        config = GiftAcquisitionConfig.objects.cached_singleton()
+        expected_ap = config.imbue_ap_cost if config else 2
+
+        self.spend(self.sheet, thread, 100)
+
+        self.ap_pool.refresh_from_db()
+        self.assertEqual(self.ap_pool.current, 200 - expected_ap)
+
+    def test_insufficient_ap_blocks_rite_and_preserves_resonance(self) -> None:
+        """Insufficient AP raises MagicError and does NOT deduct resonance."""
+        from world.magic.exceptions import MagicError
+        from world.magic.models import CharacterResonance
+
+        self.ap_pool.current = 0
+        self.ap_pool.save()
+        thread = self._make_thread_at_level(0)
+
+        with self.assertRaises(MagicError):
+            self.spend(self.sheet, thread, 100)
+
+        # Resonance balance is unchanged (atomic — both or neither).
+        cr = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.resonance)
+        self.assertEqual(cr.balance, 9999)
+
+    def test_unbound_surcharge_applies(self) -> None:
+        """Unbound characters pay ceil(base × 1.5) AP."""
+        import math
+
+        from world.distinctions.services import grant_distinction
+        from world.distinctions.types import DistinctionOrigin
+        from world.magic.models import GiftAcquisitionConfig
+        from world.seeds.character_creation import (
+            ensure_unbound_drawback_distinction,
+            wire_magic_learning_ap_cost_target,
+        )
+
+        wire_magic_learning_ap_cost_target()
+        distinction = ensure_unbound_drawback_distinction()
+        grant_distinction(self.sheet, distinction, origin=DistinctionOrigin.CHARACTER_CREATION)
+
+        thread = self._make_thread_at_level(0)
+        config = GiftAcquisitionConfig.objects.cached_singleton()
+        base_ap = config.imbue_ap_cost if config else 2
+        expected_ap = math.ceil(base_ap * 150 / 100)
+
+        self.spend(self.sheet, thread, 100)
+
+        self.ap_pool.refresh_from_db()
+        self.assertEqual(self.ap_pool.current, 200 - expected_ap)
+
+    def test_non_unbound_pays_base(self) -> None:
+        """A character without the Unbound distinction pays exactly base AP."""
+        from world.magic.models import GiftAcquisitionConfig
+
+        thread = self._make_thread_at_level(0)
+        config = GiftAcquisitionConfig.objects.cached_singleton()
+        expected_ap = config.imbue_ap_cost if config else 2
+
+        self.spend(self.sheet, thread, 100)
+
+        self.ap_pool.refresh_from_db()
+        self.assertEqual(self.ap_pool.current, 200 - expected_ap)
+
+    def test_config_tunability(self) -> None:
+        """Changing imbue_ap_cost on the config changes the AP charged."""
+        from world.magic.models import GiftAcquisitionConfig
+
+        config = GiftAcquisitionConfig.objects.get_or_create(pk=1)[0]
+        config.imbue_ap_cost = 4
+        config.save()
+        # Clear the cached singleton so the next read picks up the new value.
+        GiftAcquisitionConfig.objects.flush_singleton_cache()
+
+        thread = self._make_thread_at_level(0)
+        self.spend(self.sheet, thread, 100)
+
+        self.ap_pool.refresh_from_db()
+        self.assertEqual(self.ap_pool.current, 200 - 4)

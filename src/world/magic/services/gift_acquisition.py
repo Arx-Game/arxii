@@ -6,7 +6,7 @@ gift on the first technique learned) — one seam, two front doors:
 accept_technique_offer (player-to-player teaching, #1587) and the Academy
 TRAIN offer handler (world.npc_services.effects.run_train_offer, #2440).
 charge_and_learn also applies the Unbound magic-learning AP surcharge (#2442,
-_magic_learning_ap_cost_surcharge_percent) — TIME, not power; resonance
+magic_learning_ap_cost_surcharge_percent) — TIME, not power; resonance
 earning/spending is untouched.
 """
 
@@ -240,7 +240,7 @@ def _resolve_resonance_for(gift: Gift, claimed_ids: set[int]):
     return next((r for r in supported if r.pk in claimed_ids), supported[0])
 
 
-def _magic_learning_ap_cost_surcharge_percent(learner: CharacterSheet) -> int:
+def magic_learning_ap_cost_surcharge_percent(learner: CharacterSheet) -> int:
     """Live AP surcharge percent for magic-learning activities (#2442).
 
     Resolves the learner's ``magic_learning_ap_cost`` modifier through the live
@@ -299,7 +299,7 @@ def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; 
     After the has-gift/major-gift multiplier, the Unbound magic-learning AP
     surcharge (#2442) scales the result: ``ceil(ap_cost × (100 + surcharge%) /
     100)``, where ``surcharge%`` is the learner's live ``magic_learning_ap_cost``
-    modifier total (``_magic_learning_ap_cost_surcharge_percent``, +50 while the
+    modifier total (``magic_learning_ap_cost_surcharge_percent``, +50 while the
     "Unbound" drawback distinction is held, 0 once shed via
     ``world.magic.services.tradition_membership.join_tradition``).
 
@@ -382,7 +382,7 @@ def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; 
     # identically to both front doors (accept_technique_offer and #2440 TRAIN),
     # since both delegate here. ceil() so a fractional surcharge never rounds down
     # to a free ride.
-    surcharge_percent = _magic_learning_ap_cost_surcharge_percent(sheet)
+    surcharge_percent = magic_learning_ap_cost_surcharge_percent(sheet)
     ap_cost = math.ceil(ap_cost * (100 + surcharge_percent) / 100)
 
     # 4. Implicit gift acquisition (first technique).

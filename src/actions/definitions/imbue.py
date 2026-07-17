@@ -46,6 +46,7 @@ class ImbueAction(Action):
         from world.magic.exceptions import (  # noqa: PLC0415
             AnchorCapExceeded,
             InvalidImbueAmount,
+            MagicError,
             ProtagonismLockedError,
             ResonanceInsufficient,
         )
@@ -68,7 +69,7 @@ class ImbueAction(Action):
                 ).delete()
         except ProtagonismLockedError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        except (AnchorCapExceeded, InvalidImbueAmount, ResonanceInsufficient) as exc:
+        except (AnchorCapExceeded, InvalidImbueAmount, ResonanceInsufficient, MagicError) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
         if result.blocked_by == "CROSSING_REQUIREMENT" and result.blocked_requirement_messages:  # noqa: STRING_LITERAL

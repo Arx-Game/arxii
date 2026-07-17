@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from decimal import Decimal
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -15,6 +16,7 @@ from world.magic.exceptions import (
     AnchorCapExceeded,
     CovenantRoleNotEngagedError,
     InvalidImbueAmount,
+    MagicError,
     NoMatchingWornFacetItemsError,
     ResonanceInsufficient,
 )
@@ -49,6 +51,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import RoomProfile
+    from world.action_points.models import ActionPointPool
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.distinctions.models import CharacterDistinction
@@ -364,6 +367,43 @@ def _check_imbue_level_advance(  # noqa: PLR0913
     return True, "NONE", []
 
 
+def _charge_imbue_ap(character_sheet: CharacterSheet) -> ActionPointPool:
+    """Compute and charge the flat AP cost for a Rite of Imbuing (#2467).
+
+    The Unbound magic-learning AP surcharge (#2442) applies automatically via
+    the same ``magic_learning_ap_cost`` modifier resolution technique learning
+    uses. Raises ``MagicError`` if the character cannot afford the cost.
+
+    Args:
+        character_sheet: The character performing the imbuing.
+
+    Returns:
+        The character's ActionPointPool (already charged).
+
+    Raises:
+        MagicError: If the character has insufficient AP.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.magic.services.gift_acquisition import (  # noqa: PLC0415
+        get_gift_acquisition_config,
+        magic_learning_ap_cost_surcharge_percent,
+    )
+
+    config = get_gift_acquisition_config()
+    base_ap = config.imbue_ap_cost
+    surcharge_percent = magic_learning_ap_cost_surcharge_percent(character_sheet)
+    ap_cost = math.ceil(base_ap * (100 + surcharge_percent) / 100)
+
+    ap_pool = ActionPointPool.get_or_create_for_character(character_sheet.character)
+    if not ap_pool.can_afford(ap_cost):
+        msg = f"Insufficient action points (need {ap_cost}, have {ap_pool.current})."
+        raise MagicError(msg)
+    if not ap_pool.spend(ap_cost):
+        msg = f"Insufficient action points (need {ap_cost}, have {ap_pool.current})."
+        raise MagicError(msg)
+    return ap_pool
+
+
 @transaction.atomic
 def spend_resonance_for_imbuing(
     character_sheet: CharacterSheet,
@@ -413,6 +453,9 @@ def spend_resonance_for_imbuing(
     if amount and cr.balance < amount:
         msg = "Need " + str(amount) + ", have " + str(cr.balance) + "."
         raise ResonanceInsufficient(msg)
+
+    # AP charge (development time) — flat per rite, Unbound surcharge applies.
+    _charge_imbue_ap(character_sheet)
 
     starting_level = thread.level
     if amount:
