@@ -1,5 +1,23 @@
 # Character Creation & Identity
 
+## Built (2026-07-17 — Arx beginnings authored: Caretaker / Sleeper / Misbegotten)
+
+- The three Arx `Beginnings` are now real authored content (replacing the
+  "Commoner"/"Noble" placeholders, which the seeder retires when untouched):
+  full player-facing descriptions, species gates (Sleeper: Human + Nox'alfar +
+  Sylv'alfar; Misbegotten: Human + Daeva + all elves via the new `Elf` parent
+  species; `grants_species_languages=False`), heritage wiring, and
+  `BeginningTradition` links to the three authored Arx traditions ("The Vigil"
+  — renamed from "Caretakers" — "Metallic Order", "Fractals of the Abyss")
+  when those lore-fixture rows exist. Canonical prose + rulings live in the
+  lore repo's `beginnings/arx.md`; `Beginnings`/`CGExplanation` joined
+  `CONTENT_MODELS` so the content round-trips to the lore repo.
+- Still open from that authoring pass: "Arvani Common" (no `Language` rows
+  exist yet, so `starting_languages` is unwired), elf/Daeva form traits, the
+  Sleeper waking-tomb `starting_room_override`, and the Misbegotten orphanage
+  ("the Cradle") + ghost-tutor training mechanics (issues filed from the
+  lore-repo doc's follow-ups list).
+
 ## Built (2026-07-16, #2426 — CG magic revamp: Path → Tradition → Gift → Technique)
 
 - The old "Magic" stage (freeform cantrip creation) is retired. Stage 5 **Path** is

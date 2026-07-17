@@ -1195,7 +1195,7 @@ class DraftApplicationComment(SharedMemoryModel):
         return f"{self.get_comment_type_display()} on {self.application} at {self.created_at}"
 
 
-class CGExplanation(SharedMemoryModel):
+class CGExplanation(NaturalKeyMixin, SharedMemoryModel):
     """Key-value store for admin-editable CG explanatory text.
 
     Each row is one piece of CG copy (heading, intro, description, etc.).
@@ -1207,9 +1207,14 @@ class CGExplanation(SharedMemoryModel):
     text = models.TextField(blank=True)
     help_text = models.TextField(blank=True, help_text="Reminder of which CG stage uses this key")
 
+    objects = NaturalKeyManager()
+
     class Meta:
         verbose_name = "CG Explanation"
         verbose_name_plural = "CG Explanations"
+
+    class NaturalKeyConfig:
+        fields = ["key"]
 
     def __str__(self) -> str:
         return self.key

@@ -147,6 +147,38 @@ class SeedBeginningTraditionsTests(TestCase):
                 f"expected a seeded BeginningTradition for {beginning}",
             )
 
+    def test_arx_beginnings_link_the_arx_traditions_when_present(self) -> None:
+        """Arx beginnings get Vigil/Metallic/Fractals links; others get Unbound only.
+
+        The three Arx Tradition rows are lore-repo fixture content, so the
+        seeder links whichever exist rather than creating them (beginnings/arx.md).
+        """
+        from world.character_creation.factories import StartingAreaFactory
+        from world.character_creation.models import BeginningTradition
+        from world.magic.factories import TraditionFactory
+
+        TraditionFactory(name="Unbound")
+        TraditionFactory(name="The Vigil")
+        TraditionFactory(name="Metallic Order")
+        arx_area = StartingAreaFactory(name="Arx City")
+        caretaker = BeginningsFactory(name="Caretaker", starting_area=arx_area)
+        elsewhere = BeginningsFactory()
+
+        seed_beginning_traditions()
+
+        linked = set(
+            BeginningTradition.objects.filter(beginning=caretaker).values_list(
+                "tradition__name", flat=True
+            )
+        )
+        self.assertEqual(linked, {"Unbound", "The Vigil", "Metallic Order"})
+        elsewhere_linked = set(
+            BeginningTradition.objects.filter(beginning=elsewhere).values_list(
+                "tradition__name", flat=True
+            )
+        )
+        self.assertEqual(elsewhere_linked, {"Unbound"})
+
     def test_idempotent_second_call_creates_no_duplicates(self) -> None:
         from world.character_creation.models import BeginningTradition
         from world.magic.factories import TraditionFactory

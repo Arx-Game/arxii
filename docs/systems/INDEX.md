@@ -4745,7 +4745,9 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `buildings.DecorationKind` (#2266) — every domain upserts by a DB-unique `name`.
   `CONTENT_MODELS` (`core_management/content_export.py`) additionally covers
   `character_creation.startingarea`, `evennia_extensions.roomsizetier`, and
-  `weather.climate` (#2436/#2448) now that all three carry `NaturalKeyMixin`.
+  `weather.climate` (#2436/#2448) now that all three carry `NaturalKeyMixin`, plus
+  `character_creation.beginnings` and `character_creation.cgexplanation` (Arx
+  beginnings content; canonical prose lives in the lore repo's `beginnings/arx.md`).
 - **Grid content export/import (#2436/#2448):** rooms/areas are no longer deferred —
   `Area`/`RoomProfile` gained permanent identity keys (`slug`/`fixture_key`) and a
   `GridOrigin` export gate (see the Areas section above). `core_management.grid_export.
