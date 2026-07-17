@@ -198,6 +198,121 @@ The pre-#2426 design used a staff-curated `Cantrip` starter-technique-template
 model that CG finalization minted into a new `Technique`; that model and its API
 plumbing were fully removed in #2426 Task 8.
 
+### Guided Glimpse Story (#2427) [BUILT & WIRED]
+
+The Glimpse is the narrative of a character's first magical awakening
+(`CharacterAura.glimpse_story`, prose). #2427 replaced the old always-visible
+freeform textarea with a guided, tag-driven flow: pick authored tags across
+four narrative axes, then write (or keep writing) the prose, with curated
+distinction suggestions surfaced along the way.
+
+**Models** (`models/glimpse.py`):
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `GlimpseTag` | Authored catalog choice, one per axis. Content model — `CONTENT_MODELS` (`magic.glimpsetag`), lore-repo authored, no factory-seeded catalog | `axis` (`GlimpseTagAxis`), `name`, `slug` (natural key), `description`, `example`, `sort_order`, `is_active` |
+| `CharacterGlimpseTag` | A character's chosen tag. Instance data — never exported | `aura` FK (`CharacterAura`, `related_name="glimpse_tags"`), `tag` FK (PROTECT); unique per `(aura, tag)` |
+| `GlimpseTagDistinctionSuggestion` | Curated tag→distinction suggestion. Content model (`magic.glimpsetagdistinctionsuggestion`) — grants nothing, purely a CG-flow suggestion surface. FK points *into* `distinctions.Distinction` (specific→general, ADR-0010) | `tag` FK (CASCADE), `distinction` FK (CASCADE), `sort_order`; unique per `(tag, distinction)` |
+
+**Enums + config** (`constants.py`):
+
+- `GlimpseTagAxis` — the four guided steps: `TONE` (single-select), `CONSEQUENCE`
+  (multi-select), `WITNESS` (Witness & Secrecy, multi-select), `SENSORY`
+  (Sensory & Discovery, multi-select, renders as prose prompts rather than hard
+  tags in the writing step — authored SENSORY tags remain possible).
+- `GlimpseState` — `NOT_STARTED` / `TAGS_ONLY` (tags chosen, story unwritten) /
+  `COMPLETE`. A cache of prose+tag truth, never written directly.
+- `GLIMPSE_AXIS_CONFIG: dict[GlimpseTagAxis, GlimpseAxisRule]` — per-axis
+  `multi`/`prose_prompt` rendering rule, keyed by `GlimpseTagAxis`.
+
+**`CharacterAura.glimpse_state`** (`models/aura.py`) — a `GlimpseState` CharField,
+default `NOT_STARTED`. A service-maintained cache of the prose+tag rows (mirrors
+the `CharacterDistinction.secret` FK-presence precedent): never written directly
+outside `world.magic.services.glimpse`.
+
+**`CharacterDistinction.from_glimpse`** (`world/distinctions/models.py`) —
+nullable FK to `CharacterAura`, `SET_NULL`. The FK's presence IS the
+provenance state (mirrors `CharacterDistinction.secret`): when set, the
+distinction was born in the character's Glimpse. Deleting the aura simply
+drops the provenance, never the distinction.
+
+**Services** (`services/glimpse.py`) — the single write path; every mutation
+recomputes `glimpse_state` so it never drifts from the prose+tag truth:
+
+- `refresh_glimpse_state(aura: CharacterAura) -> GlimpseState` — recomputes and
+  persists `glimpse_state` from prose + tag rows (COMPLETE if prose is
+  non-blank, else TAGS_ONLY if any tag row exists, else NOT_STARTED).
+- `set_glimpse_tags(aura, tags: Sequence[GlimpseTag], *, axis: GlimpseTagAxis) -> None`
+  — replaces the character's chosen tags for one axis (transactional). Enforces
+  the axis's select-arity (`GLIMPSE_AXIS_CONFIG`) and that every tag belongs to
+  `axis`; an empty `tags` clears the axis. Calls `refresh_glimpse_state`.
+- `set_glimpse_prose(aura, text: str) -> None` — writes `glimpse_story` and
+  calls `refresh_glimpse_state`.
+- `link_distinction_to_glimpse(character_distinction: CharacterDistinction, aura: CharacterAura) -> None`
+  — sets `from_glimpse`; raises `ValidationError` if the distinction and aura
+  belong to different characters.
+- `unlink_distinction_from_glimpse(character_distinction: CharacterDistinction) -> None`
+  — clears `from_glimpse`.
+
+**CG finalize wiring** (`world/character_creation/services.py`,
+`finalize_magic_data`) — after creating `CharacterAura`, three `draft_data`
+keys are consumed through
+the glimpse services above (never written directly to the aura/tag rows):
+`glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis and passed to
+`set_glimpse_tags` per axis), `glimpse_story` (passed to `set_glimpse_prose`,
+defaults to `""`), `glimpse_linked_distinction_ids` (catalog `Distinction`
+ids — resolved to the character's own `CharacterDistinction` rows by
+`distinction_id__in=`, then passed to `link_distinction_to_glimpse`).
+
+**API surfaces:**
+
+- **CG catalog** — `GET /api/character-creation/glimpse-tags/`
+  (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`).
+  Global authored catalog, not draft-dependent, so the same endpoint also
+  backs the post-CG "finish your glimpse later" surface. Each row embeds its
+  `suggested_distinctions` (prefetched `GlimpseTagDistinctionSuggestion` rows,
+  ordered) via `CGGlimpseTagSerializer`.
+- **Aura actions** — four `@action`s on `CharacterAuraViewSet`
+  (`world/magic/views.py`): `POST .../set-glimpse-tags/` (body
+  `{axis, tag_ids[]}`, validates tags exist/are active before calling
+  `set_glimpse_tags`), `POST .../set-glimpse-prose/` (body `{text}`),
+  `POST .../link-glimpse-distinction/` and `POST .../unlink-glimpse-distinction/`
+  (body `{character_distinction_id}`, scoped to the aura's own character).
+  All four return the updated `CharacterAuraSerializer` payload; validation
+  errors surface as HTTP 400 detail, never raw `str(exc)`.
+
+**Sheet payload** (`world/character_sheets/`) — `AuraData` (`types.py`) gained
+`glimpse_story`, `glimpse_state`, `glimpse_tags: list[GlimpseTagEntry]`, and
+`can_finish_glimpse` (privileged-only — the "finish later" affordance, True
+when the requester may edit this aura and `glimpse_state != COMPLETE`).
+`DistinctionEntry` gained `is_from_glimpse` (`from_glimpse_id is not None`) so
+the sheet can badge/link distinctions born in the Glimpse.
+
+**Frontend** — one shared, purely presentational guided flow with two mounts
+(see `frontend/src/magic/CLAUDE.md` for the full contract):
+
+- `GlimpseFlow` (`frontend/src/magic/components/glimpse/GlimpseFlow.tsx` +
+  `glimpseTypes.ts`) — accordion of axis steps (TONE single-select,
+  CONSEQUENCE/WITNESS multi-select; axes with zero catalog tags don't render a
+  step), SENSORY as toggle chips inside the always-visible story textarea, a
+  deduped suggestion panel, and a manual distinction-link fallback. No
+  queries/mutations inside — purely props-in/callbacks-out.
+- `GlimpseSection` (`frontend/src/character-creation/components/gift/GlimpseSection.tsx`)
+  — the CG mount, binding `GlimpseFlow` to `draft_data.glimpse_tag_ids` /
+  `glimpse_linked_distinction_ids` (prose stays on `GiftStage`'s
+  `register('glimpse_story')`).
+- `GlimpseEditorDialog` (`frontend/src/magic/components/glimpse/GlimpseEditorDialog.tsx`)
+  — the "finish later" editor on the own-character sheet, opened from
+  `SpellbookTab`'s aura card, gated on `isMyCharacter && aura.can_finish_glimpse`.
+  Writes through the four aura actions above.
+
+**Out of scope (verified against code, not deferred by accident):** no
+mechanics hooks off tag picks, no LLM involvement anywhere in the flow, no new
+privacy axis beyond the existing WITNESS tags, and no authored `GlimpseTag`/
+`GlimpseTagDistinctionSuggestion` rows ship with this repo (lore-repo content,
+authored later) — the flow renders gracefully with an empty catalog (axes with
+no tags simply don't render a step).
+
 ### Standalone Casting — Shared Template + Per-Character Check (#1306) [BUILT & WIRED]
 
 `create_technique` (`services/technique_builder.py`) defaults `action_template` to the
@@ -1924,6 +2039,20 @@ No `DELETE` — tags are immutable provenance records.
 
 Telnet parity: `moment suggestions` / `moment confirm <id>` / `moment dismiss <id>` (`CmdMoment`).
 
+### Guided Glimpse Story (#2427)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/character-creation/glimpse-tags/` | GET | Active glimpse tag catalog (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`); each row embeds `suggested_distinctions`. Serves both the CG guided flow and the post-CG "finish later" surface |
+| `/character-auras/{id}/set-glimpse-tags/` | POST | Body `{axis, tag_ids[]}`; replaces the aura's chosen tags for one axis |
+| `/character-auras/{id}/set-glimpse-prose/` | POST | Body `{text}`; writes `glimpse_story` |
+| `/character-auras/{id}/link-glimpse-distinction/` | POST | Body `{character_distinction_id}`; marks a distinction as born in the Glimpse |
+| `/character-auras/{id}/unlink-glimpse-distinction/` | POST | Body `{character_distinction_id}`; clears the Glimpse provenance |
+
+All four `CharacterAuraViewSet` actions return the updated `CharacterAuraSerializer`
+payload; validation errors (unknown/inactive tag, cross-character link, wrong-axis
+tag, arity violation) surface as HTTP 400 detail.
+
 ---
 
 ## Frontend Integration
@@ -1952,6 +2081,14 @@ const { data: ritualTypes } = useAnimaRitualTypes();
 
 ### Components
 - `MagicStage.tsx` - Character creation magic selection UI
+
+### Guided Glimpse Story (#2427)
+- `GlimpseFlow` (`frontend/src/magic/components/glimpse/GlimpseFlow.tsx`) — shared,
+  purely presentational guided flow; two mounts:
+  - `GlimpseSection` (`frontend/src/character-creation/components/gift/GlimpseSection.tsx`)
+    — CG mount inside `GiftStage`
+  - `GlimpseEditorDialog` (`frontend/src/magic/components/glimpse/GlimpseEditorDialog.tsx`)
+    — "finish later" dialog on the own-character sheet, mounted from `SpellbookTab`
 
 ---
 

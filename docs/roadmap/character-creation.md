@@ -1,5 +1,45 @@
 # Character Creation & Identity
 
+## Built (2026-07-17, #2427 — guided, tag-driven Glimpse story)
+
+The Gift stage's always-visible Glimpse textarea (the character's first-magical-awakening
+narrative, `CharacterAura.glimpse_story`) is replaced by a guided flow: pick authored
+`GlimpseTag` catalog rows across four narrative axes (Tone, Consequence, Witness & Secrecy,
+Sensory & Discovery — `GlimpseTagAxis`/`GLIMPSE_AXIS_CONFIG`), then write the prose, with
+curated tag→distinction suggestions surfaced alongside a manual link fallback. One shared,
+presentational `GlimpseFlow` component (`frontend/src/magic/components/glimpse/`) backs two
+mounts: CG's `GlimpseSection` (inside `GiftStage`) and the character sheet's
+`GlimpseEditorDialog` ("finish your Glimpse later" — the flow renders gracefully with an
+empty catalog, so this stage is exercisable before any lore-repo content is authored).
+
+- **Models** (`world/magic/models/glimpse.py`): `GlimpseTag` (content model, lore-repo
+  authored, no factory-seeded catalog) + `CharacterGlimpseTag` (instance data, never
+  exported) + `GlimpseTagDistinctionSuggestion` (content model, grants nothing — a
+  suggestion surface only). `CharacterAura.glimpse_state` (`GlimpseState`:
+  NOT_STARTED/TAGS_ONLY/COMPLETE) is a cache maintained exclusively by
+  `world.magic.services.glimpse`; `CharacterDistinction.from_glimpse` (nullable FK,
+  SET_NULL) records provenance — both mirror the `.secret` FK-presence-is-state pattern.
+- **Finalize wiring:** `finalize_magic_data` consumes three new `draft_data` keys
+  (`glimpse_tag_ids`, `glimpse_story`, `glimpse_linked_distinction_ids`) through the
+  glimpse services, so `glimpse_state` is always consistent post-CG.
+- **APIs:** CG catalog `GET /api/character-creation/glimpse-tags/`
+  (`CGGlimpseTagViewSet`, embeds `suggested_distinctions`) + four
+  `CharacterAuraViewSet` actions (`set-glimpse-tags` / `set-glimpse-prose` /
+  `link-glimpse-distinction` / `unlink-glimpse-distinction`) that also power the
+  post-CG editor. Sheet payload: `AuraData.glimpse_story`/`.glimpse_state`/
+  `.glimpse_tags`/`.can_finish_glimpse` (privileged-only) and
+  `DistinctionEntry.is_from_glimpse`.
+- **Deviation from spec (no behavior change):** distinction suggestions are embedded
+  directly on the catalog endpoint rather than a separate
+  `suggested_distinctions_for` live endpoint — same information, one fewer round-trip;
+  the standalone endpoint/service was dropped as it would have had no caller.
+- **Out of scope, verified against code:** no mechanics hooks off tag picks, no LLM
+  anywhere in the flow, no new privacy axis beyond the existing Witness tags, and no
+  authored `GlimpseTag`/`GlimpseTagDistinctionSuggestion` rows ship with this repo
+  (lore-repo content, authored later).
+- See `docs/systems/magic.md`'s "Guided Glimpse Story (#2427)" section for full
+  model/service/endpoint detail.
+
 ## Built (2026-07-17 — Arx beginnings authored as lore-repo content; content-only-in-lore-repo ruling)
 
 - The three Arx `Beginnings` (Caretaker / Sleeper / Misbegotten) are now real
