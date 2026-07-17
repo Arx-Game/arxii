@@ -1,4 +1,3 @@
-warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/workspaces/arxii/.claude/worktrees/feature-2428-tradition-sponsorship-of-prospects-acade/.venv` and will be ignored; use `--active` to target the active environment instead
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
@@ -3730,6 +3729,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - ritual_grants <- magic.TraditionRitualGrant
   - teaching_organizations <- societies.Organization
   - codex_grants <- codex.TraditionCodexGrant
+  - teaching_npc_roles <- npc_services.NPCRole
 
 ### CharacterTradition
 **Foreign Keys:**
@@ -3802,6 +3802,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - conditions_caused <- conditions.ConditionInstance
   - battle_declarations <- battles.BattleActionDeclaration
   - battle_property_affinities <- battles.TechniquePropertyAffinity
+  - train_offers <- npc_services.TrainOfferDetails
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**
@@ -5112,6 +5113,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
 ### NPCRole
 **Foreign Keys:**
   - faction_affiliation -> societies.Organization [FK] (nullable)
+  - teaches_tradition -> magic.Tradition [FK] (nullable)
 **Pointed to by:**
   - distinction_grants <- assets.DistinctionAssetGrant
   - missions_reported_to <- missions.MissionTemplate
@@ -5140,6 +5142,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - mission_offer_details <- npc_services.MissionOfferDetails
   - permit_offer_details <- npc_services.PermitOfferDetails
   - loan_offer_details <- npc_services.LoanOfferDetails
+  - train_offer_details <- npc_services.TrainOfferDetails
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
   - summonses <- npc_services.OfferSummons
 
@@ -5171,6 +5174,11 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [OneToOne]
   - creditor_organization -> societies.Organization [FK] (nullable)
+
+### TrainOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - technique -> magic.Technique [FK]
 
 ### NpcRegard
 **Foreign Keys:**

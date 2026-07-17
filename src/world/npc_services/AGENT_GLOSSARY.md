@@ -78,3 +78,18 @@ The refusal mechanism (#2050) — declining or letting a summons lapse drops
 affection (auto-lowering the Court grant ceiling) and bumps the refusal streak.
 Three refusals later, the master's displeasure arrives as authored consequences,
 not GM improvisation. Debt is never the price of disobedience.
+
+**TRAIN offer / Academy training** (#2440):
+`OfferKind.TRAIN` — an Academy (or Great Archive) trainer teaches a specific
+technique for AP + coin + a Golden Hare. One `NPCServiceOffer`/`TrainOfferDetails`
+row per teachable technique (a trainer's "curriculum" is its set of MENU offers,
+not a single parameterized offer). `NPCRole.teaches_tradition` scopes which
+Tradition's *signature* techniques a trainer may teach — shared (Path × Gift)
+*pool* techniques are teachable by any Academy trainer regardless of tradition.
+The handler (`effects.run_train_offer`) is the second front door onto
+`world.magic.services.gift_acquisition.charge_and_learn`, the shared
+charge+acquire core `accept_technique_offer` (player-to-player teaching) also
+uses — one seam, two front doors, never a forked acquisition path.
+_Avoid_: "teaching offer" for TRAIN specifically (that term is
+`magic.TechniqueTeachingOffer`, the player-to-player path — a different model
+entirely, though both converge on the same acquisition seam).

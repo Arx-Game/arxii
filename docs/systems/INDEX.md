@@ -2074,16 +2074,42 @@ register as additional kinds.
   `hire <name>` prefers a co-located Functionary, falling back to a global role lookup; staff place
   them with the `functionary place/remove` command (`commands/functionary.py`); they surface on
   `look` (`Room.return_appearance`).
-- **Constants:** `OfferKind` (PERMIT / MISSION / LOAN / COLLECTION / IMPROVEMENT (#930);
-  future TRAINING/POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL). `NPCServiceOffer.ap_cost`
-  (#930) charges the resolving character before any effect dispatches
-  (`InsufficientAPError` rolls the grant back) — a generic knob on every kind.
+- **Constants:** `OfferKind` (PERMIT / MISSION / LOAN / COLLECTION / IMPROVEMENT (#930) /
+  INFORMANT / CONTACT / PERSONAL_FAVOR / GUARD / FAN / MINOR_ALLY / ASSET_TASK_INTEL /
+  ASSET_TASK_COLLECT / TRAIN (#2440); future POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL).
+  `NPCServiceOffer.ap_cost` (#930) charges the resolving character before any effect
+  dispatches (`InsufficientAPError` rolls the grant back) — a generic knob on every kind;
+  TRAIN offers leave it at 0 and charge AP through the technique-acquisition multiplier
+  seam instead (see below).
 - **Effect dispatch:** `OFFER_EFFECT_HANDLERS: dict[str, Callable]` in
   `world.npc_services.effects` — keyed on `OfferKind`: `issue_permit` (buildings),
-  MISSION (registered by `MissionsConfig.ready`), `grant_loan`, and the #930
+  MISSION (registered by `MissionsConfig.ready`), `grant_loan`, the #930
   domain-running pair `run_collection` / `run_improvement` (over
   `currency.collect_org_income` / `improve_org_domain`; org resolved via the shared
-  `_resolve_authority_org` single-treasury-authority rule).
+  `_resolve_authority_org` single-treasury-authority rule), and `run_train_offer` (#2440,
+  below).
+- **TRAIN offers — Academy training (#2440):** `NPCRole.teaches_tradition` (nullable FK →
+  `magic.Tradition`, `SET_NULL`) scopes which tradition's signature techniques a trainer
+  role can teach; `TrainOfferDetails` (1:1 per-offer details — `technique` FK, `learn_ap_cost`,
+  `gold_cost`) authors **one offer row per teachable technique** (mirrors how MISSION/PERMIT
+  enumerate per-template/per-kind rows — the smallest shape consistent with MENU/POOL
+  selection; MENU-mode already lists every eligible offer as its own menu line). Handler
+  (`run_train_offer`): resolve the Academy (`offer.role.faction_affiliation`) → obligation
+  gate (`societies.obligation_services.has_open_obligation`, #2428 — an OWED Academy debt
+  blocks further training) → availability gate (the learner's own (Path × Gift) pool
+  (`PathGiftGrant`) ∪ their `CharacterTradition` membership's signature list
+  (`TraditionGiftGrant`) via `magic.services.cg_catalog.get_technique_options`; a signature
+  technique is teachable only when the trainer's own `teaches_tradition` matches one of the
+  learner's memberships — pool techniques are teachable by any Academy trainer regardless of
+  tradition) → resolve exactly one unredeemed Golden Hare (`currency.FavorTokenDetails`)
+  issued by the Academy and held by the learner (`NoAvailableFavorTokenError` if none) →
+  charge AP + coin + the Hare → acquire via `magic.services.gift_acquisition
+  .charge_and_learn` — the extracted shared charge+acquire core `accept_technique_offer`
+  (#1587, player-to-player teaching) also delegates to; one seam, two front doors. The Hare
+  is always redeemed to the ACADEMY (not the trainer's own taught tradition) — Hares are
+  Academy-specific venue tokens (ruling on #2428). The generic `hire` command/
+  `InteractionSession` loop lists and resolves TRAIN offers with no command-layer changes —
+  the offer kind is fully expressible through the existing eligibility/dispatch machinery.
 - **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
   `(pc_persona, npc_persona)`) is atomically accumulated by
   `adjust_npc_affection(pc_persona, npc_persona, delta=...)` via `F()`. Social action

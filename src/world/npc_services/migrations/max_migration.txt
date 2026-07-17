@@ -1,1 +1,1 @@
-0022_alter_npcserviceoffer_kind
+0023_npcrole_teaches_tradition_alter_npcserviceoffer_kind_and_more

@@ -869,6 +869,18 @@ same offer). Proven end-to-end by
 `world/magic/tests/integration/test_gift_acquisition_action_e2e.py` (purchase → accept →
 `CharacterTechnique` minted; thread-weaving parity).
 
+**Second front door — Academy TRAIN offers (#2440):** `accept_technique_offer`'s charge+acquire
+core is extracted into `charge_and_learn(learner, technique, *, base_ap_cost, source,
+gold_cost=0, gold_treasury=None, teacher_tenure=None, teacher_banked_ap=0)`
+(`services/gift_acquisition.py`) — one seam, two front doors. `accept_technique_offer` delegates
+to it (`teacher_tenure=offer.teacher`, no gold); `world.npc_services.effects.run_train_offer`
+(the `OfferKind.TRAIN` effect handler) is the second caller — AP + coin (learner purse → the
+Academy's `OrganizationTreasury`) + exactly one unredeemed Golden Hare
+(`currency.FavorTokenDetails`, #2428) redeemed to the Academy as venue, no player `teacher_tenure`.
+See `docs/systems/INDEX.md`'s "NPC Services" entry (and
+`world/npc_services/AGENT_GLOSSARY.md`) for the full TRAIN-offer flow (obligation gate,
+tradition-signature members-only availability, `NPCRole.teaches_tradition`).
+
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
 Poll-able offer created on a successful Entrance social action; the entrant picks one

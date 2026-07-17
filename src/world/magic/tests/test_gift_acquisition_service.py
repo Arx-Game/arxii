@@ -452,3 +452,81 @@ class AcceptTechniqueOfferTest(TestCase):
         )
         with self.assertRaises(TechniqueCapExceeded):
             accept_technique_offer(self.sheet, offer4)
+
+
+class ChargeAndLearnGoldCostTest(TestCase):
+    """The shared core's gold-charge branch (#2440) — no player-teacher offer
+
+    exercises ``gold_cost``/``gold_treasury`` today (TechniqueTeachingOffer's
+    own gold_cost field is still unwired), so this is covered directly here
+    rather than only indirectly through the npc_services TRAIN offer tests.
+    """
+
+    def setUp(self):
+        from evennia_extensions.factories import AccountFactory
+        from world.action_points.models import ActionPointPool
+        from world.currency.services import get_or_create_purse, get_or_create_treasury
+        from world.magic.constants import TargetKind
+        from world.magic.factories import (
+            CharacterGiftFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+        )
+        from world.magic.models import Thread
+        from world.societies.factories import OrganizationFactory
+
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.sheet = CharacterSheetFactory()
+        self.account = AccountFactory()
+        self.sheet.character.account = self.account
+        self.sheet.character.save()
+        # Already-owned gift + provisioned thread — sidesteps the XP-unlock
+        # gate and the technique cap so this test stays focused on gold.
+        CharacterGiftFactory(character=self.sheet, gift=self.gift)
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=10,
+        )
+        self.technique = TechniqueFactory(gift=self.gift)
+        self.ap_pool = ActionPointPool.get_or_create_for_character(self.sheet.character)
+        self.ap_pool.current = 200
+        self.ap_pool.save()
+        self.purse = get_or_create_purse(self.sheet)
+        self.purse.balance = 1000
+        self.purse.save()
+        self.org = OrganizationFactory()
+        self.treasury = get_or_create_treasury(self.org)
+
+    def test_gold_cost_transfers_purse_to_treasury(self):
+        from world.achievements.constants import AccessChangeSource
+        from world.magic.services.gift_acquisition import charge_and_learn
+
+        ct = charge_and_learn(
+            self.sheet,
+            self.technique,
+            base_ap_cost=5,
+            source=AccessChangeSource.ACADEMY_TRAINING,
+            gold_cost=100,
+            gold_treasury=self.treasury,
+        )
+        self.assertEqual(ct.technique, self.technique)
+        self.purse.refresh_from_db()
+        self.treasury.refresh_from_db()
+        self.assertEqual(self.purse.balance, 900)
+        self.assertEqual(self.treasury.balance, 100)
+
+    def test_zero_gold_cost_does_not_touch_purse(self):
+        from world.achievements.constants import AccessChangeSource
+        from world.magic.services.gift_acquisition import charge_and_learn
+
+        charge_and_learn(
+            self.sheet,
+            self.technique,
+            base_ap_cost=5,
+            source=AccessChangeSource.ACADEMY_TRAINING,
+        )
+        self.purse.refresh_from_db()
+        self.assertEqual(self.purse.balance, 1000)

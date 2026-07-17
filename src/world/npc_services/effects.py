@@ -21,8 +21,12 @@ from typing import TYPE_CHECKING
 from world.npc_services.constants import OfferKind
 
 if TYPE_CHECKING:
-    from world.npc_services.models import NPCServiceOffer
+    from world.character_sheets.models import CharacterSheet
+    from world.currency.models import FavorTokenDetails
+    from world.magic.models import Technique
+    from world.npc_services.models import NPCRole, NPCServiceOffer
     from world.scenes.models import Persona
+    from world.societies.models import Organization
 
 
 @dataclass(frozen=True)
@@ -155,6 +159,38 @@ class AmbiguousDebtorError(LookupError):
             if count
             else "You don't hold the spending authority for any house's books."
         )
+
+
+class NoAvailableFavorTokenError(LookupError):
+    """No unredeemed Golden Hare issued by ``academy``, held by the learner (#2440)."""
+
+    def __init__(self, academy_name: str) -> None:
+        super().__init__(f"No unredeemed Golden Hare issued by {academy_name!r} in learner's hand")
+        self.user_message = f"You carry no Golden Hare for {academy_name} to call in."
+
+
+def _resolve_unredeemed_hare(sheet: CharacterSheet, academy: Organization) -> FavorTokenDetails:
+    """The learner's one unredeemed Golden Hare issued by ``academy`` (#2440).
+
+    Exactly one Hare is charged per TRAIN acceptance — the first matching row
+    (deterministic by pk) when several happen to be held. Raises
+    ``NoAvailableFavorTokenError`` when the learner holds none.
+    """
+    from world.currency.models import FavorTokenDetails  # noqa: PLC0415
+
+    token = (
+        FavorTokenDetails.objects.filter(
+            issuing_organization=academy,
+            redeemed_at__isnull=True,
+            item_instance__holder_character_sheet=sheet,
+            item_instance__destroyed_at__isnull=True,
+        )
+        .order_by("pk")
+        .first()
+    )
+    if token is None:
+        raise NoAvailableFavorTokenError(academy.name)
+    return token
 
 
 def _resolve_authority_org(persona: Persona):
@@ -415,3 +451,145 @@ def run_improvement(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
 
 OFFER_EFFECT_HANDLERS[OfferKind.COLLECTION.value] = run_collection
 OFFER_EFFECT_HANDLERS[OfferKind.IMPROVEMENT.value] = run_improvement
+
+
+def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per gate
+    offer: NPCServiceOffer, persona: Persona
+) -> EffectResult:
+    """TRAIN effect handler (#2440): Academy trainer teaches a technique.
+
+    One offer row per teachable technique (``TrainOfferDetails.technique`` —
+    see that model's docstring for why). Flow: resolve the Academy (the
+    role's ``faction_affiliation`` — TRAIN offers are always fronted by an
+    org, unlike LOAN's optional per-offer override) -> obligation gate
+    (``has_open_obligation``, #2428) -> availability gate (learner's own
+    (Path × Gift) pool ∪ their Tradition's signature list, signatures
+    members-only — ruling 3 on #2440) -> resolve exactly one unredeemed
+    Golden Hare issued by the Academy and held by the learner -> charge AP +
+    coin + the Hare -> acquire via the shared ``charge_and_learn`` seam
+    (the same core ``accept_technique_offer`` uses).
+
+    The Hare is redeemed to the ACADEMY regardless of the trainer's own
+    ``teaches_tradition`` — Hares are Academy-specific venue tokens, not
+    per-tradition (ruling 2026-07-17 on #2428; ``redeem_favor_token``'s
+    issuer-match stands unchanged).
+    """
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.currency.services import (  # noqa: PLC0415
+        get_or_create_treasury,
+        redeem_favor_token,
+    )
+    from world.magic.exceptions import MagicError  # noqa: PLC0415
+    from world.magic.services.gift_acquisition import charge_and_learn  # noqa: PLC0415
+    from world.societies.obligation_services import has_open_obligation  # noqa: PLC0415
+
+    sheet = persona.character_sheet
+    details = offer.train_offer_details
+    technique = details.technique
+
+    academy = offer.role.faction_affiliation
+    if academy is None:
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message="This trainer has no house to teach for. (Authoring error.)",
+            payload={"offer_pk": offer.pk},
+        )
+
+    if has_open_obligation(sheet, academy):
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message=f"{academy.name} won't take you on further until your debt is settled.",
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+
+    if not _technique_available_to_learner(sheet, offer.role, technique):
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message="This isn't yours to learn here.",
+            payload={"offer_pk": offer.pk, "technique_pk": technique.pk},
+        )
+
+    try:
+        token = _resolve_unredeemed_hare(sheet, academy)
+    except NoAvailableFavorTokenError as exc:
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+
+    try:
+        character_technique = charge_and_learn(
+            sheet,
+            technique,
+            base_ap_cost=details.learn_ap_cost,
+            source=AccessChangeSource.ACADEMY_TRAINING,
+            gold_cost=details.gold_cost,
+            gold_treasury=get_or_create_treasury(academy),
+        )
+    except MagicError as exc:
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk},
+        )
+    except ValueError:
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message=f"You already know {technique.name}.",
+            payload={"offer_pk": offer.pk, "technique_pk": technique.pk},
+        )
+
+    redeem_favor_token(token, redeemer_org=academy)
+
+    return EffectResult(
+        kind=OfferKind.TRAIN.value,
+        object_pk=character_technique.pk,
+        object_label=technique.name,
+        message=f"{academy.name}'s trainer walks you through {technique.name}.",
+        payload={
+            "character_technique_pk": character_technique.pk,
+            "organization_pk": academy.pk,
+            "favor_token_pk": token.pk,
+        },
+    )
+
+
+def _technique_available_to_learner(
+    sheet: CharacterSheet, role: NPCRole, technique: Technique
+) -> bool:
+    """Whether ``technique`` is in ``sheet``'s TRAIN availability via ``role`` (#2440).
+
+    Availability = the learner's own (Path × Gift) pool ∪ their Tradition's
+    signature list (ruling 3 on #2440). The pool half is tradition-agnostic
+    (any Academy trainer can teach it); the signature half is members-only —
+    offerable only when the trainer's own ``role.teaches_tradition`` matches
+    one of the learner's ``CharacterTradition`` memberships (mirrors the
+    membership-set pattern in ``world.magic.services.ritual_knowledge``, the
+    only existing "a character's traditions" reader — there is no singular
+    "current tradition" concept in the schema).
+    """
+    from world.progression.selectors import current_path_for_character  # noqa: PLC0415
+
+    path = current_path_for_character(sheet.character)
+    if path is None:
+        return False
+
+    from world.magic.services.cg_catalog import get_technique_options  # noqa: PLC0415
+
+    gift = technique.gift
+    trainer_tradition = role.teaches_tradition
+    # get_technique_options' pool half never reads `tradition` (it's sourced
+    # from PathGiftGrant(path, gift) only) — safe to pass trainer_tradition
+    # (even None) as the query arg; only the signature half is scoped by it.
+    options = get_technique_options(path, gift, trainer_tradition)
+    if technique in options.pool:
+        return True
+    if technique not in options.signature:
+        return False
+    if trainer_tradition is None:
+        return False
+    return sheet.character_traditions.filter(tradition=trainer_tradition).exists()
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.TRAIN.value] = run_train_offer
