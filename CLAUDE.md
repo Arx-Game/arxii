@@ -242,6 +242,12 @@ Database design:
 Code quality (always-on; full list in `django_notes.md`):
 
 - **No relative imports** — absolute only (`from world.roster.models import Roster`).
+- **Never edit dependency code.** `site-packages` (Evennia included) is read-only; every
+  linter, quality sweep, or fix pass must exclude Django apps we don't own — flag an
+  upstream problem, never "fix" it in the vendored copy. Worktree venvs hardlink from
+  the shared uv cache, so a venv edit silently poisons the cache and resurfaces later
+  as impossible same-locked-rev-different-bytes failures (admin.E038 incident,
+  2026-07-17: an admin sweep added `autocomplete_fields` to Evennia's own admin).
 - **No Django signals** — explicit, testable service-function calls instead (see ADR-0009).
 - **No data migrations pre-production** — schema migrations only; no `RunPython`
   backfills (no meaningful rows yet) (see ADR-0013).
