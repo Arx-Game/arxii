@@ -70,7 +70,11 @@ export function RoomPanel({
 
   const setHome = useMutation({
     mutationFn: () => dispatchRoomBuilder(characterId!, 'set_primary_home', {}),
-    onSuccess: (message: string) => {
+    onSuccess: ({ message, success }) => {
+      if (success === false) {
+        toast.error(message);
+        return;
+      }
       toast.success(message);
       if (room) {
         queryClient.invalidateQueries({ queryKey: buildingKeys.forRoom(room.id) });

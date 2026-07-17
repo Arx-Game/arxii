@@ -6,35 +6,31 @@
  * upward). Placement is cosmetic-only: a drag dispatches `place_room` and
  * the manager payload refetch settles the truth. Unplaced rooms park in a
  * tray column left of the map and can be dragged onto the grid.
+ *
+ * Node/edge composition (placed grid layout, unplaced tray, ghost cells,
+ * exit-pair edges, drag-stop → place-room shape) lives in the shared
+ * `useGridCanvasNodes` hook (`@/map-canvas`) — also used by the staff
+ * world-builder canvas (#2449, `@/world-builder/components/WorldCanvas`).
+ * This component owns only the `RoomNode` data shape, the direction-based
+ * ghost label, and the `place_room` REGISTRY key.
  */
 
-import { useCallback, useEffect, useMemo } from 'react';
-import {
-  Background,
-  Controls,
-  type Edge,
-  type Node,
-  ReactFlow,
-  ReactFlowProvider,
-  useNodesState,
-} from '@xyflow/react';
+import { useCallback } from 'react';
 
-import {
-  CELL,
-  cellToPosition,
-  exitEdges,
-  ghostCells,
-  positionToCell,
-  type ExitEdge,
-  type GhostCell,
-} from '../gridMath';
-import type { BuildingManagerPayload } from '../types';
+import { CELL } from '@/map-canvas/coords';
+import type { ExitEdge } from '@/map-canvas/edges';
+import { GhostNode } from '@/map-canvas/GhostNode';
+import type { GhostCell } from '@/map-canvas/ghosts';
+import { MapCanvasShell } from '@/map-canvas/MapCanvasShell';
+import { useGridCanvasNodes, type PlaceRoomArgs } from '@/map-canvas/useGridCanvasNodes';
+
+import type { BuildingManagerPayload, ManagerRoom } from '../types';
 import type { RoomBuilderActionKey } from '../types';
-import { GhostNode, RoomNode } from './RoomNode';
-
-import '@xyflow/react/dist/style.css';
+import { RoomNode } from './RoomNode';
 
 const nodeTypes = { room: RoomNode, ghost: GhostNode };
+
+const buildRoomNodeData = (room: ManagerRoom) => ({ room });
 
 export interface BuilderCanvasProps {
   payload: BuildingManagerPayload;
@@ -48,15 +44,7 @@ export interface BuilderCanvasProps {
   runAction: (key: RoomBuilderActionKey, kwargs: Record<string, unknown>) => void;
 }
 
-export function BuilderCanvas(props: BuilderCanvasProps) {
-  return (
-    <ReactFlowProvider>
-      <BuilderCanvasInner {...props} />
-    </ReactFlowProvider>
-  );
-}
-
-function BuilderCanvasInner({
+export function BuilderCanvas({
   payload,
   floor,
   selectedRoomId,
@@ -65,115 +53,38 @@ function BuilderCanvasInner({
   onExitClick,
   runAction,
 }: BuilderCanvasProps) {
-  const { computedNodes, computedEdges, edgeById } = useMemo(() => {
-    const onFloor = payload.rooms.filter((room) => room.floor === floor);
-    const placed = onFloor.filter((room) => room.grid_x !== null && room.grid_y !== null);
-    const unplaced = onFloor.filter((room) => room.grid_x === null || room.grid_y === null);
-
-    const trayX = (placed.length > 0 ? Math.min(...placed.map((room) => room.grid_x!)) : 0) - 2;
-    const trayTopY = placed.length > 0 ? Math.max(...placed.map((room) => room.grid_y!)) : 0;
-
-    const roomNodes: Node[] = [
-      ...placed.map((room) => ({
-        id: String(room.id),
-        type: 'room',
-        position: cellToPosition({ x: room.grid_x!, y: room.grid_y! }),
-        data: { room, selected: room.id === selectedRoomId, onSelect: onSelectRoom },
-        draggable: true,
-      })),
-      ...unplaced.map((room, index) => ({
-        id: String(room.id),
-        type: 'room',
-        position: cellToPosition({ x: trayX, y: trayTopY - index }),
-        data: { room, selected: room.id === selectedRoomId, onSelect: onSelectRoom },
-        draggable: true,
-      })),
-    ];
-
-    const ghosts = onDigAt
-      ? ghostCells(
-          payload.rooms.map((room) => ({
-            id: room.id,
-            grid_x: room.grid_x,
-            grid_y: room.grid_y,
-            floor: room.floor,
-          })),
-          floor
-        ).map(
-          (ghost): Node => ({
-            id: `ghost-${ghost.x}-${ghost.y}`,
-            type: 'ghost',
-            position: cellToPosition(ghost),
-            data: { ghost, onDig: onDigAt },
-            draggable: false,
-            selectable: false,
-          })
-        )
-      : [];
-
-    const placedIds = new Set(placed.map((room) => room.id));
-    const pairs = exitEdges(payload.exits).filter(
-      (pair) => placedIds.has(pair.source) && placedIds.has(pair.target)
-    );
-    const edges: Edge[] = pairs.map((pair) => ({
-      id: pair.id,
-      source: String(pair.source),
-      target: String(pair.target),
-      label: pair.there?.name ?? pair.back?.name ?? '',
-      type: 'straight',
-    }));
-    const byId = new Map(pairs.map((pair) => [pair.id, pair]));
-    return { computedNodes: [...ghosts, ...roomNodes], computedEdges: edges, edgeById: byId };
-  }, [payload, floor, selectedRoomId, onSelectRoom, onDigAt]);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-
-  useEffect(() => {
-    setNodes(computedNodes);
-  }, [computedNodes, setNodes]);
-
-  const onNodeDragStop = useCallback(
-    (_event: React.MouseEvent | React.TouchEvent, node: Node) => {
-      if (node.type !== 'room') return;
-      const roomId = Number(node.id);
-      if (Number.isNaN(roomId)) return;
-      const cell = positionToCell(node.position);
-      runAction('place_room', {
-        room_id: roomId,
-        grid_x: cell.x,
-        grid_y: cell.y,
-        floor,
-      });
+  const onPlaceRoom = useCallback(
+    ({ roomId, grid_x, grid_y, floor: placedFloor }: PlaceRoomArgs) => {
+      runAction('place_room', { room_id: roomId, grid_x, grid_y, floor: placedFloor });
     },
-    [runAction, floor]
+    [runAction]
   );
 
-  const onEdgeClick = useCallback(
-    (_event: React.MouseEvent, edge: Edge) => {
-      const pair = edgeById.get(edge.id);
-      if (pair && onExitClick) {
-        onExitClick(pair);
-      }
-    },
-    [edgeById, onExitClick]
-  );
+  const { nodes, edges, onNodesChange, onNodeDragStop, onEdgeClick } = useGridCanvasNodes({
+    rooms: payload.rooms,
+    exits: payload.exits,
+    floor,
+    selectedRoomId,
+    onSelectRoom,
+    nodeType: 'room',
+    buildNodeData: buildRoomNodeData,
+    onDigAt,
+    onExitClick,
+    onPlaceRoom,
+  });
 
   return (
-    <div className="h-full w-full" data-testid="builder-canvas">
-      <ReactFlow
-        nodes={nodes}
-        edges={computedEdges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onNodeDragStop={onNodeDragStop}
-        onEdgeClick={onEdgeClick}
-        fitView
-        snapToGrid
-        snapGrid={[CELL, CELL]}
-      >
-        <Background gap={CELL} />
-        <Controls />
-      </ReactFlow>
-    </div>
+    <MapCanvasShell
+      testId="builder-canvas"
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
+      onNodesChange={onNodesChange}
+      onNodeDragStop={onNodeDragStop}
+      onEdgeClick={onEdgeClick}
+      snapToGrid
+      snapGrid={[CELL, CELL]}
+      backgroundGap={CELL}
+    />
   );
 }

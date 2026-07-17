@@ -64,6 +64,15 @@ class SetRoomDisplayDataTests(TestCase):
             set_room_display_data(room=self.room, persona=stranger, name="Hijacked")
         assert not ObjectDisplayData.objects.filter(object=self.room).exists()
 
+    def test_no_persona_and_no_bypass_is_refused(self) -> None:
+        """``persona`` defaults to ``None`` now (#2449); without a bypass, that's
+
+        still an unowned edit and must raise rather than crash on ``None.pk``.
+        """
+        with self.assertRaises(RoomEditError):
+            set_room_display_data(room=self.room, name="Ghostwritten")
+        assert not ObjectDisplayData.objects.filter(object=self.room).exists()
+
     def test_cannot_make_public_while_a_non_public_scene_is_active(self) -> None:
         self.profile.is_public = False
         self.profile.save(update_fields=["is_public"])
@@ -77,6 +86,33 @@ class SetRoomDisplayDataTests(TestCase):
         self.profile.save(update_fields=["is_public"])
         set_room_display_data(room=self.room, persona=self.owner, is_public=True)
         assert RoomProfile.objects.get(objectdb=self.room).is_public is True
+
+    def test_bypass_ownership_edits_room_the_persona_does_not_own(self) -> None:
+        stranger = PersonaFactory()
+        set_room_display_data(
+            room=self.room,
+            persona=stranger,
+            name="Staff Edit",
+            bypass_ownership=True,
+        )
+        display = ObjectDisplayData.objects.get(object=self.room)
+        assert display.longname == "Staff Edit"
+
+    def test_bypass_ownership_still_refuses_public_during_active_non_public_scene(
+        self,
+    ) -> None:
+        stranger = PersonaFactory()
+        self.profile.is_public = False
+        self.profile.save(update_fields=["is_public"])
+        SceneFactory(location=self.room, privacy_mode=ScenePrivacyMode.PRIVATE, is_active=True)
+        with self.assertRaises(RoomEditError):
+            set_room_display_data(
+                room=self.room,
+                persona=stranger,
+                is_public=True,
+                bypass_ownership=True,
+            )
+        assert RoomProfile.objects.get(objectdb=self.room).is_public is False
 
 
 class IsRoomOwnerPrerequisiteTests(TestCase):

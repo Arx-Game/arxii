@@ -200,7 +200,7 @@ defenses:
 
 ## Built (2026-07-17, epic #2436 slice 1 / #2448 — grid identity + export/import)
 
-- **Authored-vs-runtime grid identity (ADR-0138):** `Area` gained a permanent unique
+- **Authored-vs-runtime grid identity (ADR-0140):** `Area` gained a permanent unique
   `slug` (+ `NaturalKeyMixin`) and `RoomProfile` gained a permanent unique
   `fixture_key`; both gained a `GridOrigin` (`world.areas.constants`:
   AUTHORED/STORY/PLAYER, default PLAYER) marking who authored the row. Only
@@ -232,7 +232,7 @@ defenses:
   #2449 (staff world-builder canvas), #2450 (GM story areas), #2451 (discovery/portal
   authoring), #2452 (player building via projects — `needs-design`).
 - **Details:** see `docs/systems/INDEX.md`'s "Areas" + "Grid content export/import"
-  entries, `docs/adr/0138-grid-content-exports-as-graph-aware-area-bundles.md`.
+  entries, `docs/adr/0140-grid-content-exports-as-graph-aware-area-bundles.md`.
 
 ## Overview
 

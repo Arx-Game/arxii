@@ -12,7 +12,7 @@ import {
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { CharacterLink } from './character';
-import { Bug, MessageSquare, PlusCircle, Shield, Sparkles } from 'lucide-react';
+import { Bug, Map, MessageSquare, PlusCircle, Shield, Sparkles } from 'lucide-react';
 
 interface ProfileDropdownProps {
   account: AccountData;
@@ -87,6 +87,12 @@ export function ProfileDropdown({ account }: ProfileDropdownProps) {
         {account.is_staff && (
           <>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/staff/world-builder" className="flex items-center gap-2">
+                <Map className="h-4 w-4" />
+                World Builder
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <a
                 href="/admin/"

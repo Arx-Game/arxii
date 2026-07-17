@@ -1,4 +1,5 @@
 import { apiFetch } from '@/evennia_replacements/api';
+import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
 
 import type {
   BuildingManagerPayload,
@@ -10,6 +11,8 @@ import type {
   RoomBuilderActionKey,
   RoomComfortBreakdown,
 } from './types';
+
+export type { DispatchResult };
 
 async function getJson<T>(url: string, fallbackError: string): Promise<T> {
   const res = await apiFetch(url);
@@ -103,31 +106,14 @@ export async function searchPersonas(term: string): Promise<PersonaSearchResult[
 /**
  * Dispatch a Room Builder REGISTRY action for `characterId` (the #1470
  * `editRoom` shape, generalized). Kwargs carry the explicit `room_id`
- * anchor so the canvas can operate building-wide. Returns the action's
- * human-readable result message; throws with the server `detail` on 4xx.
+ * anchor so the canvas can operate building-wide. Thin wrapper pinning
+ * `RoomBuilderActionKey` over the shared `dispatchCanvasAction`
+ * (`@/map-canvas/dispatch`).
  */
-export async function dispatchRoomBuilder(
+export function dispatchRoomBuilder(
   characterId: number,
   registryKey: RoomBuilderActionKey,
   kwargs: Record<string, unknown>
-): Promise<string> {
-  const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ref: { backend: 'registry', registry_key: registryKey }, kwargs }),
-  });
-  if (!res.ok) {
-    let detail = 'The action failed.';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep the generic message
-    }
-    throw new Error(detail);
-  }
-  const data = (await res.json()) as { message?: string | null };
-  return data.message ?? 'Done.';
+): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, registryKey, kwargs);
 }

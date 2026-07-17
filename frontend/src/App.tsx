@@ -80,6 +80,11 @@ const TriggerGiversPage = lazy(() =>
     default: m.TriggerGiversPage,
   }))
 );
+const WorldBuilderPage = lazy(() =>
+  import('@/world-builder/pages/WorldBuilderPage').then((m) => ({
+    default: m.WorldBuilderPage,
+  }))
+);
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
@@ -496,6 +501,16 @@ function App() {
               <StaffRoute>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                   <MissionCanvasPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/world-builder"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <WorldBuilderPage />
                 </Suspense>
               </StaffRoute>
             }

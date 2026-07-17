@@ -2,8 +2,8 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import type { GhostCell } from '@/map-canvas/ghosts';
 
-import type { GhostCell } from '../gridMath';
 import { useBuildingManagerQuery, useRoomBuilderAction, useRoomSizeTiersQuery } from '../queries';
 import type { RoomBuilderActionKey } from '../types';
 import { BudgetMeter } from './BudgetMeter';

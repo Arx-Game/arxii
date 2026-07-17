@@ -11,7 +11,7 @@ Staff world-building has a durable content pipeline now, ahead of any authoring 
 `core_management.grid_export`/`grid_import` round-trip authored areas (with their
 rooms, exits, and authored sidecar values) to the private lore repo as reviewable
 per-area JSON bundles — see `docs/roadmap/rooms-and-estates.md`'s matching "Built"
-entry and ADR-0138 for the format and rejected alternatives. No staff-facing canvas
+entry and ADR-0140 for the format and rejected alternatives. No staff-facing canvas
 exists yet (Django admin + `@dig`/`@open`/`@link` remain the only way to author grid
 content); that's slice 2. The epic's remaining slices are filed as separate
 sub-issues, not designed here: **#2449** (staff world-builder canvas — the drag/drop
@@ -19,6 +19,28 @@ authoring surface this document's "GM dashboard UI" / "Staff world management" i
 below actually need), **#2450** (GM story areas — `STORY`-origin, never exported),
 **#2451** (discovery/portal authoring — clue placement + portal anchors from the
 canvas), **#2452** (player building via projects, `needs-design`).
+
+## Built (2026-07-17, epic #2436 slice 2 / #2449 — staff world-builder canvas)
+
+Slice 1's grid foundation now has an authoring surface: a staff-only drag-and-drop
+canvas at `/staff/world-builder` (linked from the profile dropdown + Game Setup hub)
+backed by eleven `world_builder`-category REGISTRY actions
+(`create_area`/`edit_area`/`staff_dig_room`/`staff_edit_room`/`staff_link_rooms`/
+`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/`staff_remove_room`/
+`promote_room`/`promote_area`, `src/actions/definitions/world_builder.py`) and a
+read-only `WorldBuilderViewSet` (`/api/world-builder/areas/`, `IsAdminUser`-gated).
+Authority is the staff account flag alone — deliberately not a GM-ladder trust tier
+(see ADR-0139); GM-level world-shaping (this document's "GM tools" section below)
+stays a separate, still-unbuilt question. Backend substrate
+(`world.areas.grid_services`) and frontend canvas primitives (`map-canvas/`) were
+both extracted from the pre-existing building Room Builder (#670) so all three
+canvas consumers (buildings, battles, this one) share one implementation — see
+`docs/systems/INDEX.md`'s "Areas" section for the full surface and
+`src/world/areas/tests/test_world_builder_journey.py` for the create-area →
+dig → link → place → promote → export journey proving the canvas actually feeds
+slice 1's `export_grid_bundles()` pipeline. Not built this slice: an `edit_area`
+UI (the action exists; no canvas panel calls it yet), GM story areas (#2450),
+clue/portal layers (#2451) — all remain filed as their own sub-issues.
 
 ## Overview
 Tools for players, GMs, and staff to interact with and manage the game world. Player tools focus on building and customizing spaces. GM tools are granular and level-gated — GMs can only do what their trust level allows. Staff tools are unrestricted for the one staffer coordinating the entire game.
@@ -37,7 +59,8 @@ Tools for players, GMs, and staff to interact with and manage the game world. Pl
 - **Staff frontend:** Staff application detail page, extensive Django admin configuration
 - **Areas system:** Room creation infrastructure exists through the areas app;
   authored/runtime identity + grid export/import round-trip now exists (#2436/#2448,
-  see "Built" above) but no authoring UI sits on top of it yet
+  see "Built" above), and a staff-only drag-and-drop authoring canvas now sits on
+  top of it (#2449, see "Built" above)
 - **No GM-specific tooling** — no level-gated commands or GM dashboard
 
 ## What's Needed for MVP
@@ -48,7 +71,8 @@ Tools for players, GMs, and staff to interact with and manage the game world. Pl
 - Player room purchase flow — economic room acquisition with IC construction
 - Decoration system — furnishing rooms with items that provide stats and bonuses
 - Room stat calculation — how decorations and upgrades translate to room properties
-- Staff world management — tools for the coordinating staffer to manage world state (#2449)
+- ~~Staff world management — tools for the coordinating staffer to manage world state~~
+  built (#2449, staff world-builder canvas — see "Built" above)
 - GM dashboard UI — web interface for GMs to manage their tables, NPCs, and active sessions
 - Player building UI — web interface for room customization and decoration (#2452, needs-design)
 - Builder documentation — in-game help for room creation and management

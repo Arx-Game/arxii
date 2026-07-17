@@ -489,6 +489,18 @@ class ActionRegistryTests(TestCase):
             "leave_speaker_queue",
             "advance_speaker_queue",
             "skip_speaker",
+            # #2449 — staff world-builder canvas.
+            "create_area",
+            "edit_area",
+            "staff_dig_room",
+            "staff_edit_room",
+            "staff_link_rooms",
+            "staff_unlink_rooms",
+            "staff_rename_exit",
+            "staff_place_room",
+            "staff_remove_room",
+            "promote_room",
+            "promote_area",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

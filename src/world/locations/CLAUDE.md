@@ -520,9 +520,12 @@ violation.
 
 ## Owner-facing room editing (#1470)
 
-`set_room_display_data(*, room, persona, name=None, description=None, is_public=None)`
-is the owner-gated MVP seam for a player editing a room they own — the first
-player-facing write over `RoomProfile` / `ObjectDisplayData`. It:
+`set_room_display_data(*, room, persona=None, name=None, description=None, is_public=None,
+bypass_ownership=False)` is the owner-gated MVP seam for a player editing a room they
+own — the first player-facing write over `RoomProfile` / `ObjectDisplayData`.
+`bypass_ownership=True` (staff world-builder, #2449) skips only the ownership raise;
+the #1287 scene-privacy re-check always runs, and `persona` may be `None` only in
+bypass mode. It:
 
 - re-checks `is_owner(persona, room)` as a hard boundary (raises `RoomEditError`,
   which carries a player-facing `user_message` — never surface `str(exc)`);

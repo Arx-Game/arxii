@@ -406,6 +406,19 @@ from actions.definitions.voyages import (
     StartVoyageAction,
 )
 from actions.definitions.windows import CloseWindowAction, OpenWindowAction
+from actions.definitions.world_builder import (
+    CreateAreaAction,
+    EditAreaAction,
+    PromoteAreaAction,
+    PromoteRoomAction,
+    StaffDigRoomAction,
+    StaffEditRoomAction,
+    StaffLinkRoomsAction,
+    StaffPlaceRoomAction,
+    StaffRemoveRoomAction,
+    StaffRenameExitAction,
+    StaffUnlinkRoomsAction,
+)
 from actions.types import TargetType
 
 # All base action instances. Each is a singleton — actions are stateless.
@@ -765,6 +778,19 @@ _ALL_ACTIONS: list[Action] = [
     LeaveSpeakerQueueAction(),
     AdvanceSpeakerQueueAction(),
     SkipSpeakerAction(),
+    # #2449 — staff world-builder canvas: create/edit area, dig/link/place/edit/
+    # remove world rooms, promote to AUTHORED.
+    CreateAreaAction(),
+    EditAreaAction(),
+    StaffDigRoomAction(),
+    StaffEditRoomAction(),
+    StaffLinkRoomsAction(),
+    StaffUnlinkRoomsAction(),
+    StaffRenameExitAction(),
+    StaffPlaceRoomAction(),
+    StaffRemoveRoomAction(),
+    PromoteRoomAction(),
+    PromoteAreaAction(),
 ]
 
 # Lookup by key

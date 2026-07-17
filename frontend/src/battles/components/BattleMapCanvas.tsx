@@ -5,27 +5,25 @@
  * future move action, #1712 explicitly did not build it). Clicking a place
  * selects it for the detail panel.
  *
- * Composition mirrors `buildings/components/BuilderCanvas.tsx`:
- * `ReactFlowProvider` wrapper, module-level `nodeTypes`, `Background` +
- * `Controls`.
+ * Composition shares `@/map-canvas/MapCanvasShell` with
+ * `buildings/components/BuilderCanvas.tsx`: `ReactFlowProvider` wrapper,
+ * module-level `nodeTypes`, `Background` + `Controls`.
  */
 
 import { useCallback, useEffect, useMemo } from 'react';
-import {
-  Background,
-  Controls,
-  type Node,
-  ReactFlow,
-  ReactFlowProvider,
-  useNodesState,
-} from '@xyflow/react';
+import { type Node, useNodesState } from '@xyflow/react';
 
-import { centeredNodePosition, computeBounds, planeToCanvas, radiusToPixels } from '../mapMath';
+import {
+  centeredNodePosition,
+  computeBounds,
+  planeToCanvas,
+  radiusToPixels,
+} from '@/map-canvas/coords';
+import { MapCanvasShell } from '@/map-canvas/MapCanvasShell';
+
 import type { BattleDetail } from '../types';
 import type { PlaceControlRole, PlaceNodeData } from './PlaceNode';
 import { MIN_SIZE_PX, PlaceNode } from './PlaceNode';
-
-import '@xyflow/react/dist/style.css';
 
 const nodeTypes = { place: PlaceNode };
 
@@ -35,15 +33,7 @@ export interface BattleMapCanvasProps {
   onSelectPlace: (placeId: number) => void;
 }
 
-export function BattleMapCanvas(props: BattleMapCanvasProps) {
-  return (
-    <ReactFlowProvider>
-      <BattleMapCanvasInner {...props} />
-    </ReactFlowProvider>
-  );
-}
-
-function BattleMapCanvasInner({ detail, selectedPlaceId, onSelectPlace }: BattleMapCanvasProps) {
+export function BattleMapCanvas({ detail, selectedPlaceId, onSelectPlace }: BattleMapCanvasProps) {
   const computedNodes = useMemo<Node[]>(() => {
     const { places, sides, units, participants } = detail;
     const bounds = computeBounds(places);
@@ -104,31 +94,25 @@ function BattleMapCanvasInner({ detail, selectedPlaceId, onSelectPlace }: Battle
     [onSelectPlace]
   );
 
-  if (detail.places.length === 0) {
-    return (
-      <div
-        className="flex h-full w-full items-center justify-center rounded-lg border border-border bg-card text-sm text-muted-foreground"
-        data-testid="battle-map-canvas-empty"
-      >
-        No places recorded for this battle yet.
-      </div>
-    );
-  }
-
   return (
-    <div className="h-full w-full" data-testid="battle-map-canvas">
-      <ReactFlow
-        nodes={nodes}
-        edges={[]}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onNodeClick={onNodeClick}
-        nodesDraggable={false}
-        fitView
-      >
-        <Background />
-        <Controls />
-      </ReactFlow>
-    </div>
+    <MapCanvasShell
+      testId="battle-map-canvas"
+      nodes={nodes}
+      edges={[]}
+      nodeTypes={nodeTypes}
+      onNodesChange={onNodesChange}
+      onNodeClick={onNodeClick}
+      nodesDraggable={false}
+      emptyState={
+        detail.places.length === 0 ? (
+          <div
+            className="flex h-full w-full items-center justify-center rounded-lg border border-border bg-card text-sm text-muted-foreground"
+            data-testid="battle-map-canvas-empty"
+          >
+            No places recorded for this battle yet.
+          </div>
+        ) : undefined
+      }
+    />
   );
 }
