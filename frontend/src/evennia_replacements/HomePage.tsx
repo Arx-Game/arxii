@@ -12,9 +12,14 @@ import { StatsCard } from './StatsCard';
 import { RecentConnected } from './RecentConnected';
 import { NewsTeaser } from './NewsTeaser';
 import { useStatusQuery } from './queries';
+import { useAccount } from '@/store/hooks';
 
 export function HomePage() {
   const { data, isLoading } = useStatusQuery();
+  const account = useAccount();
+  const hasCharacters = (account?.available_characters?.length ?? 0) > 0;
+  const heroDestination = account && !hasCharacters ? '/characters/create' : '/game';
+  const heroLabel = account && !hasCharacters ? 'Create a character' : 'Play in the browser';
 
   return (
     <>
@@ -29,7 +34,7 @@ export function HomePage() {
           </p>
         </div>
         <Button asChild size="lg">
-          <Link to="/game">Play in the browser</Link>
+          <Link to={heroDestination}>{heroLabel}</Link>
         </Button>
         <StatusBlock />
       </section>
