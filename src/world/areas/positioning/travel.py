@@ -81,7 +81,7 @@ def find_route(origin_room: ObjectDB, destination_room: ObjectDB) -> list[Object
             ObjectDB.objects.filter(
                 db_location_id__in=frontier,
                 db_destination__isnull=False,
-            ).select_related("db_destination__room_profile")
+            ).select_related("db_destination__room_profile__area")
         )
 
         next_frontier: set[int] = set()
