@@ -647,16 +647,27 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 Species/race definitions with stat bonuses, language assignments, and species-gift provisioning.
 
 - **Models:** `Species`, `SpeciesStatBonus`, `Language`,
-  `SpeciesGiftGrant` (through-model: species → MINOR `Gift` + optional `drawback_condition`
-  FK to `conditions.ConditionTemplate`; natural key `(species, gift)`; `clean()` asserts
-  `gift.kind=MINOR`; FK direction specific→general per ADR-0010)
+  `SpeciesGiftGrant` (through-model: species → MINOR `Gift` + optional `drawback_condition`/
+  `benefit_condition` FKs to `conditions.ConditionTemplate`, optional `drawback_distinction`
+  FK to `distinctions.Distinction`, and `cg_point_cost` (PositiveInteger, default 0);
+  natural key `(species, gift)`; `clean()` asserts `gift.kind=MINOR`; FK direction
+  specific→general per ADR-0010. Four independent, freely-combinable balance shapes —
+  condition drawback, benefit condition, drawback distinction, CG point cost — plus the
+  all-null/0 free-weak-gift default; per-species shape assignment is lore-repo content.
+  See [species.md](species.md).)
 - **Key Services:** `provision_species_gifts(sheet, *, resonance=None)` (`world/species/services.py`) —
   mints the MINOR `CharacterGift`, the latent level-0 GIFT thread (via
-  `provision_latent_gift_thread`), and applies any drawback idempotently; called from
-  `finalize_magic_data` (CG, after the Major-gift block). See ADR-0071.
+  `provision_latent_gift_thread`), applies any drawback/benefit condition, and grants any
+  forced `drawback_distinction` (via `distinctions.services.grant_distinction`,
+  `origin=DistinctionOrigin.SPECIES`) idempotently; called from `finalize_magic_data`
+  (CG, after the Major-gift block). See ADR-0071. `cg_point_cost` is summed across the
+  selected species + ancestors into the `"species"` line of
+  `CharacterDraft.calculate_cg_points_breakdown()` (character_creation).
 - **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
-- **Integrates with:** character_creation (Beginnings.allowed_species), forms (physical traits),
-  magic (GIFT thread via `provision_latent_gift_thread`), conditions (drawback application)
+- **Integrates with:** character_creation (Beginnings.allowed_species, CG points
+  breakdown), forms (physical traits), magic (GIFT thread via
+  `provision_latent_gift_thread`), conditions (drawback/benefit condition application),
+  distinctions (forced drawback distinction grant)
 - **Source:** `src/world/species/`
 - **Details:** [species.md](species.md)
 ### Forms

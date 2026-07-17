@@ -115,6 +115,12 @@ draft.get_starting_room()               # Beginnings override -> area default ->
 draft.get_stage_completion()            # Dict[int, bool] for all stages
 draft.can_submit()                      # True if all stages (except Review) complete
 draft.calculate_cg_points_remaining()   # starting_budget - total_spent
+draft.calculate_cg_points_breakdown()   # itemized [{category, item, cost}, ...]:
+                                         # "heritage" (Beginnings.cg_point_cost),
+                                         # "distinction" (per draft_data distinction),
+                                         # "species" (SpeciesGiftGrant.cg_point_cost summed
+                                         # across the selected species + ancestors —
+                                         # see docs/systems/species.md)
 draft.calculate_final_stats()           # Dict[str, int] with bonuses applied
 draft.enforce_stat_caps()               # Clamp stats after distinction changes
 draft.get_expected_gift_count()         # Base 1 + bonus from distinctions

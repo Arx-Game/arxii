@@ -1,1 +1,1 @@
-0010_alter_startingarea_default_starting_room
+0011_alter_beginnings_cg_point_cost

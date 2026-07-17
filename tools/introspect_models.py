@@ -61,6 +61,7 @@ TARGET_APPS = [
     "world.ships",
     "world.skills",
     "world.societies",
+    "world.species",
     "world.stories",
     "world.traits",
     "world.weather",

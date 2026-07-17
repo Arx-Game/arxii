@@ -297,7 +297,8 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
     )
     cg_point_cost = models.IntegerField(
         default=0,
-        help_text="CG point cost for selecting this option (added to species cost)",
+        help_text="CG point cost for this beginning; summed with species gift "
+        "grant costs into the character-creation points budget.",
     )
     heritage = models.ForeignKey(
         "character_sheets.Heritage",

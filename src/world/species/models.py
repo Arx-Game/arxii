@@ -146,7 +146,8 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     """A Minor Gift (and optional drawback) a species grants its members (ADR-0050).
 
     FK direction specific→general (ADR-0010): the grant lives on the species side and
-    points into world/magic + world/conditions; those apps never import species.
+    points into world/magic, world/conditions, and world/distinctions; those apps
+    never import species.
     """
 
     species = models.ForeignKey(

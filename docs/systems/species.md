@@ -38,11 +38,32 @@ All models use `NaturalKeyMixin` (fixture support). `Species` and `Language` use
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `SpeciesGiftGrant` | A Minor Gift (and optional drawback/benefit) a species grants its members (ADR-0050) | `species` (FK), `gift` (FK to `magic.Gift`, must be `kind=MINOR`), `drawback_condition` (FK to `conditions.ConditionTemplate`, nullable — permanent negative condition applied at CG finalize, e.g. sunlight vulnerability), `benefit_condition` (FK to `conditions.ConditionTemplate`, nullable — permanent beneficial condition applied at CG finalize, e.g. a resist-check bonus, #1738) |
+| `SpeciesGiftGrant` | A Minor Gift (and optional drawback/benefit) a species grants its members (ADR-0050) | `species` (FK), `gift` (FK to `magic.Gift`, must be `kind=MINOR`), `drawback_condition` (FK to `conditions.ConditionTemplate`, nullable — permanent negative condition applied at CG finalize, e.g. sunlight vulnerability), `benefit_condition` (FK to `conditions.ConditionTemplate`, nullable — permanent beneficial condition applied at CG finalize, e.g. a resist-check bonus, #1738), `drawback_distinction` (FK to `distinctions.Distinction`, nullable — forced drawback distinction applied at CG finalize, a social/reputation price rather than a mechanical one), `cg_point_cost` (PositiveInteger, default 0 — CG points charged for this grant) |
 
-`provision_species_gifts` (`world.species.services`) mints the gift and applies both
-`drawback_condition` and `benefit_condition` idempotently at CG finalization —
-see `docs/adr/0071-species-gift-drawbacks-mitigated-by-gift-thread.md`.
+`provision_species_gifts` (`world.species.services`) mints the gift and applies
+`drawback_condition`, `benefit_condition`, and `drawback_distinction` idempotently
+at CG finalization — see
+`docs/adr/0071-species-gift-drawbacks-mitigated-by-gift-thread.md`. The forced
+distinction is granted via `world.distinctions.services.grant_distinction` with
+`origin=DistinctionOrigin.SPECIES`.
+
+`SpeciesGiftGrant` expresses species balance in four independent shapes, freely
+combinable per grant (all four fields default to null/0, so an "empty" grant is
+a free weak gift with no attached price):
+
+- **Condition drawback** — `drawback_condition` set (mechanical downside, e.g.
+  sunlight vulnerability).
+- **Benefit condition** — `benefit_condition` set (mechanical upside, e.g. a
+  resist-check bonus).
+- **Drawback distinction** — `drawback_distinction` set (social/reputation
+  downside, e.g. feared-and-distrusted, rather than a mechanical one).
+- **CG point cost** — `cg_point_cost` > 0 (a straight points price; summed
+  across the selected species + its ancestors into the `"species"` line of
+  `CharacterDraft.calculate_cg_points_breakdown()` — see
+  [character_creation.md](character_creation.md)).
+
+Which species uses which shape (or combination) is **lore-repo content** — this
+app never authors species/gift/distinction data itself.
 
 ### Hierarchy Design
 
