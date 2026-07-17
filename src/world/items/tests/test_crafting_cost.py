@@ -66,7 +66,7 @@ class StageAndAssertAffordableTests(_CraftingCostBase):
         self.assertIsInstance(result, StagedCost)
         self.assertEqual(result.action_points, 0)
         self.assertEqual(result.anima, 0)
-        self.assertEqual(result.material_pks, [])
+        self.assertEqual(result.material_allocations, [])
 
     def test_sufficient_ap_returns_staged_cost(self) -> None:
         self.recipe.action_point_cost = 50
@@ -104,7 +104,7 @@ class StageAndAssertAffordableTests(_CraftingCostBase):
             crafter_character=self.character,
             crafter_character_sheet=self.sheet,
         )
-        self.assertIn(item.pk, result.material_pks)
+        self.assertIn(item.pk, [inst.pk for inst, _ in result.material_allocations])
 
     def test_insufficient_ap_raises(self) -> None:
         self.recipe.action_point_cost = 100
@@ -206,7 +206,7 @@ class ConsumeCostNoneTests(_CraftingCostBase):
         template = ItemTemplateFactory()
         CraftingMaterialRequirementFactory(recipe=self.recipe, item_template=template, quantity=1)
         item = ItemInstanceFactory(template=template, holder_character_sheet=self.sheet, quantity=1)
-        staged = StagedCost(action_points=30, anima=5, material_pks=[item.pk])
+        staged = StagedCost(action_points=30, anima=5, material_allocations=[(item, 1)])
 
         result = consume_cost(
             crafter_character=self.character,
@@ -238,7 +238,7 @@ class ConsumeCostPartialTests(_CraftingCostBase):
 
         # AP cost=7 → ceil(7 * 0.5) = ceil(3.5) = 4
         # Anima cost=3 → ceil(3 * 0.5) = ceil(1.5) = 2
-        staged = StagedCost(action_points=7, anima=3, material_pks=[])
+        staged = StagedCost(action_points=7, anima=3, material_allocations=[])
 
         result = consume_cost(
             crafter_character=self.character,
@@ -266,7 +266,7 @@ class ConsumeCostPartialTests(_CraftingCostBase):
         item2 = ItemInstanceFactory(
             template=template, holder_character_sheet=self.sheet, quantity=1
         )
-        staged = StagedCost(action_points=0, anima=0, material_pks=[item1.pk, item2.pk])
+        staged = StagedCost(action_points=0, anima=0, material_allocations=[(item1, 1), (item2, 1)])
 
         result = consume_cost(
             crafter_character=self.character,
@@ -281,7 +281,7 @@ class ConsumeCostPartialTests(_CraftingCostBase):
 
     def test_partial_zero_cost_is_zero(self) -> None:
         """PARTIAL of 0 AP/Anima should charge 0."""
-        staged = StagedCost(action_points=0, anima=0, material_pks=[])
+        staged = StagedCost(action_points=0, anima=0, material_allocations=[])
 
         result = consume_cost(
             crafter_character=self.character,
@@ -302,7 +302,7 @@ class ConsumeCostFullTests(_CraftingCostBase):
         self.anima.current = 10
         self.anima.save(update_fields=["current"])
 
-        staged = StagedCost(action_points=50, anima=8, material_pks=[])
+        staged = StagedCost(action_points=50, anima=8, material_allocations=[])
 
         result = consume_cost(
             crafter_character=self.character,
@@ -322,7 +322,7 @@ class ConsumeCostFullTests(_CraftingCostBase):
     def test_full_consumes_all_materials(self) -> None:
         template = ItemTemplateFactory()
         item = ItemInstanceFactory(template=template, holder_character_sheet=self.sheet, quantity=1)
-        staged = StagedCost(action_points=0, anima=0, material_pks=[item.pk])
+        staged = StagedCost(action_points=0, anima=0, material_allocations=[(item, 1)])
 
         result = consume_cost(
             crafter_character=self.character,
@@ -338,7 +338,7 @@ class ConsumeCostFullTests(_CraftingCostBase):
     def test_full_returns_summary_dict(self) -> None:
         template = ItemTemplateFactory()
         item = ItemInstanceFactory(template=template, holder_character_sheet=self.sheet, quantity=1)
-        staged = StagedCost(action_points=10, anima=3, material_pks=[item.pk])
+        staged = StagedCost(action_points=10, anima=3, material_allocations=[(item, 1)])
 
         result = consume_cost(
             crafter_character=self.character,
@@ -357,7 +357,7 @@ class ConsumeCostFullTests(_CraftingCostBase):
         self.anima.current = 10
         self.anima.save(update_fields=["current"])
 
-        staged = StagedCost(action_points=0, anima=0, material_pks=[])
+        staged = StagedCost(action_points=0, anima=0, material_allocations=[])
 
         consume_cost(
             crafter_character=self.character,
@@ -378,7 +378,7 @@ class ConsumeCostApPoolCreationTests(_CraftingCostBase):
         # Delete the pool set up in setUp.
         ActionPointPool.objects.filter(character=self.character).delete()
 
-        staged = StagedCost(action_points=10, anima=0, material_pks=[])
+        staged = StagedCost(action_points=10, anima=0, material_allocations=[])
 
         result = consume_cost(
             crafter_character=self.character,
@@ -397,7 +397,7 @@ class ConsumeCostApShortfallTests(_CraftingCostBase):
 
     def test_ap_drained_between_stage_and_consume_raises(self) -> None:
         """If the pool is emptied after staging, consume_cost raises instead of lying."""
-        staged = StagedCost(action_points=50, anima=0, material_pks=[])
+        staged = StagedCost(action_points=50, anima=0, material_allocations=[])
 
         # Simulate a concurrent spend draining the pool below the staged amount.
         self.pool.current = 0
@@ -420,7 +420,7 @@ class ConsumeCostAnimaShortfallTests(_CraftingCostBase):
         ``deduct_anima(lethal=False)`` would clamp to available and leave the consumed
         summary over-reporting; the symmetric guard fails hard like the AP path instead.
         """
-        staged = StagedCost(action_points=0, anima=8, material_pks=[])
+        staged = StagedCost(action_points=0, anima=8, material_allocations=[])
 
         # Simulate a concurrent spend draining anima below the staged amount.
         self.anima.current = 3
@@ -438,7 +438,7 @@ class ConsumeCostAnimaShortfallTests(_CraftingCostBase):
 
     def test_anima_row_deleted_after_staging_raises(self) -> None:
         """A positive anima cost can't be paid when the anima row vanished after staging."""
-        staged = StagedCost(action_points=0, anima=5, material_pks=[])
+        staged = StagedCost(action_points=0, anima=5, material_allocations=[])
         CharacterAnima.objects.filter(character=self.character).delete()
 
         with self.assertRaises(CraftingCostUnaffordable):

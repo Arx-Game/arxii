@@ -1,11 +1,12 @@
 """Tests for world.items.services.materials — shared material-consumption helper.
 
 Covers:
-- gather_consumable_pks: sufficient supply returns the expected PKs (no raise)
+- gather_consumable_pks: sufficient supply returns the expected allocations (no raise)
 - gather_consumable_pks: insufficient quantity raises InsufficientMaterials with
   structured requirement + provided_qty attrs
 - gather_consumable_pks: min_quality_tier filtering excludes low-tier instances
-- consume_pks: deletes exactly the requested PKs; other rows are untouched
+- consume_materials: partial consume decrements quantity; full consume deletes row;
+  split across stacks decrements each correctly
 """
 
 from django.test import TestCase
@@ -13,7 +14,11 @@ from django.test import TestCase
 from world.items.exceptions import InsufficientMaterials
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, QualityTierFactory
 from world.items.models import ItemInstance
-from world.items.services.materials import consume_pks, gather_consumable_pks, meets_quality_tier
+from world.items.services.materials import (
+    consume_materials,
+    gather_consumable_pks,
+    meets_quality_tier,
+)
 
 # ---------------------------------------------------------------------------
 # Minimal duck-typed requirement for tests
@@ -80,7 +85,7 @@ class MeetsQualityTierTests(TestCase):
 
 
 class GatherConsumablePksSufficientTests(TestCase):
-    """gather_consumable_pks returns PKs without raising when supply is adequate."""
+    """gather_consumable_pks returns allocations without raising when supply is adequate."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -89,41 +94,47 @@ class GatherConsumablePksSufficientTests(TestCase):
         cls.inst2 = ItemInstanceFactory(template=cls.template, quantity=3)
 
     def test_single_requirement_single_instance(self) -> None:
-        """One requirement, one instance with sufficient qty — returns that PK."""
+        """One requirement, one instance with sufficient qty — returns that instance."""
         req = _Req(self.template, 2)
-        pks = gather_consumable_pks(available=[self.inst1], requirements=[req])
-        self.assertIn(self.inst1.pk, pks)
+        allocations = gather_consumable_pks(available=[self.inst1], requirements=[req])
+        self.assertEqual(allocations, [(self.inst1, 2)])
 
     def test_single_requirement_multiple_instances(self) -> None:
-        """Requirement satisfied across multiple instances — all needed PKs returned."""
+        """Requirement satisfied across multiple instances — all needed allocations returned."""
         req = _Req(self.template, 4)
-        pks = gather_consumable_pks(available=[self.inst1, self.inst2], requirements=[req])
-        # Both instances needed (qty 2+3=5 >= 4); at minimum inst1 + inst2 appear.
-        self.assertIn(self.inst1.pk, pks)
-        self.assertIn(self.inst2.pk, pks)
+        allocations = gather_consumable_pks(available=[self.inst1, self.inst2], requirements=[req])
+        # Both instances needed (qty 2+3=5 >= 4); inst1 fully consumed, inst2 partially.
+        self.assertEqual(allocations, [(self.inst1, 2), (self.inst2, 2)])
 
     def test_greedy_prune_stops_early(self) -> None:
-        """Greedy logic stops adding PKs once the running qty is satisfied."""
+        """Greedy logic stops adding allocations once the running qty is satisfied."""
         # inst2 alone (qty=3) satisfies requirement=3; inst1 should NOT be needed.
         req = _Req(self.template, 3)
-        pks = gather_consumable_pks(available=[self.inst2], requirements=[req])
-        self.assertIn(self.inst2.pk, pks)
-        self.assertNotIn(self.inst1.pk, pks)
+        allocations = gather_consumable_pks(available=[self.inst2], requirements=[req])
+        self.assertEqual(allocations, [(self.inst2, 3)])
+
+    def test_partial_consume_takes_only_what_is_needed(self) -> None:
+        """Requirement of 1 against a stack of 5 returns amount=1, not 5."""
+        inst = ItemInstanceFactory(template=self.template, quantity=5)
+        req = _Req(self.template, 1)
+        allocations = gather_consumable_pks(available=[inst], requirements=[req])
+        self.assertEqual(allocations, [(inst, 1)])
 
     def test_empty_requirements_returns_empty(self) -> None:
-        """No requirements → empty pk list, no error."""
-        pks = gather_consumable_pks(available=[self.inst1], requirements=[])
-        self.assertEqual(pks, [])
+        """No requirements → empty allocations list, no error."""
+        allocations = gather_consumable_pks(available=[self.inst1], requirements=[])
+        self.assertEqual(allocations, [])
 
     def test_no_double_count_across_requirements(self) -> None:
-        """The same instance PK cannot be allocated to two requirements simultaneously."""
+        """The same instance cannot be allocated to two requirements simultaneously."""
         template_a = ItemTemplateFactory()
         template_b = ItemTemplateFactory()
         inst_a = ItemInstanceFactory(template=template_a, quantity=1)
         inst_b = ItemInstanceFactory(template=template_b, quantity=1)
         req_a = _Req(template_a, 1)
         req_b = _Req(template_b, 1)
-        pks = gather_consumable_pks(available=[inst_a, inst_b], requirements=[req_a, req_b])
+        allocations = gather_consumable_pks(available=[inst_a, inst_b], requirements=[req_a, req_b])
+        pks = [inst.pk for inst, _ in allocations]
         self.assertIn(inst_a.pk, pks)
         self.assertIn(inst_b.pk, pks)
         # No duplicates.
@@ -203,43 +214,68 @@ class GatherConsumablePksQualityFilterTests(TestCase):
     def test_high_tier_satisfies_low_requirement(self) -> None:
         """High-tier instance satisfies a low min_quality_tier."""
         req = _Req(self.template, 1, min_quality_tier=self.low)
-        pks = gather_consumable_pks(available=[self.high_inst], requirements=[req])
-        self.assertIn(self.high_inst.pk, pks)
+        allocations = gather_consumable_pks(available=[self.high_inst], requirements=[req])
+        self.assertEqual(allocations, [(self.high_inst, 1)])
 
     def test_mixed_only_high_tier_selected(self) -> None:
         """With both tiers available, only high-tier instance is selected for a high req."""
         req = _Req(self.template, 1, min_quality_tier=self.high)
-        pks = gather_consumable_pks(available=[self.low_inst, self.high_inst], requirements=[req])
-        self.assertIn(self.high_inst.pk, pks)
-        self.assertNotIn(self.low_inst.pk, pks)
+        allocations = gather_consumable_pks(
+            available=[self.low_inst, self.high_inst], requirements=[req]
+        )
+        self.assertEqual(allocations, [(self.high_inst, 1)])
 
 
 # ---------------------------------------------------------------------------
-# consume_pks
+# consume_materials
 # ---------------------------------------------------------------------------
 
 
-class ConsumePksTests(TestCase):
-    """consume_pks deletes exactly the given PKs and leaves others untouched."""
+class ConsumeMaterialsTests(TestCase):
+    """consume_materials decrements partial stacks and deletes depleted ones."""
 
-    def test_deletes_targeted_pks(self) -> None:
-        """PKs passed to consume_pks are deleted from the DB."""
+    def test_partial_consume_decrements_quantity(self) -> None:
+        """Consuming 1 from a stack of 5 leaves quantity=4; row survives."""
         template = ItemTemplateFactory()
-        inst = ItemInstanceFactory(template=template)
-        consume_pks([inst.pk])
+        inst = ItemInstanceFactory(template=template, quantity=5)
+        consume_materials([(inst, 1)])
+        inst.refresh_from_db()
+        self.assertEqual(inst.quantity, 4)
+        self.assertTrue(ItemInstance.objects.filter(pk=inst.pk).exists())
+
+    def test_full_consume_deletes_row(self) -> None:
+        """Consuming the full quantity deletes the row."""
+        template = ItemTemplateFactory()
+        inst = ItemInstanceFactory(template=template, quantity=5)
+        consume_materials([(inst, 5)])
         self.assertFalse(ItemInstance.objects.filter(pk=inst.pk).exists())
 
-    def test_leaves_other_pks_intact(self) -> None:
-        """ItemInstance rows NOT in the PK list are unaffected."""
+    def test_split_across_stacks(self) -> None:
+        """A requirement split across two stacks: first depleted, second survives."""
         template = ItemTemplateFactory()
-        to_delete = ItemInstanceFactory(template=template)
-        to_keep = ItemInstanceFactory(template=template)
-        consume_pks([to_delete.pk])
-        self.assertTrue(ItemInstance.objects.filter(pk=to_keep.pk).exists())
+        inst1 = ItemInstanceFactory(template=template, quantity=5)
+        inst2 = ItemInstanceFactory(template=template, quantity=3)
+        consume_materials([(inst1, 5), (inst2, 2)])
+        self.assertFalse(ItemInstance.objects.filter(pk=inst1.pk).exists())
+        inst2.refresh_from_db()
+        self.assertEqual(inst2.quantity, 1)
 
-    def test_empty_pk_list_is_noop(self) -> None:
-        """An empty PK list does not raise and does not delete any rows."""
+    def test_leaves_other_instances_intact(self) -> None:
+        """Instances NOT in the allocations list are unaffected."""
         template = ItemTemplateFactory()
-        inst = ItemInstanceFactory(template=template)
-        consume_pks([])
+        to_consume = ItemInstanceFactory(template=template, quantity=3)
+        to_keep = ItemInstanceFactory(template=template, quantity=2)
+        consume_materials([(to_consume, 3)])
+        self.assertFalse(ItemInstance.objects.filter(pk=to_consume.pk).exists())
+        self.assertTrue(ItemInstance.objects.filter(pk=to_keep.pk).exists())
+        to_keep.refresh_from_db()
+        self.assertEqual(to_keep.quantity, 2)
+
+    def test_empty_allocations_is_noop(self) -> None:
+        """An empty allocations list does not raise and does not modify any rows."""
+        template = ItemTemplateFactory()
+        inst = ItemInstanceFactory(template=template, quantity=1)
+        consume_materials([])
         self.assertTrue(ItemInstance.objects.filter(pk=inst.pk).exists())
+        inst.refresh_from_db()
+        self.assertEqual(inst.quantity, 1)
