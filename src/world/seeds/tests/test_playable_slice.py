@@ -10,9 +10,11 @@ pipeline and a live multi-round encounter are Phase 2, out of scope here.
 from django.test import TestCase
 
 from world.seeds.database import seed_dev_database
+from world.seeds.tests.content_stub import stub_content_root
 
 
 class TestPlayableSlice(TestCase):
+    @stub_content_root()
     def test_resolution_tables_seeded(self) -> None:
         from world.traits.models import CheckRank, ResultChart
 
@@ -20,6 +22,7 @@ class TestPlayableSlice(TestCase):
         self.assertGreater(CheckRank.objects.count(), 0)
         self.assertGreater(ResultChart.objects.count(), 0)
 
+    @stub_content_root()
     def test_combat_resolution_content_present(self) -> None:
         from world.checks.models import CheckType
 
@@ -27,6 +30,7 @@ class TestPlayableSlice(TestCase):
         # penetration + flee CheckTypes seeded by the combat cluster
         self.assertTrue(CheckType.objects.filter(name__in=["penetration", "flee"]).exists())
 
+    @stub_content_root()
     def test_a_factory_character_check_resolves_to_a_real_outcome(self) -> None:
         """A factory character's check resolves to a real CheckOutcome.
 
@@ -79,6 +83,7 @@ class TestSeededCharacterCreation(TestCase):
     run character creation" gap.
     """
 
+    @stub_content_root()
     def test_finalize_character_works_on_seeded_only_db(self) -> None:
         from evennia.accounts.models import AccountDB
 
@@ -177,6 +182,7 @@ class TestSeededCharacterCreation(TestCase):
         # location=None on a Big-Button-seeded DB.
         self.assertIsNotNone(character.location)
 
+    @stub_content_root()
     def test_tradition_step_completable_for_every_seeded_beginning(self) -> None:
         """The CG Tradition step is completable, via the real endpoints, for every
         seeded Beginning (#2426 whole-branch-review finding).
@@ -246,6 +252,7 @@ class TestAcademyTrainingLoopReachable(TestCase):
     ``eligibility_rule``; availability is enforced at grant time inside
     ``run_train_offer`` via ``_technique_available_to_learner``)."""
 
+    @stub_content_root()
     def test_every_prospect_path_has_a_reachable_train_offer(self) -> None:
         from world.action_points.models import ActionPointPool
         from world.currency.services import get_or_create_purse, mint_favor_token
