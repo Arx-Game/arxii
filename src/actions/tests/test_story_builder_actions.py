@@ -22,6 +22,7 @@ from world.areas.models import Area
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, StoryAreaFactory, seed_default_gm_level_caps
 from world.gm.models import StoryArea
+from world.room_features.factories import RoomFeatureInstanceFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 if TYPE_CHECKING:
@@ -424,6 +425,15 @@ class StoryRemoveRoomActionTests(TestCase):
         CharacterFactory(db_key="StoryOccupant", location=self.profile.objectdb)
         result = StoryRemoveRoomAction().run(self.gm_actor, room_id=self.profile.objectdb_id)
         assert not result.success
+        assert RoomProfile.objects.filter(objectdb_id=self.profile.objectdb_id).exists()
+
+    def test_room_with_feature_instance_refused(self) -> None:
+        from actions.definitions.story_builder import StoryRemoveRoomAction
+
+        RoomFeatureInstanceFactory(room_profile=self.profile)
+        result = StoryRemoveRoomAction().run(self.gm_actor, room_id=self.profile.objectdb_id)
+        assert not result.success
+        assert result.message == "This room has an installed feature; remove that first."
         assert RoomProfile.objects.filter(objectdb_id=self.profile.objectdb_id).exists()
 
     def test_remove_deletes_room_and_exits(self) -> None:

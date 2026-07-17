@@ -473,10 +473,13 @@ class StoryRemoveRoomAction(_StoryBuilderAction):
     """Remove an owned story room. Kwarg: ``room_id``.
 
     Refuses when the room has any contents (characters or items — empty it
-    first). No exported-room guard is needed — story rooms are always
-    ``origin=STORY`` and never carry a ``fixture_key`` by construction, so the
-    ``StaffRemoveRoomAction`` export check would never trigger here. Deletes
-    exits pointing in/out, then the room itself, atomically.
+    first), or when it has an installed ``RoomFeatureInstance`` (remove that
+    first — ``RoomFeatureInstance.room_profile`` is CASCADE, so removal would
+    otherwise silently destroy the feature). No exported-room guard is
+    needed — story rooms are always ``origin=STORY`` and never carry a
+    ``fixture_key`` by construction, so the ``StaffRemoveRoomAction`` export
+    check would never trigger here. Deletes exits pointing in/out, then the
+    room itself, atomically.
     """
 
     key: str = "story_remove_room"
@@ -489,6 +492,7 @@ class StoryRemoveRoomAction(_StoryBuilderAction):
         from django.db import transaction  # noqa: PLC0415
 
         from world.areas.grid_services import has_non_exit_contents  # noqa: PLC0415
+        from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
 
         room_profile, error = _resolve_owned_story_room(actor, kwargs.get("room_id"))
         if error is not None:
@@ -496,6 +500,10 @@ class StoryRemoveRoomAction(_StoryBuilderAction):
         room = room_profile.objectdb
         if has_non_exit_contents(room):
             return ActionResult(success=False, message="Empty the room first.")
+        if RoomFeatureInstance.objects.filter(room_profile=room_profile).active().exists():
+            return ActionResult(
+                success=False, message="This room has an installed feature; remove that first."
+            )
         with transaction.atomic():
             ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_location=room).delete()
             ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_destination=room).delete()
