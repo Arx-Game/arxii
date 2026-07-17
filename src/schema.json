@@ -25620,6 +25620,19 @@ paths:
     get:
       operationId: roster_media_list
       description: API viewset for managing player media.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - roster
       security:
@@ -25629,9 +25642,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PlayerMedia'
+                $ref: '#/components/schemas/PaginatedPlayerMediaList'
           description: ''
     post:
       operationId: roster_media_create
@@ -49914,6 +49925,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerMail'
+    PaginatedPlayerMediaList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerMedia'
     PaginatedPlayerReportDetailList:
       type: object
       required:

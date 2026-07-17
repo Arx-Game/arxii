@@ -256,19 +256,19 @@ class QuerysetPermissionsTestCase(APITestCase):
         """Users should only see their own media when authenticated."""
         url = reverse("roster:media-list")
 
-        # User1 should only see their own media
+        # User1 should only see their own media (paginated envelope, ADR-0138)
         self.client.force_authenticate(user=self.user1)
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == self.user1_media.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == self.user1_media.id
 
         # User2 should only see their own media
         self.client.force_authenticate(user=self.user2)
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == self.user2_media.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == self.user2_media.id
 
     def test_staff_sees_all_media(self):
         """Staff should see all media."""
@@ -277,7 +277,7 @@ class QuerysetPermissionsTestCase(APITestCase):
         self.client.force_authenticate(user=self.staff)
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2  # Both users' media
+        assert len(response.data["results"]) == 2  # Both users' media
 
     def test_unauthenticated_sees_no_media(self):
         """Unauthenticated users should see no media in list (no player_data)."""
@@ -285,4 +285,4 @@ class QuerysetPermissionsTestCase(APITestCase):
 
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 0  # No media for unauthenticated users
+        assert len(response.data["results"]) == 0  # No media for unauthenticated users

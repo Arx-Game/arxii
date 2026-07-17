@@ -211,8 +211,10 @@ class TestPlayerMediaViewSet(TestCase):
         url = "/api/roster/media/"
         response = self.client.get(url)
         assert response.status_code == 200
-        assert len(response.data) == 1
-        media_data = response.data[0]
+        # Paginated envelope (ADR-0138).
+        assert response.data["count"] == 1
+        assert len(response.data["results"]) == 1
+        media_data = response.data["results"][0]
         expected_fields = [
             "id",
             "cloudinary_public_id",
@@ -228,6 +230,24 @@ class TestPlayerMediaViewSet(TestCase):
             assert field in media_data
         assert media_data["id"] == self.media.id
         assert media_data["created_by"] is None
+
+    def test_list_media_is_paginated(self):
+        """A player's media library is paginated (ADR-0138); the FE walks pages."""
+        # setUp made 1; add two more for this player (3 total).
+        PlayerMediaFactory(player_data=self.player)
+        PlayerMediaFactory(player_data=self.player)
+
+        url = "/api/roster/media/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["count"] == 3
+        assert response.data["next"] is None
+        assert len(response.data["results"]) == 3
+
+        # A small page splits the library and hands back a next link.
+        response = self.client.get(f"{url}?page_size=2")
+        assert len(response.data["results"]) == 2
+        assert response.data["next"] is not None
 
     @patch("world.roster.views.media_views.CloudinaryGalleryService.upload_image")
     def test_create_media(self, mock_upload):
