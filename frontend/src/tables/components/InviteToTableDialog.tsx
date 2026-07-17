@@ -5,7 +5,7 @@
  * — the same pattern established in ScheduleEventDialog.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -19,7 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { searchPersonas } from '@/events/queries';
+import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import { useInviteToTable } from '../queries';
 import type { GMTable } from '../types';
 
@@ -55,33 +55,18 @@ interface InviteToTableDialogProps {
 export function InviteToTableDialog({ table, children }: InviteToTableDialogProps) {
   const [open, setOpen] = useState(false);
   const [personaQuery, setPersonaQuery] = useState('');
-  const [personaResults, setPersonaResults] = useState<PersonaOption[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<PersonaOption | null>(null);
-  const [personaSearching, setPersonaSearching] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const inviteMutation = useInviteToTable();
 
-  // Debounced persona search
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (personaQuery.trim().length < 2) {
-      setPersonaResults([]);
-      return;
-    }
-    debounceRef.current = setTimeout(() => {
-      setPersonaSearching(true);
-      searchPersonas(personaQuery.trim())
-        .then((results) => setPersonaResults(results))
-        .catch(() => setPersonaResults([]))
-        .finally(() => setPersonaSearching(false));
-    }, 300);
-  }, [personaQuery]);
+  // Debounced, race-safe persona search (2026-07 audit — shared hook).
+  const { results, isFetching: personaSearching } = usePersonaSearch(personaQuery);
+  // Suppress the dropdown once a persona is committed (query === its name).
+  const personaResults = selectedPersona?.name === personaQuery ? [] : results;
 
   function resetForm() {
     setPersonaQuery('');
-    setPersonaResults([]);
     setSelectedPersona(null);
     setFieldErrors({});
   }
@@ -94,7 +79,6 @@ export function InviteToTableDialog({ table, children }: InviteToTableDialogProp
   function handleSelectPersona(persona: PersonaOption) {
     setSelectedPersona(persona);
     setPersonaQuery(persona.name);
-    setPersonaResults([]);
   }
 
   function handleSubmit(e: React.FormEvent) {

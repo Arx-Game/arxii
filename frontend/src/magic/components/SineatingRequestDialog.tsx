@@ -9,7 +9,7 @@
  * Character search follows InviteToTableDialog.tsx (debounced persona search).
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Dialog,
@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { searchPersonas } from '@/events/queries';
+import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import { fetchScenes } from '@/scenes/queries';
 import type { SceneListItem } from '@/scenes/queries';
 import { extractErrorMessage } from '@/lib/errors';
@@ -84,14 +84,10 @@ export function SineatingRequestDialog({
 
   // Form state
   const [sineaterQuery, setSineaterQuery] = useState('');
-  const [sineaterResults, setSineaterResults] = useState<PersonaOption[]>([]);
   const [selectedSineater, setSelectedSineater] = useState<PersonaOption | null>(null);
-  const [sineaterSearching, setSineaterSearching] = useState(false);
   const [resonanceId, setResonanceId] = useState<number | null>(null);
   const [sceneId, setSceneId] = useState<number | null>(null);
   const [units, setUnits] = useState<number | ''>('');
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Data hooks. Sineating is initiated by the Sinner — scope resonance
   // lookup to the Sinner's character_sheet so users with alts only see
@@ -105,28 +101,16 @@ export function SineatingRequestDialog({
   const scenes = scenesData?.results ?? [];
   const resonanceList = resonances ?? [];
 
+  // Debounced, race-safe sineater search (2026-07 audit — shared hook).
+  const { results: sineaterResults, isFetching: sineaterSearching } =
+    usePersonaSearch(sineaterQuery);
+  const sineaterOptions = selectedSineater?.name === sineaterQuery ? [] : sineaterResults;
+
   // Mutation
   const requestMutation = useRequestSineating();
 
-  // Debounced sineater search
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (sineaterQuery.trim().length < 2) {
-      setSineaterResults([]);
-      return;
-    }
-    debounceRef.current = setTimeout(() => {
-      setSineaterSearching(true);
-      searchPersonas(sineaterQuery.trim())
-        .then((results) => setSineaterResults(results))
-        .catch(() => setSineaterResults([]))
-        .finally(() => setSineaterSearching(false));
-    }, 300);
-  }, [sineaterQuery]);
-
   function resetForm() {
     setSineaterQuery('');
-    setSineaterResults([]);
     setSelectedSineater(null);
     setResonanceId(null);
     setSceneId(null);
@@ -142,7 +126,6 @@ export function SineatingRequestDialog({
   function handleSelectSineater(persona: PersonaOption) {
     setSelectedSineater(persona);
     setSineaterQuery(persona.name);
-    setSineaterResults([]);
   }
 
   // Validation
@@ -238,9 +221,9 @@ export function SineatingRequestDialog({
                     Searching…
                   </span>
                 )}
-                {sineaterResults.length > 0 && (
+                {sineaterOptions.length > 0 && (
                   <ul className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover shadow-lg">
-                    {sineaterResults.map((p) => (
+                    {sineaterOptions.map((p) => (
                       <li key={p.id}>
                         <button
                           type="button"
