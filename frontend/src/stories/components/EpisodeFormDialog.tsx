@@ -8,7 +8,7 @@
  * (Task 9.4).
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -21,8 +21,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useCreateEpisode, useUpdateEpisode } from '../queries';
+import { useCreateEpisode, useEpisode, useUpdateEpisode } from '../queries';
 import type { Episode, Maturity } from '../types';
+import { ApiError } from '@/lib/errors';
 import { ProgressionRequirementsEditor } from './ProgressionRequirementsEditor';
 import { PromoteMaturityButton } from './PromoteMaturityButton';
 
@@ -86,6 +87,13 @@ export function EpisodeFormDialog({
 }: EpisodeFormDialogProps) {
   const isEdit = episode !== undefined;
 
+  // Fetch the FULL episode in edit mode (2026-07 audit): the passed EpisodeLike
+  // often comes from the list serializer, which omits is_ending / description /
+  // summary / resting_conclusion — so seeding the form from it and saving wiped
+  // those fields (a rename silently reset is_ending to false). The detail query
+  // supplies them; we re-seed once it arrives.
+  const { data: detail } = useEpisode(isEdit && open ? episode.id : 0);
+
   const [title, setTitle] = useState(episode?.title ?? '');
   const [description, setDescription] = useState(episode?.description ?? '');
   const [summary, setSummary] = useState(episode?.summary ?? '');
@@ -96,9 +104,23 @@ export function EpisodeFormDialog({
   );
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
 
+  // Re-seed from the authoritative detail once it loads (edit mode only).
+  useEffect(() => {
+    if (!detail) return;
+    setTitle(detail.title ?? '');
+    setDescription(detail.description ?? '');
+    setSummary(detail.summary ?? '');
+    setRestingConclusion(detail.resting_conclusion ?? '');
+    setIsEnding(detail.is_ending ?? false);
+    setOrder(detail.order !== undefined ? String(detail.order) : '');
+  }, [detail]);
+
   const createMutation = useCreateEpisode();
   const updateMutation = useUpdateEpisode();
   const isPending = createMutation.isPending || updateMutation.isPending;
+  // In edit mode, block submit until the full episode has loaded so a save
+  // can never PATCH a not-yet-seeded is_ending / description over real data.
+  const detailLoading = isEdit && open && detail === undefined;
 
   function resetForm() {
     setTitle(episode?.title ?? '');
@@ -116,17 +138,11 @@ export function EpisodeFormDialog({
   }
 
   function handleError(err: unknown) {
-    if (err && typeof err === 'object' && 'response' in err) {
-      const response = (err as { response?: Response }).response;
-      if (response) {
-        void response
-          .json()
-          .then((data: unknown) => {
-            if (data && typeof data === 'object') setFieldErrors(data as DRFFieldErrors);
-          })
-          .catch(() => toast.error('An error occurred. Please try again.'));
-        return;
-      }
+    // ApiError (from apiFetch, #2418) carries DRF field errors + a message;
+    // the old code read err.response, a property no thrown error ever had.
+    if (err instanceof ApiError && err.fieldErrors) {
+      setFieldErrors(err.fieldErrors as DRFFieldErrors);
+      return;
     }
     toast.error(err instanceof Error ? err.message : 'An error occurred. Please try again.');
   }
@@ -135,12 +151,15 @@ export function EpisodeFormDialog({
     e.preventDefault();
     setFieldErrors({});
 
+    // On edit the fields are fully loaded, so send explicit empty strings for
+    // cleared text fields (the old `|| undefined` omitted them, making
+    // description/summary impossible to clear). On create, omit blanks.
     const data = {
       chapter: chapterId,
       title: title.trim(),
-      description: description.trim() || undefined,
-      summary: summary.trim() || undefined,
-      resting_conclusion: restingConclusion.trim() || undefined,
+      description: isEdit ? description.trim() : description.trim() || undefined,
+      summary: isEdit ? summary.trim() : summary.trim() || undefined,
+      resting_conclusion: isEdit ? restingConclusion.trim() : restingConclusion.trim() || undefined,
       is_ending: isEnding,
       order: order !== '' ? Number(order) : undefined,
     };
@@ -331,7 +350,7 @@ export function EpisodeFormDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || detailLoading}>
               {isPending
                 ? isEdit
                   ? 'Saving…'

@@ -27,6 +27,7 @@ import type { EpisodeLike } from '../components/EpisodeFormDialog';
 vi.mock('../queries', () => ({
   useCreateEpisode: vi.fn(),
   useUpdateEpisode: vi.fn(),
+  useEpisode: vi.fn(),
   useProgressionRequirements: vi.fn(),
   useCreateProgressionRequirement: vi.fn(),
   useDeleteProgressionRequirement: vi.fn(),
@@ -93,6 +94,15 @@ function setupMocks() {
     isError: false,
     error: null,
   } as unknown as ReturnType<typeof queries.useBeatList>);
+
+  // Default: no detail loaded (create mode / not-yet-fetched). Edit-mode tests
+  // that need a seeded form set this per-test.
+  vi.mocked(queries.useEpisode).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useEpisode>);
 
   return { createMock, updateMock };
 }
@@ -224,6 +234,13 @@ describe('EpisodeFormDialog — Task E2 GM/player text split + episode fields', 
   it('submits the new fields in the update body on edit', async () => {
     const user = userEvent.setup();
     const { updateMock } = setupMocks();
+    // Edit mode fetches the full episode; return it so the form seeds + enables.
+    vi.mocked(queries.useEpisode).mockReturnValue({
+      data: existingEpisode,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useEpisode>);
     updateMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
       const cb = callbacks as { onSuccess?: (data: unknown) => void };
       cb.onSuccess?.({ id: 21 });
@@ -250,6 +267,41 @@ describe('EpisodeFormDialog — Task E2 GM/player text split + episode fields', 
             resting_conclusion: 'The party rests, content with their progress.',
             is_ending: false,
           }),
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('preserves is_ending when opened from list-shaped data (2026-07 audit)', async () => {
+    const user = userEvent.setup();
+    const { updateMock } = setupMocks();
+    updateMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      (callbacks as { onSuccess?: (d: unknown) => void }).onSuccess?.({ id: 21 });
+    });
+
+    // The caller (author tree / DAG) passes list-serializer data that OMITS
+    // is_ending — but the detail query supplies the true value. A rename must
+    // not reset is_ending to false.
+    const listShaped = { id: 21, title: 'Episode One', order: 1 } as EpisodeLike;
+    vi.mocked(queries.useEpisode).mockReturnValue({
+      data: { ...listShaped, is_ending: true, description: 'GM notes.', summary: 'Recap.' },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useEpisode>);
+
+    renderWithProviders(<EpisodeFormDialog {...defaultProps} episode={listShaped} />);
+
+    const title = screen.getByLabelText(/title/i);
+    await user.clear(title);
+    await user.type(title, 'Episode One Renamed');
+    await user.click(screen.getByRole('button', { name: /save episode/i }));
+
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ title: 'Episode One Renamed', is_ending: true }),
         }),
         expect.any(Object)
       );
