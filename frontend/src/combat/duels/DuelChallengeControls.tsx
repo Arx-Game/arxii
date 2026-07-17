@@ -1,27 +1,28 @@
 /**
  * DuelChallengeControls — duel-specific affordances for the combat rail.
  *
- * Three independent components surfaced by CombatTurnPanel when relevant:
+ * Two independent components surfaced by CombatTurnPanel when relevant, plus the
+ * shared `registryRef` dispatch helper:
  *
- * 1. DuelChallengeControls — Accept/Decline prompt for an incoming pending challenge.
- *    Driven by the GET /api/combat/duel-challenges/ inbox (#1180): the caller fetches
- *    the inbox, finds the incoming challenge for this character, and passes
- *    `hasPendingIncomingChallenge`, `challengerName`, and the specific `challengeId`.
- *    Dispatches registry actions 'accept' / 'decline' (threading `challenge_id`) via
- *    useDispatchPlayerAction.
- *
- * 2. DuelYieldControls — Yield button shown while an active duel is in progress.
+ * 1. DuelYieldControls — Yield button shown while an active duel is in progress.
  *    Dispatches registry action 'yield'. Guards on `isActiveDuel` (caller derives
  *    this from encounter.encounter_type === 'duel' && encounter.status !== 'completed').
  *
- * 3. DuelAcknowledgeRiskBanner — Full-width warning shown when the encounter is
+ * 2. DuelAcknowledgeRiskBanner — Full-width warning shown when the encounter is
  *    lethal (encounter.is_lethal) and the character has not yet acknowledged risk.
  *    Dispatches registry action 'acknowledge_risk'. Caller derives `showBanner`
  *    from encounter.is_lethal (backend sets this; acknowledgement state is opaque
  *    to the frontend; the backend removes this action from availability once acked).
  *
- * All three components dispatch through useDispatchPlayerAction (the same hook
- * used by YourTurn for combat actions).
+ * Both components dispatch through useDispatchPlayerAction (the same hook used by
+ * YourTurn for combat actions), and both check `isDispatchFailure(result)` before
+ * flipping confirmed local state — the dispatch endpoint resolves HTTP 200 with
+ * `success: false` for a business-rule rejection (#2423).
+ *
+ * The Accept/Decline prompt for an incoming pending challenge (formerly
+ * DuelChallengeControls here) lives in DuelChallengeNotifier's toast body since
+ * #2157 — the standalone in-panel prompt was superseded and was deleted (#2423).
+ * `registryRef` is re-exported from here for that caller.
  *
  * Part of #568 — Duels feature, Task 14. Inbox wiring + challenge_id threading: #1180.
  */
@@ -29,6 +30,7 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useDispatchPlayerAction } from '@/combat/queries';
+import { isDispatchFailure } from '@/combat/types';
 
 // ---------------------------------------------------------------------------
 // Dispatch helper — registry-backend action with no extra kwargs
@@ -42,136 +44,6 @@ export function registryRef(key: string, kwargs: Record<string, unknown> = {}) {
     },
     kwargs,
   };
-}
-
-// ---------------------------------------------------------------------------
-// DuelChallengeControls — Accept / Decline prompt
-// ---------------------------------------------------------------------------
-
-export interface DuelChallengeControlsProps {
-  /** The character performing the action (used by useDispatchPlayerAction). */
-  characterId: number;
-  /** True when this character has a PENDING incoming DuelChallenge. */
-  hasPendingIncomingChallenge: boolean;
-  /** Display name of the challenger — shown in the prompt. */
-  challengerName: string | null;
-  /**
-   * The specific PENDING challenge this prompt acts on. Threaded into the action
-   * kwargs as `challenge_id` so accept/decline target the intended challenge when
-   * a PC has more than one pending (#1180). Null when unknown (back-compat).
-   */
-  challengeId?: number | null;
-  /**
-   * Called after a successful accept/decline so the caller can refresh caches
-   * (e.g. invalidate the inbox + the scene's active-encounter list).
-   */
-  onResolved?: () => void;
-}
-
-/**
- * Accept/Decline prompt for an incoming duel challenge.
- *
- * Renders null when `hasPendingIncomingChallenge` is false.
- * Dispatches the 'accept' or 'decline' registry action (threading `challenge_id`)
- * on click. The caller supplies the availability + identity from the
- * GET /api/combat/duel-challenges/ inbox (#1180).
- */
-export function DuelChallengeControls({
-  characterId,
-  hasPendingIncomingChallenge,
-  challengerName,
-  challengeId = null,
-  onResolved,
-}: DuelChallengeControlsProps) {
-  const { mutateAsync, isPending } = useDispatchPlayerAction(characterId);
-  const [error, setError] = useState<string | null>(null);
-
-  if (!hasPendingIncomingChallenge) return null;
-
-  const challengeKwargs: Record<string, unknown> =
-    challengeId != null ? { challenge_id: challengeId } : {};
-
-  async function handleAccept() {
-    setError(null);
-    try {
-      await mutateAsync(registryRef('accept', challengeKwargs));
-      onResolved?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to accept challenge');
-    }
-  }
-
-  async function handleDecline() {
-    setError(null);
-    try {
-      await mutateAsync(registryRef('decline', challengeKwargs));
-      onResolved?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to decline challenge');
-    }
-  }
-
-  return (
-    <div
-      className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3"
-      data-testid="duel-challenge-prompt"
-    >
-      <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Duel Challenge</p>
-      <p className="text-sm text-foreground">
-        {challengerName ? (
-          <>
-            <span className="font-semibold">{challengerName}</span> has challenged you to a duel.
-          </>
-        ) : (
-          'You have received a duel challenge.'
-        )}
-      </p>
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={() => {
-            handleAccept().catch(() => {});
-          }}
-          data-testid="duel-accept-btn"
-          className={cn(
-            'flex-1 rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-            isPending
-              ? 'border-border bg-muted text-muted-foreground'
-              : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-          )}
-        >
-          {isPending ? 'Dispatching…' : 'Accept'}
-        </button>
-
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={() => {
-            handleDecline().catch(() => {});
-          }}
-          data-testid="duel-decline-btn"
-          className={cn(
-            'flex-1 rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-            isPending
-              ? 'border-border bg-muted text-muted-foreground'
-              : 'border-destructive/60 bg-destructive/10 text-destructive hover:bg-destructive/20'
-          )}
-        >
-          {isPending ? 'Dispatching…' : 'Decline'}
-        </button>
-      </div>
-
-      {error !== null && (
-        <p role="alert" className="text-sm text-destructive" data-testid="duel-challenge-error">
-          {error}
-        </p>
-      )}
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +77,11 @@ export function DuelYieldControls({ characterId, isActiveDuel }: DuelYieldContro
   async function handleYield() {
     setError(null);
     try {
-      await mutateAsync(registryRef('yield'));
+      const result = await mutateAsync(registryRef('yield'));
+      if (isDispatchFailure(result)) {
+        setError(result.message ?? 'Failed to yield');
+        return;
+      }
       setYielded(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to yield');
@@ -287,7 +163,11 @@ export function DuelAcknowledgeRiskBanner({
   async function handleAcknowledge() {
     setError(null);
     try {
-      await mutateAsync(registryRef('acknowledge_risk'));
+      const result = await mutateAsync(registryRef('acknowledge_risk'));
+      if (isDispatchFailure(result)) {
+        setError(result.message ?? 'Failed to acknowledge risk');
+        return;
+      }
       setAcknowledged(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to acknowledge risk');
