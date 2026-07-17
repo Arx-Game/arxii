@@ -387,6 +387,7 @@
   - default_blueprint -> areas.PositionBlueprint [FK] (nullable)
 **Pointed to by:**
   - residents <- character_sheets.CharacterSheet
+  - starting_area_default <- character_creation.StartingArea
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
@@ -1221,7 +1222,7 @@
 ### StartingArea
 **Foreign Keys:**
   - realm -> realms.Realm [FK] (nullable)
-  - default_starting_room -> objects.ObjectDB [FK] (nullable)
+  - default_starting_room -> evennia_extensions.RoomProfile [FK] (nullable)
 **Pointed to by:**
   - beginnings <- character_creation.Beginnings
   - drafts <- character_creation.CharacterDraft

@@ -42,6 +42,37 @@ copy says so.
   hint to set `CONTENT_REPO_PATH` in `src/.env` (the Import Data upload
   remains the path for ad-hoc fixture files either way).
 
+### Content-Repo Export & Push (PR #2425; grid bundles added #2436/#2448)
+
+**Purpose:** the maintainers'-only inverse of the content-repo load above —
+write the DB's authored content back out to the private lore repo as JSON
+fixtures, then commit + push that repo. Two separate superuser buttons
+(export writes files; push commits/pushes them), so an operator can review
+the working-tree diff in between.
+
+- `content_export_views.py` — `content_export_preview` (GET, model inventory
+  + record counts from `core_management.content_export.CONTENT_MODELS`, plus a
+  `_grid_preview_context()` block showing authored area/room counts) and
+  `content_export_run` (POST, superuser-only) — drives
+  `core_management.content_export.export_to_content_repo` (flat
+  natural-key-serialized fixtures) **and**
+  `core_management.grid_export.export_grid_bundles` (the graph-aware
+  area/room/exit/sidecar bundles, one JSON file per `origin=AUTHORED` area at
+  `fixtures/grid/<area-slug>.json`) in the same run, surfacing grid area/room/
+  written-file/error counts alongside the flat-model results.
+- `content_push_views.py` — `content_push_preview` (GET, git
+  status/diff-stat summary of the content-repo working tree so the operator
+  can review before pushing) and `content_push_run` (POST, superuser-only) —
+  drives `core_management.content_push.push_content_to_repo` the same way
+  `tools/push_content.py` does (commit + push the export output).
+- Both view modules resolve the repo path via the same canonical
+  `core_management.content_repo.resolve_content_root()` as the load view.
+- URLs: `_content_export/` (GET preview) / `_content_export_run/` (POST run);
+  `_content_push/` (GET preview) / `_content_push_run/` (POST run).
+- Tests: `tests/test_content_export_views.py`, `tests/test_content_push_views.py`
+  (view-level HTTP tests added #2448 — both buttons shipped untested in
+  PR #2425 originally).
+
 **When Asked About**
 
 If an agent is asked about any of these topics, this is the system:
@@ -150,6 +181,10 @@ Defined in `services.py` as `HARDCODED_EXCLUDED_APPS` (canonical location, impor
 - `_seed_run/` - POST: runs `seed_dev_database()` then redirects to the Game Setup hub (superuser)
 - `_content_load/` - "Load private content repo" confirm page (superuser; #1220)
 - `_content_load_run/` - POST: builds + upserts the external content repo, then redirects to the Game Setup hub (superuser)
+- `_content_export/` - "Export to content repo" preview page (superuser; PR #2425), model inventory + grid area/room counts
+- `_content_export_run/` - POST: writes flat fixtures + grid bundles to the content repo (superuser)
+- `_content_push/` - "Push content to lore repo" preview page (superuser; PR #2425), git status/diff-stat
+- `_content_push_run/` - POST: commits + pushes the content-repo working tree (superuser)
 - `_game_setup/` - "Game Setup" hub: wayfinding + per-cluster content inventory (superuser; #1333)
 - `_tuning/` - Game Tuning dashboard skeleton (superuser; #1221); `_tuning/checks/`,
   `_tuning/consequences/`, `_tuning/conditions/`, `_tuning/simulation/` - the four HTMX panel fragments

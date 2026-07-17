@@ -719,8 +719,17 @@ per-class, per-stage health rate authoring and the primary-class level service.
 Spatial hierarchy for organizing rooms into regions, districts, and neighborhoods.
 
 - **Models:** `Area` (nullable `grid_x`/`grid_y` parent-local rendering coordinates,
-  #2223), `AreaClosure` (unmanaged, materialized view)
-- **Enums:** `AreaLevel` (Region, District, Neighborhood)
+  #2223; `slug` unique `SlugField` + `NaturalKeyMixin` (`NaturalKeyConfig.fields =
+  ["slug"]`) + `origin` (`GridOrigin`), #2436/#2448), `AreaClosure` (unmanaged,
+  materialized view)
+- **Enums:** `AreaLevel` (Region, District, Neighborhood); `GridOrigin`
+  (`world.areas.constants` — AUTHORED/STORY/PLAYER, #2436/#2448): who authored a grid
+  element. Only `origin=AUTHORED` areas/rooms (with their identity key set) export to
+  the lore repo via `grid_export.export_grid_bundles()`; `STORY` (GM-built) and
+  `PLAYER` (player-built) rows never export. Default is `PLAYER` so nothing exports by
+  accident; promotion to `AUTHORED` is a deliberate staff act. `evennia_extensions.
+  RoomProfile` carries the matching `fixture_key` (permanent, slugged identity,
+  natural-keyed) + `origin` pair — see "Grid content export/import" below.
 - **Key Functions:** `get_ancestry()`, `get_descendant_areas()`, `get_rooms_in_area()`,
   `reparent_area()`, `area_grid_path(area) -> list[tuple[int | None, int | None]]`
   (#2223, root->area chain of parent-local `(grid_x, grid_y)` pairs; rendering-hint
@@ -4729,16 +4738,39 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   idmapper RAM, process RSS/CPU, open system errors, deploy SHA).
 - **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
   maintainers' private content repository (`CONTENT_REPO_PATH` env var) via
-  `core_management.content_fixtures.build_all` + `load_entries`; linked from the Game
-  Setup hub. Domains (`DOMAIN_BUILDERS`, `core_management/content_fixtures.py`): `stats`/
+  `core_management.content_fixtures.load_world_content`; linked from the Game Setup
+  hub. Domains (`DOMAIN_BUILDERS`, `core_management/content_fixtures.py`): `stats`/
   `skills` → `traits.Trait` (#944); `npc_roles` → `npc_services.NPCRole`, `items` →
   `items.ItemTemplate`, `building_kinds` → `buildings.BuildingKind`, `decoration_kinds` →
-  `buildings.DecorationKind` (#2266) — every domain upserts by a DB-unique `name`; rooms/
-  areas are deferred (no natural key on `Area`/`RoomProfile` today).
+  `buildings.DecorationKind` (#2266) — every domain upserts by a DB-unique `name`.
+  `CONTENT_MODELS` (`core_management/content_export.py`) additionally covers
+  `character_creation.startingarea`, `evennia_extensions.roomsizetier`, and
+  `weather.climate` (#2436/#2448) now that all three carry `NaturalKeyMixin`.
+- **Grid content export/import (#2436/#2448):** rooms/areas are no longer deferred —
+  `Area`/`RoomProfile` gained permanent identity keys (`slug`/`fixture_key`) and a
+  `GridOrigin` export gate (see the Areas section above). `core_management.grid_export.
+  export_grid_bundles()` writes one JSON bundle per `origin=AUTHORED` area to
+  `<content_root>/fixtures/grid/<area-slug>.json` (area row + fixture-keyed rooms +
+  exits + `authored:`-sourced sidecar rows); `core_management.grid_import.
+  load_grid_bundles()` is the inverse — four passes (areas topologically by parent
+  slug, rooms by `fixture_key`, exits by `(source fixture_key, key)`, sidecars scoped
+  per bundle), report-never-delete for any AUTHORED row absent from the bundles. The
+  two pipelines don't run independently: a content fixture (e.g. `StartingArea`) can
+  reference a room by natural key before the grid bundle that creates it has loaded,
+  so `core_management.content_fixtures.load_world_content(content_root) ->
+  WorldLoadResult` sequences (1) content fixtures with `load_entries(...,
+  defer_unresolved=True)` — an unresolved natural-key FK is queued, not fatal — (2)
+  `load_grid_bundles()`, (3) a retry of the deferred queue with deferral off. Both
+  `tools/build_content_fixtures.py --load` and the admin Load view call this driver,
+  not a bare `load_entries`. `core_management.content_repo` (`resolve_content_root()`/
+  `load_dotenv_content_path()`) is the one canonical content-repo path resolver every
+  export/push/load call site uses. See ADR-0136 (bundle format + rejected
+  alternatives) and `docs/evennia-quirks.md`'s #946 entry (why upsert, not `loaddata`).
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,
-  `src/world/combat/simulation.py`.
+  `src/core_management/grid_export.py`, `src/core_management/grid_import.py`,
+  `src/core_management/content_repo.py`, `src/world/combat/simulation.py`.
 - **Details:** [tuning.md](tuning.md)
 
 ---

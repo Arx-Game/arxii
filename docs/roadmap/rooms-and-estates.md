@@ -198,6 +198,42 @@ defenses:
   ownership-role-gated *installation rights* beyond the existing owner/tenant Project
   gate (see "Ownership design notes" below).
 
+## Built (2026-07-17, epic #2436 slice 1 / #2448 — grid identity + export/import)
+
+- **Authored-vs-runtime grid identity (ADR-0136):** `Area` gained a permanent unique
+  `slug` (+ `NaturalKeyMixin`) and `RoomProfile` gained a permanent unique
+  `fixture_key`; both gained a `GridOrigin` (`world.areas.constants`:
+  AUTHORED/STORY/PLAYER, default PLAYER) marking who authored the row. Only
+  `origin=AUTHORED` rows with their identity key set are ever exported — GM `STORY`
+  areas and `PLAYER`-built rooms never leave the running game.
+- **Graph-aware export:** `core_management.grid_export.export_grid_bundles()` writes
+  one JSON bundle per authored area to `fixtures/grid/<area-slug>.json` in the lore
+  repo — the area row, its fixture-keyed rooms, exits (skipped-and-reported when the
+  destination isn't itself authored/keyed), and only the `authored:`-sourced
+  `LocationValueOverride`/`LocationValueModifier` sidecar rows (weather/sanctum/
+  building-style writers are excluded by construction).
+- **Graph-aware import:** `core_management.grid_import.load_grid_bundles()` is the
+  inverse — four ordered passes (areas by parent slug, rooms by `fixture_key`, exits
+  by source/destination key, sidecars) that upsert in place and never delete an
+  authored row absent from the bundles (surfaced as a report line instead).
+- **StartingArea now points at real authored rooms:**
+  `StartingArea.default_starting_room` retargeted from `ObjectDB` to `RoomProfile`,
+  joining `CONTENT_MODELS` alongside the newly natural-keyed `weather.Climate` and
+  `evennia_extensions.RoomSizeTier` — closing the #2435 crash-prone room-picker
+  admin-widget gap along the way.
+- **Sequencing driver:** `core_management.content_fixtures.load_world_content()`
+  loads content fixtures (deferring any natural-key FK a not-yet-imported room would
+  break), then the grid bundles, then retries the deferred entries — both
+  `tools/build_content_fixtures.py --load` and the admin Load button call it now.
+- **Admin fold-in:** the Export/Push buttons (PR #2425) got their missing view-level
+  tests, and Export now reports grid area/room/file counts alongside the flat-model
+  counts. See `src/web/admin/CLAUDE.md`'s "Content-Repo Export & Push" section.
+- **Remaining slices (epic #2436, not built here — separate sub-issues):**
+  #2449 (staff world-builder canvas), #2450 (GM story areas), #2451 (discovery/portal
+  authoring), #2452 (player building via projects — `needs-design`).
+- **Details:** see `docs/systems/INDEX.md`'s "Areas" + "Grid content export/import"
+  entries, `docs/adr/0136-grid-content-exports-as-graph-aware-area-bundles.md`.
+
 ## Overview
 
 Rooms are the spatial substrate of the world. Buildings and estates are
