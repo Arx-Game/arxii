@@ -28,5 +28,5 @@ identified by destination fixture key), and only the `authored:`-sourced
 `LocationValueOverride`/`LocationValueModifier` sidecar rows. `core_management.
 grid_import.load_grid_bundles()` reads every bundle back in four dependency-ordered
 passes and never deletes an authored row absent from the bundles (reports it
-instead). See ADR-0137 for the format decision and rejected alternatives.
+instead). See ADR-0138 for the format decision and rejected alternatives.
 _Avoid_: grid fixture, room fixture, area export file

@@ -4764,7 +4764,7 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `tools/build_content_fixtures.py --load` and the admin Load view call this driver,
   not a bare `load_entries`. `core_management.content_repo` (`resolve_content_root()`/
   `load_dotenv_content_path()`) is the one canonical content-repo path resolver every
-  export/push/load call site uses. See ADR-0137 (bundle format + rejected
+  export/push/load call site uses. See ADR-0138 (bundle format + rejected
   alternatives) and `docs/evennia-quirks.md`'s #946 entry (why upsert, not `loaddata`).
   Invariant (#2448 review fix): an AUTHORED room's `area` must itself be AUTHORED (never
   NULL or GM/player-owned) — `export_grid_bundles()` only walks rooms reachable through an
