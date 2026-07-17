@@ -65,15 +65,33 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
 // Mock action queries (used by ConsentPrompt + ActionPanel)
 // ---------------------------------------------------------------------------
 
-vi.mock('../../actionQueries', () => ({
-  fetchPendingRequests: vi.fn(() =>
+vi.mock('../../actionQueries', async () => {
+  const { useQuery } = await import('@tanstack/react-query');
+  const fetchAvailableActions = vi.fn(() =>
     Promise.resolve({ count: 0, next: null, previous: null, results: [] })
-  ),
-  createActionRequest: vi.fn(),
-  respondToRequest: vi.fn(),
-  fetchActionPanelData: vi.fn(() => Promise.resolve({ techniques: [], pending_requests: [] })),
-  fetchPlaces: vi.fn(() => Promise.resolve({ results: [] })),
-}));
+  );
+  return {
+    fetchPendingRequests: vi.fn(() =>
+      Promise.resolve({ count: 0, next: null, previous: null, results: [] })
+    ),
+    createActionRequest: vi.fn(),
+    respondToRequest: vi.fn(),
+    fetchActionPanelData: vi.fn(() => Promise.resolve({ techniques: [], pending_requests: [] })),
+    fetchPlaces: vi.fn(() => Promise.resolve({ results: [] })),
+    fetchAvailableActions,
+    useAvailableActionsQuery: (
+      characterId: number | null,
+      options: { enabled?: boolean; staleTime?: number; refetchInterval?: number } = {}
+    ) =>
+      useQuery({
+        queryKey: ['available-actions', characterId ?? 0],
+        queryFn: () => fetchAvailableActions(),
+        enabled: (options.enabled ?? true) && characterId !== null && characterId > 0,
+        staleTime: options.staleTime,
+        refetchInterval: options.refetchInterval,
+      }),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Mock roster queries — SceneDetailPage uses useMyRosterEntriesQuery to

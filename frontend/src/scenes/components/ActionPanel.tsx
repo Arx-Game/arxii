@@ -14,10 +14,10 @@ import { useAppSelector } from '@/store/hooks';
 import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import {
-  fetchAvailableActions,
   createActionRequest,
   castTechnique,
   useCastableTechniques,
+  useAvailableActionsQuery,
   toastDispositionMessage,
 } from '../actionQueries';
 import { fetchScene, sceneKeys } from '../queries';
@@ -111,11 +111,7 @@ export function ActionPanel({ sceneId }: Props) {
   const characterId = activeEntry?.character_id ?? null;
   const initiatorPersonaId = actingPersonaId(activeEntry);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId!),
-    enabled: open && characterId !== null,
-  });
+  const { data, isLoading } = useAvailableActionsQuery(characterId, { enabled: open });
 
   // Scene participants — used as candidates when a targeted action is selected.
   const { data: scene } = useQuery<SceneDetail>({

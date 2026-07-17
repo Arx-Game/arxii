@@ -42,7 +42,7 @@ import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
-import { fetchAvailableActions } from '@/scenes/actionQueries';
+import { useAvailableActionsQuery } from '@/scenes/actionQueries';
 import { fetchScene, sceneKeys } from '@/scenes/queries';
 import type { SceneDetail, ScenePersona } from '@/scenes/types';
 import type { PlayerAction } from '@/scenes/actionTypes';
@@ -91,11 +91,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
   // ---------------------------------------------------------------------------
   // Available actions -> the four staging refs
   // ---------------------------------------------------------------------------
-  const { data: actionsData } = useQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId!),
-    enabled: characterId !== null,
-  });
+  const { data: actionsData } = useAvailableActionsQuery(characterId);
   const availableActions: PlayerAction[] = actionsData?.results ?? [];
 
   const findAction = (registryKey: string): PlayerAction | null =>

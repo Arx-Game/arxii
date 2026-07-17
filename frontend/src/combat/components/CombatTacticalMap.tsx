@@ -10,11 +10,11 @@
  */
 
 import { useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../queries';
 import { isDispatchFailure } from '../types';
-import { fetchAvailableActions } from '@/scenes/actionQueries';
+import { useAvailableActionsQuery } from '@/scenes/actionQueries';
 import { TacticalMap } from '@/areas/components/TacticalMap';
 import type { OccupantSummary } from '@/areas/components/PositionMapNode';
 import type { PlayerAction } from '@/scenes/actionTypes';
@@ -47,10 +47,8 @@ export function CombatTacticalMap({
 }: CombatTacticalMapProps) {
   const { data: encounter } = useCombatEncounter(encounterId);
 
-  const { data: actionsData } = useQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId),
-    enabled: characterId > 0,
+  const { data: actionsData } = useAvailableActionsQuery(characterId, {
+    refetchInterval: 10_000,
   });
 
   const availableActions: PlayerAction[] = actionsData?.results ?? [];

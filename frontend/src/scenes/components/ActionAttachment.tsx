@@ -1,10 +1,9 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Zap, X, Loader2 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
-import { fetchAvailableActions } from '../actionQueries';
+import { useAvailableActionsQuery } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerAction } from '../actionTypes';
 
 interface ActionAttachmentProps {
@@ -32,10 +31,8 @@ export function ActionAttachment({
     [myRosterEntries, activeCharacterName]
   );
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId!),
-    enabled: open && characterId !== null,
+  const { data, isLoading } = useAvailableActionsQuery(characterId, {
+    enabled: open,
     staleTime: 30_000,
   });
 

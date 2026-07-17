@@ -19,7 +19,7 @@ import { isDispatchFailure } from '@/combat/types';
 import { TacticalMap } from '@/areas/components/TacticalMap';
 import type { OccupantSummary } from '@/areas/components/PositionMapNode';
 import { fetchScene, sceneKeys } from '../queries';
-import { fetchAvailableActions } from '../actionQueries';
+import { useAvailableActionsQuery } from '../actionQueries';
 import type { SceneDetail } from '../types';
 import type { PlayerAction } from '../actionTypes';
 
@@ -49,10 +49,8 @@ export function SceneTacticalMap({ sceneId }: Props) {
   // ---------------------------------------------------------------------------
   // Available actions — move_to_position/take_position + set_the_stage
   // ---------------------------------------------------------------------------
-  const { data: actionsData } = useQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId!),
-    enabled: characterId !== null,
+  const { data: actionsData } = useAvailableActionsQuery(characterId, {
+    refetchInterval: 10_000,
   });
 
   const availableActions: PlayerAction[] = actionsData?.results ?? [];

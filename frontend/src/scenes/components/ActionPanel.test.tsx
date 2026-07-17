@@ -9,9 +9,11 @@ vi.mock('../actionQueries', async (importOriginal) => {
   // Keep the real toastDispositionMessage (it only depends on 'sonner', mocked
   // below) so this test exercises the shared helper's actual wiring/logic.
   const actual = await importOriginal<typeof import('../actionQueries')>();
+  const { useQuery } = await import('@tanstack/react-query');
+  const fetchAvailableActions = vi.fn();
   return {
     ...actual,
-    fetchAvailableActions: vi.fn(),
+    fetchAvailableActions,
     createActionRequest: vi.fn(),
     castTechnique: vi.fn(),
     fetchCastableTechniques: vi.fn(),
@@ -19,6 +21,20 @@ vi.mock('../actionQueries', async (importOriginal) => {
       data: [],
       isLoading: false,
     })),
+    // Override with a version that calls the mocked fetchAvailableActions
+    // above — the real useAvailableActionsQuery's internal call binds to
+    // the actual module's own fetchAvailableActions, not this mock's export.
+    useAvailableActionsQuery: (
+      characterId: number | null,
+      options: { enabled?: boolean; staleTime?: number; refetchInterval?: number } = {}
+    ) =>
+      useQuery({
+        queryKey: ['available-actions', characterId ?? 0],
+        queryFn: () => fetchAvailableActions(characterId),
+        enabled: (options.enabled ?? true) && characterId !== null && characterId > 0,
+        staleTime: options.staleTime,
+        refetchInterval: options.refetchInterval,
+      }),
   };
 });
 
