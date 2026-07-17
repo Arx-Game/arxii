@@ -285,6 +285,19 @@ class PromoteToAuthoredRoomTests(TestCase):
         with self.assertRaises(GridServiceError):
             promote_to_authored(room_profile=profile, key="arx-city/vault-renamed")
 
+    def test_mismatched_area_prefix_raises(self) -> None:
+        profile = create_room(area=self.authored_area, name="Taproom")
+        with self.assertRaises(GridServiceError):
+            promote_to_authored(room_profile=profile, key="wrong-area/taproom")
+
+    def test_area_authored_but_slugless_raises(self) -> None:
+        slugless_area = AreaFactory(origin=GridOrigin.AUTHORED, slug=None)
+        profile = create_room(area=slugless_area, name="Taproom")
+        with self.assertRaises(GridServiceError) as ctx:
+            promote_to_authored(room_profile=profile, key="arx-city/taproom")
+        self.assertIn("area", ctx.exception.user_message.lower())
+        self.assertIn("promoted", ctx.exception.user_message.lower())
+
     def test_repromoting_with_same_key_is_idempotent(self) -> None:
         profile = create_room(area=self.authored_area, name="Vault")
         promote_to_authored(room_profile=profile, key="arx-city/vault")

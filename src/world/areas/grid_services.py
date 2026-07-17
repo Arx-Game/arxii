@@ -226,6 +226,16 @@ def _is_slug_segment(value: str) -> bool:
 
 
 def _promote_room_to_authored(room_profile: RoomProfile, key: str) -> None:
+    """Promote a room to AUTHORED, assigning its permanent ``<area-slug>/<room-slug>`` key.
+
+    Beyond the ``<area-slug>/<room-slug>`` shape check, the ``<area-slug>`` segment
+    must equal ``room_profile.area.slug`` exactly — a well-formed key naming the
+    wrong area would otherwise be accepted silently and permanently (ADR-0138), while
+    the exporter groups rooms by the room's actual FK, so the bundle filename and the
+    key's prefix would disagree forever. If the room's area is AUTHORED but has no
+    slug yet (AUTHORED areas can be slugless until they're promoted themselves), the
+    area must be promoted first — there is no slug yet to compare against.
+    """
     area_slug, _, room_slug = key.partition("/")
     if not room_slug or not _is_slug_segment(area_slug) or not _is_slug_segment(room_slug):
         msg = f"{key!r} is not a valid '<area-slug>/<room-slug>' fixture key."
@@ -234,6 +244,15 @@ def _promote_room_to_authored(room_profile: RoomProfile, key: str) -> None:
         msg = (
             "This room's area must exist and be AUTHORED before the room can be "
             "promoted (a room whose area isn't AUTHORED can never export)."
+        )
+        raise GridServiceError(msg)
+    if room_profile.area.slug is None:
+        msg = "This room's area must be promoted (given a slug) before the room can be promoted."
+        raise GridServiceError(msg)
+    if area_slug != room_profile.area.slug:
+        msg = (
+            f"Fixture key {key!r} names area {area_slug!r}, but this room's area is "
+            f"{room_profile.area.slug!r}."
         )
         raise GridServiceError(msg)
     if room_profile.fixture_key is not None and room_profile.fixture_key != key:
