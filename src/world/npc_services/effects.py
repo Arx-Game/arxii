@@ -18,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.npc_services.constants import OfferKind
 
 if TYPE_CHECKING:
@@ -169,17 +171,46 @@ class NoAvailableFavorTokenError(LookupError):
         self.user_message = f"You carry no Golden Hare for {academy_name} to call in."
 
 
+class TrainOfferMisconfiguredError(RuntimeError):
+    """A TRAIN-kind ``NPCServiceOffer`` was authored with a nonzero ``ap_cost`` (#2440).
+
+    TRAIN's AP charge flows entirely through ``charge_and_learn``'s has-gift/
+    major-gift multiplier logic (driven by ``TrainOfferDetails.learn_ap_cost``).
+    ``NPCServiceOffer.ap_cost`` must stay 0 for TRAIN offers — otherwise the
+    generic pre-dispatch charge in ``services._charge_offer_ap`` silently
+    double-charges the learner's AP pool before this handler even runs.
+    ``TrainOfferDetails.clean()`` is the authoring-time guard; this is the
+    runtime backstop, since no admin/serializer surface currently calls
+    ``full_clean()`` on ``TrainOfferDetails`` rows.
+    """
+
+    def __init__(self, offer_pk: int, ap_cost: int) -> None:
+        super().__init__(
+            f"TRAIN offer pk={offer_pk} has ap_cost={ap_cost} (must be 0) — "
+            "_charge_offer_ap would double-charge AP on top of charge_and_learn."
+        )
+
+
 def _resolve_unredeemed_hare(sheet: CharacterSheet, academy: Organization) -> FavorTokenDetails:
     """The learner's one unredeemed Golden Hare issued by ``academy`` (#2440).
 
     Exactly one Hare is charged per TRAIN acceptance — the first matching row
     (deterministic by pk) when several happen to be held. Raises
     ``NoAvailableFavorTokenError`` when the learner holds none.
+
+    ``select_for_update()`` locks the matching rows for the lifetime of the
+    caller's transaction, closing the TOCTOU where two concurrent TRAIN
+    accepts both resolve the same unredeemed Hare before either redeems it
+    (the row lock serializes the second caller behind the first's commit —
+    it then re-queries and either finds a different Hare or raises
+    ``NoAvailableFavorTokenError``). Must be called inside a
+    ``transaction.atomic()`` block — see ``run_train_offer``.
     """
     from world.currency.models import FavorTokenDetails  # noqa: PLC0415
 
     token = (
-        FavorTokenDetails.objects.filter(
+        FavorTokenDetails.objects.select_for_update()
+        .filter(
             issuing_organization=academy,
             redeemed_at__isnull=True,
             item_instance__holder_character_sheet=sheet,
@@ -473,7 +504,21 @@ def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per ga
     ``teaches_tradition`` — Hares are Academy-specific venue tokens, not
     per-tradition (ruling 2026-07-17 on #2428; ``redeem_favor_token``'s
     issuer-match stands unchanged).
+
+    Hare resolution + ``charge_and_learn`` + ``redeem_favor_token`` run
+    inside one outer ``transaction.atomic()`` — all-or-nothing regardless
+    of what the caller wraps this in. Without it, ``charge_and_learn``'s
+    own ``@transaction.atomic`` commits independently before
+    ``redeem_favor_token`` runs; a race between two concurrent TRAIN
+    accepts resolving the same Hare would then leave the loser charged
+    AP + coin + a technique with no Hare spent. ``_resolve_unredeemed_hare``
+    additionally locks the Hare row (``select_for_update()``) so the race
+    itself can't happen — the second caller serializes behind the first's
+    commit and either finds a different Hare or gets a clean
+    ``NoAvailableFavorTokenError`` refusal.
     """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
     from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
     from world.currency.services import (  # noqa: PLC0415
         get_or_create_treasury,
@@ -482,6 +527,9 @@ def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per ga
     from world.magic.exceptions import MagicError  # noqa: PLC0415
     from world.magic.services.gift_acquisition import charge_and_learn  # noqa: PLC0415
     from world.societies.obligation_services import has_open_obligation  # noqa: PLC0415
+
+    if offer.ap_cost != 0:
+        raise TrainOfferMisconfiguredError(offer.pk, offer.ap_cost)
 
     sheet = persona.character_sheet
     details = offer.train_offer_details
@@ -510,22 +558,22 @@ def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per ga
         )
 
     try:
-        token = _resolve_unredeemed_hare(sheet, academy)
+        with transaction.atomic():
+            token = _resolve_unredeemed_hare(sheet, academy)
+            character_technique = charge_and_learn(
+                sheet,
+                technique,
+                base_ap_cost=details.learn_ap_cost,
+                source=AccessChangeSource.ACADEMY_TRAINING,
+                gold_cost=details.gold_cost,
+                gold_treasury=get_or_create_treasury(academy),
+            )
+            redeem_favor_token(token, redeemer_org=academy)
     except NoAvailableFavorTokenError as exc:
         return EffectResult(
             kind=OfferKind.TRAIN.value,
             message=exc.user_message,
             payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
-        )
-
-    try:
-        character_technique = charge_and_learn(
-            sheet,
-            technique,
-            base_ap_cost=details.learn_ap_cost,
-            source=AccessChangeSource.ACADEMY_TRAINING,
-            gold_cost=details.gold_cost,
-            gold_treasury=get_or_create_treasury(academy),
         )
     except MagicError as exc:
         return EffectResult(
@@ -539,8 +587,15 @@ def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per ga
             message=f"You already know {technique.name}.",
             payload={"offer_pk": offer.pk, "technique_pk": technique.pk},
         )
-
-    redeem_favor_token(token, redeemer_org=academy)
+    except ValidationError:
+        # redeem_favor_token lost the race after charge_and_learn already
+        # ran in this transaction's savepoint — the whole atomic block above
+        # rolled back (AP, coin, and the CharacterTechnique are all undone).
+        return EffectResult(
+            kind=OfferKind.TRAIN.value,
+            message="Someone else called in that Hare before you finished.",
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
 
     return EffectResult(
         kind=OfferKind.TRAIN.value,

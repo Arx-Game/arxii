@@ -1,5 +1,8 @@
 """TRAIN offer kind (#2440): Academy trainers teach techniques for AP + coin + a Hare."""
 
+from unittest import mock
+
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.classes.factories import PathFactory
@@ -23,7 +26,11 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterTechnique
 from world.npc_services.constants import OfferKind
-from world.npc_services.effects import OFFER_EFFECT_HANDLERS, run_train_offer
+from world.npc_services.effects import (
+    OFFER_EFFECT_HANDLERS,
+    TrainOfferMisconfiguredError,
+    run_train_offer,
+)
 from world.npc_services.factories import (
     NPCRoleFactory,
     NPCServiceOfferFactory,
@@ -205,3 +212,175 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
             character=self.sheet, technique=self.signature_technique
         )
         self.assertTrue(known.exists())
+
+
+class TrainOfferAtomicChargeSequenceTests(TestCase):
+    """Hare-resolve + charge_and_learn + redeem_favor_token are all-or-nothing.
+
+    Review fix on #2440 (commit 93ff6c83c): before this fix, charge_and_learn
+    committed its own separate transaction, then redeem_favor_token ran in a
+    SECOND separate transaction. A race (or any redeem_favor_token failure)
+    would leave the learner charged AP + coin + a technique with no Hare
+    spent. run_train_offer now wraps the whole sequence in one outer
+    transaction.atomic() — a redeem_favor_token failure rolls back
+    everything charge_and_learn already did.
+    """
+
+    def setUp(self) -> None:
+        from world.action_points.models import ActionPointPool
+
+        self.academy = OrganizationFactory(name="Shroudwatch Academy")
+        self.persona = PersonaFactory()
+        self.sheet = self.persona.character_sheet
+        self.character = self.sheet.character
+
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.gift.resonances.add(ResonanceFactory())
+        self.technique = TechniqueFactory(gift=self.gift)
+        self.path = PathFactory()
+        CharacterPathHistoryFactory(character=self.character, path=self.path)
+        grant = PathGiftGrantFactory(path=self.path, gift=self.gift)
+        grant.starter_techniques.add(self.technique)
+
+        CharacterGiftUnlockFactory(character=self.sheet, unlock=GiftUnlockFactory(gift=self.gift))
+
+        self.role = NPCRoleFactory(faction_affiliation=self.academy)
+        self.offer = NPCServiceOfferFactory(
+            role=self.role, kind=OfferKind.TRAIN, label="Learn a technique", is_final=True
+        )
+        self.details = TrainOfferDetailsFactory(
+            offer=self.offer, technique=self.technique, learn_ap_cost=5, gold_cost=100
+        )
+
+        self.ap_pool = ActionPointPool.get_or_create_for_character(self.character)
+        self.ap_pool.current = 200
+        self.ap_pool.save()
+        self.purse = get_or_create_purse(self.sheet)
+        self.purse.balance = 1000
+        self.purse.save()
+        self.token = mint_favor_token(self.academy, self.sheet, provenance_note="Cleared the trial")
+
+    def test_redeem_favor_token_failure_rolls_back_charge_and_learn(self) -> None:
+        """A redeem_favor_token failure must undo charge_and_learn's AP/coin/technique.
+
+        SharedMemoryModel's identity map returns the SAME cached Python
+        instance on re-query by pk (see ``sharedmemory-model`` skill) — its
+        in-memory attributes were already mutated by charge_and_learn before
+        the rollback, and a SQL ROLLBACK cannot undo a Python attribute
+        assignment. ``refresh_from_db()``/re-querying by pk on that cached
+        instance is therefore a no-op that would mask a real bug here; each
+        model's class-wide cache must be flushed first to force a genuine
+        DB read of the post-rollback row.
+        """
+        from world.action_points.models import ActionPointPool
+        from world.currency.models import CharacterPurse, OrganizationTreasury
+
+        with mock.patch(
+            "world.currency.services.redeem_favor_token",
+            side_effect=ValidationError("This Golden Hare has already been redeemed."),
+        ):
+            result = run_train_offer(self.offer, self.persona)
+
+        self.assertIsNone(result.object_pk)
+        self.assertIn("Hare", result.message)
+
+        known = CharacterTechnique.objects.filter(character=self.sheet, technique=self.technique)
+        self.assertFalse(known.exists())
+
+        ActionPointPool.flush_instance_cache()
+        pool = ActionPointPool.get_or_create_for_character(self.character)
+        self.assertEqual(pool.current, 200)
+
+        CharacterPurse.flush_instance_cache()
+        OrganizationTreasury.flush_instance_cache()
+        purse = get_or_create_purse(self.sheet)
+        self.assertEqual(purse.balance, 1000)
+        treasury = get_or_create_treasury(self.academy)
+        self.assertEqual(treasury.balance, 0)
+
+        FavorTokenDetails.flush_instance_cache()
+        row = FavorTokenDetails.objects.get(pk=self.token.pk)
+        self.assertIsNone(row.redeemed_at)
+
+    def test_charge_and_learn_failure_leaves_hare_unredeemed(self) -> None:
+        """Insufficient AP fails charge_and_learn before the Hare is ever touched."""
+        from world.currency.models import CharacterPurse, OrganizationTreasury
+
+        self.ap_pool.current = 0
+        self.ap_pool.save()
+
+        result = run_train_offer(self.offer, self.persona)
+
+        self.assertIsNone(result.object_pk)
+        known = CharacterTechnique.objects.filter(character=self.sheet, technique=self.technique)
+        self.assertFalse(known.exists())
+
+        FavorTokenDetails.flush_instance_cache()
+        row = FavorTokenDetails.objects.get(pk=self.token.pk)
+        self.assertIsNone(row.redeemed_at)
+
+        CharacterPurse.flush_instance_cache()
+        OrganizationTreasury.flush_instance_cache()
+        purse = get_or_create_purse(self.sheet)
+        self.assertEqual(purse.balance, 1000)
+        treasury = get_or_create_treasury(self.academy)
+        self.assertEqual(treasury.balance, 0)
+
+
+class TrainOfferDetailsCleanTests(TestCase):
+    """TrainOfferDetails.clean() is the authoring-time guard for ap_cost=0."""
+
+    def setUp(self) -> None:
+        self.academy = OrganizationFactory(name="Shroudwatch Academy")
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.technique = TechniqueFactory(gift=self.gift)
+        self.role = NPCRoleFactory(faction_affiliation=self.academy)
+
+    def test_nonzero_ap_cost_rejected(self) -> None:
+        offer = NPCServiceOfferFactory(role=self.role, kind=OfferKind.TRAIN, ap_cost=3)
+        details = TrainOfferDetailsFactory(offer=offer, technique=self.technique)
+
+        with self.assertRaises(ValidationError):
+            details.clean()
+
+    def test_zero_ap_cost_accepted(self) -> None:
+        offer = NPCServiceOfferFactory(role=self.role, kind=OfferKind.TRAIN, ap_cost=0)
+        details = TrainOfferDetailsFactory(offer=offer, technique=self.technique)
+
+        details.clean()  # should not raise
+
+
+class TrainOfferApCostGuardTests(TestCase):
+    """Runtime backstop for a nonzero NPCServiceOffer.ap_cost on TRAIN offers.
+
+    TrainOfferDetails.clean() (see TrainOfferDetailsCleanTests above) is the
+    authoring-time guard, but nothing currently calls full_clean() on the
+    authoring path (no admin or serializer surface exists yet for
+    TrainOfferDetails) — so run_train_offer asserts defensively too.
+    """
+
+    def setUp(self) -> None:
+        self.academy = OrganizationFactory(name="Shroudwatch Academy")
+        self.persona = PersonaFactory()
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.gift.resonances.add(ResonanceFactory())
+        self.technique = TechniqueFactory(gift=self.gift)
+        self.role = NPCRoleFactory(faction_affiliation=self.academy)
+
+    def test_nonzero_ap_cost_raises_misconfigured_error(self) -> None:
+        offer = NPCServiceOfferFactory(role=self.role, kind=OfferKind.TRAIN, ap_cost=3)
+        TrainOfferDetailsFactory(offer=offer, technique=self.technique)
+
+        with self.assertRaises(TrainOfferMisconfiguredError):
+            run_train_offer(offer, self.persona)
+
+    def test_zero_ap_cost_does_not_trip_the_guard(self) -> None:
+        offer = NPCServiceOfferFactory(role=self.role, kind=OfferKind.TRAIN, ap_cost=0)
+        TrainOfferDetailsFactory(offer=offer, technique=self.technique)
+
+        # No PathGiftGrant/signature authored, so this falls through to the
+        # ordinary availability gate rather than raising — proving the
+        # ap_cost guard itself stays quiet at ap_cost=0.
+        result = run_train_offer(offer, self.persona)
+        self.assertIsNone(result.object_pk)
+        self.assertIn("isn't yours to learn", result.message)

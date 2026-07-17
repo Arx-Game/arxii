@@ -735,7 +735,7 @@ class TrainOfferDetails(SharedMemoryModel):
     curriculum."
 
     ``learn_ap_cost``/``gold_cost`` mirror ``TechniqueTeachingOffer``'s
-    fields — the same shared ``_charge_and_learn`` seam
+    fields — the same shared ``charge_and_learn`` seam
     (``world.magic.services.gift_acquisition``) consumes both. Unlike the
     teaching-offer path, TRAIN also always charges exactly one unredeemed
     Golden Hare (``currency.FavorTokenDetails``) issued by the Academy —
@@ -744,9 +744,11 @@ class TrainOfferDetails(SharedMemoryModel):
     NOT use ``NPCServiceOffer.ap_cost`` (the generic pre-dispatch AP charge
     used by COLLECTION/IMPROVEMENT, applied unconditionally by
     ``services._charge_offer_ap`` before the handler runs) — the
-    has-gift/major-gift AP multiplier logic in ``_charge_and_learn`` would
+    has-gift/major-gift AP multiplier logic in ``charge_and_learn`` would
     double-charge against that flat knob, so TRAIN offers are authored with
-    ``NPCServiceOffer.ap_cost=0``.
+    ``NPCServiceOffer.ap_cost=0`` (``clean()`` below enforces it; see also
+    ``world.npc_services.effects.TrainOfferMisconfiguredError``, the
+    runtime backstop for authoring paths that skip ``full_clean()``).
     """
 
     offer = models.OneToOneField(
@@ -772,6 +774,16 @@ class TrainOfferDetails(SharedMemoryModel):
         default=0,
         help_text="Coin charged to the learner's purse, credited to the Academy's treasury.",
     )
+
+    def clean(self) -> None:
+        """Reject a nonzero ``offer.ap_cost`` — see the class docstring."""
+        if self.offer_id is not None and self.offer.ap_cost != 0:
+            msg = (
+                "TRAIN offers must author NPCServiceOffer.ap_cost=0 — the AP charge "
+                "flows entirely through learn_ap_cost via charge_and_learn; a nonzero "
+                "ap_cost would double-charge the learner."
+            )
+            raise ValidationError({"offer": msg})
 
     def __str__(self) -> str:
         return f"TrainOffer: {self.offer.label} teaches {self.technique.name}"
