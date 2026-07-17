@@ -55,6 +55,27 @@ class JournalInvitePayloadTest(TestCase):
         self.assertEqual(entries[0].pending_invites, ())
         self.assertEqual(entries[0].participant_count, 1)
 
+    def test_invite_surfaces_without_any_participation(self):
+        """A PENDING invite surfaces even with zero mission participations (#audit2).
+
+        journal_for returns [] for a participation-less character, so an invite
+        to a brand-new character's first mission was invisible on the web; the
+        dedicated resolver returns it regardless.
+        """
+        from world.missions.services.journal import pending_invites_for_character
+
+        instance, holder = _holder_instance("no-part")
+        invitee = _pc()  # never shared into the mission — zero participations
+        invite = invite_to_mission(
+            instance,
+            holder.sheet_data.primary_persona,
+            invitee.sheet_data.primary_persona,
+        )
+        self.assertEqual(journal_for(invitee), [])
+        invites = pending_invites_for_character(invitee)
+        self.assertEqual(len(invites), 1)
+        self.assertEqual(invites[0].invite_id, invite.pk)
+
     def test_participant_count_reflects_group(self):
         """A 2-participant instance reports participant_count == 2."""
         instance, holder = _holder_instance("group")

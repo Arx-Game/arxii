@@ -12384,6 +12384,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/journal/pending-invites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Pending mission invites for the puppet, independent of participations (#audit2).
+     *
+     *     The journal list returns nothing for a character with no participations,
+     *     so a brand-new character invited to their first mission never saw the
+     *     invite. Invites are persona-scoped, so they get their own endpoint —
+     *     the web reads this instead of piggybacking on journal entry 0.
+     */
+    get: operations['missions_journal_pending_invites_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/journal/respond/': {
     parameters: {
       query?: never;
@@ -52188,6 +52212,25 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Opportunities'];
+        };
+      };
+    };
+  };
+  missions_journal_pending_invites_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingMissionInvite'][];
         };
       };
     };

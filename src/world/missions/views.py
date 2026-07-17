@@ -80,6 +80,7 @@ from world.missions.serializers import (
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
     OpportunitiesSerializer,
+    PendingMissionInviteSerializer,
     ResolvedBeatSerializer,
     SupportDeclareRequestSerializer,
     TaleRequestSerializer,
@@ -487,6 +488,24 @@ class MissionJournalViewSet(viewsets.ViewSet):
         page = paginator.paginate_queryset(cast("Any", entries), request)
         serializer = JournalEntrySerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
+
+    @extend_schema(responses={200: PendingMissionInviteSerializer(many=True)})
+    @action(detail=False, methods=("GET",), url_path="pending-invites")
+    def pending_invites(self, request: Request) -> Response:
+        """Pending mission invites for the puppet, independent of participations (#audit2).
+
+        The journal list returns nothing for a character with no participations,
+        so a brand-new character invited to their first mission never saw the
+        invite. Invites are persona-scoped, so they get their own endpoint —
+        the web reads this instead of piggybacking on journal entry 0.
+        """
+        from world.missions.services.journal import (  # noqa: PLC0415
+            pending_invites_for_character,
+        )
+
+        character = _puppet_character(request)
+        invites = pending_invites_for_character(character)
+        return Response(PendingMissionInviteSerializer(invites, many=True).data)
 
     @extend_schema(
         responses={

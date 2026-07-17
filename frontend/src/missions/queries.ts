@@ -15,6 +15,7 @@ import {
   getOpportunities,
   inviteToMission,
   listJournal,
+  listPendingInvites,
   resolveBeat,
   respondToMissionInvite,
   castGroupVote,
@@ -47,6 +48,7 @@ import type {
   BeatView,
   GroupBeatResult,
   JournalEntry,
+  PendingMissionInvite,
   MissionCategory,
   MissionGiver,
   MissionGiverRequest,
@@ -82,6 +84,7 @@ export const missionKeys = {
   categories: () => [...missionKeys.all, 'categories'] as const,
   givers: () => [...missionKeys.all, 'givers'] as const,
   journal: () => [...missionKeys.all, 'journal'] as const,
+  pendingInvites: () => [...missionKeys.all, 'pending-invites'] as const,
   opportunities: () => [...missionKeys.all, 'opportunities'] as const,
   // roomKey threads the player's current room into the key so a move
   // refetches liveness — the server computes "live here" from the puppet.
@@ -339,6 +342,15 @@ export function useJournal(): UseQueryResult<PaginatedResponse<JournalEntry>> {
   });
 }
 
+/** Pending mission invites for the puppet (#audit2) — surfaces even with an empty journal. */
+export function usePendingInvites(): UseQueryResult<PendingMissionInvite[]> {
+  return useQuery({
+    queryKey: missionKeys.pendingInvites(),
+    queryFn: listPendingInvites,
+    refetchInterval: 15_000,
+  });
+}
+
 export function useOpportunities() {
   return useQuery({
     queryKey: missionKeys.opportunities(),
@@ -456,7 +468,10 @@ export function useInviteToMission() {
       instanceId: number;
       invitee_character_id: number;
     }) => inviteToMission(instanceId, { invitee_character_id }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: missionKeys.pendingInvites() }).catch(() => {});
+    },
   });
 }
 
@@ -465,6 +480,9 @@ export function useRespondToMissionInvite() {
   return useMutation({
     mutationFn: (body: { invite_id: number; response: 'accept' | 'decline' }) =>
       respondToMissionInvite(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: missionKeys.pendingInvites() }).catch(() => {});
+    },
   });
 }
