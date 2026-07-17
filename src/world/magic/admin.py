@@ -25,6 +25,8 @@ from world.magic.models import (
     Gift,
     GiftAcquisitionConfig,
     GiftUnlock,
+    GlimpseTag,
+    GlimpseTagDistinctionSuggestion,
     ImbuingProseTemplate,
     IntensityTier,
     LevelPowerConfig,
@@ -232,6 +234,25 @@ class CharacterAuraAdmin(admin.ModelAdmin):
     @admin.display(description="Dominant")
     def get_dominant(self, obj):
         return obj.dominant_affinity.label
+
+
+@admin.register(GlimpseTag)
+class GlimpseTagAdmin(admin.ModelAdmin):
+    """Guided glimpse tag catalog (#2427) — lore-repo content model."""
+
+    list_display = ["name", "axis", "sort_order", "is_active"]
+    list_filter = ["axis", "is_active"]
+    search_fields = ["name", "slug"]
+    prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(GlimpseTagDistinctionSuggestion)
+class GlimpseTagDistinctionSuggestionAdmin(admin.ModelAdmin):
+    """Curated tag→distinction suggestion (#2427) — lore-repo content model."""
+
+    list_display = ["tag", "distinction", "sort_order"]
+    list_filter = ["tag__axis"]
+    search_fields = ["tag__name", "distinction__name"]
 
 
 @admin.action(description="Staff grant resonance to this row")

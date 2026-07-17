@@ -478,6 +478,18 @@ class CharacterDistinction(SharedMemoryModel):
         related_name="distinction",
         help_text="The Secret this distinction was relocated into; null = publicly visible.",
     )
+    # Glimpse provenance (#2427): when set, this distinction was born in the
+    # character's Glimpse (first magical awakening). The FK's presence IS the
+    # linked state, mirroring ``secret`` above — no separate flag to drift.
+    # SET_NULL so deleting the aura simply drops the provenance.
+    from_glimpse = models.ForeignKey(
+        "magic.CharacterAura",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="glimpse_born_distinctions",
+        help_text="The Glimpse (aura) this distinction was born in; null = no glimpse link.",
+    )
     source_description = models.TextField(
         blank=True,
         help_text="Description of how the distinction was acquired (for gameplay).",

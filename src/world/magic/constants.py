@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from django.db import models
 
 
@@ -490,3 +492,43 @@ def is_imbuing_ritual(*, name: str, service_function_path: str) -> bool:
 # resolve its own live-play modifier.
 MAGIC_LEARNING_AP_COST_TARGET_NAME = "magic_learning_ap_cost"
 MAGIC_MODIFIER_CATEGORY_NAME = "magic"
+
+
+class GlimpseTagAxis(models.TextChoices):
+    """Narrative axis of a GlimpseTag (#2427): the four guided glimpse steps."""
+
+    TONE = "TONE", "Tone"
+    CONSEQUENCE = "CONSEQUENCE", "Consequence"
+    WITNESS = "WITNESS", "Witness & Secrecy"
+    SENSORY = "SENSORY", "Sensory & Discovery"
+
+
+class GlimpseState(models.TextChoices):
+    """Deferral/progress state of a character's Glimpse (#2427).
+
+    A cache of prose+tag truth on CharacterAura, maintained exclusively by
+    world.magic.services.glimpse — never written directly.
+    """
+
+    NOT_STARTED = "NOT_STARTED", "Not started"
+    TAGS_ONLY = "TAGS_ONLY", "Tags chosen, story unwritten"
+    COMPLETE = "COMPLETE", "Complete"
+
+
+@dataclass(frozen=True)
+class GlimpseAxisRule:
+    """Select-arity + rendering rule for one glimpse axis (#2427)."""
+
+    multi: bool
+    prose_prompt: bool
+
+
+#: Axis → arity/rendering config (#2427). TONE is single-select; SENSORY
+#: renders as prose prompts in the writing step rather than hard tags
+#: (authored SENSORY tags remain possible without a migration).
+GLIMPSE_AXIS_CONFIG: dict[GlimpseTagAxis, GlimpseAxisRule] = {
+    GlimpseTagAxis.TONE: GlimpseAxisRule(multi=False, prose_prompt=False),
+    GlimpseTagAxis.CONSEQUENCE: GlimpseAxisRule(multi=True, prose_prompt=False),
+    GlimpseTagAxis.WITNESS: GlimpseAxisRule(multi=True, prose_prompt=False),
+    GlimpseTagAxis.SENSORY: GlimpseAxisRule(multi=True, prose_prompt=True),
+}
