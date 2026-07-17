@@ -250,6 +250,37 @@ class ResonanceGrantListTests(APITestCase):
         results = data["results"] if isinstance(data, dict) and "results" in data else data
         self.assertEqual(len(results), 1)
 
+    def test_ledger_is_paginated(self) -> None:
+        """The audit ledger is paginated (ADR-0138) — it grows a row per grant.
+
+        The old endpoint returned every row in one response; a character with a
+        long resonance history would have shipped hundreds of rows at once.
+        """
+        from world.magic.constants import GainSource
+        from world.magic.services.resonance import grant_resonance
+
+        account, sheet, resonance = self._account_with_grant()
+        # Two more ledger rows (3 total for this account).
+        grant_resonance(sheet, resonance, 1, source=GainSource.STAFF_GRANT)
+        grant_resonance(sheet, resonance, 1, source=GainSource.STAFF_GRANT)
+        self.client.force_authenticate(user=account)
+
+        # Default page: the paginated envelope is present with all 3 rows.
+        response = self.client.get("/api/magic/resonance-grants/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("count", data)
+        self.assertIn("results", data)
+        self.assertEqual(data["count"], 3)
+        self.assertEqual(len(data["results"]), 3)
+        self.assertIsNone(data["next"])
+
+        # A small page_size actually splits it and hands back a next link.
+        response = self.client.get("/api/magic/resonance-grants/?page_size=2")
+        data = response.json()
+        self.assertEqual(len(data["results"]), 2)
+        self.assertIsNotNone(data["next"])
+
     def test_user_does_not_see_others_grants(self) -> None:
         # Set up two accounts, each with a grant
         alice_account, _, _ = self._account_with_grant()

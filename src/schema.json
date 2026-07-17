@@ -16310,6 +16310,18 @@ paths:
         schema:
           type: string
           format: date-time
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       - in: query
         name: resonance
         schema:
@@ -16371,9 +16383,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ResonanceGrant'
+                $ref: '#/components/schemas/PaginatedResonanceGrantList'
           description: ''
   /api/magic/resonance-grants/{id}/:
     get:
@@ -50157,6 +50167,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RelationshipUpdate'
+    PaginatedResonanceGrantList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResonanceGrant'
     PaginatedRiskCalibrationList:
       type: object
       required:
