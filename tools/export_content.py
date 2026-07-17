@@ -74,14 +74,21 @@ def main() -> int:
 
     _configure_django()
 
-    from core_management.content_export import (  # noqa: PLC0415
-        CONTENT_MODELS,
-        export_to_content_repo,
-    )
+    from core_management.content_export import CONTENT_MODELS  # noqa: PLC0415
 
     if args.check:
         _run_check(CONTENT_MODELS)
+        _run_grid_check()
         return 0
+
+    model_ok = _run_model_export(content_root)
+    grid_ok = _run_grid_export(content_root)
+    return 0 if (model_ok and grid_ok) else 1
+
+
+def _run_model_export(content_root: Path) -> bool:
+    """Export content models; print the report. Returns True iff no errors."""
+    from core_management.content_export import export_to_content_repo  # noqa: PLC0415
 
     result = export_to_content_repo(content_root)
     for path in result.written:
@@ -95,7 +102,29 @@ def main() -> int:
         for err in result.errors:
             print(f"  {err}", file=sys.stderr)
     print(f"OK: {result.total_records} records -> {len(result.written)} file(s).")
-    return 0 if not result.errors else 1
+    return not result.errors
+
+
+def _run_grid_export(content_root: Path) -> bool:
+    """Export grid bundles; print the report. Returns True iff no errors."""
+    from core_management.grid_export import export_grid_bundles  # noqa: PLC0415
+
+    grid_result = export_grid_bundles(content_root)
+    for path in grid_result.written:
+        print(f"wrote {path.relative_to(content_root)}")
+    if grid_result.reports:
+        print(f"\nGrid export reports ({len(grid_result.reports)}):")
+        for line in grid_result.reports:
+            print(f"  {line}")
+    if grid_result.errors:
+        print(f"\nGrid export errors ({len(grid_result.errors)}):")
+        for err in grid_result.errors:
+            print(f"  {err}", file=sys.stderr)
+    print(
+        f"OK: grid — {grid_result.area_count} area(s), {grid_result.room_count} room(s) -> "
+        f"{len(grid_result.written)} file(s)."
+    )
+    return not grid_result.errors
 
 
 def _run_check(content_models: frozenset[str]) -> None:
@@ -117,6 +146,22 @@ def _run_check(content_models: frozenset[str]) -> None:
         else:
             print(f"  {model_label}: 0 rows (skip)")
     print(f"\nTotal: {total} records across {len(content_models)} content models.")
+    print("Nothing written (--check).")
+
+
+def _run_grid_check() -> None:
+    """Dry-run: count authored areas/rooms, write nothing."""
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.areas.constants import GridOrigin  # noqa: PLC0415
+    from world.areas.models import Area  # noqa: PLC0415
+
+    areas = Area.objects.filter(origin=GridOrigin.AUTHORED).order_by("slug")
+    area_count = areas.count()
+    print(f"\nGrid: {area_count} authored area(s):")
+    for area in areas:
+        room_count = RoomProfile.objects.filter(area=area, origin=GridOrigin.AUTHORED).count()
+        slug = area.slug or "MISSING SLUG"
+        print(f"  {slug}: {room_count} authored room(s) -> fixtures/grid/{slug}.json")
     print("Nothing written (--check).")
 
 

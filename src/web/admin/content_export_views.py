@@ -64,7 +64,43 @@ def content_export_preview(request: HttpRequest) -> HttpResponse:
         "total_models": len(models_info),
         "content_repo_configured": bool(content_root and Path(content_root).is_dir()),
     }
+    context.update(_grid_preview_context())
     return render(request, "admin/content_export_preview.html", context)
+
+
+def _grid_preview_context() -> dict:
+    """Authored-area/room counts for the grid export preview block.
+
+    Read-only mirror of ``core_management.grid_export.export_grid_bundles``'s
+    selection query — never calls it directly, since that writes files.
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.areas.constants import GridOrigin  # noqa: PLC0415
+    from world.areas.models import Area  # noqa: PLC0415
+
+    try:
+        areas = list(Area.objects.filter(origin=GridOrigin.AUTHORED).order_by("slug"))
+    except (DatabaseError, OperationalError):
+        return {"grid_areas": [], "grid_area_count": 0, "grid_room_count": 0}
+
+    grid_areas = []
+    grid_room_count = 0
+    for area in areas:
+        room_count = RoomProfile.objects.filter(area=area, origin=GridOrigin.AUTHORED).count()
+        grid_room_count += room_count
+        grid_areas.append(
+            {
+                "slug": area.slug,
+                "name": area.name,
+                "room_count": room_count,
+                "output": f"fixtures/grid/{area.slug}.json" if area.slug else None,
+            }
+        )
+    return {
+        "grid_areas": grid_areas,
+        "grid_area_count": len(grid_areas),
+        "grid_room_count": grid_room_count,
+    }
 
 
 @staff_member_required
@@ -78,6 +114,7 @@ def content_export_run(request: HttpRequest) -> HttpResponse:
         ContentExportError,
         export_to_content_repo,
     )
+    from core_management.grid_export import export_grid_bundles  # noqa: PLC0415
 
     try:
         result = export_to_content_repo()
@@ -92,5 +129,21 @@ def content_export_run(request: HttpRequest) -> HttpResponse:
         f"{len(result.errors)} error(s).",
     )
     for err in result.errors:
+        messages.error(request, err)
+
+    try:
+        grid_result = export_grid_bundles()
+    except ContentExportError as exc:
+        messages.error(request, str(exc))
+        return HttpResponseRedirect(reverse("admin_game_setup"))
+
+    messages.success(
+        request,
+        f"Grid export: {grid_result.area_count} area(s), {grid_result.room_count} room(s) -> "
+        f"{len(grid_result.written)} file(s), {len(grid_result.errors)} error(s).",
+    )
+    for line in grid_result.reports:
+        messages.warning(request, line)
+    for err in grid_result.errors:
         messages.error(request, err)
     return HttpResponseRedirect(reverse("admin_game_setup"))
