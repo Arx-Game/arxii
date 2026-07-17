@@ -26,6 +26,10 @@ as argument.
 
 """
 
+from evennia.server.inputfuncs import text as _evennia_text
+
+from server.conf.mush_markup import normalize_mush_markup
+
 # def oob_echo(session, *args, **kwargs):
 #     """
 #     Example echo function. Echoes args, kwargs sent to it.
@@ -50,6 +54,20 @@ as argument.
 #
 #     """
 #     pass
+
+
+def text(session, *args, **kwargs):
+    """Telnet input adapter: convert MUSH ``%r``/``%t`` markup before handling.
+
+    Telnet is line-oriented, so ``%r`` is how MU* players embed a newline into a
+    single line of input. Only telnet-family sessions are rewritten; websocket /
+    ajax sessions (the React frontend, which sends real newlines and dispatches
+    via ``execute_action``) pass through untouched. We then delegate to Evennia's
+    default ``text`` handler rather than re-implementing command handling.
+    """
+    if args and str(session.protocol_key or "").startswith("telnet"):
+        args = (normalize_mush_markup(args[0]), *args[1:])
+    _evennia_text(session, *args, **kwargs)
 
 
 def _build_action_ref(kwargs: dict) -> object:

@@ -65,4 +65,24 @@ HELP_ENTRY_DICTS = [
 
         """,
     },
+    {
+        "key": "formatting",
+        "aliases": ["linebreak", "%r", "%t"],
+        "category": "General",
+        "text": """
+            When typing on a telnet/MUD client, you can format multi-line text on
+            a single input line using MUSH-style markup:
+
+              %r   inserts a line break (new line)
+              %t   inserts a tab
+              %b   inserts a non-breaking space
+              %%   inserts a literal percent sign
+
+            For example, setting a two-line description:
+
+              desc A tall figure in a grey cloak.%rTheir eyes never quite settle.
+
+            (The web client uses normal line breaks, so you don't need this there.)
+            """,
+    },
 ]
