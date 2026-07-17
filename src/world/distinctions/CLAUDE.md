@@ -53,7 +53,13 @@ admin. A caller that needs to strip a distinction in play does a direct
 `CharacterDistinction.objects.filter(...).delete()` — see `world.magic.services.
 tradition_membership._shed_traditionless_drawbacks` for the first such caller. If a second
 removal caller appears, promote this to a real `revoke_distinction` seam rather than letting a
-third ad hoc delete appear.
+third ad hoc delete appear. Two traps a removal caller MUST reason about (verified #2441
+review): resonance currency seeded via `DistinctionResonanceGrant` is a permanent, monotonic
+ledger mutation — deleting the row never claws it back (its `ResonanceGrant` audit FK is
+SET_NULL by design), so removing a resonance-granting distinction leaves the currency behind
+deliberately; and `CharacterDistinction.secret` has no reverse cleanup — deleting a
+secret-relocated distinction orphans its `secrets.Secret` row (handle or forbid before
+deleting anything that may have been secretized via `mint_distinction_secret`).
 
 ## Profile Visibility — Secrets, not a boolean (#1109 → #1334)
 
