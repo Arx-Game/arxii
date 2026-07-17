@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 import json
 from pathlib import Path
 import tempfile
@@ -12,17 +11,11 @@ from evennia.utils import create as evennia_create
 
 from core_management.content_export import ContentExportError
 from core_management.grid_export import export_grid_bundles
+from core_management.tests._grid_fixtures import build_sample_grid
 from evennia_extensions.constants import ExitKind, RoomEnclosure
-from evennia_extensions.models import ExitProfile, ObjectDisplayData, RoomSizeTier
 from world.areas.constants import AreaLevel, GridOrigin
-from world.areas.models import Area
 from world.buildings.constants import PermitEligibility
-from world.buildings.models import BuildingKind
 from world.locations.constants import LocationParentType, StatKey
-from world.locations.models import LocationValueModifier, LocationValueOverride
-from world.realms.models import Realm
-from world.societies.models import Society
-from world.weather.models import Climate
 
 
 class GridExportTests(TestCase):
@@ -30,128 +23,23 @@ class GridExportTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.realm = Realm.objects.create(name="Arx")
-        cls.climate = Climate.objects.create(name="Temperate")
-        cls.society = Society.objects.create(name="The Compact", realm=cls.realm)
-        cls.building_kind = BuildingKind.objects.create(name="Tavern")
-        cls.size_tier = RoomSizeTier.objects.create(name="Modest", units=10)
-
-        cls.region = Area.objects.create(
-            name="Arx Region",
-            level=AreaLevel.REGION,
-            slug="arx-region",
-            origin=GridOrigin.AUTHORED,
-        )
-        cls.city = Area.objects.create(
-            name="Arx City",
-            level=AreaLevel.CITY,
-            parent=cls.region,
-            slug="arx-city",
-            origin=GridOrigin.AUTHORED,
-            realm=cls.realm,
-            climate=cls.climate,
-            dominant_society=cls.society,
-            description="The City of Arx.",
-            color="|y",
-            permit_eligibility=PermitEligibility.OPEN,
-            permit_cost_multiplier=Decimal("1.500"),
-        )
-        cls.city.allowed_building_kinds.add(cls.building_kind)
-
-        cls.taproom_obj = evennia_create.create_object(
-            typeclass="typeclasses.rooms.Room", key="Golden Hart Taproom", nohome=True
-        )
-        cls.taproom = cls.taproom_obj.room_profile
-        cls.taproom.area = cls.city
-        cls.taproom.origin = GridOrigin.AUTHORED
-        cls.taproom.fixture_key = "arx-city/golden-hart-taproom"
-        cls.taproom.is_public = True
-        cls.taproom.is_social_hub = True
-        cls.taproom.is_outdoor = False
-        cls.taproom.enclosure = RoomEnclosure.WALLED
-        cls.taproom.size = cls.size_tier
-        cls.taproom.grid_x = 0
-        cls.taproom.grid_y = 0
-        cls.taproom.floor = 0
-        cls.taproom.save()
-        ObjectDisplayData.objects.create(
-            object=cls.taproom_obj,
-            longname="The Golden Hart Taproom, Warm and Loud",
-            permanent_description="A cozy tavern full of laughter.",
-        )
-
-        cls.market_obj = evennia_create.create_object(
-            typeclass="typeclasses.rooms.Room", key="Market Square", nohome=True
-        )
-        cls.market = cls.market_obj.room_profile
-        cls.market.area = cls.city
-        cls.market.origin = GridOrigin.AUTHORED
-        cls.market.fixture_key = "arx-city/market-square"
-        cls.market.is_public = True
-        cls.market.enclosure = RoomEnclosure.OPEN_AIR
-        cls.market.grid_x = 1
-        cls.market.grid_y = 0
-        cls.market.save()
-
-        # PLAYER-origin room in the same area — never exported.
-        cls.player_room_obj = evennia_create.create_object(
-            typeclass="typeclasses.rooms.Room", key="Someone's Den", nohome=True
-        )
-        cls.player_room = cls.player_room_obj.room_profile
-        cls.player_room.area = cls.city
-        cls.player_room.save()
-
-        cls.north_exit = evennia_create.create_object(
-            typeclass="typeclasses.exits.Exit",
-            key="north",
-            location=cls.taproom_obj,
-            destination=cls.market_obj,
-            aliases=["n"],
-            nohome=True,
-        )
-        ExitProfile.objects.create(objectdb=cls.north_exit, exit_kind=ExitKind.WINDOW, is_open=True)
-
-        cls.south_exit = evennia_create.create_object(
-            typeclass="typeclasses.exits.Exit",
-            key="south",
-            location=cls.market_obj,
-            destination=cls.taproom_obj,
-            aliases=["s"],
-            nohome=True,
-        )
-        # No ExitProfile row — exercises the DOOR/closed default fallback.
-
-        # Exit to an unauthored (PLAYER-origin) destination — must be skipped + reported.
-        cls.stray_exit = evennia_create.create_object(
-            typeclass="typeclasses.exits.Exit",
-            key="hole in the wall",
-            location=cls.taproom_obj,
-            destination=cls.player_room_obj,
-            nohome=True,
-        )
-
-        LocationValueOverride.objects.create(
-            parent_type=LocationParentType.ROOM,
-            room_profile=cls.taproom,
-            stat_key=StatKey.LIGHTING,
-            value=1,
-        )
-        LocationValueModifier.objects.create(
-            parent_type=LocationParentType.AREA,
-            area=cls.city,
-            stat_key=StatKey.ORDER,
-            value=3,
-            change_per_day=0,
-            source="authored:city-watch",
-        )
-        LocationValueModifier.objects.create(
-            parent_type=LocationParentType.AREA,
-            area=cls.city,
-            stat_key=StatKey.COLD,
-            value=20,
-            change_per_day=-1,
-            source="weather:cold-snap",
-        )
+        grid = build_sample_grid()
+        cls.realm = grid.realm
+        cls.climate = grid.climate
+        cls.society = grid.society
+        cls.building_kind = grid.building_kind
+        cls.size_tier = grid.size_tier
+        cls.region = grid.region
+        cls.city = grid.city
+        cls.taproom_obj = grid.taproom_obj
+        cls.taproom = grid.taproom
+        cls.market_obj = grid.market_obj
+        cls.market = grid.market
+        cls.player_room_obj = grid.player_room_obj
+        cls.player_room = grid.player_room
+        cls.north_exit = grid.north_exit
+        cls.south_exit = grid.south_exit
+        cls.stray_exit = grid.stray_exit
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
