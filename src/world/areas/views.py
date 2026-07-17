@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from evennia_extensions.models import RoomProfile
+from world.areas.constants import GridOrigin
 from world.areas.filters import AreaFilter, RoomProfileFilter
 from world.areas.models import Area
 from world.areas.serializers import (
@@ -37,7 +38,12 @@ class RoomPagination(PageNumberPagination):
 
 
 class AreaViewSet(ReadOnlyModelViewSet):
-    """Browse the area hierarchy for room selection."""
+    """Browse the area hierarchy for room selection.
+
+    STORY-origin areas are excluded — those are a GM's own scratch space
+    (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+    world an ordinary player browses (#2450).
+    """
 
     serializer_class = AreaListSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -46,13 +52,20 @@ class AreaViewSet(ReadOnlyModelViewSet):
     pagination_class = AreaPagination
 
     def get_queryset(self) -> QuerySet[Area]:
-        return Area.objects.annotate(
-            children_count=Count("children"),
-        ).order_by("name")
+        return (
+            Area.objects.exclude(origin=GridOrigin.STORY)
+            .annotate(children_count=Count("children"))
+            .order_by("name")
+        )
 
 
 class RoomProfileViewSet(ReadOnlyModelViewSet):
-    """Browse public rooms, filterable by area (includes descendant areas)."""
+    """Browse public rooms, filterable by area (includes descendant areas).
+
+    STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+    depth alongside the STORY area exclusion above, since a room's own
+    ``is_public`` flag says nothing about its area's origin (#2450).
+    """
 
     serializer_class = AreaRoomSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -65,6 +78,7 @@ class RoomProfileViewSet(ReadOnlyModelViewSet):
             RoomProfile.objects.filter(
                 is_public=True,
             )
+            .exclude(area__origin=GridOrigin.STORY)
             .select_related("objectdb", "area")
             .order_by("objectdb__db_key")
         )

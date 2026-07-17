@@ -64,6 +64,68 @@ def _occupant_counts(room_ids: list[int]) -> dict[int, int]:
     return counts
 
 
+def area_manager_payload(area: Area) -> dict:
+    """Area + all rooms + exits for the world-builder/story-builder manager canvas.
+
+    Shared by ``WorldBuilderViewSet.manager`` (#2449, all areas, staff-only) and
+    ``StoryBuilderViewSet.manager`` (#2450, STORY areas, GM-owner-or-staff) — the
+    payload shape doesn't vary by origin, only the permission gate on the caller
+    does. ``rooms`` includes every RoomProfile in the area regardless of
+    ``is_public`` — both callers need to see (and select) private rooms too.
+    """
+    profiles = list(RoomProfile.objects.filter(area_id=area.pk).select_related("objectdb", "size"))
+    room_ids = [p.objectdb_id for p in profiles]
+    descriptions = {
+        row.object_id: row.permanent_description
+        for row in ObjectDisplayData.objects.filter(object_id__in=room_ids)
+    }
+    occupant_counts = _occupant_counts(room_ids)
+
+    exits = list(exits_from_rooms(set(room_ids)).select_related("db_destination"))
+    destination_ids = {e.db_destination_id for e in exits if e.db_destination_id is not None}
+    destination_areas = dict(
+        RoomProfile.objects.filter(objectdb_id__in=destination_ids).values_list(
+            "objectdb_id", "area_id"
+        )
+    )
+
+    return {
+        "area": area,
+        "rooms": [
+            {
+                "id": p.objectdb_id,
+                "name": p.objectdb.db_key,
+                "description": descriptions.get(p.objectdb_id, ""),
+                "is_public": p.is_public,
+                "is_social_hub": p.is_social_hub,
+                "is_outdoor": p.is_outdoor,
+                "enclosure": p.enclosure,
+                "size_name": p.size.name if p.size_id else None,
+                "grid_x": p.grid_x,
+                "grid_y": p.grid_y,
+                "floor": p.floor,
+                "fixture_key": p.fixture_key,
+                "origin": p.origin,
+                "occupant_count": occupant_counts.get(p.objectdb_id, 0),
+            }
+            for p in profiles
+        ],
+        "exits": [
+            {
+                "id": e.pk,
+                "name": e.db_key,
+                "from_room_id": e.db_location_id,
+                "to_room_id": e.db_destination_id,
+                "to_room_name": (
+                    e.db_destination.db_key if e.db_destination_id is not None else None
+                ),
+                "to_area_id": destination_areas.get(e.db_destination_id),
+            }
+            for e in exits
+        ],
+    }
+
+
 @extend_schema(tags=["world-builder"])
 class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
     """Staff-only reads for the world-builder canvas (#2449)."""
@@ -86,59 +148,5 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
         RoomProfile in the area regardless of ``is_public`` — staff editing
         the canvas needs to see (and select) private rooms too.
         """
-        area = self.get_object()
-
-        profiles = list(
-            RoomProfile.objects.filter(area_id=area.pk).select_related("objectdb", "size")
-        )
-        room_ids = [p.objectdb_id for p in profiles]
-        descriptions = {
-            row.object_id: row.permanent_description
-            for row in ObjectDisplayData.objects.filter(object_id__in=room_ids)
-        }
-        occupant_counts = _occupant_counts(room_ids)
-
-        exits = list(exits_from_rooms(set(room_ids)).select_related("db_destination"))
-        destination_ids = {e.db_destination_id for e in exits if e.db_destination_id is not None}
-        destination_areas = dict(
-            RoomProfile.objects.filter(objectdb_id__in=destination_ids).values_list(
-                "objectdb_id", "area_id"
-            )
-        )
-
-        payload = {
-            "area": area,
-            "rooms": [
-                {
-                    "id": p.objectdb_id,
-                    "name": p.objectdb.db_key,
-                    "description": descriptions.get(p.objectdb_id, ""),
-                    "is_public": p.is_public,
-                    "is_social_hub": p.is_social_hub,
-                    "is_outdoor": p.is_outdoor,
-                    "enclosure": p.enclosure,
-                    "size_name": p.size.name if p.size_id else None,
-                    "grid_x": p.grid_x,
-                    "grid_y": p.grid_y,
-                    "floor": p.floor,
-                    "fixture_key": p.fixture_key,
-                    "origin": p.origin,
-                    "occupant_count": occupant_counts.get(p.objectdb_id, 0),
-                }
-                for p in profiles
-            ],
-            "exits": [
-                {
-                    "id": e.pk,
-                    "name": e.db_key,
-                    "from_room_id": e.db_location_id,
-                    "to_room_id": e.db_destination_id,
-                    "to_room_name": (
-                        e.db_destination.db_key if e.db_destination_id is not None else None
-                    ),
-                    "to_area_id": destination_areas.get(e.db_destination_id),
-                }
-                for e in exits
-            ],
-        }
+        payload = area_manager_payload(self.get_object())
         return Response(WorldBuilderAreaManagerSerializer(payload).data)

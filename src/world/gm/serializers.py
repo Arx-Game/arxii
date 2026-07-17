@@ -19,6 +19,7 @@ from world.gm.models import (
     GMTable,
     GMTableMembership,
 )
+from world.instances.models import InstancedRoom
 from world.roster.models.applications import RosterApplication
 
 
@@ -583,3 +584,14 @@ class DemandRansomSerializer(serializers.Serializer):
             )
         except CaptivityError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
+
+
+class StoryInstanceSerializer(serializers.ModelSerializer):
+    """A GM-owned temp scene room row for the story-builder dashboard (#2450)."""
+
+    room_id = serializers.IntegerField(source="room.pk", read_only=True)
+    name = serializers.CharField(source="room.db_key", read_only=True)
+
+    class Meta:
+        model = InstancedRoom
+        fields = ["id", "room_id", "name", "status", "created_at"]
