@@ -124,6 +124,18 @@ def _apply_permanent_condition_once(character, condition) -> None:
         apply_condition(character, condition)
 
 
+def _grant_species_distinction_once(sheet, distinction) -> None:
+    """Mint *distinction* on the sheet as a species-forced drawback, idempotently.
+
+    Uses the canonical grant seam; explicit rank=1 makes a re-finalize a no-op
+    (set-only, never a rank-up) so double provisioning cannot escalate the price.
+    """
+    from world.distinctions.services import grant_distinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    grant_distinction(sheet, distinction, origin=DistinctionOrigin.SPECIES, rank=1)
+
+
 def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[CharacterGift]:
     """Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.
 
@@ -140,7 +152,7 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
 
     species_pks = [s.pk for s in _species_and_ancestors(sheet.species)]
     grants = SpeciesGiftGrant.objects.filter(species_id__in=species_pks).select_related(
-        "gift", "drawback_condition", "benefit_condition"
+        "gift", "drawback_condition", "benefit_condition", "drawback_distinction"
     )
     minted: list[CharacterGift] = []
     for grant in grants:
@@ -151,4 +163,6 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
             _apply_permanent_condition_once(sheet.character, grant.drawback_condition)
         if grant.benefit_condition_id is not None:
             _apply_permanent_condition_once(sheet.character, grant.benefit_condition)
+        if grant.drawback_distinction_id is not None:
+            _grant_species_distinction_once(sheet, grant.drawback_distinction)
     return minted

@@ -12,6 +12,9 @@ from django.test import TestCase, tag
 from world.character_creation.factories import CharacterDraftFactory
 from world.character_creation.services import finalize_magic_data
 from world.character_sheets.factories import CharacterSheetFactory
+from world.distinctions.factories import DistinctionFactory
+from world.distinctions.models import CharacterDistinction
+from world.distinctions.types import DistinctionOrigin
 from world.magic.constants import GiftKind, TargetKind
 from world.magic.factories import GiftFactory, ResonanceFactory, TraditionFactory
 from world.magic.models import Thread
@@ -134,6 +137,38 @@ class ProvisionSpeciesGiftsTests(TestCase):
             ConditionInstance.objects.filter(target=sheet.character).exists(),
             "No condition should be applied when grant has no benefit_condition",
         )
+
+    def test_drawback_distinction_applied_with_species_origin(self):
+        """A grant's drawback_distinction is minted at finalize with origin=SPECIES."""
+        distinction = DistinctionFactory(slug="test-feared", name="Feared")
+        grant = SpeciesGiftGrantFactory(
+            species=SpeciesFactory(name="TestInfernal"),
+            gift=GiftFactory(name="Test Hellfire", kind=GiftKind.MINOR),
+            drawback_distinction=distinction,
+        )
+        grant.gift.resonances.add(self.resonance)
+        sheet = CharacterSheetFactory(species=grant.species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        cd = CharacterDistinction.objects.get(character=sheet.character, distinction=distinction)
+        self.assertEqual(cd.origin, DistinctionOrigin.SPECIES)
+
+    def test_drawback_distinction_is_idempotent(self):
+        """Double finalize does not rank up or duplicate the drawback distinction."""
+        distinction = DistinctionFactory(slug="test-feared-2", name="Feared2")
+        grant = SpeciesGiftGrantFactory(
+            species=SpeciesFactory(name="TestInfernal2"),
+            gift=GiftFactory(name="Test Hellfire2", kind=GiftKind.MINOR),
+            drawback_distinction=distinction,
+        )
+        grant.gift.resonances.add(self.resonance)
+        sheet = CharacterSheetFactory(species=grant.species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        rows = CharacterDistinction.objects.filter(
+            character=sheet.character, distinction=distinction
+        )
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.first().rank, 1)
 
 
 class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
