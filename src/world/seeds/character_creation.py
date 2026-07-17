@@ -25,6 +25,7 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
     STARTING_TECHNIQUE_PICKS_TARGET,
+    UNBOUND_TRADITION_NAME,
 )
 from world.character_creation.models import Beginnings, StartingArea
 from world.character_sheets.models import Gender, Heritage, Pronouns
@@ -306,11 +307,11 @@ def ensure_tradition_training_distinction() -> None:
     )
 
 
-#: Must match ``_UNBOUND_TRADITION_NAME`` in
-#: ``world.seeds.game_content.magic.seed_starter_gift_catalog`` — that's the
-#: "magic" cluster seeder that creates the row; this module only looks it up by
-#: name (get_or_create ownership stays on the magic seeder).
-_UNBOUND_TRADITION_NAME = "Unbound"
+#: Canonical name: ``world.character_creation.constants.UNBOUND_TRADITION_NAME``
+#: (#2428 Task 3). The row itself is created by
+#: ``world.seeds.game_content.magic.seed_starter_gift_catalog`` (the "magic"
+#: cluster seeder) — this module only looks it up by name.
+_UNBOUND_TRADITION_NAME = UNBOUND_TRADITION_NAME
 
 
 def seed_beginning_traditions() -> None:
