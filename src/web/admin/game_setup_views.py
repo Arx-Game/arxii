@@ -37,7 +37,7 @@ def game_setup(request: HttpRequest) -> HttpResponse:
     if not request.user.is_superuser:
         raise PermissionDenied
 
-    from web.admin.content_load_views import resolve_content_root  # noqa: PLC0415
+    from core_management.content_repo import resolve_content_root  # noqa: PLC0415
     from world.seeds.clusters import seeded_models_by_cluster  # noqa: PLC0415
 
     inventory = [

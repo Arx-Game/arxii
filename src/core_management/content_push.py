@@ -19,9 +19,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-import os
 from pathlib import Path
 import subprocess
+
+from core_management.content_repo import resolve_content_root
 
 logger = logging.getLogger(__name__)
 
@@ -208,14 +209,3 @@ def push_content_to_repo(content_root: Path | None = None) -> PushResult:
     _push_with_rebase_retry(root, result)
 
     return result
-
-
-def resolve_content_root() -> Path | None:
-    """Return the configured content-repo path if set and a real directory."""
-    raw = os.environ.get("CONTENT_REPO_PATH")
-    if not raw:
-        return None
-    path = Path(raw).expanduser()
-    if not path.is_dir():
-        return None
-    return path

@@ -18,8 +18,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-import os
 from pathlib import Path
+
+from core_management.content_repo import resolve_content_root
 
 logger = logging.getLogger(__name__)
 
@@ -103,17 +104,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "weather.weathertypeexposure",
     }
 )
-
-
-def resolve_content_root() -> Path | None:
-    """Return the configured content-repo path if set and a real directory."""
-    raw = os.environ.get("CONTENT_REPO_PATH")
-    if not raw:
-        return None
-    path = Path(raw).expanduser()
-    if not path.is_dir():
-        return None
-    return path
 
 
 @dataclass

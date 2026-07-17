@@ -27,12 +27,14 @@ the database. Mirrors the seed button's confirm/run shape but is an upsert
 (`update_or_create` by natural key), not create-if-missing — the confirm page
 copy says so.
 
-- `content_load_views.py` — `resolve_content_root()` (env lookup + directory
-  check, reused by `game_setup_views.game_setup` for the
-  `content_repo_configured` flag); `content_load_confirm` (GET) +
-  `content_load_run` (POST, superuser-only) which drive
-  `core_management.content_fixtures.build_all` + `load_entries` the same way
-  `tools/build_content_fixtures.py --load` does.
+- `content_load_views.py` — `content_load_confirm` (GET) + `content_load_run`
+  (POST, superuser-only), which drive
+  `core_management.content_fixtures.load_world_content` the same way
+  `tools/build_content_fixtures.py --load` does. Content-repo path resolution
+  (`resolve_content_root()` — env lookup + directory check, also used by
+  `game_setup_views.game_setup` for the `content_repo_configured` flag) lives
+  in `core_management.content_repo`, the canonical location shared by every
+  export/push/load call site (#2448).
 - `templates/admin/content_load_confirm.html` — mirrors `seed_confirm.html`.
 - URLs: `_content_load/` → `admin_content_load` (GET confirm);
   `_content_load_run/` → `admin_content_load_run` (POST run).

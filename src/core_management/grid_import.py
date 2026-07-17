@@ -481,8 +481,8 @@ def load_grid_bundles(content_root: Path | None = None) -> GridImportResult:
     fixture_key. Never deletes an AUTHORED area/room/exit absent from the bundles —
     those surface as ``reports`` lines instead (see module docstring).
     """
-    from core_management.content_export import resolve_content_root  # noqa: PLC0415
     from core_management.content_fixtures import ContentError  # noqa: PLC0415
+    from core_management.content_repo import resolve_content_root  # noqa: PLC0415
 
     root = content_root or resolve_content_root()
     if root is None:

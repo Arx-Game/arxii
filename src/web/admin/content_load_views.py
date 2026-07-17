@@ -26,17 +26,6 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 
-def resolve_content_root() -> Path | None:
-    """Return the configured content-repo path if set and a real directory."""
-    raw = os.environ.get("CONTENT_REPO_PATH")
-    if not raw:
-        return None
-    path = Path(raw).expanduser()
-    if not path.is_dir():
-        return None
-    return path
-
-
 @staff_member_required
 @require_GET
 def content_load_confirm(request: HttpRequest) -> HttpResponse:

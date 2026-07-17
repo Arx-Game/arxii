@@ -8,9 +8,6 @@ here) is located via the ``CONTENT_REPO_PATH`` environment variable. Drives
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
@@ -56,13 +53,14 @@ def content_export_preview(request: HttpRequest) -> HttpResponse:
             )
             total_records += count
 
-    content_root = os.environ.get("CONTENT_REPO_PATH")
+    from core_management.content_repo import resolve_content_root  # noqa: PLC0415
+
     context = {
         "title": "Export to content repo",
         "models": models_info,
         "total_records": total_records,
         "total_models": len(models_info),
-        "content_repo_configured": bool(content_root and Path(content_root).is_dir()),
+        "content_repo_configured": resolve_content_root() is not None,
     }
     context.update(_grid_preview_context())
     return render(request, "admin/content_export_preview.html", context)

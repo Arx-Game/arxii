@@ -278,10 +278,8 @@ def export_grid_bundles(content_root: Path | None = None) -> GridExportResult:
     claims to be canonical content but lacks its stable identity key is a
     data bug, not something to skip quietly.
     """
-    from core_management.content_export import (  # noqa: PLC0415
-        ContentExportError,
-        resolve_content_root,
-    )
+    from core_management.content_export import ContentExportError  # noqa: PLC0415
+    from core_management.content_repo import resolve_content_root  # noqa: PLC0415
     from world.areas.constants import GridOrigin  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
 

@@ -29,6 +29,7 @@ from core_management.content_fixtures import (  # noqa: E402
     build_all,
     write_fixtures,
 )
+from core_management.content_repo import load_dotenv_content_path  # noqa: E402
 
 
 class _ExitEarly(Exception):
@@ -47,23 +48,9 @@ class _ExitEarly(Exception):
         super().__init__(code)
 
 
-def _load_dotenv_path() -> str | None:
-    """Read CONTENT_REPO_PATH from the environment, falling back to src/.env."""
-    value = os.environ.get("CONTENT_REPO_PATH")
-    if value:
-        return value
-    env_file = SRC_ROOT / ".env"
-    if env_file.is_file():
-        for raw_line in env_file.read_text(encoding="utf-8").splitlines():
-            stripped = raw_line.strip()
-            if stripped.startswith("CONTENT_REPO_PATH="):
-                return stripped.split("=", 1)[1].strip().strip('"').strip("'")
-    return None
-
-
 def _require_content_root(args: argparse.Namespace) -> Path:
     """Resolve + validate the content checkout path, or raise ``_ExitEarly(2)``."""
-    content_path = args.content_path or _load_dotenv_path()
+    content_path = args.content_path or load_dotenv_content_path()
     if not content_path:
         print(
             "CONTENT_REPO_PATH is not set. Add it to src/.env pointing at your "
