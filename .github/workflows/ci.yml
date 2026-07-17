@@ -97,101 +97,109 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          # Eight shards balanced by ESTIMATED RUNTIME, not test count
-          # (rebalanced from 6 shards, 2026-07-17). Test count was the old
-          # metric and it lied: two shards with ~2,545 tests each measured
-          # 328s vs 447s because seconds-per-test varies ~40% between apps.
-          # Estimates below = fresh `def test_` counts × the measured
-          # sec/test ratio of the shard each app ran in on 2026-07-17
-          # (run 29543529238). Each shard targets ~305s of test runtime
-          # (+~60s fixed setup). To refresh: pull per-shard "Run tests" step
-          # seconds from a green run, recount tests per app
-          # (`grep -rE '^\s*def test_' src/<app>/ --include='*.py' | wc -l`),
-          # and re-balance greedily.
+          # Eight shards balanced by MEASURED RUNTIME, not test count
+          # (rebalanced from 6 shards 2026-07-17; corrected same day from the
+          # first 8-shard run's measured "Run tests" step seconds — run
+          # 29547709130). Test count was the old metric and it lied:
+          # seconds-per-test varies up to ~2x between apps (actions and
+          # world.combat run far slower per test than the small apps).
+          # Each shard targets ~344s of test runtime (+~60s fixed setup).
+          # To refresh: pull per-shard "Run tests" step seconds from a green
+          # run, scale each app's estimate by its shard's actual/estimated
+          # factor, and re-balance greedily (one such iteration converges
+          # well; per-app comments below carry the current estimates).
           #
-          # world.magic is bigger than a whole shard's budget, so it is split
-          # below the app level: shard-1 and shard-2 each run one generated
-          # half of its test modules (split_app/split_part/split_of — see the
-          # "Run tests" step and tools/split_test_labels.py). The split is
-          # re-derived from disk every run, so new magic test modules cannot
-          # fall between the halves.
+          # world.magic and world.combat are each bigger than a shard's
+          # budget, so they are split below the app level: two shards each
+          # run one generated half of the app's test modules
+          # (split_app/split_part/split_of — see the "Run tests" step and
+          # tools/split_test_labels.py). The split is re-derived from disk
+          # every run, so new test modules cannot fall between the halves.
           #
           # tools/lint_shard_coverage.py (the shard-coverage pre-commit hook,
           # run by the pre-commit CI job) fails when an app is missing from
           # this matrix, covered twice, or listed as a sub-app label — keep
           # it green when editing.
           #
-          # shard-1 (~304s): world.magic half 1 (~191s) + world.societies (44)
-          #   + web (24) + world.seeds (12) + world.distinctions (9)
-          #   + world.clues (6) + world.journals (5) + evennia_extensions (5)
-          #   + world.ceremonies (2). world.realms (0 tests) is inert.
+          # shard-1 (~344s): world.magic half 1 (~208s) + world.societies (55)
+          #   + world.npc_services (30) + world.character_sheets (19)
+          #   + world.distinctions (11) + world.skills (8) + evennia_extensions (6)
+          #   + typeclasses (5) + world.instances (2). world.realms (0 tests) is inert.
           - name: shard-1
             split_app: world.magic
             split_part: 1
             split_of: 2
             apps: >-
-              world.societies web world.seeds world.distinctions world.clues
-              world.journals evennia_extensions world.ceremonies world.realms
-          # shard-2 (~306s): world.magic half 2 (~191s) + flows (40)
-          #   + world.roster (26) + world.room_features (18) + world.game_clock (10)
-          #   + world.assets (7) + world.captivity (6) + world.tarot (5)
-          #   + core (3) + world.worship (1)
+              world.societies world.npc_services world.character_sheets
+              world.distinctions world.skills evennia_extensions typeclasses
+              world.instances world.realms
+          # shard-2 (~344s): world.magic half 2 (~208s) + integration_tests (51)
+          #   + world.mechanics (33) + world.room_features (17) + world.travel (12)
+          #   + world.classes (8) + world.weather (6) + world.projects (5)
+          #   + world.boundaries (3)
           - name: shard-2
             split_app: world.magic
             split_part: 2
             split_of: 2
             apps: >-
-              flows world.roster world.room_features world.game_clock world.assets
-              world.captivity world.tarot core world.worship
-          # shard-3 (~304s): world.combat (235) + world.checks (23) + world.events (14)
-          #   + world.codex (11) + world.justice (10) + world.player_submissions (5)
-          #   + world.species (4) + world.tidings (2)
+              integration_tests world.mechanics world.room_features world.travel
+              world.classes world.weather world.projects world.boundaries
+          # shard-3 (~343s): world.combat half 1 (~178s) + world.items (68)
+          #   + world.checks (35) + world.gm (24) + world.seeds (15)
+          #   + world.fatigue (10) + world.assets (7) + world.action_points (5)
+          #   + core (3)
           - name: shard-3
+            split_app: world.combat
+            split_part: 1
+            split_of: 2
             apps: >-
-              world.combat world.checks world.events world.codex world.justice
-              world.player_submissions world.species world.tidings
-          # shard-4 (~305s): world.stories (157) + world.conditions (49)
-          #   + world.locations (32) + world.vitals (22) + world.fatigue (13)
-          #   + world.skills (10) + world.achievements (8) + world.projects (6)
-          #   + world.traits (4) + world.military (3)
+              world.items world.checks world.gm world.seeds world.fatigue
+              world.assets world.action_points core
+          # shard-4 (~344s): world.combat half 2 (~178s) + world.covenants (65)
+          #   + world.conditions (37) + world.locations (24) + world.justice (15)
+          #   + world.game_clock (9) + world.narrative (7) + world.consent (6)
+          #   + world.predicates (2)
           - name: shard-4
+            split_app: world.combat
+            split_part: 2
+            split_of: 2
             apps: >-
-              world.stories world.conditions world.locations world.vitals world.fatigue
-              world.skills world.achievements world.projects world.traits world.military
-          # shard-5 (~303s): world.scenes (140) + world.progression (52)
-          #   + world.character_creation (36) + world.npc_services (28) + world.gm (22)
-          #   + world.goals (10) + world.weather (6) + typeclasses (5)
-          #   + world.dreams (3) + behaviors (1)
+              world.covenants world.conditions world.locations world.justice
+              world.game_clock world.narrative world.consent world.predicates
+          # shard-5 (~344s): actions (199) + world.progression (56) + world.forms (35)
+          #   + world.events (21) + world.currency (11) + world.clues (7)
+          #   + world.species (6) + world.captivity (6) + world.military (2)
           - name: shard-5
             apps: >-
-              world.scenes world.progression world.character_creation world.npc_services
-              world.gm world.goals world.weather typeclasses world.dreams behaviors
-          # shard-6 (~303s): actions (120) + world.battles (64) + world.areas (47)
-          #   + world.relationships (30) + world.forms (21) + world.secrets (10)
-          #   + world.travel (7) + world.classes (5) + world.staff_inbox (4)
+              actions world.progression world.forms world.events world.currency
+              world.clues world.species world.captivity world.military
+          # shard-6 (~344s): world.stories (118) + world.battles (106)
+          #   + world.character_creation (38) + web (30) + world.codex (17)
+          #   + world.companions (14) + world.ships (7) + world.achievements (6)
+          #   + world.dreams (3) + world.tidings (3) + behaviors (1)
           - name: shard-6
             apps: >-
-              actions world.battles world.areas world.relationships world.forms
-              world.secrets world.travel world.classes world.staff_inbox
-          # shard-7 (~304s): commands (131) + world.covenants (57)
-          #   + integration_tests (45, whole app — the old .pipeline/.game_content
-          #   labels silently skipped its root-level test modules)
-          #   + world.buildings (26) + world.companions (12) + world.currency (10)
-          #   + world.agriculture (7) + world.ships (6) + world.action_points (4)
-          #   + world.instances (2)
+              world.stories world.battles world.character_creation web world.codex
+              world.companions world.ships world.achievements world.dreams
+              world.tidings behaviors
+          # shard-7 (~344s): world.scenes (150) + world.areas (78) + flows (37)
+          #   + world.buildings (30) + world.vitals (17) + core_management (10)
+          #   + world.player_submissions (8) + world.staff_inbox (7)
+          #   + world.estates (4) + world.traits (3)
           - name: shard-7
             apps: >-
-              commands world.covenants integration_tests world.buildings world.companions
-              world.currency world.agriculture world.ships world.action_points world.instances
-          # shard-8 (~305s): world.missions (95) + world.items (92) + world.mechanics (45)
-          #   + world.character_sheets (25) + core_management (14) + world.narrative (9)
-          #   + world.consent (8) + world.estates (6) + world.boundaries (4)
-          #   + world.predicates (3)
+              world.scenes world.areas flows world.buildings world.vitals
+              core_management world.player_submissions world.staff_inbox
+              world.estates world.traits
+          # shard-8 (~344s): commands (150) + world.missions (70)
+          #   + world.relationships (50) + world.roster (24) + world.secrets (17)
+          #   + world.goals (11) + world.agriculture (8) + world.journals (6)
+          #   + world.tarot (5) + world.ceremonies (2) + world.worship (1)
           - name: shard-8
             apps: >-
-              world.missions world.items world.mechanics world.character_sheets
-              core_management world.narrative world.consent world.estates
-              world.boundaries world.predicates
+              commands world.missions world.relationships world.roster world.secrets
+              world.goals world.agriculture world.journals world.tarot
+              world.ceremonies world.worship
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the

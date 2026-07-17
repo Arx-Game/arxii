@@ -65,13 +65,19 @@ class BattleConclusionHookRegistryTests(TestCase):
         # Simulates a pre-existing production hook (e.g. apply_ship_battle_outcome
         # registered by world.ships.apps.ready()) that must survive this test's
         # clear/replace cycle instead of being permanently wiped.
-        conclusion_hooks._HOOKS[:] = [self._probe]
-        self._saved_hooks = list(conclusion_hooks._HOOKS)
+        #
+        # Uses a LOCAL snapshot on purpose: overwriting self._saved_hooks here
+        # made the class-level cleanup restore [probe] instead of the real
+        # registry, permanently dropping the production ship hook for every
+        # test that ran after this module (surfaced as a ship-journey failure
+        # when the CI shard rebalance first co-located battles and ships).
+        simulated_prior = [self._probe]
+        conclusion_hooks._HOOKS[:] = simulated_prior
 
         clear_battle_conclusion_hooks()
         register_battle_conclusion_hook(lambda _battle: None)
-        self.assertNotEqual(conclusion_hooks._HOOKS, self._saved_hooks)
+        self.assertNotEqual(conclusion_hooks._HOOKS, simulated_prior)
 
-        self._restore_hooks()
+        conclusion_hooks._HOOKS[:] = simulated_prior  # the restore under test
 
         self.assertEqual(conclusion_hooks._HOOKS, [self._probe])
