@@ -41,6 +41,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
+import { isDispatchFailure } from '@/combat/types';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
 import { fetchScene, sceneKeys } from '@/scenes/queries';
 import type { SceneDetail, ScenePersona } from '@/scenes/types';
@@ -122,11 +123,6 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
   // (`postDispatchAction`, `frontend/src/combat/api.ts:383-397`) marks a
   // real transport/structural error. Both render with the same error styling.
   const [feedback, setFeedback] = useState<{ text: string; error: boolean } | null>(null);
-
-  /** `result.success === false` is the honest-failure wire signal (#2010 review). */
-  function isDispatchFailure(result: { success?: boolean | null }): boolean {
-    return result.success === false;
-  }
 
   function invalidateBattleQueries() {
     queryClient.invalidateQueries({ queryKey: battleKeys.forScene(sceneId) });

@@ -159,3 +159,13 @@ export interface DispatchResult {
    */
   data?: Record<string, unknown> | null;
 }
+
+/**
+ * `result.success === false` is the honest-failure wire signal (#2010 review):
+ * the dispatch endpoint always resolves HTTP 200 for a business-rule rejection
+ * (only a structural ref error is a 400), so every write path must check this
+ * before flipping confirmed local state (#2423).
+ */
+export function isDispatchFailure(result: Pick<DispatchResult, 'success'>): boolean {
+  return result.success === false;
+}
