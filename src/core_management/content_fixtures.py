@@ -543,6 +543,66 @@ def _resolve_natural_key_fields(model, fields: dict, source_path: Path | None) -
             raise UnresolvedNaturalKeyError(msg) from None
 
 
+def _pop_m2m_fields(model, fields: dict) -> dict[str, list]:
+    """Pop many-to-many field values out of *fields*, keyed by field name.
+
+    A many-to-many field with natural keys serializes as a LIST OF natural-key
+    lists (e.g. ``"resonances": [["Insidia"], ["Ember"]]``, or ``[]`` when
+    empty — Django's own serializer always emits the key, even for an
+    untouched m2m). That value shape doesn't fit ``_resolve_natural_key_fields``,
+    which resolves exactly one related instance per field (a to-one FK's
+    natural key). Nor can it be passed through ``update_or_create``'s
+    ``defaults``: assigning a many-to-many field requires an already-saved
+    instance, so ``_upsert_fixture_object`` applies these via ``.set()`` after
+    the row is upserted (see ``_resolve_m2m_fields``). Checking
+    ``field.many_to_many`` (true only for ``ManyToManyField``, never for a
+    ``ForeignKey``) keeps this purely structural — no reliance on the value's
+    shape, unlike the FK-vs-non-relational check in
+    ``_resolve_natural_key_fields``.
+    """
+    m2m_fields: dict[str, list] = {}
+    for field_name in list(fields):
+        field = model._meta.get_field(field_name)  # noqa: SLF001
+        if field.many_to_many:
+            m2m_fields[field_name] = fields.pop(field_name)
+    return m2m_fields
+
+
+def _resolve_m2m_fields(
+    model, m2m_fields: dict[str, list], source_path: Path | None
+) -> dict[str, list]:
+    """Resolve each m2m field's natural-key-list values into model instances.
+
+    Mirrors ``_resolve_natural_key_fields``'s not-found handling (raises
+    ``UnresolvedNaturalKeyError``, the one failure mode ``load_world_content``
+    defers) but resolves a LIST of related instances per field instead of one.
+    """
+    resolved: dict[str, list] = {}
+    for field_name, values in m2m_fields.items():
+        field = model._meta.get_field(field_name)  # noqa: SLF001
+        related_model = field.related_model
+        location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+        instances = []
+        for value in values:
+            from django.core.exceptions import (  # noqa: PLC0415
+                ObjectDoesNotExist as _ObjectDoesNotExist,
+            )
+
+            try:
+                instances.append(related_model.objects.get_by_natural_key(*value))
+            except related_model.DoesNotExist:
+                msg = f"{location}: {field_name!r} {related_model.__name__} {value!r} not found."
+                raise UnresolvedNaturalKeyError(msg) from None
+            except _ObjectDoesNotExist as exc:
+                msg = (
+                    f"{location}: {field_name!r} {related_model.__name__} "
+                    f"{value!r} not found (nested: {exc})."
+                )
+                raise UnresolvedNaturalKeyError(msg) from None
+        resolved[field_name] = instances
+    return resolved
+
+
 def _extract_natural_key(model, fields: dict, source_path: Path | None) -> dict:
     """Pop the natural-key fields from *fields* and return them as a lookup dict.
 
@@ -619,6 +679,11 @@ def _upsert_fixture_object(
         result.skipped.append(str(exc))
         return OUTCOME_SKIPPED
 
+    # Many-to-many values (#2474) can't be resolved/assigned the same way as a
+    # to-one FK's natural key — pulled out here so _resolve_natural_key_fields
+    # below never sees them, and applied via .set() after a successful upsert.
+    m2m_fields = _pop_m2m_fields(model, fields)
+
     # Resolve natural-key-list FK values in both the lookup (the natural-key
     # fields themselves) and the remaining defaults. Each except clause below
     # only sets skip_msg (never returns directly) so this function keeps a
@@ -628,10 +693,13 @@ def _upsert_fixture_object(
     # distinct outcome ("deferred") from every other skip.
     created = False
     skip_msg: str | None = None
+    instance = None
+    resolved_m2m: dict[str, list] = {}
     try:
         _resolve_natural_key_fields(model, lookup, source_path)
         _resolve_natural_key_fields(model, fields, source_path)
-        _, created = model.objects.update_or_create(**lookup, defaults=fields)
+        resolved_m2m = _resolve_m2m_fields(model, m2m_fields, source_path)
+        instance, created = model.objects.update_or_create(**lookup, defaults=fields)
     except UnresolvedNaturalKeyError as exc:
         # Must be caught before the broader ContentError clause below (it's a
         # subclass) — this is the ONLY failure mode ever deferred.
@@ -669,6 +737,8 @@ def _upsert_fixture_object(
     if skip_msg is not None:
         result.skipped.append(skip_msg)
         return OUTCOME_SKIPPED
+    for field_name, instances in resolved_m2m.items():
+        getattr(instance, field_name).set(instances)
     return OUTCOME_CREATED if created else OUTCOME_UPDATED
 
 
