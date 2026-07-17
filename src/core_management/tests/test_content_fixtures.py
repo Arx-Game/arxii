@@ -588,6 +588,42 @@ class FixtureJsonLoadTests(TestCase):
         created, updated = load_entries(build_all(self.root))
         assert created + updated == 1
 
+    def test_defer_unresolved_returns_deferred_entries(self) -> None:
+        """#2448: an unresolved natural-key FK target defers, not skips, when asked."""
+        _write(
+            self.root,
+            "fixtures/mechanics/targets.json",
+            json.dumps(
+                [
+                    {
+                        "model": "mechanics.modifiertarget",
+                        "fields": {
+                            "category": ["does-not-exist-yet"],
+                            "name": "Test Target",
+                        },
+                    },
+                ]
+            ),
+        )
+        # Deliberately do NOT create the ModifierCategory — the FK target is
+        # missing at load time (mirrors a StartingArea fixture referencing a
+        # room the grid bundles haven't imported yet).
+        result = build_all(self.root)
+        created, updated, deferred = load_entries(result, defer_unresolved=True)
+        assert (created, updated) == (0, 0)
+        assert len(deferred) == 1
+        obj, source_path = deferred[0]
+        assert obj["model"] == "mechanics.modifiertarget"
+        assert source_path == result.source_paths["fixtures/mechanics/targets.json"][0]
+        # A deferred object is NOT a skip — the caller (load_world_content)
+        # gets a second chance to resolve it after the grid bundles load.
+        assert result.skipped == []
+
+        # Without the flag, the exact same fixture skips (today's terminal
+        # behavior, unchanged).
+        created, updated = load_entries(build_all(self.root))
+        assert (created, updated) == (0, 0)
+
     def test_combined_frontmatter_and_fixture_json(self) -> None:
         """Both YAML frontmatter and fixture JSON load in one pass."""
         _write(self.root, "skills/performance.md", GOOD_SKILL)

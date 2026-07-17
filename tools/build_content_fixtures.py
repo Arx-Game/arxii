@@ -25,6 +25,7 @@ sys.path.insert(0, str(SRC_ROOT))
 from core_management.content_fixtures import (  # noqa: E402
     BuildResult,
     ContentError,
+    WorldLoadResult,
     build_all,
     write_fixtures,
 )
@@ -122,14 +123,20 @@ def _build_content(content_root: Path) -> BuildResult:
         raise _ExitEarly(2) from exc
 
 
-def _load_content(result) -> tuple[int, int]:
-    """Run ``load_entries``, or raise ``_ExitEarly`` with a clean stderr message."""
+def _load_world(content_root: Path) -> WorldLoadResult:
+    """Run ``load_world_content``, or raise ``_ExitEarly`` with a clean stderr message.
+
+    Sequences content fixtures -> grid bundles -> deferred natural-key retry
+    (#2448) — replaces the old bare ``build_all`` + ``load_entries`` pair so a
+    ``StartingArea`` fixture's ``default_starting_room`` (a room natural key
+    the grid bundles, not the content fixtures, create) resolves in one run.
+    """
     from django.db import Error as DjangoDbError  # noqa: PLC0415
 
-    from core_management.content_fixtures import load_entries  # noqa: PLC0415
+    from core_management.content_fixtures import load_world_content  # noqa: PLC0415
 
     try:
-        return load_entries(result)
+        return load_world_content(content_root)
     except ContentError as exc:
         print(str(exc), file=sys.stderr)
         raise _ExitEarly(1) from exc
@@ -140,6 +147,29 @@ def _load_content(result) -> tuple[int, int]:
             file=sys.stderr,
         )
         raise _ExitEarly(2) from exc
+
+
+def _print_load_report(world_result: WorldLoadResult) -> None:
+    """Print the ``--load`` summary: content counts, grid counts, deferred, skips."""
+    print(f"loaded: {world_result.created} created, {world_result.updated} updated.")
+    if world_result.deferred_resolved:
+        print(
+            f"deferred-resolved: {world_result.deferred_resolved} object(s) "
+            "(unblocked once the grid bundles loaded)."
+        )
+    grid = world_result.grid
+    grid_created = grid.created_areas + grid.created_rooms + grid.created_exits
+    grid_updated = grid.updated_areas + grid.updated_rooms + grid.updated_exits
+    if grid_created or grid_updated:
+        print(f"grid: {grid_created} created, {grid_updated} updated.")
+    if grid.reports:
+        print(f"grid reports ({len(grid.reports)}):")
+        for line in grid.reports:
+            print(f"  {line}")
+    if world_result.skipped:
+        print(f"skipped: {len(world_result.skipped)} object(s):")
+        for msg in world_result.skipped:
+            print(f"  {msg}")
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -168,11 +198,10 @@ def _run(args: argparse.Namespace) -> int:
     print(f"OK: {total} content files -> {len(written)} fixture file(s).")
 
     if args.load:
-        # Upsert path (NOT loaddata — see load_entries docstring).
-        created, updated = _load_content(result)
-        print(f"loaded: {created} created, {updated} updated.")
-        if result.skipped:
-            print(f"skipped: {len(result.skipped)} object(s) (see above).")
+        # Upsert path (NOT loaddata — see load_entries docstring). Sequences
+        # content fixtures -> grid bundles -> deferred natural-key retry
+        # (#2448) via load_world_content, rather than a bare load_entries.
+        _print_load_report(_load_world(content_root))
     return 0
 
 

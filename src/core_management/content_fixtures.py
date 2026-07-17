@@ -91,8 +91,12 @@ from dataclasses import dataclass, field
 from functools import partial
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from core_management.grid_import import GridImportResult
 
 PLACEHOLDER_MARK = "PLACEHOLDER"
 FRONTMATTER_DELIMITER = "---"
@@ -124,9 +128,33 @@ FIELD_DEFAULT_DESCRIPTION_TEMPLATE = "default_description_template"
 FIELD_VALUE = "value"
 FIELD_WEIGHT = "weight"
 
+# _upsert_fixture_object()/load_entries()/load_world_content() outcome tokens
+# (#2448) — module constants for the same reason as the FIELD_* group above:
+# every use is a return value or an ``==`` comparison, which the
+# bare-string-literal-as-identifier lint rejects.
+OUTCOME_CREATED = "created"
+OUTCOME_UPDATED = "updated"
+OUTCOME_SKIPPED = "skipped"
+OUTCOME_DEFERRED = "deferred"
+
 
 class ContentError(Exception):
     """A content file failed validation. Message carries file + reason."""
+
+
+class UnresolvedNaturalKeyError(ContentError):
+    """A natural-key-list FK value did not resolve to an existing row (#2448).
+
+    Narrower than the base ``ContentError`` ``_resolve_natural_key_fields``
+    otherwise raises — only its two "not found" sites use this subclass, never
+    the "list-valued field but not relational" shape error. That narrowness is
+    what lets ``load_entries(..., defer_unresolved=True)`` DEFER only a
+    genuine missing-target failure (e.g. a ``StartingArea`` fixture naming a
+    room that the grid bundles haven't loaded yet) and still skip every other
+    ContentError immediately, unchanged — see ``load_world_content``, which
+    sequences content fixtures before grid bundles specifically to give a
+    deferred object a second chance once the room it names exists.
+    """
 
 
 @dataclass
@@ -386,11 +414,22 @@ def build_fixture_json(content_root: Path, result: BuildResult) -> None:
     FK values that are lists (Django's natural-key fixture convention, e.g.
     ``"resonance": ["resonance", "Insidia"]``) are left as-is in the fields
     dict — ``_resolve_natural_key_fields`` resolves them at upsert time.
+
+    ``fixtures/grid/`` is excluded (#2448): ``grid_export.export_grid_bundles``
+    writes one JSON file per AUTHORED area there, but in a different shape (a
+    single ``{"format": ..., "area": ..., "rooms": [...], ...}`` bundle dict,
+    not an array of fixture objects) — ``load_grid_bundles`` is the only
+    reader for that subtree. Without this exclusion, any content repo with
+    authored grid content would fail every ``build_all`` call (including
+    ``--check``) with "expected a JSON array of fixture objects."
     """
     fixtures_dir = content_root / "fixtures"
     if not fixtures_dir.is_dir():
         return
+    grid_dir = fixtures_dir / "grid"
     for path in sorted(fixtures_dir.rglob("*.json")):
+        if path.is_relative_to(grid_dir):
+            continue
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
@@ -491,7 +530,7 @@ def _resolve_natural_key_fields(model, fields: dict, source_path: Path | None) -
             fields[field_name] = related_model.objects.get_by_natural_key(*value)
         except related_model.DoesNotExist:
             msg = f"{location}: {field_name!r} {related_model.__name__} {value!r} not found."
-            raise ContentError(msg) from None
+            raise UnresolvedNaturalKeyError(msg) from None
         except _ObjectDoesNotExist as exc:
             # A nested FK resolution (inside get_by_natural_key →
             # _resolve_fk_arg) raises a DIFFERENT model's DoesNotExist —
@@ -501,7 +540,7 @@ def _resolve_natural_key_fields(model, fields: dict, source_path: Path | None) -
                 f"{location}: {field_name!r} {related_model.__name__} "
                 f"{value!r} not found (nested: {exc})."
             )
-            raise ContentError(msg) from None
+            raise UnresolvedNaturalKeyError(msg) from None
 
 
 def _extract_natural_key(model, fields: dict, source_path: Path | None) -> dict:
@@ -542,7 +581,100 @@ def _extract_natural_key(model, fields: dict, source_path: Path | None) -> dict:
     return lookup
 
 
-def load_entries(result: BuildResult) -> tuple[int, int]:
+def _upsert_fixture_object(
+    model: type,
+    obj: dict,
+    source_path: Path | None,
+    result: BuildResult,
+    *,
+    defer_unresolved: bool = False,
+) -> str:
+    """Upsert one already-model-resolved fixture object.
+
+    Returns ``"created"``, ``"updated"``, ``"skipped"``, or ``"deferred"``.
+    Factored out of ``load_entries`` (#2448) so ``load_world_content``'s
+    deferred-retry pass (after the grid bundles load) reuses this exact upsert
+    body instead of a second hand-maintained copy. ``model`` is already
+    resolved via ``apps.get_model`` — the stale-model-label skip stays at each
+    call site, since that is a lookup failure that happens before any
+    per-object upsert logic runs.
+
+    Only ``UnresolvedNaturalKeyError`` defers, and only when
+    ``defer_unresolved`` is true — every other failure mode (bad shape, stale
+    field, constraint violation, or an unresolved FK when the flag is false)
+    still lands in ``result.skipped`` with the exact same message text as
+    before this function was factored out.
+    """
+    from django.core.exceptions import FieldError  # noqa: PLC0415
+    from django.db import IntegrityError  # noqa: PLC0415
+
+    from core.natural_keys import NaturalKeyConfigError  # noqa: PLC0415
+
+    fields = dict(obj["fields"])
+    # Strip pk if present — upsert is by natural key, not pk.
+    fields.pop("pk", None)
+    try:
+        lookup = _extract_natural_key(model, fields, source_path)
+    except ContentError as exc:
+        result.skipped.append(str(exc))
+        return OUTCOME_SKIPPED
+
+    # Resolve natural-key-list FK values in both the lookup (the natural-key
+    # fields themselves) and the remaining defaults. Each except clause below
+    # only sets skip_msg (never returns directly) so this function keeps a
+    # single skip-vs-success branch at the end, rather than one return per
+    # exception type (ruff PLR0911) — the only early return is the
+    # UnresolvedNaturalKeyError-and-deferring case, which is a genuinely
+    # distinct outcome ("deferred") from every other skip.
+    created = False
+    skip_msg: str | None = None
+    try:
+        _resolve_natural_key_fields(model, lookup, source_path)
+        _resolve_natural_key_fields(model, fields, source_path)
+        _, created = model.objects.update_or_create(**lookup, defaults=fields)
+    except UnresolvedNaturalKeyError as exc:
+        # Must be caught before the broader ContentError clause below (it's a
+        # subclass) — this is the ONLY failure mode ever deferred.
+        if defer_unresolved:
+            return OUTCOME_DEFERRED
+        skip_msg = f"{source_path}: {model.__name__} could not be loaded: {exc}"
+    except (ValueError, TypeError) as exc:
+        # A FK value that is a raw integer (pk-based fixture) rather than a
+        # natural-key list causes a ValueError on assignment. These fixtures
+        # can't be upserted by natural key — skip.
+        skip_msg = (
+            f"{source_path}: {model.__name__} could not be loaded "
+            f"(likely pk-based FK reference): {exc}"
+        )
+    except (NaturalKeyConfigError, ContentError, FieldError) as exc:
+        # FK resolution failure or schema drift. ContentError covers every
+        # OTHER re-raised failure from _resolve_natural_key_fields (the
+        # non-relational-list-field case) plus _extract_natural_key's own
+        # errors; NaturalKeyConfigError covers arity mismatches; FieldError
+        # covers fixture fields that no longer exist on the model.
+        skip_msg = f"{source_path}: {model.__name__} could not be loaded: {exc}"
+    except model.DoesNotExist as exc:
+        # The model's own DoesNotExist — the natural-key lookup didn't find
+        # an existing row (shouldn't happen for update_or_create, but catch
+        # just in case).
+        skip_msg = f"{source_path}: {model.__name__} could not be loaded (lookup failed): {exc}"
+    except IntegrityError as exc:
+        # DB constraint violation (e.g. a unique constraint on a
+        # non-natural-key field that the fixture data violates). The record
+        # can't be loaded — skip it.
+        skip_msg = (
+            f"{source_path}: {model.__name__} could not be loaded (constraint violation): {exc}"
+        )
+
+    if skip_msg is not None:
+        result.skipped.append(skip_msg)
+        return OUTCOME_SKIPPED
+    return OUTCOME_CREATED if created else OUTCOME_UPDATED
+
+
+def load_entries(
+    result: BuildResult, *, defer_unresolved: bool = False
+) -> tuple[int, int] | tuple[int, int, list[tuple[dict, Path | None]]]:
     """Upsert built objects into the database; returns (created, updated).
 
     Deliberately NOT ``loaddata``: SharedMemoryModel's identity map
@@ -564,23 +696,30 @@ def load_entries(result: BuildResult) -> tuple[int, int]:
       ``ConditionStage`` keyed on ``condition`` + ``stage_order``) work too.
 
     Both paths share the same ``_resolve_natural_key_fields`` pass for FK
-    natural-key-list values.
+    natural-key-list values, via the per-object ``_upsert_fixture_object``.
 
     Stale model labels (referencing renamed/removed models) are skipped with
     a warning written to ``result.skipped`` — the load does not fail, but the
     skip is visible to the operator.
 
+    ``defer_unresolved`` (#2448): when true, returns a THIRD tuple element —
+    ``deferred``, a list of ``(obj, source_path)`` pairs that failed only on
+    an ``UnresolvedNaturalKeyError`` (a natural-key FK target that doesn't
+    exist YET, e.g. a room the grid bundles haven't imported). Every other
+    failure mode still lands in ``result.skipped`` exactly as when the flag
+    is false (the default) — this method's return shape and every skip
+    message are otherwise byte-for-byte identical to before this flag
+    existed. ``load_world_content`` is the only caller that sets it; it
+    retries the deferred pairs once the grid bundles have loaded.
+
     Requires Django to be configured; imports are deferred so the module
     stays import-safe for pure validation.
     """
     from django.apps import apps  # noqa: PLC0415
-    from django.core.exceptions import FieldError  # noqa: PLC0415
-    from django.db import IntegrityError  # noqa: PLC0415
-
-    from core.natural_keys import NaturalKeyConfigError  # noqa: PLC0415
 
     created_count = 0
     updated_count = 0
+    deferred: list[tuple[dict, Path | None]] = []
     for output_path, objects in result.fixtures.items():
         paths = result.source_paths.get(output_path, [])
         for obj, source_path in zip(objects, paths, strict=False):
@@ -592,58 +731,98 @@ def load_entries(result: BuildResult) -> tuple[int, int]:
                     f"{source_path}: stale model {obj['model']!r} (renamed or removed) — skipped."
                 )
                 continue
-            fields = dict(obj["fields"])
-            # Strip pk if present — upsert is by natural key, not pk.
-            fields.pop("pk", None)
-            try:
-                lookup = _extract_natural_key(model, fields, source_path)
-            except ContentError as exc:
-                result.skipped.append(str(exc))
-                continue
-            # Resolve natural-key-list FK values in both the lookup (the
-            # natural-key fields themselves) and the remaining defaults.
-            try:
-                _resolve_natural_key_fields(model, lookup, source_path)
-                _resolve_natural_key_fields(model, fields, source_path)
-                _, created = model.objects.update_or_create(**lookup, defaults=fields)
-            except (ValueError, TypeError) as exc:
-                # A FK value that is a raw integer (pk-based fixture) rather
-                # than a natural-key list causes a ValueError on assignment.
-                # These fixtures can't be upserted by natural key — skip.
-                result.skipped.append(
-                    f"{source_path}: {model.__name__} could not be loaded "
-                    f"(likely pk-based FK reference): {exc}"
-                )
-                continue
-            except (NaturalKeyConfigError, ContentError, FieldError) as exc:
-                # FK resolution failure or schema drift. ContentError covers
-                # the re-raised DoesNotExist from _resolve_natural_key_fields;
-                # NaturalKeyConfigError covers arity mismatches; FieldError
-                # covers fixture fields that no longer exist on the model.
-                result.skipped.append(f"{source_path}: {model.__name__} could not be loaded: {exc}")
-                continue
-            except model.DoesNotExist as exc:
-                # The model's own DoesNotExist — the natural-key lookup
-                # didn't find an existing row (shouldn't happen for
-                # update_or_create, but catch just in case).
-                result.skipped.append(
-                    f"{source_path}: {model.__name__} could not be loaded (lookup failed): {exc}"
-                )
-                continue
-            except IntegrityError as exc:
-                # DB constraint violation (e.g. a unique constraint on a
-                # non-natural-key field that the fixture data violates).
-                # The record can't be loaded — skip it.
-                result.skipped.append(
-                    f"{source_path}: {model.__name__} could not be loaded "
-                    f"(constraint violation): {exc}"
-                )
-                continue
-            if created:
+            outcome = _upsert_fixture_object(
+                model, obj, source_path, result, defer_unresolved=defer_unresolved
+            )
+            if outcome == OUTCOME_CREATED:
                 created_count += 1
-            else:
+            elif outcome == OUTCOME_UPDATED:
                 updated_count += 1
+            elif outcome == OUTCOME_DEFERRED:
+                deferred.append((obj, source_path))
+    if defer_unresolved:
+        return created_count, updated_count, deferred
     return created_count, updated_count
+
+
+@dataclass
+class WorldLoadResult:
+    """Outcome of ``load_world_content``'s full content-fixtures + grid load (#2448).
+
+    ``created``/``updated`` are the FINAL counts after the deferred-retry
+    pass — an object that resolved on retry counts as created/updated here,
+    not separately. ``deferred_resolved`` is how many of those came from the
+    retry (visibility into how much the content-then-grid ordering mattered
+    this run). ``skipped`` is the terminal skip list: an object still
+    unresolved after the grid bundles loaded is a genuine gap, not a race.
+    """
+
+    created: int
+    updated: int
+    grid: GridImportResult
+    skipped: list[str]
+    deferred_resolved: int
+
+
+def load_world_content(content_root: Path) -> WorldLoadResult:
+    """Sequence content fixtures -> grid bundles -> deferred natural-key retry (#2448).
+
+    Closes the circular dependency between content fixtures and the grid:
+    e.g. a ``StartingArea`` fixture's ``default_starting_room`` names a room
+    by its ``RoomProfile`` natural key (``fixture_key``), but that room only
+    exists once the grid bundles (Task 4's ``load_grid_bundles``) import —
+    and the grid bundles are a separate file tree from the content fixtures.
+    Neither can safely load first if the other's target might not exist yet,
+    so this driver:
+
+    1. Builds + loads the content fixtures with ``defer_unresolved=True`` —
+       an unresolved natural-key FK target (only that failure mode) is queued
+       instead of skipped.
+    2. Loads the grid bundles (creating the rooms/areas/exits those FK
+       targets may have named).
+    3. Retries every deferred object once, with deferral off — still
+       unresolved now is a genuine gap, and lands in ``skipped`` exactly as
+       an unresolved FK does on a normal ``load_entries`` call.
+
+    Requires Django to be configured (delegates to ``build_all``/
+    ``load_entries``/``load_grid_bundles``, all of which need it); imports of
+    those are deferred so this module stays import-safe for pure validation
+    callers that never load.
+    """
+    from django.apps import apps  # noqa: PLC0415
+
+    from core_management.grid_import import load_grid_bundles  # noqa: PLC0415
+
+    result = build_all(content_root)
+    created, updated, deferred = load_entries(result, defer_unresolved=True)
+    grid = load_grid_bundles(content_root)
+
+    deferred_resolved = 0
+    for obj, source_path in deferred:
+        app_label, model_name = obj["model"].split(".")
+        try:
+            model = apps.get_model(app_label, model_name)
+        except LookupError:
+            result.skipped.append(
+                f"{source_path}: stale model {obj['model']!r} (renamed or removed) — skipped."
+            )
+            continue
+        outcome = _upsert_fixture_object(model, obj, source_path, result, defer_unresolved=False)
+        if outcome == OUTCOME_CREATED:
+            created += 1
+            deferred_resolved += 1
+        elif outcome == OUTCOME_UPDATED:
+            updated += 1
+            deferred_resolved += 1
+        # "skipped" outcome already appended its message to result.skipped.
+
+    return WorldLoadResult(
+        created=created,
+        updated=updated,
+        grid=grid,
+        skipped=result.skipped,
+        deferred_resolved=deferred_resolved,
+    )
 
 
 def write_fixtures(result: BuildResult, src_root: Path) -> list[Path]:

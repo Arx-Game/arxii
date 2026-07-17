@@ -4,9 +4,11 @@ Mirrors the seed-button pattern (``seed_views.py``): the private content
 repository (never named here) is located via the ``CONTENT_REPO_PATH``
 environment variable, already loaded into the process env by the ``arx``
 CLI's dotenv handling — this module reads it via ``os.environ``, it does
-not re-parse ``.env``. Drives ``core_management.content_fixtures.build_all``
-+ ``load_entries`` the same way ``tools/build_content_fixtures.py --load``
-does.
+not re-parse ``.env``. Drives ``core_management.content_fixtures.
+load_world_content`` (#2448) the same way ``tools/build_content_fixtures.py
+--load`` does — content fixtures, then grid bundles, then a retry of any
+fixture whose natural-key FK target (e.g. a ``StartingArea``'s
+``default_starting_room``) only existed once the grid loaded.
 """
 
 from __future__ import annotations
@@ -48,13 +50,20 @@ def content_load_confirm(request: HttpRequest) -> HttpResponse:
 @staff_member_required
 @require_POST
 def content_load_run(request: HttpRequest) -> HttpResponse:
-    """Build + upsert the external content repo. Superuser-only; safe to re-run."""
+    """Build + upsert the external content repo, then import grid bundles.
+
+    Superuser-only; safe to re-run. ``build_all`` is called once directly,
+    purely to read ``placeholder_counts`` for the flash message — cheap,
+    side-effect-free parsing (not a second load); ``load_world_content`` does
+    the actual content-fixtures -> grid-bundles -> deferred-retry sequence
+    (#2448) and owns every create/update/skip/grid count reported below.
+    """
     if not request.user.is_superuser:
         raise PermissionDenied
     from core_management.content_fixtures import (  # noqa: PLC0415
         ContentError,
         build_all,
-        load_entries,
+        load_world_content,
     )
 
     raw = os.environ.get("CONTENT_REPO_PATH")
@@ -72,8 +81,8 @@ def content_load_run(request: HttpRequest) -> HttpResponse:
         return HttpResponseRedirect(reverse("admin_game_setup"))
 
     try:
-        result = build_all(content_root)
-        created, updated = load_entries(result)
+        placeholder_counts = build_all(content_root).placeholder_counts
+        world_result = load_world_content(content_root)
     except ContentError as exc:
         messages.error(request, str(exc))
         return HttpResponseRedirect(reverse("admin_game_setup"))
@@ -82,22 +91,36 @@ def content_load_run(request: HttpRequest) -> HttpResponse:
         # never needs to catch ImproperlyConfigured — an admin request only
         # reaches here with Django already fully configured. An unmigrated
         # or unreachable DB (e.g. the npc_roles/ faction_affiliation lookup,
-        # or load_entries' update_or_create) is the one environmental
-        # failure mode left; surface it the same clean way as ContentError
-        # instead of a raw 500.
+        # or load_world_content's update_or_create/grid import) is the one
+        # environmental failure mode left; surface it the same clean way as
+        # ContentError instead of a raw 500.
         messages.error(
             request,
             f"Database error while loading content: {exc} "
             "(hint: run `arx manage migrate` to bring the dev DB schema up to date).",
         )
         return HttpResponseRedirect(reverse("admin_game_setup"))
-    placeholders = sum(result.placeholder_counts.values())
-    skip_msg = f", {len(result.skipped)} skipped" if result.skipped else ""
+
+    placeholders = sum(placeholder_counts.values())
+    skip_msg = f", {len(world_result.skipped)} skipped" if world_result.skipped else ""
+    deferred_msg = (
+        f", {world_result.deferred_resolved} deferred-resolved"
+        if world_result.deferred_resolved
+        else ""
+    )
+    grid = world_result.grid
+    grid_created = grid.created_areas + grid.created_rooms + grid.created_exits
+    grid_updated = grid.updated_areas + grid.updated_rooms + grid.updated_exits
+    grid_msg = ""
+    if grid_created or grid_updated:
+        grid_msg = f"; grid: {grid_created} created, {grid_updated} updated"
     messages.success(
         request,
-        f"Content load: {created} created, {updated} updated, "
-        f"{placeholders} placeholder entries{skip_msg}",
+        f"Content load: {world_result.created} created, {world_result.updated} updated, "
+        f"{placeholders} placeholder entries{skip_msg}{deferred_msg}{grid_msg}",
     )
-    for skip in result.skipped:
+    for skip in world_result.skipped:
         messages.warning(request, skip)
+    for report in grid.reports:
+        messages.warning(request, report)
     return HttpResponseRedirect(reverse("admin_game_setup"))
