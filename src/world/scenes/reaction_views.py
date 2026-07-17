@@ -44,6 +44,8 @@ class ReactionWindowViewSet(viewsets.GenericViewSet):
     reaction — kudos-style kinds need no pre-existing window row.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = ReactionWindow.objects.all()
     serializer_class = WindowReactInputSerializer
     permission_classes = [IsAuthenticated]

@@ -78,6 +78,8 @@ class SanctumViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
     contract is preserved (#1497).
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = SanctumDetailsSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "feature_instance_id"

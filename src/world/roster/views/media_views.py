@@ -24,6 +24,8 @@ from world.roster.services import CloudinaryGalleryService
 class PlayerMediaViewSet(viewsets.ModelViewSet):
     """API viewset for managing player media."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = PlayerMediaSerializer
     permission_classes = [ReadOnlyOrOwner]
 
@@ -118,6 +120,8 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
 
 class TenureGalleryViewSet(viewsets.ModelViewSet):
     """API viewset for managing tenure galleries."""
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = TenureGallerySerializer
     permission_classes = [ReadOnlyOrOwner]

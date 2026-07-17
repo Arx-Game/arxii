@@ -24,6 +24,8 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
     the original creator or staff.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = CharacterSheetSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = []

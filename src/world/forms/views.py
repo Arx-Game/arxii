@@ -38,6 +38,8 @@ from world.roster.selectors import puppeted_sheet_for
 class FormTraitViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for browsing form trait definitions."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = FormTrait.objects.all()
     serializer_class = FormTraitSerializer
     permission_classes = [IsAuthenticated]
@@ -45,6 +47,8 @@ class FormTraitViewSet(viewsets.ReadOnlyModelViewSet):
 
 class CharacterFormViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for viewing a character's forms."""
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterFormSerializer
     permission_classes = [IsAuthenticated]
@@ -81,6 +85,8 @@ class CharacterFormViewSet(viewsets.ReadOnlyModelViewSet):
 class HeightBandViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for browsing height bands in character creation."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = HeightBandSerializer
     permission_classes = [IsAuthenticated]
 
@@ -93,6 +99,8 @@ class HeightBandViewSet(viewsets.ReadOnlyModelViewSet):
 
 class BuildViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for browsing builds in character creation."""
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = BuildSerializer
     permission_classes = [IsAuthenticated]

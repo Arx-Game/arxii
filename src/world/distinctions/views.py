@@ -45,6 +45,8 @@ class DistinctionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     Read-only endpoint for retrieving distinction categories.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = DistinctionCategory.objects.all()
     serializer_class = DistinctionCategorySerializer
     permission_classes = [IsAuthenticated]
@@ -62,6 +64,8 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
     - exclude_variants: Exclude variant distinctions (show only parents/standalone)
     - draft_id: Add lock status based on draft's existing distinctions
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]

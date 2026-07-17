@@ -113,7 +113,21 @@ class StoryFilter(django_filters.FilterSet):
 
 ### Pagination
 
-**Create custom pagination classes for consistent API responses:**
+**List endpoints are paginated by default (ADR-0138).**
+`REST_FRAMEWORK["DEFAULT_PAGINATION_CLASS"]` is `web.api.pagination.DefaultPagination`
+(PageNumber, `page_size=50`), so a new ViewSet is paginated **without doing
+anything** — you can no longer leak an unbounded list by forgetting
+`pagination_class`. Opt out **explicitly** only when the result set is
+intrinsically small (a lookup table, a per-scene queue, one character's
+sanctums):
+
+```python
+class SpeakerQueueViewSet(viewsets.ReadOnlyModelViewSet):
+    pagination_class = None  # intrinsically small — bare array is fine
+```
+
+**Custom pagination classes** (a different `page_size`, extra metadata) still
+apply per-ViewSet:
 
 ```python
 class StandardResultsSetPagination(PageNumberPagination):

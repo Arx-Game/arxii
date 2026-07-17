@@ -92,6 +92,8 @@ logger = logging.getLogger(__name__)
 class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for listing starting areas."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = StartingAreaSerializer
     permission_classes = [IsAuthenticated]
 
@@ -107,6 +109,8 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
     Filter by starting_area to get options available for a specific starting area.
     Results are filtered by user trust level.
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = BeginningsSerializer
     permission_classes = [IsAuthenticated]
@@ -152,6 +156,8 @@ class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     Returns all species with their parent hierarchy.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = Species.objects.select_related("parent").prefetch_related(
         Prefetch(
             "stat_bonuses",
@@ -172,6 +178,8 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     Filter by area_id to get families available for a starting area's realm.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = Family.objects.filter(is_playable=True)
     serializer_class = FamilySerializer
     permission_classes = [IsAuthenticated]
@@ -182,6 +190,8 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
 class GenderViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for listing gender options."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = Gender.objects.all()
     serializer_class = GenderSerializer
     permission_classes = [IsAuthenticated]
@@ -191,6 +201,8 @@ class GenderViewSet(viewsets.ReadOnlyModelViewSet):
 
 class PronounsViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for listing pronoun sets."""
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     queryset = Pronouns.objects.all()
     serializer_class = PronounsSerializer
@@ -205,6 +217,8 @@ class CGPointBudgetViewSet(viewsets.ReadOnlyModelViewSet):
 
     Returns the active budget configuration for character creation.
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CGPointBudgetSerializer
     permission_classes = [IsAuthenticated]
@@ -221,6 +235,8 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
     Only returns active Prospect-stage paths.
     Uses Prefetch with to_attr to avoid SharedMemoryModel cache pollution.
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = PathSerializer
     permission_classes = [IsAuthenticated]
@@ -259,6 +275,8 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
     Query params:
         beginning_id: Filter by beginning (required)
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = TraditionSerializer
     permission_classes = [IsAuthenticated]
@@ -502,6 +520,8 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     Each user can have at most one draft. The queryset is filtered
     to only return the current user's draft.
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterDraftSerializer
     permission_classes = [IsAuthenticated]

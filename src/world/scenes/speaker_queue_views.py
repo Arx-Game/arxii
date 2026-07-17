@@ -62,6 +62,8 @@ class SpeakerQueueSerializer(serializers.ModelSerializer):
 class SpeakerQueueViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only ViewSet with action endpoints for speaker queue mutations."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = SpeakerQueueSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]

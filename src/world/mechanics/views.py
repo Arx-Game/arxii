@@ -73,6 +73,8 @@ class ModifierTargetViewSet(viewsets.ReadOnlyModelViewSet):
 class CharacterModifierViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve character modifiers."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = CharacterModifier.objects.select_related(
         "character",
         "character__character",

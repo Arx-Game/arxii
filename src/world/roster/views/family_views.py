@@ -41,6 +41,8 @@ def _viewer_entry(request: Request) -> object:
 class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     """Families list/detail + the viewer-aware tree and CG slot browser."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = Family.objects.filter(is_playable=True).order_by("family_type", "name")
     serializer_class = FamilySerializer
     permission_classes = [IsAuthenticated]
