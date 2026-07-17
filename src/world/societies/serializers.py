@@ -274,3 +274,33 @@ def _house_open_crises(organization) -> list[dict]:
                 }
             )
     return rows
+
+
+class CrisisOptionInputSerializer(serializers.Serializer):
+    """Input for the crisis judgment call (#2238): crisis + option, org-scoped."""
+
+    crisis = serializers.IntegerField()
+    option = serializers.IntegerField()
+
+    def validate(self, attrs: dict) -> dict:
+        from world.societies.houses.models import (  # noqa: PLC0415
+            DomainCrisis,
+            DomainCrisisTypeOption,
+        )
+
+        organization = self.context["organization"]
+        crisis = (
+            DomainCrisis.objects.select_related("domain", "crisis_type")
+            .filter(pk=attrs["crisis"])
+            .first()
+        )
+        if crisis is None or crisis.domain.owner_org_id != organization.pk:
+            msg = "That crisis is not on this house's domains."
+            raise serializers.ValidationError({"crisis": msg})
+        option = DomainCrisisTypeOption.objects.filter(pk=attrs["option"]).first()
+        if option is None:
+            msg = "Unknown option."
+            raise serializers.ValidationError({"option": msg})
+        attrs["crisis"] = crisis
+        attrs["option"] = option
+        return attrs

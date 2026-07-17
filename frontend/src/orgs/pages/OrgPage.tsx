@@ -14,9 +14,10 @@ import { useParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useOrganizationQuery, useHouseFeedQuery } from '@/orgs/queries';
-import type { HouseDetail } from '@/orgs/api';
+import { useOrganizationQuery, useHouseFeedQuery, useChooseCrisisOption } from '@/orgs/queries';
+import type { HouseCrisis, HouseDetail } from '@/orgs/api';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton
@@ -51,6 +52,64 @@ function NotYetPublicCard() {
 // Inner page
 // ---------------------------------------------------------------------------
 
+const SEVERITY_LABEL: Record<string, string> = {
+  trouble: 'Trouble',
+  crisis: 'Crisis',
+  catastrophe: 'Catastrophe',
+};
+
+const OPTION_LABEL: Record<string, string> = {
+  pay: 'Pay it off',
+  mission: 'Confront it',
+  wait: 'Ride it out',
+};
+
+/** An open domain crisis awaiting the house's judgment call (#2238). */
+function CrisisCard({ orgId, crisis }: { orgId: number; crisis: HouseCrisis }) {
+  const mutation = useChooseCrisisOption(orgId);
+
+  return (
+    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+      <div className="flex items-center gap-2">
+        <Badge variant="destructive">{SEVERITY_LABEL[crisis.severity] ?? crisis.severity}</Badge>
+        <span className="font-semibold">
+          {crisis.type_name || 'Crisis'} in {crisis.domain_name}
+        </span>
+      </div>
+      {crisis.description && (
+        <p className="mt-1 text-sm text-muted-foreground">{crisis.description}</p>
+      )}
+      {crisis.chosen_kind ? (
+        <p className="mt-2 text-sm italic text-muted-foreground">
+          Course chosen: {OPTION_LABEL[crisis.chosen_kind] ?? crisis.chosen_kind}
+        </p>
+      ) : (
+        crisis.options.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {crisis.options.map((option) => (
+              <Button
+                key={option.id}
+                size="sm"
+                variant="outline"
+                disabled={mutation.isPending}
+                onClick={() => mutation.mutate({ crisisId: crisis.id, optionId: option.id })}
+              >
+                {OPTION_LABEL[option.kind] ?? option.kind}
+                {option.kind === 'pay' ? ` (${option.cost_coppers}c)` : ''}
+              </Button>
+            ))}
+          </div>
+        )
+      )}
+      {mutation.isError && (
+        <p className="mt-2 text-sm text-destructive">
+          {mutation.error instanceof Error ? mutation.error.message : 'That action failed.'}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
   const { data: feed = [] } = useHouseFeedQuery(orgId, true);
 
@@ -61,6 +120,13 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
           <CardTitle className="text-lg">House of {house.family_name}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
+          {house.open_crises.length > 0 && (
+            <div className="space-y-2">
+              {house.open_crises.map((crisis) => (
+                <CrisisCard key={crisis.id} orgId={orgId} crisis={crisis} />
+              ))}
+            </div>
+          )}
           {house.aspects.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {house.aspects.map((aspect) => (

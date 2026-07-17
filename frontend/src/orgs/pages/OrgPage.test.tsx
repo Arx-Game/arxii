@@ -18,6 +18,12 @@ import type { Organization } from '@/orgs/api';
 
 vi.mock('@/orgs/queries', () => ({
   useOrganizationQuery: vi.fn(),
+  useChooseCrisisOption: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
   useHouseFeedQuery: vi.fn(() => ({ data: [] })),
 }));
 
@@ -84,6 +90,7 @@ describe('OrgPageInner', () => {
         vassal_names: [],
         titles: [],
         domains: [],
+        open_crises: [],
         aspects: [
           {
             definition: 'Patron Deity',
@@ -113,5 +120,62 @@ describe('OrgPageInner', () => {
     expect(screen.getByText(/Patron Deity: The Chained Judge/)).toBeInTheDocument();
     expect(screen.getByText('Black Ledger')).toBeInTheDocument();
     expect(screen.getByText(/Ways of the House/)).toBeInTheDocument();
+  });
+
+  it('renders an open domain crisis with its judgment-call options (#2238)', () => {
+    const crisisOrg: Organization = {
+      ...ORG,
+      name: 'House Maldrave',
+      house: {
+        family_name: 'Maldrave',
+        liege_name: '',
+        vassal_names: [],
+        titles: [],
+        domains: [],
+        aspects: [],
+        features: [],
+        open_crises: [
+          {
+            id: 7,
+            domain_name: 'Westrock Vale',
+            severity: 'crisis',
+            type_name: 'Bandit Trouble',
+            description: 'Roads unsafe after dark.',
+            origin: 'unrest',
+            opened_at: '2026-07-18T00:00:00Z',
+            chosen_kind: '',
+            minted_mission_id: null,
+            options: [
+              {
+                id: 1,
+                kind: 'pay',
+                cost_coppers: 2000,
+                mission_template_id: null,
+                self_resolve_pct: 0,
+                worsen_pct: 0,
+              },
+              {
+                id: 2,
+                kind: 'wait',
+                cost_coppers: 0,
+                mission_template_id: null,
+                self_resolve_pct: 20,
+                worsen_pct: 30,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    mockedUseOrganizationQuery.mockReturnValue({
+      data: crisisOrg,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useOrganizationQuery>);
+
+    render(<OrgPageInner orgId={7} />);
+    expect(screen.getByText(/Bandit Trouble in Westrock Vale/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pay it off \(2000c\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ride it out/ })).toBeInTheDocument();
   });
 });

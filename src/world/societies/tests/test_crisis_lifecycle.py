@@ -265,3 +265,75 @@ class CrisisLifecycleTests(TestCase):
         self.assertEqual(kinds, {CrisisResolutionKind.PAY, CrisisResolutionKind.WAIT})
         pay = next(o for o in row["options"] if o["kind"] == CrisisResolutionKind.PAY)
         self.assertEqual(pay["cost_coppers"], 1000)  # TROUBLE = 1x base
+
+
+class CrisisOptionApiTests(TestCase):
+    """POST /api/societies/organizations/{id}/crisis-option/ (#2238)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from rest_framework.test import APIClient
+
+        cls.APIClient = APIClient
+        cls.org = OrganizationFactory(name="House Api")
+        cls.area = AreaFactory()
+        cls.domain = create_domain(area=cls.area, name="Apivale", owner_org=cls.org)
+        _make_type("Protests", DomainCrisisSeverity.TROUBLE, [CrisisResolutionKind.WAIT])
+        cls.crisis = open_crisis(cls.domain, origin=CrisisOrigin.UNREST, rng=_FixedRng())
+
+    def _leader_account(self):
+        """An account whose active character's persona leads the org."""
+        from world.magic.services.gain import account_for_sheet
+        from world.roster.factories import RosterTenureFactory
+        from world.societies.models import OrganizationRank
+
+        tenure = RosterTenureFactory()
+        sheet = tenure.roster_entry.character_sheet
+        persona = sheet.primary_persona
+        rank = OrganizationRank.objects.filter(organization=self.org, tier=1).first()
+        if rank is None:
+            rank = OrganizationRankFactory(organization=self.org, tier=1, name="Head")
+        if not rank.can_manage_ranks:
+            rank.can_manage_ranks = True
+            rank.save(update_fields=["can_manage_ranks"])
+        OrganizationMembership.objects.create(organization=self.org, persona=persona, rank=rank)
+        return account_for_sheet(sheet)
+
+    def test_leader_chooses_wait_via_api(self):
+        client = self.APIClient()
+        client.force_authenticate(user=self._leader_account())
+        option = self.crisis.crisis_type.options.first()
+        response = client.post(
+            f"/api/societies/organizations/{self.org.pk}/crisis-option/",
+            {"crisis": self.crisis.pk, "option": option.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.crisis.refresh_from_db()
+        self.assertEqual(self.crisis.chosen_option, option)
+        self.assertEqual(response.data["open_crises"][0]["chosen_kind"], "wait")
+
+    def test_non_authority_rejected(self):
+        from world.magic.services.gain import account_for_sheet
+        from world.roster.factories import RosterTenureFactory
+
+        tenure = RosterTenureFactory()
+        persona = tenure.roster_entry.character_sheet.primary_persona
+        # Plain member (no leadership rank): sees the org, lacks authority.
+        from world.societies.models import OrganizationRank
+
+        rank = OrganizationRank.objects.filter(organization=self.org, tier=5).first()
+        if rank is None:
+            rank = OrganizationRankFactory(organization=self.org, tier=5, name="Rabble")
+        OrganizationMembership.objects.create(organization=self.org, persona=persona, rank=rank)
+        client = self.APIClient()
+        client.force_authenticate(user=account_for_sheet(tenure.roster_entry.character_sheet))
+        option = self.crisis.crisis_type.options.first()
+        response = client.post(
+            f"/api/societies/organizations/{self.org.pk}/crisis-option/",
+            {"crisis": self.crisis.pk, "option": option.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.crisis.refresh_from_db()
+        self.assertIsNone(self.crisis.chosen_option)

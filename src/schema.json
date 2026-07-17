@@ -27133,6 +27133,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Organization'
           description: ''
+  /api/societies/organizations/{id}/crisis-option/:
+    post:
+      operationId: societies_organizations_crisis_option_create
+      description: |-
+        POST /api/societies/organizations/{id}/crisis-option/ (#2238).
+
+        The administrator's judgment call on an open DomainCrisis. Body:
+        ``{"crisis": <id>, "option": <id>}``. Acts as whichever of the
+        requester's personas holds domain authority (leader rank or the
+        domain-steward office) — a 400 with a safe message otherwise.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      tags:
+      - societies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
   /api/societies/organizations/{id}/feed/:
     get:
       operationId: societies_organizations_feed_list
@@ -42234,6 +42268,69 @@ components:
         * `pending` - Pending Review
         * `approved` - Approved
         * `rejected` - Rejected
+    HouseCrisis:
+      type: object
+      description: An open DomainCrisis on the house block (#2238).
+      properties:
+        id:
+          type: integer
+        domain_name:
+          type: string
+        severity:
+          type: string
+        type_name:
+          type: string
+        description:
+          type: string
+        origin:
+          type: string
+        opened_at:
+          type: string
+          format: date-time
+        chosen_kind:
+          type: string
+        minted_mission_id:
+          type: integer
+          nullable: true
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseCrisisOption'
+      required:
+      - chosen_kind
+      - description
+      - domain_name
+      - id
+      - minted_mission_id
+      - opened_at
+      - options
+      - origin
+      - severity
+      - type_name
+    HouseCrisisOption:
+      type: object
+      description: One judgment-call option on an open crisis (#2238).
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+        cost_coppers:
+          type: integer
+        mission_template_id:
+          type: integer
+          nullable: true
+        self_resolve_pct:
+          type: integer
+        worsen_pct:
+          type: integer
+      required:
+      - cost_coppers
+      - id
+      - kind
+      - mission_template_id
+      - self_resolve_pct
+      - worsen_pct
     HouseDetail:
       type: object
       description: The house block of an org payload (#1884) — null for non-family
@@ -42263,12 +42360,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HouseFeatureFacet'
+        open_crises:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseCrisis'
       required:
       - aspects
       - domains
       - family_name
       - features
       - liege_name
+      - open_crises
       - titles
       - vassal_names
     HouseDomain:
@@ -47124,6 +47226,38 @@ components:
       - id
       - name
       - tier
+    OrganizationRankRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Diegetic name for this rung (e.g., Guildmaster, Captain)
+          maxLength: 60
+        tier:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Authority tier (1 highest, 5 lowest)
+        can_invite:
+          type: boolean
+          description: Members at this rank can invite others to the organization
+        can_kick:
+          type: boolean
+          description: Members at this rank can expel lower-ranked members
+        can_manage_ranks:
+          type: boolean
+          description: Members at this rank can promote/demote others
+        can_lead_rituals:
+          type: boolean
+          description: 'Members at this rank may lead this organization''s group rituals.
+            No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations
+            — see needs-design follow-up filed alongside #708 (''Generic organization-ritual
+            dispatch for non-Covenant org kinds''). Mirrors CovenantRank.can_lead_rituals,
+            which IS consumed today by Covenant Sanctification.'
+      required:
+      - name
+      - tier
     OrganizationReputation:
       type: object
       description: A persona's standing with an organization — named tier only, never
@@ -47150,6 +47284,30 @@ components:
       - organization_name
       - persona
       - tier
+    OrganizationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: The organization's name
+          maxLength: 100
+        description:
+          type: string
+          description: A description of the organization's purpose and history
+        words:
+          type: string
+          description: Words / motto — house words, gang credo, guild maxim (#2079).
+          maxLength: 200
+        colors:
+          type: string
+          description: The organization's colors, in prose (#2079).
+          maxLength: 200
+        sigil_description:
+          type: string
+          description: Sigil / emblem, described (#2079).
+      required:
+      - name
     OrganizationSearch:
       type: object
       properties:

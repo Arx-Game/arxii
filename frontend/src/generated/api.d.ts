@@ -16520,6 +16520,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/organizations/{id}/crisis-option/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/societies/organizations/{id}/crisis-option/ (#2238).
+     *
+     *     The administrator's judgment call on an open DomainCrisis. Body:
+     *     ``{"crisis": <id>, "option": <id>}``. Acts as whichever of the
+     *     requester's personas holds domain authority (leader rank or the
+     *     domain-steward office) — a 400 with a safe message otherwise.
+     */
+    post: operations['societies_organizations_crisis_option_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/societies/organizations/{id}/feed/': {
     parameters: {
       query?: never;
@@ -23870,6 +23894,29 @@ export interface components {
      * @enum {string}
      */
     HouseClaimStatusStatusEnum: 'pending' | 'approved' | 'rejected';
+    /** @description An open DomainCrisis on the house block (#2238). */
+    HouseCrisis: {
+      id: number;
+      domain_name: string;
+      severity: string;
+      type_name: string;
+      description: string;
+      origin: string;
+      /** Format: date-time */
+      opened_at: string;
+      chosen_kind: string;
+      minted_mission_id: number | null;
+      options: components['schemas']['HouseCrisisOption'][];
+    };
+    /** @description One judgment-call option on an open crisis (#2238). */
+    HouseCrisisOption: {
+      id: number;
+      kind: string;
+      cost_coppers: number;
+      mission_template_id: number | null;
+      self_resolve_pct: number;
+      worsen_pct: number;
+    };
     /** @description The house block of an org payload (#1884) — null for non-family orgs. */
     HouseDetail: {
       family_name: string;
@@ -23879,6 +23926,7 @@ export interface components {
       domains: components['schemas']['HouseDomain'][];
       aspects: components['schemas']['HouseAspectFacet'][];
       features: components['schemas']['HouseFeatureFacet'][];
+      open_crises: components['schemas']['HouseCrisis'][];
     };
     HouseDomain: {
       name: string;
@@ -26323,6 +26371,20 @@ export interface components {
       /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
       can_lead_rituals?: boolean;
     };
+    OrganizationRankRequest: {
+      /** @description Diegetic name for this rung (e.g., Guildmaster, Captain) */
+      name: string;
+      /** @description Authority tier (1 highest, 5 lowest) */
+      tier: number;
+      /** @description Members at this rank can invite others to the organization */
+      can_invite?: boolean;
+      /** @description Members at this rank can expel lower-ranked members */
+      can_kick?: boolean;
+      /** @description Members at this rank can promote/demote others */
+      can_manage_ranks?: boolean;
+      /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
+      can_lead_rituals?: boolean;
+    };
     /** @description A persona's standing with an organization — named tier only, never the raw value. */
     OrganizationReputation: {
       readonly id: number;
@@ -26332,6 +26394,18 @@ export interface components {
       organization: number;
       readonly organization_name: string;
       readonly tier: string;
+    };
+    OrganizationRequest: {
+      /** @description The organization's name */
+      name: string;
+      /** @description A description of the organization's purpose and history */
+      description?: string;
+      /** @description Words / motto — house words, gang credo, guild maxim (#2079). */
+      words?: string;
+      /** @description The organization's colors, in prose (#2079). */
+      colors?: string;
+      /** @description Sigil / emblem, described (#2079). */
+      sigil_description?: string;
     };
     OrganizationSearch: {
       id: number;
@@ -48998,7 +49072,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Consequence Pool. */
+        id: number;
       };
       cookie?: never;
     };
@@ -49064,8 +49139,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -59275,6 +59349,32 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Organization'];
+        };
+      };
+    };
+  };
+  societies_organizations_crisis_option_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OrganizationRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
