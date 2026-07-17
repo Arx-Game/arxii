@@ -154,7 +154,7 @@ class ProvisionSpeciesGiftsTests(TestCase):
 
     def test_drawback_distinction_is_idempotent(self):
         """Double finalize does not rank up or duplicate the drawback distinction."""
-        distinction = DistinctionFactory(slug="test-feared-2", name="Feared2")
+        distinction = DistinctionFactory(slug="test-feared-2", name="Feared2", max_rank=2)
         grant = SpeciesGiftGrantFactory(
             species=SpeciesFactory(name="TestInfernal2"),
             gift=GiftFactory(name="Test Hellfire2", kind=GiftKind.MINOR),
