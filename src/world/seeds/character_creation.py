@@ -48,6 +48,8 @@ from world.traits.models import Trait, TraitType
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.societies.models import Organization
+
 logger = logging.getLogger(__name__)
 
 # Reserved slug for the AUTHORED Area that houses the canonical fallback
@@ -353,6 +355,49 @@ def seed_beginning_traditions() -> None:
         )
 
 
+def ensure_shroudwatch_academy() -> Organization:
+    """Seed the Shroudwatch Academy org — every Prospect's CG entrance point (#2428).
+
+    ``tradition=None`` is deliberate (ruling on #2426): the Academy is a
+    multi-tradition teaching structure that trains through its trainer NPCs
+    rather than being a single Tradition's own dedicated org. Resolved by
+    name (``SHROUDWATCH_ACADEMY_NAME``) at CG-finalize time
+    (``world.character_creation.services._finalize_academy_entrance_obligation``)
+    to create the Unbound entrance obligation / sponsor-settled row.
+
+    ``description``/rank titles are PLACEHOLDER and content-overridable — the
+    real Academy prose (rooms, trainer Functionaries, The Vanishing lore) is a
+    lore-repo authoring pass (#2428's spec, "Content" section), not this seed.
+    Idempotent via get_or_create; never overwrites a staff-adjusted row.
+    """
+    from world.character_creation.constants import SHROUDWATCH_ACADEMY_NAME  # noqa: PLC0415
+    from world.societies.models import Organization, OrganizationType  # noqa: PLC0415
+
+    org_type, _ = OrganizationType.objects.get_or_create(
+        name="guild",
+        defaults={
+            "rank_1_title": "Headmaster",
+            "rank_2_title": "Senior Trainer",
+            "rank_3_title": "Trainer",
+            "rank_4_title": "Journeyman",
+            "rank_5_title": "Prospect",
+        },
+    )
+    academy, _ = Organization.objects.get_or_create(
+        name=SHROUDWATCH_ACADEMY_NAME,
+        defaults={
+            "description": (
+                "PLACEHOLDER: the academy every Prospect passes through on the way "
+                "to becoming a Potential. Content-overridable — real lore (rooms, "
+                "trainer Functionaries, The Vanishing) is a lore-repo authoring pass."
+            ),
+            "org_type": org_type,
+            "tradition": None,  # deliberate NULL — #2426 ruling
+        },
+    )
+    return academy
+
+
 def seed_character_creation_dev() -> None:
     """Seed the CG-world content a fresh DB needs to run character creation.
 
@@ -519,6 +564,7 @@ def seed_character_creation_dev() -> None:
     _seed_cg_explanations()
     ensure_tradition_training_distinction()
     seed_beginning_traditions()
+    ensure_shroudwatch_academy()
 
 
 def _seed_cg_explanations() -> None:

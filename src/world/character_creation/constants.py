@@ -45,6 +45,19 @@ FALLBACK_STARTING_ROOM_TYPECLASS = "typeclasses.rooms.Room"
 # marking it AUTHORED so it is stable-identity and included in the grid export.
 FALLBACK_STARTING_ROOM_FIXTURE_KEY = "arx/fallback-starting-room"
 
+# Golden Hare CG entrance obligation (#2428): shared contract between the magic
+# finalize hook (services.py's finalize_magic_data) and the Academy org seed
+# (world.seeds.character_creation.ensure_shroudwatch_academy). Resolved by
+# name at finalize time — the Academy is a deliberate NULL-tradition
+# ``Organization`` (#2426 ruling), not a Tradition itself.
+SHROUDWATCH_ACADEMY_NAME = "Shroudwatch Academy"
+
+# Tradition identifying the tradition-agnostic default CG pick (#2426). There is
+# no boolean "is Unbound" field on ``Tradition`` — every existing caller (the
+# magic seed, ``seed_beginning_traditions`` above) matches by name, so the
+# finalize hook does the same rather than inventing a new marker.
+UNBOUND_TRADITION_NAME = "Unbound"
+
 
 class Stage(models.IntegerChoices):
     """Character creation stages."""

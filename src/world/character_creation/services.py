@@ -1127,6 +1127,11 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         tradition=draft.selected_tradition,
     )
 
+    # 2b. Golden Hare CG entrance obligation (#2428) — Unbound Prospects start
+    #     owing Shroudwatch Academy a Hare; sponsored Prospects start
+    #     SETTLED_BY_SPONSOR (the sponsor spent a Hare on their behalf).
+    _finalize_academy_entrance_obligation(draft, sheet)
+
     # 3. Apply tradition codex grants
     _finalize_tradition_codex_grants(draft, sheet)
 
@@ -1161,6 +1166,54 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
 
     # 6. Create player anima Ritual + sidecar + CharacterRitualKnowledge.
     _finalize_anima_ritual(draft, sheet)
+
+
+def _finalize_academy_entrance_obligation(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Create the CG-finalize Golden Hare Academy obligation row (#2428).
+
+    Unbound Prospects (no Tradition sponsor) start CG owing Shroudwatch
+    Academy one Golden Hare (``OWED``); every other tradition is sponsored —
+    the sponsor literally spent a Hare on the Prospect's behalf at CG time,
+    so that row starts ``SETTLED_BY_SPONSOR`` with ``settled_at`` stamped and
+    ``settled_by_token`` left ``NULL`` (lore-recorded, not a minted item at CG
+    time — spec ruling on #2428).
+
+    The Academy is resolved by name (``SHROUDWATCH_ACADEMY_NAME``) rather than
+    a FK on the draft/sheet — a defensive, logged skip when it isn't seeded
+    mirrors ``seed_beginning_traditions``'s Unbound-tradition skip (#2444);
+    cluster ordering guarantees this can't happen via the Big Button.
+
+    Idempotent via ``get_or_create`` keyed on (debtor, creditor, origin) so
+    re-finalize test paths don't create a duplicate obligation row.
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        SHROUDWATCH_ACADEMY_NAME,
+        UNBOUND_TRADITION_NAME,
+    )
+    from world.societies.constants import ObligationOrigin, ObligationState  # noqa: PLC0415
+    from world.societies.models import Organization, OrganizationObligation  # noqa: PLC0415
+
+    academy = Organization.objects.filter(name=SHROUDWATCH_ACADEMY_NAME).first()
+    if academy is None:
+        logger.warning(
+            "Skipping Academy entrance obligation: %r org is not seeded.",
+            SHROUDWATCH_ACADEMY_NAME,
+        )
+        return
+
+    tradition = draft.selected_tradition
+    is_unbound = tradition is not None and tradition.name == UNBOUND_TRADITION_NAME
+    if is_unbound:
+        defaults = {"state": ObligationState.OWED}
+    else:
+        defaults = {"state": ObligationState.SETTLED_BY_SPONSOR, "settled_at": timezone.now()}
+
+    OrganizationObligation.objects.get_or_create(
+        debtor=sheet,
+        creditor=academy,
+        origin=ObligationOrigin.ACADEMY_ENTRANCE,
+        defaults=defaults,
+    )
 
 
 def _grant_beginnings_ritual_knowledge(draft: CharacterDraft, roster_entry: RosterEntry) -> None:

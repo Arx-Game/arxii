@@ -40,6 +40,12 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`settle_obligation(obligation, token)`**: settle an OWED `OrganizationObligation` by redeeming a Golden Hare (`currency.FavorTokenDetails`) to the creditor org; stamps `settled_at`/`settled_by_token`. Settled rows are history — never deleted.
 - **`has_open_obligation(sheet, org)`**: cheap `.exists()` gate used by training/access flows (#2440).
 - `OrganizationObligation` (models.py) is a **character→org personal debt** (e.g. Academy entrance); distinct from `currency.OrgObligation`, the org↔org percent-of-income tithe (#926).
+- **CG-finalize hook lives in `character_creation`, not here** (#2428 Task 3):
+  `world.character_creation.services._finalize_academy_entrance_obligation`
+  creates the row (`OWED` for Unbound, `SETTLED_BY_SPONSOR` otherwise) against
+  the "Shroudwatch Academy" org seeded by
+  `world.seeds.character_creation.ensure_shroudwatch_academy`
+  (`tradition=None` — deliberate NULL, #2426 ruling).
 
 ### `office_services.py` (#2239)
 - **`appoint_office(*, organization, slug, holder, title="", feeds_check=None)`**: install/replace an office holder (idempotent per org+slug)

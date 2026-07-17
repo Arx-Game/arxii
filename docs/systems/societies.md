@@ -88,6 +88,16 @@ cleared flag. `obligation_services.py`:
 - `has_open_obligation(sheet, org)` — read-only gate: `True` iff `sheet` has
   an `OWED` row against `org`. Consumed by the Academy training gate (#2440).
 
+**CG-finalize hook (#2428 Task 3):** `world.character_creation.services.finalize_magic_data`
+resolves the "Shroudwatch Academy" `Organization` by name (seeded by
+`world.seeds.character_creation.ensure_shroudwatch_academy`, `tradition=None` —
+deliberate NULL, #2426 ruling) and creates one `ACADEMY_ENTRANCE` obligation row
+per character: `OWED` when `draft.selected_tradition.name == "Unbound"`, else
+`SETTLED_BY_SPONSOR` with `settled_at` stamped and `settled_by_token` left `NULL`
+(the sponsor's Hare is lore-recorded, not a minted item at CG time). Defensive
+logged skip (no row created) if the Academy isn't seeded yet, mirroring
+`seed_beginning_traditions`'s Unbound-tradition skip. `get_or_create`-idempotent.
+
 FK direction (ADR-0010): societies is the dependent side of this edge (an
 obligation is a societies concept that happens to be settled with a currency
 instrument), so `settled_by_token` uses the string ref

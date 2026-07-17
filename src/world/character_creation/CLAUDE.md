@@ -99,6 +99,15 @@ for the five-branch validation gate this data must satisfy before submission.
 - CharacterTradition creation is unconditional — `compute_magic_errors` requires
   `selected_tradition` on any draft that reaches submission, so the old
   `if draft.selected_tradition:` guard was dropped.
+- **Golden Hare Academy entrance obligation (#2428 Task 3)** —
+  `_finalize_academy_entrance_obligation` resolves the "Shroudwatch Academy"
+  `Organization` by name (seeded by `world.seeds.character_creation.
+  ensure_shroudwatch_academy`) and creates a `societies.OrganizationObligation`:
+  `OWED` when `draft.selected_tradition.name == "Unbound"`, else
+  `SETTLED_BY_SPONSOR` (`settled_at` stamped, `settled_by_token` left `NULL` —
+  the sponsor's Hare is lore-recorded, not minted at CG time). Defensive logged
+  skip if the Academy isn't seeded (mirrors `seed_beginning_traditions`'s
+  Unbound-tradition skip); `get_or_create`-idempotent.
 
 ### `get_accessible_starting_areas(account)`
 Returns StartingArea queryset filtered by account access level.

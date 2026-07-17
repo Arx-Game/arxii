@@ -16,10 +16,12 @@ from django.test import TestCase
 
 from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
+    SHROUDWATCH_ACADEMY_NAME,
     STARTING_TECHNIQUE_PICKS_TARGET,
 )
 from world.character_creation.factories import BeginningsFactory, CharacterDraftFactory
 from world.seeds.character_creation import (
+    ensure_shroudwatch_academy,
     ensure_tradition_training_distinction,
     seed_beginning_traditions,
     wire_starting_technique_picks_target,
@@ -198,3 +200,48 @@ class SeedBeginningTraditionsTests(TestCase):
         seed_beginning_traditions()
 
         self.assertEqual(BeginningTradition.objects.count(), 0)
+
+
+class EnsureShroudwatchAcademyTests(TestCase):
+    """Tests for ``ensure_shroudwatch_academy()`` (#2428).
+
+    The Academy org resolved-by-name at CG-finalize time to create the
+    Unbound entrance obligation / sponsor-settled row (see
+    ``world.character_creation.services._finalize_academy_entrance_obligation``
+    and ``AcademyEntranceObligationTest`` in
+    ``world.character_creation.tests.test_magic_stage``).
+    """
+
+    def test_creates_academy_org_with_null_tradition(self) -> None:
+        from world.societies.models import Organization
+
+        ensure_shroudwatch_academy()
+
+        academy = Organization.objects.get(name=SHROUDWATCH_ACADEMY_NAME)
+        self.assertIsNone(
+            academy.tradition_id,
+            "Academy tradition must be NULL — a multi-tradition teaching org (#2426 ruling).",
+        )
+
+    def test_idempotent_second_call_creates_no_duplicate(self) -> None:
+        from world.societies.models import Organization
+
+        ensure_shroudwatch_academy()
+        ensure_shroudwatch_academy()
+
+        self.assertEqual(Organization.objects.filter(name=SHROUDWATCH_ACADEMY_NAME).count(), 1)
+
+    def test_does_not_overwrite_a_staff_adjusted_row(self) -> None:
+        from world.societies.models import Organization
+
+        ensure_shroudwatch_academy()
+        Organization.objects.filter(name=SHROUDWATCH_ACADEMY_NAME).update(
+            description="staff-edited description"
+        )
+
+        ensure_shroudwatch_academy()
+
+        db_value = (
+            Organization.objects.filter(name=SHROUDWATCH_ACADEMY_NAME).values("description").get()
+        )
+        self.assertEqual(db_value["description"], "staff-edited description")

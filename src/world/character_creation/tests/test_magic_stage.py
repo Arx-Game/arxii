@@ -6,9 +6,17 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.achievements.constants import AccessChangeSource
-from world.character_creation.constants import CG_MODIFIER_CATEGORY, STARTING_TECHNIQUE_PICKS_TARGET
+from world.character_creation.constants import (
+    CG_MODIFIER_CATEGORY,
+    SHROUDWATCH_ACADEMY_NAME,
+    STARTING_TECHNIQUE_PICKS_TARGET,
+    UNBOUND_TRADITION_NAME,
+)
 from world.character_creation.factories import CharacterDraftFactory
-from world.character_creation.services import finalize_magic_data
+from world.character_creation.services import (
+    _finalize_academy_entrance_obligation,
+    finalize_magic_data,
+)
 from world.character_creation.validators import compute_magic_errors
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
@@ -27,6 +35,9 @@ from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFac
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
 from world.skills.factories import SkillFactory
+from world.societies.constants import ObligationOrigin, ObligationState
+from world.societies.factories import OrganizationFactory
+from world.societies.models import OrganizationObligation
 from world.traits.factories import SkillTraitFactory, StatTraitFactory
 
 
@@ -213,6 +224,76 @@ class MagicFinalizationCGSeedingTest(TestCase):
         get_or_create_fatigue_pool(sheet)
         self.assertEqual(CharacterAnima.objects.filter(character=sheet.character).count(), 1)
         self.assertEqual(FatiguePool.objects.filter(character_sheet=sheet).count(), 1)
+
+
+class AcademyEntranceObligationTest(TestCase):
+    """finalize_magic_data's Golden Hare Academy entrance hook (#2428).
+
+    Unbound Prospects (no Tradition sponsor) start OWED to Shroudwatch
+    Academy; every other tradition is sponsored and starts SETTLED_BY_SPONSOR.
+    Resolved by name — a defensive, logged skip covers an unseeded Academy.
+    """
+
+    def _make_draft_and_sheet(self, *, tradition_name: str):
+        sheet = CharacterSheetFactory()
+        draft = CharacterDraftFactory(selected_tradition=TraditionFactory(name=tradition_name))
+        return draft, sheet
+
+    def test_unbound_tradition_creates_owed_obligation(self):
+        academy = OrganizationFactory(name=SHROUDWATCH_ACADEMY_NAME, tradition=None)
+        draft, sheet = self._make_draft_and_sheet(tradition_name=UNBOUND_TRADITION_NAME)
+
+        finalize_magic_data(draft, sheet)
+
+        obligation = OrganizationObligation.objects.get(debtor=sheet, creditor=academy)
+        self.assertEqual(obligation.origin, ObligationOrigin.ACADEMY_ENTRANCE)
+        self.assertEqual(obligation.state, ObligationState.OWED)
+        self.assertIsNone(obligation.settled_at)
+        self.assertIsNone(obligation.settled_by_token)
+
+    def test_sponsored_tradition_creates_settled_by_sponsor_obligation(self):
+        academy = OrganizationFactory(name=SHROUDWATCH_ACADEMY_NAME, tradition=None)
+        draft, sheet = self._make_draft_and_sheet(tradition_name="Khati Ancestral Rite")
+
+        finalize_magic_data(draft, sheet)
+
+        obligation = OrganizationObligation.objects.get(debtor=sheet, creditor=academy)
+        self.assertEqual(obligation.origin, ObligationOrigin.ACADEMY_ENTRANCE)
+        self.assertEqual(obligation.state, ObligationState.SETTLED_BY_SPONSOR)
+        self.assertIsNotNone(obligation.settled_at)
+        self.assertIsNone(
+            obligation.settled_by_token,
+            "Sponsor's Hare is lore-recorded, not a minted item at CG time (#2428).",
+        )
+
+    def test_no_academy_seeded_skips_without_crash(self):
+        draft, sheet = self._make_draft_and_sheet(tradition_name=UNBOUND_TRADITION_NAME)
+
+        with self.assertLogs("world.character_creation.services", level="WARNING") as logs:
+            finalize_magic_data(draft, sheet)
+
+        self.assertFalse(OrganizationObligation.objects.exists())
+        self.assertTrue(
+            any(SHROUDWATCH_ACADEMY_NAME in message for message in logs.output),
+            f"Expected a logged skip naming {SHROUDWATCH_ACADEMY_NAME!r}: {logs.output}",
+        )
+
+    def test_idempotent_second_call_creates_no_duplicate(self):
+        OrganizationFactory(name=SHROUDWATCH_ACADEMY_NAME, tradition=None)
+        draft = CharacterDraftFactory(
+            selected_tradition=TraditionFactory(name=UNBOUND_TRADITION_NAME)
+        )
+        sheet = CharacterSheetFactory()
+
+        _finalize_academy_entrance_obligation(draft, sheet)
+        _finalize_academy_entrance_obligation(draft, sheet)
+
+        self.assertEqual(
+            OrganizationObligation.objects.filter(
+                debtor=sheet, creditor__name=SHROUDWATCH_ACADEMY_NAME
+            ).count(),
+            1,
+        )
 
 
 class GiftGrantNotificationTest(TestCase):
