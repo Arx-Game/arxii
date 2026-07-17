@@ -52,7 +52,7 @@ class WorldBuilderAreaPagination(PageNumberPagination):
 def _occupant_counts(room_ids: list[int]) -> dict[int, int]:
     """Character-occupant counts per room, one bulk query (no per-room N+1).
 
-    Mirrors ``actions.definitions.world_builder._has_character_occupants``'s
+    Mirrors ``world.areas.grid_services.has_character_occupants``'s
     typeclass check, but batched: every object located in ``room_ids`` is
     fetched once and grouped in Python, instead of querying each room's
     contents separately.
