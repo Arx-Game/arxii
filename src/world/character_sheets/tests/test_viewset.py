@@ -913,10 +913,17 @@ class TestDistinctionsSection(TestCase):
         assert len(distinctions) == 2
 
     def test_distinction_entry_keys(self) -> None:
-        """Each distinction entry has id, name, rank, notes, is_secret (#1334)."""
+        """Each distinction entry has id, name, rank, notes, is_secret, is_from_glimpse (#2427)."""
         distinctions = self._get_distinctions()
         for entry in distinctions:
-            assert set(entry.keys()) == {"id", "name", "rank", "notes", "is_secret"}
+            assert set(entry.keys()) == {
+                "id",
+                "name",
+                "rank",
+                "notes",
+                "is_secret",
+                "is_from_glimpse",
+            }
 
     def test_distinction_entry_values(self) -> None:
         """Distinction entries contain correct values from the models."""
@@ -927,11 +934,26 @@ class TestDistinctionsSection(TestCase):
         assert misbegotten["id"] == self.cd_a.pk
         assert misbegotten["rank"] == 1
         assert misbegotten["notes"] == "Born outside the compact."
+        assert misbegotten["is_from_glimpse"] is False
 
         strong_arm = by_name["Strong Arm"]
         assert strong_arm["id"] == self.cd_b.pk
         assert strong_arm["rank"] == 2
         assert strong_arm["notes"] == ""
+        assert strong_arm["is_from_glimpse"] is False
+
+    def test_distinction_entry_is_from_glimpse_true_when_linked(self) -> None:
+        """A distinction linked via CharacterDistinction.from_glimpse reports True (#2427)."""
+        from world.magic.factories import CharacterAuraFactory
+
+        aura = CharacterAuraFactory(character=self.character)
+        self.cd_a.from_glimpse = aura
+        self.cd_a.save()
+
+        distinctions = self._get_distinctions()
+        by_name = {d["name"]: d for d in distinctions}
+        assert by_name["Misbegotten"]["is_from_glimpse"] is True
+        assert by_name["Strong Arm"]["is_from_glimpse"] is False
 
 
 class TestDistinctionsEmpty(TestCase):

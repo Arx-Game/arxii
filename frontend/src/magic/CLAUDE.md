@@ -425,7 +425,50 @@ distinction-link fallback. Two mounts share it: the CG `GiftStage`
 (`character-creation/components/gift/GlimpseSection.tsx`, which binds it to
 `draft_data.glimpse_tag_ids`/`glimpse_story`/`glimpse_linked_distinction_ids`
 and threads `heading` down from GiftStage's copy query) and the character
-sheet (Task 6, not yet built).
+sheet (`components/glimpse/GlimpseEditorDialog.tsx`, below).
+
+### `components/glimpse/GlimpseEditorDialog.tsx` (#2427 Task 6)
+
+The "finish later" Glimpse editor on the own-character sheet — a `Dialog`
+(same `@/components/ui/dialog` primitives `CodexModal` uses) hosting
+`GlimpseFlow` in live mode. Opened from `SpellbookTab`'s aura card via a
+"Finish your Glimpse" button, gated on `isMyCharacter && aura.can_finish_glimpse`
+(mirrors the `MotifStylePanel` own-view gate). Catalog comes from
+`useGlimpseTags()` (`@/character-creation/queries` — the same catalog CG's
+`GlimpseSection` reads); selection/prose are seeded from the sheet payload's
+`magic.aura.glimpse_tags`/`glimpse_story`; writes go through the Task 4 aura
+action mutations below. `showDeferralControls={false}` — closing the dialog
+IS the deferral (unlike CG, which offers an explicit "skip" button).
+
+**ID-space note:** CG's `GlimpseSection` links glimpse suggestions by
+**catalog** `Distinction` id (`draft_data.glimpse_linked_distinction_ids`,
+reconciled at finalize). This dialog links by **CharacterDistinction row id**
+instead — the id the aura's `link-glimpse-distinction`/
+`unlink-glimpse-distinction` endpoints require, which is exactly what
+`CharacterSheetDistinction.id` already carries. `linkedDistinctionIds` is
+derived from the sheet payload's new `distinctions[*].is_from_glimpse` flag
+(`world.character_sheets.types.DistinctionEntry`, #2427 backend touch-up —
+`CharacterDistinction.from_glimpse_id is not None`); `linkableDistinctions`
+maps the same list to `{id, name}`. No separate fetch — both come from the
+sheet payload `SpellbookTab` already has.
+
+**Mutation hooks** (`@/magic/queries`, wrap the Task 4
+`CharacterAuraViewSet` actions — `src/world/magic/views.py`):
+`useSetGlimpseTags(auraId, characterSheetId)`,
+`useSetGlimpseProse(auraId, characterSheetId)`,
+`useToggleGlimpseDistinction(auraId, characterSheetId)` (wraps
+link+unlink behind one `toggle(characterDistinctionId, isCurrentlyLinked)`
+call). All three invalidate `['character-sheets', characterSheetId]` on
+success — the same key `useCharacterSheetQuery` reads — rather than trying
+to read the aura action responses (`CharacterAuraSerializer` output doesn't
+carry `glimpse_tags`/`glimpse_story`/`can_finish_glimpse`; those live only in
+the sheet payload's `AuraData`). Request bodies are hand-rolled in
+`magic/types.ts` (`SetGlimpseTagsRequest`/`SetGlimpseProseRequest`/
+`GlimpseDistinctionLinkRequest`) rather than the generated schema — the
+generated request type for these `@action` methods is
+`CharacterAuraRequest` (drf-spectacular falls back to the ViewSet's own
+serializer since the actions aren't `@extend_schema`-annotated), which is
+wrong for these bodies.
 
 ### `XpKudosPage.alterationGate.test.tsx` (in `src/progression/`)
 

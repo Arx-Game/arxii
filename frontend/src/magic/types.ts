@@ -401,6 +401,42 @@ export interface UnbindMotifStyleRequest {
   style_id: number;
 }
 
+// ---------------------------------------------------------------------------
+// Glimpse aura action mutations, #2427
+//
+// CharacterAuraViewSet's set-glimpse-tags/set-glimpse-prose/link-glimpse-
+// distinction/unlink-glimpse-distinction actions are plain @action methods
+// (no @extend_schema), so drf-spectacular records their request bodies as the
+// ViewSet's own CharacterAuraRequest — inaccurate for these actions. These are
+// hand-rolled to mirror the real input serializers
+// (GlimpseSetTagsSerializer / GlimpseSetProseSerializer /
+// GlimpseDistinctionLinkSerializer, src/world/magic/serializers.py).
+// ---------------------------------------------------------------------------
+
+/** Request body for POST /api/magic/character-auras/{id}/set-glimpse-tags/. */
+export interface SetGlimpseTagsRequest {
+  axis: 'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY';
+  tag_ids: number[];
+}
+
+/** Request body for POST /api/magic/character-auras/{id}/set-glimpse-prose/. */
+export interface SetGlimpseProseRequest {
+  text: string;
+}
+
+/**
+ * Request body for POST /api/magic/character-auras/{id}/link-glimpse-distinction/
+ * and .../unlink-glimpse-distinction/.
+ *
+ * NOTE the semantic difference from CG: this id is a **CharacterDistinction**
+ * row pk (the character's own distinction instance), not a catalog
+ * `Distinction` id — CG's `glimpse_linked_distinction_ids` (draft_data) links
+ * by catalog Distinction id instead. Never mix the two id spaces.
+ */
+export interface GlimpseDistinctionLinkRequest {
+  character_distinction_id: number;
+}
+
 /** Request body for POST /api/magic/techniques/price/ and /api/magic/techniques/author/. */
 export interface TechniqueDesignRequest {
   name: string;

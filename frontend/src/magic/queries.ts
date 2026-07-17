@@ -22,8 +22,11 @@ import type {
   CrossXPLockRequest,
   DissolveRequest,
   EntryFlourishRespondRequest,
+  GlimpseDistinctionLinkRequest,
   PatchThreadRequest,
   RescueRequest,
+  SetGlimpseProseRequest,
+  SetGlimpseTagsRequest,
   SineatingRequest,
   SineatingRespondRequest,
   StageAdvanceRespondRequest,
@@ -837,4 +840,62 @@ export function useUnbindMotifStyle(characterSheetId: number) {
       qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Glimpse aura actions, #2427 — the "finish later" character-sheet editor.
+//
+// Every hook here is keyed by `auraId` (the endpoint's own path param, from
+// `CharacterSheetAura.id`) but takes `characterSheetId` too so it can
+// invalidate the character-sheet query on success — the same
+// `['character-sheets', characterSheetId]` key `useCharacterSheetQuery`
+// (character_sheets/queries.ts) reads, which is where `glimpse_state` /
+// `glimpse_tags` / `glimpse_story` actually live. The aura action responses
+// themselves are not consumed (see the "Glimpse aura actions" note in api.ts).
+// ---------------------------------------------------------------------------
+
+function invalidateGlimpseSheet(qc: ReturnType<typeof useQueryClient>, characterSheetId: number) {
+  qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
+}
+
+/** Replace one axis's glimpse tag picks. */
+export function useSetGlimpseTags(auraId: number, characterSheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SetGlimpseTagsRequest) => api.setGlimpseTags(auraId, body),
+    onSuccess: () => invalidateGlimpseSheet(qc, characterSheetId),
+  });
+}
+
+/** Write the glimpse story prose. */
+export function useSetGlimpseProse(auraId: number, characterSheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SetGlimpseProseRequest) => api.setGlimpseProse(auraId, body),
+    onSuccess: () => invalidateGlimpseSheet(qc, characterSheetId),
+  });
+}
+
+/**
+ * Link/unlink a CharacterDistinction to the glimpse. Wraps both endpoints
+ * behind one `toggle(characterDistinctionId, isCurrentlyLinked)` call so
+ * callers (GlimpseEditorDialog) don't need to pick the mutation themselves.
+ */
+export function useToggleGlimpseDistinction(auraId: number, characterSheetId: number) {
+  const qc = useQueryClient();
+  const link = useMutation({
+    mutationFn: (body: GlimpseDistinctionLinkRequest) => api.linkGlimpseDistinction(auraId, body),
+    onSuccess: () => invalidateGlimpseSheet(qc, characterSheetId),
+  });
+  const unlink = useMutation({
+    mutationFn: (body: GlimpseDistinctionLinkRequest) => api.unlinkGlimpseDistinction(auraId, body),
+    onSuccess: () => invalidateGlimpseSheet(qc, characterSheetId),
+  });
+  return {
+    toggle: (characterDistinctionId: number, isCurrentlyLinked: boolean) => {
+      const mutation = isCurrentlyLinked ? unlink : link;
+      mutation.mutate({ character_distinction_id: characterDistinctionId });
+    },
+    isPending: link.isPending || unlink.isPending,
+  };
 }

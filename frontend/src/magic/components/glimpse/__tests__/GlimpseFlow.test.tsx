@@ -249,7 +249,7 @@ describe('GlimpseFlow', () => {
     const onChangeAxis = vi.fn();
     render(<GlimpseFlow {...makeProps({ onChangeAxis })} />);
 
-    screen.getByText('Wonder').closest('[role="button"]')?.focus();
+    (screen.getByText('Wonder').closest('[role="button"]') as HTMLElement | null)?.focus();
     await user.keyboard('{Enter}');
 
     expect(onChangeAxis).toHaveBeenCalledWith('TONE', [1]);

@@ -125,6 +125,11 @@ class DistinctionEntry(TypedDict):
     # secret entries at all — they're shown the public list only; the flag lets the owner / staff
     # see which of their distinctions are currently gated.
     is_secret: bool
+    # Whether this distinction was born from the character's Glimpse (#2427) —
+    # CharacterDistinction.from_glimpse is set. Drives the own-character sheet's
+    # Glimpse editor "linked distinction" chip state (id here is the
+    # CharacterDistinction pk, matching the aura endpoints' character_distinction_id).
+    is_from_glimpse: bool
 
 
 class TechniqueEntry(TypedDict):

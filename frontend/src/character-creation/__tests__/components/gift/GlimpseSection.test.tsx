@@ -168,7 +168,7 @@ describe('GlimpseSection', () => {
     const draft = createMockDraft({ id: 1, draft_data: {} });
     renderSection(draft);
 
-    screen.getByText('Wonder').closest('[role="button"]')?.focus();
+    (screen.getByText('Wonder').closest('[role="button"]') as HTMLElement | null)?.focus();
     await user.keyboard('{Enter}');
 
     await waitFor(() => {

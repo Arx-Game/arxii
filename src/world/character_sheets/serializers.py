@@ -571,6 +571,7 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
             rank=cd.rank,
             notes=cd.notes,
             is_secret=cd.is_secret,
+            is_from_glimpse=cd.from_glimpse_id is not None,
         )
         for cd in character.cached_distinctions
         if privileged or not cd.is_secret
