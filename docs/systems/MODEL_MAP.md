@@ -3935,6 +3935,7 @@
   - legendrequirement_requirements <- progression.LegendRequirement
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
+  - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
 
 ### DramaticMomentType
 **Foreign Keys:**
@@ -5383,6 +5384,7 @@
   - legendrequirement_requirements <- progression.LegendRequirement
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
+  - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
 
 ### TraitRatingUnlock
 **Foreign Keys:**
@@ -5447,6 +5449,11 @@
   - item_template -> items.ItemTemplate [FK] (nullable)
   - min_touchstone_tier -> magic.ResonanceTier [FK] (nullable)
   - min_quality_tier -> items.QualityTier [FK] (nullable)
+
+### MajorGiftTechniqueRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
 
 ### CharacterUnlock
 **Foreign Keys:**

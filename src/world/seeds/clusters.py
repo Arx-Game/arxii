@@ -141,9 +141,19 @@ def _seed_tutorial() -> None:
 
 
 def _seed_progression() -> None:
-    from world.progression.seeds import seed_durance_officiants  # noqa: PLC0415
+    from world.progression.seeds import (  # noqa: PLC0415
+        seed_durance_officiants,
+        seed_major_gift_technique_level_requirement,
+    )
 
     seed_durance_officiants()
+    seed_major_gift_technique_level_requirement()
+
+
+def _seed_npc_services() -> None:
+    from world.npc_services.seeds import ensure_great_archive_librarian_role  # noqa: PLC0415
+
+    ensure_great_archive_librarian_role()
 
 
 def _seed_justice() -> None:
@@ -369,6 +379,12 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # After "character_creation" (the room) and "magic" (the Ritual of the
     # Durance row + the 5 PROSPECT Path rows, both seeded by seed_magic_dev).
     "progression": _seed_progression,
+    # NPC services: the Great Archive Librarian role + self-study TRAIN offers
+    # (#2440 ruling 5), gated by a PLACEHOLDER quest-completion Achievement.
+    # After "progression" (itself after "character_creation" for the
+    # Shroudwatch Academy org and "magic" for the starter Gift/Technique
+    # catalog the self-study offers reference).
+    "npc_services": _seed_npc_services,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
@@ -582,8 +598,14 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # in the first legend-risk mission. Represented by NPCRole (the tutor).
         "tutorial": [NPCRole],
         # Progression: one Durance training officiant + site per PROSPECT path
-        # (#2121), so the first-ever Ritual of the Durance is conductible.
+        # (#2121), so the first-ever Ritual of the Durance is conductible. Also
+        # seeds the level-2 ClassLevelUnlock + MajorGiftTechniqueRequirement gate
+        # (#2440 ruling 4) — no standalone representative model (rides the
+        # existing ClassLevelUnlock/requirement tables).
         "progression": [DuranceTrainingSite],
+        # NPC services: the Great Archive Librarian role + self-study TRAIN offers
+        # (#2440 ruling 5), represented by NPCRole (mirrors "tutorial" above).
+        "npc_services": [NPCRole],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under

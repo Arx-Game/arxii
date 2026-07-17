@@ -90,6 +90,8 @@ All requirements inherit from `AbstractClassLevelRequirement` which provides `de
 | `AchievementRequirement` | Character has been granted a specific Achievement | `achievement` (FK `achievements.Achievement`) |
 | `RelationshipRequirement` | Character's own relationship-track tier count (#2116) | `required_track_kind` (nullable FK `relationships.RelationshipTrack`, null = any track), `minimum_tier`, `minimum_count` (default 1) |
 | `ItemRequirement` | Possesses a physical touchstone/trophy item (#1859) | `item_template` XOR `min_touchstone_tier` (FK `magic.ResonanceTier`), `quantity`, `min_quality_tier` — possession-only, not consumed |
+| `LegendRequirement` | Minimum total legend value | `minimum_legend` |
+| `MajorGiftTechniqueRequirement` | Knows >= N techniques of the character's MAJOR gift (#2440 ruling 4) — a COUNT gate, not completeness; minor-gift techniques never count. Seeded onto the level-2 `ClassLevelUnlock` via `world.progression.seeds.seed_major_gift_technique_level_requirement` | `minimum_techniques` (default 3) |
 
 ### Class-Level Advancement Receipts (#1352)
 

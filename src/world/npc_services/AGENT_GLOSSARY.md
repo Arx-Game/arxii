@@ -93,3 +93,16 @@ uses — one seam, two front doors, never a forked acquisition path.
 _Avoid_: "teaching offer" for TRAIN specifically (that term is
 `magic.TechniqueTeachingOffer`, the player-to-player path — a different model
 entirely, though both converge on the same acquisition seam).
+
+**Great Archive self-study** (#2440 ruling 5):
+The post-Vanishing path for orphaned traditions — TRAIN offers on a "Great
+Archive Librarian" `NPCRole` (same Academy `faction_affiliation`, same AP +
+coin + Golden Hare cost as any other trainer), visible only to a learner who
+holds a quest-completion `Achievement`
+(`world.npc_services.seeds.GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG`). The
+gate reuses `NPCServiceOffer.eligibility_rule`'s existing `has_achievement`
+predicate leaf (`world.predicates.predicates`) — no bespoke FK. Seeded via
+`ensure_great_archive_librarian_role()`; the achievement definition exists on
+a fresh DB, but granting it to a character is lore-repo quest content, not
+this seed's job. _Avoid_: a new `required_achievement` FK — `eligibility_rule`
+is already the offer-visibility predicate for every `NPCServiceOffer` kind.

@@ -2110,6 +2110,17 @@ register as additional kinds.
   Academy-specific venue tokens (ruling on #2428). The generic `hire` command/
   `InteractionSession` loop lists and resolves TRAIN offers with no command-layer changes —
   the offer kind is fully expressible through the existing eligibility/dispatch machinery.
+- **Great Archive self-study (#2440 ruling 5):** the post-Vanishing path for orphaned
+  traditions — a quest-completion flag unlocks self-teaching, mechanically a TRAIN offer
+  set on a "Great Archive Librarian" `NPCRole` (`faction_affiliation` = Shroudwatch
+  Academy — same Hare/coin seam as any other Academy trainer; `teaches_tradition=None`,
+  shared pool only). Gate mechanism: reuses `NPCServiceOffer.eligibility_rule` — already
+  THE offer visibility/selectability predicate — with the existing `has_achievement` leaf
+  (`world.predicates.predicates`) rather than a new FK; no migration needed for the gate
+  itself. Seeded by `ensure_great_archive_librarian_role()` (`world.npc_services.seeds`),
+  which also get-or-creates the PLACEHOLDER `Achievement` row
+  (`GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG`) the offers gate on — granting it to a
+  character is the lore-repo quest's job, not this seed's.
 - **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
   `(pc_persona, npc_persona)`) is atomically accumulated by
   `adjust_npc_affection(pc_persona, npc_persona, delta=...)` via `F()`. Social action
@@ -2171,8 +2182,12 @@ register as additional kinds.
   → `end_interaction(session)` (persists new affection for class-2+ NPCs).
 - **Predicate engine reuse:** `world.predicates` (shared utility — see entry below).
   `min_npc_standing` and persona-scoped `has_item` leaves live there.
-- **Seeding:** `ensure_builders_guild_clerk_role()` in `world.npc_services.seeds` —
-  idempotent get_or_create; NOT a committed fixture (per #683).
+- **Seeding:** `ensure_builders_guild_clerk_role()`, `ensure_great_archive_librarian_role()`
+  (#2440), `ensure_great_archive_self_study_achievement()` (#2440) in
+  `world.npc_services.seeds` — idempotent get_or_create; NOT a committed fixture (per #683).
+  The Archive seed rides the Big Button via the `"npc_services"` cluster
+  (`world.seeds.clusters`), after `"progression"` (Shroudwatch Academy org + starter
+  Gift/Technique catalog it depends on).
 - **API:** `/api/npc-services/standings/`, `/api/npc-services/roles/`, `/api/npc-services/offers/`,
   `/api/npc-services/cooldowns/`, `/api/npc-services/permit-details/` — staff CRUD.
   `/api/npc-services/interactions/{start,resolve,end}/` — player-facing interaction state machine

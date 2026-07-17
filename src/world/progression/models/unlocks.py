@@ -767,6 +767,58 @@ class ItemRequirement(AbstractClassLevelRequirement):
         return f"Touchstone: tier >= {self.min_touchstone_tier.name}"
 
 
+class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
+    """Requirement for knowing >= N techniques of the character's MAJOR gift.
+
+    Level-2 gate (#2440 ruling 4): CG hands out only 1-3 starter picks from
+    the (Path x Gift) pool (1 + Tradition Training rank); the design intent
+    is that characters fill out the rest of their starter gift in play via
+    Academy/Archive TRAIN offers before crossing to level 2. The gate is a
+    COUNT, not completeness — a major gift can grow many techniques over a
+    character's life (several level-gated), so requiring every technique
+    would be a moving, unreachable target. ``minimum_techniques`` defaults
+    to 3, matching CG's upper end.
+
+    Only the character's single MAJOR gift counts (``Gift.kind ==
+    GiftKind.MAJOR``, resolved via ``CharacterGift`` — CG links exactly
+    one). Minor-gift techniques never count toward this gate.
+    """
+
+    minimum_techniques = models.PositiveSmallIntegerField(
+        default=3,
+        help_text="Techniques of the character's MAJOR gift required (#2440 ruling 4).",
+    )
+
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
+        """Count CharacterTechnique rows whose technique belongs to the MAJOR gift."""
+        from world.magic.constants import GiftKind  # noqa: PLC0415
+        from world.magic.models import CharacterGift  # noqa: PLC0415
+        from world.magic.services.gift_acquisition import (  # noqa: PLC0415
+            count_techniques_for_gift,
+        )
+
+        sheet = character.sheet_data
+        major_link = CharacterGift.objects.filter(
+            character=sheet, gift__kind=GiftKind.MAJOR
+        ).first()
+        if major_link is None:
+            return (
+                False,
+                f"Need {self.minimum_techniques} techniques of your major gift, have no major gift",
+            )
+
+        count = count_techniques_for_gift(sheet, major_link.gift)
+        if count >= cast(int, self.minimum_techniques):
+            return True, f"Knows {count} techniques of {major_link.gift.name}"
+        return (
+            False,
+            f"Need {self.minimum_techniques} techniques of {major_link.gift.name}, have {count}",
+        )
+
+    def __str__(self) -> str:
+        return f"Major Gift Techniques: >= {self.minimum_techniques}"
+
+
 # Character Unlocks
 
 

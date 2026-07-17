@@ -150,6 +150,7 @@ def _check_requirements(
         ItemRequirement,
         LegendRequirement,
         LevelRequirement,
+        MajorGiftTechniqueRequirement,
         MultiClassRequirement,
         RelationshipRequirement,
         TierRequirement,
@@ -166,6 +167,7 @@ def _check_requirements(
         MultiClassRequirement,
         LegendRequirement,
         ItemRequirement,
+        MajorGiftTechniqueRequirement,
     ]
 
     failed_messages: list[str] = []
