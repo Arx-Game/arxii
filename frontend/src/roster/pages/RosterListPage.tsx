@@ -23,9 +23,12 @@ import {
 } from '@/components/ui/select';
 import { Gender, GENDER_LABELS } from '@/world/character_sheets/types';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { Link } from 'react-router-dom';
+import { useAccount } from '@/store/hooks';
 
 export function RosterListPage() {
   const { data: rosters, isLoading: rostersLoading } = useRostersQuery();
+  const account = useAccount();
   const [activeRoster, setActiveRoster] = useState<string>('');
   const [page, setPage] = useState(1);
   const [name, setName] = useState('');
@@ -59,6 +62,14 @@ export function RosterListPage() {
 
   return (
     <div className="container mx-auto space-y-4 p-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Roster</h1>
+        {account?.can_create_characters && (
+          <Button asChild>
+            <Link to="/characters/create">Create a character</Link>
+          </Button>
+        )}
+      </div>
       <Tabs
         value={activeRoster}
         onValueChange={(v: string) => {
