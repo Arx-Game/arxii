@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.utils.text import slugify
+
 from evennia_extensions.models import RoomProfile, RoomSizeTier
 from world.areas.constants import GridOrigin
 
@@ -216,3 +218,93 @@ def place_room_on_grid(*, profile: RoomProfile, grid_x: int, grid_y: int, floor:
     profile.grid_y = grid_y
     profile.floor = floor
     profile.save(update_fields=["grid_x", "grid_y", "floor"])
+
+
+def _is_slug_segment(value: str) -> bool:
+    """Whether ``value`` is exactly one non-empty slug segment (no ``/``)."""
+    return bool(value) and slugify(value) == value
+
+
+def _promote_room_to_authored(room_profile: RoomProfile, key: str) -> None:
+    area_slug, _, room_slug = key.partition("/")
+    if not room_slug or not _is_slug_segment(area_slug) or not _is_slug_segment(room_slug):
+        msg = f"{key!r} is not a valid '<area-slug>/<room-slug>' fixture key."
+        raise GridServiceError(msg)
+    if room_profile.area is None or room_profile.area.origin != GridOrigin.AUTHORED:
+        msg = (
+            "This room's area must exist and be AUTHORED before the room can be "
+            "promoted (a room whose area isn't AUTHORED can never export)."
+        )
+        raise GridServiceError(msg)
+    if room_profile.fixture_key is not None and room_profile.fixture_key != key:
+        msg = "This room already has a different fixture key; keys are permanent once set."
+        raise GridServiceError(msg)
+    room_profile.origin = GridOrigin.AUTHORED
+    room_profile.fixture_key = key
+    room_profile.save(update_fields=["origin", "fixture_key"])
+
+
+def _promote_area_to_authored(area: Area, key: str) -> None:
+    if not _is_slug_segment(key):
+        msg = f"{key!r} is not a valid area slug."
+        raise GridServiceError(msg)
+    if area.slug is not None and area.slug != key:
+        msg = "This area already has a different slug; keys are permanent once set."
+        raise GridServiceError(msg)
+    area.origin = GridOrigin.AUTHORED
+    area.slug = key
+    area.save(update_fields=["origin", "slug"])
+
+
+def promote_to_authored(
+    *, room_profile: RoomProfile | None = None, area: Area | None = None, key: str
+) -> None:
+    """Promote a PLAYER/STORY room or area to AUTHORED, assigning its permanent key.
+
+    Exactly one of ``room_profile``/``area`` must be given. Validates the key
+    format — ``<area-slug>/<room-slug>`` for a room, a plain slug for an area —
+    and, for a room, enforces the slice-1 invariant that its area must exist and
+    itself be AUTHORED (see ``core_management.grid_export.find_unhoused_authored_rooms``);
+    otherwise the room would be silently unreachable to any export pass.
+
+    Key permanence (ADR-0138): re-promoting with a *different* key than one
+    already set raises — authored identity is assignment-time and permanent.
+    Re-promoting with the *same* key is a no-op success.
+    """
+    if room_profile is not None and area is not None:
+        msg = "Promote exactly one of room_profile or area, not both."
+        raise GridServiceError(msg)
+    if room_profile is not None:
+        _promote_room_to_authored(room_profile, key)
+    elif area is not None:
+        _promote_area_to_authored(area, key)
+    else:
+        msg = "Promote exactly one of room_profile or area."
+        raise GridServiceError(msg)
+
+
+def suggest_fixture_key(area: Area, name: str) -> str:
+    """Suggest a ``<area-slug>/<room-slug>`` fixture key for ``name`` in ``area``.
+
+    Not a reservation — just a starting point for staff to accept or edit; the
+    permanence contract lives in ``promote_to_authored``. ``area.slug`` must
+    already be set (i.e. ``area`` is itself AUTHORED). Dedupes against existing
+    fixture keys under this area's prefix with one ``startswith`` query, appending
+    ``-2``, ``-3``, ... on collision.
+    """
+    if not area.slug:
+        msg = "Can't suggest a fixture key for an area with no slug."
+        raise GridServiceError(msg)
+    base = f"{area.slug}/{slugify(name)}"
+    prefix = f"{area.slug}/"
+    existing = set(
+        RoomProfile.objects.filter(fixture_key__startswith=prefix).values_list(
+            "fixture_key", flat=True
+        )
+    )
+    if base not in existing:
+        return base
+    suffix = 2
+    while f"{base}-{suffix}" in existing:
+        suffix += 1
+    return f"{base}-{suffix}"

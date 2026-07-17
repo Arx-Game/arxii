@@ -14,7 +14,9 @@ from world.areas.grid_services import (
     exits_for_rooms,
     exits_from_rooms,
     place_room_on_grid,
+    promote_to_authored,
     stranded_rooms,
+    suggest_fixture_key,
 )
 
 
@@ -245,3 +247,117 @@ class StrandedRoomsTests(TestCase):
             drop_room_id=self.entry.pk,
         )
         self.assertEqual(orphaned, set())
+
+
+class PromoteToAuthoredRoomTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.authored_area = AreaFactory(origin=GridOrigin.AUTHORED, slug="arx-city")
+        cls.player_area = AreaFactory(origin=GridOrigin.PLAYER)
+
+    def test_promotes_room_in_authored_area(self) -> None:
+        profile = create_room(area=self.authored_area, name="Taproom")
+        promote_to_authored(room_profile=profile, key="arx-city/taproom")
+        profile.refresh_from_db()
+        self.assertEqual(profile.origin, GridOrigin.AUTHORED)
+        self.assertEqual(profile.fixture_key, "arx-city/taproom")
+
+    def test_room_in_player_area_raises(self) -> None:
+        profile = create_room(area=self.player_area, name="Shack")
+        with self.assertRaises(GridServiceError):
+            promote_to_authored(room_profile=profile, key="some-area/shack")
+
+    def test_room_with_no_area_raises(self) -> None:
+        profile = create_room(area=self.authored_area, name="Floating")
+        profile.area = None
+        profile.save(update_fields=["area"])
+        with self.assertRaises(GridServiceError):
+            promote_to_authored(room_profile=profile, key="arx-city/floating")
+
+    def test_invalid_key_format_raises(self) -> None:
+        profile = create_room(area=self.authored_area, name="Bad Key Room")
+        with self.assertRaises(GridServiceError):
+            promote_to_authored(room_profile=profile, key="NotASlug")
+
+    def test_rekeying_with_a_different_key_raises(self) -> None:
+        profile = create_room(area=self.authored_area, name="Vault")
+        promote_to_authored(room_profile=profile, key="arx-city/vault")
+        with self.assertRaises(GridServiceError):
+            promote_to_authored(room_profile=profile, key="arx-city/vault-renamed")
+
+    def test_repromoting_with_same_key_is_idempotent(self) -> None:
+        profile = create_room(area=self.authored_area, name="Vault")
+        promote_to_authored(room_profile=profile, key="arx-city/vault")
+        promote_to_authored(room_profile=profile, key="arx-city/vault")
+        profile.refresh_from_db()
+        self.assertEqual(profile.fixture_key, "arx-city/vault")
+
+    def test_requires_exactly_one_target(self) -> None:
+        with self.assertRaises(GridServiceError):
+            promote_to_authored(key="arx-city/neither")
+
+    def test_both_targets_given_raises(self) -> None:
+        profile = create_room(area=self.authored_area, name="Both")
+        with self.assertRaises(GridServiceError):
+            promote_to_authored(room_profile=profile, area=self.authored_area, key="arx-city/both")
+
+
+class PromoteToAuthoredAreaTests(TestCase):
+    def test_promotes_area(self) -> None:
+        area = AreaFactory(origin=GridOrigin.PLAYER)
+        promote_to_authored(area=area, key="new-region")
+        area.refresh_from_db()
+        self.assertEqual(area.origin, GridOrigin.AUTHORED)
+        self.assertEqual(area.slug, "new-region")
+
+    def test_invalid_key_format_raises(self) -> None:
+        area = AreaFactory(origin=GridOrigin.PLAYER)
+        with self.assertRaises(GridServiceError):
+            promote_to_authored(area=area, key="not/a/plain/slug")
+
+    def test_rekeying_with_a_different_key_raises(self) -> None:
+        area = AreaFactory(origin=GridOrigin.AUTHORED, slug="old-region")
+        with self.assertRaises(GridServiceError):
+            promote_to_authored(area=area, key="new-region")
+
+    def test_repromoting_with_same_key_is_idempotent(self) -> None:
+        area = AreaFactory(origin=GridOrigin.AUTHORED, slug="stable-region")
+        promote_to_authored(area=area, key="stable-region")
+        area.refresh_from_db()
+        self.assertEqual(area.slug, "stable-region")
+
+
+class SuggestFixtureKeyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.area = AreaFactory(origin=GridOrigin.AUTHORED, slug="arx-city")
+
+    def test_suggests_area_slug_and_slugified_name(self) -> None:
+        self.assertEqual(
+            suggest_fixture_key(self.area, "Golden Hart Taproom"),
+            "arx-city/golden-hart-taproom",
+        )
+
+    def test_dedupes_on_collision(self) -> None:
+        create_room(
+            area=self.area,
+            name="Taproom",
+            origin=GridOrigin.AUTHORED,
+            fixture_key="arx-city/taproom",
+        )
+        self.assertEqual(suggest_fixture_key(self.area, "Taproom"), "arx-city/taproom-2")
+
+    def test_dedupes_past_first_collision(self) -> None:
+        create_room(
+            area=self.area,
+            name="Taproom",
+            origin=GridOrigin.AUTHORED,
+            fixture_key="arx-city/taproom",
+        )
+        create_room(
+            area=self.area,
+            name="Taproom 2",
+            origin=GridOrigin.AUTHORED,
+            fixture_key="arx-city/taproom-2",
+        )
+        self.assertEqual(suggest_fixture_key(self.area, "Taproom"), "arx-city/taproom-3")
