@@ -505,3 +505,103 @@ class DistinctionSyncClearsTraditionTests(TestCase):
         assert response.status_code == status.HTTP_204_NO_CONTENT
         draft.refresh_from_db()
         assert draft.selected_tradition == self.tradition
+
+
+class OrphanedTraditionSelectionTests(TestCase):
+    """End-to-end: the seeded 'Metallic Order' example is gated by the real
+    'Orphaned Tradition' drawback distinction through the real select-tradition
+    endpoint (#2428 Task 5).
+
+    Reuses #2426's ``required_distinction`` gate (already covered abstractly by
+    ``SelectTraditionTests`` above) — this class proves the *seeded* orphaned-
+    tradition wiring itself: ``seed_metallic_order_tradition()`` produces a
+    tradition + BeginningTradition row that actually enforces the gate end to
+    end, not just that the gate mechanism works in the abstract.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_creation.factories import RealmFactory, StartingAreaFactory
+        from world.distinctions.models import Distinction
+        from world.magic.factories import GiftFactory, TraditionGiftGrantFactory
+        from world.seeds.character_creation import seed_metallic_order_tradition
+
+        cls.account = AccountFactory()
+
+        # Unbound + its 5 starter gift grants — the source seed_metallic_order_
+        # tradition() mirrors when granting Metallic Order its own 5 gifts.
+        unbound = TraditionFactory(name="Unbound")
+        for _ in range(5):
+            TraditionGiftGrantFactory(tradition=unbound, gift=GiftFactory())
+
+        # An Arx-realm Beginning — seed_metallic_order_tradition() scopes its
+        # BeginningTradition rows to starting_area__realm__name="Arx".
+        realm = RealmFactory(name="Arx")
+        area = StartingAreaFactory(realm=realm)
+        cls.beginning = BeginningsFactory(starting_area=area)
+
+        cls.tradition = seed_metallic_order_tradition()
+        cls.distinction = Distinction.objects.get(slug="orphaned-tradition")
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def _create_draft(self, **kwargs):
+        defaults = {
+            "account": self.account,
+            "selected_beginnings": self.beginning,
+        }
+        defaults.update(kwargs)
+        return CharacterDraftFactory(**defaults)
+
+    def _add_distinction_to_draft(self, draft, distinction):
+        distinctions = draft.draft_data.get("distinctions", [])
+        distinctions.append(
+            {
+                "distinction_id": distinction.id,
+                "distinction_name": distinction.name,
+                "distinction_slug": distinction.slug,
+                "category_slug": distinction.category.slug,
+                "rank": 1,
+                "cost": distinction.calculate_total_cost(1),
+                "notes": "",
+            }
+        )
+        draft.draft_data["distinctions"] = distinctions
+        draft.save(update_fields=["draft_data"])
+
+    def test_seed_wired_up_beginning_tradition_row(self):
+        """Sanity: the seeder actually produced the row this test class exercises."""
+        bt = BeginningTradition.objects.get(beginning=self.beginning, tradition=self.tradition)
+        assert bt.required_distinction_id == self.distinction.id
+
+    def test_not_selectable_without_the_drawback(self):
+        """Metallic Order is refused when the draft lacks the seeded drawback."""
+        draft = self._create_draft()
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": self.tradition.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "formal training" in response.data["detail"]
+        draft.refresh_from_db()
+        assert draft.selected_tradition is None
+
+    def test_selectable_once_the_draft_holds_the_drawback(self):
+        """Metallic Order is selectable once the draft carries the drawback."""
+        draft = self._create_draft()
+        self._add_distinction_to_draft(draft, self.distinction)
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": self.tradition.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        draft.refresh_from_db()
+        assert draft.selected_tradition == self.tradition

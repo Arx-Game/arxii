@@ -19,11 +19,18 @@ from world.character_creation.constants import (
     SHROUDWATCH_ACADEMY_NAME,
     STARTING_TECHNIQUE_PICKS_TARGET,
 )
-from world.character_creation.factories import BeginningsFactory, CharacterDraftFactory
+from world.character_creation.factories import (
+    BeginningsFactory,
+    CharacterDraftFactory,
+    RealmFactory,
+    StartingAreaFactory,
+)
 from world.seeds.character_creation import (
+    ensure_orphaned_tradition_distinction,
     ensure_shroudwatch_academy,
     ensure_tradition_training_distinction,
     seed_beginning_traditions,
+    seed_metallic_order_tradition,
     wire_starting_technique_picks_target,
 )
 
@@ -245,3 +252,192 @@ class EnsureShroudwatchAcademyTests(TestCase):
             Organization.objects.filter(name=SHROUDWATCH_ACADEMY_NAME).values("description").get()
         )
         self.assertEqual(db_value["description"], "staff-edited description")
+
+
+class EnsureOrphanedTraditionDistinctionTests(TestCase):
+    """First-call, idempotency, edit-preservation for the drawback distinction (#2428)."""
+
+    def test_creates_distinction_with_expected_shape(self) -> None:
+        from world.distinctions.models import Distinction, DistinctionEffect
+
+        ensure_orphaned_tradition_distinction()
+
+        distinction = Distinction.objects.get(slug="orphaned-tradition")
+        self.assertEqual(distinction.name, "Orphaned Tradition")
+        self.assertEqual(distinction.max_rank, 1)
+        self.assertLess(
+            distinction.cost_per_rank,
+            0,
+            "Drawback convention: negative cost_per_rank reimburses CG points.",
+        )
+        self.assertEqual(distinction.category.slug, "arcane")
+        self.assertFalse(
+            DistinctionEffect.objects.filter(distinction=distinction).exists(),
+            "No DistinctionEffect — the drawback's teeth are trainerlessness (#2440), "
+            "not a stat penalty (#2428 spec ruling 4).",
+        )
+
+    def test_idempotent_second_call_creates_no_duplicates(self) -> None:
+        from world.distinctions.models import Distinction
+
+        ensure_orphaned_tradition_distinction()
+        ensure_orphaned_tradition_distinction()
+
+        self.assertEqual(Distinction.objects.filter(slug="orphaned-tradition").count(), 1)
+
+    def test_staff_edit_to_distinction_survives_rerun(self) -> None:
+        from world.distinctions.models import Distinction
+
+        ensure_orphaned_tradition_distinction()
+        Distinction.objects.filter(slug="orphaned-tradition").update(
+            description="staff-edited description"
+        )
+
+        ensure_orphaned_tradition_distinction()
+
+        db_value = Distinction.objects.filter(slug="orphaned-tradition").values("description").get()
+        self.assertEqual(db_value["description"], "staff-edited description")
+
+
+class SeedMetallicOrderTraditionTests(TestCase):
+    """Tests for ``seed_metallic_order_tradition()`` (#2428 Task 5).
+
+    Covers: the defensive skip when the magic cluster hasn't run yet, the
+    shape of the created rows (Tradition + its 5 TraditionGiftGrant rows +
+    Arx-scoped BeginningTradition rows gated by the orphaned drawback),
+    idempotency, and that seeding Metallic Order never touches Unbound's own
+    rows.
+    """
+
+    def _seed_unbound_with_starter_grants(self, gift_count: int = 5):
+        from world.magic.factories import GiftFactory, TraditionFactory, TraditionGiftGrantFactory
+
+        unbound = TraditionFactory(name="Unbound")
+        gifts = [GiftFactory() for _ in range(gift_count)]
+        for gift in gifts:
+            TraditionGiftGrantFactory(tradition=unbound, gift=gift)
+        return unbound, gifts
+
+    def _arx_beginning(self):
+        realm = RealmFactory(name="Arx")
+        area = StartingAreaFactory(realm=realm)
+        return BeginningsFactory(starting_area=area)
+
+    def test_skips_silently_when_unbound_tradition_not_seeded(self) -> None:
+        from world.magic.models import Tradition
+
+        result = seed_metallic_order_tradition()
+
+        self.assertIsNone(result)
+        self.assertFalse(Tradition.objects.filter(name="Metallic Order").exists())
+
+    def test_skips_silently_when_unbound_has_no_starter_grants(self) -> None:
+        from world.magic.factories import TraditionFactory
+        from world.magic.models import Tradition
+
+        TraditionFactory(name="Unbound")
+
+        result = seed_metallic_order_tradition()
+
+        self.assertIsNone(result)
+        self.assertFalse(Tradition.objects.filter(name="Metallic Order").exists())
+
+    def test_creates_tradition_grants_and_beginning_traditions(self) -> None:
+        from world.character_creation.models import BeginningTradition
+        from world.distinctions.models import Distinction
+        from world.magic.models.grants import TraditionGiftGrant
+
+        _unbound, gifts = self._seed_unbound_with_starter_grants()
+        beginning = self._arx_beginning()
+        other_realm_beginning = BeginningsFactory()  # default realm != "Arx"
+
+        tradition = seed_metallic_order_tradition()
+
+        self.assertIsNotNone(tradition)
+        self.assertEqual(tradition.name, "Metallic Order")
+        self.assertTrue(tradition.is_active)
+
+        granted_gift_ids = set(
+            TraditionGiftGrant.objects.filter(tradition=tradition).values_list("gift_id", flat=True)
+        )
+        self.assertEqual(granted_gift_ids, {gift.id for gift in gifts})
+
+        distinction = Distinction.objects.get(slug="orphaned-tradition")
+        bt = BeginningTradition.objects.get(beginning=beginning, tradition=tradition)
+        self.assertEqual(bt.required_distinction_id, distinction.id)
+
+        self.assertFalse(
+            BeginningTradition.objects.filter(
+                beginning=other_realm_beginning, tradition=tradition
+            ).exists(),
+            "Only Arx-realm Beginnings should get a Metallic Order row.",
+        )
+
+    def test_idempotent_second_call_creates_no_duplicates(self) -> None:
+        from world.character_creation.models import BeginningTradition
+        from world.magic.models import Tradition
+        from world.magic.models.grants import TraditionGiftGrant
+
+        self._seed_unbound_with_starter_grants()
+        self._arx_beginning()
+
+        seed_metallic_order_tradition()
+        seed_metallic_order_tradition()
+
+        self.assertEqual(Tradition.objects.filter(name="Metallic Order").count(), 1)
+        self.assertEqual(
+            TraditionGiftGrant.objects.filter(tradition__name="Metallic Order").count(), 5
+        )
+        self.assertEqual(
+            BeginningTradition.objects.filter(tradition__name="Metallic Order").count(), 1
+        )
+
+    def test_does_not_overwrite_a_staff_adjusted_row(self) -> None:
+        from world.character_creation.models import BeginningTradition
+
+        self._seed_unbound_with_starter_grants()
+        self._arx_beginning()
+        seed_metallic_order_tradition()
+
+        # Staff clears the gate — a recovery quest restored the tradition's teachers.
+        BeginningTradition.objects.filter(tradition__name="Metallic Order").update(
+            required_distinction=None
+        )
+
+        seed_metallic_order_tradition()
+
+        # SharedMemoryModel (idmapper) — re-fetch via .values() so a stale cached
+        # instance can't mask a regression (mirrors SeedBeginningTraditionsTests).
+        db_value = (
+            BeginningTradition.objects.filter(tradition__name="Metallic Order")
+            .values("required_distinction_id")
+            .get()
+        )
+        self.assertIsNone(db_value["required_distinction_id"])
+
+    def test_unbound_rows_unaffected(self) -> None:
+        from world.character_creation.models import BeginningTradition
+        from world.magic.models.grants import TraditionGiftGrant
+
+        unbound, gifts = self._seed_unbound_with_starter_grants()
+        beginning = self._arx_beginning()
+        seed_beginning_traditions()  # seeds the Unbound BeginningTradition row too
+        unbound_bt_count_before = BeginningTradition.objects.filter(tradition=unbound).count()
+        unbound_grant_count_before = TraditionGiftGrant.objects.filter(tradition=unbound).count()
+
+        seed_metallic_order_tradition()
+
+        self.assertEqual(
+            TraditionGiftGrant.objects.filter(tradition=unbound).count(),
+            unbound_grant_count_before,
+        )
+        self.assertEqual(
+            {grant.gift_id for grant in TraditionGiftGrant.objects.filter(tradition=unbound)},
+            {gift.id for gift in gifts},
+        )
+        self.assertEqual(
+            BeginningTradition.objects.filter(tradition=unbound).count(),
+            unbound_bt_count_before,
+        )
+        unbound_bt = BeginningTradition.objects.get(beginning=beginning, tradition=unbound)
+        self.assertIsNone(unbound_bt.required_distinction_id)

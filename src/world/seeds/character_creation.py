@@ -313,6 +313,18 @@ def ensure_tradition_training_distinction() -> None:
 #: cluster seeder) — this module only looks it up by name.
 _UNBOUND_TRADITION_NAME = UNBOUND_TRADITION_NAME
 
+#: Slug for the "Orphaned Tradition" drawback distinction (#2428 Task 5). Local
+#: to this module — unlike ``UNBOUND_TRADITION_NAME``/``SHROUDWATCH_ACADEMY_NAME``
+#: (``character_creation/constants.py``), nothing outside seed content and its
+#: tests resolves this by name; the CG-finalize hook never reads it.
+_ORPHANED_TRADITION_DISTINCTION_SLUG = "orphaned-tradition"
+
+#: Name for the one example orphaned Arx tradition seeded alongside the
+#: drawback (#2428 Task 5). Richer lore ("ancient Traditions for the Metallic
+#: Order and the Fractals of the Abyss" per the #2428 vision) is a lore-repo
+#: authoring pass; this row is a PLACEHOLDER, content-overridable.
+_METALLIC_ORDER_TRADITION_NAME = "Metallic Order"
+
 
 def seed_beginning_traditions() -> None:
     """Seed a BeginningTradition (Unbound, no gate) for every seeded Beginnings row.
@@ -397,6 +409,134 @@ def ensure_shroudwatch_academy() -> Organization:
         },
     )
     return academy
+
+
+def ensure_orphaned_tradition_distinction():
+    """Seed the 'Orphaned Tradition' drawback distinction (#2428 Task 5).
+
+    Marks a tradition as currently teacherless (post-Vanishing Arx traditions
+    especially — see #2428's addendum). Wired onto a ``BeginningTradition`` row
+    via ``required_distinction`` (the same #2426 gate ``ensure_tradition_training_
+    distinction`` uses), so selecting an orphaned tradition at CG auto-attaches
+    this drawback. ``cost_per_rank`` is negative — the house drawback convention
+    (``Distinction.cost_per_rank`` docstring: "Positive costs points, negative
+    reimburses"; e.g. the ``-2``/``-5``/``-10`` fixtures across
+    ``world/distinctions/tests``) — refunding CG points the way any other
+    disadvantage does. ``-2`` is a modest refund: per the #2428 spec, this
+    drawback's teeth are trainerlessness (#2440's members-only/no-trainer rules),
+    not a stat penalty, so deliberately NO ``DistinctionEffect`` is attached here
+    (contrast ``ensure_tradition_training_distinction``, which does attach one).
+
+    "Arcane" reuses the magic-flavored ``DistinctionCategory`` first seeded by
+    ``ensure_tradition_training_distinction`` (get_or_create is a no-op on a
+    second creation regardless of call order). Idempotent via get_or_create;
+    never overwrites a staff-adjusted row.
+    """
+    from world.distinctions.models import Distinction, DistinctionCategory  # noqa: PLC0415
+
+    category, _ = DistinctionCategory.objects.get_or_create(
+        slug="arcane",
+        defaults={
+            "name": "Arcane",
+            "description": (
+                "Distinctions tied to a character's magical tradition, practice, or gifts."
+            ),
+        },
+    )
+    distinction, _ = Distinction.objects.get_or_create(
+        slug=_ORPHANED_TRADITION_DISTINCTION_SLUG,
+        defaults={
+            "name": "Orphaned Tradition",
+            "category": category,
+            "description": (
+                "PLACEHOLDER: your tradition's teachers are gone — lost to The "
+                "Vanishing, scattered, or simply dead — and no one at Shroudwatch "
+                "Academy can train you in its ways until they're found or replaced. "
+                "Content-overridable — real lore lives in the private lore repo."
+            ),
+            "cost_per_rank": -2,
+            "max_rank": 1,
+        },
+    )
+    return distinction
+
+
+def seed_metallic_order_tradition():
+    """Seed the 'Metallic Order' example orphaned Arx tradition (#2428 Task 5).
+
+    Demonstrates the orphaned-tradition shape end to end:
+
+    - The "Orphaned Tradition" drawback (``ensure_orphaned_tradition_distinction``).
+    - A ``Tradition`` row (get_or_create by name; PLACEHOLDER description,
+      content-overridable — real Metallic Order lore is a lore-repo authoring
+      pass per the #2428 vision).
+    - ``TraditionGiftGrant`` rows granting it the same 5 starter Gifts Unbound
+      grants (mirrors ``seed_starter_gift_catalog``'s Unbound grants rather than
+      hardcoding gift names — reads Unbound's own grant rows so this stays in
+      sync with the starter catalog).
+    - ``BeginningTradition`` rows for every Arx-realm ``Beginnings`` (``starting_
+      area__realm__name="Arx"`` — the #2428 vision names Arx as the realm with
+      "many orphans" and ancient traditions like this one), each carrying
+      ``required_distinction=<Orphaned Tradition>``. Per the #2428 spec ruling,
+      this is authored data staff can mutate as story unfolds (a recovery quest
+      restoring teachers => staff clears ``required_distinction`` on these rows),
+      and CG reflects the change automatically — no code change needed.
+
+    Skips (logged) if the Unbound tradition or its starter gift grants aren't
+    seeded yet — mirrors ``seed_beginning_traditions``'s defensive skip; cluster
+    ordering (``magic`` before ``character_creation``) guarantees this can't
+    happen via the Big Button. Idempotent throughout via get_or_create; never
+    overwrites a staff-adjusted row.
+    """
+    from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+    from world.magic.models import Tradition  # noqa: PLC0415
+    from world.magic.models.grants import TraditionGiftGrant  # noqa: PLC0415
+
+    unbound = Tradition.objects.filter(name=_UNBOUND_TRADITION_NAME).first()
+    if unbound is None:
+        logger.warning(
+            "Skipping %r tradition seeding: %r tradition is not seeded.",
+            _METALLIC_ORDER_TRADITION_NAME,
+            _UNBOUND_TRADITION_NAME,
+        )
+        return None
+
+    starter_grants = list(TraditionGiftGrant.objects.filter(tradition=unbound))
+    if not starter_grants:
+        logger.warning(
+            "Skipping %r tradition seeding: no starter TraditionGiftGrant rows found for %r.",
+            _METALLIC_ORDER_TRADITION_NAME,
+            _UNBOUND_TRADITION_NAME,
+        )
+        return None
+
+    distinction = ensure_orphaned_tradition_distinction()
+
+    tradition, _ = Tradition.objects.get_or_create(
+        name=_METALLIC_ORDER_TRADITION_NAME,
+        defaults={
+            "description": (
+                "PLACEHOLDER: an ancient Arx tradition whose teachers vanished long "
+                "before living memory — its rites are still practiced by those who "
+                "carry its name, but no living trainer walks Shroudwatch Academy's "
+                "halls. Content-overridable — real lore lives in the private lore repo."
+            ),
+            "is_active": True,
+            "sort_order": 1,
+        },
+    )
+
+    for grant in starter_grants:
+        TraditionGiftGrant.objects.get_or_create(tradition=tradition, gift=grant.gift)
+
+    for beginning in Beginnings.objects.filter(starting_area__realm__name="Arx"):
+        BeginningTradition.objects.get_or_create(
+            beginning=beginning,
+            tradition=tradition,
+            defaults={"required_distinction": distinction, "sort_order": 1},
+        )
+
+    return tradition
 
 
 def seed_character_creation_dev() -> None:
@@ -566,6 +706,7 @@ def seed_character_creation_dev() -> None:
     ensure_tradition_training_distinction()
     seed_beginning_traditions()
     ensure_shroudwatch_academy()
+    seed_metallic_order_tradition()
 
 
 def _seed_cg_explanations() -> None:
