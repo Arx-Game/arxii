@@ -544,6 +544,26 @@ class GrantStoryRoomAccessActionTests(TestCase):
             room=self.room, character=self.target.sheet_data
         ).exists()
 
+    def test_grant_refuses_ambiguous_character_name(self) -> None:
+        """Two characters sharing a name refuse the grant instead of silently picking one."""
+        from actions.definitions.story_builder import GrantStoryRoomAccessAction
+        from world.gm.models import StoryRoomGrant
+
+        dup_name = "Ambiguous Name"
+        dup_a = CharacterFactory(db_key=dup_name)
+        CharacterSheetFactory(character=dup_a)
+        dup_b = CharacterFactory(db_key=dup_name)
+        CharacterSheetFactory(character=dup_b)
+
+        result = GrantStoryRoomAccessAction().run(
+            self.gm_actor,
+            room_id=self.room.objectdb_id,
+            character_name=dup_name,
+        )
+        assert not result.success
+        assert f"Multiple characters are named {dup_name}" in result.message
+        assert not StoryRoomGrant.objects.filter(room=self.room).exists()
+
 
 class RevokeStoryRoomAccessActionTests(TestCase):
     @classmethod

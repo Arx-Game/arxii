@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
+    from world.character_sheets.models import CharacterSheet
     from world.gm.models import GMProfile
     from world.instances.models import InstancedRoom
 
@@ -201,6 +202,26 @@ def _parse_aliases(raw: Any) -> tuple[str, ...]:
     if not raw:
         return ()
     return tuple(part.strip() for part in str(raw).split(",") if part.strip())
+
+
+def _resolve_named_character(character_name: str) -> tuple[CharacterSheet | None, str | None]:
+    """Resolve a case-insensitive character name to a single CharacterSheet.
+
+    Duplicate character names are an accepted state in this codebase — a name
+    matching two or more characters refuses rather than silently picking one
+    (grant/revoke must target a specific person). Shared by
+    ``GrantStoryRoomAccessAction`` and ``RevokeStoryRoomAccessAction``.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    matches = list(CharacterSheet.objects.filter(character__db_key__iexact=character_name)[:2])
+    if not matches:
+        return None, "No such character."
+    if len(matches) > 1:
+        return None, (
+            f"Multiple characters are named {character_name} — staff can grant by a unique name."
+        )
+    return matches[0], None
 
 
 @dataclass
@@ -568,7 +589,6 @@ class GrantStoryRoomAccessAction(_StoryBuilderAction):
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
         from world.gm.story_services import StoryServiceError, grant_story_room  # noqa: PLC0415
 
         room_profile, error = _resolve_owned_story_or_temp_room(actor, kwargs.get("room_id"))
@@ -580,9 +600,9 @@ class GrantStoryRoomAccessAction(_StoryBuilderAction):
         character_name = (kwargs.get("character_name") or "").strip()
         if not character_name:
             return ActionResult(success=False, message="Name the character.")
-        sheet = CharacterSheet.objects.filter(character__db_key__iexact=character_name).first()
-        if sheet is None:
-            return ActionResult(success=False, message="No such character.")
+        sheet, error = _resolve_named_character(character_name)
+        if error is not None:
+            return ActionResult(success=False, message=error)
         try:
             grant_story_room(gm=profile, room_profile=room_profile, sheet=sheet)
         except StoryServiceError as exc:
@@ -608,7 +628,6 @@ class RevokeStoryRoomAccessAction(_StoryBuilderAction):
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
         from world.gm.models import StoryRoomGrant  # noqa: PLC0415
         from world.gm.story_services import StoryServiceError, revoke_story_room  # noqa: PLC0415
 
@@ -618,9 +637,9 @@ class RevokeStoryRoomAccessAction(_StoryBuilderAction):
         character_name = (kwargs.get("character_name") or "").strip()
         if not character_name:
             return ActionResult(success=False, message="Name the character.")
-        sheet = CharacterSheet.objects.filter(character__db_key__iexact=character_name).first()
-        if sheet is None:
-            return ActionResult(success=False, message="No such character.")
+        sheet, error = _resolve_named_character(character_name)
+        if error is not None:
+            return ActionResult(success=False, message=error)
         grant = StoryRoomGrant.objects.filter(room=room_profile, character=sheet).first()
         if grant is None:
             return ActionResult(success=False, message="That character has no access to revoke.")

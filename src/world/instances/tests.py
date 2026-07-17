@@ -190,6 +190,23 @@ class SpawnInstancedRoomTests(TestCase):
 
         assert RoomProfile.objects.filter(objectdb=room).exists()
 
+    def test_spawn_room_profile_is_never_publicly_listed(self):
+        """Spawned room's RoomProfile is is_public=False, overriding the model default.
+
+        Instanced rooms are temporary GM/mission/captivity scaffolding — they must
+        never leak into RoomProfileViewSet public browsing or let
+        ensure_scene_for_location derive a PUBLIC scene from a stale default.
+        """
+        room = spawn_instanced_room(
+            name="Never Public Room",
+            description="Should not be publicly listed.",
+            owner=self.sheet,
+            return_location=self.return_room,
+        )
+
+        profile = RoomProfile.objects.get(objectdb=room)
+        assert profile.is_public is False
+
     def test_spawn_stores_description_in_display_data(self):
         """Description is stored in ObjectDisplayData, not Evennia attributes."""
         room = spawn_instanced_room(

@@ -19,13 +19,21 @@ def spawn_instanced_room(  # noqa: PLR0913 — one owner-kind arg per caller (pl
     source_key: str = "",
     gm_owner: GMProfile | None = None,
 ) -> ObjectDB:
-    """Create a temporary instanced room, its RoomProfile, and lifecycle record."""
+    """Create a temporary instanced room, its RoomProfile, and lifecycle record.
+
+    Temporary instanced rooms are never publicly listed — the profile always
+    ends with ``is_public=False``, regardless of the model default, so a GM
+    scene room, mission room, or captivity room never leaks into public room
+    browsing or derives a PUBLIC scene privacy from a stale default.
+    """
     room = create_object(
         typeclass="typeclasses.rooms.Room",
         key=name,
         nohome=True,
     )
-    RoomProfile.objects.get_or_create(objectdb=room)
+    profile, _created = RoomProfile.objects.get_or_create(objectdb=room)
+    RoomProfile.objects.filter(pk=profile.pk).update(is_public=False)
+    profile.is_public = False
     display_data, _created = ObjectDisplayData.objects.get_or_create(object=room)
     display_data.permanent_description = description
     display_data.save(update_fields=["permanent_description"])
