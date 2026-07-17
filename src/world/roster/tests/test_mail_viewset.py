@@ -214,7 +214,11 @@ class PlayerMailArrivalPushTestCase(TestCase):
         }
         assert "account" not in mail_payload
         assert "username" not in mail_payload
-        assert str(self.sender_account.pk) not in str(mail_payload)
+        # Check pk as a payload VALUE, not a substring of the stringified dict —
+        # the account pk can legitimately appear as a substring of mail_id
+        # (both are auto-increment sequences), which made this flake when the
+        # app's CI shard neighborhood (and thus pk ranges) changed.
+        assert self.sender_account.pk not in mail_payload.values()
         assert self.sender_account.username not in str(mail_payload.values())
 
     def test_offline_recipient_is_a_no_op(self):

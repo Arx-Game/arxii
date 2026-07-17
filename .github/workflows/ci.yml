@@ -15,6 +15,16 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded PR runs. Without this, pushing a new commit to a PR leaves
+# the now-obsolete run burning ~13 runner slots to completion — real contention
+# on the org's concurrent-job cap (measured 2026-07-17: during a 3-build
+# merge-queue burst, shards queued up to 9.5 min waiting for runners).
+# Non-PR events (merge_group, push:main) get a unique group per run, so queue
+# builds and main validation are never canceled or serialized.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Detect which stacks the PR actually touches. Downstream heavy jobs are
   # gated on these flags so a backend-only change skips the frontend suite
