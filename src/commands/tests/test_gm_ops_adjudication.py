@@ -21,11 +21,13 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory, CheckTypeTraitFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
+from world.currency.models import FavorTokenDetails
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.progression.models import ExperiencePointsData
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.societies.factories import OrganizationFactory
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import (
     CharacterTraitValue,
@@ -175,6 +177,25 @@ class CmdGMAwardTests(GMOpsAdjudicationTestBase):
         messages = _run_cmd(self.player_actor, f"award {self.target.key} xp=20")
         self.assertTrue(len(messages) > 0)
         self.assertFalse(ExperiencePointsData.objects.filter(account=self.target_account).exists())
+
+    def test_award_favor_token_mints_golden_hare(self) -> None:
+        org = OrganizationFactory(name="GMOps Academy")
+        messages = _run_cmd(
+            self.gm_actor,
+            f"award {self.target.key} hare=GMOps Academy reason=Cleared the Thornwood ambush",
+        )
+        self.assertTrue(any("Golden Hare" in m for m in messages))
+        token = FavorTokenDetails.objects.get(issuing_organization=org)
+        self.assertEqual(token.provenance_note, "Cleared the Thornwood ambush")
+
+    def test_award_favor_token_non_gm_is_refused(self) -> None:
+        OrganizationFactory(name="GMOps Academy")
+        messages = _run_cmd(
+            self.player_actor,
+            f"award {self.target.key} hare=GMOps Academy reason=Cleared the Thornwood ambush",
+        )
+        self.assertTrue(len(messages) > 0)
+        self.assertFalse(FavorTokenDetails.objects.exists())
 
 
 class CmdGMConditionTests(GMOpsAdjudicationTestBase):

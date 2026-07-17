@@ -40,6 +40,7 @@ _DESCRIPTION_SNIPPET_LEN = 80
 # GMAwardAction.award_type values.
 _AWARD_TYPE_XP = "xp"
 _AWARD_TYPE_DEVELOPMENT = "development"
+_AWARD_TYPE_FAVOR_TOKEN = "favor_token"  # noqa: S105 -- award-kind literal, not a secret
 
 
 def _check_type_summary(check_type: CheckType) -> str:
@@ -235,6 +236,15 @@ class GMAwardAction(Action):
     ``IsSceneGMPrerequisite`` + ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`` (staff
     bypass preserved) -- pure fiat, the same trust bar as
     ``GrantItemAction``/``SetSituationAction``.
+
+    A third ``award_type="favor_token"`` (#2428) mints a Golden Hare -- a
+    deed-backed favor token -- from an authored ``Organization`` via
+    ``world.currency.services.mint_favor_token``. Same JUNIOR trust bar as
+    XP/development: this is pure GM fiat, not gated on the GM's own standing
+    in the issuing org (the GM adjudication toolkit never checks that -- see
+    the module-level RATIFIED invariant). ``description`` is required and
+    becomes the token's ``provenance_note`` -- the deed the Hare is redeemable
+    against, never left to a generic default.
     """
 
     key: str = "gm_award_progression"
@@ -264,7 +274,11 @@ class GMAwardAction(Action):
             return self._award_xp(actor, target, kwargs.get("amount"), description)
         if award_type == _AWARD_TYPE_DEVELOPMENT:
             return self._award_development(actor, target, kwargs, description)
-        return ActionResult(success=False, message="award_type must be 'xp' or 'development'.")
+        if award_type == _AWARD_TYPE_FAVOR_TOKEN:
+            return self._award_favor_token(target, kwargs, description)
+        return ActionResult(
+            success=False, message="award_type must be 'xp', 'development', or 'favor_token'."
+        )
 
     def _award_xp(
         self,
@@ -355,6 +369,47 @@ class GMAwardAction(Action):
         return ActionResult(
             success=True,
             message=f"Awarded {amount_int} development point(s) in {trait.name} to {target.key}.",
+        )
+
+    def _award_favor_token(
+        self,
+        target: ObjectDB,
+        kwargs: dict[str, Any],
+        description: str,
+    ) -> ActionResult:
+        from world.currency.services import mint_favor_token  # noqa: PLC0415
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        sheet = target.character_sheet
+        if sheet is None:
+            return ActionResult(success=False, message=f"{target.key} has no character sheet.")
+
+        org_ref = str(kwargs.get("org_ref") or "").strip()
+        if not org_ref:
+            return ActionResult(
+                success=False, message="An organization is required to mint a Golden Hare."
+            )
+
+        try:
+            org = resolve_model_by_pk_or_name(
+                Organization,
+                org_ref,
+                not_found_msg=f"No organization named {org_ref!r}.",
+            )
+        except CommandError as err:
+            return ActionResult(success=False, message=str(err))
+
+        if not description:
+            return ActionResult(
+                success=False,
+                message="A description of the deed is required to mint a Golden Hare.",
+            )
+
+        mint_favor_token(org, sheet, provenance_note=description)
+
+        return ActionResult(
+            success=True,
+            message=f"Minted a Golden Hare from {org.name} for {target.key}.",
         )
 
 

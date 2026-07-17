@@ -1529,10 +1529,13 @@ GM at a given level may author (#2000, ADR-0097).
   integer difficulty or a consequence-pool reference), `GMAwardAction` (key
   `gm_award_progression` — `award_xp`/`award_development_points` with
   `ProgressionReason.GM_AWARD`, gated additionally on `MinimumGMLevelPrerequisite(GMLevel
-  .JUNIOR)`), `GMApplyConditionAction` (key `gm_apply_condition` — `apply_condition` against an
+  .JUNIOR)`; `award_type="favor_token"` (#2428) mints a Golden Hare from an org via
+  `currency.mint_favor_token`, resolving `org_ref` pk-or-name against `societies.Organization`
+  and requiring a non-empty `description` as the token's `provenance_note`),
+  `GMApplyConditionAction` (key `gm_apply_condition` — `apply_condition` against an
   authored `ConditionTemplate` via `get_by_name`, same JUNIOR floor). Telnet: `gm check [find
   <term>]` / `gm check <char> <check-type>=<band> [edge=<reason>|setback=<reason>]`, `gm award
-  <char> xp=<amount>|dev=<trait> amount=<n> [reason=<text>]`, `gm condition <char>
+  <char> xp=<amount>|dev=<trait> amount=<n>|hare=<organization> reason=<text>`, `gm condition <char>
   condition=<name> [severity=<n>] [duration=<n>] [note=<text>]` (`commands/gm_ops.py`'s
   `CmdGMDashboard`).
 - **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
@@ -2296,6 +2299,17 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
     `redeem_instrument`'s hard-delete.
   - Substrate for the tradition-sponsorship cluster (#2428/#2440/#2441/#2442): Academy
     training costs a Hare; sponsorship is a Hare spent on the Prospect's behalf at CG.
+  - **Minting hook (Task 4, #2428):** `GMAwardAction` (`gm_award_progression`, see the
+    GM Adjudication Toolkit entry below) gains `award_type="favor_token"` — thin over
+    `mint_favor_token`, resolving `org_ref` (pk-or-name) against `societies.Organization`
+    and requiring a non-empty `description` (becomes the token's `provenance_note`).
+    Same JUNIOR-tier GM-fiat trust bar as the existing `xp`/`development` award types.
+    Missions have an authored per-route reward surface (`MissionOptionRouteReward` /
+    `DeedRewardSink`), but no sink resolves to an `Organization` today and adding one
+    (`FAVOR_TOKEN` sink + an org FK on the reward template) is a schema change — out of
+    scope here. Until that lands, mission-triggered Hares are GM-tool + authored-content
+    driven (a GM hands one out via this action mid-scene), not an automatic completion
+    payout.
 - **Source:** `src/world/currency/`
 
 ### Predicates (shared rule engine)

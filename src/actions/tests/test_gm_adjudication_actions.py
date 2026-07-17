@@ -22,6 +22,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory, CheckTypeTraitFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
+from world.currency.models import FavorTokenDetails
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.progression.models import DevelopmentPoints, ExperiencePointsData
@@ -29,6 +30,7 @@ from world.progression.types import ProgressionReason
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import DifficultyChoice
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.societies.factories import OrganizationFactory
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import (
     CharacterTraitValue,
@@ -411,6 +413,77 @@ class GMAwardActionTests(GMAdjudicationActionsTestBase):
             actor=self.gm_actor, target=self.target, award_type="legend", amount=5
         )
         self.assertFalse(result.success)
+
+    def test_award_favor_token_mints_with_provenance(self) -> None:
+        org = OrganizationFactory()
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="favor_token",
+            org_ref=str(org.pk),
+            description="Cleared the Thornwood ambush",
+        )
+        self.assertTrue(result.success)
+        token = FavorTokenDetails.objects.get(issuing_organization=org)
+        self.assertEqual(token.provenance_note, "Cleared the Thornwood ambush")
+        target_sheet_pk = self.target.character_sheet.pk
+        self.assertEqual(token.item_instance.holder_character_sheet_id, target_sheet_pk)
+
+    def test_award_favor_token_resolves_org_by_name(self) -> None:
+        org = OrganizationFactory(name="The Golden Hare Academy")
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="favor_token",
+            org_ref="The Golden Hare Academy",
+            description="Sponsored the prospect's trial",
+        )
+        self.assertTrue(result.success)
+        self.assertTrue(FavorTokenDetails.objects.filter(issuing_organization=org).exists())
+
+    def test_award_favor_token_requires_org_ref(self) -> None:
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="favor_token",
+            description="Cleared the Thornwood ambush",
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(FavorTokenDetails.objects.exists())
+
+    def test_award_favor_token_requires_description(self) -> None:
+        org = OrganizationFactory()
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="favor_token",
+            org_ref=str(org.pk),
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(FavorTokenDetails.objects.exists())
+
+    def test_award_favor_token_rejects_unknown_org(self) -> None:
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="favor_token",
+            org_ref="Nonexistent Order",
+            description="Cleared the Thornwood ambush",
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(FavorTokenDetails.objects.exists())
+
+    def test_award_favor_token_non_gm_is_refused(self) -> None:
+        org = OrganizationFactory()
+        result = GMAwardAction().run(
+            actor=self.player_actor,
+            target=self.target,
+            award_type="favor_token",
+            org_ref=str(org.pk),
+            description="Cleared the Thornwood ambush",
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(FavorTokenDetails.objects.exists())
 
 
 class GMApplyConditionActionTests(GMAdjudicationActionsTestBase):
