@@ -73,7 +73,7 @@ room by natural key before the grid bundle that creates it has loaded, the
 combined driver `core_management.content_fixtures.load_world_content()` loads
 content fixtures first with an unresolved-natural-key FK **deferred** (not
 fatal), then the grid bundles, then retries the deferred entries — see
-`docs/systems/INDEX.md`'s "Grid content export/import" entry and ADR-0136.
+`docs/systems/INDEX.md`'s "Grid content export/import" entry and ADR-0137.
 
 ### Migration-number collisions on sync-with-main
 
