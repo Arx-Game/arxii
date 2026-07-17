@@ -84,7 +84,11 @@ cleared flag. `obligation_services.py`:
   1's typed surface: raises `ValidationError` if the token is already redeemed
   or not issued by the creditor), then flips `OWED` → `SETTLED` and stamps
   `settled_at`/`settled_by_token`. Raises `ObligationNotOwedError` if the
-  obligation isn't `OWED`.
+  obligation isn't `OWED`. Live caller: `world.npc_services.effects.
+  run_settle_obligation_offer` (the `OfferKind.SETTLE_OBLIGATION` effect handler),
+  reached via the Academy Registrar's ungated offer
+  (`world.npc_services.seeds.ensure_academy_registrar_role`) — the whole-branch-fix
+  front door that lets a debtor actually pay this off in play.
 - `has_open_obligation(sheet, org)` — read-only gate: `True` iff `sheet` has
   an `OWED` row against `org`. Consumed by the Academy training gate (#2440).
 

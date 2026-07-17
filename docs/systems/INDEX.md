@@ -2076,7 +2076,8 @@ register as additional kinds.
   `look` (`Room.return_appearance`).
 - **Constants:** `OfferKind` (PERMIT / MISSION / LOAN / COLLECTION / IMPROVEMENT (#930) /
   INFORMANT / CONTACT / PERSONAL_FAVOR / GUARD / FAN / MINOR_ALLY / ASSET_TASK_INTEL /
-  ASSET_TASK_COLLECT / TRAIN (#2440); future POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL).
+  ASSET_TASK_COLLECT / TRAIN (#2440) / SETTLE_OBLIGATION (#2428 whole-branch fix);
+  future POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL).
   `NPCServiceOffer.ap_cost` (#930) charges the resolving character before any effect
   dispatches (`InsufficientAPError` rolls the grant back) — a generic knob on every kind;
   TRAIN offers leave it at 0 and charge AP through the technique-acquisition multiplier
@@ -2121,7 +2122,25 @@ register as additional kinds.
   itself. Seeded by `ensure_great_archive_librarian_role()` (`world.npc_services.seeds`),
   which also get-or-creates the PLACEHOLDER `Achievement` row
   (`GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG`) the offers gate on — granting it to a
-  character is the lore-repo quest's job, not this seed's.
+  character is the lore-repo quest's job, not this seed's. Self-study teaches the shared
+  (Path × Gift) pool only — it does **not** restore an orphaned tradition's own signature
+  technique list; that recovery is story content, not a mechanical unlock.
+- **SETTLE_OBLIGATION — the Academy Registrar (#2428 whole-branch fix):** closes the gap
+  where `societies.obligation_services.settle_obligation` (Task 1) shipped with no live
+  caller — an Unbound Prospect had no in-game way to ever pay off their Academy entrance
+  debt. Handler `run_settle_obligation_offer`: resolve the offer's org
+  (`offer.role.faction_affiliation`) → fetch the learner's OWED `OrganizationObligation`
+  against it (`None` → typed refusal, not an error) → resolve one unredeemed Golden Hare
+  (reuses `_resolve_unredeemed_hare`, same row-lock as TRAIN) → `settle_obligation`
+  redeems it and flips the row to SETTLED, inside one outer `transaction.atomic()`.
+  Seeded by `ensure_academy_registrar_role()` (`world.npc_services.seeds`) as an
+  ungated, always-visible offer on a class-1 "Academy Registrar" bursar role — a debtor
+  must always be able to find someone to pay. A second seed,
+  `ensure_academy_generalist_trainer_role()`, mirrors the Great Archive librarian's shape
+  (same one-technique-per-starter-Gift sample) but with no achievement gate, so a
+  fresh-DB Prospect has ≥1 reachable TRAIN offer immediately, without needing the
+  Archive's not-yet-authored quest content. Both are PLACEHOLDER-flagged dev-minimum
+  content — real Academy trainer curricula are lore-repo authored.
 - **Tradition membership lifecycle (#2441 Task 8):** `magic.CharacterTradition` gained
   `left_at` (nullable) + a partial-unique `unique_active_tradition_per_character`
   constraint (`character` WHERE `left_at IS NULL`) — mirrors

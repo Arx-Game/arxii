@@ -37,7 +37,7 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`ensure_default_rank_ladder()`**: Create the default five-tier `OrganizationRank` ladder for a generic organization (covenants are skipped)
 
 ### `obligation_services.py` (#2428)
-- **`settle_obligation(obligation, token)`**: settle an OWED `OrganizationObligation` by redeeming a Golden Hare (`currency.FavorTokenDetails`) to the creditor org; stamps `settled_at`/`settled_by_token`. Settled rows are history — never deleted.
+- **`settle_obligation(obligation, token)`**: settle an OWED `OrganizationObligation` by redeeming a Golden Hare (`currency.FavorTokenDetails`) to the creditor org; stamps `settled_at`/`settled_by_token`. Settled rows are history — never deleted. **Live caller** (whole-branch fix): `world.npc_services.effects.run_settle_obligation_offer`, dispatched by the Academy Registrar's ungated `OfferKind.SETTLE_OBLIGATION` offer (`world.npc_services.seeds.ensure_academy_registrar_role`) — this is the in-game front door that lets an Unbound Prospect pay off the debt.
 - **`has_open_obligation(sheet, org)`**: cheap `.exists()` gate used by training/access flows (#2440).
 - `OrganizationObligation` (models.py) is a **character→org personal debt** (e.g. Academy entrance); distinct from `currency.OrgObligation`, the org↔org percent-of-income tithe (#926).
 - **CG-finalize hook lives in `character_creation`, not here** (#2428 Task 3):

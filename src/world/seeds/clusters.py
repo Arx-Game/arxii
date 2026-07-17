@@ -151,9 +151,19 @@ def _seed_progression() -> None:
 
 
 def _seed_npc_services() -> None:
-    from world.npc_services.seeds import ensure_great_archive_librarian_role  # noqa: PLC0415
+    from world.npc_services.seeds import (  # noqa: PLC0415
+        ensure_academy_generalist_trainer_role,
+        ensure_academy_registrar_role,
+        ensure_great_archive_librarian_role,
+    )
 
     ensure_great_archive_librarian_role()
+    # #2428 whole-branch fix: the Registrar (settle the entrance debt) and an
+    # ungated generalist trainer close the fresh-DB training loop end to end —
+    # see world.npc_services.seeds for why both are needed alongside the
+    # achievement-gated Great Archive self-study seed above.
+    ensure_academy_registrar_role()
+    ensure_academy_generalist_trainer_role()
 
 
 def _seed_justice() -> None:
@@ -604,7 +614,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # existing ClassLevelUnlock/requirement tables).
         "progression": [DuranceTrainingSite],
         # NPC services: the Great Archive Librarian role + self-study TRAIN offers
-        # (#2440 ruling 5), represented by NPCRole (mirrors "tutorial" above).
+        # (#2440 ruling 5), the Academy Registrar's SETTLE_OBLIGATION offer, and an
+        # ungated Academy generalist trainer (both #2428 whole-branch fix — the
+        # live caller for settle_obligation and the fresh-DB-completable training
+        # loop), represented by NPCRole (mirrors "tutorial" above).
         "npc_services": [NPCRole],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],

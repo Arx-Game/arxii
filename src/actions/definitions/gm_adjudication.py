@@ -405,7 +405,11 @@ class GMAwardAction(Action):
                 message="A description of the deed is required to mint a Golden Hare.",
             )
 
-        mint_favor_token(org, sheet, provenance_note=description)
+        # Truncate to FavorTokenDetails.provenance_note's max_length before create —
+        # mirrors deliver_mission_money's `[:200]` convention (world.currency.services)
+        # rather than letting an over-length description hit the DB-level varchar(200)
+        # constraint as a raw DataError (#2428 whole-branch fix).
+        mint_favor_token(org, sheet, provenance_note=description[:200])
 
         return ActionResult(
             success=True,

@@ -316,7 +316,7 @@ class TraditionGiftGrantAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterTradition)
 class CharacterTraditionAdmin(admin.ModelAdmin):
-    list_display = ["character", "tradition", "acquired_at"]
+    list_display = ["character", "tradition", "acquired_at", "left_at"]
     list_filter = ["tradition"]
     search_fields = ["character__character__db_key", "tradition__name"]
     raw_id_fields = ["character"]

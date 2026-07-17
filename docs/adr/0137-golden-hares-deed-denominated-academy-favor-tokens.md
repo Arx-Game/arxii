@@ -35,6 +35,11 @@ power, so a self-taught mage develops just as strong, only slower.
 > Status: accepted · Source: #2428, #2440, #2441, #2442, Tehom design ruling
 > 2026-07-17 · Confidence: built and wired — `currency.FavorTokenDetails` /
 > `mint_favor_token` / `redeem_favor_token`; `societies.OrganizationObligation` /
-> `settle_obligation`; `npc_services.OfferKind.TRAIN` / `run_train_offer`;
+> `settle_obligation`, reached in play via the Academy Registrar's
+> `npc_services.OfferKind.SETTLE_OBLIGATION` offer
+> (`run_settle_obligation_offer`, whole-branch fix — the original Task 1 landed
+> `settle_obligation` with no live caller, so an Unbound Prospect could not yet
+> pay off the debt this ADR describes; the Registrar seam closes that gap);
+> `npc_services.OfferKind.TRAIN` / `run_train_offer`;
 > `progression.MajorGiftTechniqueRequirement`; `magic` "unbound" drawback
 > `Distinction` on the `magic_learning_ap_cost` `ModifierTarget`.

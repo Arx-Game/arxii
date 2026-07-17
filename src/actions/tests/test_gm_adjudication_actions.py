@@ -473,6 +473,27 @@ class GMAwardActionTests(GMAdjudicationActionsTestBase):
         self.assertFalse(result.success)
         self.assertFalse(FavorTokenDetails.objects.exists())
 
+    def test_award_favor_token_truncates_long_description(self) -> None:
+        """provenance_note is truncated to FavorTokenDetails' max_length=200 before
+        create (#2428 whole-branch fix) -- mirrors deliver_mission_money's `[:200]`
+        convention. Without the truncation this raises a DB-level DataError instead
+        of a clean save."""
+        org = OrganizationFactory()
+        long_description = "x" * 250
+
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="favor_token",
+            org_ref=str(org.pk),
+            description=long_description,
+        )
+
+        self.assertTrue(result.success)
+        token = FavorTokenDetails.objects.get(issuing_organization=org)
+        self.assertEqual(token.provenance_note, long_description[:200])
+        self.assertEqual(len(token.provenance_note), 200)
+
     def test_award_favor_token_non_gm_is_refused(self) -> None:
         org = OrganizationFactory()
         result = GMAwardAction().run(

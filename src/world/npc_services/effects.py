@@ -655,3 +655,93 @@ def _technique_available_to_learner(
 
 
 OFFER_EFFECT_HANDLERS[OfferKind.TRAIN.value] = run_train_offer
+
+
+def run_settle_obligation_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """SETTLE_OBLIGATION effect handler (#2428 whole-branch fix): the Academy Registrar
+    clears a learner's OWED entrance obligation.
+
+    ``settle_obligation`` (``world.societies.obligation_services``) was authored in an
+    earlier task on this cluster but shipped with no live caller — an Unbound Prospect
+    had no in-game way to ever pay off their Academy entrance debt. This handler is
+    that caller: resolve the offer's org (the role's ``faction_affiliation``, same
+    convention as ``run_train_offer``) -> fetch the learner's OWED
+    ``OrganizationObligation`` against it (the row ``has_open_obligation`` only
+    ``.exists()``-checks) -> no OWED row is a typed refusal, not an error -> resolve
+    exactly one unredeemed Golden Hare issued by the org and held by the learner
+    (reuses ``_resolve_unredeemed_hare``, same row-lock TOCTOU protection as TRAIN)
+    -> ``settle_obligation`` redeems it and flips the row to SETTLED.
+
+    Hare resolution + ``settle_obligation`` run inside one outer
+    ``transaction.atomic()`` for the same reason ``run_train_offer`` wraps its own
+    charge sequence: without it, a race between two concurrent settle attempts could
+    resolve the same Hare before either redemption commits.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.societies.constants import ObligationState  # noqa: PLC0415
+    from world.societies.exceptions import ObligationNotOwedError  # noqa: PLC0415
+    from world.societies.models import OrganizationObligation  # noqa: PLC0415
+    from world.societies.obligation_services import settle_obligation  # noqa: PLC0415
+
+    sheet = persona.character_sheet
+    academy = offer.role.faction_affiliation
+    if academy is None:
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message="This registrar keeps no house's books. (Authoring error.)",
+            payload={"offer_pk": offer.pk},
+        )
+
+    obligation = OrganizationObligation.objects.filter(
+        debtor=sheet, creditor=academy, state=ObligationState.OWED
+    ).first()
+    if obligation is None:
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message=f"You owe {academy.name} nothing.",
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+
+    try:
+        with transaction.atomic():
+            token = _resolve_unredeemed_hare(sheet, academy)
+            settle_obligation(obligation, token)
+    except NoAvailableFavorTokenError as exc:
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+    except ObligationNotOwedError as exc:
+        # Someone else settled this exact row (or it was settled by a sponsor)
+        # between the query above and the lock inside settle_obligation.
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+    except ValidationError:
+        # redeem_favor_token (inside settle_obligation) lost the race for this
+        # Hare after _resolve_unredeemed_hare picked it — the whole atomic
+        # block above rolled back, obligation still OWED.
+        return EffectResult(
+            kind=OfferKind.SETTLE_OBLIGATION.value,
+            message="Someone else called in that Hare before you finished.",
+            payload={"offer_pk": offer.pk, "organization_pk": academy.pk},
+        )
+
+    return EffectResult(
+        kind=OfferKind.SETTLE_OBLIGATION.value,
+        object_pk=obligation.pk,
+        object_label=f"Obligation to {academy.name} settled",
+        message=f"The registrar marks your debt to {academy.name} paid in full.",
+        payload={
+            "obligation_pk": obligation.pk,
+            "organization_pk": academy.pk,
+            "favor_token_pk": token.pk,
+        },
+    )
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.SETTLE_OBLIGATION.value] = run_settle_obligation_offer

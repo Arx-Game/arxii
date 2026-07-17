@@ -326,3 +326,172 @@ def ensure_great_archive_librarian_role() -> NPCRole:
     ).delete()
 
     return role
+
+
+# --- Academy Registrar: settle the entrance debt (#2428 whole-branch fix) --
+
+ACADEMY_REGISTRAR_ROLE_NAME = "Academy Registrar"
+
+_REGISTRAR_SETTLE_OFFER_LABEL = "Settle your Academy debt"
+
+
+def ensure_academy_registrar_role() -> NPCRole:
+    """Get-or-create the Academy Registrar role + its ungated SETTLE_OBLIGATION offer.
+
+    Closes the whole-branch-review Critical finding on #2428:
+    ``world.societies.obligation_services.settle_obligation`` was authored (Task 1)
+    with no live caller, so an Unbound Prospect had no in-game way to ever pay off
+    their Academy entrance debt — the cluster's headline loop dead-ended. This is
+    that caller's front door: a class-1 Functionary "bursar" role, fronted by the
+    Shroudwatch Academy org (``faction_affiliation``, same convention every other
+    Academy role uses), with one ungated offer (no rapport/achievement gate — a
+    Prospect who owes the debt should always be able to find someone to pay it to)
+    that dispatches ``world.npc_services.effects.run_settle_obligation_offer``.
+
+    PLACEHOLDER description/flavor — real Registrar prose is a lore-repo authoring
+    pass, same as every other Academy NPC role seeded here.
+
+    Idempotent (get_or_create + stale-label cleanup), mirroring
+    ``ensure_builders_guild_clerk_role``'s shape.
+    """
+    from world.seeds.character_creation import ensure_shroudwatch_academy  # noqa: PLC0415
+
+    academy = ensure_shroudwatch_academy()
+
+    role, _ = NPCRole.objects.get_or_create(
+        name=ACADEMY_REGISTRAR_ROLE_NAME,
+        defaults={
+            "description": (
+                "PLACEHOLDER: keeps the Academy's entrance ledger. Takes a Golden "
+                "Hare in hand and marks a Prospect's debt paid. Real Registrar "
+                "prose/room is a lore-repo authoring pass (#2428)."
+            ),
+            "default_description_template": (
+                "A bursar sits behind a ledger stand thick with entrance records, "
+                "quill ready to strike a debt paid."
+            ),
+            "default_rapport_starting_value": 0,
+            "faction_affiliation": academy,
+            "teaches_tradition": None,
+        },
+    )
+
+    offer, created = NPCServiceOffer.objects.get_or_create(
+        role=role,
+        label=_REGISTRAR_SETTLE_OFFER_LABEL,
+        defaults={
+            "kind": OfferKind.SETTLE_OBLIGATION,
+            "draw_mode": DrawMode.MENU,
+            "eligibility_rule": {},  # Ungated — anyone who owes can pay.
+            "is_final": True,
+            "ap_cost": 0,
+        },
+    )
+    if not created and offer.kind != OfferKind.SETTLE_OBLIGATION:
+        offer.kind = OfferKind.SETTLE_OBLIGATION
+        offer.save(update_fields=["kind"])
+
+    # Idempotent cleanup mirroring the other role seeds: drop any offer this
+    # seed itself minted under an old label no longer in current use.
+    NPCServiceOffer.objects.filter(role=role, kind=OfferKind.SETTLE_OBLIGATION).exclude(
+        label=_REGISTRAR_SETTLE_OFFER_LABEL
+    ).delete()
+
+    return role
+
+
+# --- Academy Trainer: ungated generalist (#2428 whole-branch fix) ----------
+
+ACADEMY_GENERALIST_TRAINER_ROLE_NAME = "Academy Trainer"
+
+#: Same one-per-starter-Gift sample as the Great Archive librarian's self-study
+#: list (``_SELF_STUDY_TECHNIQUE_NAMES``) — deliberately identical set: both
+#: seeds exist to prove the (Path x Gift) pool is reachable, this one just
+#: without the achievement gate, so a fresh-DB character can complete their
+#: starter pool without first doing the Archive's quest. Real Academy
+#: curriculum content is a lore-repo authoring pass (#2440's spec, "Out of
+#: scope") — staff/content can add or replace offers freely; this seed never
+#: overwrites a staff-adjusted row (get_or_create) and only prunes labels it
+#: itself minted.
+_GENERALIST_TRAINER_TECHNIQUE_NAMES: tuple[str, ...] = _SELF_STUDY_TECHNIQUE_NAMES
+
+
+def ensure_academy_generalist_trainer_role() -> NPCRole:
+    """Get-or-create the ungated Academy generalist trainer + its TRAIN offers.
+
+    Closes the whole-branch-review Important finding on #2428: without this seed,
+    the only fresh-DB TRAIN offers were the Great Archive librarian's
+    achievement-gated self-study rows — a brand-new Unbound Prospect had no
+    reachable trainer at all until they completed a quest that doesn't exist yet
+    outside a PLACEHOLDER Achievement row. This role mirrors
+    ``ensure_great_archive_librarian_role``'s shape exactly (same technique
+    sample, same TRAIN offer authoring) but with NO ``eligibility_rule`` gate —
+    a fresh Prospect can walk up and learn from their own (Path x Gift) starter
+    pool immediately. ``teaches_tradition=None``: like the librarian, this trainer
+    teaches the shared pool only, not any tradition's signature list (a single
+    ``teaches_tradition`` FK can't serve every tradition's signature list at
+    once — a per-tradition trainer role is lore-repo content, not this seed's job).
+
+    Fronted by Shroudwatch Academy (``faction_affiliation``) — the Hare a learner
+    spends here redeems to the Academy, same as every other Academy TRAIN offer.
+
+    PLACEHOLDER description/flavor. Idempotent (get_or_create + stale-label
+    cleanup), mirroring ``ensure_great_archive_librarian_role``.
+    """
+    from world.seeds.character_creation import ensure_shroudwatch_academy  # noqa: PLC0415
+    from world.seeds.game_content.magic import seed_starter_gift_catalog  # noqa: PLC0415
+
+    academy = ensure_shroudwatch_academy()
+    catalog = seed_starter_gift_catalog()
+
+    role, _ = NPCRole.objects.get_or_create(
+        name=ACADEMY_GENERALIST_TRAINER_ROLE_NAME,
+        defaults={
+            "description": (
+                "PLACEHOLDER: an Academy instructor who teaches any Prospect the "
+                "basics of their own Path's starter Gift — no sponsorship, no "
+                "quest, just AP, coin, and a Golden Hare. Real Academy trainer "
+                "prose/rooms are a lore-repo authoring pass (#2440)."
+            ),
+            "default_description_template": (
+                "An Academy instructor waits by a practice circle, ready to walk "
+                "any Prospect through the fundamentals."
+            ),
+            "default_rapport_starting_value": 0,
+            "faction_affiliation": academy,
+            "teaches_tradition": None,
+        },
+    )
+
+    expected_labels: set[str] = set()
+    for technique_name in _GENERALIST_TRAINER_TECHNIQUE_NAMES:
+        technique = catalog.techniques.get(technique_name)
+        if technique is None:
+            continue
+        label = f"Learn: {technique.name}"
+        expected_labels.add(label)
+        offer, created = NPCServiceOffer.objects.get_or_create(
+            role=role,
+            label=label,
+            defaults={
+                "kind": OfferKind.TRAIN,
+                "draw_mode": DrawMode.MENU,
+                "is_final": True,
+                "ap_cost": 0,
+                "eligibility_rule": {},  # Ungated.
+            },
+        )
+        if not created and offer.eligibility_rule:
+            offer.eligibility_rule = {}
+            offer.save(update_fields=["eligibility_rule"])
+        TrainOfferDetails.objects.get_or_create(
+            offer=offer,
+            defaults={"technique": technique, "learn_ap_cost": 5, "gold_cost": 0},
+        )
+
+    # Idempotent cleanup mirroring ensure_great_archive_librarian_role.
+    NPCServiceOffer.objects.filter(role=role, kind=OfferKind.TRAIN).exclude(
+        label__in=expected_labels
+    ).delete()
+
+    return role

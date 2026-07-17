@@ -294,7 +294,19 @@ class OrganizationMembershipAdmin(admin.ModelAdmin):
 
 @admin.register(OrganizationObligation)
 class OrganizationObligationAdmin(admin.ModelAdmin):
-    """Admin interface for OrganizationObligation management (#2428 Golden Hares)."""
+    """Admin interface for OrganizationObligation management (#2428 Golden Hares).
+
+    ``state``/``settled_at``/``settled_by_token`` are read-only here:
+    ``world.societies.obligation_services.settle_obligation`` is the only writer —
+    it redeems a real Golden Hare (``currency.redeem_favor_token``) as part of the
+    same transaction that flips these fields, so hand-editing them in admin would
+    mark a debt settled with no Hare ever changing hands. In play this row is
+    settled at the Academy Registrar's SETTLE_OBLIGATION offer
+    (``world.npc_services.effects.run_settle_obligation_offer``); from staff
+    tooling, mint the debtor a Hare (GM Award action, ``award_type="favor_token"``)
+    and have them settle it through that same flow, or call ``settle_obligation``
+    directly.
+    """
 
     list_display = [
         "debtor",
@@ -306,8 +318,8 @@ class OrganizationObligationAdmin(admin.ModelAdmin):
     ]
     list_filter = ["origin", "state", "creditor"]
     search_fields = ["debtor__character__db_key", "creditor__name"]
-    readonly_fields = ["created_at", "settled_at"]
-    raw_id_fields = ["debtor", "settled_by_token"]
+    readonly_fields = ["created_at", "state", "settled_at", "settled_by_token"]
+    raw_id_fields = ["debtor"]
 
 
 @admin.register(OrganizationRank)
