@@ -4,6 +4,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 
 export interface StockListing {
   id: number;
@@ -80,18 +81,7 @@ export async function dispatchMarketAction(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ref: { backend: 'registry', registry_key: registryKey }, kwargs }),
   });
-  if (!res.ok) {
-    let detail = 'The action failed.';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep the generic message
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'The action failed.');
   const data = (await res.json()) as { message?: string };
   return data.message ?? 'Done.';
 }

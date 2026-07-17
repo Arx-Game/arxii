@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type { HighlightReel, Interaction, ReactionEmojiEntry, SceneRoundModeValue } from './types';
 
 // ---------------------------------------------------------------------------
@@ -80,10 +81,7 @@ export async function setRoundMode(id: string, payload: SetRoundModePayload) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail || 'Failed to set round mode');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to set round mode');
   return res.json();
 }
 

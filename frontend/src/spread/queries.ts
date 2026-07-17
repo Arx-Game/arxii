@@ -5,6 +5,7 @@
  * - useSpreadMutation: dispatch a telling in the current scene.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { throwApiError } from '@/lib/errors';
 
 import { apiFetch } from '@/evennia_replacements/api';
 
@@ -110,10 +111,7 @@ export function useSpreadMutation(personaId: number) {
         method: 'POST',
         body: JSON.stringify(input),
       });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail ?? 'The tale could not be spread.');
-      }
+      if (!res.ok) await throwApiError(res, 'The tale could not be spread.');
       return res.json() as Promise<SpreadResult>;
     },
     onSuccess: () => {
@@ -157,10 +155,7 @@ export function useSaveDeedStoryMutation(personaId: number) {
         method: 'POST',
         body: JSON.stringify(input),
       });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail ?? 'Your account could not be saved.');
-      }
+      if (!res.ok) await throwApiError(res, 'Your account could not be saved.');
       return res.json() as Promise<DeedStory>;
     },
     onSuccess: (_data, input) => {

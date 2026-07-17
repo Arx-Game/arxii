@@ -1,4 +1,5 @@
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 
 import type {
   BattleDetail,
@@ -9,18 +10,7 @@ import type {
 
 async function getJson<T>(url: string, fallbackError: string): Promise<T> {
   const res = await apiFetch(url);
-  if (!res.ok) {
-    let detail = fallbackError;
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep the generic message
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, fallbackError);
   return (await res.json()) as T;
 }
 

@@ -5,6 +5,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type { components } from '@/generated/api';
 
 export type InteractionState = components['schemas']['InteractionState'];
@@ -18,18 +19,7 @@ async function post<T>(url: string, body: Record<string, unknown>): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    let detail = 'The interaction failed.';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep the generic message
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'The interaction failed.');
   return (await res.json()) as T;
 }
 

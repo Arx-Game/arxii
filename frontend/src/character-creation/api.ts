@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type { components } from '@/generated/api';
 import type { PaginatedResponse } from '@/shared/types';
 import type {
@@ -784,9 +785,6 @@ export async function submitHouseClaim(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(data.detail ?? 'Failed to submit house claim');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to submit house claim');
   return res.json();
 }

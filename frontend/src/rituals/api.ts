@@ -11,7 +11,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
-import { readErrorDetail } from '@/lib/errors';
+import { readErrorDetail, throwApiError } from '@/lib/errors';
 import type {
   PerformRitualRequest,
   PerformRitualResponse,
@@ -91,18 +91,7 @@ export async function patchRitual(id: number, body: AnimaRitualPatchBody): Promi
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
-    let detail = 'Failed to update ritual';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep generic
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to update ritual');
 
   return res.json() as Promise<Ritual>;
 }
@@ -142,18 +131,7 @@ export async function performRitual(body: PerformRitualRequest): Promise<Perform
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
-    let detail = 'Failed to perform ritual';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep generic
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to perform ritual');
 
   return res.json() as Promise<PerformRitualResponse>;
 }

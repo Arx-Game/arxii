@@ -1,4 +1,5 @@
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 
 export interface RoomEditInput {
   name?: string;
@@ -23,18 +24,7 @@ export async function editRoom(characterId: number, input: RoomEditInput): Promi
       kwargs: input,
     }),
   });
-  if (!res.ok) {
-    let detail = 'Failed to update the room.';
-    try {
-      const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === 'string' && data.detail.trim()) {
-        detail = data.detail;
-      }
-    } catch {
-      // body wasn't JSON; keep the generic message
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to update the room.');
   const data = (await res.json()) as { message?: string | null };
   return data.message ?? 'Room updated.';
 }
