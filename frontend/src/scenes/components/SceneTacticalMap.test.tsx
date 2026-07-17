@@ -50,9 +50,17 @@ vi.mock('@/combat/queries', () => ({
   })),
 }));
 
-import { fetchScene } from '../queries';
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+import { fetchScene, sceneKeys } from '../queries';
 import { fetchAvailableActions } from '../actionQueries';
 import { useDispatchPlayerAction } from '@/combat/queries';
+import { toast } from 'sonner';
 import { SceneTacticalMap } from './SceneTacticalMap';
 
 // ---------------------------------------------------------------------------
@@ -66,6 +74,19 @@ function createWrapper() {
   return function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   };
+}
+
+// Exposes the QueryClient (unlike createWrapper above) so a test can spy on
+// invalidateQueries — #2423: dispatches must refresh the scene's position
+// data on a genuine success and must not on a success:false rejection.
+function createWrapperWithClient() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return { Wrapper, queryClient };
 }
 
 const MOCK_SCENE = {
@@ -223,5 +244,73 @@ describe('SceneTacticalMap', () => {
     const northWallNode = screen.getByTestId('tactical-map-node-101');
     fireEvent.click(northWallNode);
     expect(mockMutateAsync).toHaveBeenCalledWith({ ref: takeAction.ref, kwargs: {} });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Dispatch contract (#2423) — the endpoint resolves HTTP 200 + success:false
+  // for a business-rule rejection, so a resolved promise is not itself proof
+  // of success.
+  // ---------------------------------------------------------------------------
+
+  it('shows a toast and does not invalidate scene positions when the move dispatch resolves success:false', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: false, message: 'Blocked.' })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const moveAction = makeMoveAction('move_to_position', 102, 'Move to Center');
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [moveAction],
+    });
+
+    const { Wrapper, queryClient } = createWrapperWithClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    render(<SceneTacticalMap sceneId="10" />, { wrapper: Wrapper });
+
+    const centerNode = await screen.findByTestId('tactical-map-node-102');
+    fireEvent.click(centerNode);
+
+    await vi.waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Blocked.');
+    });
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: sceneKeys.detail('10') });
+  });
+
+  it('invalidates the scene query when the move dispatch resolves success:true', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: true })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const moveAction = makeMoveAction('move_to_position', 102, 'Move to Center');
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [moveAction],
+    });
+
+    const { Wrapper, queryClient } = createWrapperWithClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    render(<SceneTacticalMap sceneId="10" />, { wrapper: Wrapper });
+
+    const centerNode = await screen.findByTestId('tactical-map-node-102');
+    fireEvent.click(centerNode);
+
+    await vi.waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: sceneKeys.detail('10') });
+    });
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });
