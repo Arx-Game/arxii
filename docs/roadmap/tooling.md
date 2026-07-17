@@ -11,7 +11,7 @@ Staff world-building has a durable content pipeline now, ahead of any authoring 
 `core_management.grid_export`/`grid_import` round-trip authored areas (with their
 rooms, exits, and authored sidecar values) to the private lore repo as reviewable
 per-area JSON bundles — see `docs/roadmap/rooms-and-estates.md`'s matching "Built"
-entry and ADR-0138 for the format and rejected alternatives. No staff-facing canvas
+entry and ADR-0140 for the format and rejected alternatives. No staff-facing canvas
 exists yet (Django admin + `@dig`/`@open`/`@link` remain the only way to author grid
 content); that's slice 2. The epic's remaining slices are filed as separate
 sub-issues, not designed here: **#2449** (staff world-builder canvas — the drag/drop

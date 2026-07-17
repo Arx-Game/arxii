@@ -230,7 +230,7 @@ def _promote_room_to_authored(room_profile: RoomProfile, key: str) -> None:
 
     Beyond the ``<area-slug>/<room-slug>`` shape check, the ``<area-slug>`` segment
     must equal ``room_profile.area.slug`` exactly — a well-formed key naming the
-    wrong area would otherwise be accepted silently and permanently (ADR-0138), while
+    wrong area would otherwise be accepted silently and permanently (ADR-0140), while
     the exporter groups rooms by the room's actual FK, so the bundle filename and the
     key's prefix would disagree forever. If the room's area is AUTHORED but has no
     slug yet (AUTHORED areas can be slugless until they're promoted themselves), the
@@ -302,7 +302,7 @@ def promote_to_authored(
     itself be AUTHORED (see ``core_management.grid_export.find_unhoused_authored_rooms``);
     otherwise the room would be silently unreachable to any export pass.
 
-    Key permanence (ADR-0138): re-promoting with a *different* key than one
+    Key permanence (ADR-0140): re-promoting with a *different* key than one
     already set raises — authored identity is assignment-time and permanent.
     Re-promoting with the *same* key is a no-op success.
     """

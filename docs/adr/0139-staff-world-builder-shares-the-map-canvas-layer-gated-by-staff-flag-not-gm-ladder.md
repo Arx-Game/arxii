@@ -32,6 +32,6 @@ actually means once GM story-area authoring exists to compare it against, rather
 guessing at a ladder rung with only one consumer.
 
 > Status: accepted · Source: epic #2436, issue #2449 (staff world-builder canvas) · Related:
-> ADR-0138 (the grid-export bundle format this canvas's `promote_room`/`promote_area` verbs
+> ADR-0140 (the grid-export bundle format this canvas's `promote_room`/`promote_area` verbs
 > feed) · Follow-ups: #2450 (GM story areas — where the GM-ladder authority question gets
 > revisited), #2451 (clue/portal layers), #2452

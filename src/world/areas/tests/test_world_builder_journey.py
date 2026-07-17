@@ -99,7 +99,7 @@ class WorldBuilderJourneyTests(TestCase):
         assert place_result.success, place_result.message
 
         # 5. promote_room — re-promoting with the same fixture_key is a no-op
-        # success (ADR-0138 key permanence); proves the promote verb is wired
+        # success (ADR-0140 key permanence); proves the promote verb is wired
         # even though staff_dig_room already authored the room outright.
         promote_result = PromoteRoomAction().run(
             self.staff, room_id=room_two.objectdb_id, fixture_key=room_two.fixture_key
