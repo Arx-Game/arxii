@@ -144,6 +144,7 @@ from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.speaker_queue import CmdLine  # #2356
 from commands.story import CmdStory
+from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom  # #2450
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
 from commands.travel import CmdTravel  # #2163
@@ -363,6 +364,11 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGuard,
             # #1498 — staff set-the-stage: apply a position blueprint to the room.
             CmdSetStage,
+            # #2450 — GM story rooms: spin up/close a temp scene room; join/leave a
+            # granted story or scene room.
+            CmdSceneRoom,
+            CmdJoinRoom,
+            CmdLeaveRoom,
             # #1895 — staff set-situation: instantiate a SituationTemplate into the room.
             CmdSetSituation,
             # #1514 — in-room comfort/weather readout (the mechanical surface).
