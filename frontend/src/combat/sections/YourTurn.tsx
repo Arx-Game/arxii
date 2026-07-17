@@ -182,9 +182,9 @@ function initialContext(slot: ActionSlot): ActionContext {
 // Dispatch-job builders (extracted from handleSubmit to flatten its branching)
 // ---------------------------------------------------------------------------
 
-type DispatchFn = (params: DispatchActionRequest) => Promise<unknown>;
+type DispatchFn = (params: DispatchActionRequest) => Promise<DispatchResult>;
 
-type DispatchJob = () => Promise<unknown>;
+type DispatchJob = () => Promise<DispatchResult>;
 
 /**
  * Build the focused-slot dispatch job (if a technique is selected). Threads the
@@ -845,12 +845,12 @@ export function YourTurn({
 
     try {
       for (const job of dispatchJobs) {
-        const result = (await job()) as DispatchResult | undefined;
+        const result = await job();
         // The dispatch endpoint always resolves 200 for a business-rule
         // rejection (only a structural ref error is a 400) — success:false
         // must be checked explicitly, or an honest-failure job would silently
         // flip the local `submitted`/ready state (#2423).
-        if (result !== undefined && isDispatchFailure(result)) {
+        if (isDispatchFailure(result)) {
           setSubmitError(result.message ?? 'Submit failed. Try again.');
           return;
         }

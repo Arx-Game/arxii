@@ -155,9 +155,14 @@ function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  return function Wrapper({ children }: { children: ReactNode }) {
+  function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
+  }
+  // Exposes the QueryClient instance so tests can spy on invalidateQueries
+  // (#2423) — attaching to the function keeps every existing
+  // `{ wrapper: createWrapper() }` call site unaffected.
+  Wrapper.queryClient = queryClient;
+  return Wrapper;
 }
 
 const mockedUseAvailableCombos = combatQueries.useAvailableCombos as ReturnType<typeof vi.fn>;
@@ -1692,7 +1697,7 @@ describe('YourTurn — server is_ready lock (#2423)', () => {
     expect(screen.getByTestId('action-card-focused')).toHaveAttribute('data-readonly', 'true');
   });
 
-  it('does not show ready badge and surfaces the rejection when a dispatch job resolves success:false', async () => {
+  it('skips the ready badge and encounter invalidation when a job resolves success:false', async () => {
     setupMocks();
 
     // Override the focused card stub so selecting a technique emits techniqueId=99.
@@ -1728,7 +1733,10 @@ describe('YourTurn — server is_ready lock (#2423)', () => {
       message: 'Rejected.',
     });
 
-    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+    const wrapper = createWrapper();
+    const invalidateSpy = vi.spyOn(wrapper.queryClient, 'invalidateQueries');
+
+    render(<YourTurn {...defaultProps()} />, { wrapper });
 
     await userEvent.click(screen.getByTestId('card-select-technique-focused'));
     await userEvent.click(screen.getByTestId('submit-declarations-btn'));
@@ -1739,6 +1747,61 @@ describe('YourTurn — server is_ready lock (#2423)', () => {
     // ready-badge should NOT appear — submission did not complete successfully.
     expect(screen.queryByTestId('ready-badge')).not.toBeInTheDocument();
     expect(screen.getByTestId('submit-declarations-btn')).not.toBeDisabled();
+
+    // The honest-failure result must short-circuit before any invalidation —
+    // a rejected dispatch must not refresh the encounter as if it succeeded.
+    expect(invalidateSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: combatQueries.combatKeys.encounter(1) })
+    );
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('invalidates the encounter query once every dispatch job succeeds', async () => {
+    setupMocks();
+
+    // Override the focused card stub so selecting a technique emits techniqueId=7.
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          ActionCard [{slot}]
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({
+                slot,
+                effort: 'MEDIUM',
+                strainCommitment: 0,
+                techniqueId: 7,
+              })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    // beforeEach already sets mockMutateAsync's default resolved value to a
+    // successful, non-deferred-looking result — no override needed here.
+
+    const wrapper = createWrapper();
+    const invalidateSpy = vi.spyOn(wrapper.queryClient, 'invalidateQueries');
+
+    render(<YourTurn {...defaultProps({ encounterId: 1 })} />, { wrapper });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: combatQueries.combatKeys.encounter(1) })
+    );
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
