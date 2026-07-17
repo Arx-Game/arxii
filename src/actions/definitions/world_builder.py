@@ -1,0 +1,624 @@
+"""Staff world-builder actions (#2449) — the canvas's dispatch seam.
+
+Eleven REGISTRY actions, all ``category="world_builder"``, ``target_type=SELF``,
+gated by ``StaffOnlyPrerequisite`` alone (no ownership/tenancy standing — this is
+staff tooling, not a player-facing builder). Each is a thin wrapper over the
+Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid primitives +
+``promote_to_authored``/``suggest_fixture_key``) and
+``world.locations.services.set_room_display_data(..., bypass_ownership=True)``.
+
+Unlike the owner-facing Room Builder (``locations.py``), there is no "anchor
+room" (``actor.location``) fallback — every id kwarg (``area_id``/``room_id``/
+``exit_id``/etc.) is resolved explicitly inside ``execute()``, since REST
+dispatch passes raw ints and staff building happens over the whole shared map,
+not from the actor's own position (#2163).
+
+``staff_dig_room`` requires an AUTHORED area (canonical world rooms only — a
+STORY/PLAYER area is out of scope for this canvas). ``staff_remove_room``
+refuses an already-exported room (``fixture_key`` set + ``origin=AUTHORED``):
+those come out via the report-never-delete pipeline (see
+``core_management.content_export``), never the canvas. ``staff_unlink_rooms``'s
+stranding guard is deliberately looser than the building Room Builder's
+BFS-reachability check (which has no meaningful "anchor room" world-wide) — it
+only refuses when the drop would leave an occupied room with zero exits.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from evennia.objects.models import ObjectDB
+
+from actions.base import Action
+from actions.constants import ActionCategory
+from actions.prerequisites import Prerequisite, StaffOnlyPrerequisite
+from actions.types import ActionResult, TargetType
+
+if TYPE_CHECKING:
+    from actions.types import ActionContext
+    from evennia_extensions.models import RoomProfile
+    from world.areas.models import Area
+    from world.scenes.models import Persona
+
+_EXIT_TYPECLASS = "typeclasses.exits.Exit"
+_CHARACTER_TYPECLASS = "typeclasses.characters.Character"
+
+
+def _resolve_area(area_id: Any) -> Area | None:
+    from world.areas.models import Area  # noqa: PLC0415
+
+    if not area_id:
+        return None
+    return Area.objects.filter(pk=area_id).first()
+
+
+def _resolve_room_profile(room_id: Any) -> RoomProfile | None:
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    if not room_id:
+        return None
+    return (
+        RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb", "area").first()
+    )
+
+
+def _resolve_exit(exit_id: Any) -> ObjectDB | None:
+    if not exit_id:
+        return None
+    return ObjectDB.objects.filter(pk=exit_id, db_typeclass_path=_EXIT_TYPECLASS).first()
+
+
+def _exit_pair(exit_obj: ObjectDB) -> list[ObjectDB]:
+    """The exit and its reverse-direction sibling (if one exists)."""
+    pair = [exit_obj]
+    reverse = ObjectDB.objects.filter(
+        db_typeclass_path=_EXIT_TYPECLASS,
+        db_location=exit_obj.db_destination,
+        db_destination=exit_obj.db_location,
+    ).first()
+    if reverse is not None:
+        pair.append(reverse)
+    return pair
+
+
+def _has_character_occupants(room: ObjectDB) -> bool:
+    return any(obj.is_typeclass(_CHARACTER_TYPECLASS, exact=False) for obj in room.contents)
+
+
+def _stranded_occupied_room(rooms: set[ObjectDB], dropped_exit_ids: set[int]) -> ObjectDB | None:
+    """The first room in ``rooms`` that would be left exit-less AND occupied."""
+    for room in rooms:
+        remaining = (
+            ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_location=room)
+            .exclude(pk__in=dropped_exit_ids)
+            .exists()
+        )
+        if not remaining and _has_character_occupants(room):
+            return room
+    return None
+
+
+def _staff_persona(actor: ObjectDB) -> Persona | None:
+    """Best-effort persona for the acting staffer.
+
+    ``set_room_display_data``'s ``persona`` kwarg goes unused when
+    ``bypass_ownership=True`` but the parameter isn't optional; this resolves
+    *a* persona for the call without imposing ``HasCharacterSheetPrerequisite``
+    on the whole world-builder family — a bare staff/GM puppet with no sheet
+    simply can't touch the name/description/public fields.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    try:
+        return active_persona_for_sheet(actor.sheet_data)
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+
+
+@dataclass
+class _WorldBuilderAction(Action):
+    """Shared shape for the staff world-builder canvas verbs (#2449)."""
+
+    category: str = "world_builder"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [StaffOnlyPrerequisite()]
+
+
+@dataclass
+class CreateAreaAction(_WorldBuilderAction):
+    """Create a new AUTHORED area.
+
+    Kwargs: ``name``, ``slug``, ``level`` (int), optional ``parent_id``.
+    """
+
+    key: str = "create_area"
+    name: str = "Create Area"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.areas.constants import GridOrigin  # noqa: PLC0415
+        from world.areas.models import Area  # noqa: PLC0415
+
+        area_name = (kwargs.get("name") or "").strip()
+        slug = (kwargs.get("slug") or "").strip()
+        if not area_name or not slug:
+            return ActionResult(success=False, message="An area needs both a name and a slug.")
+        try:
+            level = int(kwargs["level"])
+        except (KeyError, TypeError, ValueError):
+            return ActionResult(success=False, message="Pick a level.")
+        parent_id = kwargs.get("parent_id")
+        parent = _resolve_area(parent_id)
+        if parent_id and parent is None:
+            return ActionResult(success=False, message="No such parent area.")
+        area = Area(
+            name=area_name,
+            slug=slug,
+            level=level,
+            parent=parent,
+            origin=GridOrigin.AUTHORED,
+        )
+        try:
+            area.save()
+        except ValidationError as exc:
+            return ActionResult(success=False, message="; ".join(exc.messages))
+        return ActionResult(success=True, message=f"{area.name} created (area #{area.pk}).")
+
+
+@dataclass
+class EditAreaAction(_WorldBuilderAction):
+    """Edit an area. Kwargs: ``area_id``, optional ``name``/``slug``/``level``/``parent_id``.
+
+    A slug change on an already-exported (AUTHORED + keyed) area is refused —
+    keys are permanent once set (mirrors ``promote_to_authored``'s guard).
+    """
+
+    key: str = "edit_area"
+    name: str = "Edit Area"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.areas.constants import GridOrigin  # noqa: PLC0415
+
+        area = _resolve_area(kwargs.get("area_id"))
+        if area is None:
+            return ActionResult(success=False, message="No such area.")
+        new_slug = kwargs.get("slug")
+        if (
+            new_slug is not None
+            and area.origin == GridOrigin.AUTHORED
+            and area.slug is not None
+            and new_slug != area.slug
+        ):
+            return ActionResult(
+                success=False,
+                message="This area already has a different slug; keys are permanent once set.",
+            )
+        if kwargs.get("name") is not None:
+            area.name = kwargs["name"]
+        if new_slug is not None:
+            area.slug = new_slug
+        if kwargs.get("level") is not None:
+            try:
+                area.level = int(kwargs["level"])
+            except (TypeError, ValueError):
+                return ActionResult(success=False, message="Pick a valid level.")
+        parent_id = kwargs.get("parent_id")
+        if parent_id is not None:
+            parent = _resolve_area(parent_id)
+            if parent is None:
+                return ActionResult(success=False, message="No such parent area.")
+            area.parent = parent
+        try:
+            area.save()
+        except ValidationError as exc:
+            return ActionResult(success=False, message="; ".join(exc.messages))
+        return ActionResult(success=True, message=f"{area.name} updated.")
+
+
+@dataclass
+class StaffDigRoomAction(_WorldBuilderAction):
+    """Dig a room into an AUTHORED area — no exit requirement (linking is separate).
+
+    Kwargs: ``area_id``, ``name``, optional ``description``/``size``/``grid_x``/
+    ``grid_y``/``floor``/``fixture_key`` (defaults to ``suggest_fixture_key``).
+    """
+
+    key: str = "staff_dig_room"
+    name: str = "Dig World Room"
+    icon: str = "hammer"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from evennia_extensions.models import RoomSizeTier  # noqa: PLC0415
+        from world.areas.constants import GridOrigin  # noqa: PLC0415
+        from world.areas.grid_services import (  # noqa: PLC0415
+            GridServiceError,
+            create_room,
+            suggest_fixture_key,
+        )
+
+        area = _resolve_area(kwargs.get("area_id"))
+        if area is None:
+            return ActionResult(success=False, message="No such area.")
+        if area.origin != GridOrigin.AUTHORED:
+            return ActionResult(
+                success=False,
+                message="This area must be AUTHORED before rooms can be dug into it.",
+            )
+        room_name = (kwargs.get("name") or "").strip()
+        if not room_name:
+            return ActionResult(success=False, message="Name the room.")
+        size = None
+        size_name = (kwargs.get("size") or "").strip()
+        if size_name:
+            size = RoomSizeTier.objects.filter(name__iexact=size_name).first()
+            if size is None:
+                options = ", ".join(RoomSizeTier.objects.values_list("name", flat=True))
+                return ActionResult(
+                    success=False, message=f"No '{size_name}' size. Sizes: {options}."
+                )
+        fixture_key = kwargs.get("fixture_key")
+        if not fixture_key:
+            try:
+                fixture_key = suggest_fixture_key(area, room_name)
+            except GridServiceError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+        grid_x = kwargs.get("grid_x")
+        grid_y = kwargs.get("grid_y")
+        profile = create_room(
+            area=area,
+            name=room_name,
+            description=kwargs.get("description") or "",
+            size=size,
+            grid_x=int(grid_x) if grid_x is not None else None,
+            grid_y=int(grid_y) if grid_y is not None else None,
+            floor=int(kwargs.get("floor") or 0),
+            origin=GridOrigin.AUTHORED,
+            fixture_key=fixture_key,
+        )
+        return ActionResult(success=True, message=f"{profile.objectdb.db_key} dug (#{profile.pk}).")
+
+
+@dataclass
+class StaffEditRoomAction(_WorldBuilderAction):
+    """Edit a world room's display data + profile flags.
+
+    Kwargs: ``room_id``, optional ``name``/``description``/``is_public``/
+    ``is_social_hub``/``is_outdoor``/``enclosure``.
+    """
+
+    key: str = "staff_edit_room"
+    name: str = "Edit World Room"
+    icon: str = "pencil"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from evennia_extensions.constants import RoomEnclosure  # noqa: PLC0415
+        from world.locations.services import RoomEditError, set_room_display_data  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message="No such room.")
+        display_name = kwargs.get("name")
+        description = kwargs.get("description")
+        is_public = kwargs.get("is_public")
+        if display_name is not None or description is not None or is_public is not None:
+            persona = _staff_persona(actor)
+            if persona is None:
+                return ActionResult(success=False, message="You have no active character sheet.")
+            try:
+                set_room_display_data(
+                    room=profile.objectdb,
+                    persona=persona,
+                    name=display_name,
+                    description=description,
+                    is_public=is_public,
+                    bypass_ownership=True,
+                )
+            except RoomEditError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+        update_fields = []
+        if kwargs.get("is_social_hub") is not None:
+            profile.is_social_hub = bool(kwargs["is_social_hub"])
+            update_fields.append("is_social_hub")
+        if kwargs.get("is_outdoor") is not None:
+            profile.is_outdoor = bool(kwargs["is_outdoor"])
+            update_fields.append("is_outdoor")
+        enclosure = kwargs.get("enclosure")
+        if enclosure:
+            valid = {choice for choice, _ in RoomEnclosure.choices}
+            if enclosure not in valid:
+                options = ", ".join(sorted(valid))
+                return ActionResult(success=False, message=f"Pick an enclosure: {options}.")
+            profile.enclosure = enclosure
+            update_fields.append("enclosure")
+        if update_fields:
+            profile.save(update_fields=update_fields)
+        return ActionResult(success=True, message=f"{profile.objectdb.db_key} updated.")
+
+
+@dataclass
+class StaffLinkRoomsAction(_WorldBuilderAction):
+    """Link two world rooms with a named exit pair — cross-area allowed.
+
+    Kwargs: ``room_a_id``, ``room_b_id``, ``name_ab``, ``name_ba``.
+    """
+
+    key: str = "staff_link_rooms"
+    name: str = "Link World Rooms"
+    icon: str = "link"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.grid_services import create_exit_pair  # noqa: PLC0415
+
+        room_a = _resolve_room_profile(kwargs.get("room_a_id"))
+        room_b = _resolve_room_profile(kwargs.get("room_b_id"))
+        if room_a is None or room_b is None:
+            return ActionResult(success=False, message="No such room.")
+        name_ab = (kwargs.get("name_ab") or "").strip()
+        name_ba = (kwargs.get("name_ba") or "").strip()
+        if not name_ab or not name_ba:
+            return ActionResult(
+                success=False, message="Both exit names are needed (one for each direction)."
+            )
+        create_exit_pair(
+            name=name_ab,
+            aliases=(),
+            reverse_name=name_ba,
+            reverse_aliases=(),
+            room_a=room_a.objectdb,
+            room_b=room_b.objectdb,
+        )
+        return ActionResult(
+            success=True,
+            message=f"Linked {room_a.objectdb.db_key} <-> {room_b.objectdb.db_key}.",
+        )
+
+
+@dataclass
+class StaffUnlinkRoomsAction(_WorldBuilderAction):
+    """Remove an exit and its reverse sibling. Kwarg: ``exit_id``.
+
+    Refuses only when the removal would leave an occupied room with zero
+    remaining exits (a world-wide BFS-reachability guard, like the building
+    Room Builder's, has no meaningful anchor room here).
+    """
+
+    key: str = "staff_unlink_rooms"
+    name: str = "Unlink World Rooms"
+    icon: str = "unlink"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        exit_obj = _resolve_exit(kwargs.get("exit_id"))
+        if exit_obj is None:
+            return ActionResult(success=False, message="No such exit.")
+        pair = _exit_pair(exit_obj)
+        rooms = {exit_obj.db_location, exit_obj.db_destination}
+        stranded = _stranded_occupied_room(rooms, {e.pk for e in pair})
+        if stranded is not None:
+            return ActionResult(
+                success=False,
+                message=f"Removing that exit would strand {stranded.db_key}, which has "
+                "characters in it.",
+            )
+        for e in pair:
+            e.delete()
+        return ActionResult(success=True, message="Exit removed.")
+
+
+@dataclass
+class StaffRenameExitAction(_WorldBuilderAction):
+    """Rename one direction of an exit. Kwargs: ``exit_id``, ``name``."""
+
+    key: str = "staff_rename_exit"
+    name: str = "Rename World Exit"
+    icon: str = "pencil"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        exit_obj = _resolve_exit(kwargs.get("exit_id"))
+        if exit_obj is None:
+            return ActionResult(success=False, message="No such exit.")
+        new_name = (kwargs.get("name") or "").strip()
+        if not new_name:
+            return ActionResult(success=False, message="The exit needs a name.")
+        exit_obj.db_key = new_name
+        exit_obj.save(update_fields=["db_key"])
+        return ActionResult(success=True, message=f"Exit renamed to {new_name}.")
+
+
+@dataclass
+class StaffPlaceRoomAction(_WorldBuilderAction):
+    """Place a world room on its area's map grid (cosmetic; canvas drag).
+
+    Kwargs: ``room_id``, ``grid_x``, ``grid_y``, optional ``floor``.
+    """
+
+    key: str = "staff_place_room"
+    name: str = "Place World Room"
+    icon: str = "move"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.grid_services import GridServiceError, place_room_on_grid  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message="No such room.")
+        try:
+            grid_x, grid_y = int(kwargs["grid_x"]), int(kwargs["grid_y"])
+        except (KeyError, TypeError, ValueError):
+            return ActionResult(success=False, message="Pick a spot on the map.")
+        floor = kwargs.get("floor")
+        try:
+            place_room_on_grid(
+                profile=profile,
+                grid_x=grid_x,
+                grid_y=grid_y,
+                floor=int(floor) if floor is not None else profile.floor,
+            )
+        except GridServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message="Room placed.")
+
+
+@dataclass
+class StaffRemoveRoomAction(_WorldBuilderAction):
+    """Remove a world room. Kwarg: ``room_id``.
+
+    Refuses when occupied (characters present), when it has an installed
+    ``RoomFeatureInstance``, or when it's already exported (``fixture_key``
+    set + ``origin=AUTHORED`` — those come out via the report-never-delete
+    pipeline, not the canvas). Else deletes exits pointing in/out, then the
+    room itself.
+    """
+
+    key: str = "staff_remove_room"
+    name: str = "Remove World Room"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.constants import GridOrigin  # noqa: PLC0415
+        from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message="No such room.")
+        room = profile.objectdb
+        if _has_character_occupants(room):
+            return ActionResult(success=False, message="This room has characters in it.")
+        if RoomFeatureInstance.objects.filter(room_profile=profile).active().exists():
+            return ActionResult(
+                success=False, message="This room has an installed feature; remove that first."
+            )
+        if profile.fixture_key is not None and profile.origin == GridOrigin.AUTHORED:
+            return ActionResult(
+                success=False,
+                message="Exported rooms are removed via the report-never-delete pipeline, "
+                "not the canvas.",
+            )
+        ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_location=room).delete()
+        ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_destination=room).delete()
+        room.delete()
+        return ActionResult(success=True, message="Room removed.")
+
+
+@dataclass
+class PromoteRoomAction(_WorldBuilderAction):
+    """Promote a room to AUTHORED. Kwargs: ``room_id``, optional ``fixture_key`` (suggested)."""
+
+    key: str = "promote_room"
+    name: str = "Promote Room"
+    icon: str = "star"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.grid_services import (  # noqa: PLC0415
+            GridServiceError,
+            promote_to_authored,
+            suggest_fixture_key,
+        )
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message="No such room.")
+        fixture_key = kwargs.get("fixture_key")
+        if not fixture_key:
+            if profile.area is None:
+                return ActionResult(success=False, message="This room has no area to promote into.")
+            try:
+                fixture_key = suggest_fixture_key(profile.area, profile.objectdb.db_key)
+            except GridServiceError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+        try:
+            promote_to_authored(room_profile=profile, key=fixture_key)
+        except GridServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True, message=f"{profile.objectdb.db_key} promoted as {fixture_key}."
+        )
+
+
+@dataclass
+class PromoteAreaAction(_WorldBuilderAction):
+    """Promote an area to AUTHORED. Kwargs: ``area_id``, optional ``slug`` (slugified name)."""
+
+    key: str = "promote_area"
+    name: str = "Promote Area"
+    icon: str = "star"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.utils.text import slugify  # noqa: PLC0415
+
+        from world.areas.grid_services import GridServiceError, promote_to_authored  # noqa: PLC0415
+
+        area = _resolve_area(kwargs.get("area_id"))
+        if area is None:
+            return ActionResult(success=False, message="No such area.")
+        slug = kwargs.get("slug") or slugify(area.name)
+        try:
+            promote_to_authored(area=area, key=slug)
+        except GridServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message=f"{area.name} promoted as {slug}.")
