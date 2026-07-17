@@ -202,6 +202,24 @@ class SpawnInstancedRoomTests(TestCase):
         display = ObjectDisplayData.objects.get(object=room)
         assert display.permanent_description == "Stored properly."
 
+    def test_spawn_creates_room_profile_and_gm_owner(self) -> None:
+        from world.gm.factories import GMProfileFactory
+
+        gm = GMProfileFactory()
+        room = spawn_instanced_room(
+            name="Test Cellar",
+            description="Dank.",
+            owner=None,
+            return_location=None,
+            source_key=f"gm:{gm.pk}",
+            gm_owner=gm,
+        )
+        assert room.room_profile is not None
+        instance = room.instance_data
+        assert instance.gm_owner == gm
+        assert instance.owner is None
+        assert gm.owned_instances.get() == instance
+
 
 class CompleteInstancedRoomTests(TestCase):
     """Test the complete_instanced_room service function."""
