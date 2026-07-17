@@ -37,6 +37,7 @@ class TraitAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterTraitValue)
 class CharacterTraitValueAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = ["character", "trait", "value", "display_value"]
     list_filter = ["trait__trait_type", "trait__category"]
     search_fields = ["character__db_key", "trait__name"]

@@ -70,6 +70,7 @@ class StoryProtectedSubjectInline(admin.TabularInline):
 
 @admin.register(Story)
 class StoryAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet", "owners"]
     list_display = [
         "title",
         "status",
@@ -118,6 +119,7 @@ class StoryAdmin(admin.ModelAdmin):
 
 @admin.register(StoryParticipation)
 class StoryParticipationAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = [
         "character",
         "story",
@@ -290,6 +292,7 @@ class TrustCategoryFeedbackRatingInline(admin.TabularInline):
 
 @admin.register(StoryFeedback)
 class StoryFeedbackAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["reviewed_player", "reviewer"]
     list_display = [
         "story",
         "reviewed_player",
@@ -342,6 +345,7 @@ class StoryFeedbackAdmin(admin.ModelAdmin):
 
 @admin.register(TrustCategory)
 class TrustCategoryAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["created_by"]
     list_display = ["display_name", "name", "is_active", "created_at"]
     list_filter = ["is_active", "created_at"]
     search_fields = ["name", "display_name", "description"]
@@ -409,6 +413,7 @@ class PlayerTrustLevelAdmin(admin.ModelAdmin):
 
 @admin.register(StoryTrustRequirement)
 class StoryTrustRequirementAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["created_by"]
     list_display = [
         "story",
         "trust_category",
@@ -455,6 +460,7 @@ class EraAdmin(admin.ModelAdmin):
 
 @admin.register(BeatCompletion)
 class BeatCompletionAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet", "roster_entry"]
     list_display = ("beat", "character_sheet", "outcome", "era", "recorded_at")
     list_filter = ("outcome",)
     search_fields = ("beat__internal_description", "character_sheet__name")
@@ -478,6 +484,7 @@ class CrossoverInviteAdmin(admin.ModelAdmin):
 
 @admin.register(EpisodeResolution)
 class EpisodeResolutionAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet"]
     list_display = (
         "episode",
         "character_sheet",
@@ -494,6 +501,7 @@ class EpisodeResolutionAdmin(admin.ModelAdmin):
 
 @admin.register(StoryProgress)
 class StoryProgressAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet"]
     list_display = (
         "story",
         "character_sheet",
@@ -525,6 +533,7 @@ class GlobalStoryProgressAdmin(admin.ModelAdmin):
 
 @admin.register(AggregateBeatContribution)
 class AggregateBeatContributionAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet", "roster_entry"]
     list_display = ("beat", "character_sheet", "points", "era", "recorded_at")
     list_filter = ("era",)
     search_fields = ("beat__internal_description", "source_note")

@@ -19,6 +19,8 @@ class ContentThemeAdmin(admin.ModelAdmin):
 class PlayerBoundaryAdmin(admin.ModelAdmin):
     """Admin interface for PlayerBoundary."""
 
+    autocomplete_fields = ["excluded_tenures", "visible_to_tenures"]
+
     list_display = ["owner", "kind", "theme", "visibility_mode", "created_at"]
     list_filter = ["kind", "visibility_mode", "theme"]
     search_fields = ["owner__account__username"]
@@ -28,6 +30,8 @@ class PlayerBoundaryAdmin(admin.ModelAdmin):
 @admin.register(TreasuredSubject)
 class TreasuredSubjectAdmin(admin.ModelAdmin):
     """Admin interface for TreasuredSubject."""
+
+    autocomplete_fields = ["excluded_tenures", "visible_to_tenures"]
 
     list_display = ["owner", "subject_kind", "subject_label", "created_at"]
     list_filter = ["subject_kind"]

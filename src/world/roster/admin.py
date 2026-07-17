@@ -23,6 +23,7 @@ from world.roster.models import (
 
 @admin.register(Family)
 class FamilyAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["created_by"]
     list_display = ["name", "family_type", "is_playable", "created_by_cg"]
     list_filter = ["family_type", "is_playable", "created_by_cg"]
     search_fields = ["name", "description"]
@@ -46,6 +47,8 @@ class FamilyMembershipInline(admin.TabularInline):
 @admin.register(Kinsperson)
 class KinspersonAdmin(admin.ModelAdmin):
     """Staff authoring surface for the kinship graph (#2062)."""
+
+    autocomplete_fields = ["created_by"]
 
     list_display = [
         "display_name",
@@ -100,7 +103,7 @@ class RosterEntryAdmin(admin.ModelAdmin):
     readonly_fields = ["joined_roster", "created_date", "updated_date"]
 
     # Use autocomplete for CharacterSheet (could be many) and profile_picture
-    autocomplete_fields = ["character_sheet", "profile_picture"]
+    autocomplete_fields = ["character_sheet", "created_by_account", "profile_picture"]
     # Roster is a lookup table with few entries, keep default widget
 
     fieldsets = (

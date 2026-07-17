@@ -212,7 +212,7 @@ class TechniqueAdmin(admin.ModelAdmin):
     filter_horizontal = ["restrictions", "target_prerequisites"]
     search_fields = ["name", "description"]
     readonly_fields = ["get_tier"]
-    autocomplete_fields = ["gift", "style", "effect_type"]
+    autocomplete_fields = ["creator", "effect_type", "gift", "style"]
     list_select_related = ["gift", "style", "effect_type"]
     inlines = [TechniqueCapabilityGrantInline, TechniqueRemovedConditionInline]
 
@@ -223,6 +223,7 @@ class TechniqueAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterAura)
 class CharacterAuraAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = ["character", "celestial", "primal", "abyssal", "get_dominant"]
     list_filter = ["updated_at"]
     search_fields = ["character__db_key"]
@@ -263,7 +264,7 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
         "claimed_at",
     ]
     search_fields = ["character_sheet__character__db_key", "resonance__name"]
-    autocomplete_fields = ["resonance"]
+    autocomplete_fields = ["character_sheet", "resonance"]
     list_select_related = [
         "character_sheet",
         "character_sheet__character",
@@ -275,6 +276,7 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
 
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["creator"]
     list_display = ["name"]
     search_fields = ["name", "description"]
     filter_horizontal = ["resonances"]
@@ -282,6 +284,7 @@ class GiftAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterGift)
 class CharacterGiftAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = ["character", "gift", "acquired_at"]
     list_filter = ["gift"]
     search_fields = ["character__character__db_key", "gift__name"]
@@ -322,6 +325,7 @@ class CharacterTraditionAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterTechnique)
 class CharacterTechniqueAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = ["character", "technique", "acquired_at"]
     list_filter = ["technique__gift", "technique__style"]
     search_fields = ["character__character__db_key", "technique__name"]
@@ -330,6 +334,7 @@ class CharacterTechniqueAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterAnima)
 class CharacterAnimaAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = ["character", "current", "maximum", "last_recovery"]
     list_filter = ["last_recovery"]
     search_fields = ["character__db_key"]
@@ -344,6 +349,7 @@ class AnimaRitualPerformanceInline(admin.TabularInline):
 
 @admin.register(AnimaRitualPerformance)
 class AnimaRitualPerformanceAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["scene", "target_character"]
     list_display = [
         "ritual",
         "target_character",
@@ -368,6 +374,7 @@ class MotifResonanceInline(admin.TabularInline):
 
 @admin.register(Motif)
 class MotifAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = ["__str__", "character"]
     search_fields = ["character__character__db_key", "description"]
     inlines = [MotifResonanceInline]
@@ -494,6 +501,8 @@ class StandingCapBandAdmin(admin.ModelAdmin):
 class ResonanceGainConfigAdmin(admin.ModelAdmin):
     """Singleton tuning config — one row per environment."""
 
+    autocomplete_fields = ["updated_by"]
+
     list_display = (
         "pk",
         "weekly_pot_per_character",
@@ -515,6 +524,8 @@ class ResonanceGainConfigAdmin(admin.ModelAdmin):
 @admin.register(ResonanceEnvironmentConfig)
 class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
     """Singleton tuning config for the resonance-environment primitive."""
+
+    autocomplete_fields = ["updated_by"]
 
     list_display = (
         "pk",
@@ -631,7 +642,7 @@ class RitualAdmin(admin.ModelAdmin):
     ]
     list_filter = ["execution_kind", "hedge_accessible", "glimpse_eligible"]
     search_fields = ["name", "description"]
-    autocomplete_fields = ["flow", "site_property"]
+    autocomplete_fields = ["author_account", "flow", "site_property"]
     inlines = [RitualComponentRequirementInline, RitualCheckConfigInline]
     # Dispatch fields (execution_kind / service_function_path / flow)
     # determine WHICH code runs when a ritual is performed. Exposing them
@@ -730,6 +741,7 @@ class ThreadWeavingTeachingOfferAdmin(admin.ModelAdmin):
 
 @admin.register(ResonanceGrant)
 class ResonanceGrantAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet", "source_staff_account"]
     list_display = (
         "id",
         "character_sheet",
@@ -764,6 +776,7 @@ class ResonanceGrantAdmin(admin.ModelAdmin):
 
 @admin.register(PoseEndorsement)
 class PoseEndorsementAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["endorsee_sheet", "endorser_sheet", "interaction", "persona_snapshot"]
     list_display = (
         "id",
         "endorser_sheet",
@@ -784,6 +797,13 @@ class PoseEndorsementAdmin(admin.ModelAdmin):
 
 @admin.register(SceneEntryEndorsement)
 class SceneEntryEndorsementAdmin(admin.ModelAdmin):
+    autocomplete_fields = [
+        "endorsee_sheet",
+        "endorser_sheet",
+        "entry_interaction",
+        "persona_snapshot",
+        "scene",
+    ]
     list_display = (
         "id",
         "endorser_sheet",
@@ -839,6 +859,8 @@ class RelationshipBondPullTuningAdmin(admin.ModelAdmin):
 class SoulTetherConfigAdmin(admin.ModelAdmin):
     """Singleton tuning config for the Soul Tether bond mechanic — one row per environment."""
 
+    autocomplete_fields = ["updated_by"]
+
     list_display = (
         "pk",
         "anima_cost_per_unit",
@@ -880,6 +902,7 @@ class DramaticMomentTypeAdmin(admin.ModelAdmin):
 
 @admin.register(DramaticMomentTag)
 class DramaticMomentTagAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet", "interaction", "scene", "tagged_by"]
     list_display = ("id", "character_sheet", "moment_type", "scene", "tagged_by", "tagged_at")
     list_filter = ("moment_type",)
     readonly_fields = tuple(f.name for f in DramaticMomentTag._meta.fields)  # noqa: SLF001
@@ -893,6 +916,7 @@ class DramaticMomentTagAdmin(admin.ModelAdmin):
 
 @admin.register(DramaticMomentSuggestion)
 class DramaticMomentSuggestionAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet", "interaction", "resolved_by", "scene"]
     list_display = (
         "id",
         "character_sheet",
@@ -925,6 +949,7 @@ class GiftUnlockAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterGiftUnlock)
 class CharacterGiftUnlockAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character", "teacher"]
     list_display = ["character", "unlock", "xp_spent", "teacher", "acquired_at"]
     search_fields = ["character__name"]
     readonly_fields = ["acquired_at"]
@@ -932,6 +957,7 @@ class CharacterGiftUnlockAdmin(admin.ModelAdmin):
 
 @admin.register(TechniqueTeachingOffer)
 class TechniqueTeachingOfferAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["teacher"]
     list_display = [
         "teacher",
         "technique",
@@ -1111,6 +1137,8 @@ class FallRedemptionConfigAdmin(admin.ModelAdmin):
 @admin.register(FallRedemptionRecord)
 class FallRedemptionRecordAdmin(admin.ModelAdmin):
     """Read-only admin for Fall/Redemption conversion audit records."""
+
+    autocomplete_fields = ["character_sheet", "scene"]
 
     list_display = (
         "character_sheet",

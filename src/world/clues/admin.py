@@ -13,6 +13,8 @@ from world.clues.models import (
 class ClueAdmin(admin.ModelAdmin):
     """Authoring surface for clues — add/remove/rename freely (data, not code)."""
 
+    autocomplete_fields = ["target_persona", "target_persona_linked"]
+
     list_display = ["name", "target_kind", "get_active_target_name", "resolution_mode"]
     list_filter = ["target_kind", "resolution_mode"]
     search_fields = ["name", "description"]
@@ -25,6 +27,8 @@ class ClueAdmin(admin.ModelAdmin):
 @admin.register(CharacterClue)
 class CharacterClueAdmin(admin.ModelAdmin):
     """Read-only debugging view of who holds which clues."""
+
+    autocomplete_fields = ["roster_entry"]
 
     list_display = ["roster_entry", "clue", "found_at"]
     list_filter = ["clue__target_kind"]

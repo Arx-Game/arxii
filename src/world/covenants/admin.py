@@ -22,6 +22,7 @@ class CovenantRoleAdmin(admin.ModelAdmin):
 
 @admin.register(Covenant)
 class CovenantAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["leader"]
     list_display = ("name", "covenant_type", "level", "formed_at", "dissolved_at")
     list_filter = ("covenant_type",)
     search_fields = ("name",)

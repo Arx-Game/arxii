@@ -25,6 +25,8 @@ class GameClockAdmin(admin.ModelAdmin):
 class GameClockHistoryAdmin(admin.ModelAdmin):
     """Admin for clock change audit log."""
 
+    autocomplete_fields = ["changed_by"]
+
     list_display = [
         "changed_at",
         "changed_by",

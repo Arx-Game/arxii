@@ -19,6 +19,14 @@ from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
 class BlockContactFlagAdmin(admin.ModelAdmin):
     """Staff review of blocked-player contact attempts (#1278)."""
 
+    autocomplete_fields = [
+        "blocked_account",
+        "blocker_account",
+        "initiator_persona",
+        "scene",
+        "target_persona",
+    ]
+
     list_display = [
         "created_at",
         "blocked_account",
@@ -51,6 +59,7 @@ class SceneParticipationInline(admin.TabularInline):
 
 @admin.register(Scene)
 class SceneAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["location", "participants"]
     list_display = [
         "name",
         "location",
@@ -72,6 +81,7 @@ class SceneAdmin(admin.ModelAdmin):
 
 @admin.register(Persona)
 class PersonaAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet", "interactions_targeted"]
     list_display = ["name", "character_sheet", "persona_type", "created_at"]
     list_filter = ["persona_type", "created_at"]
     search_fields = ["name", "character__db_key"]
@@ -86,6 +96,7 @@ class InteractionReceiverInlineForInteraction(admin.TabularInline):
 
 @admin.register(Interaction)
 class InteractionAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["persona", "place", "scene", "target_personas", "writer_account"]
     list_display = ["persona", "mode", "visibility", "scene", "place", "timestamp"]
     list_filter = ["mode", "visibility"]
     search_fields = ["content"]
@@ -94,11 +105,13 @@ class InteractionAdmin(admin.ModelAdmin):
 
 @admin.register(InteractionFavorite)
 class InteractionFavoriteAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["interaction", "roster_entry"]
     list_display = ["interaction", "roster_entry", "created_at"]
 
 
 @admin.register(InteractionReaction)
 class InteractionReactionAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["account", "interaction"]
     list_display = ["interaction", "account", "emoji", "created_at"]
     list_filter = ["emoji"]
 
@@ -112,12 +125,14 @@ class ReactionEmojiAdmin(admin.ModelAdmin):
 
 @admin.register(PersonaDiscovery)
 class PersonaDiscoveryAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["discovered_by", "linked_to", "persona"]
     list_display = ["persona", "linked_to", "discovered_by", "discovered_at"]
     list_filter = ["discovered_at"]
 
 
 @admin.register(SceneSummaryRevision)
 class SceneSummaryRevisionAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["persona", "scene"]
     list_display = ["scene", "persona", "action", "timestamp"]
     list_filter = ["action"]
 
@@ -129,6 +144,7 @@ class PlacePresenceInline(admin.TabularInline):
 
 @admin.register(Place)
 class PlaceAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["room"]
     list_display = ["name", "room", "status", "created_at"]
     list_filter = ["status"]
     search_fields = ["name"]

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 @admin.register(PlayerData)
 class PlayerDataAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["account"]
     list_display: ClassVar[list[str]] = [
         "account",
         "display_name",
@@ -58,6 +59,7 @@ class PlayerDataAdmin(admin.ModelAdmin):
 
 @admin.register(PlayerAllowList)
 class PlayerAllowListAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["allowed_player", "owner"]
     list_display: ClassVar[list[str]] = [
         "owner",
         "allowed_player",
@@ -74,6 +76,7 @@ class PlayerAllowListAdmin(admin.ModelAdmin):
 
 @admin.register(PlayerMedia)
 class PlayerMediaAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["player_data"]
     list_display: ClassVar[list[str]] = [
         "player_data",
         "media_type",
@@ -88,6 +91,7 @@ class PlayerMediaAdmin(admin.ModelAdmin):
 
 @admin.register(ObjectDisplayData)
 class ObjectDisplayDataAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["object"]
     list_display: ClassVar[list[str]] = [
         "object",
         "longname",
@@ -106,6 +110,7 @@ class ObjectDisplayDataAdmin(admin.ModelAdmin):
 
 @admin.register(Artist)
 class ArtistAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["player_data"]
     list_display: ClassVar[list[str]] = ["name", "player_data", "accepting_commissions"]
     list_filter: ClassVar[list[str]] = ["accepting_commissions"]
     search_fields: ClassVar[list[str]] = ["name", "player_data__account__username"]
@@ -119,6 +124,7 @@ with contextlib.suppress(admin.sites.NotRegistered):
 
 @admin.register(EmailAddress)
 class EmailAddressAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["user"]
     list_display = [
         "email",
         "user",
@@ -238,7 +244,7 @@ class RoomProfileAdmin(admin.ModelAdmin):
     list_display: ClassVar[list[str]] = ["objectdb", "area", "size", "is_outdoor", "is_public"]
     list_filter: ClassVar[list[str]] = ["area__level", "is_outdoor", "is_public", "size"]
     search_fields: ClassVar[list[str]] = ["objectdb__db_key"]
-    autocomplete_fields: ClassVar[list[str]] = ["area"]
+    autocomplete_fields: ClassVar[list[str]] = ["area", "objectdb"]
 
 
 @admin.register(RoomSizeTier)

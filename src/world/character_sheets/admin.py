@@ -12,6 +12,9 @@ from world.character_sheets.models import (
 class ProfileAdmin(admin.ModelAdmin):
     """Admin for the narrative bio Profile (#1270)."""
 
+    # owning_sheet is a reverse OneToOneRel — can't use autocomplete_fields/raw_id_fields
+    large_table_widget_exempt = ["owning_sheet"]
+
     list_display = ["__str__", "concept"]
     search_fields = ["concept", "real_concept"]
     raw_id_fields = ("heritage", "origin_realm", "family", "tarot_card")
@@ -51,6 +54,9 @@ class PronounsAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterSheet)
 class CharacterSheetAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["active_persona", "character", "created_by"]
+    # roster_entry is a reverse OneToOneRel — can't use autocomplete_fields/raw_id_fields
+    large_table_widget_exempt = ["roster_entry"]
     list_display = [
         "character",
         "age",

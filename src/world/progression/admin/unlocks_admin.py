@@ -265,6 +265,8 @@ class TierRequirementAdmin(admin.ModelAdmin):
 class CharacterUnlockAdmin(admin.ModelAdmin):
     """Admin interface for CharacterUnlock."""
 
+    autocomplete_fields = ["character"]
+
     list_display = [
         "character",
         "character_class",

@@ -150,6 +150,8 @@ class CharacterCodexKnowledgeAdmin(admin.ModelAdmin):
 class CodexTeachingOfferAdmin(admin.ModelAdmin):
     """Admin interface for CodexTeachingOffer."""
 
+    autocomplete_fields = ["excluded_tenures", "visible_to_tenures"]
+
     list_display = ["teacher", "entry", "banked_ap", "gold_cost", "visibility_mode"]
     list_filter = ["visibility_mode", "entry__subject__category"]
     search_fields = ["teacher__roster_entry__character__db_key", "entry__name", "pitch"]

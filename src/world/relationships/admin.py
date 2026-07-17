@@ -127,6 +127,7 @@ class RelationshipTrackProgressAdmin(admin.ModelAdmin):
 
 @admin.register(RelationshipUpdate)
 class RelationshipUpdateAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["author", "linked_interaction", "linked_scene"]
     list_display = ["title", "relationship", "track", "points_earned", "visibility", "created_at"]
     list_filter = ["visibility", "is_first_impression", "track"]
     search_fields = ["title"]
@@ -136,6 +137,7 @@ class RelationshipUpdateAdmin(admin.ModelAdmin):
 
 @admin.register(RelationshipDevelopment)
 class RelationshipDevelopmentAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["author", "linked_scene"]
     list_display = [
         "title",
         "relationship",
@@ -153,6 +155,7 @@ class RelationshipDevelopmentAdmin(admin.ModelAdmin):
 
 @admin.register(RelationshipCapstone)
 class RelationshipCapstoneAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["author", "linked_scene"]
     list_display = ["title", "relationship", "track", "points", "visibility", "created_at"]
     list_filter = ["visibility", "track"]
     search_fields = ["title"]
@@ -162,6 +165,7 @@ class RelationshipCapstoneAdmin(admin.ModelAdmin):
 
 @admin.register(RelationshipChange)
 class RelationshipChangeAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["author"]
     list_display = [
         "title",
         "relationship",
@@ -179,6 +183,7 @@ class RelationshipChangeAdmin(admin.ModelAdmin):
 
 @admin.register(WriteupComplaint)
 class WriteupComplaintAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["complainant"]
     list_display = [
         "writeup_ref",
         "author_sheet_col",
@@ -219,6 +224,8 @@ class WriteupComplaintAdmin(admin.ModelAdmin):
 @admin.register(BondCombatConfig)
 class BondCombatConfigAdmin(admin.ModelAdmin):
     """Singleton tuning config for relationship bond combat bonuses (#2021)."""
+
+    autocomplete_fields = ["updated_by"]
 
     list_display = (
         "pk",

@@ -5,6 +5,7 @@ from world.instances.models import InstancedRoom
 
 @admin.register(InstancedRoom)
 class InstancedRoomAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["owner", "return_location", "room"]
     list_display = ["room", "owner", "status", "source_key", "created_at"]
     list_filter = ["status"]
     search_fields = ["room__db_key", "source_key"]

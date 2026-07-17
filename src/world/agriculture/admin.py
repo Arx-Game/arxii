@@ -52,6 +52,7 @@ class FoodConfigAdmin(admin.ModelAdmin):
 
 @admin.register(FoodTransfer)
 class FoodTransferAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["acting_persona"]
     list_display = ["source_domain", "target_domain", "amount", "acting_persona", "created_at"]
     readonly_fields = ["created_at"]
     search_fields = ["source_domain__name", "target_domain__name"]

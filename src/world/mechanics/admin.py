@@ -129,6 +129,7 @@ class PropertyCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Property)
 class PropertyAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["personas"]
     list_display = ["name", "category"]
     list_filter = ["category"]
     search_fields = ["name"]
@@ -272,6 +273,7 @@ class SituationInstanceAdmin(admin.ModelAdmin):
 
 @admin.register(ChallengeInstance)
 class ChallengeInstanceAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["target_object"]
     list_display = ["template", "location", "is_active", "is_revealed"]
     list_filter = ["is_active", "is_revealed"]
     raw_id_fields = ["location", "situation_instance"]
@@ -291,6 +293,7 @@ class ContextConsequencePoolAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterEngagement)
 class CharacterEngagementAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = ("character", "engagement_type", "escalation_level", "started_at")
     list_filter = ("engagement_type",)
     readonly_fields = ("started_at",)

@@ -14,6 +14,8 @@ from world.player_submissions.models import (
 class SystemErrorReportAdmin(admin.ModelAdmin):
     """Auto-captured runtime errors (#1164) — the staff queue's system-error lane."""
 
+    autocomplete_fields = ["actor_persona"]
+
     list_display = ["exception_type", "label", "occurrence_count", "last_seen", "status"]
     list_filter = ["status", "exception_type", "last_seen"]
     search_fields = ["label", "exception_type", "message", "traceback"]
@@ -22,6 +24,7 @@ class SystemErrorReportAdmin(admin.ModelAdmin):
 
 @admin.register(PlayerFeedback)
 class PlayerFeedbackAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["location", "reporter_account", "reporter_persona"]
     list_display = ["id", "reporter_account", "reporter_persona", "status", "created_at"]
     list_filter = ["status", "created_at"]
     search_fields = ["description"]
@@ -30,6 +33,7 @@ class PlayerFeedbackAdmin(admin.ModelAdmin):
 
 @admin.register(BugReport)
 class BugReportAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["location", "reporter_account", "reporter_persona"]
     list_display = ["id", "reporter_account", "reporter_persona", "status", "created_at"]
     list_filter = ["status", "created_at"]
     search_fields = ["description"]
@@ -38,6 +42,15 @@ class BugReportAdmin(admin.ModelAdmin):
 
 @admin.register(PlayerReport)
 class PlayerReportAdmin(admin.ModelAdmin):
+    autocomplete_fields = [
+        "interaction",
+        "location",
+        "reported_account",
+        "reported_persona",
+        "reporter_account",
+        "reporter_persona",
+        "scene",
+    ]
     list_display = [
         "id",
         "reporter_account",

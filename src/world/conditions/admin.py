@@ -267,11 +267,12 @@ class ConditionInstanceAdmin(admin.ModelAdmin):
         "source_description",
     ]
     autocomplete_fields = [
-        "target",
         "condition",
         "current_stage",
+        "detected_by",
         "source_character",
         "source_technique",
+        "target",
     ]
     readonly_fields = ["applied_at"]
 

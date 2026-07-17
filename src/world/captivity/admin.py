@@ -7,6 +7,7 @@ from world.captivity.models import Captivity
 
 @admin.register(Captivity)
 class CaptivityAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["holding_room", "return_location"]
     list_display = (
         "captive",
         "status",

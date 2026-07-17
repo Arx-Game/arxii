@@ -173,6 +173,12 @@ class ItemStyleInline(admin.TabularInline):
 
 @admin.register(ItemInstance)
 class ItemInstanceAdmin(admin.ModelAdmin):
+    autocomplete_fields = [
+        "attuned_to_character_sheet",
+        "contained_in",
+        "designer_character_sheet",
+        "designer_persona_display",
+    ]
     list_display = [
         "display_name",
         "template",

@@ -52,6 +52,8 @@ class SpecializationAdmin(admin.ModelAdmin):
 class CharacterSkillValueAdmin(admin.ModelAdmin):
     """Admin for character skill values."""
 
+    autocomplete_fields = ["character"]
+
     list_display = [
         "character",
         "skill",
@@ -72,6 +74,8 @@ class CharacterSkillValueAdmin(admin.ModelAdmin):
 @admin.register(CharacterSpecializationValue)
 class CharacterSpecializationValueAdmin(admin.ModelAdmin):
     """Admin for character specialization values."""
+
+    autocomplete_fields = ["character"]
 
     list_display = [
         "character",
