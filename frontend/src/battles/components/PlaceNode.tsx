@@ -15,6 +15,7 @@ import { Flame, PawPrint, Plane, Shield, ShieldAlert, Ship, Waves } from 'lucide
 import type { LucideIcon } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { useMapNodeInteraction } from '@/map-canvas/useMapNodeInteraction';
 
 import type { BattlePlace, BattleVehicleSummary } from '../types';
 
@@ -30,7 +31,7 @@ export interface PlaceNodeData extends Record<string, unknown> {
    * Final rendered diameter in canvas px — already
    * ``Math.max(MIN_SIZE_PX, Math.round(radiusToPixels(...) * 2))`` (computed
    * by BattleMapCanvas, which also uses it to center the node's position via
-   * ``centeredNodePosition``, see ../mapMath.ts).
+   * ``centeredNodePosition``, see @/map-canvas/coords.ts).
    */
   sizePx: number;
   selected: boolean;
@@ -63,22 +64,15 @@ function PlaceNodeComponent({ data }: NodeProps<PlaceNodeType>) {
   const VehicleIcon = vehicle ? VEHICLE_ICON[vehicle.vehicle_kind] : null;
   const hasFortifications = place.fortifications.length > 0;
   const hasBreach = place.fortifications.some((fort) => fort.breached);
+  const interaction = useMapNodeInteraction({ onSelect: () => data.onSelect(place.id) });
 
   return (
     <div
-      role="button"
-      tabIndex={0}
+      {...interaction}
       style={{ width: size, height: size }}
       className={`flex flex-col items-center justify-center gap-1 rounded-full border-2 bg-card p-2 text-center shadow-sm transition-colors hover:border-primary/60 ${ROLE_RING[roleKey]} ${
         selected ? 'ring-4 ring-foreground/30' : ''
       }`}
-      onClick={() => data.onSelect(place.id)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          data.onSelect(place.id);
-        }
-      }}
       data-testid="battle-place-node"
       data-place-id={place.id}
     >

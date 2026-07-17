@@ -2,13 +2,31 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CANVAS_SIZE,
+  CELL,
+  cellToPosition,
   centeredNodePosition,
   computeBounds,
   PADDING,
   planeToCanvas,
+  positionToCell,
   radiusToPixels,
   type PlaneBounds,
-} from './mapMath';
+} from './coords';
+
+describe('cellToPosition / positionToCell', () => {
+  it('renders north (+grid_y) upward (negative screen y)', () => {
+    expect(cellToPosition({ x: 0, y: 1 })).toEqual({ x: 0, y: -CELL });
+    expect(cellToPosition({ x: 2, y: -1 })).toEqual({ x: 2 * CELL, y: CELL });
+  });
+
+  it('round-trips through a drag position with snapping', () => {
+    const position = cellToPosition({ x: 3, y: 2 });
+    expect(positionToCell({ x: position.x + CELL * 0.3, y: position.y - CELL * 0.2 })).toEqual({
+      x: 3,
+      y: 2,
+    });
+  });
+});
 
 describe('computeBounds', () => {
   it('spans the tightest box over known places plus padding', () => {

@@ -9,30 +9,16 @@
  */
 
 import { useCallback, useEffect, useMemo } from 'react';
-import {
-  Background,
-  Controls,
-  type Edge,
-  type Node,
-  ReactFlow,
-  ReactFlowProvider,
-  useNodesState,
-} from '@xyflow/react';
+import { type Edge, type Node, useNodesState } from '@xyflow/react';
 
-import {
-  CELL,
-  cellToPosition,
-  exitEdges,
-  ghostCells,
-  positionToCell,
-  type ExitEdge,
-  type GhostCell,
-} from '../gridMath';
+import { CELL, cellToPosition, positionToCell } from '@/map-canvas/coords';
+import { exitEdges, type ExitEdge } from '@/map-canvas/edges';
+import { MapCanvasShell } from '@/map-canvas/MapCanvasShell';
+
+import { ghostCells, type GhostCell } from '../gridMath';
 import type { BuildingManagerPayload } from '../types';
 import type { RoomBuilderActionKey } from '../types';
 import { GhostNode, RoomNode } from './RoomNode';
-
-import '@xyflow/react/dist/style.css';
 
 const nodeTypes = { room: RoomNode, ghost: GhostNode };
 
@@ -48,15 +34,7 @@ export interface BuilderCanvasProps {
   runAction: (key: RoomBuilderActionKey, kwargs: Record<string, unknown>) => void;
 }
 
-export function BuilderCanvas(props: BuilderCanvasProps) {
-  return (
-    <ReactFlowProvider>
-      <BuilderCanvasInner {...props} />
-    </ReactFlowProvider>
-  );
-}
-
-function BuilderCanvasInner({
+export function BuilderCanvas({
   payload,
   floor,
   selectedRoomId,
@@ -159,21 +137,17 @@ function BuilderCanvasInner({
   );
 
   return (
-    <div className="h-full w-full" data-testid="builder-canvas">
-      <ReactFlow
-        nodes={nodes}
-        edges={computedEdges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onNodeDragStop={onNodeDragStop}
-        onEdgeClick={onEdgeClick}
-        fitView
-        snapToGrid
-        snapGrid={[CELL, CELL]}
-      >
-        <Background gap={CELL} />
-        <Controls />
-      </ReactFlow>
-    </div>
+    <MapCanvasShell
+      testId="builder-canvas"
+      nodes={nodes}
+      edges={computedEdges}
+      nodeTypes={nodeTypes}
+      onNodesChange={onNodesChange}
+      onNodeDragStop={onNodeDragStop}
+      onEdgeClick={onEdgeClick}
+      snapToGrid
+      snapGrid={[CELL, CELL]}
+      backgroundGap={CELL}
+    />
   );
 }
