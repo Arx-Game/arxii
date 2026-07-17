@@ -73,15 +73,19 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
         goals = CharacterGoal.objects.filter(character=character).select_related("domain")
         total_points = sum(g.points for g in goals)
 
-        revision, _ = GoalRevision.objects.get_or_create(character=character)
+        # Read-only (2026-07 audit): this list GET used get_or_create, a DB write
+        # inside a GET (breaks read-replica/caching assumptions and, worse, a
+        # brand-new character was created with last_revised_at=now, so they
+        # couldn't revise for a week). A missing revision means never-revised.
+        revision = GoalRevision.objects.filter(character=character).first()
 
         data = {
             "goals": CharacterGoalSerializer(goals, many=True).data,
             "total_points": total_points,
             "points_remaining": MAX_GOAL_POINTS - total_points,
             "revision": {
-                "last_revised_at": revision.last_revised_at,
-                "can_revise": revision.can_revise(),
+                "last_revised_at": revision.last_revised_at if revision else None,
+                "can_revise": revision.can_revise() if revision else True,
             },
         }
 

@@ -159,6 +159,28 @@ class CharacterGoalViewSetTests(TestCase):
         assert response.data["points_remaining"] == MAX_GOAL_POINTS - 15
 
     @patch("world.goals.views.CharacterGoalViewSet._get_character")
+    def test_list_goals_is_read_only(self, mock_get_char):
+        """The list GET creates no GoalRevision row (2026-07 audit).
+
+        It used get_or_create — a write inside a GET that also stamped a new
+        character with last_revised_at=now, locking them out of revising for a
+        week. A character who never revised should read can_revise=True with no
+        row written.
+        """
+        from world.goals.models import GoalRevision
+
+        mock_get_char.return_value = self.character
+        assert not GoalRevision.objects.filter(character=self.character).exists()
+
+        response = self.client.get("/api/goals/my-goals/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["revision"]["can_revise"] is True
+        assert response.data["revision"]["last_revised_at"] is None
+        # The GET must not have written a revision row.
+        assert not GoalRevision.objects.filter(character=self.character).exists()
+
+    @patch("world.goals.views.CharacterGoalViewSet._get_character")
     def test_list_goals_no_character(self, mock_get_char):
         """Returns 404 when user has no character."""
         mock_get_char.return_value = None

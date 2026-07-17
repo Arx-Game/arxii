@@ -64,6 +64,46 @@ class OrganizationApiTests(TestCase):
         self.assertIn(self.organization.id, ids)
         self.assertNotIn(cov_membership.organization.id, ids)
 
+    def test_house_payload_is_bounded_regardless_of_org_count(self) -> None:
+        """The org list query count doesn't grow with the number of family orgs (2026-07 audit).
+
+        OrganizationSerializer.get_house used to fire ~6 queries per org with a
+        family; the viewset now prefetches the house relations so a page of many
+        houses costs the same as one.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from evennia.utils.idmapper.models import flush_cache
+
+        from world.roster.factories import FamilyFactory
+
+        staff = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=staff)
+        url = reverse("societies:organization-list")
+
+        OrganizationFactory(family=FamilyFactory())
+        self.client.get(url)  # warm up (session middleware)
+        # Flush the SharedMemoryModel identity map before each capture — otherwise
+        # a warmed request serves cached relations and undercounts the prefetches.
+        flush_cache()
+        with CaptureQueriesContext(connection) as one_ctx:
+            self.client.get(url)
+        one_org = len(one_ctx.captured_queries)
+
+        # Four more family orgs must not scale the query count.
+        for _ in range(4):
+            OrganizationFactory(family=FamilyFactory())
+        flush_cache()
+        with CaptureQueriesContext(connection) as five_ctx:
+            self.client.get(url)
+        five_orgs = len(five_ctx.captured_queries)
+
+        self.assertEqual(
+            five_orgs,
+            one_org,
+            f"House payload query count scaled with org count: {one_org} -> {five_orgs}",
+        )
+
     def test_staff_sees_all_non_covenant_organizations(self) -> None:
         """Staff users see every non-covenant organization, regardless of membership."""
         staff_account = AccountFactory(is_staff=True)
