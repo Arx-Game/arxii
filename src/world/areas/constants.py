@@ -13,6 +13,18 @@ class AreaLevel(models.IntegerChoices):
     PLANE = 90, "Plane"
 
 
+class GridOrigin(models.TextChoices):
+    """Who authored a grid element — drives export capture (#2436/#2448).
+
+    AUTHORED rows (with identity keys) export to the lore repo; STORY (GM)
+    and PLAYER rows never do. Promotion to AUTHORED is a deliberate staff act.
+    """
+
+    AUTHORED = "authored", "Authored (canonical, exported)"
+    STORY = "story", "GM Story (never exported)"
+    PLAYER = "player", "Player-built (never exported)"
+
+
 # Area quality ladder (PLACEHOLDER labels, staff-tunable).
 AREA_QUALITY_MIN = 0
 AREA_QUALITY_MAX = 5
