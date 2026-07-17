@@ -88,6 +88,7 @@ treat those names as hints to confirm, not gospel.
 - [0093 — Game Tuning/Ops dashboards stay on the stock ArxAdminSite with django-htmx, not django-unfold](0093-admin-hosted-tuning-dashboard-htmx-without-unfold.md) (narrows ADR-0022's implementation detail)
 - [0083 — CI/test databases build schema from model state; migration replay runs nightly only](0083-ci-schema-from-models.md)
 - [0084 — SQLite fast tier restores a cached schema template instead of rebuilding per run](0084-sqlite-test-schema-template-cache.md)
+- [0137 — CI shards balanced by measured runtime; oversized apps split via generated module labels](0137-ci-shards-balanced-by-measured-runtime-with-generated-splits.md) (extends ADR-0083's CI pipeline)
 
 ### Game-design tenets
 - [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)

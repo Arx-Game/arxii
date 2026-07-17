@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.factories import (
@@ -17,6 +17,7 @@ from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
     QualityTierFactory,
+    install_full_lab_station,
     wire_enchanting_crafting,
 )
 from world.items.services.crafting import craft_attach_facet
@@ -43,11 +44,18 @@ class CraftedFacetPowersFacetPullTest(TestCase):
         # Wire the Enchanting skill + CheckType + crafting config singleton.
         wire_enchanting_crafting(base_difficulty=0)
 
+        # requires_station defaults True (#1234) — put the crafter in a room
+        # with a full Lab station so the craft step passes the station gate.
+        self.room_profile = RoomProfileFactory()
+        install_full_lab_station(self.room_profile)
+
         # A wide quality tier so any score resolves to something.
         QualityTierFactory(name="Common", numeric_min=0, numeric_max=9999, sort_order=0)
 
         # Character sheet + the prerequisites the pull service requires.
         self.sheet = CharacterSheetFactory()
+        self.sheet.character.location = self.room_profile.objectdb
+        self.sheet.character.save()
         CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
         self.resonance = ResonanceFactory()
         CharacterResonanceFactory(
