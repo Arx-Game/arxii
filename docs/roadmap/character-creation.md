@@ -1,22 +1,24 @@
 # Character Creation & Identity
 
-## Built (2026-07-17 — Arx beginnings authored: Caretaker / Sleeper / Misbegotten)
+## Built (2026-07-17 — Arx beginnings authored as lore-repo content; content-only-in-lore-repo ruling)
 
-- The three Arx `Beginnings` are now real authored content (replacing the
-  "Commoner"/"Noble" placeholders, which the seeder retires when untouched):
-  full player-facing descriptions, species gates (Sleeper: Human + Nox'alfar +
-  Sylv'alfar; Misbegotten: Human + Daeva + all elves via the new `Elf` parent
-  species; `grants_species_languages=False`), heritage wiring, and
-  `BeginningTradition` links to the three authored Arx traditions ("The Vigil"
-  — renamed from "Caretakers" — "Metallic Order", "Fractals of the Abyss")
-  when those lore-fixture rows exist. Canonical prose + rulings live in the
-  lore repo's `beginnings/arx.md`; `Beginnings`/`CGExplanation` joined
-  `CONTENT_MODELS` so the content round-trips to the lore repo.
-- Still open from that authoring pass: "Arvani Common" (no `Language` rows
-  exist yet, so `starting_languages` is unwired), elf/Daeva form traits, the
-  Sleeper waking-tomb `starting_room_override`, and the Misbegotten orphanage
-  ("the Cradle") + ghost-tutor training mechanics (issues filed from the
-  lore-repo doc's follow-ups list).
+- The three Arx `Beginnings` (Caretaker / Sleeper / Misbegotten) are now real
+  authored content — but they live **entirely in the private lore repo** as
+  natural-key fixtures (`fixtures/character_creation/beginnings.json` +
+  `beginningtradition.json`, canonical prose + rulings in `beginnings/arx.md`),
+  loaded via `load_world_content` and exported back via `content_export`.
+  **Ruling (TehomCD):** real content never expands this repo's seed data — the
+  public-repo leak risk is permanent — so seeds keep only generic bootstrap
+  placeholders, and content work needs no arxii PR unless schema/structure
+  changes. This PR's arxii side is structural only: `character_creation.
+  beginnings` + `cgexplanation` joined `CONTENT_MODELS` (CGExplanation gained
+  its natural key), and `ensure_content_repo.sh` enables the lore repo's
+  pre-push guard hook after fresh clones.
+- Content still to author (lore repo) / open issues: ghost-tutor training for
+  the orphaned Arx traditions (#2460, needs-design), "the Keeping"
+  coming-of-age house grant (#2461, needs-design), waking-tomb + Cradle rooms
+  (#2462, grid epic #2436), Arvani Common + elf/Daeva form traits (#2463 —
+  `Language` has zero rows anywhere yet).
 
 ## Built (2026-07-16, #2426 — CG magic revamp: Path → Tradition → Gift → Technique)
 

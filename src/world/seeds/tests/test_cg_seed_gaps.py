@@ -76,44 +76,16 @@ class RealmAndAreaSeedTests(TestCase):
         self.assertEqual(luxen.realm.name, "Luxen")
 
     def test_multiple_beginnings(self):
-        """Seed creates the three Arx beginnings (beginnings/arx.md)."""
+        """Seed creates both Commoner and Noble beginnings."""
         seed_character_creation_dev()
         from world.character_creation.models import Beginnings
 
-        caretaker = Beginnings.objects.get(name="Caretaker")
-        self.assertTrue(caretaker.family_known)
-        sleeper = Beginnings.objects.get(name="Sleeper")
-        self.assertFalse(sleeper.family_known)
-        self.assertEqual(sleeper.heritage.name, "Sleeper")
-        misbegotten = Beginnings.objects.get(name="Misbegotten")
-        self.assertFalse(misbegotten.family_known)
-        self.assertEqual(misbegotten.heritage.name, "Misbegotten")
-        self.assertFalse(misbegotten.grants_species_languages)
-
-    def test_placeholder_beginnings_retired(self):
-        """Pre-content 'Commoner'/'Noble' placeholder rows are deactivated."""
-        from world.character_creation.models import Beginnings, StartingArea
-        from world.realms.models import Realm
-
-        realm, _ = Realm.objects.get_or_create(name="Arx", defaults={"description": "x"})
-        area, _ = StartingArea.objects.get_or_create(
-            name="Arx City", defaults={"description": "x", "realm": realm}
-        )
-        placeholder, _ = Beginnings.objects.get_or_create(
-            starting_area=area,
-            name="Commoner",
-            defaults={"description": "A common beginning.", "is_active": True},
-        )
-        edited, _ = Beginnings.objects.get_or_create(
-            starting_area=area,
-            name="Noble",
-            defaults={"description": "Staff rewrote this one.", "is_active": True},
-        )
-        seed_character_creation_dev()
-        placeholder.refresh_from_db()
-        edited.refresh_from_db()
-        self.assertFalse(placeholder.is_active)
-        self.assertTrue(edited.is_active, "edited rows must never be touched")
+        self.assertTrue(Beginnings.objects.filter(name="Commoner").exists())
+        self.assertTrue(Beginnings.objects.filter(name="Noble").exists())
+        noble = Beginnings.objects.get(name="Noble")
+        self.assertTrue(noble.family_known)
+        commoner = Beginnings.objects.get(name="Commoner")
+        self.assertFalse(commoner.family_known)
 
     def test_multiple_species(self):
         """Seed creates both Human and Khati species."""
@@ -122,26 +94,22 @@ class RealmAndAreaSeedTests(TestCase):
         self.assertTrue(Species.objects.filter(name="Khati").exists())
 
     def test_beginnings_allow_correct_species(self):
-        """Species gates match beginnings/arx.md; Luxen allows Human + Khati."""
+        """Arx beginnings allow Human only; Luxen beginnings allow Human + Khati."""
         seed_character_creation_dev()
         from world.character_creation.models import Beginnings
 
-        def gate(name: str) -> set[str]:
+        # Arx beginnings: Human only
+        for name in ["Commoner", "Noble"]:
             b = Beginnings.objects.get(name=name)
-            return {s.name for s in b.allowed_species.all()}
+            species_names = {s.name for s in b.allowed_species.all()}
+            self.assertIn("Human", species_names)
+            self.assertNotIn("Khati", species_names, f"{name} should not allow Khati")
 
-        self.assertEqual(gate("Caretaker"), {"Human"})
-        self.assertEqual(gate("Sleeper"), {"Human", "Nox'alfar", "Sylv'alfar"})
-        # Misbegotten grants all elves via the Elf parent row.
-        self.assertEqual(gate("Misbegotten"), {"Human", "Daeva", "Elf"})
-        misbegotten = Beginnings.objects.get(name="Misbegotten")
-        expanded = {s.name for s in misbegotten.get_available_species()}
-        self.assertTrue(
-            {"Nox'alfar", "Sylv'alfar", "Rex'alfar"} <= expanded,
-            f"Elf parent should expand to all elves, got {expanded}",
-        )
-        self.assertNotIn("Khati", expanded)
-        self.assertEqual(gate("Luxen Commoner"), {"Human", "Khati"})
+        # Luxen beginnings: Human + Khati
+        luxen = Beginnings.objects.get(name="Luxen Commoner")
+        species_names = {s.name for s in luxen.allowed_species.all()}
+        self.assertIn("Human", species_names)
+        self.assertIn("Khati", species_names)
 
     def test_starting_areas_have_rooms(self):
         """Every seeded StartingArea has a default_starting_room."""

@@ -311,68 +311,6 @@ def ensure_tradition_training_distinction() -> None:
 _UNBOUND_TRADITION_NAME = "Unbound"
 
 
-# The three Arx traditions, authored in the lore repo (beginnings/arx.md;
-# fixtures/magic/tradition.json). Tradition rows are content-fixture data, not
-# seeded here — the links below attach whichever of them exist.
-_ARX_TRADITION_NAMES: tuple[str, ...] = (
-    "The Vigil",
-    "Metallic Order",
-    "Fractals of the Abyss",
-)
-
-_ARX_BEGINNING_NAMES: tuple[str, ...] = ("Caretaker", "Sleeper", "Misbegotten")
-
-# Player-facing Beginnings descriptions. Canonical text lives in the lore
-# repo's beginnings/arx.md ("Player-facing description" blocks) — edit there
-# first, then mirror here.
-_CARETAKER_DESC = (
-    "Arx is a city built for three million that holds fifty thousand, and your "
-    "family has tended it for a thousand years. You grew up under the Shroud's "
-    "grey twilight: sweeping steps no one would climb, lighting lamps in streets "
-    "where nothing living walked, learning the names of every house on your row — "
-    "including the empty ones. Especially the empty ones. Your people were offered "
-    "the Great Callings and stayed; someone had to keep the city. When you came of "
-    "age you were deeded a dark house of your own from among the countless empty, "
-    "and you read its registry aloud the day you took the keys, so the house would "
-    "know it was remembered. Then the Vanishing took the teachers, the Shroud "
-    "fell, and the world outside — older now by ages you cannot count — began "
-    "speaking your city's name like a prayer. The duty your family deferred for "
-    "forty generations has come due. It is time, at last, to complete the Durance."
-)
-
-_SLEEPER_DESC = (
-    "You woke in the dark beneath Arx, in a tomb that was never quite a grave. The "
-    "stone lid moved because you pushed it; the cold preserving light faded as you "
-    "sat up; and cut into the slab where your head had lain was a single line of "
-    "text: your name. It is the only thing you have. Not your family, not your "
-    "first language, not the reason you were set aside like a letter addressed to "
-    "someone not yet born. The Caretakers found you wandering the necropolis and "
-    "took you in gently — they have found others like you, more and more since the "
-    "Shroud fell, and no one says aloud what everyone thinks about the timing. "
-    "Sometimes your hands know things. A ward-sign drawn without thinking. A "
-    "phrase of the craft pronounced a way that makes your teachers go quiet, "
-    "because it is how their tradition sounded before their tradition began. "
-    "Whoever preserved you meant you for something. The Vanishing took everyone "
-    "who might have remembered what."
-)
-
-_MISBEGOTTEN_DESC = (
-    "No one carried you into the world. The Tree of Souls simply had you, the way "
-    "a tree has fruit: you were found at its roots, an infant with no mother, no "
-    "lineage, and no explanation, and the Vigil carried you to the Cradle to be "
-    "raised with the others like you. Arx lives easily with its ghosts, but it has "
-    "never decided what you are — blessing or omen — so it treats you carefully, "
-    "like a dropped thing that might be sacred: doors close politely as you pass, "
-    "and prayers are said just after. Inside the Cradle you had what the rest of "
-    "the ghost city forgot it missed. Noise. Siblings. A family assembled from "
-    "foundlings, fiercer for being chosen. You speak the common tongue of Arx and "
-    "nothing older; whatever people the Tree shaped you from, it did not pass "
-    "along their words. And the question follows you up every empty street: the "
-    "Tree keeps making people, in the emptiest city in the world, in the hour of "
-    "its greatest need. What are you for?"
-)
-
-
 def seed_beginning_traditions() -> None:
     """Seed a BeginningTradition (Unbound, no gate) for every seeded Beginnings row.
 
@@ -413,165 +351,6 @@ def seed_beginning_traditions() -> None:
             tradition=unbound,
             defaults={"required_distinction": None, "sort_order": 0},
         )
-
-    # Arx beginnings additionally offer the city's three orphaned traditions
-    # (lore repo: beginnings/arx.md). Those Tradition rows are authored content
-    # loaded from the lore-repo fixture, not seeded — link whichever exist, so
-    # a fixture-less dev DB still seeds cleanly with just Unbound.
-    arx_traditions = list(Tradition.objects.filter(name__in=_ARX_TRADITION_NAMES, is_active=True))
-    arx_beginnings = Beginnings.objects.filter(
-        starting_area__name="Arx City", name__in=_ARX_BEGINNING_NAMES
-    )
-    for beginning in arx_beginnings:
-        for sort_order, tradition in enumerate(arx_traditions, start=1):
-            BeginningTradition.objects.get_or_create(
-                beginning=beginning,
-                tradition=tradition,
-                defaults={"required_distinction": None, "sort_order": sort_order},
-            )
-
-
-def _seed_beginnings(area: StartingArea, area_luxen: StartingArea) -> tuple[Species, Species]:
-    """Seed the Arx and Luxen Beginnings rows, species gates, and heritages.
-
-    Canonical player-facing text and per-beginning mechanical gates live in
-    the lore repo (beginnings/arx.md) — edit there first, mirror here.
-
-    Returns the (Human, Khati) rows the caller wires into form traits.
-    """
-    human, _ = Species.objects.get_or_create(
-        name="Human",
-        defaults={"description": "The default species.", "sort_order": 0},
-    )
-    khati, _ = Species.objects.get_or_create(
-        name="Khati",
-        defaults={
-            "description": "A feline species known for agility and perception.",
-            "sort_order": 1,
-        },
-    )
-    daeva, _ = Species.objects.get_or_create(
-        name="Daeva",
-        defaults={
-            "description": "Angelic beings with divine heritage, always bearing feathered wings.",
-            "sort_order": 30,
-        },
-    )
-    # Elves begin only in Arx (world-lore-reference; lore repo). The parent row
-    # exists so allowed_species can grant "all elves" via parent expansion.
-    elf, _ = Species.objects.get_or_create(
-        name="Elf",
-        defaults={
-            "description": "The elder peoples of the deep ages. Elves begin only in Arx.",
-            "sort_order": 40,
-        },
-    )
-    nox, _ = Species.objects.get_or_create(
-        name="Nox'alfar",
-        defaults={
-            "description": (
-                "Dark elves of the deep past, night-bound and easy among the dead. "
-                "Sunlight is lethal to them; the grey twilight of Arx never was."
-            ),
-            "parent": elf,
-            "sort_order": 41,
-        },
-    )
-    sylv, _ = Species.objects.get_or_create(
-        name="Sylv'alfar",
-        defaults={
-            "description": (
-                "Wood elves, children of the old forests who once settled Arvum "
-                "before the world outside forgot them."
-            ),
-            "parent": elf,
-            "sort_order": 42,
-        },
-    )
-    Species.objects.get_or_create(
-        name="Rex'alfar",
-        defaults={
-            "description": (
-                "High elves of lost Caer'alfar, rarest and proudest of the elder peoples."
-            ),
-            "parent": elf,
-            "sort_order": 43,
-        },
-    )
-    # Heritage rows must exist before the Arx beginnings that FK them.
-    _seed_heritages()
-    heritage_sleeper = Heritage.objects.get(name="Sleeper")
-    heritage_misbegotten = Heritage.objects.get(name="Misbegotten")
-    beginnings_caretaker, _ = Beginnings.objects.get_or_create(
-        starting_area=area,
-        name="Caretaker",
-        defaults={
-            "description": _CARETAKER_DESC,
-            "trust_required": 0,
-            "is_active": True,
-            "sort_order": 0,
-            "family_known": True,
-        },
-    )
-    beginnings_sleeper, _ = Beginnings.objects.get_or_create(
-        starting_area=area,
-        name="Sleeper",
-        defaults={
-            "description": _SLEEPER_DESC,
-            "trust_required": 0,
-            "is_active": True,
-            "sort_order": 1,
-            "family_known": False,
-            "heritage": heritage_sleeper,
-        },
-    )
-    beginnings_misbegotten, _ = Beginnings.objects.get_or_create(
-        starting_area=area,
-        name="Misbegotten",
-        defaults={
-            "description": _MISBEGOTTEN_DESC,
-            "trust_required": 0,
-            "is_active": True,
-            "sort_order": 2,
-            "family_known": False,
-            "heritage": heritage_misbegotten,
-            "grants_species_languages": False,
-        },
-    )
-    beginnings_luxen, _ = Beginnings.objects.get_or_create(
-        starting_area=area_luxen,
-        name="Luxen Commoner",
-        defaults={
-            "description": "A common beginning in the sunlit port of Luxen.",
-            "trust_required": 0,
-            "is_active": True,
-            "sort_order": 3,
-            "family_known": False,
-        },
-    )
-    # Retire the pre-content Arx placeholders. Exact-description guard: a row
-    # staff have edited no longer matches and is never touched.
-    stale_placeholders = Beginnings.objects.filter(
-        starting_area=area,
-        name__in=("Commoner", "Noble"),
-        description__in=(
-            "A common beginning.",
-            "A noble upbringing with known family and standing.",
-        ),
-        is_active=True,
-    )
-    for stale in stale_placeholders:
-        stale.is_active = False
-        stale.save(update_fields=["is_active"])
-    # Species gates (beginnings/arx.md): Caretaker is Human; Sleeper adds the
-    # night and wood elves; Misbegotten spans Human, Daeva, and all elves (via
-    # the Elf parent). Luxen: Human + Khati.
-    beginnings_caretaker.allowed_species.add(human)
-    beginnings_sleeper.allowed_species.add(human, nox, sylv)
-    beginnings_misbegotten.allowed_species.add(human, daeva, elf)
-    beginnings_luxen.allowed_species.add(human)
-    beginnings_luxen.allowed_species.add(khati)
-    return human, khati
 
 
 def seed_character_creation_dev() -> None:
@@ -622,7 +401,57 @@ def seed_character_creation_dev() -> None:
     if area_luxen.default_starting_room_id is None:
         area_luxen.default_starting_room = ensure_canonical_fallback_room().room_profile
         area_luxen.save(update_fields=["default_starting_room"])
-    species, species_khati = _seed_beginnings(area, area_luxen)
+    species, _ = Species.objects.get_or_create(
+        name="Human",
+        defaults={"description": "The default species.", "sort_order": 0},
+    )
+    species_khati, _ = Species.objects.get_or_create(
+        name="Khati",
+        defaults={
+            "description": "A feline species known for agility and perception.",
+            "sort_order": 1,
+        },
+    )
+    beginnings, _ = Beginnings.objects.get_or_create(
+        name="Commoner",
+        defaults={
+            "description": "A common beginning.",
+            "starting_area": area,
+            "trust_required": 0,
+            "is_active": True,
+            "sort_order": 0,
+            "family_known": False,
+        },
+    )
+    beginnings_noble, _ = Beginnings.objects.get_or_create(
+        name="Noble",
+        defaults={
+            "description": "A noble upbringing with known family and standing.",
+            "starting_area": area,
+            "trust_required": 0,
+            "is_active": True,
+            "sort_order": 1,
+            "family_known": True,
+        },
+    )
+    beginnings_luxen, _ = Beginnings.objects.get_or_create(
+        name="Luxen Commoner",
+        defaults={
+            "description": "A common beginning in the sunlit port of Luxen.",
+            "starting_area": area_luxen,
+            "trust_required": 0,
+            "is_active": True,
+            "sort_order": 2,
+            "family_known": False,
+        },
+    )
+    # Arx beginnings: Human only. Luxen beginnings: Human + Khati.
+    # This tests the species-filtering UI — Khati only appears when Luxen
+    # is selected as the starting area.
+    beginnings.allowed_species.add(species)
+    beginnings_noble.allowed_species.add(species)
+    beginnings_luxen.allowed_species.add(species)
+    beginnings_luxen.allowed_species.add(species_khati)
     Gender.objects.get_or_create(
         key="male",
         defaults={"display_name": "Male", "is_default": False},
@@ -668,6 +497,7 @@ def seed_character_creation_dev() -> None:
     )
     _seed_form_traits(species)
     _seed_form_traits(species_khati)
+    _seed_heritages()
     _seed_pronouns()
     _seed_commoner_families(realm)
     for stat_name in DEFAULT_STAT_NAMES:

@@ -99,7 +99,7 @@ class TestSeededCharacterCreation(TestCase):
         )
         beginnings = CharacterDraft._meta.get_field(
             "selected_beginnings"
-        ).related_model.objects.get(name="Caretaker")
+        ).related_model.objects.get(name="Commoner")
         species = CharacterDraft._meta.get_field("selected_species").related_model.objects.get(
             name="Human"
         )
