@@ -215,7 +215,7 @@ describe('GlimpseFlow', () => {
     const onChangeProse = vi.fn();
     render(<GlimpseFlow {...makeProps({ onChangeProse })} />);
 
-    await user.type(screen.getByLabelText('The Glimpse'), 'a');
+    await user.type(screen.getByLabelText('Your Story'), 'a');
 
     expect(onChangeProse).toHaveBeenCalled();
   });
@@ -226,8 +226,44 @@ describe('GlimpseFlow', () => {
     expect(screen.queryByText('Tone')).not.toBeInTheDocument();
     expect(screen.queryByText('Consequence')).not.toBeInTheDocument();
     expect(screen.queryByText('Witness & Secrecy')).not.toBeInTheDocument();
-    // The always-present story step still renders.
+    // The always-present heading and story step still render.
     expect(screen.getByText('The Glimpse')).toBeInTheDocument();
     expect(screen.getByText('Link a distinction to your glimpse')).toBeInTheDocument();
+  });
+
+  it('renders the default heading above the axis accordion when no heading prop is passed', () => {
+    render(<GlimpseFlow {...makeProps()} />);
+
+    expect(screen.getByText('The Glimpse')).toBeInTheDocument();
+  });
+
+  it('renders a staff-authored heading when the heading prop is passed', () => {
+    render(<GlimpseFlow {...makeProps({ heading: 'Your First Sight of the Unseen' })} />);
+
+    expect(screen.getByText('Your First Sight of the Unseen')).toBeInTheDocument();
+    expect(screen.queryByText('The Glimpse')).not.toBeInTheDocument();
+  });
+
+  it('selects a tag card via Enter from the keyboard', async () => {
+    const user = userEvent.setup();
+    const onChangeAxis = vi.fn();
+    render(<GlimpseFlow {...makeProps({ onChangeAxis })} />);
+
+    screen.getByText('Wonder').closest('[role="button"]')?.focus();
+    await user.keyboard('{Enter}');
+
+    expect(onChangeAxis).toHaveBeenCalledWith('TONE', [1]);
+  });
+
+  it('selects a tag card via Space from the keyboard, without scrolling the page', async () => {
+    const user = userEvent.setup();
+    const onChangeAxis = vi.fn();
+    render(<GlimpseFlow {...makeProps({ onChangeAxis })} />);
+
+    const card = screen.getByText('Wonder').closest('[role="button"]') as HTMLElement;
+    card.focus();
+    await user.keyboard('[Space]');
+
+    expect(onChangeAxis).toHaveBeenCalledWith('TONE', [1]);
   });
 });

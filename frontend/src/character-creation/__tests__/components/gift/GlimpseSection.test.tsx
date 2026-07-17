@@ -120,7 +120,7 @@ describe('GlimpseSection', () => {
     });
     const { glimpseProseField } = renderSection(draft);
 
-    const textarea = screen.getByLabelText('The Glimpse') as HTMLTextAreaElement;
+    const textarea = screen.getByLabelText('Your Story') as HTMLTextAreaElement;
     expect(textarea.value).toBe('Once, in the dark');
 
     await user.type(textarea, '!');
@@ -130,5 +130,54 @@ describe('GlimpseSection', () => {
         target: expect.objectContaining({ name: 'glimpse_story' }),
       })
     );
+  });
+
+  it('renders GlimpseFlow default heading when no heading prop is passed', () => {
+    const draft = createMockDraft({ id: 1, draft_data: {} });
+    renderSection(draft);
+
+    expect(screen.getByText('The Glimpse')).toBeInTheDocument();
+  });
+
+  it('passes a staff-authored heading through to GlimpseFlow', () => {
+    const draft = createMockDraft({ id: 1, draft_data: {} });
+    const queryClient = createTestQueryClient();
+    seedQueryData(queryClient, characterCreationKeys.glimpseTags(), CATALOG);
+    seedQueryData(queryClient, distinctionKeys.draftDistinctions(draft.id), [DRAFT_DISTINCTION]);
+    const glimpseProseField = {
+      name: 'glimpse_story' as const,
+      onChange: vi.fn(),
+      onBlur: vi.fn(),
+      ref: vi.fn(),
+    };
+    renderWithCharacterCreationProviders(
+      <GlimpseSection
+        draft={draft}
+        glimpseProseField={glimpseProseField}
+        heading="A Door You Cannot Unsee"
+      />,
+      { queryClient }
+    );
+
+    expect(screen.getByText('A Door You Cannot Unsee')).toBeInTheDocument();
+    expect(screen.queryByText('The Glimpse')).not.toBeInTheDocument();
+  });
+
+  it('selects a tag card via the keyboard (Enter)', async () => {
+    const user = userEvent.setup();
+    const draft = createMockDraft({ id: 1, draft_data: {} });
+    renderSection(draft);
+
+    screen.getByText('Wonder').closest('[role="button"]')?.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => {
+      expect(updateDraftMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          draft_data: expect.objectContaining({ glimpse_tag_ids: [1] }),
+        })
+      );
+    });
   });
 });

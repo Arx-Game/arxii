@@ -27,6 +27,14 @@ export interface GlimpseTagOption {
 }
 
 export interface GlimpseFlowProps {
+  /**
+   * Staff-authorable section heading, rendered at the top of the flow above
+   * the axis accordion. Defaults to `'The Glimpse'`. Mirrors the
+   * `magic_glimpse_heading` CGExplanation row the way the sibling Motif
+   * field uses `magic_motif_heading` — threaded in by whichever mount point
+   * (GiftStage/GlimpseSection today) has access to the copy query.
+   */
+  heading?: string;
   /** Full active catalog. */
   tags: GlimpseTagOption[];
   selectedTagIds: number[];

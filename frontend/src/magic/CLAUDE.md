@@ -405,21 +405,27 @@ Dialog for accepting a teaching offer. Shows XP cost and calls `useAcceptTeachin
 ### `components/glimpse/GlimpseFlow.tsx` + `glimpseTypes.ts` (#2427)
 
 Shared, purely presentational guided flow for authoring "The Glimpse" — props
-in (`tags`, `selectedTagIds`, `prose`, `linkedDistinctionIds`,
-`linkableDistinctions`, `showDeferralControls`), callbacks out
-(`onChangeAxis`, `onChangeProse`, `onToggleDistinctionLink`, `onSkip`); no
-queries or mutations inside. `glimpseTypes.ts` is the single definition of
-`GlimpseTagOption` (backs `GET /api/character-creation/glimpse-tags/`) —
-the character-creation module re-exports it from `types.ts` rather than
-redeclaring it. Renders a Radix accordion (TONE single-select, CONSEQUENCE/
-WITNESS multi-select — axes with zero catalog tags don't render a step),
-SENSORY tags as toggle chips inside the always-visible story `Textarea`, a
-suggestion panel (deduped `suggested_distinctions` across selected tags),
-and an unconditional manual distinction-link fallback. Two mounts share it:
-the CG `GiftStage` (`character-creation/components/gift/GlimpseSection.tsx`,
-which binds it to `draft_data.glimpse_tag_ids`/`glimpse_story`/
-`glimpse_linked_distinction_ids`) and the character sheet (Task 6, not yet
-built).
+in (`heading` (optional, defaults `'The Glimpse'`), `tags`, `selectedTagIds`,
+`prose`, `linkedDistinctionIds`, `linkableDistinctions`,
+`showDeferralControls`), callbacks out (`onChangeAxis`, `onChangeProse`,
+`onToggleDistinctionLink`, `onSkip`); no queries or mutations inside.
+`glimpseTypes.ts` is the single definition of `GlimpseTagOption` (backs
+`GET /api/character-creation/glimpse-tags/`) — the character-creation module
+re-exports it from `types.ts` rather than redeclaring it. Renders the
+`heading` at the top (staff-authorable — CG threads `magic_glimpse_heading`
+from `useCGExplanations()` through, mirroring the sibling Motif field's
+`magic_motif_heading`; review fix, #2427), then a Radix accordion (TONE
+single-select, CONSEQUENCE/WITNESS multi-select — axes with zero catalog tags
+don't render a step; each tag Card is `role="button" tabIndex={0}` with an
+explicit `onKeyDown` for Enter/Space activation — review fix), SENSORY tags as
+toggle chips (native `<button>`s, keyboard-operable for free) inside the
+always-visible story `Textarea`, a suggestion panel (deduped
+`suggested_distinctions` across selected tags), and an unconditional manual
+distinction-link fallback. Two mounts share it: the CG `GiftStage`
+(`character-creation/components/gift/GlimpseSection.tsx`, which binds it to
+`draft_data.glimpse_tag_ids`/`glimpse_story`/`glimpse_linked_distinction_ids`
+and threads `heading` down from GiftStage's copy query) and the character
+sheet (Task 6, not yet built).
 
 ### `XpKudosPage.alterationGate.test.tsx` (in `src/progression/`)
 

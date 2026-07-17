@@ -30,9 +30,17 @@ interface GlimpseSectionProps {
   /** Registration for the prose field — owned by GiftStage's shared form so a
    * single beforeLeave save covers ritual name + motif + glimpse. */
   glimpseProseField: UseFormRegisterReturn<'glimpse_story'>;
+  /**
+   * Staff-authorable section heading, threaded down from GiftStage's
+   * `copy?.magic_glimpse_heading` (GiftStage holds the `useCGExplanations()`
+   * query — GlimpseSection stays a thin pass-through so GlimpseFlow itself
+   * stays presentational). Falls back to GlimpseFlow's own default when
+   * omitted.
+   */
+  heading?: string;
 }
 
-export function GlimpseSection({ draft, glimpseProseField }: GlimpseSectionProps) {
+export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSectionProps) {
   const updateDraft = useUpdateDraft();
   const { data: tags } = useGlimpseTags();
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
@@ -108,10 +116,11 @@ export function GlimpseSection({ draft, glimpseProseField }: GlimpseSectionProps
     );
   }
 
-  // No extra wrapping heading here — GlimpseFlow's own story-step label ("The
-  // Glimpse", tied to the textarea via htmlFor) is the section's heading.
+  // GlimpseFlow renders its own top-of-flow heading (defaults to 'The
+  // Glimpse' when `heading` is omitted) — no extra wrapping heading here.
   return (
     <GlimpseFlow
+      heading={heading}
       tags={tags ?? []}
       selectedTagIds={selectedTagIds}
       prose={prose}

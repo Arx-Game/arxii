@@ -232,7 +232,11 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
             className="resize-y"
           />
         </div>
-        <GlimpseSection draft={draft} glimpseProseField={register('glimpse_story')} />
+        <GlimpseSection
+          draft={draft}
+          glimpseProseField={register('glimpse_story')}
+          heading={copy?.magic_glimpse_heading}
+        />
       </section>
     </motion.div>
   );

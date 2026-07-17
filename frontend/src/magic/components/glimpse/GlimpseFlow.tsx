@@ -6,12 +6,19 @@
  * (`character-creation/components/gift/GlimpseSection.tsx`) and the
  * character sheet (Task 6).
  *
- * Structure mirrors the GiftStage funnel idiom — a Radix
+ * Structure: a staff-authorable `heading` (defaults to `'The Glimpse'`,
+ * mirrors `magic_motif_heading`'s CGExplanation pattern on the sibling Motif
+ * field — review fix, previously hardcoded) rendered at the top, then a Radix
  * `Accordion type="single" collapsible` with one item per axis, then an
  * always-visible story step. TONE is single-select; CONSEQUENCE and WITNESS
  * are multi-select. SENSORY doesn't get an accordion item — its tags render
  * as optional toggle chips inside the story step (`GLIMPSE_AXIS_CONFIG`'s
  * `prose_prompt` rendering), alongside the sensory prompts themselves.
+ *
+ * The axis tag Cards are `role="button" tabIndex={0}` (not native buttons),
+ * so they carry an explicit `onKeyDown` (Enter/Space) for keyboard
+ * activation — review fix; the SENSORY chips are native `<button>`s and get
+ * this for free.
  */
 
 import {
@@ -28,6 +35,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
 import { useMemo } from 'react';
+import type { KeyboardEvent } from 'react';
 import type {
   GlimpseFlowProps,
   GlimpseSuggestedDistinction,
@@ -70,6 +78,7 @@ function DistinctionLinkChips({
 }
 
 export function GlimpseFlow({
+  heading = 'The Glimpse',
   tags,
   selectedTagIds,
   prose,
@@ -136,8 +145,30 @@ export function GlimpseFlow({
     }
   };
 
+  // Activates a role="button" tag card from the keyboard the same way a click
+  // would — native buttons get this for free, but these are Cards.
+  const handleTagKeyDown = (
+    event: KeyboardEvent<HTMLDivElement>,
+    axis: GlimpseTagOption['axis'],
+    multi: boolean,
+    tagId: number
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      // Space also scrolls the page by default — suppress that, Enter has no
+      // such side effect.
+      if (event.key === ' ') {
+        event.preventDefault();
+      }
+      handleTagClick(axis, multi, tagId);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <div className="space-y-2">
+        <Label>{heading}</Label>
+      </div>
+
       {visibleAxisSteps.length > 0 && (
         <Accordion type="single" collapsible defaultValue={visibleAxisSteps[0].axis}>
           {visibleAxisSteps.map((step) => (
@@ -158,6 +189,9 @@ export function GlimpseFlow({
                           !isSelected && 'hover:ring-1 hover:ring-primary/50'
                         )}
                         onClick={() => handleTagClick(step.axis, step.multi, tag.id)}
+                        onKeyDown={(event) =>
+                          handleTagKeyDown(event, step.axis, step.multi, tag.id)
+                        }
                       >
                         <CardHeader className="p-3">
                           <CardTitle className="flex items-center justify-between gap-2 text-sm">
@@ -180,7 +214,7 @@ export function GlimpseFlow({
       )}
 
       <div className="space-y-3">
-        <Label htmlFor="glimpse-flow-story">The Glimpse</Label>
+        <Label htmlFor="glimpse-flow-story">Your Story</Label>
         <p className="text-sm text-muted-foreground">
           What did you see? What did you hear? What did you <em>know</em>, after?
         </p>
@@ -189,6 +223,8 @@ export function GlimpseFlow({
             {sensoryTags.map((tag) => {
               const isSelected = selectedTagIdSet.has(tag.id);
               return (
+                // Native <button> — Enter/Space activation is free, no
+                // onKeyDown needed (unlike the role="button" axis Cards above).
                 <button
                   key={tag.id}
                   type="button"
