@@ -24,6 +24,15 @@ from django.db.models import Sum
 
 from evennia_extensions.models import RoomProfile, RoomSizeTier
 from evennia_extensions.seeds import DEFAULT_ROOM_SIZE_NAME
+from world.areas.grid_services import (
+    GridServiceError,
+    cell_occupied as _grid_cell_occupied,
+    create_exit_pair as _grid_create_exit_pair,
+    create_room as _grid_create_room,
+    exits_for_rooms as _grid_exits_for_rooms,
+    place_room_on_grid as _grid_place_room_on_grid,
+    stranded_rooms as _grid_stranded_rooms,
+)
 from world.buildings.models import Building
 from world.buildings.room_constants import DIRECTIONS, UNFINISHED_ROOM_DESC
 
@@ -87,15 +96,7 @@ def _require_building_owner(persona: Persona, room: DefaultObject) -> Building:
 
 
 def _cell_occupied(building: Building, x: int, y: int, floor: int) -> bool:
-    return RoomProfile.objects.filter(area=building.area, grid_x=x, grid_y=y, floor=floor).exists()
-
-
-def _set_room_description(room: DefaultObject, description: str) -> None:
-    from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
-
-    display, _ = ObjectDisplayData.objects.get_or_create(object=room)
-    display.permanent_description = description
-    display.save()
+    return _grid_cell_occupied(building.area, x, y, floor)
 
 
 def _room_description(room: DefaultObject) -> str:
@@ -103,22 +104,6 @@ def _room_description(room: DefaultObject) -> str:
 
     display = ObjectDisplayData.objects.filter(object=room).first()
     return display.permanent_description if display else ""
-
-
-def _create_exit(
-    *, name: str, aliases: tuple[str, ...], source: DefaultObject, destination: DefaultObject
-) -> DefaultObject:
-    from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
-    exit_obj = ObjectDB.objects.create(
-        db_key=name,
-        db_typeclass_path="typeclasses.exits.Exit",
-        db_location=source,
-        db_destination=destination,
-    )
-    for alias in aliases:
-        exit_obj.aliases.add(alias)
-    return exit_obj
 
 
 def _resolve_like_profile(like: DefaultObject | None, building: Building) -> RoomProfile | None:
@@ -166,8 +151,6 @@ def dig_room(  # noqa: PLR0913 — dig's optional knobs are the ratified UX surf
     Instant and free within the space budget. Freeform-named connections
     between existing rooms are ``link_rooms``'s job, not dig's.
     """
-    from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
     direction = direction.strip().lower()
     spec = DIRECTIONS.get(direction)
     if spec is None:
@@ -200,26 +183,24 @@ def dig_room(  # noqa: PLR0913 — dig's optional knobs are the ratified UX surf
             grid_x, grid_y = tx, ty
 
     with transaction.atomic():
-        room = ObjectDB.objects.create(
-            db_key=name.strip(),
-            db_typeclass_path="typeclasses.rooms.Room",
-        )
-        profile, _ = RoomProfile.objects.update_or_create(
-            objectdb=room,
-            defaults={
-                "area": building.area,
-                "is_outdoor": False,
-                "size": new_size,
-                "grid_x": grid_x,
-                "grid_y": grid_y,
-                "floor": floor,
-            },
-        )
-        _set_room_description(room, description)
         reverse = DIRECTIONS[spec.opposite]
-        _create_exit(name=direction, aliases=spec.aliases, source=from_room, destination=room)
-        _create_exit(
-            name=spec.opposite, aliases=reverse.aliases, source=room, destination=from_room
+        profile = _grid_create_room(
+            area=building.area,
+            name=name.strip(),
+            description=description,
+            size=new_size,
+            grid_x=grid_x,
+            grid_y=grid_y,
+            floor=floor,
+        )
+        room = profile.objectdb
+        _grid_create_exit_pair(
+            name=direction,
+            aliases=spec.aliases,
+            reverse_name=spec.opposite,
+            reverse_aliases=reverse.aliases,
+            room_a=from_room,
+            room_b=room,
         )
     logger.info(
         "dig_room: %s dug %s %s of room %s in building %s (%d/%d units used).",
@@ -249,16 +230,10 @@ def resize_room(*, persona: Persona, room: DefaultObject, size: RoomSizeTier) ->
 
 def building_exits(building: Building) -> list[DefaultObject]:
     """All Exit objects whose source room is in this building."""
-    from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
-    room_ids = RoomProfile.objects.filter(area=building.area).values_list("objectdb_id", flat=True)
-    return list(
-        ObjectDB.objects.filter(
-            db_typeclass_path="typeclasses.exits.Exit",
-            db_location_id__in=list(room_ids),
-            db_destination_id__in=list(room_ids),
-        )
+    room_ids = set(
+        RoomProfile.objects.filter(area=building.area).values_list("objectdb_id", flat=True)
     )
+    return list(_grid_exits_for_rooms(room_ids))
 
 
 def _stranded_rooms(
@@ -269,33 +244,22 @@ def _stranded_rooms(
 ) -> list[str]:
     """Names of rooms unreachable from the entry room after a hypothetical removal.
 
-    BFS over the building's exit graph, skipping the dropped room / exits.
-    Buildings top out at a few hundred rooms, so this is cheap.
+    Thin building-flavored wrapper over ``grid_services.stranded_rooms``: the
+    anchor is the building's entry room and the room set is everything in the
+    building's area. Buildings top out at a few hundred rooms, so this is cheap.
     """
     entry = building.entry_room
-    if entry is None or entry.objectdb_id == drop_room_id:
+    if entry is None:
         return []
     room_ids = set(
         RoomProfile.objects.filter(area=building.area).values_list("objectdb_id", flat=True)
     )
-    room_ids.discard(drop_room_id)
-    adjacency: dict[int, set[int]] = {rid: set() for rid in room_ids}
-    for exit_obj in building_exits(building):
-        if exit_obj.pk in drop_exit_ids:
-            continue
-        src, dst = exit_obj.db_location_id, exit_obj.db_destination_id
-        if src in room_ids and dst in room_ids:
-            adjacency[src].add(dst)
-            adjacency[dst].add(src)
-    seen = {entry.objectdb_id}
-    frontier = [entry.objectdb_id]
-    while frontier:
-        current = frontier.pop()
-        for neighbor in adjacency.get(current, ()):
-            if neighbor not in seen:
-                seen.add(neighbor)
-                frontier.append(neighbor)
-    orphaned = room_ids - seen
+    orphaned = _grid_stranded_rooms(
+        anchor_room_id=entry.objectdb_id,
+        room_ids=room_ids,
+        drop_room_id=drop_room_id,
+        drop_exit_ids=drop_exit_ids,
+    )
     if not orphaned:
         return []
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
@@ -332,17 +296,13 @@ def link_rooms(
     spec_ab = DIRECTIONS.get(name_ab.strip().lower())
     spec_ba = DIRECTIONS.get(name_ba.strip().lower())
     with transaction.atomic():
-        _create_exit(
+        _grid_create_exit_pair(
             name=name_ab.strip(),
             aliases=spec_ab.aliases if spec_ab else (),
-            source=room_a,
-            destination=room_b,
-        )
-        _create_exit(
-            name=name_ba.strip(),
-            aliases=spec_ba.aliases if spec_ba else (),
-            source=room_b,
-            destination=room_a,
+            reverse_name=name_ba.strip(),
+            reverse_aliases=spec_ba.aliases if spec_ba else (),
+            room_a=room_a,
+            room_b=room_b,
         )
 
 
@@ -398,23 +358,13 @@ def place_room(
     Placement never gates play — it only moves the room's map cell. The one
     guard is cell collision on the target floor, so the map stays readable.
     """
-    building = _require_building_owner(persona, room)
+    _require_building_owner(persona, room)
     profile = room.room_profile
     target_floor = profile.floor if floor is None else floor
-    occupied = (
-        RoomProfile.objects.filter(
-            area=building.area, grid_x=grid_x, grid_y=grid_y, floor=target_floor
-        )
-        .exclude(pk=profile.pk)
-        .exists()
-    )
-    if occupied:
-        msg = "That spot on the map is already occupied."
-        raise RoomBuildError(msg)
-    profile.grid_x = grid_x
-    profile.grid_y = grid_y
-    profile.floor = target_floor
-    profile.save(update_fields=["grid_x", "grid_y", "floor"])
+    try:
+        _grid_place_room_on_grid(profile=profile, grid_x=grid_x, grid_y=grid_y, floor=target_floor)
+    except GridServiceError as exc:
+        raise RoomBuildError(exc.user_message) from exc
     return profile
 
 

@@ -5,5 +5,5 @@
 # Plain tokens count '# noqa: <TOKEN>' suppressions; 'pattern:' tokens count
 # the regexes defined in lint_noqa_ratchet.py's PATTERNS map.
 GETATTR_LITERAL 61
-pattern:BARE_OBJECTDB_CREATE 4
+pattern:BARE_OBJECTDB_CREATE 2
 pattern:BROAD_EXCEPT 101
