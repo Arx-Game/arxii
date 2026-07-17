@@ -2097,11 +2097,12 @@ register as additional kinds.
   (`run_train_offer`): resolve the Academy (`offer.role.faction_affiliation`) → obligation
   gate (`societies.obligation_services.has_open_obligation`, #2428 — an OWED Academy debt
   blocks further training) → availability gate (the learner's own (Path × Gift) pool
-  (`PathGiftGrant`) ∪ their `CharacterTradition` membership's signature list
-  (`TraditionGiftGrant`) via `magic.services.cg_catalog.get_technique_options`; a signature
-  technique is teachable only when the trainer's own `teaches_tradition` matches one of the
-  learner's memberships — pool techniques are teachable by any Academy trainer regardless of
-  tradition) → resolve exactly one unredeemed Golden Hare (`currency.FavorTokenDetails`)
+  (`PathGiftGrant`) ∪ their ACTIVE `CharacterTradition` membership's signature list
+  (`TraditionGiftGrant`, `left_at__isnull=True` since #2441 Task 8 — see "Tradition
+  membership lifecycle" below) via `magic.services.cg_catalog.get_technique_options`; a
+  signature technique is teachable only when the trainer's own `teaches_tradition` matches
+  the learner's currently active tradition — pool techniques are teachable by any Academy
+  trainer regardless of tradition) → resolve exactly one unredeemed Golden Hare (`currency.FavorTokenDetails`)
   issued by the Academy and held by the learner (`NoAvailableFavorTokenError` if none) →
   charge AP + coin + the Hare → acquire via `magic.services.gift_acquisition
   .charge_and_learn` — the extracted shared charge+acquire core `accept_technique_offer`
@@ -2121,6 +2122,37 @@ register as additional kinds.
   which also get-or-creates the PLACEHOLDER `Achievement` row
   (`GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG`) the offers gate on — granting it to a
   character is the lore-repo quest's job, not this seed's.
+- **Tradition membership lifecycle (#2441 Task 8):** `magic.CharacterTradition` gained
+  `left_at` (nullable) + a partial-unique `unique_active_tradition_per_character`
+  constraint (`character` WHERE `left_at IS NULL`) — mirrors
+  `societies.OrganizationMembership.left_at`. `unique_together` on `(character,
+  tradition)` was dropped (a character may rejoin a tradition they previously left,
+  creating a second historical row for the same pair). `world.magic.services.
+  tradition_membership`: `join_tradition(sheet, tradition, *, via_membership=None)` —
+  ends the active row (`left_at`), creates a new one, and — when the joined tradition
+  is not orphaned (`_tradition_is_orphaned`, reading `character_creation.
+  BeginningTradition.required_distinction__slug="orphaned-tradition"`, the only place
+  "no living teachers" is recorded in the schema, per Task 5/#2428) — deletes any held
+  `unbound`/`orphaned-tradition` drawback `CharacterDistinction` row (direct queryset
+  delete; `grant_distinction` has no removal counterpart, see
+  `world/distinctions/CLAUDE.md`). Raises `AlreadyInTraditionError` on a no-op re-join.
+  `leave_tradition(sheet)` — `left_at` only, no replacement row; re-applies the
+  `unbound` drawback via `grant_distinction(origin=DistinctionOrigin.GAMEPLAY)`
+  (defensive no-op, logged, if the "unbound" `Distinction` isn't seeded yet — Task 9
+  ships it), catching `DistinctionExclusionError`. Raises `NoActiveTraditionError` if
+  already traditionless. **Wired trigger:** `societies.membership_services.
+  _maybe_join_tradition`, called from both `accept_invitation` and `accept_application`
+  when `organization.tradition_id` is set (ruling 1 on #2441 — a tradition is joined
+  through its teaching org's membership-offer accept flow); swallows
+  `AlreadyInTraditionError` so re-accepting an org invite never fails the membership
+  accept. `leave_tradition` has no live caller yet — a symmetric
+  `leave_organization`/`expel_member` hook is a natural future wiring point, deliberately
+  left undecided by this task. Learned techniques are never revoked on switch (ruling 3,
+  "learned is learned") — only the TRAIN-offer signature-list *access* gate
+  (`npc_services.effects._technique_available_to_learner`) was upgraded to read
+  `left_at__isnull=True`; `magic.services.ritual_knowledge.reconcile_ritual_knowledge`'s
+  "all traditions in history" walk is deliberately unchanged (a different, intentionally
+  permanent grant).
 - **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
   `(pc_persona, npc_persona)`) is atomically accumulated by
   `adjust_npc_affection(pc_persona, npc_persona, delta=...)` via `F()`. Social action

@@ -618,11 +618,16 @@ def _technique_available_to_learner(
     Availability = the learner's own (Path × Gift) pool ∪ their Tradition's
     signature list (ruling 3 on #2440). The pool half is tradition-agnostic
     (any Academy trainer can teach it); the signature half is members-only —
-    offerable only when the trainer's own ``role.teaches_tradition`` matches
-    one of the learner's ``CharacterTradition`` memberships (mirrors the
-    membership-set pattern in ``world.magic.services.ritual_knowledge``, the
-    only existing "a character's traditions" reader — there is no singular
-    "current tradition" concept in the schema).
+    offerable only when the trainer's own ``role.teaches_tradition`` matches the
+    learner's currently ACTIVE ``CharacterTradition`` membership
+    (``left_at__isnull=True``). #2441 Task 8 gave ``CharacterTradition`` history
+    (``left_at``) and an active-row constraint, so "current tradition" is now a
+    real, singular concept — this seam was upgraded from the old
+    membership-*set* read (any row ever held, matching
+    ``world.magic.services.ritual_knowledge``'s "all traditions in history" walk,
+    which is deliberately unchanged — ritual knowledge is learned-is-learned) to
+    an active-only read: a former tradition's signature techniques stop being
+    offerable the moment the learner switches or leaves, per ruling 3.
     """
     from world.progression.selectors import current_path_for_character  # noqa: PLC0415
 
@@ -644,7 +649,9 @@ def _technique_available_to_learner(
         return False
     if trainer_tradition is None:
         return False
-    return sheet.character_traditions.filter(tradition=trainer_tradition).exists()
+    return sheet.character_traditions.filter(
+        tradition=trainer_tradition, left_at__isnull=True
+    ).exists()
 
 
 OFFER_EFFECT_HANDLERS[OfferKind.TRAIN.value] = run_train_offer

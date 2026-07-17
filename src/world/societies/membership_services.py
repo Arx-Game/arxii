@@ -6,6 +6,7 @@ here. Actions are thin wrappers that call these functions.
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -225,6 +226,39 @@ def apply_to_organization(
     )
 
 
+def _maybe_join_tradition(membership: OrganizationMembership) -> None:
+    """Trigger the tradition-join lifecycle when the org is a tradition's teaching org.
+
+    Ruling 1 on #2441: accepting membership in a tradition's teaching org
+    (``Organization.tradition`` set) triggers ``world.magic.services.
+    tradition_membership.join_tradition``. ``societies`` importing a ``magic``
+    service here is the dependent flow calling the domain service — mirrors
+    several existing ``world.magic`` -> ``world.societies`` imports elsewhere in
+    the codebase (e.g. ``magic/audere_majora.py``, ``magic/services/gain.py``);
+    a lazy cross-app service call in either direction is an established pattern
+    here, not a layering violation. No-op when the org isn't a tradition org.
+
+    Catches ``AlreadyInTraditionError`` and swallows it: re-accepting membership
+    in an org for a tradition the character is already actively in (e.g.
+    rejoining after being kicked, tradition membership never left) must not fail
+    the org-membership accept — the tradition side is already in the target
+    state, which is exactly what "idempotent" means for this trigger.
+    """
+    organization = membership.organization
+    if organization.tradition_id is None:
+        return
+
+    from world.magic.exceptions import AlreadyInTraditionError  # noqa: PLC0415
+    from world.magic.services.tradition_membership import join_tradition  # noqa: PLC0415
+
+    with contextlib.suppress(AlreadyInTraditionError):
+        join_tradition(
+            membership.persona.character_sheet,
+            organization.tradition,
+            via_membership=membership,
+        )
+
+
 @transaction.atomic
 def accept_invitation(
     offer: OrganizationMembershipOffer,
@@ -239,6 +273,7 @@ def accept_invitation(
         raise OrganizationOfferNotForYouError
 
     membership = join_organization(offer.organization, as_persona)
+    _maybe_join_tradition(membership)
     offer.status = offer.Status.ACCEPTED
     offer.resolved_at = timezone.now()
     offer.save(update_fields=["status", "resolved_at"])
@@ -275,6 +310,7 @@ def accept_application(
         raise NotAuthorizedToInviteError
 
     membership = join_organization(offer.organization, offer.from_persona)
+    _maybe_join_tradition(membership)
     offer.status = offer.Status.ACCEPTED
     offer.resolved_at = timezone.now()
     offer.save(update_fields=["status", "resolved_at"])

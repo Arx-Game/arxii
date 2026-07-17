@@ -37,12 +37,23 @@ are the only other writers — no in-play caller re-implements the create/rank-u
   resonance-seed cascade (`world.magic.services.distinction_resonance`, #1834) fires
   automatically on every call — do not hand-roll modifier creation in a new caller.
 
-**The four ratified sources** (each stamps its own `DistinctionOrigin`): `GM_AWARD` (GM action
+**Five ratified sources** (each stamps its own `DistinctionOrigin`): `GM_AWARD` (GM action
 `gm_award_distinction` / telnet `grant_distinction`, JUNIOR-tier GM), `ACHIEVEMENT_AUTO_GRANT`
 (`RewardType.DISTINCTION` on `achievements.RewardDefinition`), `CONSEQUENCE_POOL`
 (`EffectType.GRANT_DISTINCTION` on `checks.ConsequenceEffect`), `ENDORSEMENT_THRESHOLD`
 (`DistinctionResonanceRankThreshold` in `world.magic`, fired from sustained-endorsement resonance
-gain). Full per-source detail: `docs/systems/distinctions.md` "Post-CG acquisition" section.
+gain), and — as of #2441 Task 8 — `GAMEPLAY` (`world.magic.services.tradition_membership.
+leave_tradition` re-applying the Unbound drawback; previously vestigial/unassigned). Full
+per-source detail: `docs/systems/distinctions.md` "Post-CG acquisition" section.
+
+**There is no removal counterpart to `grant_distinction`.** Verified #2441 Task 8: nothing in
+this app (or elsewhere) revokes/deactivates a `CharacterDistinction` row outside CG-draft editing
+(`DraftDistinctionViewSet`, which operates on unsaved draft JSON, not `CharacterDistinction`) and
+admin. A caller that needs to strip a distinction in play does a direct
+`CharacterDistinction.objects.filter(...).delete()` — see `world.magic.services.
+tradition_membership._shed_traditionless_drawbacks` for the first such caller. If a second
+removal caller appears, promote this to a real `revoke_distinction` seam rather than letting a
+third ad hoc delete appear.
 
 ## Profile Visibility — Secrets, not a boolean (#1109 → #1334)
 

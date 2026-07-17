@@ -27,28 +27,56 @@ class TraditionModelTests(TestCase):
 
 
 class CharacterTraditionTests(TestCase):
-    """Tests for CharacterTradition -- multiple per character."""
+    """Tests for CharacterTradition -- one ACTIVE row per character, history preserved.
+
+    #2441 Task 8 ratified "every character has exactly one tradition at a time"
+    (#2426) as a DB constraint (`unique_active_tradition_per_character`, `character`
+    WHERE `left_at IS NULL`) and dropped the old `unique_together` on
+    (character, tradition) — a character may rejoin a tradition they previously
+    left, which needs a second historical row for the same pair.
+    """
 
     def test_create_character_tradition(self):
         ct = CharacterTraditionFactory()
         assert CharacterTradition.objects.filter(pk=ct.pk).exists()
 
-    def test_multiple_traditions_per_character(self):
+    def test_second_active_tradition_conflicts(self):
+        from django.db import IntegrityError
+
         from world.character_sheets.factories import CharacterSheetFactory
 
         sheet = CharacterSheetFactory()
         t1 = TraditionFactory(name="Tradition A")
         t2 = TraditionFactory(name="Tradition B")
         CharacterTradition.objects.create(character=sheet, tradition=t1)
+        with self.assertRaises(IntegrityError):
+            CharacterTradition.objects.create(character=sheet, tradition=t2)
+
+    def test_historical_rows_allowed_after_leaving(self):
+        from django.utils import timezone
+
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        t1 = TraditionFactory(name="Tradition A")
+        t2 = TraditionFactory(name="Tradition B")
+        old = CharacterTradition.objects.create(character=sheet, tradition=t1)
+        old.left_at = timezone.now()
+        old.save(update_fields=["left_at"])
         CharacterTradition.objects.create(character=sheet, tradition=t2)
         assert sheet.character_traditions.count() == 2
 
-    def test_unique_together(self):
-        from django.db import IntegrityError
+    def test_unique_together_dropped_rejoin_allowed(self):
+        """Rejoining a previously-left tradition creates a second historical row."""
+        from django.utils import timezone
 
         ct = CharacterTraditionFactory()
-        with self.assertRaises(IntegrityError):
-            CharacterTradition.objects.create(character=ct.character, tradition=ct.tradition)
+        ct.left_at = timezone.now()
+        ct.save(update_fields=["left_at"])
+        rejoined = CharacterTradition.objects.create(character=ct.character, tradition=ct.tradition)
+        active_count = ct.character.character_traditions.filter(left_at__isnull=True).count()
+        assert active_count == 1
+        assert rejoined.pk != ct.pk
 
 
 class GiftDerivedAffinityTests(TestCase):

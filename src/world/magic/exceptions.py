@@ -614,3 +614,18 @@ class ConversionMappingError(FallRedemptionError):
 
 class PenanceError(FallRedemptionError):
     """Raised when there is no non-native resonance to convert during Atonement."""
+
+
+class AlreadyInTraditionError(MagicError):
+    """Raised when ``join_tradition`` is called with the character's own currently
+    active tradition (#2441) — a no-op re-join is refused rather than silently
+    swapping the row for itself."""
+
+    user_message = "You are already a member of this tradition."
+
+
+class NoActiveTraditionError(MagicError):
+    """Raised when ``leave_tradition`` is called on a character with no active
+    ``CharacterTradition`` row (#2441) — already traditionless, nothing to leave."""
+
+    user_message = "You have no tradition to leave."

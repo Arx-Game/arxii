@@ -213,6 +213,24 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
         )
         self.assertTrue(known.exists())
 
+    def test_left_member_is_blocked(self) -> None:
+        """A membership row with left_at set is not active — TRAIN treats it as if the
+        character never joined (#2441 Task 8: signature-list access is active-only)."""
+        from django.utils import timezone
+
+        CharacterTraditionFactory(
+            character=self.sheet, tradition=self.tradition, left_at=timezone.now()
+        )
+
+        result = run_train_offer(self.offer, self.persona)
+
+        self.assertIsNone(result.object_pk)
+        self.assertIn("isn't yours to learn", result.message)
+        known = CharacterTechnique.objects.filter(
+            character=self.sheet, technique=self.signature_technique
+        )
+        self.assertFalse(known.exists())
+
 
 class TrainOfferAtomicChargeSequenceTests(TestCase):
     """Hare-resolve + charge_and_learn + redeem_favor_token are all-or-nothing.
