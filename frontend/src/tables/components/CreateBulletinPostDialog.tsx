@@ -7,11 +7,14 @@
  *   - Story selector: "Table-Wide" (null) or a specific story PK
  *   - Allow replies (checkbox, default true)
  *
- * The Lead GM's persona PK must be passed as `gmPersonaId`.
+ * The backend authors the post as the requesting GM's own persona (a GM
+ * table is account-scoped, not character-scoped); no persona id is passed.
  */
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
+import { FieldError, FormErrors } from './FieldError';
 import {
   Dialog,
   DialogContent,
@@ -39,23 +42,12 @@ import type { StoryList } from '@/stories/types';
 // DRF error shapes
 // ---------------------------------------------------------------------------
 
-interface DRFErrors {
-  title?: string[];
-  body?: string[];
-  story?: string[];
-  allow_replies?: string[];
-  non_field_errors?: string[];
-  detail?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 interface CreateBulletinPostDialogProps {
   tableId: number;
-  /** The Lead GM's persona PK — required for author_persona in the POST body. */
-  gmPersonaId: number;
   /** Stories at this table (for the section selector in the form). */
   stories: StoryList[];
   /** Initial story to pre-select (optional — e.g., when opened from a story tab). */
@@ -69,7 +61,6 @@ interface CreateBulletinPostDialogProps {
 
 export function CreateBulletinPostDialog({
   tableId,
-  gmPersonaId,
   stories,
   initialStoryId,
   children,
@@ -80,7 +71,7 @@ export function CreateBulletinPostDialog({
   /** "table-wide" means null story; otherwise story PK as string. */
   const [storyValue, setStoryValue] = useState<string>('table-wide');
   const [allowReplies, setAllowReplies] = useState(true);
-  const [fieldErrors, setFieldErrors] = useState<DRFErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<BulletinFieldErrors>({});
 
   const createMutation = useCreateBulletinPost();
 
@@ -114,7 +105,6 @@ export function CreateBulletinPostDialog({
       {
         table: tableId,
         story: storyId,
-        author_persona: gmPersonaId,
         title: title.trim(),
         body: body.trim(),
         allow_replies: allowReplies,
@@ -124,12 +114,8 @@ export function CreateBulletinPostDialog({
           toast.success('Post created');
           setOpen(false);
         },
-        onError: async (err: unknown) => {
-          const res = (err as { response?: Response })?.response;
-          if (res) {
-            const errBody = (await res.json()) as DRFErrors;
-            setFieldErrors(errBody);
-          }
+        onError: (err: unknown) => {
+          setFieldErrors(bulletinErrorsFrom(err));
         },
       }
     );
@@ -162,11 +148,7 @@ export function CreateBulletinPostDialog({
               required
               aria-describedby={fieldErrors.title ? 'bp-title-error' : undefined}
             />
-            {fieldErrors.title && (
-              <p id="bp-title-error" className="text-sm text-destructive">
-                {fieldErrors.title.join(' ')}
-              </p>
-            )}
+            <FieldError errors={fieldErrors} field="title" id="bp-title-error" />
           </div>
 
           {/* Body */}
@@ -181,11 +163,7 @@ export function CreateBulletinPostDialog({
               required
               aria-describedby={fieldErrors.body ? 'bp-body-error' : undefined}
             />
-            {fieldErrors.body && (
-              <p id="bp-body-error" className="text-sm text-destructive">
-                {fieldErrors.body.join(' ')}
-              </p>
-            )}
+            <FieldError errors={fieldErrors} field="body" id="bp-body-error" />
           </div>
 
           {/* Section selector */}
@@ -204,9 +182,7 @@ export function CreateBulletinPostDialog({
                 ))}
               </SelectContent>
             </Select>
-            {fieldErrors.story && (
-              <p className="text-sm text-destructive">{fieldErrors.story.join(' ')}</p>
-            )}
+            <FieldError errors={fieldErrors} field="story" />
           </div>
 
           {/* Allow replies */}
@@ -222,10 +198,7 @@ export function CreateBulletinPostDialog({
           </div>
 
           {/* Global errors */}
-          {fieldErrors.non_field_errors && (
-            <p className="text-sm text-destructive">{fieldErrors.non_field_errors.join(' ')}</p>
-          )}
-          {fieldErrors.detail && <p className="text-sm text-destructive">{fieldErrors.detail}</p>}
+          <FormErrors errors={fieldErrors} />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

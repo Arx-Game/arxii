@@ -37038,6 +37038,12 @@ components:
         - ``story`` (if set) belongs to ``table`` (story.primary_table == table)
         - ``author_persona`` belongs to the requesting user's account
 
+        ``author_persona`` is optional (2026-07 audit): a GM table is account-scoped,
+        not tied to a specific character, so the frontend has no in-game persona to
+        pass — omit it and the requester's own persona is resolved server-side.
+        When supplied, it MUST belong to the requesting account (the ownership check
+        the docstring always claimed but never enforced).
+
         Stores validated model instances in validated_data.
       properties:
         table:
@@ -37056,7 +37062,6 @@ components:
           type: boolean
           default: true
       required:
-      - author_persona
       - body
       - table
       - title
@@ -37070,6 +37075,12 @@ components:
         - ``story`` (if set) belongs to ``table`` (story.primary_table == table)
         - ``author_persona`` belongs to the requesting user's account
 
+        ``author_persona`` is optional (2026-07 audit): a GM table is account-scoped,
+        not tied to a specific character, so the frontend has no in-game persona to
+        pass — omit it and the requester's own persona is resolved server-side.
+        When supplied, it MUST belong to the requesting account (the ownership check
+        the docstring always claimed but never enforced).
+
         Stores validated model instances in validated_data.
       properties:
         table:
@@ -37090,7 +37101,6 @@ components:
           type: boolean
           default: true
       required:
-      - author_persona
       - body
       - table
       - title
@@ -37114,7 +37124,6 @@ components:
         body:
           type: string
       required:
-      - author_persona
       - body
       - post
     CreateBulletinReplyInputRequest:
@@ -37138,7 +37147,6 @@ components:
           type: string
           minLength: 1
       required:
-      - author_persona
       - body
       - post
     CreateEstablishedPersonaRequestRequest:

@@ -145,8 +145,12 @@ export interface PaginatedBulletinReplies {
 export interface BulletinPostCreateBody {
   table: number;
   story?: number | null;
-  /** PK of the author persona (Lead GM's persona at this table). */
-  author_persona: number;
+  /**
+   * Optional (#audit2): a GM table is account-scoped, not tied to an in-game
+   * character, so the web omits this and the backend authors as the requester's
+   * own persona. Only set it to post as a specific owned persona.
+   */
+  author_persona?: number;
   title: string;
   body: string;
   allow_replies?: boolean;
@@ -160,8 +164,8 @@ export interface BulletinPostUpdateBody {
 
 export interface BulletinReplyCreateBody {
   post: number;
-  /** PK of the author persona. */
-  author_persona: number;
+  /** Optional (#audit2) — omitted by the web; backend authors as the requester's own persona. */
+  author_persona?: number;
   body: string;
 }
 
