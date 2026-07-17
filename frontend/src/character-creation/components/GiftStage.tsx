@@ -2,9 +2,10 @@
  * Stage 6: Gift
  *
  * Vertical funnel — Tradition → Gift → Techniques → Gift Resonance →
- * Anima Check — with completed steps collapsible. Motif and Glimpse remain
- * always-visible textareas below the funnel, carried over from the old
- * MagicStage advanced section (glimpse redesign is #2427, not this task).
+ * Anima Check — with completed steps collapsible. Motif remains an
+ * always-visible textarea below the funnel, carried over from the old
+ * MagicStage advanced section. The Glimpse is the guided tag-driven flow
+ * mounted via `GlimpseSection` (#2427).
  */
 
 import {
@@ -30,6 +31,7 @@ import { useCGExplanations, useResonances, useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftSelector } from './gift/GiftSelector';
+import { GlimpseSection } from './gift/GlimpseSection';
 import { TechniqueSelector } from './gift/TechniqueSelector';
 import { TraditionStep } from './gift/TraditionStep';
 
@@ -217,8 +219,8 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
         </AccordionItem>
       </Accordion>
 
-      {/* Motif + Glimpse — always visible (carried from the old MagicStage advanced
-          section; glimpse redesign is #2427, not this task) */}
+      {/* Motif — always visible (carried from the old MagicStage advanced section).
+          Glimpse is the guided tag-driven flow below (#2427). */}
       <section className="space-y-6">
         <div className="space-y-2">
           <Label htmlFor="motif-description">{copy?.magic_motif_heading ?? 'Motif'}</Label>
@@ -230,16 +232,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
             className="resize-y"
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="glimpse-story">{copy?.magic_glimpse_heading ?? 'The Glimpse'}</Label>
-          <Textarea
-            id="glimpse-story"
-            {...register('glimpse_story')}
-            placeholder="The first time you glimpsed the magical world..."
-            rows={4}
-            className="resize-y"
-          />
-        </div>
+        <GlimpseSection draft={draft} glimpseProseField={register('glimpse_story')} />
       </section>
     </motion.div>
   );

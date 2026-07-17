@@ -37,6 +37,7 @@ import {
   getGenders,
   getGift,
   getGifts,
+  getGlimpseTags,
   getHeightBands,
   getPaths,
   getPathSkillSuggestions,
@@ -96,6 +97,8 @@ export const characterCreationKeys = {
   cgGifts: (draftId: number) => [...characterCreationKeys.all, 'cg-gifts', draftId] as const,
   cgTechniqueOptions: (draftId: number, giftId: number) =>
     [...characterCreationKeys.all, 'cg-technique-options', draftId, giftId] as const,
+  // Glimpse tag catalog (guided Glimpse flow, #2427)
+  glimpseTags: () => [...characterCreationKeys.all, 'glimpse-tags'] as const,
   // Build-your-own magic system keys
   techniqueStyles: () => [...characterCreationKeys.all, 'technique-styles'] as const,
   effectTypes: () => [...characterCreationKeys.all, 'effect-types'] as const,
@@ -420,6 +423,19 @@ export function useCGTechniqueOptions(draftId: number | undefined, giftId: numbe
     queryKey: characterCreationKeys.cgTechniqueOptions(draftId!, giftId!),
     queryFn: () => getCGTechniqueOptions(draftId!, giftId!),
     enabled: !!draftId && !!giftId,
+  });
+}
+
+/**
+ * Glimpse tag catalog for the guided Glimpse flow (#2427) — an authored
+ * catalog that rarely changes, so a longer staleTime avoids refetching on
+ * every CG stage visit.
+ */
+export function useGlimpseTags() {
+  return useQuery({
+    queryKey: characterCreationKeys.glimpseTags(),
+    queryFn: getGlimpseTags,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

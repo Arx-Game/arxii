@@ -23,8 +23,9 @@ character-creation/
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection)
     ├── GiftStage.tsx        # Stage 6 (Gift): vertical funnel — Tradition → Gift →
-    │                        #   Techniques → Gift Resonance → Anima Check, plus
-    │                        #   always-visible Motif/Glimpse textareas (#2426 Task 10)
+    │                        #   Techniques → Gift Resonance → Anima Check, plus an
+    │                        #   always-visible Motif textarea and the guided Glimpse
+    │                        #   flow (#2426 Task 10; Glimpse redesign #2427)
     ├── AppearanceStage.tsx  # Stage 8: Appearance
     ├── IdentityStage.tsx    # Stage 9: Identity
     ├── FinalTouchesStage.tsx # Stage 10: Goals
@@ -34,7 +35,11 @@ character-creation/
         ├── TraditionStep.tsx    # Wraps TraditionPicker
         ├── GiftSelector.tsx     # Gift catalog cards (GET .../gifts/?draft_id=)
         ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
-        └── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
+        ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
+        └── GlimpseSection.tsx   # CG mount of the shared guided Glimpse flow (#2427);
+                                 #   binds `@/magic/components/glimpse/GlimpseFlow` to
+                                 #   draft_data glimpse_tag_ids/glimpse_linked_distinction_ids,
+                                 #   prose stays on GiftStage's register('glimpse_story')
 ```
 
 ## Key Features
@@ -56,6 +61,7 @@ character-creation/
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Draft detail operations
 - `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's tradition + path
 - `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
+- `GET /api/character-creation/glimpse-tags/` - List the active glimpse tag catalog (guided Glimpse flow, #2427)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
 

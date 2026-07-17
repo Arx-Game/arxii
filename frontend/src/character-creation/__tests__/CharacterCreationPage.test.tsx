@@ -10,6 +10,7 @@
 
 import { screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
+import { distinctionKeys } from '@/hooks/useDistinctions';
 import { CharacterCreationPage } from '../CharacterCreationPage';
 import { Stage } from '../types';
 import {
@@ -30,6 +31,7 @@ import {
   renderWithCharacterCreationProviders,
   createTestQueryClient,
   seedCharacterCreationQueries,
+  seedQueryData,
 } from './testUtils';
 
 // Mock the API module
@@ -49,6 +51,9 @@ vi.mock('../api', () => ({
   // of its render (for the always-mounted Gift Resonance step), independent
   // of which funnel step is currently open.
   getResonances: vi.fn().mockResolvedValue([]),
+  // GlimpseSection (#2427) calls useGlimpseTags() unconditionally as part of
+  // the always-mounted Glimpse guided flow.
+  getGlimpseTags: vi.fn().mockResolvedValue([]),
 }));
 
 describe('CharacterCreationPage', () => {
@@ -256,6 +261,10 @@ describe('CharacterCreationPage', () => {
         startingAreas: mockStartingAreas,
         explanations: mockCGExplanations,
       });
+      // GlimpseSection (#2427) calls useDraftDistinctions(draft.id) unconditionally
+      // for its manual distinction-link fallback — seed it so the test doesn't
+      // fire a real (failing) network fetch.
+      seedQueryData(queryClient, distinctionKeys.draftDistinctions(mockEmptyDraft.id), []);
 
       renderWithCharacterCreationProviders(<CharacterCreationPage />, {
         queryClient,
