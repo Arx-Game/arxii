@@ -172,6 +172,29 @@ class JoinRoomTests(TestCase):
 
         assert any("no story room grants" in m for m in msgs)
 
+    def test_join_by_ambiguous_name_picks_lowest_room_id(self) -> None:
+        """Two grants sharing a room name resolve deterministically -- the
+        lowest-id room wins (#2450 fix round 1)."""
+        origin_room = _make_room("Ambiguous Origin")
+        player = _make_player_character("ambiguous_namer", origin_room)
+        _gm, profile = _make_gm_character("ambiguous_gm", _make_room("Ambiguous GM Room"))
+
+        first_room = _make_room("Twinned Room")
+        second_room = _make_room("Twinned Room")
+        # Guard the test's own premise: object ids must actually differ.
+        assert first_room.id != second_room.id
+        lower_room, higher_room = sorted((first_room, second_room), key=lambda r: r.id)
+
+        lower_profile = RoomProfileFactory(objectdb=lower_room)
+        higher_profile = RoomProfileFactory(objectdb=higher_room)
+        StoryRoomGrantFactory(room=higher_profile, character=player.sheet_data, granted_by=profile)
+        StoryRoomGrantFactory(room=lower_profile, character=player.sheet_data, granted_by=profile)
+
+        msgs = _run(CmdJoinRoom, "Twinned Room", player)
+
+        player.refresh_from_db()
+        assert player.location == lower_room, msgs
+
 
 class LeaveRoomTests(TestCase):
     def test_leave_restores_origin(self) -> None:

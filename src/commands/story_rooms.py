@@ -92,6 +92,9 @@ class CmdJoinRoom(ArxCommand):
     Usage:
       joinroom               -- list rooms you may join
       joinroom <#id|name>    -- join one (name matches your own grants only)
+
+    If several of your granted rooms share a name, the lowest-id one is
+    picked -- join by #id to disambiguate.
     """
 
     key = "joinroom"
@@ -105,7 +108,7 @@ class CmdJoinRoom(ArxCommand):
         room_id_raw = raw.lstrip("#")
         if room_id_raw.isdigit():
             return {"room_id": int(room_id_raw)}
-        grant = grants.filter(room__objectdb__db_key__iexact=raw).first()
+        grant = grants.filter(room__objectdb__db_key__iexact=raw).order_by("room_id").first()
         if grant is None:
             msg = "No such room among your grants. (joinroom to see them.)"
             raise CommandError(msg)
@@ -118,6 +121,7 @@ class CmdJoinRoom(ArxCommand):
                 self._list_grants()
             except CommandError as err:
                 self.msg(str(err))
+                self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
             return
         super().func()
 
