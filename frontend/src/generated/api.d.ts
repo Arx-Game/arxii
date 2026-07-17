@@ -28225,6 +28225,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['RelationshipUpdate'][];
     };
+    PaginatedResonanceGrantList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ResonanceGrant'][];
+    };
     PaginatedRiskCalibrationList: {
       /** @example 123 */
       count: number;
@@ -49850,6 +49865,10 @@ export interface operations {
       query?: {
         granted_after?: string;
         granted_before?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
         resonance?: number;
         /**
          * @description Discriminator. Identifies which source_* FK is populated.
@@ -49908,7 +49927,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ResonanceGrant'][];
+          'application/json': components['schemas']['PaginatedResonanceGrantList'];
         };
       };
     };

@@ -1298,8 +1298,10 @@ class ResonanceGrantViewSet(
     Filter params: source, resonance (PK), granted_after, granted_before.
     """
 
-    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
-
+    # Paginated via the project default (ADR-0138): this audit ledger accrues a
+    # row every time a character earns resonance (poses, scene entries, style
+    # endorsements, dramatic moments, …), so it grows without bound over a
+    # character's life — a timeline surface that must be served in pages.
     serializer_class = ResonanceGrantSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
