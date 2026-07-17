@@ -21,6 +21,7 @@ from world.npc_services.effects import OFFER_EFFECT_HANDLERS, run_settle_obligat
 from world.npc_services.factories import NPCRoleFactory, NPCServiceOfferFactory
 from world.npc_services.services import resolve_offer, start_interaction
 from world.scenes.factories import PersonaFactory
+from world.seeds.tests.content_stub import stub_content_root
 from world.societies.constants import ObligationState
 from world.societies.factories import OrganizationFactory, OrganizationObligationFactory
 
@@ -123,6 +124,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
     Hare, settle at the Registrar, and the training door that was refused while
     OWED now opens."""
 
+    @stub_content_root()
     def test_settle_at_registrar_unblocks_train_offer(self) -> None:  # noqa: PLR0915
         from evennia.accounts.models import AccountDB
 
