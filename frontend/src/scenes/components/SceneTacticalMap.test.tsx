@@ -252,7 +252,7 @@ describe('SceneTacticalMap', () => {
   // of success.
   // ---------------------------------------------------------------------------
 
-  it('shows a toast and does not invalidate scene positions when the move dispatch resolves success:false', async () => {
+  it('toasts and skips scene invalidation on a success:false move', async () => {
     const mockMutateAsync = vi.fn(() =>
       Promise.resolve({ backend: 'registry', deferred: false, success: false, message: 'Blocked.' })
     );

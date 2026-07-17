@@ -316,7 +316,7 @@ describe('PersonaContextMenu', () => {
 
   // #2423: the dispatch endpoint resolves HTTP 200 + success:false for a
   // business-rule rejection — a resolved promise is not itself proof of success.
-  it('shows a toast and does not invalidate duel challenges when the challenge dispatch resolves success:false', async () => {
+  it('toasts and skips duel-challenge invalidation on success:false', async () => {
     const user = userEvent.setup();
     const mockMutateAsync = vi.fn(() =>
       Promise.resolve({ backend: 'registry', deferred: false, success: false, message: 'No.' })

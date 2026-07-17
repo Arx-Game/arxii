@@ -52,7 +52,7 @@ describe('MovementActions', () => {
 
   it('click dispatches with the action ref and empty kwargs', async () => {
     const action = makeMoveAction(5, 'Move to Balcony');
-    const dispatchAction = vi.fn(() => Promise.resolve());
+    const dispatchAction = vi.fn(() => Promise.resolve({ success: true }));
     const user = userEvent.setup();
 
     render(<MovementActions actions={[action]} isLocked={false} dispatchAction={dispatchAction} />);
@@ -85,7 +85,7 @@ describe('MovementActions', () => {
   // of success.
   // ---------------------------------------------------------------------------
 
-  it('shows a toast and does not call onDispatched when the dispatch resolves success:false', async () => {
+  it('shows a toast and skips onDispatched on success:false', async () => {
     vi.clearAllMocks();
     const action = makeMoveAction(5, 'Move to Balcony');
     const dispatchAction = vi.fn(() =>
