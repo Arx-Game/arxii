@@ -15,6 +15,16 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded PR runs. Without this, pushing a new commit to a PR leaves
+# the now-obsolete run burning ~13 runner slots to completion — real contention
+# on the org's concurrent-job cap (measured 2026-07-17: during a 3-build
+# merge-queue burst, shards queued up to 9.5 min waiting for runners).
+# Non-PR events (merge_group, push:main) get a unique group per run, so queue
+# builds and main validation are never canceled or serialized.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Detect which stacks the PR actually touches. Downstream heavy jobs are
   # gated on these flags so a backend-only change skips the frontend suite
@@ -87,75 +97,101 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          # Shard groupings by approximate test-method count (as of 2026-07-02).
-          # Run `grep -rE '^\s*def test_' src/<app>/ --include='*.py' | wc -l`
-          # per app to refresh counts after adding significant test suites.
-          # Rebalanced from 4 shards → 6 shards: the old 4-shard split (dated
-          # 2026-05-02) had shard-1 at ~4,705 tests and shard-4 at ~5,861 —
-          # both 3-4× their designed size after the suite roughly doubled.
-          # Six shards at ~2,545 each cuts the bottleneck-shard wall-clock
-          # roughly in half.
+          # Eight shards balanced by ESTIMATED RUNTIME, not test count
+          # (rebalanced from 6 shards, 2026-07-17). Test count was the old
+          # metric and it lied: two shards with ~2,545 tests each measured
+          # 328s vs 447s because seconds-per-test varies ~40% between apps.
+          # Estimates below = fresh `def test_` counts × the measured
+          # sec/test ratio of the shard each app ran in on 2026-07-17
+          # (run 29543529238). Each shard targets ~305s of test runtime
+          # (+~60s fixed setup). To refresh: pull per-shard "Run tests" step
+          # seconds from a green run, recount tests per app
+          # (`grep -rE '^\s*def test_' src/<app>/ --include='*.py' | wc -l`),
+          # and re-balance greedily.
           #
-          # shard-1 (~2,544): world.magic (2544) — the largest app, nearly a
-          #                    full shard on its own. world.realms (0) is inert.
+          # world.magic is bigger than a whole shard's budget, so it is split
+          # below the app level: shard-1 and shard-2 each run one generated
+          # half of its test modules (split_app/split_part/split_of — see the
+          # "Run tests" step and tools/split_test_labels.py). The split is
+          # re-derived from disk every run, so new magic test modules cannot
+          # fall between the halves.
+          #
+          # tools/lint_shard_coverage.py (the shard-coverage pre-commit hook,
+          # run by the pre-commit CI job) fails when an app is missing from
+          # this matrix, covered twice, or listed as a sub-app label — keep
+          # it green when editing.
+          #
+          # shard-1 (~304s): world.magic half 1 (~191s) + world.societies (44)
+          #   + web (24) + world.seeds (12) + world.distinctions (9)
+          #   + world.clues (6) + world.journals (5) + evennia_extensions (5)
+          #   + world.ceremonies (2). world.realms (0 tests) is inert.
           - name: shard-1
-            apps: "world.magic world.realms"
-          # shard-2 (~2,545): world.combat (1432) + flows (291) + world.character_creation (228)
-          #                   + world.roster (156) + world.events (112) + world.battles (93)
-          #                   + world.goals (77) + world.journals (56) + world.classes (38)
-          #                   + world.projects (34) + world.species (28)
-          - name: shard-2
+            split_app: world.magic
+            split_part: 1
+            split_of: 2
             apps: >-
-              world.combat flows world.character_creation world.roster world.events
-              world.battles world.goals world.journals world.classes world.projects world.species
-          # shard-3 (~2,529): world.stories (1046) + world.mechanics (370)
-          #                   + integration_tests.pipeline (158) + integration_tests.game_content (165)
-          #                   + world.checks (190) + world.vitals (149) + world.fatigue (117)
-          #                   + core_management (94) + world.achievements (68) + world.secrets (63)
-          #                   + world.action_points (40) + evennia_extensions (34) + typeclasses (25)
-          #                   + behaviors (6) + world.ships (57) + world.boundaries (38, #1771)
-          #                   + world.companions (3, #672) + world.assets (3, #1872)
+              world.societies web world.seeds world.distinctions world.clues
+              world.journals evennia_extensions world.ceremonies world.realms
+          # shard-2 (~306s): world.magic half 2 (~191s) + flows (40)
+          #   + world.roster (26) + world.room_features (18) + world.game_clock (10)
+          #   + world.assets (7) + world.captivity (6) + world.tarot (5)
+          #   + core (3) + world.worship (1)
+          - name: shard-2
+            split_app: world.magic
+            split_part: 2
+            split_of: 2
+            apps: >-
+              flows world.roster world.room_features world.game_clock world.assets
+              world.captivity world.tarot core world.worship
+          # shard-3 (~304s): world.combat (235) + world.checks (23) + world.events (14)
+          #   + world.codex (11) + world.justice (10) + world.player_submissions (5)
+          #   + world.species (4) + world.tidings (2)
           - name: shard-3
             apps: >-
-              world.stories world.mechanics world.checks world.vitals world.fatigue
-              core_management world.achievements world.secrets world.action_points
-              evennia_extensions typeclasses behaviors world.ships world.boundaries
-              world.companions world.assets world.agriculture world.travel world.estates
-              world.military
-              world.dreams
-              integration_tests.pipeline integration_tests.game_content
-          # shard-4 (~2,545): world.scenes (892) + world.items (529) + world.conditions (326)
-          #                   + world.areas (224) + world.buildings (135) + world.forms (114)
-          #                   + world.narrative (84) + world.distinctions (82) + world.currency (59)
-          #                   + world.captivity (37) + world.tarot (36) + world.predicates (21)
-          #                   + world.tidings (6)
+              world.combat world.checks world.events world.codex world.justice
+              world.player_submissions world.species world.tidings
+          # shard-4 (~305s): world.stories (157) + world.conditions (49)
+          #   + world.locations (32) + world.vitals (22) + world.fatigue (13)
+          #   + world.skills (10) + world.achievements (8) + world.projects (6)
+          #   + world.traits (4) + world.military (3)
           - name: shard-4
             apps: >-
-              world.scenes world.items world.conditions world.areas world.buildings
-              world.forms world.narrative world.distinctions world.currency
-              world.captivity world.tarot world.predicates world.tidings
-          # shard-5 (~2,545): actions (817) + world.covenants (543) + world.societies (350)
-          #                   + world.character_sheets (253) + web (72) + web.admin (48) + web.api (24)
-          #                   + world.game_clock (109) + world.skills (97) + world.consent (67)
-          #                   + world.player_submissions (59) + world.clues (54) + world.seeds (31)
-          #                   + world.instances (21) + world.worship (new, #2355)
-          #                   + world.ceremonies (new, #2289)
+              world.stories world.conditions world.locations world.vitals world.fatigue
+              world.skills world.achievements world.projects world.traits world.military
+          # shard-5 (~303s): world.scenes (140) + world.progression (52)
+          #   + world.character_creation (36) + world.npc_services (28) + world.gm (22)
+          #   + world.goals (10) + world.weather (6) + typeclasses (5)
+          #   + world.dreams (3) + behaviors (1)
           - name: shard-5
             apps: >-
-              actions world.covenants world.societies world.character_sheets
-              web web.admin web.api
-              world.game_clock world.skills world.consent world.player_submissions
-              world.clues world.seeds world.instances world.worship world.ceremonies
-          # shard-6 (~2,579): commands (660) + world.missions (636) + world.progression (366)
-          #                   + world.locations (256) + world.relationships (160) + world.gm (122)
-          #                   + world.npc_services (108) + world.codex (79) + world.weather (57)
-          #                   + world.traits (39) + world.room_features (33) + world.staff_inbox (29)
-          #                   + world.justice (34)
+              world.scenes world.progression world.character_creation world.npc_services
+              world.gm world.goals world.weather typeclasses world.dreams behaviors
+          # shard-6 (~303s): actions (120) + world.battles (64) + world.areas (47)
+          #   + world.relationships (30) + world.forms (21) + world.secrets (10)
+          #   + world.travel (7) + world.classes (5) + world.staff_inbox (4)
           - name: shard-6
             apps: >-
-              commands world.missions world.progression world.locations world.relationships
-              world.gm world.npc_services world.codex world.weather world.traits
-              world.room_features world.staff_inbox world.justice
+              actions world.battles world.areas world.relationships world.forms
+              world.secrets world.travel world.classes world.staff_inbox
+          # shard-7 (~304s): commands (131) + world.covenants (57)
+          #   + integration_tests (45, whole app — the old .pipeline/.game_content
+          #   labels silently skipped its root-level test modules)
+          #   + world.buildings (26) + world.companions (12) + world.currency (10)
+          #   + world.agriculture (7) + world.ships (6) + world.action_points (4)
+          #   + world.instances (2)
+          - name: shard-7
+            apps: >-
+              commands world.covenants integration_tests world.buildings world.companions
+              world.currency world.agriculture world.ships world.action_points world.instances
+          # shard-8 (~305s): world.missions (95) + world.items (92) + world.mechanics (45)
+          #   + world.character_sheets (25) + core_management (14) + world.narrative (9)
+          #   + world.consent (8) + world.estates (6) + world.boundaries (4)
+          #   + world.predicates (3)
+          - name: shard-8
+            apps: >-
+              world.missions world.items world.mechanics world.character_sheets
+              core_management world.narrative world.consent world.estates
+              world.boundaries world.predicates
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the
@@ -229,7 +265,21 @@ jobs:
         # boolean flag, so `auto` would fall through as a positional test label
         # and Django would fail trying to import a module named `auto`.
         # --keepdb: reuse the pre-cloned test_arxii_test instead of rebuilding it.
-        run: uv run arx test --keepdb --parallel ${{ matrix.shard.apps }}
+        #
+        # Shards with a split_app additionally run one generated slice of that
+        # app's test modules. split_test_labels.py re-derives the module set
+        # from disk and exits non-zero sooner than emit an incomplete slice;
+        # `test -n` backstops an empty expansion so a script failure can never
+        # quietly shrink the label list.
+        run: |
+          LABELS="${{ matrix.shard.apps }}"
+          if [ -n "${{ matrix.shard.split_app }}" ]; then
+            PART_LABELS="$(uv run python tools/split_test_labels.py ${{ matrix.shard.split_app }} \
+              --part ${{ matrix.shard.split_part }} --of ${{ matrix.shard.split_of }})"
+            test -n "$PART_LABELS"
+            LABELS="$LABELS $PART_LABELS"
+          fi
+          uv run arx test --keepdb --parallel $LABELS
 
   # Aggregator: succeeds iff every backend-shard matrix entry succeeded.
   # Lets branch protection require a single status check named "backend"

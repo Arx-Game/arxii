@@ -16,6 +16,8 @@ from world.projects.services import (
     get_kind_handler,
     register_kind_handler,
     resolve_project,
+    restore_registries,
+    snapshot_registries,
 )
 from world.scenes.factories import PersonaFactory
 from world.traits.models import CheckOutcome
@@ -63,6 +65,9 @@ class AddContributionTests(TestCase):
 
 class KindHandlerRegistryTests(TestCase):
     def setUp(self) -> None:
+        # Registries are process-global app-ready state — snapshot before
+        # clearing so tests that run after this module see them intact.
+        self.addCleanup(restore_registries, snapshot_registries())
         clear_kind_handlers()
 
     def test_register_and_lookup_handler(self) -> None:
@@ -88,6 +93,7 @@ class ResolveProjectTests(TestCase):
         )
 
     def setUp(self) -> None:
+        self.addCleanup(restore_registries, snapshot_registries())
         clear_kind_handlers()
         self.handler_calls = []
 

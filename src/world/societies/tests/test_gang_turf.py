@@ -8,11 +8,11 @@ from django.utils import timezone
 from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus
 from world.projects.factories import ProjectFactory
 from world.projects.services import (
-    clear_kind_handlers,
-    clear_tiered_resolvers,
     register_kind_handler,
     register_tiered_resolver,
+    restore_registries,
     scan_active_projects,
+    snapshot_registries,
 )
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory, OrganizationTypeFactory
@@ -123,12 +123,11 @@ class CompleteGangTurfTests(TestCase):
 @tag("postgres")
 class ResolveGangTurfTests(TestCase):
     def setUp(self) -> None:
+        # Registries are process-global app-ready state — restore, never
+        # leave them cleared for tests that run after this module.
+        self.addCleanup(restore_registries, snapshot_registries())
         # resolve_project dispatches the kind handler; register GANG_TURF's.
         register_kind_handler(ProjectKind.GANG_TURF, complete_gang_turf)
-
-    def tearDown(self) -> None:
-        clear_kind_handlers()
-        clear_tiered_resolvers()
 
     def test_grades_by_progress_and_resolves(self) -> None:
         org, leader, _ = _gang_org_with_leader()
@@ -196,12 +195,9 @@ class StartGangTurfProjectTests(TestCase):
 @tag("postgres")
 class ScanJourneyTests(TestCase):
     def setUp(self) -> None:
+        self.addCleanup(restore_registries, snapshot_registries())
         register_kind_handler(ProjectKind.GANG_TURF, complete_gang_turf)
         register_tiered_resolver(ProjectKind.GANG_TURF, resolve_gang_turf)
-
-    def tearDown(self) -> None:
-        clear_kind_handlers()
-        clear_tiered_resolvers()
 
     def test_scan_grades_and_resolves_in_one_tick(self) -> None:
         org, leader, _ = _gang_org_with_leader()

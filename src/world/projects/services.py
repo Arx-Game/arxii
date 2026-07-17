@@ -330,8 +330,31 @@ def get_kind_handler(kind: str) -> KindHandler:
 
 
 def clear_kind_handlers() -> None:
-    """Test-only: clear the handler registry."""
+    """Test-only: clear the handler registry.
+
+    Both registries are process-global and populated at app-ready, so a test
+    that clears one MUST restore it afterward or every later test in the
+    process that relies on app-ready registrations breaks (surfaced when the
+    CI shard rebalance put world.battles before world.areas). Pair with
+    snapshot_registries()/restore_registries() via addCleanup.
+    """
     _KIND_HANDLERS.clear()
+
+
+def snapshot_registries() -> tuple[dict[str, KindHandler], dict[str, TieredResolver]]:
+    """Test-only: copy both registries for restore_registries()."""
+    return dict(_KIND_HANDLERS), dict(_TIERED_RESOLVERS)
+
+
+def restore_registries(
+    snapshot: tuple[dict[str, KindHandler], dict[str, TieredResolver]],
+) -> None:
+    """Test-only: reset both registries to a snapshot_registries() copy."""
+    kind_handlers, tiered_resolvers = snapshot
+    _KIND_HANDLERS.clear()
+    _KIND_HANDLERS.update(kind_handlers)
+    _TIERED_RESOLVERS.clear()
+    _TIERED_RESOLVERS.update(tiered_resolvers)
 
 
 # ---------------------------------------------------------------------------

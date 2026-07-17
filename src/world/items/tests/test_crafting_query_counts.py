@@ -237,15 +237,29 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # estate/evidence bumps; never scales with linked-deed count.
             # Postgres 91→92; SQLite 92→93.
             from django.db import connection
+            from django.test.utils import CaptureQueriesContext
 
-            expected = 92 if connection.vendor == "postgresql" else 93
-            with self.assertNumQueries(expected):
+            # Band, not exact count (2026-07 shard rebalance): whether a
+            # SharedMemoryModel lookup (RoomProfile, ActionPointConfig, ...)
+            # hits the identity map depends on which tests ran earlier in the
+            # process, so the exact count wobbles ±1 with suite composition on
+            # BOTH vendors — the old exact-per-vendor pins broke every time
+            # the CI shard groupings changed. The guard's purpose is catching
+            # per-row N+1s, and those add ≥3 (3 consequence rows), which blows
+            # past the band. Observed: 92 (warm identity map) / 93 (cold).
+            with CaptureQueriesContext(connection) as ctx:
                 result = craft_attach_facet(
                     crafter_account=self.account,
                     crafter_character=self.character,
                     item_instance=self.item,
                     facet=self.facet,
                 )
+            executed = len(ctx.captured_queries)
+            self.assertTrue(
+                91 <= executed <= 94,
+                f"{executed} queries executed, expected 92-93 ±1 identity-map "
+                f"wobble (band 91-94). A jump of >=3 means a per-row N+1.",
+            )
 
         self.assertTrue(result.attached)
         self.assertIsNotNone(result.quality_tier)

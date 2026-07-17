@@ -7,7 +7,7 @@ Exercises the full pipeline:
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.checks.constants import EffectType
@@ -45,6 +45,9 @@ def _ensure_active_era():
     return active
 
 
+# The legend-summary materialized views only exist on Postgres; the SQLite
+# tier has no societies_covenantlegendsummary table.
+@tag("postgres")
 class CovenantSliceDFlowIntegrationTest(TestCase):
     """End-to-end exercise of the Slice D loop.
 
