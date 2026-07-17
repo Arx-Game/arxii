@@ -12,7 +12,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile
-from world.areas.constants import GridOrigin
+from world.areas.constants import AreaLevel, GridOrigin
 from world.gm.factories import GMProfileFactory, StoryAreaFactory
 from world.instances.constants import InstanceStatus
 from world.instances.factories import InstancedRoomFactory
@@ -76,6 +76,18 @@ class StoryAreaListTests(StoryBuilderApiBase):
         ids = {row["id"] for row in response.data["results"]}
         self.assertIn(self.story_area.pk, ids)
         self.assertIn(self.other_story_area.pk, ids)
+
+    def test_filter_by_parent(self) -> None:
+        """AreaFilter is wired (django_notes ViewSet standard) and composes with
+        the GM-ownership scoping in get_queryset — not just registered inertly."""
+        parent_story = StoryAreaFactory(gm=self.gm, area__level=AreaLevel.WARD).area
+        child = StoryAreaFactory(
+            gm=self.gm, area__level=AreaLevel.BUILDING, area__parent=parent_story
+        ).area
+        response = self._get(self._url(), self.gm_account, parent=parent_story.pk)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertEqual(ids, {child.pk})
 
 
 class StoryAreaManagerTests(StoryBuilderApiBase):

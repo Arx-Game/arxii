@@ -87,3 +87,16 @@ class TestRoomIsPubliclyListed(TestCase):
         room.room_profile.delete()
         room.refresh_from_db()
         self.assertFalse(room_is_publicly_listed(room))
+
+    def test_story_area_room_with_is_public_true_returns_false(self) -> None:
+        """GM Story-area rooms are never publicly listed, even with is_public=True (#2450)."""
+        from evennia_extensions.models import room_is_publicly_listed
+        from world.areas.constants import GridOrigin
+        from world.areas.factories import AreaFactory
+
+        story_area = AreaFactory(origin=GridOrigin.STORY)
+        room = self._room()
+        room.room_profile.area = story_area
+        room.room_profile.is_public = True
+        room.room_profile.save()
+        self.assertFalse(room_is_publicly_listed(room))

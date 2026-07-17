@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.db.models import Count, QuerySet
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -11,6 +12,7 @@ from rest_framework.response import Response
 
 from world.areas.builder_views import WorldBuilderAreaPagination, area_manager_payload
 from world.areas.constants import GridOrigin
+from world.areas.filters import AreaFilter
 from world.areas.models import Area
 from world.areas.serializers import (
     WorldBuilderAreaManagerSerializer,
@@ -28,6 +30,8 @@ class StoryBuilderViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = WorldBuilderAreaSerializer
     permission_classes = [IsGMOrStaff]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = AreaFilter
     pagination_class = WorldBuilderAreaPagination
 
     def get_queryset(self) -> QuerySet[Area]:

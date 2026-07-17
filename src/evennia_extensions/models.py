@@ -384,11 +384,17 @@ def room_is_publicly_listed(room: ObjectDB) -> bool:
 
     Single source of truth for the scene privacy<->room-publicness invariant:
     consumed by Scene validation, ensure_scene_for_location, and combat duels.
+    Story-area rooms are never publicly listed regardless of the ``is_public``
+    flag — GM-authored areas (GridOrigin.STORY) are staff scaffolding, not
+    content meant to surface in the global room listing.
     """
     try:
-        return room.room_profile.is_public
+        profile = room.room_profile
     except ObjectDoesNotExist:
         return False
+    if profile.area_id is not None and profile.area.origin == GridOrigin.STORY:
+        return False
+    return profile.is_public
 
 
 class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
