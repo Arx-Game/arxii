@@ -185,7 +185,7 @@ def _serialize_modifiers(modifiers, room_fixture_by_pk: dict) -> list[dict]:
             "resonance": row.resonance.name if row.resonance_id else None,
             "damage_type": row.damage_type.name if row.damage_type_id else None,
             "value": row.value,
-            "change_per_day": str(row.change_per_day),
+            "change_per_day": row.change_per_day,
             "source": row.source,
         }
         for row in modifiers

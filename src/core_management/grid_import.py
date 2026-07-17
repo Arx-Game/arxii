@@ -443,7 +443,7 @@ def _import_sidecars(
                     parent_type=row_data["parent_type"],
                     key_type=row_data["key_type"],
                     value=row_data["value"],
-                    change_per_day=row_data["change_per_day"],
+                    change_per_day=int(row_data["change_per_day"]),
                     source=row_data["source"],
                     **{parent_field: parent_obj, axis_field: axis_value},
                 )

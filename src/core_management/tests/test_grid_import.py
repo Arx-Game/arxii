@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import json
 from pathlib import Path
 import tempfile
 
 from django.test import TestCase
+from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils import create as evennia_create
 
@@ -16,7 +18,7 @@ from core_management.grid_import import load_grid_bundles
 from core_management.tests._grid_fixtures import build_sample_grid
 from evennia_extensions.constants import ExitKind
 from evennia_extensions.models import ExitProfile, ObjectDisplayData, RoomProfile
-from world.areas.constants import GridOrigin
+from world.areas.constants import AreaLevel, GridOrigin
 from world.areas.models import Area
 from world.locations.constants import LocationParentType, StatKey
 from world.locations.models import LocationValueModifier, LocationValueOverride
@@ -198,3 +200,46 @@ class GridImportTests(TestCase):
         self.assertNotEqual(authored_rows.first().pk, authored_pk)
         self.assertEqual(authored_rows.first().value, 3)
         self.assertEqual(result.errors, [])
+
+    def test_reimported_modifier_change_per_day_round_trips_as_int(self) -> None:
+        """#2448 fix: the exporter must not stringify change_per_day, and the freshly
+        created (idmapper-cached) instance must carry a real int — not a str that
+        merely happens to coerce correctly on the next DB round-trip."""
+        export_grid_bundles(self.root)
+
+        bundle = self._load_bundle("arx-city")
+        for modifier in bundle["modifiers"]:
+            if modifier["source"] == "authored:city-watch":
+                modifier["change_per_day"] = -2
+        self._write_bundle("arx-city", bundle)
+
+        result = load_grid_bundles(self.root)
+        self.assertEqual(result.errors, [])
+
+        modifier = LocationValueModifier.objects.get(
+            parent_type=LocationParentType.AREA, area=self.grid.city, source="authored:city-watch"
+        )
+        self.assertIsInstance(modifier.change_per_day, int)
+        self.assertEqual(modifier.change_per_day, -2)
+
+        # Force the decay arithmetic path (nonzero elapsed days) rather than the
+        # value==0/change_per_day==0 shortcut — this is exactly where a str
+        # change_per_day raises TypeError instead of computing a decayed int.
+        current = modifier.current_value(now=timezone.now() + timedelta(days=5))
+        self.assertIsInstance(current, int)
+
+    def test_db_area_absent_from_bundles_reported_not_deleted(self) -> None:
+        export_grid_bundles(self.root)
+
+        Area.objects.create(
+            name="Forgotten Ward",
+            level=AreaLevel.REGION,
+            slug="arx-forgotten-ward",
+            origin=GridOrigin.AUTHORED,
+        )
+
+        result = load_grid_bundles(self.root)
+
+        matching = [r for r in result.reports if "arx-forgotten-ward" in r]
+        self.assertEqual(len(matching), 1)
+        self.assertTrue(Area.objects.filter(slug="arx-forgotten-ward").exists())

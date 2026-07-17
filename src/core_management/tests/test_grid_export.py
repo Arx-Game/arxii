@@ -147,7 +147,7 @@ class GridExportTests(TestCase):
         self.assertIsNone(authored_modifier["room"])
         self.assertEqual(authored_modifier["stat_key"], StatKey.ORDER)
         self.assertEqual(authored_modifier["value"], 3)
-        self.assertEqual(authored_modifier["change_per_day"], "0")
+        self.assertEqual(authored_modifier["change_per_day"], 0)
 
     def test_player_origin_room_not_exported(self) -> None:
         export_grid_bundles(self.root)
