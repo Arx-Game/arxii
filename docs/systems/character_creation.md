@@ -40,6 +40,16 @@ from world.character_creation.types import (
 | `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level`, `minimum_trust` |
 | `Beginnings` | Worldbuilding paths per area | `name`, `starting_area` (FK), `description`, `family_known`, `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank` |
 
+**Content vs seeds:** the real, authored `Beginnings` rows (e.g. the Arx trio —
+Caretaker/Sleeper/Misbegotten) are **lore-repo content fixtures**
+(`fixtures/character_creation/beginnings.json` + `beginningtradition.json`,
+prose + rulings in the lore repo's `beginnings/arx.md`), loaded by
+`load_world_content` (natural-key upserts — the fixture also retires the
+seeded placeholders via `is_active: false` rows) and exported back by
+`content_export` (`Beginnings`/`CGExplanation` are in `CONTENT_MODELS`). The
+rows seeded below are generic bootstrap placeholders only; real content never
+expands seed data in this public repo (TehomCD ruling, 2026-07-17).
+
 ### Template/Configuration Tables
 
 | Model | Purpose | Key Fields |

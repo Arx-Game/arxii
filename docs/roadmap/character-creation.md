@@ -1,5 +1,25 @@
 # Character Creation & Identity
 
+## Built (2026-07-17 — Arx beginnings authored as lore-repo content; content-only-in-lore-repo ruling)
+
+- The three Arx `Beginnings` (Caretaker / Sleeper / Misbegotten) are now real
+  authored content — but they live **entirely in the private lore repo** as
+  natural-key fixtures (`fixtures/character_creation/beginnings.json` +
+  `beginningtradition.json`, canonical prose + rulings in `beginnings/arx.md`),
+  loaded via `load_world_content` and exported back via `content_export`.
+  **Ruling (TehomCD):** real content never expands this repo's seed data — the
+  public-repo leak risk is permanent — so seeds keep only generic bootstrap
+  placeholders, and content work needs no arxii PR unless schema/structure
+  changes. This PR's arxii side is structural only: `character_creation.
+  beginnings` + `cgexplanation` joined `CONTENT_MODELS` (CGExplanation gained
+  its natural key), and `ensure_content_repo.sh` enables the lore repo's
+  pre-push guard hook after fresh clones.
+- Content still to author (lore repo) / open issues: ghost-tutor training for
+  the orphaned Arx traditions (#2460, needs-design), "the Keeping"
+  coming-of-age house grant (#2461, needs-design), waking-tomb + Cradle rooms
+  (#2462, grid epic #2436), Arvani Common + elf/Daeva form traits (#2463 —
+  `Language` has zero rows anywhere yet).
+
 ## Built (2026-07-16, #2426 — CG magic revamp: Path → Tradition → Gift → Technique)
 
 - The old "Magic" stage (freeform cantrip creation) is retired. Stage 5 **Path** is

@@ -56,3 +56,10 @@ if ! gh repo clone "$url" "$path"; then
     echo "or clone the repo manually."
     exit 1
 fi
+
+# Enable the lore repo's pre-push hook (blocks force-push / history rewrites).
+# Required after every fresh clone — see the lore repo's README.
+if [ -d "$path/.githooks" ]; then
+    git -C "$path" config core.hooksPath .githooks
+    echo "Enabled pre-push guard hook."
+fi

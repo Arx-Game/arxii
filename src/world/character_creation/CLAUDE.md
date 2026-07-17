@@ -29,7 +29,8 @@ Character creation is a multi-stage process that guides players through creating
 - Access control: all players, trust-required, or staff-only
 
 ### Beginnings
-- Worldbuilding paths for each starting area (e.g., Sleeper, Normal Upbringing, Noble Birth)
+- Worldbuilding paths for each starting area (Arx: Caretaker, Sleeper, Misbegotten —
+  canonical prose and gates in the lore repo's `beginnings/arx.md`)
 - Controls which species are available (allows_all_species or specific species_options)
 - Sets whether family is known (family_known=False for Sleeper/Misbegotten)
 - Can override starting room (e.g., Sleeper Wake Room)

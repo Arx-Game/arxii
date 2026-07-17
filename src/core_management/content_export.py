@@ -38,7 +38,9 @@ class ContentExportError(Exception):
 CONTENT_MODELS: frozenset[str] = frozenset(
     {
         # character_creation
+        "character_creation.beginnings",
         "character_creation.beginningtradition",
+        "character_creation.cgexplanation",
         "character_creation.startingarea",
         # character_sheets
         "character_sheets.gender",
