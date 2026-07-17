@@ -99,7 +99,11 @@ def grant_story_room(
 
 
 def revoke_story_room(*, grant: StoryRoomGrant) -> None:
-    """Delete the grant; if the character is inside, return them first."""
+    """Delete the grant; if the character is inside, return them first.
+
+    ``_return_character`` only completes normally when the move succeeds, so a
+    stuck character (blocked ``move_to``) keeps the grant instead of losing it.
+    """
     char = grant.character.character
     if char is not None and char.location == grant.room.objectdb:
         _return_character(grant)
@@ -113,9 +117,13 @@ def join_story_room(*, sheet: CharacterSheet, room_profile: RoomProfile) -> Obje
         msg = "You have no invitation to that room."
         raise StoryServiceError(msg)
     char = sheet.character
-    grant.return_location = char.location
+    origin = char.location
+    moved = char.move_to(room_profile.objectdb, quiet=True)
+    if not moved:
+        msg = "Something blocked the move — you haven't joined. Try again or ask your GM."
+        raise StoryServiceError(msg)
+    grant.return_location = origin
     grant.save(update_fields=["return_location"])
-    char.move_to(room_profile.objectdb, quiet=True)
     return room_profile.objectdb
 
 
@@ -134,7 +142,10 @@ def _return_character(grant: StoryRoomGrant) -> ObjectDB:
     if destination is None:
         msg = "Nowhere to return you to — ask staff."
         raise StoryServiceError(msg)
-    char.move_to(destination, quiet=True)
+    moved = char.move_to(destination, quiet=True)
+    if not moved:
+        msg = "Something blocked the return move — ask staff."
+        raise StoryServiceError(msg)
     grant.return_location = None
     grant.save(update_fields=["return_location"])
     return destination
@@ -156,15 +167,36 @@ def spin_up_scene_room(*, gm: GMProfile, name: str, description: str) -> Instanc
 
 
 def close_scene_room(*, instance: InstancedRoom) -> None:
-    """Return every joined character per their grant, then complete the instance."""
+    """Return every joined character per their grant, then complete the instance.
+
+    Deliberately no ``transaction.atomic()`` here: ``move_to`` triggers room
+    hooks with non-DB side effects (messaging, scene bookkeeping) that a DB
+    rollback cannot undo, so wrapping this in a transaction would only roll
+    back the grant/instance rows while leaving those side effects applied —
+    an inconsistent half-state disguised as atomic. Instead this stays
+    retryable: if any present character fails to return (blocked ``move_to``),
+    no grant is deleted and the instance is not completed, so the whole close
+    can simply be attempted again once whatever blocked the move is cleared.
+    """
     from world.instances.services import complete_instanced_room  # noqa: PLC0415
 
     grants = StoryRoomGrant.objects.filter(room__objectdb=instance.room).select_related(
         "character", "room"
     )
+    failures: list[str] = []
     for grant in grants:
         char = grant.character.character
-        if char is not None and char.location == instance.room:
+        if char is None or char.location != instance.room:
+            continue
+        try:
             _return_character(grant)
+        except StoryServiceError:
+            failures.append(str(char))
+
+    if failures:
+        names = ", ".join(failures)
+        msg = f"Could not return: {names}. Try closing again once they're clear."
+        raise StoryServiceError(msg)
+
     grants.delete()
     complete_instanced_room(instance.room)

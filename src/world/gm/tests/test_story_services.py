@@ -5,6 +5,8 @@ Caps, ownership, grants, join/leave, and GM-owned temp scene rooms.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
@@ -33,6 +35,7 @@ from world.gm.story_services import (
     spin_up_scene_room,
     story_room_cap_check,
 )
+from world.instances.constants import InstanceStatus
 from world.instances.models import InstancedRoom
 
 
@@ -139,6 +142,23 @@ class JoinStoryRoomTests(TestCase):
         grant = StoryRoomGrant.objects.get(room=room_profile, character=sheet)
         assert grant.return_location == origin_room
 
+    def test_blocked_move_raises_and_does_not_persist_return_location(self) -> None:
+        gm = GMProfileFactory()
+        room_profile = RoomProfileFactory()
+        origin_room = RoomProfileFactory().objectdb
+        char = CharacterFactory(home=origin_room)
+        sheet = CharacterSheetFactory(character=char)
+        char.move_to(origin_room, quiet=True)
+        StoryRoomGrantFactory(room=room_profile, character=sheet, granted_by=gm)
+
+        with patch.object(type(char), "move_to", return_value=False):
+            with self.assertRaises(StoryServiceError):
+                join_story_room(sheet=sheet, room_profile=room_profile)
+
+        assert char.location == origin_room
+        grant = StoryRoomGrant.objects.get(room=room_profile, character=sheet)
+        assert grant.return_location is None
+
 
 class LeaveStoryRoomTests(TestCase):
     def test_raises_without_grant(self) -> None:
@@ -182,6 +202,24 @@ class LeaveStoryRoomTests(TestCase):
         assert destination == home_room
         assert char.location == home_room
 
+    def test_blocked_return_move_raises_and_preserves_return_location(self) -> None:
+        gm = GMProfileFactory()
+        room_profile = RoomProfileFactory()
+        origin_room = RoomProfileFactory().objectdb
+        char = CharacterFactory(home=origin_room)
+        sheet = CharacterSheetFactory(character=char)
+        char.move_to(origin_room, quiet=True)
+        StoryRoomGrantFactory(room=room_profile, character=sheet, granted_by=gm)
+        join_story_room(sheet=sheet, room_profile=room_profile)
+
+        with patch.object(type(char), "move_to", return_value=False):
+            with self.assertRaises(StoryServiceError):
+                leave_story_room(sheet=sheet, room_profile=room_profile)
+
+        assert char.location == room_profile.objectdb
+        grant = StoryRoomGrant.objects.get(room=room_profile, character=sheet)
+        assert grant.return_location == origin_room
+
 
 class RevokeStoryRoomTests(TestCase):
     def test_returns_character_to_captured_origin_when_inside(self) -> None:
@@ -205,6 +243,25 @@ class RevokeStoryRoomTests(TestCase):
         grant = StoryRoomGrantFactory()
         revoke_story_room(grant=grant)
         assert not StoryRoomGrant.objects.filter(pk=grant.pk).exists()
+
+    def test_keeps_grant_when_stuck_character_cannot_be_returned(self) -> None:
+        gm = GMProfileFactory()
+        room_profile = RoomProfileFactory()
+        origin_room = RoomProfileFactory().objectdb
+        home_room = RoomProfileFactory().objectdb
+        char = CharacterFactory(home=home_room)
+        sheet = CharacterSheetFactory(character=char)
+        char.move_to(origin_room, quiet=True)
+        grant = StoryRoomGrantFactory(room=room_profile, character=sheet, granted_by=gm)
+        join_story_room(sheet=sheet, room_profile=room_profile)
+        grant.refresh_from_db()
+
+        with patch.object(type(char), "move_to", return_value=False):
+            with self.assertRaises(StoryServiceError):
+                revoke_story_room(grant=grant)
+
+        assert char.location == room_profile.objectdb
+        assert StoryRoomGrant.objects.filter(pk=grant.pk).exists()
 
 
 class SpinUpSceneRoomTests(TestCase):
@@ -244,3 +301,25 @@ class CloseSceneRoomTests(TestCase):
         # OneToOneField CASCADE, the InstancedRoom row) — confirming
         # completion ran to the end after the character was returned.
         assert not InstancedRoom.objects.filter(pk=instance_pk).exists()
+
+    def test_stuck_character_blocks_close_and_keeps_grants_and_instance(self) -> None:
+        gm = GMProfileFactory()
+        instance = spin_up_scene_room(gm=gm, name="Ambush Site", description="A dark alley.")
+        room_profile = RoomProfile.objects.get(objectdb=instance.room)
+
+        home_room = RoomProfileFactory().objectdb
+        char = CharacterFactory(home=home_room)
+        sheet = CharacterSheetFactory(character=char)
+        char.move_to(home_room, quiet=True)
+        grant = StoryRoomGrantFactory(room=room_profile, character=sheet, granted_by=gm)
+        join_story_room(sheet=sheet, room_profile=room_profile)
+        assert char.location == instance.room
+
+        with patch.object(type(char), "move_to", return_value=False):
+            with self.assertRaises(StoryServiceError):
+                close_scene_room(instance=instance)
+
+        assert char.location == instance.room
+        assert StoryRoomGrant.objects.filter(pk=grant.pk).exists()
+        instance.refresh_from_db()
+        assert instance.status == InstanceStatus.ACTIVE
