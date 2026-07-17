@@ -938,8 +938,9 @@ Mechanical regional climate + transient weather feeding the #1514 comfort substr
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 
-- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank`, `OrganizationMembership`, `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
+- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank`, `OrganizationMembership`, `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
 - **Office services** (`office_services.py`, #2239): `appoint_office` / `vacate_office` / `office_holder` / `holds_office`
+- **Obligation services** (`obligation_services.py`, #2428): `settle_obligation(obligation, token)` (redeems the Hare via `currency.redeem_favor_token`, flips `OWED` → `SETTLED`, stamps `settled_at`/`settled_by_token`; raises `ObligationNotOwedError` if not `OWED`) / `has_open_obligation(sheet, org)` (read-only gate for training/entrance flows)
 - **Enums:** `ReputationTier`, `OrganizationMembershipOffer.Kind`, `OrganizationMembershipOffer.Status`
 - **Key Services:** `ensure_default_rank_ladder`, `join_organization`, `leave_organization`, `invite_to_organization`, `apply_to_organization`, `accept_invitation`, `decline_invitation`, `accept_application`, `decline_application`, `promote_member`, `demote_member`, `expel_member`
 - **Action Keys:** `org_invite`, `org_apply`, `org_join`, `org_leave`, `org_promote`, `org_demote`, `org_expel`
@@ -969,7 +970,7 @@ Social structures, organizations, reputation, and legend tracking.
 - **`Organization`/`Society` as `NpcRegard` target (#1717):** either can now be the *target* (not
   holder) of a notable NPC's external opinion — see the Regard bullet in the NPC Services
   section above.
-- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam), battles (consumer — `world.battles.legend_wiring` calls `create_legend_event`/`create_solo_deed` from a battle-conclusion hook, win-gated Legend, #2184; FK direction battles→societies, ADR-0010 — this app never imports `world.battles`)
+- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity; `OrganizationObligation.debtor` FK, #2428), currency (`OrganizationObligation.settled_by_token` → `FavorTokenDetails`, string FK + `obligation_services.py` deferred-imports `redeem_favor_token`; FK direction societies→currency, ADR-0010 — currency never imports societies for this), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam), battles (consumer — `world.battles.legend_wiring` calls `create_legend_event`/`create_solo_deed` from a battle-conclusion hook, win-gated Legend, #2184; FK direction battles→societies, ADR-0010 — this app never imports `world.battles`)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
 

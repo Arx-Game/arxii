@@ -284,3 +284,33 @@ RANK_OUTFLOW_MULTIPLIERS: dict[int, float] = {
     4: 0.10,
     5: 0.05,
 }
+
+
+# ---------------------------------------------------------------------------
+# OrganizationObligation (#2428) — Golden Hare entrance debt
+#
+# Unbound Prospects owe Shroudwatch Academy a Golden Hare on CG finalize
+# (no Tradition sponsor covered their entrance); sponsored Prospects start
+# with a SETTLED_BY_SPONSOR row recording the literal Hare their sponsor
+# spent on their behalf. Rows are never deleted — settled history persists.
+# ---------------------------------------------------------------------------
+
+
+class ObligationOrigin(models.TextChoices):
+    """What created an :class:`~world.societies.models.OrganizationObligation`."""
+
+    ACADEMY_ENTRANCE = "academy_entrance", "Academy Entrance"
+    OTHER = "other", "Other"
+
+
+class ObligationState(models.TextChoices):
+    """Lifecycle of an :class:`~world.societies.models.OrganizationObligation`.
+
+    ``OWED`` is the only settleable state; ``SETTLED`` and
+    ``SETTLED_BY_SPONSOR`` are both terminal, distinguished only by whether
+    the debtor or a sponsor surrendered the Hare.
+    """
+
+    OWED = "owed", "Owed"
+    SETTLED = "settled", "Settled"
+    SETTLED_BY_SPONSOR = "settled_by_sponsor", "Settled by Sponsor"

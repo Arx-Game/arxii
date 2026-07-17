@@ -33,6 +33,8 @@ from world.societies.constants import (
     COMMON_KNOWLEDGE_MULTIPLIER,
     DeedKnowledgeSource,
     FameTier,
+    ObligationOrigin,
+    ObligationState,
 )
 from world.societies.renown_config import RenownAwardConfig
 from world.societies.types import ReputationTier
@@ -2005,6 +2007,71 @@ class PropagandaDetails(RenownAwardConfig):
 
     def __str__(self) -> str:
         return f"PropagandaDetails for {self.project}"
+
+
+class OrganizationObligation(SharedMemoryModel):
+    """A personal debt of one Golden Hare owed by a character to an org (#2428).
+
+    The Academy-entrance mechanic: Unbound Prospects (no Tradition sponsor)
+    start CG with an ``OWED`` row against Shroudwatch Academy; sponsored
+    Prospects start ``SETTLED_BY_SPONSOR`` — the sponsor literally spent a
+    Hare on their behalf (lore ruling, not an abstract waiver). Rows are
+    never deleted: a settled obligation is story-significant history, so
+    ``settle_obligation`` only flips ``state`` and stamps ``settled_at`` /
+    ``settled_by_token``.
+    """
+
+    debtor = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="org_obligations",
+        help_text="The character who owes the Hare.",
+    )
+    creditor = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        # NOT "obligations_owed": that related_name is already claimed by
+        # currency.OrgObligation.from_organization (#926's org-to-org standing
+        # tithe/tax obligation) — a different concept from this personal
+        # per-character debt. Deviates from the brief's exact literal name to
+        # avoid a reverse-accessor clash (fields.E304/E305).
+        related_name="personal_obligations_owed",
+        help_text="The organization the Hare is owed to.",
+    )
+    origin = models.CharField(
+        max_length=20,
+        choices=ObligationOrigin.choices,
+        default=ObligationOrigin.OTHER,
+        help_text="What created this obligation.",
+    )
+    state = models.CharField(
+        max_length=20,
+        choices=ObligationState.choices,
+        default=ObligationState.OWED,
+        help_text="OWED until settled (by the debtor or a sponsor); never deleted after.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    settled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this obligation left OWED. Null while still outstanding.",
+    )
+    settled_by_token = models.ForeignKey(
+        "currency.FavorTokenDetails",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="settled_obligations",
+        help_text="The Golden Hare redeemed to settle this obligation, if any.",
+    )
+
+    class Meta:
+        verbose_name = "Organization Obligation"
+        verbose_name_plural = "Organization Obligations"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.debtor_id} owes {self.creditor.name} ({self.get_state_display()})"
 
 
 # ---------------------------------------------------------------------------

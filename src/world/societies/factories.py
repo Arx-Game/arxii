@@ -9,8 +9,10 @@ import factory
 import factory.django as factory_django
 
 from world.character_creation.factories import RealmFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
+from world.societies.constants import ObligationOrigin, ObligationState
 from world.societies.membership_services import base_rank_for_organization
 from world.societies.models import (
     CovenantLegendCredit,
@@ -22,6 +24,7 @@ from world.societies.models import (
     Organization,
     OrganizationMembership,
     OrganizationMembershipOffer,
+    OrganizationObligation,
     OrganizationRank,
     OrganizationReputation,
     OrganizationType,
@@ -167,6 +170,22 @@ class OrganizationMembershipOfferFactory(factory_django.DjangoModelFactory):
     to_persona = factory.SubFactory(PersonaFactory)
     kind = OrganizationMembershipOffer.Kind.INVITE
     status = OrganizationMembershipOffer.Status.PENDING
+
+
+class OrganizationObligationFactory(factory_django.DjangoModelFactory):
+    """Factory for OrganizationObligation (Golden Hare entrance debt, #2428).
+
+    Defaults to an OWED Academy-entrance row — the Unbound starting-debt
+    shape. Pass ``state``/``settled_at``/``settled_by_token`` for a settled row.
+    """
+
+    class Meta:
+        model = OrganizationObligation
+
+    debtor = factory.SubFactory(CharacterSheetFactory)
+    creditor = factory.SubFactory(OrganizationFactory)
+    origin = ObligationOrigin.ACADEMY_ENTRANCE
+    state = ObligationState.OWED
 
 
 class SocietyReputationFactory(factory_django.DjangoModelFactory):

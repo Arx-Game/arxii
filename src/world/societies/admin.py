@@ -24,6 +24,7 @@ from world.societies.models import (
     OrganizationGiftGrant,
     OrganizationMembership,
     OrganizationMembershipOffer,
+    OrganizationObligation,
     OrganizationRank,
     OrganizationReputation,
     OrganizationType,
@@ -289,6 +290,24 @@ class OrganizationMembershipAdmin(admin.ModelAdmin):
         return obj.get_title()
 
     get_title.short_description = "Title"
+
+
+@admin.register(OrganizationObligation)
+class OrganizationObligationAdmin(admin.ModelAdmin):
+    """Admin interface for OrganizationObligation management (#2428 Golden Hares)."""
+
+    list_display = [
+        "debtor",
+        "creditor",
+        "origin",
+        "state",
+        "created_at",
+        "settled_at",
+    ]
+    list_filter = ["origin", "state", "creditor"]
+    search_fields = ["debtor__character__db_key", "creditor__name"]
+    readonly_fields = ["created_at", "settled_at"]
+    raw_id_fields = ["debtor", "settled_by_token"]
 
 
 @admin.register(OrganizationRank)

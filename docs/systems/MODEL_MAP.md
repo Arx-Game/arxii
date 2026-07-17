@@ -1,3 +1,4 @@
+warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/workspaces/arxii/.claude/worktrees/feature-2428-tradition-sponsorship-of-prospects-acade/.venv` and will be ignored; use `--active` to target the active environment instead
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
@@ -1399,6 +1400,7 @@
   - story_progress <- stories.StoryProgress
   - alternate_selves <- forms.AlternateSelf
   - active_alternate_self <- forms.ActiveAlternateSelf
+  - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
   - treasured_by <- boundaries.TreasuredSubject
@@ -2795,6 +2797,8 @@
 **Foreign Keys:**
   - item_instance -> items.ItemInstance [OneToOne]
   - issuing_organization -> societies.Organization [FK]
+**Pointed to by:**
+  - settled_obligations <- societies.OrganizationObligation
 
 ### OrgEconomicsProfile
 **Foreign Keys:**
@@ -6582,6 +6586,7 @@
   - offices <- societies.OrganizationOffice
   - reputations <- societies.OrganizationReputation
   - gang_turf_projects <- societies.GangTurfDetails
+  - personal_obligations_owed <- societies.OrganizationObligation
   - fealty <- societies.FealtyEdge
   - vassal_edges <- societies.FealtyEdge
   - titles <- societies.Title
@@ -6800,6 +6805,12 @@
   - project -> projects.Project [OneToOne]
   - source_tier -> societies.PropagandaCampaignTier [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
+
+### OrganizationObligation
+**Foreign Keys:**
+  - debtor -> character_sheets.CharacterSheet [FK]
+  - creditor -> societies.Organization [FK]
+  - settled_by_token -> currency.FavorTokenDetails [FK] (nullable)
 
 ### NobiliaryParticle
 **Foreign Keys:**
