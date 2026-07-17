@@ -60,6 +60,8 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             "aspects__definition",  # noqa: PREFETCH_STRING
             "aspects__option",  # noqa: PREFETCH_STRING
             "features__feature",  # noqa: PREFETCH_STRING
+            "domains__crises__crisis_type__options",  # noqa: PREFETCH_STRING — crisis cards (#2238)
+            "domains__crises__chosen_option",  # noqa: PREFETCH_STRING
             "fealty__liege",  # noqa: PREFETCH_STRING  — this org's liege edge (get_house)
             "vassal_edges__vassal",  # noqa: PREFETCH_STRING  — its direct vassals
         )

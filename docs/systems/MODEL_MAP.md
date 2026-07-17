@@ -4850,6 +4850,7 @@
   - report_to_role -> npc_services.NPCRole [FK] (nullable)
   - categories -> missions.MissionCategory [M2M]
 **Pointed to by:**
+  - crisis_options <- societies.DomainCrisisTypeOption
   - clues <- clues.Clue
   - nodes <- missions.MissionNode
   - instances <- missions.MissionInstance
@@ -4920,6 +4921,7 @@
   - rescue_target -> character_sheets.CharacterSheet [FK] (nullable)
   - target_project -> projects.Project [FK] (nullable)
 **Pointed to by:**
+  - source_crisis <- societies.DomainCrisis
   - participants <- missions.MissionParticipant
   - invites <- missions.MissionInvite
   - snapshots <- missions.MissionNodeSnapshot
@@ -6892,9 +6894,24 @@
   - domain -> societies.Domain [FK]
   - holding -> societies.DomainHolding [FK] (nullable)
 
+### DomainCrisisType
+**Pointed to by:**
+  - options <- societies.DomainCrisisTypeOption
+  - crises <- societies.DomainCrisis
+
+### DomainCrisisTypeOption
+**Foreign Keys:**
+  - crisis_type -> societies.DomainCrisisType [FK]
+  - mission_template -> missions.MissionTemplate [FK] (nullable)
+**Pointed to by:**
+  - chosen_on <- societies.DomainCrisis
+
 ### DomainCrisis
 **Foreign Keys:**
   - domain -> societies.Domain [FK]
+  - crisis_type -> societies.DomainCrisisType [FK] (nullable)
+  - chosen_option -> societies.DomainCrisisTypeOption [FK] (nullable)
+  - minted_mission -> missions.MissionInstance [FK] (nullable)
 
 ### MarriagePact
 **Foreign Keys:**
@@ -7022,6 +7039,7 @@
 - `provision_species_gifts(sheet: 'CharacterSheet', *, resonance=None) -> 'list[CharacterGift]' — Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.`
 - `reconcile_sunlight_exposure(character, room) -> 'None' — Apply or remove the Sunlight Exposure condition based on outdoor + day-phase + shelter`
 - `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool — Remove a condition from a target.`
+- `total_species_gift_cost(species) -> 'int' — Total CG-point cost of a species' gift grants, summed over it and its ancestors.`
 
 
 ## world.stories

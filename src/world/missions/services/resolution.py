@@ -533,6 +533,13 @@ def _finish_terminal(
         instance.save()
     _teardown_spawned_room(instance)
     on_mission_complete_for_beat(instance, route=route)
+    # Crisis seam (#2238): a run minted from a DomainCrisis resolves it on
+    # terminal completion. Cheap no-op for every run without a source crisis.
+    from world.societies.houses.crisis_services import (  # noqa: PLC0415
+        resolve_crisis_for_mission,
+    )
+
+    resolve_crisis_for_mission(instance)
 
 
 def resolve_option(  # noqa: PLR0913
