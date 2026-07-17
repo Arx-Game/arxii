@@ -5,7 +5,6 @@ from rest_framework.permissions import AllowAny
 from web.api.views.general_views import (
     CurrentUserAPIView,
     EmailVerificationAPIView,
-    HomePageAPIView,
     LogoutAPIView,
     RegisterAvailabilityAPIView,
     ResendEmailVerificationAPIView,
@@ -19,7 +18,6 @@ from web.api.views.search_views import (
 )
 
 urlpatterns = [
-    path("homepage/", HomePageAPIView.as_view(), name="api-homepage"),
     path("status/", ServerStatusAPIView.as_view(), name="api-status"),
     path("user/", CurrentUserAPIView.as_view(), name="api-current-user"),
     path(

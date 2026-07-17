@@ -7975,23 +7975,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/homepage/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Return basic game statistics. */
-    get: operations['homepage_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/interaction-favorites/': {
     parameters: {
       query?: never;
@@ -46842,24 +46825,6 @@ export interface operations {
         content: {
           'application/json': components['schemas']['GroupStoryRequest'];
         };
-      };
-    };
-  };
-  homepage_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
       };
     };
   };

@@ -12800,18 +12800,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/GroupStoryRequest'
           description: ''
-  /api/homepage/:
-    get:
-      operationId: homepage_retrieve
-      description: Return basic game statistics.
-      tags:
-      - homepage
-      security:
-      - cookieAuth: []
-      - {}
-      responses:
-        '200':
-          description: No response body
   /api/interaction-favorites/:
     get:
       operationId: interaction_favorites_list
