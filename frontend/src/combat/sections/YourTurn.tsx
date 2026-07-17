@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/select';
 import {
   combatKeys,
+  invalidateConsequenceOutcomes,
   useAvailableCombos,
   useCoverMutation,
   useDispatchPlayerAction,
@@ -45,9 +46,11 @@ import {
   useGuardMutation,
   useUpgradeCombo,
 } from '../queries';
+import { isDispatchFailure } from '../types';
 import type {
   AvailableCombo,
   DispatchActionRequest,
+  DispatchResult,
   EncounterDetail,
   Participant,
   PositionNode,
@@ -640,6 +643,13 @@ export function YourTurn({
     return (match as RoundActionTyped) ?? null;
   })();
 
+  // Server-derived ready lock (#2423): CombatRail's Radix tabs unmount inactive
+  // TabsContent, so switching to the Map tab and back remounts this component
+  // and resets local `submitted` to false — even though the server already has
+  // this participant's round action marked ready. Deriving the lock from
+  // ownRoundAction.is_ready (not just local state) survives that remount.
+  const serverReady = ownRoundAction?.is_ready === true;
+
   const participants: Participant[] = encounter?.participants ?? [];
 
   // All active participants except self count as allies until covenant sides land (mirrors backend serializers.py note).
@@ -775,7 +785,7 @@ export function YourTurn({
   // ---------------------------------------------------------------------------
 
   async function handleSubmit() {
-    if (submitted || dispatchPending) return;
+    if (submitted || serverReady || dispatchPending) return;
 
     setSubmitError(null);
 
@@ -835,9 +845,23 @@ export function YourTurn({
 
     try {
       for (const job of dispatchJobs) {
-        await job();
+        const result = (await job()) as DispatchResult | undefined;
+        // The dispatch endpoint always resolves 200 for a business-rule
+        // rejection (only a structural ref error is a 400) — success:false
+        // must be checked explicitly, or an honest-failure job would silently
+        // flip the local `submitted`/ready state (#2423).
+        if (result !== undefined && isDispatchFailure(result)) {
+          setSubmitError(result.message ?? 'Submit failed. Try again.');
+          return;
+        }
       }
       setSubmitted(true);
+      // Refresh the encounter (carries the server's is_ready) and the "Last
+      // Outcome" panel now that every declared job succeeded (#2423).
+      queryClient
+        .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
+        .catch(() => {});
+      invalidateConsequenceOutcomes(queryClient);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Submit failed. Try again.';
       setSubmitError(message);
@@ -910,12 +934,12 @@ export function YourTurn({
   // Render
   // ---------------------------------------------------------------------------
 
-  const isLocked = readOnly || submitted;
+  const isLocked = readOnly || submitted || serverReady;
 
   return (
     <div className="space-y-4" data-testid="your-turn-section">
       {/* Submitted / ready badge */}
-      {submitted && (
+      {(submitted || serverReady) && (
         <div
           className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-center text-sm font-medium text-emerald-300"
           data-testid="ready-badge"

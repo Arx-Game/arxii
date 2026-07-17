@@ -1658,3 +1658,88 @@ describe('YourTurn — cast-position mount-reset guard (#2206 review finding)', 
     expect(onCastPositionChange).not.toHaveBeenCalledWith({});
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 5 — lock derives from server is_ready; submit checks results (#2423)
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — server is_ready lock (#2423)', () => {
+  it('locks the panel and shows the ready badge from server is_ready on fresh mount', () => {
+    // Simulates the tab-remount scenario: Radix unmounts YourTurn on Map tab
+    // switch, then remounts it — local `submitted` state resets to false, but
+    // the server already has this participant's round action marked ready.
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: null,
+          is_ready: true,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    // Fresh local state (no click on submit) — ready-badge still renders
+    // because it derives from ownRoundAction.is_ready, not local `submitted`.
+    expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    expect(screen.getByTestId('submit-declarations-btn')).toBeDisabled();
+    expect(screen.getByTestId('action-card-focused')).toHaveAttribute('data-readonly', 'true');
+  });
+
+  it('does not show ready badge and surfaces the rejection when a dispatch job resolves success:false', async () => {
+    setupMocks();
+
+    // Override the focused card stub so selecting a technique emits techniqueId=99.
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          ActionCard [{slot}]
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({
+                slot,
+                effort: 'MEDIUM',
+                strainCommitment: 0,
+                techniqueId: 99,
+              })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    // The dispatch endpoint always resolves 200 — a business-rule rejection
+    // surfaces as success:false, not a thrown error.
+    mockMutateAsync.mockResolvedValueOnce({
+      backend: 'COMBAT',
+      deferred: false,
+      success: false,
+      message: 'Rejected.',
+    });
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Rejected.');
+
+    // ready-badge should NOT appear — submission did not complete successfully.
+    expect(screen.queryByTestId('ready-badge')).not.toBeInTheDocument();
+    expect(screen.getByTestId('submit-declarations-btn')).not.toBeDisabled();
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+});

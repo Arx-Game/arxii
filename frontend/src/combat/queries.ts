@@ -40,7 +40,7 @@ export const combatKeys = {
  * Invalidate every consequence-outcome query (all character/encounter variants),
  * so the "Last Outcome" panel refetches after a round-affecting mutation (#866).
  */
-function invalidateConsequenceOutcomes(qc: QueryClient): void {
+export function invalidateConsequenceOutcomes(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] }).catch(() => {});
 }
 
