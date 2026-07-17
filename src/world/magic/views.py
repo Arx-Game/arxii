@@ -509,6 +509,8 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
     to disambiguate when the user has alts.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = CharacterAuraSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -534,6 +536,8 @@ class CharacterResonanceViewSet(viewsets.ModelViewSet):
     picker for rituals) should pass ``?character_sheet=<pk>`` so the
     result is unambiguous when the user has alts.
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterResonanceSerializer
     permission_classes = [IsAuthenticated]
@@ -565,6 +569,8 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
     of whether they are actively puppeting them right now. Pass
     ``?character=<pk>`` to narrow to a single character.
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterGiftSerializer
     permission_classes = [IsAuthenticated]
@@ -611,6 +617,8 @@ class CharacterAnimaViewSet(viewsets.ModelViewSet):
     regardless of whether they are actively puppeting them right now.
     Pass ``?character=<pk>`` to narrow to a single character.
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterAnimaSerializer
     permission_classes = [IsAuthenticated]
@@ -1170,6 +1178,8 @@ class PoseEndorsementViewSet(
     DELETE /api/magic/pose-endorsements/<pk>/ — retract an unsettled endorsement.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = PoseEndorsement.objects.select_related(
         "endorser_sheet",
         "endorsee_sheet",
@@ -1215,6 +1225,8 @@ class SceneEntryEndorsementViewSet(
     GET  /api/magic/scene-entry-endorsements/<pk>/ — retrieve an endorsement.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = SceneEntryEndorsement.objects.select_related(
         "endorser_sheet",
         "endorsee_sheet",
@@ -1248,6 +1260,8 @@ class StylePresentationEndorsementViewSet(
     POST /api/magic/style-presentation-endorsements/ — create an endorsement.
     GET  /api/magic/style-presentation-endorsements/<pk>/ — retrieve an endorsement.
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     queryset = StylePresentationEndorsement.objects.select_related(
         "endorser_sheet",
@@ -1283,6 +1297,8 @@ class ResonanceGrantViewSet(
 
     Filter params: source, resonance (PK), granted_after, granted_before.
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = ResonanceGrantSerializer
     permission_classes = [IsAuthenticated]

@@ -404,6 +404,8 @@ class ConditionInstanceViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSe
     so retrieving them yields 404 (queryset-scoped, like the list view).
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = ConditionInstanceSerializer
     permission_classes = [IsAuthenticated]
 

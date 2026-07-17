@@ -26,6 +26,8 @@ class MarketSquareFilterSet(django_filters.FilterSet):
 class MarketSquareViewSet(viewsets.ReadOnlyModelViewSet):
     """Browse market squares with their stalls and live listings."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = MarketSquare.objects.prefetch_related(
         "stalls__stock_listings__template",  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel (leak)
         "stalls__ware_listings__item_instance",  # noqa: PREFETCH_STRING
@@ -48,6 +50,8 @@ class ServiceOfferFilterSet(django_filters.FilterSet):
 
 class ServiceOfferViewSet(viewsets.ReadOnlyModelViewSet):
     """The shop directory: standing craft-as-service offers (visit to use)."""
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     queryset = (
         CraftingServiceOffer.objects.filter(is_active=True)

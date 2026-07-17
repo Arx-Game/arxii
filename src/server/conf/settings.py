@@ -358,6 +358,10 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Paginate every list endpoint by default (2026-07 audit) — a ViewSet must
+    # explicitly `pagination_class = None` to return a bare array. See ADR-0138
+    # and web/api/pagination.py.
+    "DEFAULT_PAGINATION_CLASS": "web.api.pagination.DefaultPagination",
 }
 
 SPECTACULAR_SETTINGS = {

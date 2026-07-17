@@ -17,6 +17,8 @@ from world.travel.serializers import (
 class TravelHubViewSet(viewsets.ReadOnlyModelViewSet):
     """List active travel hubs — public infrastructure (no per-char filtering)."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = TravelHubSerializer
     permission_classes = [IsAuthenticated]
     queryset = TravelHub.objects.filter(is_active=True)
@@ -25,6 +27,8 @@ class TravelHubViewSet(viewsets.ReadOnlyModelViewSet):
 class TravelMethodViewSet(viewsets.ReadOnlyModelViewSet):
     """List all travel methods."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = TravelMethodSerializer
     permission_classes = [IsAuthenticated]
     queryset = TravelMethod.objects.all()
@@ -32,6 +36,8 @@ class TravelMethodViewSet(viewsets.ReadOnlyModelViewSet):
 
 class VoyageViewSet(viewsets.ReadOnlyModelViewSet):
     """List voyages the requesting user's personas participate in."""
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = VoyageSerializer
     permission_classes = [IsAuthenticated]
@@ -57,6 +63,8 @@ class VoyageViewSet(viewsets.ReadOnlyModelViewSet):
 
 class VoyageInviteViewSet(viewsets.ReadOnlyModelViewSet):
     """List PENDING voyage invites targeting the requesting user's personas."""
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = VoyageInviteSerializer
     permission_classes = [IsAuthenticated]

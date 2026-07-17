@@ -29,6 +29,8 @@ class AchievementViewSet(ReadOnlyModelViewSet):
     have been earned by the requesting user's characters.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ["name", "description"]
@@ -83,6 +85,8 @@ class CharacterTitleViewSet(ReadOnlyModelViewSet):
     Titles are cosmetic and public — a character shows them off — so any authenticated user can
     read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterTitleSerializer
     permission_classes = [IsAuthenticated]

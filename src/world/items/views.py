@@ -1402,6 +1402,8 @@ class FashionJudgementViewSet(
     duplicate judging are rejected with HTTP 400 (friendly message).
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = FashionPresentation.objects.none()
     serializer_class = FashionJudgementSerializer
     permission_classes = [IsAuthenticated]

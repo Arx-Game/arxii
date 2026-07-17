@@ -238,6 +238,8 @@ class VoteViewSet(
     GET /votes/budget/ — Return current vote budget
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     serializer_class = WeeklyVoteSerializer
     permission_classes = [IsAuthenticated]
 
@@ -318,6 +320,8 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     POST /random-scenes/<id>/claim/ — Claim a target
     POST /random-scenes/<id>/reroll/ — Reroll a target
     """
+
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = RandomSceneTargetSerializer
     permission_classes = [IsAuthenticated]

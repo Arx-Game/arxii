@@ -41,6 +41,8 @@ class GoalDomainViewSet(viewsets.ReadOnlyModelViewSet):
     Goal domains are ModifierTarget entries with category='goal'.
     """
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = get_goal_domains_queryset()
     serializer_class = GoalDomainSerializer
     permission_classes = [IsAuthenticated]

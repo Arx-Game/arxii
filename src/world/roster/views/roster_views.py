@@ -13,6 +13,8 @@ from world.roster.serializers import RosterListSerializer
 class RosterViewSet(viewsets.ReadOnlyModelViewSet):
     """API viewset for listing rosters."""
 
+    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
     queryset = Roster.objects.filter(is_active=True).order_by("sort_order", "name")
     serializer_class = RosterListSerializer
     permission_classes = [AllowAny]
