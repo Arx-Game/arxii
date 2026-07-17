@@ -8,6 +8,7 @@ import type {
 } from './types';
 import type { PaginatedResponse } from '@/shared/types';
 import { apiFetch } from '@/evennia_replacements/api';
+import { fetchAllPages } from '@/lib/pagination';
 
 export async function fetchRosterEntry(id: RosterEntryData['id']): Promise<RosterEntryData> {
   const res = await apiFetch(`/api/roster/entries/${id}/`);
@@ -42,11 +43,9 @@ export async function fetchRosters(): Promise<RosterData[]> {
 }
 
 export async function fetchPlayerMedia(): Promise<PlayerMedia[]> {
-  const res = await apiFetch('/api/roster/media/');
-  if (!res.ok) {
-    throw new Error('Failed to load media');
-  }
-  return res.json();
+  // The endpoint is paginated (ADR-0138); the gallery grid shows the full
+  // library, so walk every page.
+  return fetchAllPages<PlayerMedia>('/api/roster/media/', 'Failed to load media');
 }
 
 export async function uploadPlayerMedia(form: FormData): Promise<PlayerMedia> {

@@ -24,8 +24,10 @@ from world.roster.services import CloudinaryGalleryService
 class PlayerMediaViewSet(viewsets.ModelViewSet):
     """API viewset for managing player media."""
 
-    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
-
+    # Paginated via the project default (ADR-0138): a player's whole uploaded
+    # image library grows over time. PlayerMedia.Meta.ordering (-uploaded_date)
+    # gives stable page boundaries; the frontend gallery loads every page via
+    # fetchAllPages since the grid shows the full set.
     serializer_class = PlayerMediaSerializer
     permission_classes = [ReadOnlyOrOwner]
 

@@ -28090,6 +28090,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PlayerMail'][];
     };
+    PaginatedPlayerMediaList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PlayerMedia'][];
+    };
     PaginatedPlayerReportDetailList: {
       /** @example 123 */
       count: number;
@@ -57943,7 +57958,12 @@ export interface operations {
   };
   roster_media_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -57955,7 +57975,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PlayerMedia'][];
+          'application/json': components['schemas']['PaginatedPlayerMediaList'];
         };
       };
     };
