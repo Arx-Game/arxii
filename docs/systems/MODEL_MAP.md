@@ -128,10 +128,10 @@
   - blocking_challenges <- mechanics.ChallengeTemplate
   - granted_by_roles <- covenants.CovenantRole
   - combat_pull_grants <- combat.CombatPullResolvedEffect
-  - battle_units <- battles.BattleUnit
-  - battle_unit_values <- battles.BattleUnitCapability
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
   - battle_unit_template_values <- battles.BattleUnitTemplateCapability
+  - military_units <- military.MilitaryUnit
+  - military_unit_values <- military.MilitaryUnitCapability
   - assist_patterns <- missions.MissionAssistPattern
 
 ### DamageType
@@ -569,6 +569,8 @@
   - income_streams <- currency.OrgIncomeStream
   - gossip_heat <- secrets.SecretGossip
   - children <- areas.Area
+  - quality <- areas.AreaQuality
+  - cleanup_projects <- areas.CleanupProjectDetails
   - laws <- justice.AreaLaw
   - heat_rows <- justice.PersonaHeat
   - stat_overrides <- locations.LocationValueOverride
@@ -589,6 +591,22 @@
 **Foreign Keys:**
   - ancestor -> areas.Area [FK]
   - descendant -> areas.Area [FK]
+
+### AreaQuality
+**Foreign Keys:**
+  - area -> areas.Area [OneToOne]
+
+### CleanupProjectDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - target_area -> areas.Area [FK]
+**Pointed to by:**
+  - tier_thresholds <- areas.CleanupTierThreshold
+
+### CleanupTierThreshold
+**Foreign Keys:**
+  - details -> areas.CleanupProjectDetails [FK]
+  - outcome_tier -> traits.CheckOutcome [FK]
 
 ### Position
 **Foreign Keys:**
@@ -784,19 +802,10 @@
   - side -> battles.BattleSide [FK]
   - place -> battles.BattlePlace [FK] (nullable)
   - transit_target_place -> battles.BattlePlace [FK] (nullable)
-  - commander -> character_sheets.CharacterSheet [FK] (nullable)
-  - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
-  - properties -> mechanics.Property [M2M]
-  - capabilities -> conditions.CapabilityType [M2M]
+  - military_unit -> military.MilitaryUnit [FK]
 **Pointed to by:**
-  - capability_values <- battles.BattleUnitCapability
   - declarations <- battles.BattleActionDeclaration
   - vehicle <- battles.BattleVehicle
-
-### BattleUnitCapability
-**Foreign Keys:**
-  - unit -> battles.BattleUnit [FK]
-  - capability -> conditions.CapabilityType [FK]
 
 ### BattleRound
 **Foreign Keys:**
@@ -922,7 +931,6 @@
   - covenant -> covenants.Covenant [OneToOne]
 
 ### ReadinessThreshold
-(No foreign keys — global model keyed by min_training_level)
 
 ### Service Functions
 - `activate_stakes_for_battle(battle: 'Battle') -> 'None' — Lock any staked beats' contracts for this battle's enlisted party.`
@@ -1285,7 +1293,7 @@
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' — Deny an application.`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' — Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft') -> 'tuple[RosterEntry, Story]' — Finalize a GM-initiated draft into a roster character + story.`
-- `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' — Create magic models from cantrip selection during finalization.`
+- `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' — Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' — Get all starting areas accessible to an account.`
 - `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' — Request revisions on an application.`
 - `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' — Resubmit a draft application after revisions.`
@@ -1452,9 +1460,10 @@
   - combat_risk_acknowledgements <- combat.EncounterRiskAcknowledgement
   - duel_challenges_issued <- combat.DuelChallenge
   - duel_challenges_received <- combat.DuelChallenge
-  - commanded_battle_units <- battles.BattleUnit
-  - summoned_battle_units <- battles.BattleUnit
   - battle_participations <- battles.BattleParticipant
+  - commanded_military_units <- military.MilitaryUnit
+  - summoned_military_units <- military.MilitaryUnit
+  - commanded_armies <- military.Army
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - conjured_hazards <- room_features.Trap
   - detected_traps <- room_features.Trap
@@ -1521,6 +1530,7 @@
   - aspects <- checks.CheckTypeAspect
   - specializations <- checks.CheckTypeSpecialization
   - item_check_modifiers <- items.ItemCheckModifier
+  - dream_peril_configs <- dreams.DreamPerilConfig
   - threat_pool_entries <- combat.ThreatPoolEntry
   - escalation_curves <- combat.EscalationCurve
   - situation_fits <- gm.CheckTypeSituationFit
@@ -1727,6 +1737,8 @@
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
+  - gifts <- magic.Gift
+  - techniques <- magic.Technique
   - crossing_options <- magic.CrossingOption
   - ritual_grants <- magic.CodexEntryRitualGrant
   - progression_milestones <- magic.MagicProgressionMilestone
@@ -1774,6 +1786,9 @@
 **Foreign Keys:**
   - tradition -> magic.Tradition [FK]
   - entry -> codex.CodexEntry [FK]
+
+### Service Functions
+- `resolve_codex_links(content: 'str | None', subject: 'CodexSubject', roster_entry: 'RosterEntry | None') -> 'list[dict]' — Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.`
 
 
 ## world.combat
@@ -2248,10 +2263,10 @@
   - blocking_challenges <- mechanics.ChallengeTemplate
   - granted_by_roles <- covenants.CovenantRole
   - combat_pull_grants <- combat.CombatPullResolvedEffect
-  - battle_units <- battles.BattleUnit
-  - battle_unit_values <- battles.BattleUnitCapability
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
   - battle_unit_template_values <- battles.BattleUnitTemplateCapability
+  - military_units <- military.MilitaryUnit
+  - military_unit_values <- military.MilitaryUnitCapability
   - assist_patterns <- missions.MissionAssistPattern
 
 ### DamageType
@@ -2581,6 +2596,9 @@
   - court_pacts <- covenants.CourtPact
   - combo_signatures <- combat.ComboSignature
   - battle_sides <- battles.BattleSide
+  - war_funding_projects <- battles.WarFundingDetails
+  - military_readiness <- battles.CovenantMilitaryReadiness
+  - armies <- military.Army
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
   - constructed_ships <- ships.ShipConstructionDetails
 
@@ -3223,7 +3241,7 @@
   - designer_persona_display -> scenes.Persona [FK] (nullable)
   - contained_in -> items.ItemInstance [FK] (nullable)
   - image -> evennia_extensions.PlayerMedia [FK] (nullable)
-  - legend_deeds -> societies.LegendEntry [M2M] (#2359)
+  - legend_deeds -> societies.LegendEntry [M2M]
 **Pointed to by:**
   - applied_disguise_overlays <- forms.CharacterFormState
   - currency_instrument <- currency.CurrencyInstrumentDetails
@@ -3665,6 +3683,7 @@
 ### Gift
 **Foreign Keys:**
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
 **Pointed to by:**
   - species_grants <- species.SpeciesGiftGrant
@@ -3672,6 +3691,7 @@
   - techniques <- magic.Technique
   - gift_unlocks <- magic.GiftUnlock
   - path_grants <- magic.PathGiftGrant
+  - tradition_grants <- magic.TraditionGiftGrant
   - reincarnation <- magic.Reincarnation
   - technique_drafts <- magic.TechniqueDraft
   - thread_pull_effects <- magic.ThreadPullEffect
@@ -3689,13 +3709,13 @@
   - gift -> magic.Gift [FK]
 
 ### Tradition
-**Foreign Keys:**
-  - society -> societies.Society [FK] (nullable)
 **Pointed to by:**
   - available_beginnings <- character_creation.Beginnings
   - beginning_traditions <- character_creation.BeginningTradition
   - character_traditions <- magic.CharacterTradition
+  - gift_grants <- magic.TraditionGiftGrant
   - ritual_grants <- magic.TraditionRitualGrant
+  - teaching_organizations <- societies.Organization
   - codex_grants <- codex.TraditionCodexGrant
 
 ### CharacterTradition
@@ -3708,7 +3728,6 @@
   - available_restrictions <- magic.Restriction
   - techniques <- magic.Technique
   - enhanced_by_techniques <- magic.Technique
-  - cantrips <- magic.Cantrip
   - technique_drafts <- magic.TechniqueDraft
   - combo_slots <- combat.ComboSlot
 
@@ -3717,7 +3736,6 @@
   - allowed_paths -> classes.Path [M2M]
 **Pointed to by:**
   - techniques <- magic.Technique
-  - cantrips <- magic.Cantrip
   - technique_drafts <- magic.TechniqueDraft
 
 ### Restriction
@@ -3740,11 +3758,11 @@
   - enhances_effect_type -> magic.EffectType [FK] (nullable)
   - clash_resolution_pool -> actions.ConsequencePool [FK] (nullable)
   - clash_per_round_pool -> actions.ConsequencePool [FK] (nullable)
-  - source_cantrip -> magic.Cantrip [FK] (nullable)
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - action_template -> actions.ActionTemplate [FK] (nullable)
   - target_weather_type -> weather.WeatherType [FK] (nullable)
   - travel_anchor_kind -> magic.PortalAnchorKind [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
   - restrictions -> magic.Restriction [M2M]
   - applied_conditions -> conditions.ConditionTemplate [M2M]
   - properties -> mechanics.Property [M2M]
@@ -3761,6 +3779,7 @@
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - teaching_offers <- magic.TechniqueTeachingOffer
   - granted_by_path_gifts <- magic.PathGiftGrant
+  - granted_by_tradition_gifts <- magic.TraditionGiftGrant
   - variants <- magic.TechniqueVariant
   - grants <- magic.TechniqueGrant
   - anchored_threads <- magic.Thread
@@ -3868,14 +3887,6 @@
 ### AuraAffinityThreshold
 **Foreign Keys:**
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
-
-### Cantrip
-**Foreign Keys:**
-  - effect_type -> magic.EffectType [FK]
-  - style -> magic.TechniqueStyle [FK]
-  - allowed_facets -> magic.Facet [M2M]
-**Pointed to by:**
-  - created_techniques <- magic.Technique
 
 ### CorruptionConfig
 **Foreign Keys:**
@@ -4062,6 +4073,12 @@
   - gift -> magic.Gift [FK]
   - starter_techniques -> magic.Technique [M2M]
 
+### TraditionGiftGrant
+**Foreign Keys:**
+  - tradition -> magic.Tradition [FK]
+  - gift -> magic.Gift [FK]
+  - signature_techniques -> magic.Technique [M2M]
+
 ### DistinctionRitualGrant
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [FK]
@@ -4101,7 +4118,6 @@
 **Foreign Keys:**
   - parent -> magic.Facet [FK] (nullable)
 **Pointed to by:**
-  - cantrips <- magic.Cantrip
   - children <- magic.Facet
   - motif_usages <- magic.MotifResonanceAssociation
   - signature_bonuses <- magic.SignatureMotifBonus
@@ -4514,7 +4530,7 @@
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
 - `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None, target: 'ObjectDB | None' = None) -> 'PullPreviewResult' — Read-only preview of a resonance pull (Spec A §5.6).`
-- `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str') -> 'Ritual | None' — Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
+- `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str', stat: 'Trait | None' = None, skill: 'Skill | None' = None) -> 'Ritual | None' — Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' — Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None — Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
 - `resolve_and_consume_ritual_components(*, ritual: 'Ritual', components: 'list[ItemInstance]', performer_sheet: 'CharacterSheet', resonance_context: 'Resonance | None' = None) -> 'None' — Validate and atomically consume ``ritual``'s components from ``components``.`
@@ -4617,10 +4633,10 @@
   - context_consequence_pools <- mechanics.ContextConsequencePool
   - consequence_effects <- checks.ConsequenceEffect
   - threat_pool_entries <- combat.ThreatPoolEntry
-  - battle_units <- battles.BattleUnit
   - battle_technique_affinities <- battles.TechniquePropertyAffinity
   - battle_terrain_effects <- battles.TerrainPropertyEffect
   - battle_weather_effects <- battles.WeatherTypePropertyEffect
+  - military_units <- military.MilitaryUnit
 
 ### ChallengeTemplateProperty
 **Foreign Keys:**
@@ -5471,9 +5487,11 @@
   - domain_improvement_details <- societies.DomainImprovementDetails
   - org_capability_details <- societies.OrganizationCapabilityProjectDetails
   - research_details <- clues.ResearchProjectDetails
+  - cleanup_details <- areas.CleanupProjectDetails
   - frame_job_details <- justice.FrameJobDetails
   - ransom_captivities <- captivity.Captivity
   - city_defense_details <- battles.CityDefenseDetails
+  - war_funding_details <- battles.WarFundingDetails
   - contributions <- projects.Contribution
   - resulting_building <- buildings.Building
   - building_extension_details <- buildings.BuildingExtensionDetails
@@ -5918,6 +5936,7 @@
   - decisive_markers <- scenes.DecisiveCheckMarker
   - action_requests <- scenes.SceneActionRequest
   - reaction_windows <- scenes.ReactionWindow
+  - speaker_queues <- scenes.SpeakerQueue
   - story_episodes <- stories.EpisodeScene
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
@@ -5982,6 +6001,8 @@
   - place_presences <- scenes.PlacePresence
   - interactions_received <- scenes.InteractionReceiver
   - window_reactions <- scenes.WindowReaction
+  - opened_speaker_queues <- scenes.SpeakerQueue
+  - speaker_queue_entries <- scenes.SpeakerQueueEntry
   - table_bulletin_posts <- stories.TableBulletinPost
   - table_bulletin_replies <- stories.TableBulletinReply
   - alternate_self_grants <- forms.AlternateSelf
@@ -6004,6 +6025,7 @@
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
   - businesses <- currency.Business
+  - food_transfers_initiated <- agriculture.FoodTransfer
   - promoted_assets <- assets.NPCAsset
   - asset_ownerships <- assets.NPCAsset
   - authored_secrets <- secrets.Secret
@@ -6274,6 +6296,19 @@
   - window -> scenes.ReactionWindow [FK]
   - reactor_persona -> scenes.Persona [FK]
 
+### SpeakerQueue
+**Foreign Keys:**
+  - room -> objects.ObjectDB [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - opened_by -> scenes.Persona [FK] (nullable)
+**Pointed to by:**
+  - entries <- scenes.SpeakerQueueEntry
+
+### SpeakerQueueEntry
+**Foreign Keys:**
+  - speaker_queue -> scenes.SpeakerQueue [FK]
+  - persona -> scenes.Persona [FK]
+
 ### Service Functions
 - `active_persona_for_sheet(sheet: 'CharacterSheet') -> 'Persona' — The face a character is currently presenting as (#981).`
 - `broadcast_scene_message(scene: 'Scene', action: 'ActionType') -> 'None' — Send scene information to all accounts in the scene's location.`
@@ -6498,7 +6533,6 @@
   - current_fashion_style -> items.FashionStyle [FK] (nullable)
 **Pointed to by:**
   - connected_beginnings <- character_creation.Beginnings
-  - traditions <- magic.Tradition
   - organizations <- societies.Organization
   - reputations <- societies.SocietyReputation
   - known_legend_entries <- societies.LegendEntry
@@ -6525,6 +6559,7 @@
 ### Organization
 **Foreign Keys:**
   - family -> roster.Family [FK] (nullable)
+  - tradition -> magic.Tradition [FK] (nullable)
   - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
@@ -6569,6 +6604,7 @@
   - covenant <- covenants.Covenant
   - bequests_received <- estates.Bequest
   - estate_claims <- estates.EstateClaim
+  - military_units <- military.MilitaryUnit
   - gemits <- narrative.Gemit
   - npc_roles <- npc_services.NPCRole
   - loan_offers <- npc_services.LoanOfferDetails
@@ -6659,6 +6695,7 @@
   - heat_sources <- justice.HeatSource
   - frame_claims <- justice.AccusationCrimeClaim
   - crime_evidence <- justice.CrimeEvidence
+  - linked_items <- items.ItemInstance
   - mission_deeds <- missions.MissionDeedRecord
 
 ### LegendSpread
@@ -6795,6 +6832,8 @@
   - improvement_details <- societies.DomainImprovementDetails
   - crises <- societies.DomainCrisis
   - food_stockpile <- agriculture.FoodStockpile
+  - food_transfers_out <- agriculture.FoodTransfer
+  - food_transfers_in <- agriculture.FoodTransfer
 
 ### HoldingKind
 **Pointed to by:**
@@ -6946,6 +6985,7 @@
   - legend_entries <- societies.LegendEntry
   - ended_campaigns <- covenants.Covenant
   - battles <- battles.Battle
+  - armies <- military.Army
   - narrative_messages <- narrative.NarrativeMessage
   - gemits <- narrative.Gemit
   - muted_by <- narrative.UserStoryMute
@@ -7301,11 +7341,15 @@
   - treatment_attempts <- conditions.TreatmentAttempt
   - challenge_records <- mechanics.CharacterChallengeRecord
   - consequences <- checks.Consequence
+  - cleanup_thresholds <- areas.CleanupTierThreshold
   - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
   - battle_outcome_mappings <- battles.BattleOutcomeMapping
   - city_defense_projects <- battles.CityDefenseDetails
   - city_defense_thresholds <- battles.CityDefenseTierThreshold
   - battles_citydefenseintegritybonus <- battles.CityDefenseIntegrityBonus
+  - war_funding_projects <- battles.WarFundingDetails
+  - war_funding_thresholds <- battles.WarFundingTierThreshold
+  - battles_warfundingtierbonus <- battles.WarFundingTierBonus
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution
 

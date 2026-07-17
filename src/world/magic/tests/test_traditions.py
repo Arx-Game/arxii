@@ -18,13 +18,6 @@ class TraditionModelTests(TestCase):
         assert Tradition.objects.filter(pk=tradition.pk).exists()
         assert str(tradition) == tradition.name
 
-    def test_tradition_with_society(self):
-        from world.societies.factories import SocietyFactory
-
-        society = SocietyFactory()
-        tradition = TraditionFactory(society=society)
-        assert tradition.society == society
-
     def test_tradition_ordering(self):
         t2 = TraditionFactory(sort_order=2, name="Bravo")
         t1 = TraditionFactory(sort_order=1, name="Alpha")

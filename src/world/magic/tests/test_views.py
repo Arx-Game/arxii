@@ -5,11 +5,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.magic.constants import CantripArchetype
 from world.magic.factories import (
-    CantripFactory,
     EffectTypeFactory,
-    FacetFactory,
     GiftFactory,
     ResonanceFactory,
     RestrictionFactory,
@@ -430,123 +427,6 @@ class FacetViewSetTest(APITestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["name"], "Creatures")
         self.assertIn("children", response.data[0])
-
-
-class CantripViewSetTest(APITestCase):
-    """Tests for CantripViewSet under character creation."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = AccountFactory()
-        cls.innate = CantripFactory(
-            name="Danger Sense",
-            archetype=CantripArchetype.UTILITY,
-            requires_facet=False,
-        )
-        cls.manifested = CantripFactory(
-            name="Elemental Strike",
-            archetype=CantripArchetype.ATTACK,
-            requires_facet=True,
-            facet_prompt="Choose your element",
-        )
-        fire = FacetFactory(name="Fire")
-        ice = FacetFactory(name="Ice")
-        cls.manifested.allowed_facets.add(fire, ice)
-        # Inactive should not appear
-        CantripFactory(name="Inactive Power", is_active=False)
-
-    def test_list_requires_auth(self):
-        """Test that listing cantrips requires authentication."""
-        response = self.client.get("/api/character-creation/cantrips/")
-        self.assertIn(
-            response.status_code,
-            [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
-        )
-
-    def test_list_returns_active_cantrips(self):
-        """Test that only active cantrips are returned."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get("/api/character-creation/cantrips/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        names = [c["name"] for c in response.data]
-        self.assertIn("Danger Sense", names)
-        self.assertIn("Elemental Strike", names)
-        self.assertNotIn("Inactive Power", names)
-
-    def test_manifested_cantrip_includes_allowed_facets(self):
-        """Test that manifested cantrips include their allowed facets."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get("/api/character-creation/cantrips/")
-        manifested = next(c for c in response.data if c["name"] == "Elemental Strike")
-        self.assertTrue(manifested["requires_facet"])
-        self.assertEqual(manifested["facet_prompt"], "Choose your element")
-        self.assertEqual(len(manifested["allowed_facets"]), 2)
-
-    def test_innate_cantrip_has_empty_facets(self):
-        """Test that innate cantrips have empty allowed_facets."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get("/api/character-creation/cantrips/")
-        innate = next(c for c in response.data if c["name"] == "Danger Sense")
-        self.assertFalse(innate["requires_facet"])
-        self.assertEqual(len(innate["allowed_facets"]), 0)
-
-    def test_filter_by_path_returns_matching_cantrips(self) -> None:
-        """Only cantrips whose style is allowed by the path are returned."""
-        from world.classes.factories import PathFactory
-
-        path = PathFactory(name="Test Path of Steel")
-        style = TechniqueStyleFactory(name="Test Manifestation Style")
-        style.allowed_paths.add(path)
-        CantripFactory(name="Path Cantrip", style=style)
-        other_style = TechniqueStyleFactory(name="Other Style")
-        CantripFactory(name="Other Cantrip", style=other_style)
-
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get(f"/api/character-creation/cantrips/?path_id={path.id}")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        names = [c["name"] for c in response.data]
-        self.assertIn("Path Cantrip", names)
-        self.assertNotIn("Other Cantrip", names)
-        self.assertNotIn("Danger Sense", names)
-        self.assertNotIn("Elemental Strike", names)
-
-    def test_no_path_id_returns_all_active(self) -> None:
-        """Without path_id param, all active cantrips are returned."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get("/api/character-creation/cantrips/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(response.data), 2)
-
-    def test_invalid_path_id_returns_400(self) -> None:
-        """Invalid path_id returns 400 error."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get("/api/character-creation/cantrips/?path_id=99999")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_inactive_path_returns_400(self) -> None:
-        """Inactive path_id returns 400 error."""
-        from world.classes.factories import PathFactory
-
-        inactive_path = PathFactory(name="Inactive Path", is_active=False)
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get(f"/api/character-creation/cantrips/?path_id={inactive_path.id}")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_path_with_no_styles_returns_empty(self) -> None:
-        """A valid path with no allowed styles returns empty list."""
-        from world.classes.factories import PathFactory
-
-        empty_path = PathFactory(name="Empty Path")
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get(f"/api/character-creation/cantrips/?path_id={empty_path.id}")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 0)
-
-    def test_non_numeric_path_id_returns_400(self) -> None:
-        """Non-numeric path_id returns 400 error."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get("/api/character-creation/cantrips/?path_id=abc")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class ConsequencePoolCatalogViewSetTests(APITestCase):

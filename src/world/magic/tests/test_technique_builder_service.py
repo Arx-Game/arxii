@@ -400,7 +400,7 @@ class CreateTechniqueDefaultActionTemplateTests(TestCase):
         sheet = CharacterSheetFactory()
         return {
             "creator": sheet,
-            "name": "Test Cantrip",
+            "name": "Test Technique",
             "gift": GiftFactory(creator=sheet),
             "style": TechniqueStyleFactory(),
             "effect_type": EffectTypeFactory(),

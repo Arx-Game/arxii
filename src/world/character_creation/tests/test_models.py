@@ -438,8 +438,12 @@ class CharacterDraftBeginningsTests(TestCase):
         assert draft.selected_beginnings is None
 
 
-class PathSkillsStageCompletionTest(TestCase):
-    """Test path & skills stage completion logic."""
+class PathStageCompletionTest(TestCase):
+    """Test Path stage completion logic.
+
+    Skill point allocation moved out of this stage into Attributes & Skills
+    (#2426) — Stage 5 now reflects path selection only.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -451,24 +455,22 @@ class PathSkillsStageCompletionTest(TestCase):
         )
         cls.tradition = TraditionFactory()
 
-    def test_path_skills_incomplete_without_path(self):
-        """Stage 5 is incomplete without path selection."""
+    def test_path_incomplete_without_path(self):
+        """Stage 5 (Path) is incomplete without path selection."""
         draft = CharacterDraftFactory(account=self.account, selected_path=None)
         completion = draft.get_stage_completion()
-        self.assertFalse(completion[CharacterDraft.Stage.PATH_SKILLS])
+        self.assertFalse(completion[CharacterDraft.Stage.PATH])
 
-    def test_path_skills_complete_with_path_and_valid_skills(self):
-        """Stage 5 is complete with path and valid skill allocation."""
+    def test_path_complete_with_path_selected(self):
+        """Stage 5 (Path) is complete once a path is selected — skills don't gate it."""
         draft = CharacterDraftFactory(
             account=self.account,
             selected_path=self.path,
             selected_tradition=self.tradition,
             draft_data={"skills": {}, "specializations": {}},
         )
-        # With empty skills but path and tradition selected, stage is complete
-        # (validation passes because total spent <= budget)
         completion = draft.get_stage_completion()
-        self.assertTrue(completion[CharacterDraft.Stage.PATH_SKILLS])
+        self.assertTrue(completion[CharacterDraft.Stage.PATH])
 
 
 class DistinctionStatBonusTests(TestCase):

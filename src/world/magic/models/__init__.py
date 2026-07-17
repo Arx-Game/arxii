@@ -17,7 +17,6 @@ Submodules (see Scope 6 §4.4):
 - specialization: TechniqueVariant, TechniqueVariantCapabilityGrant,
   TechniqueVariantDamageProfile, TechniqueVariantAppliedCondition
   (gift-technique specialization variants, #1578)
-- cantrips: Cantrip
 - motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
 - soulfray: SoulfrayConfig, MishapPoolTier, AnimaRitualBudgetAward
 - alterations: MagicalAlterationTemplate, PendingAlteration, MagicalAlterationEvent
@@ -75,7 +74,6 @@ from world.magic.models.aura import (
     CharacterAura,
     CharacterResonance,
 )
-from world.magic.models.cantrips import Cantrip
 from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
 from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.models.crossing import (
@@ -128,6 +126,7 @@ from world.magic.models.grants import (
     DistinctionRitualGrant,
     PathGiftGrant,
     PathRitualGrant,
+    TraditionGiftGrant,
     TraditionRitualGrant,
 )
 from world.magic.models.knowledge import CharacterRitualKnowledge
@@ -254,8 +253,6 @@ __all__ = [
     "AuraPowerConfig",
     # knowledge layer grants (Anima Ritual UI spec §Decision 6)
     "BeginningsRitualGrant",
-    # cantrips
-    "Cantrip",
     "CharacterAnima",
     "CharacterAura",
     # gifts
@@ -429,6 +426,7 @@ __all__ = [
     # touchstone combat resonance config (#2023)
     "TouchstoneCastConfig",
     "Tradition",
+    "TraditionGiftGrant",
     "TraditionManager",
     "TraditionRitualGrant",
 ]

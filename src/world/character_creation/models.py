@@ -26,7 +26,9 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.character_creation.constants import (
     AGE_MAX,
     AGE_MIN,
+    CG_MODIFIER_CATEGORY,
     REQUIRED_STATS,
+    STARTING_TECHNIQUE_PICKS_TARGET,
     STAT_DEFAULT_VALUE,
     STAT_DISPLAY_DIVISOR,
     ApplicationStatus,
@@ -827,6 +829,18 @@ class CharacterDraft(SharedMemoryModel):
 
         return sum(effect.get_value_at_rank(entries[effect.distinction_id]) for effect in effects)
 
+    @property
+    def starting_technique_picks(self) -> int:
+        """How many techniques the player may pick at CG magic stage.
+
+        Base of 1, plus any distinction bonus targeting the
+        ``starting_technique_picks`` ModifierTarget in the
+        ``character_creation`` ModifierCategory (#2426).
+        """
+        return 1 + self._get_distinction_bonus(
+            STARTING_TECHNIQUE_PICKS_TARGET, CG_MODIFIER_CATEGORY
+        )
+
     def calculate_stat_budget(self) -> int:
         """Total stat points = default * stat_count + net bonuses."""
         bonuses = self.get_all_stat_bonuses()
@@ -966,16 +980,21 @@ class CharacterDraft(SharedMemoryModel):
         return {name: stats.get(name, STAT_DEFAULT_VALUE) for name in REQUIRED_STATS}
 
     def _is_attributes_complete(self) -> bool:
-        """Check if attributes stage is complete."""
+        """Check if the Attributes & Skills stage is complete (stats + skill allocation)."""
         return not self.get_stage_validation_errors().get(self.Stage.ATTRIBUTES, [])
 
-    def _is_path_skills_complete(self) -> bool:
-        """Check Stage 5 (Path & Skills) completion status."""
-        return not self.get_stage_validation_errors().get(self.Stage.PATH_SKILLS, [])
+    def _is_path_complete(self) -> bool:
+        """Check Stage 5 (Path) completion status."""
+        return not self.get_stage_validation_errors().get(self.Stage.PATH, [])
 
     def validate_path_skills(self) -> None:
         """
-        Validate Stage 5 (Path & Skills) data.
+        Validate skill point allocation data.
+
+        Skill allocation is now part of the Attributes & Skills stage
+        (formerly validated as part of the "Path & Skills" stage, #2426) —
+        the method name is kept since ``draft_data["skills"]``/
+        ``draft_data["specializations"]`` are unchanged.
 
         Raises:
             rest_framework.serializers.ValidationError: If validation fails,

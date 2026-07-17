@@ -15,7 +15,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
-    `Gift`, `CharacterGift`, `Technique`, `CharacterTechnique`, `Cantrip`,
+    `Gift`, `CharacterGift`, `Technique`, `CharacterTechnique`,
     `TechniqueStyle`, `EffectType`, `Restriction`, `IntensityTier`,
     `TechniqueCapabilityGrant`,
     `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition`
@@ -284,6 +284,28 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     used by **both** `cross_threshold` (Audere Majora) **and** the Ritual of the Durance level-3
     POTENTIAL semi-crossing (`_maybe_semi_cross_into_potential_path`, ADR-0063 — no Audere Majora).
     Proven by `test_path_crossing_grant_e2e.py` + `test_advancement.py::DuranceSemiCrossingTests`.
+  - **CG catalog magic — Path → Tradition → Gift → Technique (#2426, ADR-0136):**
+    `TraditionGiftGrant` (`world/magic/models/grants.py`, per `(tradition, gift)`
+    grant with a `signature_techniques` M2M — a tradition's CG gift list; the
+    self-taught `Unbound` tradition carries the common starter set, no extras).
+    `PathGiftGrant.starter_techniques` is now read as CG pick *availability*
+    (pool ∪ tradition signature extras), not an automatic grant — `grant_path_magic`
+    still mints from the same rows at the level-3 Durance semi-crossing (ADR-0063,
+    unchanged). `EffectType.category` (`TechniqueCategory` choices — Offense/Defense/
+    Enhancement/Affliction/Utility) is the player-facing archetype grouping, replacing
+    the retired `Cantrip.archetype`; `Gift.codex_entry` / `Technique.codex_entry`
+    (nullable FKs → `codex.CodexEntry`) back the expanding-card → lore-modal pattern
+    (#2410) on every CG catalog card. Read service (`world/magic/services/cg_catalog.py`):
+    `get_gift_options(tradition, path) -> list[Gift]` /
+    `get_technique_options(path, gift, tradition) -> TechniqueOptions` (callers pass
+    `draft.selected_tradition` / `draft.selected_path`). The rankable
+    **Tradition Training** distinction (`ModifierTarget` "Starting Technique Picks")
+    adds +1 CG technique pick per rank above the Unbound baseline of 1, read via
+    `CharacterDraft._get_distinction_bonus`. `Organization.tradition` (nullable FK →
+    `magic.Tradition`, specific→general per ADR-0010) marks an org as a tradition's
+    teaching structure; `Tradition.society` (no live consumer) was dropped. The `Cantrip`
+    model + its full API/admin/frontend stack were removed. See `docs/systems/magic.md`
+    and `docs/systems/character_creation.md` for the CG stage/endpoint detail.
   - Soul Tether config: `get_soul_tether_config() -> SoulTetherConfig` (lazy pk=1 singleton)
   - Soul Tether events: `SOUL_TETHER_DISSOLVED` emitted by `dissolve_soul_tether`
   - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater
@@ -2006,7 +2028,7 @@ gains a discoverable content item for the first time.
     personal to the earner list.
 - **Wired callers of `announce_access_change`:** `world/forms/services.py` (assume/revert
   alternate self), `world/covenants/services.py` (engage/disengage covenant role, via
-  `_announce_capability_diff`), `world/character_creation/services.py` (CG cantrip grant)
+  `_announce_capability_diff`), `world/character_creation/services.py` (CG starter-catalog Gift/Technique grant)
 - **API Endpoints:**
   - `GET /api/achievements/character-titles/?character_sheet=<id>` — earned titles, newest first
 - **Integrates with:** magic (`Technique` inherits `DiscoverableContent`; `discovery_achievement`
@@ -4675,7 +4697,7 @@ Extensions to Evennia models for additional data storage.
 Production-callable seed layer for populating sane defaults on a fresh dev install.
 
 - **Entry Point:** `world.seeds.database.seed_dev_database(*, verbose=False) -> SeedReport` — calls every registered cluster seeder in sequence; idempotent (create-if-missing semantics throughout, never overwrites).
-- **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name, in seed order: `"checks"` (resolution spine, first), `"magic"`, `"items"`, `"combat"`, `"consent"`, `"character_creation"` (CG-world content, last — after `magic`, which provides the cantrip/resonance `finalize_character` picks). Add a new cluster by appending an entry here. `seeded_models()` (flat representative-content list for row-count tracking) and `seeded_models_by_cluster()` (per-cluster inventory for the admin hub) are the two read shapes.
+- **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name, in seed order: `"checks"` (resolution spine, first), `"magic"`, `"items"`, `"combat"`, `"consent"`, `"character_creation"` (CG-world content, last — after `magic`, which provides the starter-Gift/resonance `finalize_character` picks). Add a new cluster by appending an entry here. `seeded_models()` (flat representative-content list for row-count tracking) and `seeded_models_by_cluster()` (per-cluster inventory for the admin hub) are the two read shapes.
 - **Surfaces:**
   - `arx seed dev` — CLI entry point (management command `src/core_management/management/commands/seed.py`; `--verbose` flag prints per-cluster row deltas).
   - Django admin **"Load sane defaults"** button (`src/web/admin/seed_views.py`) — superuser-only; runs `seed_dev_database()` and flashes a success/error message; redirects to the Game Setup hub on success.

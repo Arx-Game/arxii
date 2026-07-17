@@ -22,7 +22,6 @@ from world.magic.constants import (
     AffinityInteractionKind,
     AlterationKind,
     AlterationTier,
-    CantripArchetype,
     EffectKind,
     GiftKind,
     MagicMilestoneKind,
@@ -60,6 +59,7 @@ from world.magic.models import (
     MotifResonance,
     MotifResonanceAssociation,
     MotifResonanceStyle,
+    PathGiftGrant,
     PendingAlteration,
     PortalAnchor,
     PortalAnchorKind,
@@ -91,6 +91,7 @@ from world.magic.models import (
     ThreadWeavingUnlock,
     ThreadXPLockedLevel,
     Tradition,
+    TraditionGiftGrant,
 )
 from world.magic.models.anima import AnimaConfig
 from world.magic.models.knowledge import CharacterRitualKnowledge
@@ -741,6 +742,16 @@ class CharacterGiftFactory(factory.django.DjangoModelFactory):
     gift = factory.SubFactory(GiftFactory)
 
 
+class PathGiftGrantFactory(factory.django.DjangoModelFactory):
+    """Factory for PathGiftGrant — the (path x gift) CG-availability pool row."""
+
+    class Meta:
+        model = PathGiftGrant
+
+    path = factory.SubFactory("world.classes.factories.PathFactory")
+    gift = factory.SubFactory(GiftFactory)
+
+
 class TraditionFactory(factory.django.DjangoModelFactory):
     """Factory for Tradition."""
 
@@ -752,6 +763,16 @@ class TraditionFactory(factory.django.DjangoModelFactory):
     description = factory.LazyAttribute(lambda o: f"Description of {o.name}.")
     is_active = True
     sort_order = 0
+
+
+class TraditionGiftGrantFactory(factory.django.DjangoModelFactory):
+    """Factory for TraditionGiftGrant — the (tradition x gift) CG-availability pool row."""
+
+    class Meta:
+        model = TraditionGiftGrant
+
+    tradition = factory.SubFactory(TraditionFactory)
+    gift = factory.SubFactory(GiftFactory)
 
 
 class CharacterTraditionFactory(factory.django.DjangoModelFactory):
@@ -848,30 +869,6 @@ class MotifResonanceStyleFactory(factory.django.DjangoModelFactory):
 
     motif_resonance = factory.SubFactory(MotifResonanceFactory)
     style = factory.SubFactory("world.items.factories.StyleFactory")
-
-
-# =============================================================================
-# Cantrip Factories
-# =============================================================================
-
-
-class CantripFactory(factory.django.DjangoModelFactory):
-    """Factory for Cantrip - staff-curated starter technique templates."""
-
-    class Meta:
-        model = "magic.Cantrip"
-
-    name = factory.Sequence(lambda n: f"Cantrip {n}")
-    description = factory.Faker("sentence")
-    archetype = CantripArchetype.ATTACK
-    effect_type = factory.SubFactory(EffectTypeFactory)
-    style = factory.SubFactory(TechniqueStyleFactory)
-    base_intensity = 1
-    base_control = 1
-    base_anima_cost = 5
-    requires_facet = False
-    is_active = True
-    sort_order = factory.Sequence(lambda n: n)
 
 
 class AudereThresholdFactory(factory.django.DjangoModelFactory):
@@ -3256,7 +3253,7 @@ def seed_magic_progression(prospect_paths=None):
             "Developing Techniques",
             False,
             "Techniques are the shaped workings you develop and refine over a magical career.",
-            "Where a cantrip is a first spark, a developed technique is a deliberate,"
+            "Where a starter technique is a first spark, a developed technique is a deliberate,"
             " honed working.",
         ),
         "anima": (

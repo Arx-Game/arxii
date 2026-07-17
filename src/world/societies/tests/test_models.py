@@ -10,6 +10,8 @@ import pytest
 
 from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.factories import TraditionFactory
+from world.magic.models import Tradition
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import (
@@ -139,6 +141,26 @@ class OrganizationModelTests(TestCase):
         assert org.pk is not None
         assert org.society is not None
         assert org.org_type is not None
+
+
+class OrganizationTraditionTests(TestCase):
+    """Test Organization.tradition FK (#2426) — replaces the removed Tradition.society."""
+
+    def test_organization_accepts_tradition(self):
+        """An Organization row accepts tradition=TraditionFactory(...)."""
+        tradition = TraditionFactory()
+        org = OrganizationFactory(tradition=tradition)
+        assert org.tradition == tradition
+
+    def test_tradition_teaching_organizations_reverse(self):
+        """Tradition.teaching_organizations reverse accessor works."""
+        tradition = TraditionFactory()
+        org = OrganizationFactory(tradition=tradition)
+        assert list(tradition.teaching_organizations.all()) == [org]
+
+    def test_tradition_has_no_society_field(self):
+        """Tradition no longer has a society FK (#2426 — moved to Organization.tradition)."""
+        assert "society" not in {f.name for f in Tradition._meta.get_fields()}
 
 
 class OrganizationPrincipleInheritanceTests(TestCase):

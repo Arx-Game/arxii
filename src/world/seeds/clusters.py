@@ -349,7 +349,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "consent": _seed_consent,
     # Character-creation "world" content (Realm/StartingArea/Beginnings/Species/
     # Gender/TarotCard/HeightBand/Build/stats/Rosters/Path) — after magic because
-    # finalize_character picks the magic-seeded cantrip + resonance. (#1333)
+    # finalize_character picks the magic-seeded catalog Gift/Technique + resonance
+    # (#2426; the pre-#2426 starter-catalog model was retired in Task 8, #1333).
     "character_creation": _seed_character_creation,
     # Missions: the starter notice board (1 BOARD MissionGiver + 3 OPEN
     # MissionTemplate rows) so `mission opportunities` isn't dead-on-arrival on

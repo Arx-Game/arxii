@@ -1,7 +1,13 @@
 from django.db import models
 
 
-class CantripArchetype(models.TextChoices):
+class TechniqueCategory(models.TextChoices):
+    """Player-facing technique grouping (#2426).
+
+    Formerly duplicated on the now-removed CG starter-technique-template
+    model (#2426 Task 8); this is the sole surviving grouping.
+    """
+
     ATTACK = "attack", "Attack"
     DEFENSE = "defense", "Defense"
     BUFF = "buff", "Buff"

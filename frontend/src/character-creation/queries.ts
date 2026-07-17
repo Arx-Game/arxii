@@ -18,8 +18,9 @@ import {
   getAffinities,
   getBeginnings,
   getBuilds,
-  getCantrips,
+  getCGGifts,
   getCGPointBudget,
+  getCGTechniqueOptions,
   getDraft,
   getDraftApplication,
   getDraftCGPoints,
@@ -91,7 +92,10 @@ export const characterCreationKeys = {
   resonances: () => [...characterCreationKeys.all, 'resonances'] as const,
   gifts: () => [...characterCreationKeys.all, 'gifts'] as const,
   gift: (giftId: number) => [...characterCreationKeys.all, 'gift', giftId] as const,
-  cantrips: (pathId?: number) => [...characterCreationKeys.all, 'cantrips', pathId] as const,
+  // CG gift/technique options (GiftStage funnel, #2426 Task 10)
+  cgGifts: (draftId: number) => [...characterCreationKeys.all, 'cg-gifts', draftId] as const,
+  cgTechniqueOptions: (draftId: number, giftId: number) =>
+    [...characterCreationKeys.all, 'cg-technique-options', draftId, giftId] as const,
   // Build-your-own magic system keys
   techniqueStyles: () => [...characterCreationKeys.all, 'technique-styles'] as const,
   effectTypes: () => [...characterCreationKeys.all, 'effect-types'] as const,
@@ -395,11 +399,27 @@ export function useGift(giftId: number | undefined) {
   });
 }
 
-export function useCantrips(pathId?: number, fetchAll?: boolean) {
+/**
+ * Gifts pickable for a draft's chosen tradition + path (GiftStage funnel, #2426).
+ * Empty until the draft has both a selected tradition and a selected path.
+ */
+export function useCGGifts(draftId: number | undefined) {
   return useQuery({
-    queryKey: characterCreationKeys.cantrips(fetchAll ? undefined : pathId),
-    queryFn: () => getCantrips(fetchAll ? undefined : pathId),
-    enabled: fetchAll || pathId !== undefined,
+    queryKey: characterCreationKeys.cgGifts(draftId!),
+    queryFn: () => getCGGifts(draftId!),
+    enabled: !!draftId,
+  });
+}
+
+/**
+ * Technique options (pool ∪ signature) for a draft's (path, gift, tradition) pick
+ * (GiftStage funnel, #2426).
+ */
+export function useCGTechniqueOptions(draftId: number | undefined, giftId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.cgTechniqueOptions(draftId!, giftId!),
+    queryFn: () => getCGTechniqueOptions(draftId!, giftId!),
+    enabled: !!draftId && !!giftId,
   });
 }
 
@@ -588,6 +608,15 @@ export function useSelectTradition() {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
       // Selecting a tradition may auto-add a required distinction, affecting CG points
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftCGPoints(draftId) });
+      // The gift (and downstream technique) catalog is scoped per-tradition — refetch
+      // immediately so GiftSelector's stale-pick reset (and the funnel UI generally)
+      // sees the new tradition's options right away instead of on the next unrelated
+      // refetch. Invalidate the technique-options key by its draftId-scoped prefix
+      // (no giftId yet known here) so every cached (draftId, giftId) entry is covered.
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.cgGifts(draftId) });
+      queryClient.invalidateQueries({
+        queryKey: [...characterCreationKeys.all, 'cg-technique-options', draftId],
+      });
     },
   });
 }

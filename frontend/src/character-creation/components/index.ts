@@ -4,13 +4,14 @@ export { AttributesStage } from './AttributesStage';
 export { DistinctionsStage } from './DistinctionsStage';
 export { FinalTouchesStage } from './FinalTouchesStage';
 export { FreePointsWidget } from './FreePointsWidget';
+export { GiftStage } from './GiftStage';
 export { HeritageStage } from './HeritageStage';
 export { IdentityStage } from './IdentityStage';
 export { LineageStage } from './LineageStage';
-export { MagicStage } from './MagicStage';
 export { OriginStage } from './OriginStage';
-export { PathStage as PathSkillsStage } from './PathStage';
+export { PathStage } from './PathStage';
 export { ReviewStage } from './ReviewStage';
+export { SkillsSection } from './SkillsSection';
 export { StageErrorBoundary } from './StageErrorBoundary';
 export { StageStepper } from './StageStepper';
 export { StartingAreaCard } from './StartingAreaCard';
@@ -18,5 +19,8 @@ export { StatCard } from './StatCard';
 export { StatModal } from './StatModal';
 export { TraditionPicker } from './TraditionPicker';
 
-// Magic components
-export * from './magic';
+// Gift funnel components (#2426 Task 10)
+export { AnimaCheckStep } from './gift/AnimaCheckStep';
+export { GiftSelector } from './gift/GiftSelector';
+export { TechniqueSelector } from './gift/TechniqueSelector';
+export { TraditionStep } from './gift/TraditionStep';

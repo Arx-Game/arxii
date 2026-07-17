@@ -1,5 +1,34 @@
 # Character Creation & Identity
 
+## Built (2026-07-16, #2426 — CG magic revamp: Path → Tradition → Gift → Technique)
+
+- The old "Magic" stage (freeform cantrip creation) is retired. Stage 5 **Path** is
+  now explicitly the magical-Path pick (the Path of your Durance); Stage 6 **Gift**
+  runs a guided funnel — Tradition → Gift → Technique picks → gift resonance →
+  **Anima Check** (the stat + skill pair every cast rolls, replacing a silent
+  Willpower + highest-skill default) — all against staff-authored catalogs instead
+  of per-character cantrip creation. Skills moved in with Attributes as Stage 7.
+- Every character has exactly one Tradition, including the self-taught `Unbound`
+  tradition (no more NULL-tradition special-casing). `TraditionGiftGrant`
+  (tradition × gift → signature technique extras) drives the CG gift list; the
+  shared `PathGiftGrant.starter_techniques` pool (already used by
+  `grant_path_magic` at the level-3 Durance crossing, ADR-0063 — unchanged) is
+  reinterpreted as CG pick *availability*, not an automatic grant. The rankable
+  **Tradition Training** distinction adds +1 starting technique pick per rank
+  above the Unbound baseline of 1.
+- `Organization.tradition` (nullable FK) lets orgs act as a tradition's teaching
+  structure (chapters/academies); `Tradition.society` (no live consumer) is
+  dropped. `Gift`/`Technique` gained `codex_entry` FKs so every CG catalog card
+  can open a lore modal (#2410 pattern).
+- Removed: the `Cantrip` model and its full API/admin/frontend stack, CG facet
+  selection (`selected_facet_id` — verified dead at finalize), CG custom gift
+  name/description, and the CG "Outcome Flavor" pick (`selected_consequence_pool_id`
+  — only worked by baking a pool into a per-character technique row, which shared
+  catalog techniques make impossible without new cast-path machinery).
+- Rationale + rejected alternative (per-character gift/cantrip creation) recorded
+  in ADR-0136. See `docs/systems/magic.md` and `docs/systems/character_creation.md`
+  for the current model/endpoint shape.
+
 ## Built (2026-07-11, #2162 — CGExplanation stage copy seeded)
 
 - The `character_creation` cluster seeder now writes real heading/intro/desc prose
@@ -50,18 +79,18 @@
 The 11-stage character creation flow that takes a player from concept to approved character. CG is the first experience every player has with the game, so it must be polished, informative, and exciting — setting the tone for everything that follows.
 
 ## Key Design Points
-- 11 stages: Origin, Heritage, Lineage, Attributes, Skills, Distinctions, Path, Magic, Appearance, Identity, Review
+- 11 stages: Origin, Heritage, Lineage, Distinctions, Path, Gift, Attributes & Skills, Appearance, Identity, Final Touches, Review (#2426 — Skills moved in with Attributes; the old standalone "Magic" stage split into Path + Gift)
 - Draft system allows saving and resuming in-progress characters
 - Application review workflow with staff conversation threads
 - Admin-editable CG copy text (CGExplanation key-value system) so lore text can be updated without code changes
-- Tradition templates reduce choice paralysis for new players by pre-filling magic selections
+- Tradition-gated staff-authored catalogs (`TraditionGiftGrant`/`PathGiftGrant`), not per-character-authored magic — a guided Tradition → Gift → Technique funnel narrows a bounded pick from real content instead of freeform creation (#2426)
 - Tarot card naming ritual for familyless characters (78-card deck with surname derivation)
 - Points budget system configurable via admin
 
 ## What Exists
-- **Models:** Full stage models, CharacterDraft with stage tracking, DraftApplication with review workflow, CGExplanation KV store, CGPointBudget, BeginningTradition templates
-- **APIs:** Complete viewsets and serializers for all stages
-- **Frontend:** Full React components for all 11 stages — OriginStage, HeritageStage, LineageStage, DistinctionsStage, PathStage, AttributesStage, MagicStage, AppearanceStage, IdentityStage, FinalTouchesStage, ReviewStage. Gift/Technique builders, Anima Ritual forms, Motif designers, CG Points widget, Species cards, Tarot selection
+- **Models:** Full stage models, CharacterDraft with stage tracking, DraftApplication with review workflow, CGExplanation KV store, CGPointBudget, `BeginningTradition` (tradition-per-beginning gate, `required_distinction`)
+- **APIs:** Complete viewsets and serializers for all stages, including the Gift-stage catalog reads (`gifts`, `technique-options`, #2426)
+- **Frontend:** Full React components for all 11 stages — OriginStage, HeritageStage, LineageStage, DistinctionsStage, PathStage, GiftStage, AttributesStage, AppearanceStage, IdentityStage, FinalTouchesStage, ReviewStage. GiftStage runs the Tradition → Gift → Technique → Resonance → Anima Check funnel; CG Points widget, Species cards, Tarot selection
 - **Tests:** Comprehensive coverage of stages, serializers, services, application workflow
 
 ## What's Needed for MVP

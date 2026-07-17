@@ -265,6 +265,18 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
             "(specific→general, ADR-0010); membership flows from recognition."
         ),
     )
+    tradition = models.ForeignKey(
+        "magic.Tradition",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="teaching_organizations",
+        help_text=(
+            "The tradition this org is a teaching structure of (#2426). Null = not "
+            "a tradition org (e.g. a multi-tradition academy teaches via its "
+            "trainers, not this link)."
+        ),
+    )
     default_succession_law = models.ForeignKey(
         "societies.SuccessionLaw",
         null=True,

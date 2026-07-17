@@ -10,9 +10,11 @@ Character creation is a multi-stage process that guides players through creating
 2. **Heritage** - Special heritage (Sleeper/Misbegotten) or normal → Species → Gender/Pronouns → Age
 3. **Lineage** - Family selection (or "Unknown" for special heritage)
 4. **Distinctions** - Advantages and disadvantages
-5. **Path & Skills** - Class/path selection and skill customization
-6. **Attributes** - Primary stat allocation (cap-aware with distinction/species bonuses)
-7. **Magic** - Cantrip selection, optional facet, aura distribution
+5. **Path** - Class/path selection
+6. **Gift** - Tradition, Gift + Technique catalog picks, gift resonance, and Anima Check
+   stat/skill (renders the `GiftStage` funnel component; #2426 Task 10)
+7. **Attributes & Skills** - Primary stat allocation (cap-aware with distinction/species
+   bonuses) plus skill point allocation (moved in from Path, #2426 Task 9)
 8. **Appearance** - Height, build, form traits (hair/eye color, etc.)
 9. **Identity** - Name, description, personality, background
 10. **Final Touches** - Goals (optional)
@@ -62,27 +64,40 @@ Creates a Character from a completed draft:
 - Creates RosterEntry for roster management
 - Handles staff "Add to Roster" vs player submission
 
-### Magic finalization — `finalize_magic_data`
-After `CharacterGift` is created for the chosen gift, the magic stage provisions the
-latent GIFT thread (#1578, ADR-0055):
-- `provision_latent_gift_thread(sheet, gift, resonance=...)` creates the level-0 GIFT
-  thread (the specialization substrate), idempotent on `(owner, gift)` and write-once on
-  resonance. One active GIFT thread per gift.
-- The resonance is read from `draft.draft_data["selected_gift_resonance_id"]`. The
-  frontend CG resonance picker is built (#1620): the `CantripSelector` component
-  renders a resonance dropdown (via `useResonances()`) that writes this key, and
-  `compute_magic_errors` requires it — submission is blocked until a resonance is
-  selected. When unset (legacy drafts), the provisioning falls back to
-  `gift.resonances.first()` with a warning, and skips entirely if the gift
-  supports no resonances.
-- The cantrip's starting technique may also carry a chosen consequence-pool "flavor"
-  (#1320): `draft.draft_data["selected_consequence_pool_id"]` is read and resolved via
-  `world.magic.services.technique_builder.resolve_cast_action_template()` to pick the
-  `Technique.action_template`. The frontend picker (CG magic stage's
-  `CantripSelector`) is built and writes this key. An unset key resolves
-  to the shared default template (`resolve_cast_action_template(None)`); a stale/invalid
-  id raises `InvalidConsequencePoolChoice`, which finalize catches, logs a warning, and
-  falls back to the shared default template — finalize never fails on a bad pool id.
+### Magic finalization — `finalize_magic_data` (catalog gift/technique contract, #2426)
+The magic stage's CG picks are **catalog rows the player selects**, not templates
+finalize builds new rows from — `_finalize_gift_and_techniques` only *links* the
+chosen `Gift`/`Technique`s to the character; it never creates a `Gift` or `Technique`
+row. See `world/magic/services/cg_catalog.py` for the picker endpoints
+(`get_gift_options`/`get_technique_options`) and `validators.py:compute_magic_errors`
+for the five-branch validation gate this data must satisfy before submission.
+
+- `draft.draft_data["selected_gift_id"]` names the chosen catalog `Gift`.
+  `world.magic.specialization.services.grant_gift_to_character(sheet, gift,
+  resonance=...)` mints the `CharacterGift` link and provisions the latent level-0
+  GIFT thread (#1578, ADR-0055) in one call — the same primitive `grant_path_magic`
+  uses for path-crossing grants. No-op (early return, nothing created) when the
+  draft has no `selected_gift_id` — only legacy/test-only draft_data reaches this,
+  since `compute_magic_errors` requires the key on any draft that reaches submission.
+- The resonance is read from `draft.draft_data["selected_gift_resonance_id"]`
+  (required by `compute_magic_errors`) and resolved to a `Resonance` row; `None`
+  when unset or invalid — `grant_gift_to_character` skips thread provisioning in
+  that case (no fallback-to-first-supported-resonance; that fallback only existed
+  in the old CG-creates-a-new-technique path).
+- `draft.draft_data["selected_technique_ids"]` names the chosen catalog
+  `Technique`s (drawn from the gift's pool ∪ the tradition's signature set); each
+  gets a `CharacterTechnique.objects.get_or_create` link. `announce_access_change`
+  fires once with every linked technique as `gained`.
+- **Outcome-flavor consequence-pool selection is dropped entirely** (spec
+  correction on #2426) — every catalog technique already carries its own authored
+  `action_template`; finalize no longer reads a `selected_consequence_pool_id` key
+  or calls `resolve_cast_action_template`. That resolver and
+  `InvalidConsequencePoolChoice` remain live for the technique-authoring workbench
+  (`world.magic.services.technique_builder`) — only the CG-finalize call site was
+  removed.
+- CharacterTradition creation is unconditional — `compute_magic_errors` requires
+  `selected_tradition` on any draft that reaches submission, so the old
+  `if draft.selected_tradition:` guard was dropped.
 
 ### `get_accessible_starting_areas(account)`
 Returns StartingArea queryset filtered by account access level.

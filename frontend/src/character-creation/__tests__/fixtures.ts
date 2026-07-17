@@ -4,15 +4,19 @@
  * Mock data for testing character creation flows.
  */
 
+import type { CodexEntryDetail } from '@/codex/types';
 import type {
   Beginnings,
   Build,
+  CGGiftOption,
+  CGTechniqueOption,
   CharacterDraft,
   DraftData,
   EffectType,
   Family,
   GiftDetail,
   HeightBand,
+  Path,
   Resonance,
   ResonanceAssociation,
   Restriction,
@@ -21,6 +25,7 @@ import type {
   StartingArea,
   Technique,
   TechniqueStyle,
+  Tradition,
 } from '../types';
 
 // =============================================================================
@@ -244,6 +249,7 @@ export const mockEmptyDraft: CharacterDraft = {
   stage_errors: {},
   stats_points_remaining: 5,
   stats_budget: 5,
+  starting_technique_picks: 1,
 };
 
 export const mockDraftWithArea: CharacterDraft = {
@@ -327,8 +333,8 @@ export const mockIncompleteDraft: CharacterDraft = {
     3: true,
     4: false, // incomplete
     5: true,
-    6: false, // incomplete
-    7: true,
+    6: true,
+    7: false, // incomplete (Attributes & Skills)
     8: true,
     9: true,
     10: false, // incomplete
@@ -447,7 +453,6 @@ export const mockTechnique: Technique = {
   control: 1,
   anima_cost: 2,
   description: 'A strike from the shadows',
-  source_cantrip: null,
   tier: 1,
 };
 
@@ -461,6 +466,109 @@ export const mockGiftDetail: GiftDetail = {
   techniques: [mockTechnique],
   technique_count: 1,
 };
+
+// =============================================================================
+// GiftStage Funnel Fixtures (#2426 Task 10)
+// =============================================================================
+
+export const mockPath: Path = {
+  id: 1,
+  name: 'The Wanderer',
+  description: 'A path of restless travel and self-reliance.',
+  stage: 1,
+  minimum_level: 1,
+  icon_url: null,
+  icon_name: 'compass',
+  aspects: ['Wanderlust'],
+};
+
+export const mockTradition: Tradition = {
+  id: 1,
+  name: 'The Whispering Path',
+  description: 'A tradition of quiet, patient magic learned through observation.',
+  is_active: true,
+  sort_order: 1,
+  codex_entry_ids: [7],
+  required_distinction_id: null,
+};
+
+export const mockCGGiftOption: CGGiftOption = {
+  id: 1,
+  name: 'Whispers of Shadow',
+  description: 'Mastery over shadows and darkness.',
+  kind: 'major',
+  codex_entry_id: 12,
+};
+
+export const mockCGGiftOptions: CGGiftOption[] = [
+  mockCGGiftOption,
+  {
+    id: 2,
+    name: 'Flame Ascendant',
+    description: 'Command over fire and heat.',
+    kind: 'major',
+    codex_entry_id: null,
+  },
+];
+
+export const mockCGTechniqueOptionPool: CGTechniqueOption = {
+  id: 10,
+  name: 'Shadow Strike',
+  description: 'A strike drawn from the dark.',
+  category: 'attack',
+  codex_entry_id: null,
+  is_signature: false,
+};
+
+export const mockCGTechniqueOptionSignature: CGTechniqueOption = {
+  id: 11,
+  name: 'Veil of Whispers',
+  description: 'A signature technique of the tradition.',
+  category: 'utility',
+  codex_entry_id: 20,
+  is_signature: true,
+};
+
+export const mockCGTechniqueOptions: CGTechniqueOption[] = [
+  mockCGTechniqueOptionPool,
+  mockCGTechniqueOptionSignature,
+  {
+    id: 12,
+    name: 'Umbral Wall',
+    description: 'A shielding wall of shadow.',
+    category: 'defense',
+    codex_entry_id: null,
+    is_signature: false,
+  },
+];
+
+/**
+ * Minimal CodexEntryDetail for seeding `useCodexEntry`'s query cache in tests.
+ * `CodexTerm`/`CodexModal` mount unconditionally whenever a gift/technique
+ * carries a `codex_entry_id` (the entry fetch isn't gated on the modal being
+ * open), so any test rendering a card with a non-null `codex_entry_id` must
+ * seed `codexKeys.entry(id)` — otherwise it fires a real (failing) network
+ * fetch in jsdom.
+ */
+export function mockCodexEntry(id: number): CodexEntryDetail {
+  return {
+    id,
+    name: `Codex Entry ${id}`,
+    summary: 'A lore entry.',
+    is_public: true,
+    subject: 1,
+    subject_name: 'Test Subject',
+    subject_path: [],
+    display_order: 0,
+    knowledge_status: 'known',
+    lore_content: 'Lore content.',
+    mechanics_content: null,
+    lore_links: [],
+    mechanics_links: [],
+    learn_threshold: 0,
+    research_progress: null,
+  };
+}
 
 // =============================================================================
 // CG Explanations

@@ -1,6 +1,6 @@
 # Character Creation System
 
-Multi-stage character creation flow with draft persistence, CG point budgets, cantrip-based magic selection, and staff review workflow.
+Multi-stage character creation flow with draft persistence, CG point budgets, catalog gift/technique magic selection, and staff review workflow.
 
 **Source:** `src/world/character_creation/`
 **API Base:** `/api/character-creation/`
@@ -52,7 +52,7 @@ from world.character_creation.types import (
 |-------|---------|------------|
 | `CharacterDraft` | In-progress creation state | `account`, `current_stage`, `selected_area`, `selected_beginnings`, `selected_species`, `selected_gender`, `age`, `family`, `family_member`, `selected_path`, `selected_tradition`, `height_band`, `height_inches`, `build`, `draft_data` (JSON) |
 
-**Note:** Magic selections during CG (cantrip, facet, aura distribution) are stored in `draft_data` JSON, not in separate Draft* models. The old DraftGift, DraftTechnique, DraftMotif, DraftMotifResonance, DraftMotifResonanceAssociation, DraftAnimaRitual, TraditionTemplate, TraditionTemplateTechnique, and TraditionTemplateFacet models have been removed.
+**Note:** Magic selections during CG (gift, techniques, gift resonance, Anima Check stat/skill, aura distribution) are stored in `draft_data` JSON, not in separate Draft* models. The old DraftGift, DraftTechnique, DraftMotif, DraftMotifResonance, DraftMotifResonanceAssociation, DraftAnimaRitual, TraditionTemplate, TraditionTemplateTechnique, and TraditionTemplateFacet models have been removed.
 
 ### Application/Review
 
@@ -71,9 +71,9 @@ from world.character_creation.types import (
 | 2 | Heritage | Beginnings, species, gender selected; family/tarot complete; CG points >= 0; species allowed by beginnings |
 | 3 | Lineage | Family selected, OR familyless with tarot card |
 | 4 | Distinctions | `traits_complete` flag set; CG points >= 0 |
-| 5 | Path & Skills | Path and tradition selected; skills validated against budget |
-| 6 | Attributes | All 9 stats present, valid range (10-50), multiples of 10, free points = 0 |
-| 7 | Magic | Cantrip selected; aura distribution valid; if cantrip requires facet, facet selected |
+| 5 | Path | Path selected (`get_path_errors`) |
+| 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
+| 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9) |
 | 8 | Appearance | Age, height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
 | 10 | Final Touches | Always complete (goals are optional) |
@@ -142,7 +142,7 @@ from world.character_creation.services import (
     request_revisions,            # Staff: send back with feedback
     deny_application,             # Staff: deny with 14-day soft-delete
     add_application_comment,      # Add message to thread
-    finalize_magic_data,          # Create magic objects from draft cantrip selection
+    finalize_magic_data,          # Link the draft's chosen catalog Gift/Techniques to the character
 )
 ```
 
@@ -195,9 +195,13 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff: finalize directly to roster (STAFF provenance)
 - `POST /api/character-creation/drafts/{id}/finalize-gm/` - Player-GM: finalize onto the Available roster for a table they own (GM_TABLE provenance; body `target_table`, `story_title`, optional `story_description`) (#1506)
 
-### Magic (Cantrip Selection)
-- `GET /api/character-creation/cantrips/?tradition_id=X` - List cantrips for a tradition
-- Magic selections (cantrip, facet, aura) are stored in `draft_data` JSON via draft PATCH
+### Magic (Gift/Technique Selection, #2426)
+- `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's chosen tradition + path
+- `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
+- Magic selections (`selected_gift_id`, `selected_technique_ids`, `selected_gift_resonance_id`,
+  `anima_check_stat_id`, `anima_check_skill_id`, `anima_ritual_name`, `motif_description`,
+  `glimpse_story`) are stored in `draft_data` JSON via draft PATCH — see `GiftStage` (frontend)
+  and `compute_magic_errors` (validation)
 
 ### Application Workflow (Player)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review
@@ -236,6 +240,6 @@ from world.seeds.character_creation import seed_character_creation_dev
 seed_character_creation_dev()  # idempotent: get_or_create, never overwrites edits
 ```
 
-It seeds: `Realm` "Arx"; `StartingArea` "Arx City" (access_level=ALL); `Beginnings` "Commoner" (+ allowed_species M2M); `Species` "Human"; `Gender` key `unspecified`; `TarotCard` "The Fool" (MAJOR, rank 0); `HeightBand` `average_band` + `Build` `average_build`; the 12 stat `Trait` rows; the two `Roster` rows ("Available"/"Active Characters"); a `Path` "The Wanderer" (PROSPECT); and, via `_seed_cg_explanations()` (#2162), every `CGExplanation` heading/intro/desc row (`CG_EXPLANATION_COPY`, 28 keys — one per `copy?.<key>` lookup across the 11 stage components) so a fresh deploy never ships blank CG stage copy. Unlike the rest of this seeder, `CGExplanation` rows are `update_or_create`d on every run (in-repo prose fixes keep reaching already-seeded deploys); every other row stays `get_or_create` (never overwrites a staff edit). Registered last in `CLUSTER_SEEDERS` (after `magic`, which provides the cantrip/resonance `finalize_character` picks). Verified by `test_playable_slice.py::TestSeededCharacterCreation` (finalize runs on a seeded-only DB), `test_idempotency.py::test_edited_cg_row_survives_reseed`, and `test_clusters.py::test_cg_explanations_seeded_and_nonempty`.
+It seeds: `Realm` "Arx"; `StartingArea` "Arx City" (access_level=ALL); `Beginnings` "Commoner" (+ allowed_species M2M); `Species` "Human"; `Gender` key `unspecified`; `TarotCard` "The Fool" (MAJOR, rank 0); `HeightBand` `average_band` + `Build` `average_build`; the 12 stat `Trait` rows; the two `Roster` rows ("Available"/"Active Characters"); a `Path` "The Wanderer" (PROSPECT); and, via `_seed_cg_explanations()` (#2162), every `CGExplanation` heading/intro/desc row (`CG_EXPLANATION_COPY`, 28 keys — one per `copy?.<key>` lookup across the 11 stage components) so a fresh deploy never ships blank CG stage copy. Unlike the rest of this seeder, `CGExplanation` rows are `update_or_create`d on every run (in-repo prose fixes keep reaching already-seeded deploys); every other row stays `get_or_create` (never overwrites a staff edit). `seed_beginning_traditions()` (#2426 whole-branch-review fix) then links every seeded `Beginnings` row to the magic-seeded "Unbound" `Tradition` via a `BeginningTradition` row (`required_distinction=None`) — without it, `TraditionViewSet` and `select_tradition` have nothing to offer and CG's Tradition step is uncompletable on a fresh DB, even the tradition-agnostic Unbound path. Registered last in `CLUSTER_SEEDERS` (after `magic`, which provides the gift/technique/resonance `finalize_character` picks and the Unbound `Tradition` row itself). Verified by `test_playable_slice.py::TestSeededCharacterCreation` (finalize + the real Tradition-step gates run on a seeded-only DB), `test_character_creation_magic_seed.py` (`seed_beginning_traditions` idempotency + defensive skip), `test_idempotency.py::test_edited_cg_row_survives_reseed`, and `test_clusters.py::test_cg_explanations_seeded_and_nonempty`.
 
 The admin **Game Setup** hub (`admin_game_setup` view, `_game_setup/` URL) is a superuser-only landing page for clone hosts: the clone→seed→tweak→export flow, a per-cluster content inventory (via `seeded_models_by_cluster()`) with live row counts, and links to the Big Button, Export/Import, and the World authoring apps. See `src/web/admin/CLAUDE.md`.

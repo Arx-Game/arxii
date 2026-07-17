@@ -178,8 +178,8 @@ describe('ReviewStage', () => {
         { queryClient }
       );
 
-      // Attributes and Distinctions are incomplete in mockIncompleteDraft
-      expect(screen.getByText('Attributes')).toBeInTheDocument();
+      // Attributes & Skills and Distinctions are incomplete in mockIncompleteDraft
+      expect(screen.getByText('Attributes & Skills')).toBeInTheDocument();
       expect(screen.getByText('Distinctions')).toBeInTheDocument();
     });
 
@@ -196,7 +196,7 @@ describe('ReviewStage', () => {
         { queryClient }
       );
 
-      const attributesLink = screen.getByText('Attributes');
+      const attributesLink = screen.getByText('Attributes & Skills');
       await user.click(attributesLink);
 
       expect(mockOnStageSelect).toHaveBeenCalledWith(Stage.ATTRIBUTES);

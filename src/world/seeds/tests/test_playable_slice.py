@@ -85,9 +85,12 @@ class TestSeededCharacterCreation(TestCase):
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
         from world.character_sheets.models import CharacterSheet
-        from world.magic.models import Cantrip, Resonance
+        from world.magic.models import Resonance, Tradition
+        from world.magic.services.cg_catalog import get_gift_options, get_technique_options
         from world.seeds.character_creation import DEFAULT_STAT_NAMES
+        from world.skills.models import Skill
         from world.tarot.models import TarotCard
+        from world.traits.models import Trait, TraitType
 
         seed_dev_database()
 
@@ -103,8 +106,11 @@ class TestSeededCharacterCreation(TestCase):
         gender = CharacterDraft._meta.get_field("selected_gender").related_model.objects.get(
             key="unspecified"
         )
+        # "The Wanderer" (the generic fallback path) has no starter Gift options —
+        # the CG-selectable magic pipeline lives on the 5 style-linked PROSPECT
+        # paths seeded by seed_starter_gift_catalog (#2426).
         path = CharacterDraft._meta.get_field("selected_path").related_model.objects.get(
-            name="The Wanderer"
+            name="Path of Steel"
         )
         height_band = CharacterDraft._meta.get_field("height_band").related_model.objects.get(
             name="average_band"
@@ -114,11 +120,22 @@ class TestSeededCharacterCreation(TestCase):
         )
         tarot = TarotCard.objects.get(name="The Fool")
 
-        # The seeded magic cluster provides a selectable cantrip.
-        cantrip = Cantrip.objects.first()
-        self.assertIsNotNone(cantrip, "magic cluster must seed a selectable cantrip")
+        # The seeded magic cluster provides the Unbound tradition + a Gift/technique
+        # pool for every PROSPECT path (#2426).
+        tradition = Tradition.objects.get(name="Unbound")
+        gift_options = get_gift_options(tradition, path)
+        self.assertTrue(gift_options, "Unbound must have a gift option for Path of Steel")
+        gift = gift_options[0]
+        technique_options = get_technique_options(path, gift, tradition)
+        available_techniques = technique_options.pool + technique_options.signature
+        self.assertTrue(available_techniques, "the picked gift must have >=1 available technique")
+        technique = available_techniques[0]
         resonance = Resonance.objects.first()
         self.assertIsNotNone(resonance, "magic cluster must seed a resonance")
+        stat = Trait.objects.filter(trait_type=TraitType.STAT).first()
+        self.assertIsNotNone(stat, "character-creation cluster must seed STAT traits")
+        skill = Skill.objects.filter(is_active=True).first()
+        self.assertIsNotNone(skill, "checks cluster must seed an active skill")
 
         account = AccountDB.objects.create(username="seeded_cg_player")
         draft_data = {
@@ -129,10 +146,12 @@ class TestSeededCharacterCreation(TestCase):
             "tarot_card_name": tarot.name,
             "tarot_reversed": False,
             "traits_complete": True,
-            "selected_cantrip_id": cantrip.id,
+            "selected_gift_id": gift.id,
+            "selected_technique_ids": [technique.id],
             "selected_gift_resonance_id": resonance.id,
+            "anima_check_stat_id": stat.id,
+            "anima_check_skill_id": skill.id,
         }
-        # selected_tradition may be nullable; leave it unset unless finalize needs it.
 
         draft = CharacterDraft.objects.create(
             account=account,
@@ -141,6 +160,7 @@ class TestSeededCharacterCreation(TestCase):
             selected_species=species,
             selected_gender=gender,
             selected_path=path,
+            selected_tradition=tradition,
             age=25,
             height_band=height_band,
             height_inches=(height_band.min_inches + height_band.max_inches) // 2,
@@ -156,3 +176,61 @@ class TestSeededCharacterCreation(TestCase):
         # default_starting_room; finalize_character() never produces
         # location=None on a Big-Button-seeded DB.
         self.assertIsNotNone(character.location)
+
+    def test_tradition_step_completable_for_every_seeded_beginning(self) -> None:
+        """The CG Tradition step is completable, via the real endpoints, for every
+        seeded Beginning (#2426 whole-branch-review finding).
+
+        Without ``seed_beginning_traditions()``,
+        ``TraditionViewSet.get_queryset()`` returns nothing (empty
+        ``cached_beginning_traditions``) and ``select-tradition`` independently
+        400s for every Beginning on a fresh Big-Button-only DB — CG is
+        uncompletable, even the tradition-agnostic Unbound path. This drives the
+        real gates end-to-end (the API endpoint) instead of assigning
+        ``draft.selected_tradition`` directly, which is what let the original gap
+        slip past this test file.
+        """
+        from evennia.accounts.models import AccountDB
+        from rest_framework import status
+        from rest_framework.test import APIClient
+
+        from world.character_creation.models import Beginnings, CharacterDraft
+
+        seed_dev_database()
+
+        beginnings = list(Beginnings.objects.filter(is_active=True))
+        self.assertTrue(
+            beginnings, "character_creation cluster must seed at least one active Beginning"
+        )
+
+        account = AccountDB.objects.create(username="tradition_step_probe")
+        client = APIClient()
+        client.force_authenticate(user=account)
+
+        for beginning in beginnings:
+            # Same list TraditionViewSet.get_queryset() reads (#2426).
+            bts = beginning.cached_beginning_traditions
+            self.assertTrue(
+                bts,
+                f"{beginning.name!r} must have >=1 seeded BeginningTradition (#2426)",
+            )
+            unbound_bt = next((bt for bt in bts if bt.tradition.name == "Unbound"), None)
+            self.assertIsNotNone(
+                unbound_bt, f"{beginning.name!r} must offer the Unbound tradition (#2426)"
+            )
+
+            draft = CharacterDraft.objects.create(account=account, selected_beginnings=beginning)
+
+            response = client.post(
+                f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+                {"tradition_id": unbound_bt.tradition_id},
+                format="json",
+            )
+
+            self.assertEqual(
+                response.status_code,
+                status.HTTP_200_OK,
+                f"select-tradition failed for {beginning.name!r}: {response.data}",
+            )
+            draft.refresh_from_db()
+            self.assertEqual(draft.selected_tradition_id, unbound_bt.tradition_id)

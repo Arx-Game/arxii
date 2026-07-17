@@ -17,7 +17,6 @@ from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
 
-from actions.constants import ActionCategory
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import ApplicationStatus, CommentType
 from world.character_creation.models import CharacterDraft
@@ -929,116 +928,52 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
     return True, ""
 
 
-def _finalize_cantrip_gift_and_technique(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Step 1: create Gift + CharacterGift + Technique + CharacterTechnique.
+def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Step 1: link the CG-chosen catalog Gift + Techniques to the character.
 
-    No-op when the draft has no selected cantrip.
+    Replaces the old CG-creates-a-new-technique path (#2426): the Gift and
+    Techniques are staff-authored catalog rows the player picked via the CG
+    option endpoints (``get_gift_options``/``get_technique_options``) —
+    finalize only links them, it never mints new ``Gift``/``Technique`` rows.
+    Outcome-flavor consequence-pool selection is dropped entirely (spec
+    correction on #2426): every catalog technique already carries its own
+    authored ``action_template``.
+
+    No-op when the draft has no selected gift (legacy/test-only draft_data —
+    ``compute_magic_errors`` requires ``selected_gift_id`` on any draft that
+    reaches submission).
     """
-    from world.magic.models import (  # noqa: PLC0415
-        Cantrip,
-        CharacterGift,
-        CharacterTechnique,
-        Gift,
-    )
-
-    cantrip_id = draft.draft_data.get("selected_cantrip_id")
-    if not cantrip_id:
+    gift_id = draft.draft_data.get("selected_gift_id")
+    if not gift_id:
         return
 
-    try:
-        cantrip = Cantrip.objects.get(pk=cantrip_id, is_active=True)
-    except Cantrip.DoesNotExist:
-        logger.exception("Cantrip %s not found or inactive during finalization", cantrip_id)
-        raise
-
-    custom_name = draft.draft_data.get("custom_gift_name") or cantrip.name
-    custom_description = draft.draft_data.get("custom_gift_description") or cantrip.description
-    gift = Gift.objects.create(
-        name=custom_name,
-        description=custom_description,
-        creator=sheet,
+    from world.magic.models import (  # noqa: PLC0415
+        CharacterTechnique,
+        Gift,
+        Resonance,
+        Technique,
     )
-    CharacterGift.objects.create(character=sheet, gift=gift)
+    from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415
 
-    # Provision the latent level-0 GIFT thread at the player's CG-chosen
-    # resonance (#1578). Acquiring a gift IS weaving a (latent) thread.
-    from world.magic.specialization.services import (  # noqa: PLC0415
-        provision_latent_gift_thread,
-    )
+    gift = Gift.objects.get(pk=gift_id)
 
-    chosen_resonance_id = draft.draft_data.get("selected_gift_resonance_id")
-    resonance = None
-    if chosen_resonance_id:
-        from world.magic.models import Resonance  # noqa: PLC0415
+    # Provision the CharacterGift link + the latent level-0 GIFT thread at the
+    # player's CG-chosen resonance (#1578, ADR-0055). Acquiring a gift IS
+    # weaving a (latent) thread.
+    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+    resonance = Resonance.objects.filter(pk=resonance_id).first() if resonance_id else None
+    grant_gift_to_character(sheet, gift, resonance=resonance)
 
-        resonance = Resonance.objects.filter(pk=chosen_resonance_id).first()
-    if resonance is None:
-        # Legacy/absent draft data: fall back to the gift's first supported
-        # resonance with a logged warning.
-        logger.warning(
-            "CG finalize: no selected_gift_resonance_id for draft %s; "
-            "falling back to gift %s first supported resonance.",
-            draft.pk,
-            gift.pk,
-        )
-        resonance = gift.resonances.first()
-    if resonance is not None:
-        provision_latent_gift_thread(sheet, gift, resonance=resonance)
-
-    # The technique's action arena derives from the character's Path — no
-    # off-path picks (noobtrap prevention). Falls back to the model default
-    # if the path has no authored category.
-    selected_path = draft.selected_path
-    derived_category = (
-        selected_path.action_category
-        if selected_path and selected_path.action_category
-        else ActionCategory.PHYSICAL
-    )
-
-    # Create a real Technique from the cantrip template
-    from world.magic.services.technique_builder import (  # noqa: PLC0415
-        create_technique,
-        resolve_cast_action_template,
-    )
-
-    chosen_pool_id = draft.draft_data.get("selected_consequence_pool_id")
-    from world.magic.exceptions import InvalidConsequencePoolChoice  # noqa: PLC0415
-
-    try:
-        action_template = resolve_cast_action_template(
-            chosen_pool_id, action_category=derived_category
-        )
-    except InvalidConsequencePoolChoice:
-        logger.warning(
-            "CG finalize: invalid selected_consequence_pool_id %s for draft %s; "
-            "falling back to the shared default technique-cast template.",
-            chosen_pool_id,
-            draft.pk,
-        )
-        action_template = resolve_cast_action_template(None, action_category=derived_category)
-
-    technique = create_technique(
-        creator=sheet,
-        name=custom_name,
-        gift=gift,
-        style=cantrip.style,
-        effect_type=cantrip.effect_type,
-        intensity=cantrip.base_intensity,
-        control=cantrip.base_control,
-        anima_cost=cantrip.base_anima_cost,
-        level=1,
-        action_category=derived_category,
-        description=custom_description,
-        source_cantrip=cantrip,
-        action_template=action_template,
-    )
-    CharacterTechnique.objects.create(character=sheet, technique=technique)
+    technique_ids = draft.draft_data.get("selected_technique_ids") or []
+    techniques = list(Technique.objects.filter(pk__in=technique_ids))
+    for technique in techniques:
+        CharacterTechnique.objects.get_or_create(character=sheet, technique=technique)
 
     from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
     from world.achievements.discovery import announce_access_change  # noqa: PLC0415
 
     announce_access_change(
-        sheet, gained=[technique], lost=[], source=AccessChangeSource.CHARACTER_CREATION
+        sheet, gained=techniques, lost=[], source=AccessChangeSource.CHARACTER_CREATION
     )
 
 
@@ -1101,9 +1036,14 @@ def _finalize_path_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) ->
 def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Step 5: create player anima Ritual + sidecar + CharacterRitualKnowledge.
 
-    The Ritual is authored by the player's account and uses their highest CG
-    skill + Willpower as defaults (customisable post-CG). CharacterRitualKnowledge
-    is created so the ritual gate in the scene action menu is satisfied.
+    The Ritual is authored by the player's account. Its stat + skill are the
+    player's explicit CG Anima Check pick (``anima_check_stat_id`` /
+    ``anima_check_skill_id`` — required by ``compute_magic_errors``, #2426);
+    when a draft has neither set (legacy/test-only draft_data),
+    ``provision_player_anima_ritual`` falls back to its Willpower +
+    highest-CG-skill defaults. Both are customisable post-CG.
+    CharacterRitualKnowledge is created so the ritual gate in the scene action
+    menu is satisfied.
     Guard: if the sheet has no RosterEntry yet (e.g. in isolated unit tests that
     call finalize_magic_data directly), skip — the CharacterRitualKnowledge cannot
     be created without a roster_entry FK. finalize_character always creates the
@@ -1119,24 +1059,42 @@ def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None
     from world.magic.services.anima import provision_player_anima_ritual  # noqa: PLC0415
 
     character_name = draft.draft_data.get("first_name", "Character")
+    ritual_name = draft.draft_data.get("anima_ritual_name") or f"{character_name}'s Anima Ritual"
+
+    stat = None
+    stat_id = draft.draft_data.get("anima_check_stat_id")
+    if stat_id:
+        from world.traits.models import Trait  # noqa: PLC0415
+
+        stat = Trait.objects.filter(pk=stat_id).first()
+
+    skill = None
+    skill_id = draft.draft_data.get("anima_check_skill_id")
+    if skill_id:
+        from world.skills.models import Skill  # noqa: PLC0415
+
+        skill = Skill.objects.filter(pk=skill_id).first()
+
     provision_player_anima_ritual(
         account=draft.account,
         character_sheet=sheet,
         roster_entry=roster_entry,
-        ritual_name=f"{character_name}'s Anima Ritual",
+        ritual_name=ritual_name,
+        stat=stat,
+        skill=skill,
     )
 
 
 @transaction.atomic
 def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Create magic models from cantrip selection during finalization.
+    """Create magic models from the CG-chosen catalog Gift/Techniques during finalization.
 
     Called during finalize_character() after CharacterSheet is created.
-    Creates Gift + CharacterGift + Technique + CharacterTechnique from the
-    selected cantrip, optionally CharacterTradition, applies tradition codex
-    grants, and creates CharacterAura — then recomputes it once so any resonance
-    already seeded earlier in finalize (e.g. distinction resonance grants, #1834)
-    is reflected in the starting aura.
+    Links CharacterGift + CharacterTechnique to the CG-chosen catalog Gift and
+    Techniques, creates CharacterTradition, applies tradition codex grants, and
+    creates CharacterAura — then recomputes it once so any resonance already
+    seeded earlier in finalize (e.g. distinction resonance grants, #1834) is
+    reflected in the starting aura.
     """
     from world.fatigue.services import get_or_create_fatigue_pool  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415
@@ -1145,8 +1103,8 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         CharacterTradition,
     )
 
-    # 1. Create Gift and Technique from cantrip
-    _finalize_cantrip_gift_and_technique(draft, sheet)
+    # 1. Link the CG-chosen catalog Gift + Techniques
+    _finalize_gift_and_techniques(draft, sheet)
 
     # 1b. Provision species Minor Gift(s) + latent GIFT thread + any drawback (#1580).
     #     Re-uses the player's CG-chosen resonance (same key as the Major-gift block)
@@ -1162,12 +1120,12 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         _cg_resonance = Resonance.objects.filter(pk=_cg_resonance_id).first()
     provision_species_gifts(sheet, resonance=_cg_resonance)
 
-    # 2. Create CharacterTradition (optional)
-    if draft.selected_tradition:
-        CharacterTradition.objects.create(
-            character=sheet,
-            tradition=draft.selected_tradition,
-        )
+    # 2. Create CharacterTradition — unconditional: compute_magic_errors requires
+    #    selected_tradition on any draft that reaches submission (#2426).
+    CharacterTradition.objects.create(
+        character=sheet,
+        tradition=draft.selected_tradition,
+    )
 
     # 3. Apply tradition codex grants
     _finalize_tradition_codex_grants(draft, sheet)
@@ -1705,7 +1663,7 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     _apply_character_mechanics(character, draft)
 
     # Finalize magic data (same as player finalize flow — GM-created
-    # characters may have cantrip/tradition/aura selections in the draft).
+    # characters may have gift/technique/tradition/aura selections in the draft).
     finalize_magic_data(draft, sheet)
 
     # NOTE: home and location are intentionally unset. A GM-created character

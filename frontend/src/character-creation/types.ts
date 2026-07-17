@@ -293,9 +293,9 @@ export enum Stage {
   HERITAGE = 2,
   LINEAGE = 3,
   DISTINCTIONS = 4,
-  PATH_SKILLS = 5,
-  ATTRIBUTES = 6,
-  MAGIC = 7,
+  PATH = 5,
+  GIFT = 6,
+  ATTRIBUTES = 7,
   APPEARANCE = 8,
   IDENTITY = 9,
   FINAL_TOUCHES = 10,
@@ -307,9 +307,9 @@ export const STAGE_LABELS: Record<Stage, string> = {
   [Stage.HERITAGE]: 'Heritage',
   [Stage.LINEAGE]: 'Lineage',
   [Stage.DISTINCTIONS]: 'Distinctions',
-  [Stage.PATH_SKILLS]: 'Path & Skills',
-  [Stage.ATTRIBUTES]: 'Attributes',
-  [Stage.MAGIC]: 'Magic',
+  [Stage.PATH]: 'Path',
+  [Stage.GIFT]: 'Gift',
+  [Stage.ATTRIBUTES]: 'Attributes & Skills',
   [Stage.APPEARANCE]: 'Appearance',
   [Stage.IDENTITY]: 'Identity',
   [Stage.FINAL_TOUCHES]: 'Final Touches',
@@ -351,6 +351,8 @@ export interface CharacterDraft {
   has_existing_characters: boolean;
   stats_points_remaining: number;
   stats_budget: number;
+  /** Gift-stage technique pick budget (base 1 + distinction bonus, #2426). */
+  starting_technique_picks: number;
 }
 
 export interface Stats {
@@ -408,24 +410,32 @@ export interface Tradition {
 }
 
 // =============================================================================
-// Cantrip Types (Character Creation Magic Stage)
+// CG Gift/Technique Option Types (GiftStage funnel, #2426 Task 10)
 // =============================================================================
 
-export interface CantripFacet {
-  id: number;
-  name: string;
-}
-
-export interface Cantrip {
+/**
+ * Gift row for the CG gift-options list.
+ * From GET /api/character-creation/gifts/?draft_id=<id>
+ */
+export interface CGGiftOption {
   id: number;
   name: string;
   description: string;
-  archetype: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
-  requires_facet: boolean;
-  facet_prompt: string;
-  allowed_facets: CantripFacet[];
-  sort_order: number;
-  style_id: number;
+  kind: string;
+  codex_entry_id: number | null;
+}
+
+/**
+ * Technique row for the CG technique-options list (pool ∪ signature).
+ * From GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>
+ */
+export interface CGTechniqueOption {
+  id: number;
+  name: string;
+  description: string;
+  category: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
+  codex_entry_id: number | null;
+  is_signature: boolean;
 }
 
 // =============================================================================
@@ -518,7 +528,6 @@ export interface Technique {
   control: number;
   anima_cost: number;
   description: string;
-  source_cantrip: number | null;
   tier: number;
 }
 
@@ -678,12 +687,13 @@ export interface DraftData {
   aura_celestial?: number;
   aura_primal?: number;
   aura_abyssal?: number;
-  // Magic fields - Cantrip selection
-  selected_cantrip_id?: number;
-  selected_facet_id?: number | null;
-  selected_consequence_pool_id?: number | null;
-  custom_gift_name?: string;
-  custom_gift_description?: string;
+  // Magic fields - Gift/technique picks (GiftStage funnel, #2426 Task 10)
+  selected_gift_id?: number | null;
+  selected_technique_ids?: number[];
+  // Magic fields - Anima Check (the stat + skill every cast rolls, #2426)
+  anima_check_stat_id?: number | null;
+  anima_check_skill_id?: number | null;
+  anima_ritual_name?: string;
   motif_description?: string;
   // The Glimpse story
   glimpse_story?: string;

@@ -27,7 +27,6 @@ from world.magic.constants import (
     is_imbuing_ritual,
 )
 from world.magic.models import (
-    Cantrip,
     CharacterAnima,
     CharacterAura,
     CharacterGift,
@@ -172,46 +171,6 @@ class RestrictionSerializer(serializers.ModelSerializer):
         return [et.id for et in obj.cached_allowed_effect_types]
 
 
-class CantripFacetSerializer(serializers.ModelSerializer):
-    """Lightweight facet representation for cantrip dropdown."""
-
-    class Meta:
-        model = Facet
-        fields = ["id", "name"]
-        read_only_fields = fields
-
-
-class CantripSerializer(serializers.ModelSerializer):
-    """Serializer for Cantrip lookup records with allowed facets.
-
-    Mechanical fields (intensity, control, anima cost) are intentionally
-    hidden — the player only sees name, description, archetype, and facets.
-    style_id is exposed for path-based filtering.
-    """
-
-    allowed_facets = serializers.SerializerMethodField()
-    style_id = serializers.PrimaryKeyRelatedField(source="style", read_only=True)
-
-    class Meta:
-        model = Cantrip
-        fields = [
-            "id",
-            "name",
-            "description",
-            "archetype",
-            "requires_facet",
-            "facet_prompt",
-            "allowed_facets",
-            "sort_order",
-            "style_id",
-        ]
-        read_only_fields = fields
-
-    def get_allowed_facets(self, obj: Cantrip) -> list[dict]:
-        """Get allowed facets using cached property."""
-        return CantripFacetSerializer(obj.cached_allowed_facets, many=True).data
-
-
 # =============================================================================
 # Technique Serializers
 # =============================================================================
@@ -243,7 +202,6 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "control",
             "anima_cost",
             "description",
-            "source_cantrip",
             "target_type",
             "reach",
             "reach_hops",

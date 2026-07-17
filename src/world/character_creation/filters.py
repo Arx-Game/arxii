@@ -8,7 +8,7 @@ import django_filters
 
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path
-from world.magic.models import Tradition
+from world.magic.models import Gift, Technique, Tradition
 from world.roster.models import Family
 from world.species.models import Species
 
@@ -116,3 +116,43 @@ class TraditionFilter(django_filters.FilterSet):
     class Meta:
         model = Tradition
         fields = ["beginning_id"]
+
+
+class CGGiftOptionFilter(django_filters.FilterSet):
+    """Declares ``draft_id`` for CG gift-options list schema/discoverability (#2426).
+
+    Resolution (draft lookup, account scoping, tradition/path derivation) happens in
+    ``CGGiftOptionViewSet.get_queryset`` — mirrors ``TraditionViewSet``'s split between
+    ``_get_beginning`` (SharedMemoryModel-cache-aware resolution) and its filterset.
+    """
+
+    draft_id = django_filters.NumberFilter(method="filter_noop")
+
+    class Meta:
+        model = Gift
+        fields = ["draft_id"]
+
+    def filter_noop(self, queryset: QuerySet[Gift], name: str, value: int) -> QuerySet[Gift]:
+        """No-op — the view's ``get_queryset`` already narrowed by draft_id."""
+        return queryset
+
+
+class CGTechniqueOptionFilter(django_filters.FilterSet):
+    """Declares ``draft_id``/``gift_id`` for CG technique-options schema/discoverability.
+
+    Resolution happens in ``CGTechniqueOptionViewSet.get_queryset`` — see
+    ``CGGiftOptionFilter`` above for why.
+    """
+
+    draft_id = django_filters.NumberFilter(method="filter_noop")
+    gift_id = django_filters.NumberFilter(method="filter_noop")
+
+    class Meta:
+        model = Technique
+        fields = ["draft_id", "gift_id"]
+
+    def filter_noop(
+        self, queryset: QuerySet[Technique], name: str, value: int
+    ) -> QuerySet[Technique]:
+        """No-op — the view's ``get_queryset`` already narrowed by draft_id/gift_id."""
+        return queryset

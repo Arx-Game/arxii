@@ -61,6 +61,14 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         related_name="created_gifts",
         help_text="Character who created this gift.",
     )
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="gifts",
+        help_text="Lore entry this gift is bound to, if any.",
+    )
 
     objects = GiftManager()
 
@@ -132,7 +140,6 @@ class Tradition(NaturalKeyMixin, SharedMemoryModel):
     A magical tradition representing a school of practice or philosophy.
 
     Traditions group practitioners who share techniques, beliefs, or methods.
-    A tradition may be associated with a society but can also exist independently.
     """
 
     @cached_property
@@ -151,14 +158,6 @@ class Tradition(NaturalKeyMixin, SharedMemoryModel):
     description = models.TextField(
         blank=True,
         help_text="Player-facing description of this tradition's philosophy and practices.",
-    )
-    society = models.ForeignKey(
-        "societies.Society",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="traditions",
-        help_text="The society this tradition is associated with, if any.",
     )
     is_active = models.BooleanField(
         default=True,

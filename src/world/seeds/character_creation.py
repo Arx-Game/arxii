@@ -6,20 +6,24 @@ seed rows — the content a fresh DB needs to actually run ``finalize_character`
 Create-if-missing; never overwrites; never deletes (the #651 invariant).
 
 Child of #651 / epic #1220 (Phase A). Registered in ``CLUSTER_SEEDERS`` after
-``magic`` because ``finalize_character`` picks the magic-seeded selectable
-``Cantrip`` + ``Resonance``/``TechniqueStyle`` at finalize time — NOT because
-``Beginnings`` FKs into magic (it FKs ``starting_area`` -> ``Realm`` and an M2M
-``allowed_species`` -> ``Species``).
+``magic`` because ``finalize_character`` picks the magic-seeded catalog
+``Gift``/``Technique`` + ``Resonance``/``TechniqueStyle`` at finalize time (#2426),
+and ``seed_beginning_traditions`` (below) links every seeded ``Beginnings`` to the
+magic-seeded Unbound ``Tradition`` — NOT because ``Beginnings`` FKs into magic (it
+FKs ``starting_area`` -> ``Realm`` and an M2M ``allowed_species`` -> ``Species``).
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
+import logging
 from typing import TYPE_CHECKING
 
 from world.character_creation.constants import (
+    CG_MODIFIER_CATEGORY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
+    STARTING_TECHNIQUE_PICKS_TARGET,
 )
 from world.character_creation.models import Beginnings, StartingArea
 from world.character_sheets.models import Gender, Heritage, Pronouns
@@ -42,6 +46,8 @@ from world.traits.models import Trait, TraitType
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+logger = logging.getLogger(__name__)
 
 # The canonical 12 stat names. Mirrors the set FinalizationTestMixin uses; kept
 # here as the single seed-time source (factories-as-seed-data). The test mixin's
@@ -119,7 +125,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "Spend your skill points across the specializations your path opens up; "
         "these are the trained competencies your character can already call on."
     ),
-    "magic_heading": "Magic & Cantrips",
+    "magic_heading": "Magic & Gifts",
     "identity_heading": "Name & Identity",
     "identity_intro": (
         "Give your character a name, a guiding concept, and the words and history "
@@ -169,6 +175,128 @@ def ensure_canonical_fallback_room() -> ObjectDB:
         key=FALLBACK_STARTING_ROOM_KEY,
         nohome=True,
     )
+
+
+def wire_starting_technique_picks_target():
+    """Seed the 'starting_technique_picks' ModifierTarget (#2426).
+
+    A character-creation-scoped flat bonus: distinctions granting extra CG
+    magic-stage technique picks (e.g. Tradition Training) target this row.
+    ``CharacterDraft.starting_technique_picks`` sums it via
+    ``_get_distinction_bonus(STARTING_TECHNIQUE_PICKS_TARGET, CG_MODIFIER_CATEGORY)``.
+    Idempotent via get_or_create on (category, name) — mirrors
+    ``wire_elevation_advantage_modifier_target`` (world/combat/factories.py).
+    """
+    from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+
+    category, _ = ModifierCategory.objects.get_or_create(name=CG_MODIFIER_CATEGORY)
+    target, _ = ModifierTarget.objects.get_or_create(
+        name=STARTING_TECHNIQUE_PICKS_TARGET,
+        category=category,
+        defaults={
+            "description": "Extra CG magic-stage technique picks, beyond the base of 1.",
+        },
+    )
+    return target
+
+
+def ensure_tradition_training_distinction() -> None:
+    """Seed the 'Tradition Training' distinction (#2426).
+
+    Grants +1 CG magic-stage technique pick per rank (max_rank=2) via a
+    DistinctionEffect targeting ``starting_technique_picks``. ``cost_per_rank=1``
+    mirrors the existing seeded-distinction convention (the "Attractive"
+    distinction, ``world/seeds/social_relationships.py``); "Arcane" is the
+    magic-flavored category named in ``DistinctionCategory``'s own docstring
+    ("the initial set: Physical, Mental, Personality, Social, Background, Arcane").
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionEffect,
+    )
+
+    target = wire_starting_technique_picks_target()
+
+    category, _ = DistinctionCategory.objects.get_or_create(
+        slug="arcane",
+        defaults={
+            "name": "Arcane",
+            "description": (
+                "Distinctions tied to a character's magical tradition, practice, or gifts."
+            ),
+        },
+    )
+    distinction, _ = Distinction.objects.get_or_create(
+        slug="tradition-training",
+        defaults={
+            "name": "Tradition Training",
+            "category": category,
+            "description": (
+                "PLACEHOLDER: Years spent under a tradition's tutelage broaden which "
+                "techniques you can call your own at the outset."
+            ),
+            "cost_per_rank": 1,
+            "max_rank": 2,
+        },
+    )
+    DistinctionEffect.objects.update_or_create(
+        distinction=distinction,
+        target=target,
+        defaults={
+            "value_per_rank": 1,
+            "description": "+1 CG magic-stage technique pick per rank.",
+        },
+    )
+
+
+#: Must match ``_UNBOUND_TRADITION_NAME`` in
+#: ``world.seeds.game_content.magic.seed_starter_gift_catalog`` — that's the
+#: "magic" cluster seeder that creates the row; this module only looks it up by
+#: name (get_or_create ownership stays on the magic seeder).
+_UNBOUND_TRADITION_NAME = "Unbound"
+
+
+def seed_beginning_traditions() -> None:
+    """Seed a BeginningTradition (Unbound, no gate) for every seeded Beginnings row.
+
+    Without this, the CG Tradition step is empty for every Beginning on a fresh
+    Big-Button-only DB: ``TraditionViewSet.get_queryset()`` returns nothing when
+    ``beginning.cached_beginning_traditions`` is empty, and ``select_tradition``
+    independently 400s without a matching ``BeginningTradition`` row — CG is
+    uncompletable, even the tradition-agnostic Unbound path (#2426 whole-branch
+    review finding).
+
+    The Unbound ``Tradition`` row itself is seeded by
+    ``world.seeds.game_content.magic.seed_starter_gift_catalog`` (the "magic"
+    cluster), which runs BEFORE "character_creation" in cluster order
+    (``world.seeds.clusters``) precisely so both sides of this join exist by the
+    time this function runs. ``required_distinction=None`` — Unbound is the
+    tradition-agnostic default, open to every beginning with no gate.
+    Idempotent via get_or_create; never overwrites a staff-adjusted row.
+
+    Skips silently (logged) if the Unbound tradition hasn't been seeded yet —
+    cluster ordering guarantees this can't happen via the Big Button; defensive
+    only, mirrors the per-row skip in ``seed_durance_officiants``
+    (``world.progression.seeds``).
+    """
+    from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+    from world.magic.models import Tradition  # noqa: PLC0415
+
+    unbound = Tradition.objects.filter(name=_UNBOUND_TRADITION_NAME).first()
+    if unbound is None:
+        logger.warning(
+            "Skipping BeginningTradition seeding: %r tradition is not seeded.",
+            _UNBOUND_TRADITION_NAME,
+        )
+        return
+
+    for beginning in Beginnings.objects.all():
+        BeginningTradition.objects.get_or_create(
+            beginning=beginning,
+            tradition=unbound,
+            defaults={"required_distinction": None, "sort_order": 0},
+        )
 
 
 def seed_character_creation_dev() -> None:
@@ -335,6 +463,8 @@ def seed_character_creation_dev() -> None:
         },
     )
     _seed_cg_explanations()
+    ensure_tradition_training_distinction()
+    seed_beginning_traditions()
 
 
 def _seed_cg_explanations() -> None:

@@ -45,7 +45,6 @@ from world.magic.exceptions import (
     TechniqueBudgetExceeded,
 )
 from world.magic.filters import (
-    CantripFilter,
     CharacterAnimaFilter,
     CharacterAuraFilter,
     CharacterGiftFilter,
@@ -57,7 +56,6 @@ from world.magic.filters import (
     ThreadWeavingTeachingOfferFilter,
 )
 from world.magic.models import (
-    Cantrip,
     CharacterAnima,
     CharacterAura,
     CharacterGift,
@@ -96,7 +94,6 @@ from world.magic.serializers import (
     AudereMajoraRespondSerializer,
     AudereOfferResultSerializer,
     AudereRespondSerializer,
-    CantripSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
     CharacterGiftSerializer,
@@ -213,8 +210,8 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
     list by default. An optional ``?action_category=`` query param narrows to
     the category-matching catalog (physical → combat flavors, anything else →
-    magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
-    path-derived category) only offer flavors the technique can legally keep —
+    magic flavors) so pickers with draft context (e.g. a path-derived category)
+    only offer flavors the technique can legally keep —
     resolve_cast_action_template enforces the same split at submit/finalize
     time. The technique builder's category-agnostic picker keeps the flat
     union by passing no param."""
@@ -250,32 +247,6 @@ class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["allowed_effect_types"]
     pagination_class = None  # Small lookup table
-
-
-class CantripViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    List active cantrips for character creation.
-
-    Returns all active cantrips with their allowed facets.
-    Accepts optional ``?path_id=<int>`` to filter by Path's allowed styles.
-    Registered under /api/character-creation/ since it's used during CG.
-    """
-
-    serializer_class = CantripSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = None  # Small lookup table
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = CantripFilter
-
-    def get_queryset(self):
-        """Return active cantrips with prefetched allowed facets."""
-        return Cantrip.objects.filter(is_active=True).prefetch_related(
-            Prefetch(
-                "allowed_facets",
-                queryset=Facet.objects.all(),
-                to_attr="cached_allowed_facets",
-            )
-        )
 
 
 class FacetViewSet(viewsets.ReadOnlyModelViewSet):

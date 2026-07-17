@@ -1,8 +1,8 @@
-"""End-to-end regression for #1306: a CG-finalized character can cast a cantrip
+"""End-to-end regression for #1306: a CG-finalized character can cast a starter
 technique standalone, and the cast rolls the CASTER'S per-character magic check.
 
 Issue #1306: standalone casts previously raised "Technique is not castable
-standalone" because cantrip-derived techniques carried no action_template, and
+standalone" because starter-catalog techniques carried no action_template, and
 even once they did, the cast rolled the template's fallback check rather than the
 character's personal anima-ritual check.
 
@@ -31,14 +31,17 @@ from world.classes.factories import PathFactory
 from world.classes.models import PathStage
 from world.forms.models import Build, HeightBand
 from world.magic.factories import (
-    CantripFactory,
     EffectTypeFactory,
+    GiftFactory,
+    PathGiftGrantFactory,
     ResonanceFactory,
+    TechniqueFactory,
     TechniqueStyleFactory,
     TraditionFactory,
+    TraditionGiftGrantFactory,
 )
 from world.magic.models import CharacterTechnique
-from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME
+from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, get_standalone_cast_template
 from world.magic.seeds_checks import character_magic_check_type_name
 from world.magic.services.anima import get_character_cast_check
 from world.realms.models import Realm
@@ -70,7 +73,7 @@ _STATS = {
 
 
 class CastUsesPerCharacterCheckTests(TestCase):
-    """A finalized character casts a cantrip technique using their personal check."""
+    """A finalized character casts a starter technique using their personal check."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -82,6 +85,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
                 name=stat_name,
                 defaults={"trait_type": TraitType.STAT, "description": stat_name},
             )
+        cls.anima_stat = Trait.objects.get(name="willpower")
         Roster.objects.get_or_create(name="Available Characters")
 
         realm = Realm.objects.create(name="CastPC Realm", description="Test")
@@ -134,7 +138,19 @@ class CastUsesPerCharacterCheckTests(TestCase):
         cls.tradition = TraditionFactory()
         # Skill so provision_player_anima_ritual finds a default and doesn't skip.
         cls.skill = SkillFactory(trait__name="CastPCRitualism")
-        cls.cantrip = CantripFactory(requires_facet=False)
+
+        # Gift-stage draft contract (#2426): a catalog Gift + Technique the player
+        # picks, granted for this (path, tradition) via PathGiftGrant/TraditionGiftGrant.
+        # The technique carries the shared standalone cast template so the
+        # finalized CharacterTechnique is immediately castable.
+        cls.gift = GiftFactory()
+        cls.gift.resonances.add(cls.resonance)
+        cls.technique = TechniqueFactory(
+            gift=cls.gift, action_template=get_standalone_cast_template()
+        )
+        path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
+        path_grant.starter_techniques.set([cls.technique])
+        TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
 
     def setUp(self) -> None:
         CharacterSheet.flush_instance_cache()
@@ -169,8 +185,11 @@ class CastUsesPerCharacterCheckTests(TestCase):
                 "tarot_card_name": self.tarot.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
-                "selected_cantrip_id": self.cantrip.id,
+                "selected_gift_id": self.gift.id,
+                "selected_technique_ids": [self.technique.id],
                 "selected_gift_resonance_id": self.resonance.id,
+                "anima_check_stat_id": self.anima_stat.id,
+                "anima_check_skill_id": self.skill.id,
                 "skills": {str(self.skill.pk): 20},
             },
         )
@@ -183,19 +202,20 @@ class CastUsesPerCharacterCheckTests(TestCase):
         return character, sheet, account
 
     def test_finalized_character_casts_with_personal_check(self) -> None:
-        """A CG-finalized character can self-cast their cantrip technique, and the
+        """A CG-finalized character can self-cast their starter technique, and the
         cast rolls their per-character magic check rather than the fallback."""
         character, sheet, _account = self._finalize_caster()
 
-        # The cantrip finalized into a real Technique with the default cast template.
+        # The catalog pick finalized into a linked CharacterTechnique with the
+        # default cast template.
         char_technique = CharacterTechnique.objects.filter(character=sheet).first()
         self.assertIsNotNone(
-            char_technique, "Finalized character should know a cantrip-derived technique"
+            char_technique, "Finalized character should know a starter-catalog technique"
         )
         technique = char_technique.technique
         self.assertIsNotNone(
             technique.action_template_id,
-            "Cantrip-derived technique must carry the default cast template (Task 6)",
+            "Starter-catalog technique must carry the default cast template (Task 6)",
         )
 
         # The personal check exists and is what we expect the cast to roll.

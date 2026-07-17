@@ -322,3 +322,27 @@ class HasExistingCharactersFieldTest(TestCase):
         RosterTenureFactory(player_data=player_data)
         serializer = CharacterDraftSerializer(instance=self.draft)
         assert serializer.data["has_existing_characters"] is True
+
+
+class StartingTechniquePicksFieldTest(TestCase):
+    """starting_technique_picks (#2426 Task 10) — read-only, backs the GiftStage
+    funnel's technique-pick budget banner ("n of m chosen")."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.draft = CharacterDraftFactory(account=cls.account)
+
+    def test_defaults_to_one(self) -> None:
+        """Base budget is 1 with no distinction bonus."""
+        serializer = CharacterDraftSerializer(instance=self.draft)
+        assert serializer.data["starting_technique_picks"] == 1
+
+    def test_is_read_only(self) -> None:
+        """The field cannot be set via a PATCH payload — it's derived, not stored."""
+        serializer = CharacterDraftSerializer(
+            instance=self.draft, data={"starting_technique_picks": 99}, partial=True
+        )
+        assert serializer.is_valid(), serializer.errors
+        updated = serializer.save()
+        assert updated.starting_technique_picks == 1

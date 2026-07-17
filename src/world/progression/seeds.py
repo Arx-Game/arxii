@@ -156,7 +156,7 @@ _DURANCE_OFFICIANT_CLASS_NAME = "Adventurer"
 _DURANCE_OFFICIANT_LEVEL = 5
 
 #: The 5 CG-selectable PROSPECT paths, seeded by
-#: world.seeds.game_content.magic.seed_cantrip_starter_catalog. One officiant
+#: world.seeds.game_content.magic.seed_starter_gift_catalog (#2426). One officiant
 #: per path — see world/progression/CLAUDE.md's PROSPECT/style mapping.
 _DURANCE_OFFICIANT_PATH_NAMES: tuple[str, ...] = (
     "Path of Steel",

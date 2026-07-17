@@ -50,13 +50,13 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.magic.constants import EffectKind, GiftKind, TargetKind
 from world.magic.factories import (
-    CantripFactory,
     CharacterResonanceFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
+    TraditionFactory,
 )
 from world.magic.models import Resonance, Technique, Thread
 from world.magic.models.gifts import CharacterGift
@@ -91,7 +91,9 @@ class _SpeciesGiftJourneyBase(TestCase):
     minor_gift: ClassVar
     technique: ClassVar[Technique]
     variant: ClassVar[TechniqueVariant]
-    cantrip: ClassVar
+    major_gift: ClassVar
+    major_technique: ClassVar[Technique]
+    tradition: ClassVar
 
     @classmethod
     def _seed_common(cls, *, drawback_condition=None) -> None:
@@ -123,9 +125,13 @@ class _SpeciesGiftJourneyBase(TestCase):
             gift=cls.minor_gift,
             drawback_condition=drawback_condition,
         )
-        # A cantrip so finalize_magic_data also mints the Major gift + its latent
-        # thread (beat 6 non-regression).
-        cls.cantrip = CantripFactory()
+        # A CG-authored catalog Major gift + technique so finalize_magic_data also
+        # links the Major gift + its latent thread (beat 6 non-regression, #2426
+        # catalog gift/technique contract).
+        cls.major_gift = GiftFactory(name="Test Nightform Ascendancy", kind=GiftKind.MAJOR)
+        cls.major_gift.resonances.add(cls.resonance)
+        cls.major_technique = TechniqueFactory(gift=cls.major_gift, name="Nightform Strike")
+        cls.tradition = TraditionFactory()
 
     def _finalize_character(self) -> CharacterSheet:
         """Build + CG-finalize a character of the granting species (real pipeline)."""
@@ -134,8 +140,10 @@ class _SpeciesGiftJourneyBase(TestCase):
         # (achievement + codex) can be asserted end-to-end.
         RosterEntryFactory(character_sheet=sheet)
         draft = CharacterDraftFactory(
+            selected_tradition=self.tradition,
             draft_data={
-                "selected_cantrip_id": self.cantrip.id,
+                "selected_gift_id": self.major_gift.id,
+                "selected_technique_ids": [self.major_technique.id],
                 "selected_gift_resonance_id": self.resonance.id,
             },
         )
@@ -202,8 +210,9 @@ class _SpeciesGiftJourneyBase(TestCase):
 
     def _assert_non_regression(self, sheet: CharacterSheet) -> None:
         """Beat 6: the Major-gift latent thread + covenant sub-role resolution still pass."""
-        # (a) The cantrip's Major gift still got its own latent GIFT thread, distinct
-        #     from the species MINOR gift thread (species provisioning did not clobber it).
+        # (a) The CG-chosen catalog Major gift still got its own latent GIFT thread,
+        #     distinct from the species MINOR gift thread (species provisioning did
+        #     not clobber it).
         gift_threads = Thread.objects.filter(owner=sheet, target_kind=TargetKind.GIFT)
         major_threads = gift_threads.exclude(target_gift=self.minor_gift)
         self.assertTrue(

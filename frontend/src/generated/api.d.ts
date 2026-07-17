@@ -1979,52 +1979,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/character-creation/cantrips/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description List active cantrips for character creation.
-     *
-     *     Returns all active cantrips with their allowed facets.
-     *     Accepts optional ``?path_id=<int>`` to filter by Path's allowed styles.
-     *     Registered under /api/character-creation/ since it's used during CG.
-     */
-    get: operations['character_creation_cantrips_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/character-creation/cantrips/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description List active cantrips for character creation.
-     *
-     *     Returns all active cantrips with their allowed facets.
-     *     Accepts optional ``?path_id=<int>`` to filter by Path's allowed styles.
-     *     Registered under /api/character-creation/ since it's used during CG.
-     */
-    get: operations['character_creation_cantrips_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/character-creation/cg-budgets/': {
     parameters: {
       query?: never;
@@ -2291,7 +2245,16 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Select a tradition for the draft. */
+    /**
+     * @description Select a tradition for the draft.
+     *
+     *     Gates on ``BeginningTradition.required_distinction`` (#2426): a tradition
+     *     that requires formal training may only be selected once the draft already
+     *     holds that distinction (added via the distinctions app). There is no
+     *     auto-attach — `world.distinctions.views` only *clears* the selected
+     *     tradition when its required distinction is later removed
+     *     (`_clear_tradition_if_required_distinction_removed`); it never adds one.
+     */
     post: operations['character_creation_drafts_select_tradition_create'];
     delete?: never;
     options?: never;
@@ -2478,6 +2441,60 @@ export interface paths {
     };
     /** @description ViewSet for listing gender options. */
     get: operations['character_creation_genders_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/gifts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List gifts pickable for a draft's chosen tradition + path during CG (#2426).
+     *
+     *     Query params:
+     *         draft_id: The caller's CharacterDraft (required — empty list without it).
+     *
+     *     Empty list until the draft has both a selected tradition and a selected path.
+     *     Delegates availability resolution to ``world.magic.services.cg_catalog
+     *     .get_gift_options`` — a gift with zero combined (path pool ∪ tradition
+     *     signature) techniques for this path is excluded.
+     */
+    get: operations['character_creation_gifts_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/gifts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List gifts pickable for a draft's chosen tradition + path during CG (#2426).
+     *
+     *     Query params:
+     *         draft_id: The caller's CharacterDraft (required — empty list without it).
+     *
+     *     Empty list until the draft has both a selected tradition and a selected path.
+     *     Delegates availability resolution to ``world.magic.services.cg_catalog
+     *     .get_gift_options`` — a gift with zero combined (path pool ∪ tradition
+     *     signature) techniques for this path is excluded.
+     */
+    get: operations['character_creation_gifts_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2717,6 +2734,64 @@ export interface paths {
     };
     /** @description Read-only list of tarot cards for CG surname selection. */
     get: operations['character_creation_tarot_cards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/technique-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List technique options (pool U signature) for a draft's (path, gift, tradition)
+     *     pick during CG (#2426).
+     *
+     *     Query params:
+     *         draft_id: The caller's CharacterDraft (required).
+     *         gift_id: The Gift being picked techniques for (required).
+     *
+     *     Empty list until both params resolve to a draft with tradition + path selected.
+     *     Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
+     *     returned row's ``is_signature`` reflects membership in the tradition's curated
+     *     signature set (as opposed to the path's starter pool).
+     */
+    get: operations['character_creation_technique_options_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/technique-options/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List technique options (pool U signature) for a draft's (path, gift, tradition)
+     *     pick during CG (#2426).
+     *
+     *     Query params:
+     *         draft_id: The caller's CharacterDraft (required).
+     *         gift_id: The Gift being picked techniques for (required).
+     *
+     *     Empty list until both params resolve to a draft with tradition + path selected.
+     *     Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
+     *     returned row's ``is_signature`` reflects membership in the tradition's curated
+     *     signature set (as opposed to the path's starter pool).
+     */
+    get: operations['character_creation_technique_options_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -9495,8 +9570,8 @@ export interface paths {
      *     children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
      *     list by default. An optional ``?action_category=`` query param narrows to
      *     the category-matching catalog (physical → combat flavors, anything else →
-     *     magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
-     *     path-derived category) only offer flavors the technique can legally keep —
+     *     magic flavors) so pickers with draft context (e.g. a path-derived category)
+     *     only offer flavors the technique can legally keep —
      *     resolve_cast_action_template enforces the same split at submit/finalize
      *     time. The technique builder's category-agnostic picker keeps the flat
      *     union by passing no param.
@@ -9523,8 +9598,8 @@ export interface paths {
      *     children of the combat 'Combat: Melee Offense' pool (#1995), in one flat
      *     list by default. An optional ``?action_category=`` query param narrows to
      *     the category-matching catalog (physical → combat flavors, anything else →
-     *     magic flavors) so pickers with draft context (e.g. the CG cantrip picker's
-     *     path-derived category) only offer flavors the technique can legally keep —
+     *     magic flavors) so pickers with draft context (e.g. a path-derived category)
+     *     only offer flavors the technique can legally keep —
      *     resolve_cast_action_template enforces the same split at submit/finalize
      *     time. The technique builder's category-agnostic picker keeps the flat
      *     union by passing no param.
@@ -18908,6 +18983,13 @@ export interface components {
      */
     ArcanaTypeEnum: 'major' | 'minor';
     /**
+     * @description * `sword` - Sword
+     *     * `shield` - Shield
+     *     * `crown` - Crown
+     * @enum {string}
+     */
+    ArchetypeEnum: 'sword' | 'shield' | 'crown';
+    /**
      * @description An authorable architectural style for the builder picker (#1882).
      *
      *     The player-facing lore lives in the linked ``CodexSubject`` — knowing that
@@ -19748,6 +19830,34 @@ export interface components {
       rooms: components['schemas']['ManagerRoom'][];
       exits: components['schemas']['ManagerExit'][];
     };
+    /**
+     * @description Gift row for the CG gift-options list (#2426).
+     *
+     *     Backs ``GET /api/character-creation/gifts/?draft_id=<id>`` — a gift the
+     *     draft's selected tradition + path make pickable (see
+     *     ``world.magic.services.cg_catalog.get_gift_options``).
+     */
+    CGGiftOption: {
+      readonly id: number;
+      /** @description Display name for this gift. */
+      readonly name: string;
+      /** @description Player-facing description of this gift. */
+      readonly description: string;
+      /**
+       * @description Major: the one CG-chosen gift. Minor: shared/acquirable gifts that species abilities and in-play powers are delivered as (ADR-0050).
+       *
+       *     * `MAJOR` - Major (CG-chosen)
+       *     * `MINOR` - Minor (shared, acquirable)
+       */
+      readonly kind: components['schemas']['CGGiftOptionKindEnum'];
+      readonly codex_entry_id: number | null;
+    };
+    /**
+     * @description * `MAJOR` - Major (CG-chosen)
+     *     * `MINOR` - Minor (shared, acquirable)
+     * @enum {string}
+     */
+    CGGiftOptionKindEnum: 'MAJOR' | 'MINOR';
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
       readonly id: number;
@@ -19759,6 +19869,28 @@ export interface components {
       xp_conversion_rate?: number;
       /** @description Whether this budget is currently active */
       is_active?: boolean;
+    };
+    /**
+     * @description Technique row for the CG technique-options list (#2426).
+     *
+     *     Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
+     *     — the pool ∪ signature availability set for one (path, gift, tradition) pick
+     *     (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_signature``
+     *     is resolved from the ``signature_technique_ids`` set the ViewSet places in the
+     *     serializer context — never attached to the (SharedMemoryModel) ``Technique``
+     *     instance itself, to avoid leaking one request's filtered flag into another's
+     *     cached row (see the ``required_distinction_id`` comment above).
+     */
+    CGTechniqueOption: {
+      readonly id: number;
+      /** @description Name of the technique (not unique - different characters can have same name). */
+      readonly name: string;
+      /** @description Description of what this technique does. */
+      readonly description: string;
+      readonly category: string;
+      readonly codex_entry_id: number | null;
+      /** @description True when this technique came from the tradition's signature set. */
+      readonly is_signature: boolean;
     };
     /**
      * @description Read/response serializer for CanonReview (#2003).
@@ -19789,47 +19921,6 @@ export interface components {
      * @enum {string}
      */
     CanonReviewStatusEnum: 'pending' | 'cleared' | 'changes_requested';
-    /**
-     * @description Serializer for Cantrip lookup records with allowed facets.
-     *
-     *     Mechanical fields (intensity, control, anima cost) are intentionally
-     *     hidden — the player only sees name, description, archetype, and facets.
-     *     style_id is exposed for path-based filtering.
-     */
-    Cantrip: {
-      readonly id: number;
-      readonly name: string;
-      readonly description: string;
-      /**
-       * @description Player-facing category for CG grouping: attack, defense, buff, debuff, utility.
-       *
-       *     * `attack` - Attack
-       *     * `defense` - Defense
-       *     * `buff` - Buff
-       *     * `debuff` - Debuff
-       *     * `utility` - Utility
-       */
-      readonly archetype: components['schemas']['CantripArchetypeEnum'];
-      /** @description If true, player must pick a facet (element/damage type) from allowed_facets. */
-      readonly requires_facet: boolean;
-      /** @description Player-facing dropdown label, e.g. "Choose your element". Only used when requires_facet=True. */
-      readonly facet_prompt: string;
-      /** @description Get allowed facets using cached property. */
-      readonly allowed_facets: {
-        [key: string]: unknown;
-      }[];
-      readonly sort_order: number;
-      readonly style_id: number;
-    };
-    /**
-     * @description * `attack` - Attack
-     *     * `defense` - Defense
-     *     * `buff` - Buff
-     *     * `debuff` - Debuff
-     *     * `utility` - Utility
-     * @enum {string}
-     */
-    CantripArchetypeEnum: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
     /** @description Serializer for capability types. */
     CapabilityType: {
       readonly id: number;
@@ -20312,9 +20403,9 @@ export interface components {
        *     * `2` - Heritage
        *     * `3` - Lineage
        *     * `4` - Distinctions
-       *     * `5` - Path & Skills
-       *     * `6` - Attributes
-       *     * `7` - Magic
+       *     * `5` - Path
+       *     * `6` - Gift
+       *     * `7` - Attributes & Skills
        *     * `8` - Appearance
        *     * `9` - Identity
        *     * `10` - Final Touches
@@ -20372,6 +20463,7 @@ export interface components {
       readonly stats_points_remaining: number;
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
+      readonly starting_technique_picks: number;
     };
     /** @description Serializer for creating a new draft. */
     CharacterDraftCreate: {
@@ -20386,9 +20478,9 @@ export interface components {
        *     * `2` - Heritage
        *     * `3` - Lineage
        *     * `4` - Distinctions
-       *     * `5` - Path & Skills
-       *     * `6` - Attributes
-       *     * `7` - Magic
+       *     * `5` - Path
+       *     * `6` - Gift
+       *     * `7` - Attributes & Skills
        *     * `8` - Appearance
        *     * `9` - Identity
        *     * `10` - Final Touches
@@ -21235,7 +21327,7 @@ export interface components {
        *     * `shield` - Shield
        *     * `crown` - Crown
        */
-      readonly archetype: components['schemas']['CovenantRoleArchetypeEnum'];
+      readonly archetype: components['schemas']['ArchetypeEnum'];
       readonly archetype_display: string;
       /** @description Combat resolution order. Lower is faster (1 = fastest). */
       readonly speed_rank: number;
@@ -21244,13 +21336,6 @@ export interface components {
       /** @description Null for primary roles. Set for sub-roles. */
       readonly parent_role: number | null;
     };
-    /**
-     * @description * `sword` - Sword
-     *     * `shield` - Shield
-     *     * `crown` - Crown
-     * @enum {string}
-     */
-    CovenantRoleArchetypeEnum: 'sword' | 'shield' | 'crown';
     /**
      * @description * `durance` - Covenant of the Durance
      *     * `battle` - Covenant of Battle
@@ -21435,9 +21520,9 @@ export interface components {
      *     * `2` - Heritage
      *     * `3` - Lineage
      *     * `4` - Distinctions
-     *     * `5` - Path & Skills
-     *     * `6` - Attributes
-     *     * `7` - Magic
+     *     * `5` - Path
+     *     * `6` - Gift
+     *     * `7` - Attributes & Skills
      *     * `8` - Appearance
      *     * `9` - Identity
      *     * `10` - Final Touches
@@ -29091,9 +29176,9 @@ export interface components {
        *     * `2` - Heritage
        *     * `3` - Lineage
        *     * `4` - Distinctions
-       *     * `5` - Path & Skills
-       *     * `6` - Attributes
-       *     * `7` - Magic
+       *     * `5` - Path
+       *     * `6` - Gift
+       *     * `7` - Attributes & Skills
        *     * `8` - Appearance
        *     * `9` - Identity
        *     * `10` - Final Touches
@@ -30112,8 +30197,6 @@ export interface components {
       anima_cost?: number;
       /** @description Description of what this technique does. */
       description?: string;
-      /** @description The cantrip template this technique was created from, if any. */
-      source_cantrip?: number | null;
       /**
        * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
        *
@@ -34411,8 +34494,6 @@ export interface components {
       anima_cost: number;
       /** @description Description of what this technique does. */
       description?: string;
-      /** @description The cantrip template this technique was created from, if any. */
-      source_cantrip?: number | null;
       /**
        * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
        *
@@ -34480,8 +34561,6 @@ export interface components {
       anima_cost: number;
       /** @description Description of what this technique does. */
       description?: string;
-      /** @description The cantrip template this technique was created from, if any. */
-      source_cantrip?: number | null;
       /**
        * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
        *
@@ -38435,49 +38514,6 @@ export interface operations {
       };
     };
   };
-  character_creation_cantrips_list: {
-    parameters: {
-      query?: {
-        path_id?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Cantrip'][];
-        };
-      };
-    };
-  };
-  character_creation_cantrips_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this Cantrip. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Cantrip'];
-        };
-      };
-    };
-  };
   character_creation_cg_budgets_list: {
     parameters: {
       query?: never;
@@ -39102,6 +39138,49 @@ export interface operations {
       };
     };
   };
+  character_creation_gifts_list: {
+    parameters: {
+      query?: {
+        draft_id?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGGiftOption'][];
+        };
+      };
+    };
+  };
+  character_creation_gifts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this gift. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGGiftOption'];
+        };
+      };
+    };
+  };
   character_creation_house_titles_list: {
     parameters: {
       query?: never;
@@ -39366,6 +39445,50 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TarotCard'];
+        };
+      };
+    };
+  };
+  character_creation_technique_options_list: {
+    parameters: {
+      query?: {
+        draft_id?: number;
+        gift_id?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGTechniqueOption'][];
+        };
+      };
+    };
+  };
+  character_creation_technique_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Technique. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGTechniqueOption'];
         };
       };
     };

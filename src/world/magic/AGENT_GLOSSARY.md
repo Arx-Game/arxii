@@ -10,6 +10,9 @@ A character's soul-state expressed as percentages across the three Affinities (c
 A character's pool of magical energy (current / maximum). It governs the *safety* of casting, not access — magic can always be attempted, and a shortfall is paid from life force rather than blocking the cast.
 _Avoid_: mana, magic points.
 
+**Anima Check**:
+The stat + skill pair every one of a character's casts rolls, chosen explicitly during the CG Gift stage (closing the Tradition → Gift → Technique funnel alongside a ritual name) instead of the old silent Willpower + highest-skill default. Embodied as the character's personal `RitualCheckConfig` on their `CharacterAnimaRitual`, provisioned by `provision_player_anima_ritual`. Deliberately **not** called "Signature" — ADR-0072 already owns that term for the Motif-flourish mechanic. (#2426, ADR-0136.)
+
 **Gift**:
 A thematic collection of Techniques (e.g. Pyromancy, Shadow Majesty), associated with a set of Resonances. A character acquires a Gift to gain access to its Techniques.
 
@@ -20,6 +23,12 @@ _Avoid_: main gift.
 **Minor Gift**:
 A smaller, shared, more-easily-acquired Gift (e.g. Sight → Soulsight/Magesight; Travel → teleportation). **Species abilities (vampire/lycan/khati) are delivered as species-granted Minor Gifts.** (ADR-0050.)
 _Avoid_: lesser gift, sub-gift.
+
+**Tradition**:
+A school of magical practice. Every character has exactly one — the self-taught `Unbound` tradition is a real Tradition row, not a NULL special-case. A Tradition gates which Gifts are pickable at CG via `TraditionGiftGrant` rows (tradition × gift, plus a `signature_techniques` M2M of that tradition's unique extras for the gift); non-Unbound traditions are further gated at tradition selection by `BeginningTradition.required_distinction`. Organizations may serve as a Tradition's teaching structure — many orgs per tradition (chapters, academies) — via the nullable `Organization.tradition` FK (specific→general, ADR-0010; `Tradition` itself stays dependency-free). (#2426, ADR-0136.)
+
+**Tradition Training**:
+A rankable distinction that scales a character's CG starting-technique-pick budget: baseline (Unbound, no distinction) is 1 pick, and each rank of Tradition Training adds +1 (rank 1 → 2 picks, rank 2 → 3). Data-modeled as a `ModifierTarget` ("Starting Technique Picks") + `DistinctionEffect`, read at draft time via the existing `CharacterDraft._get_distinction_bonus` — no new mechanism. Real (non-Unbound) traditions require this distinction at CG via `BeginningTradition.required_distinction`. (#2426, ADR-0136.)
 
 **Gift-thread**:
 The Thread woven into a Gift: its level sets the Gift's strength (more and stronger techniques) and its resonance sets the Gift's affinity. The costliest thread kind, because it gates magical power. (ADR-0051, ADR-0052.)
@@ -36,15 +45,11 @@ _Avoid_: signature variant, signature specialization (it is additive, not a vari
 The one shared `(entity × resonance) → customized capability` resolution (a generalization of covenant sub-role resolution): the same Gift down different Paths, or with a different resonance, yields different specialized techniques, derived on read. (ADR-0055.)
 
 **Technique**:
-A specific, player-created magical ability that lives within a Gift, carrying base intensity, control, and anima cost plus a style and effect type. It is the primary unit of magical action.
-_Avoid_: power, spell, ability.
-
-**Cantrip**:
-A staff-curated starter Technique template selected during character creation; at CG finalization it produces a real Technique in the character's Gift. Its mechanical fields are hidden from the player.
-_Avoid_: starter spell, baby technique (informal only).
+A specific magical ability that lives within a Gift, carrying base intensity, control, and anima cost plus a style and effect type. It is the primary unit of magical action. At character creation, players pick 1 + `Tradition Training` bonus Techniques from a staff-authored catalog (their Path × Gift's availability pool, plus their Tradition's signature extras) rather than authoring one; personalization (custom flavor, signature variants) is a level-3+ thread mechanic, not CG. (#2426, ADR-0136.)
+_Avoid_: power, spell, ability; **cantrip** (retired #2426 — see ADR-0136; CG used to mint a personal Technique from a staff-curated `Cantrip` template, now it links to catalog `Technique` rows directly, no per-character row created).
 
 **Consequence-Pool Catalog**:
-The curated set of `ConsequencePool` rows selectable when authoring a technique or customizing a cantrip's starting technique — structurally, the single-depth children of the base "Magic: Technique Cast" pool (`ConsequencePool.parent`). Each catalog entry has a matching `ActionTemplate` sharing the base template's `check_type`/`pipeline`/`target_type`; only `consequence_pool` differs. (#1320.)
+The curated set of `ConsequencePool` rows selectable when authoring a technique — structurally, the single-depth children of the base "Magic: Technique Cast" pool (`ConsequencePool.parent`). Each catalog entry has a matching `ActionTemplate` sharing the base template's `check_type`/`pipeline`/`target_type`; only `consequence_pool` differs. (#1320.) CG no longer has an "Outcome Flavor" pick from this catalog — dropped in #2426 (ADR-0136) because it only worked by baking a pool into a per-character technique row, which shared catalog techniques make impossible without new cast-path machinery.
 
 **Intensity**:
 The magnitude a caster *channels* — it drives cost and risk (anima cost, control mishap, Soulfray, Audere gating, resonance attribution). It is a base/static value on the Technique and is never reduced by a ward.

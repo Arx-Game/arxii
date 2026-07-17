@@ -399,7 +399,7 @@ Built capability and challenge content layer exercising the full pipeline end-to
 - **TechniqueCapabilityGrant** already connects Techniques to Capabilities. When a character learns a new Technique, they automatically gain new action options
 - **Effect properties** linked to Resonances via M2M (Resonance.properties, refactored from name-matching in PR #360). May need direct effect property declarations on Techniques as the system matures
 - **Intensity scaling** — higher-intensity Techniques produce higher capability values, making harder Challenges accessible
-- **Cantrips** — CG cantrips create real Techniques, which means TechniqueCapabilityGrants on cantrip-generated Techniques give starting characters capabilities from day one
+- **CG catalog techniques** — CG links characters to authored catalog `Technique` rows (Path × Gift starter pool, #2426), which means TechniqueCapabilityGrants on those catalog Techniques give starting characters capabilities from day one
 - **Post-CG technique builder** — new Techniques created post-CG need TechniqueCapabilityGrant assignment (manual via admin, or derived from effect type)
 
 ### Combat (world/combat — not yet built)

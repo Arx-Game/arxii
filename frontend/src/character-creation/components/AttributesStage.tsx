@@ -1,7 +1,8 @@
 /**
- * Stage 6: Attributes Allocation
+ * Stage 7: Attributes & Skills
  *
- * 12 primary statistics in 4 categories, allocated with a point budget.
+ * 12 primary statistics in 4 categories, allocated with a point budget,
+ * plus skill point allocation (moved in from the Path stage, #2426 Task 9).
  * Values are 1-5 directly (no internal scaling).
  */
 
@@ -13,6 +14,7 @@ import { useCGExplanations, useStatDefinitions, useUpdateDraft } from '../querie
 import { getDefaultStats } from '../types';
 import type { CharacterDraft, Stats } from '../types';
 import { FreePointsWidget } from './FreePointsWidget';
+import { SkillsSection } from './SkillsSection';
 import { StatCard } from './StatCard';
 import { StatModal } from './StatModal';
 
@@ -147,6 +149,13 @@ export function AttributesStage({ draft }: AttributesStageProps) {
           </div>
         </div>
       </div>
+
+      {/* Skills Section - appears after attributes, requires a path to suggest from */}
+      {draft.selected_path && (
+        <div className="mt-8 border-t pt-8">
+          <SkillsSection draft={draft} />
+        </div>
+      )}
 
       {/* Mobile modal */}
       <StatModal

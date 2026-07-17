@@ -11,6 +11,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import { CharacterCreationPage } from '../CharacterCreationPage';
+import { Stage } from '../types';
 import {
   mockCGExplanations,
   mockEmptyDraft,
@@ -44,6 +45,10 @@ vi.mock('../api', () => ({
   submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
   getCGExplanations: vi.fn(),
+  // GiftStage (#2426 Task 10) calls useResonances() unconditionally at the top
+  // of its render (for the always-mounted Gift Resonance step), independent
+  // of which funnel step is currently open.
+  getResonances: vi.fn().mockResolvedValue([]),
 }));
 
 describe('CharacterCreationPage', () => {
@@ -239,6 +244,32 @@ describe('CharacterCreationPage', () => {
         const nextButton = screen.getByRole('button', { name: /next/i });
         expect(nextButton).toBeDisabled();
       });
+    });
+  });
+
+  describe('Gift Stage Dispatch (#2426 Task 10)', () => {
+    it('renders GiftStage (not the retired MagicStage) for Stage.GIFT', async () => {
+      const queryClient = createTestQueryClient();
+      seedCharacterCreationQueries(queryClient, {
+        canCreate: mockCanCreateYes,
+        draft: { ...mockEmptyDraft, current_stage: Stage.GIFT },
+        startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
+      });
+
+      renderWithCharacterCreationProviders(<CharacterCreationPage />, {
+        queryClient,
+        account: mockPlayerAccount,
+      });
+
+      // The funnel's Anima Check step label always renders, independent of
+      // any catalog data loading — a reliable signal GiftStage (not the old
+      // MagicStage cantrip UI) is what's mounted.
+      await waitFor(() => {
+        expect(screen.getByText('Anima Check')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Tradition')).toBeInTheDocument();
+      expect(screen.getByText('Techniques')).toBeInTheDocument();
     });
   });
 

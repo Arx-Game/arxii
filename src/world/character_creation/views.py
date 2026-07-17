@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
 from django.db.models import Case, IntegerField, Prefetch, QuerySet, Value, When
+from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, permissions, status, viewsets
@@ -23,6 +24,8 @@ from rest_framework.views import APIView
 
 from world.character_creation.constants import ApplicationStatus
 from world.character_creation.filters import (
+    CGGiftOptionFilter,
+    CGTechniqueOptionFilter,
     FamilyFilter,
     GenderFilter,
     PathFilter,
@@ -40,7 +43,9 @@ from world.character_creation.models import (
 from world.character_creation.serializers import (
     BeginningsSerializer,
     CGExplanationsSerializer,
+    CGGiftOptionSerializer,
     CGPointBudgetSerializer,
+    CGTechniqueOptionSerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
     ClaimableTitleSerializer,
@@ -73,7 +78,9 @@ from world.character_creation.services import (
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
 from world.forms.services import get_cg_form_options
-from world.magic.models import Tradition
+from world.magic.models import Gift, Technique, Tradition
+from world.magic.services.cg_catalog import get_gift_options, get_technique_options
+from world.magic.types.cg_catalog import TechniqueOptions
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Language, Species, SpeciesStatBonus
@@ -236,6 +243,15 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
+def _view_request(view: viewsets.GenericViewSet) -> Request | None:
+    """Return ``view.request``, or None during drf-spectacular schema generation.
+
+    Shared by every CG ViewSet below that resolves its queryset from a query
+    param — a single suppression site instead of one per call site.
+    """
+    return getattr(view, "request", None)  # noqa: GETATTR_LITERAL
+
+
 class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Lists traditions available for a beginning during CG.
@@ -261,8 +277,7 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
         ``query_params`` returns the id as a string, but Evennia's identity
         map keys instances by int pk; cast explicitly so the cache hits.
         """
-        # Suppression justified: DRF .request absent during drf-spectacular schema generation.
-        request = getattr(self, "request", None)  # noqa: GETATTR_LITERAL
+        request = _view_request(self)
         raw = (
             request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
             if request is not None
@@ -319,6 +334,142 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
             {bt.tradition_id: bt for bt in beginning.cached_beginning_traditions}
             if beginning is not None
             else {}
+        )
+        return context
+
+
+class CGGiftOptionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    List gifts pickable for a draft's chosen tradition + path during CG (#2426).
+
+    Query params:
+        draft_id: The caller's CharacterDraft (required — empty list without it).
+
+    Empty list until the draft has both a selected tradition and a selected path.
+    Delegates availability resolution to ``world.magic.services.cg_catalog
+    .get_gift_options`` — a gift with zero combined (path pool ∪ tradition
+    signature) techniques for this path is excluded.
+    """
+
+    serializer_class = CGGiftOptionSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table.
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CGGiftOptionFilter
+
+    def filter_queryset(self, queryset: QuerySet[Gift]) -> QuerySet[Gift]:
+        """Skip ``CGGiftOptionFilter``'s form validation — it exists only for OpenAPI
+        schema/discoverability (see its docstring); real ``draft_id`` resolution
+        (including malformed-value handling) already happened in ``get_queryset()``
+        via ``_get_draft()``. Without this override, ``NumberFilter`` form validation
+        would 400 a non-numeric ``draft_id`` instead of treating it as absent like
+        every other malformed/missing param on this endpoint.
+        """
+        return queryset
+
+    def _get_draft(self) -> CharacterDraft | None:
+        """Resolve the request's own CharacterDraft from ``?draft_id=``."""
+        request = _view_request(self)
+        if request is None:
+            return None
+        raw = request.query_params.get("draft_id")  # noqa: USE_FILTERSET
+        if not raw:
+            return None
+        try:
+            draft_id = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
+
+    def get_queryset(self) -> QuerySet[Gift]:
+        """Return gifts pickable under the draft's tradition, available to its path."""
+        draft = self._get_draft()
+        if draft is None:
+            return Gift.objects.none()
+        if draft.selected_tradition_id is None or draft.selected_path_id is None:
+            return Gift.objects.none()
+
+        gift_ids = [
+            gift.id for gift in get_gift_options(draft.selected_tradition, draft.selected_path)
+        ]
+        return Gift.objects.filter(id__in=gift_ids).select_related("codex_entry").order_by("name")
+
+
+class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    List technique options (pool U signature) for a draft's (path, gift, tradition)
+    pick during CG (#2426).
+
+    Query params:
+        draft_id: The caller's CharacterDraft (required).
+        gift_id: The Gift being picked techniques for (required).
+
+    Empty list until both params resolve to a draft with tradition + path selected.
+    Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
+    returned row's ``is_signature`` reflects membership in the tradition's curated
+    signature set (as opposed to the path's starter pool).
+    """
+
+    serializer_class = CGTechniqueOptionSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table.
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CGTechniqueOptionFilter
+
+    def filter_queryset(self, queryset: QuerySet[Technique]) -> QuerySet[Technique]:
+        """Skip ``CGTechniqueOptionFilter``'s form validation — it exists only for
+        OpenAPI schema/discoverability (see its docstring); real ``draft_id``/``gift_id``
+        resolution (including malformed-value handling) already happened in
+        ``get_queryset()`` via ``_resolve_options()``. Without this override,
+        ``NumberFilter`` form validation would 400 a non-numeric id instead of treating
+        it as absent like every other malformed/missing param on this endpoint.
+        """
+        return queryset
+
+    def _resolve_options(self) -> TechniqueOptions | None:
+        """Resolve pool/signature techniques for ``?draft_id=&gift_id=``, cached per request."""
+        if hasattr(self, "_cg_technique_options"):
+            return self._cg_technique_options
+
+        request = _view_request(self)
+        raw_draft_id = None
+        raw_gift_id = None
+        if request is not None:
+            raw_draft_id = request.query_params.get("draft_id")  # noqa: USE_FILTERSET
+            raw_gift_id = request.query_params.get("gift_id")  # noqa: USE_FILTERSET
+        options: TechniqueOptions | None = None
+        if raw_draft_id and raw_gift_id:
+            try:
+                draft_id = int(raw_draft_id)
+                gift_id = int(raw_gift_id)
+            except (TypeError, ValueError):
+                draft_id = None
+                gift_id = None
+            if draft_id is not None and gift_id is not None:
+                draft = get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
+                if draft.selected_tradition_id is not None and draft.selected_path_id is not None:
+                    gift = get_object_or_404(Gift, pk=gift_id)
+                    options = get_technique_options(
+                        draft.selected_path, gift, draft.selected_tradition
+                    )
+
+        self._cg_technique_options = options
+        return options
+
+    def get_queryset(self) -> QuerySet[Technique]:
+        """Return the pool U signature techniques for the resolved (path, gift, tradition)."""
+        options = self._resolve_options()
+        if options is None:
+            return Technique.objects.none()
+
+        technique_ids = {t.id for t in [*options.pool, *options.signature]}
+        return Technique.objects.filter(id__in=technique_ids).select_related("effect_type")
+
+    def get_serializer_context(self) -> dict[str, Any]:
+        context = super().get_serializer_context()
+        options = self._resolve_options()
+        context["signature_technique_ids"] = (
+            {t.id for t in options.signature} if options is not None else set()
         )
         return context
 
@@ -536,7 +687,15 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="select-tradition")
     def select_tradition(self, request: Request, pk: int | None = None) -> Response:
-        """Select a tradition for the draft."""
+        """Select a tradition for the draft.
+
+        Gates on ``BeginningTradition.required_distinction`` (#2426): a tradition
+        that requires formal training may only be selected once the draft already
+        holds that distinction (added via the distinctions app). There is no
+        auto-attach — `world.distinctions.views` only *clears* the selected
+        tradition when its required distinction is later removed
+        (`_clear_tradition_if_required_distinction_removed`); it never adds one.
+        """
         draft = self.get_object()
         tradition_id = request.data.get("tradition_id")
 
@@ -548,14 +707,26 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         if not draft.selected_beginnings:
             raise ValidationError({"detail": "A beginning must be selected first."})
 
-        if not BeginningTradition.objects.filter(
+        bt = BeginningTradition.objects.filter(
             beginning=draft.selected_beginnings, tradition_id=tradition_id
-        ).exists():
+        ).first()
+        if bt is None:
             raise ValidationError(
                 {"detail": "This tradition is not available for the selected beginning."}
             )
 
-        from django.shortcuts import get_object_or_404  # noqa: PLC0415
+        if bt.required_distinction_id:
+            held_distinction_ids = {
+                entry.get("distinction_id") for entry in draft.draft_data.get("distinctions", [])
+            }
+            if bt.required_distinction_id not in held_distinction_ids:
+                raise ValidationError(
+                    {
+                        "detail": (
+                            "This tradition requires formal training (take its distinction first)."
+                        )
+                    }
+                )
 
         tradition = get_object_or_404(Tradition, pk=tradition_id, is_active=True)
         draft.selected_tradition = tradition
