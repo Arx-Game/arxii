@@ -511,6 +511,12 @@ class ActionRegistryTests(TestCase):
             "story_unlink_rooms",
             "story_place_room",
             "story_remove_room",
+            "grant_story_room",
+            "revoke_story_room",
+            "join_story_room",
+            "leave_story_room",
+            "spin_up_scene_room",
+            "close_scene_room",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

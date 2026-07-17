@@ -480,3 +480,234 @@ class StoryBuilderNonGMRejectionTests(TestCase):
             assert action is not None, key
             result = action.run(self.player)
             assert not result.success, key
+
+
+class GrantStoryRoomAccessActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.gm_actor, self.gm_profile = _gm_actor("GrantAccessGM")
+        self.story = StoryAreaFactory(gm=self.gm_profile)
+        self.room = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+        self.target = _player_actor("GrantAccessTarget")
+
+    def test_gm_grants_on_own_story_room(self) -> None:
+        from actions.definitions.story_builder import GrantStoryRoomAccessAction
+        from world.gm.models import StoryRoomGrant
+
+        result = GrantStoryRoomAccessAction().run(
+            self.gm_actor,
+            room_id=self.room.objectdb_id,
+            character_name=self.target.db_key,
+        )
+        assert result.success, result.message
+        assert StoryRoomGrant.objects.filter(
+            room=self.room, character=self.target.sheet_data
+        ).exists()
+
+    def test_gm_grants_on_own_temp_room(self) -> None:
+        from actions.definitions.story_builder import (
+            GrantStoryRoomAccessAction,
+            SpinUpSceneRoomAction,
+        )
+        from world.gm.models import StoryRoomGrant
+        from world.instances.models import InstancedRoom
+
+        spin_result = SpinUpSceneRoomAction().run(self.gm_actor, name="Temp Room")
+        assert spin_result.success, spin_result.message
+        instance = InstancedRoom.objects.get(gm_owner=self.gm_profile)
+
+        result = GrantStoryRoomAccessAction().run(
+            self.gm_actor,
+            room_id=instance.room_id,
+            character_name=self.target.db_key,
+        )
+        assert result.success, result.message
+        assert StoryRoomGrant.objects.filter(
+            room=instance.room.room_profile, character=self.target.sheet_data
+        ).exists()
+
+    def test_grant_on_foreign_gm_room_fails(self) -> None:
+        from actions.definitions.story_builder import GrantStoryRoomAccessAction
+        from world.gm.models import StoryRoomGrant
+
+        other_gm_actor, _ = _gm_actor("GrantAccessOtherGM")
+        result = GrantStoryRoomAccessAction().run(
+            other_gm_actor,
+            room_id=self.room.objectdb_id,
+            character_name=self.target.db_key,
+        )
+        assert not result.success
+        assert not StoryRoomGrant.objects.filter(
+            room=self.room, character=self.target.sheet_data
+        ).exists()
+
+
+class RevokeStoryRoomAccessActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.gm_actor, self.gm_profile = _gm_actor("RevokeAccessGM")
+        self.story = StoryAreaFactory(gm=self.gm_profile)
+        self.room = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+        self.origin_room = RoomProfileFactory().objectdb
+        self.target = CharacterFactory(db_key="RevokeAccessTarget", home=self.origin_room)
+        CharacterSheetFactory(character=self.target)
+        self.target.move_to(self.origin_room, quiet=True)
+
+    def test_revoke_returns_an_inside_character(self) -> None:
+        from actions.definitions.story_builder import (
+            GrantStoryRoomAccessAction,
+            JoinStoryRoomAction,
+            RevokeStoryRoomAccessAction,
+        )
+        from world.gm.models import StoryRoomGrant
+
+        GrantStoryRoomAccessAction().run(
+            self.gm_actor, room_id=self.room.objectdb_id, character_name=self.target.db_key
+        )
+        join_result = JoinStoryRoomAction().run(self.target, room_id=self.room.objectdb_id)
+        assert join_result.success, join_result.message
+        assert self.target.location == self.room.objectdb
+
+        result = RevokeStoryRoomAccessAction().run(
+            self.gm_actor, room_id=self.room.objectdb_id, character_name=self.target.db_key
+        )
+        assert result.success, result.message
+        assert self.target.location == self.origin_room
+        assert not StoryRoomGrant.objects.filter(
+            room=self.room, character=self.target.sheet_data
+        ).exists()
+
+
+class JoinLeaveStoryRoomActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.gm_actor, self.gm_profile = _gm_actor("JoinLeaveGM")
+        self.story = StoryAreaFactory(gm=self.gm_profile)
+        self.room = RoomProfileFactory(area=self.story.area, origin=GridOrigin.STORY)
+        self.origin_room = RoomProfileFactory().objectdb
+        self.player = CharacterFactory(db_key="JoinLeavePlayer", home=self.origin_room)
+        CharacterSheetFactory(character=self.player)
+        self.player.move_to(self.origin_room, quiet=True)
+
+    def test_join_without_grant_fails(self) -> None:
+        from actions.definitions.story_builder import JoinStoryRoomAction
+
+        result = JoinStoryRoomAction().run(self.player, room_id=self.room.objectdb_id)
+        assert not result.success
+        assert self.player.location == self.origin_room
+
+    def test_join_then_leave_round_trip_restores_location(self) -> None:
+        from actions.definitions.story_builder import (
+            GrantStoryRoomAccessAction,
+            JoinStoryRoomAction,
+            LeaveStoryRoomAction,
+        )
+
+        GrantStoryRoomAccessAction().run(
+            self.gm_actor, room_id=self.room.objectdb_id, character_name=self.player.db_key
+        )
+        join_result = JoinStoryRoomAction().run(self.player, room_id=self.room.objectdb_id)
+        assert join_result.success, join_result.message
+        assert self.player.location == self.room.objectdb
+
+        leave_result = LeaveStoryRoomAction().run(self.player)
+        assert leave_result.success, leave_result.message
+        assert self.player.location == self.origin_room
+
+    def test_leave_outside_a_story_room_fails_cleanly(self) -> None:
+        """No grant for the current (ordinary) room — fails cleanly with the
+        service's own message rather than raising. The
+        ``"You're not in a story room."`` wording is reserved for a location
+        with no ``RoomProfile`` at all — see
+        ``test_leave_with_no_location_fails_cleanly`` below."""
+        from actions.definitions.story_builder import LeaveStoryRoomAction
+
+        result = LeaveStoryRoomAction().run(self.player)
+        assert not result.success
+        assert self.player.location == self.origin_room
+
+    def test_leave_with_no_location_fails_cleanly(self) -> None:
+        from actions.definitions.story_builder import LeaveStoryRoomAction
+
+        self.player.location = None
+        result = LeaveStoryRoomAction().run(self.player)
+        assert not result.success
+        assert result.message == "You're not in a story room."
+
+
+class SpinUpCloseSceneRoomActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.gm_actor, self.gm_profile = _gm_actor("SpinCloseGM")
+        self.origin_room = RoomProfileFactory().objectdb
+        self.player = CharacterFactory(db_key="SpinClosePlayer", home=self.origin_room)
+        CharacterSheetFactory(character=self.player)
+        self.player.move_to(self.origin_room, quiet=True)
+
+    def test_spin_up_grant_join_close_lifecycle(self) -> None:
+        from actions.definitions.story_builder import (
+            CloseSceneRoomAction,
+            GrantStoryRoomAccessAction,
+            JoinStoryRoomAction,
+            SpinUpSceneRoomAction,
+        )
+        from world.instances.constants import InstanceStatus
+        from world.instances.models import InstancedRoom
+
+        spin_result = SpinUpSceneRoomAction().run(self.gm_actor, name="Ambush Site")
+        assert spin_result.success, spin_result.message
+        instance = InstancedRoom.objects.get(gm_owner=self.gm_profile)
+
+        grant_result = GrantStoryRoomAccessAction().run(
+            self.gm_actor, room_id=instance.room_id, character_name=self.player.db_key
+        )
+        assert grant_result.success, grant_result.message
+
+        join_result = JoinStoryRoomAction().run(self.player, room_id=instance.room_id)
+        assert join_result.success, join_result.message
+        assert self.player.location == instance.room
+
+        close_result = CloseSceneRoomAction().run(self.gm_actor, room_id=instance.room_id)
+        assert close_result.success, close_result.message
+        assert self.player.location == self.origin_room
+        # Ephemeral temp room with no history — completed and deleted.
+        assert not InstancedRoom.objects.filter(
+            pk=instance.pk, status=InstanceStatus.ACTIVE
+        ).exists()
+
+
+class StoryRoomGMVerbsNonGMRejectionTests(TestCase):
+    """Non-GM rejected on the four GM-side story-room verbs (#2450 task 7)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_gm_level_caps()
+
+    def setUp(self) -> None:
+        self.player = _player_actor("StoryRoomVerbsRejectionPlayer")
+
+    def test_non_gm_rejected_on_each_key(self) -> None:
+        from actions.registry import get_action
+
+        for key in (
+            "grant_story_room",
+            "revoke_story_room",
+            "spin_up_scene_room",
+            "close_scene_room",
+        ):
+            action = get_action(key)
+            assert action is not None, key
+            result = action.run(self.player)
+            assert not result.success, key

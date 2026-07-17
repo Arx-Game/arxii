@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
     from world.gm.models import GMProfile
+    from world.instances.models import InstancedRoom
 
 _EXIT_TYPECLASS = "typeclasses.exits.Exit"
 
@@ -89,6 +90,47 @@ def _resolve_owned_story_room(
     if error is not None:
         return None, error
     return room_profile, None
+
+
+def _resolve_owned_instance(
+    actor: ObjectDB, room_id: Any
+) -> tuple[InstancedRoom | None, str | None]:
+    """Resolve room_id to an active GM-owned InstancedRoom (staff: any active gm-owned instance)."""
+    from world.instances.constants import InstanceStatus  # noqa: PLC0415
+    from world.instances.models import InstancedRoom  # noqa: PLC0415
+
+    if not room_id:
+        return None, "No such room."
+    qs = InstancedRoom.objects.filter(
+        room_id=room_id, status=InstanceStatus.ACTIVE, gm_owner__isnull=False
+    ).select_related("room")
+    if not _is_staff(actor):
+        profile = _gm_profile_for(actor)
+        if profile is None:
+            return None, "GM trust required."
+        qs = qs.filter(gm_owner=profile)
+    instance = qs.first()
+    if instance is None:
+        return None, "No such room."
+    return instance, None
+
+
+def _resolve_owned_story_or_temp_room(
+    actor: ObjectDB, room_id: Any
+) -> tuple[RoomProfile | None, str | None]:
+    """Resolve room_id to an owned RoomProfile — a story-area room, or an active temp scene room.
+
+    Tries the story-area resolver first (the common case); falls back to the
+    temp-instance resolver only when that fails, so a foreign GM's story room
+    still gets story_room's own error message rather than "No such room."
+    """
+    room_profile, error = _resolve_owned_story_room(actor, room_id)
+    if room_profile is not None:
+        return room_profile, None
+    instance, inst_error = _resolve_owned_instance(actor, room_id)
+    if instance is not None:
+        return instance.room.room_profile, None
+    return None, error or inst_error
 
 
 def _parse_dig_room_grid(kwargs: dict[str, Any]) -> tuple[int | None, int | None, int] | None:
@@ -509,3 +551,215 @@ class StoryRemoveRoomAction(_StoryBuilderAction):
             ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_destination=room).delete()
             room.delete()
         return ActionResult(success=True, message="Room removed.")
+
+
+@dataclass
+class GrantStoryRoomAccessAction(_StoryBuilderAction):
+    """Grant a character access to join an owned story room or temp scene room.
+
+    Kwargs: ``room_id``, ``character_name``. ``room_id`` resolves against a
+    story-area room first, then an active GM-owned temp scene room.
+    """
+
+    key: str = "grant_story_room"
+    name: str = "Grant Story Room Access"
+    icon: str = "user-plus"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.gm.story_services import StoryServiceError, grant_story_room  # noqa: PLC0415
+
+        room_profile, error = _resolve_owned_story_or_temp_room(actor, kwargs.get("room_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+        profile = _gm_profile_for(actor)
+        if profile is None:
+            return ActionResult(success=False, message="GM trust required.")
+        character_name = (kwargs.get("character_name") or "").strip()
+        if not character_name:
+            return ActionResult(success=False, message="Name the character.")
+        sheet = CharacterSheet.objects.filter(character__db_key__iexact=character_name).first()
+        if sheet is None:
+            return ActionResult(success=False, message="No such character.")
+        try:
+            grant_story_room(gm=profile, room_profile=room_profile, sheet=sheet)
+        except StoryServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"{character_name} may now join {room_profile.objectdb.db_key}.",
+        )
+
+
+@dataclass
+class RevokeStoryRoomAccessAction(_StoryBuilderAction):
+    """Revoke a character's access to an owned story room or temp scene room.
+
+    Kwargs: ``room_id``, ``character_name``. If the character is currently
+    inside, they are returned to their captured origin first.
+    """
+
+    key: str = "revoke_story_room"
+    name: str = "Revoke Story Room Access"
+    icon: str = "user-minus"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.gm.models import StoryRoomGrant  # noqa: PLC0415
+        from world.gm.story_services import StoryServiceError, revoke_story_room  # noqa: PLC0415
+
+        room_profile, error = _resolve_owned_story_or_temp_room(actor, kwargs.get("room_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+        character_name = (kwargs.get("character_name") or "").strip()
+        if not character_name:
+            return ActionResult(success=False, message="Name the character.")
+        sheet = CharacterSheet.objects.filter(character__db_key__iexact=character_name).first()
+        if sheet is None:
+            return ActionResult(success=False, message="No such character.")
+        grant = StoryRoomGrant.objects.filter(room=room_profile, character=sheet).first()
+        if grant is None:
+            return ActionResult(success=False, message="That character has no access to revoke.")
+        try:
+            revoke_story_room(grant=grant)
+        except StoryServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message=f"{character_name}'s access revoked.")
+
+
+@dataclass
+class SpinUpSceneRoomAction(_StoryBuilderAction):
+    """Spin up a temporary GM-owned scene room. Kwargs: ``name``, optional ``description``."""
+
+    key: str = "spin_up_scene_room"
+    name: str = "Spin Up Scene Room"
+    icon: str = "sparkles"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.gm.story_services import StoryServiceError, spin_up_scene_room  # noqa: PLC0415
+
+        profile = _gm_profile_for(actor)
+        if profile is None:
+            return ActionResult(success=False, message="GM trust required.")
+        room_name = (kwargs.get("name") or "").strip()
+        if not room_name:
+            return ActionResult(success=False, message="Name the room.")
+        try:
+            instance = spin_up_scene_room(
+                gm=profile, name=room_name, description=kwargs.get("description") or ""
+            )
+        except StoryServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=(
+                f"{instance.room.db_key} spun up (#{instance.room.pk}) — grant characters access."
+            ),
+        )
+
+
+@dataclass
+class CloseSceneRoomAction(_StoryBuilderAction):
+    """Close an active temp scene room you own, returning any joined characters.
+
+    Kwarg: ``room_id``.
+    """
+
+    key: str = "close_scene_room"
+    name: str = "Close Scene Room"
+    icon: str = "door-closed"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.gm.story_services import StoryServiceError, close_scene_room  # noqa: PLC0415
+
+        instance, error = _resolve_owned_instance(actor, kwargs.get("room_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+        try:
+            close_scene_room(instance=instance)
+        except StoryServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message="Scene room closed.")
+
+
+@dataclass
+class _StoryRoomPlayerAction(Action):
+    """Player-side story-room verbs — no GM standing required (#2450)."""
+
+    category: str = "story_rooms"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return []
+
+
+@dataclass
+class JoinStoryRoomAction(_StoryRoomPlayerAction):
+    """Join a story or temp scene room you've been granted access to. Kwarg: ``room_id``."""
+
+    key: str = "join_story_room"
+    name: str = "Join Story Room"
+    icon: str = "door-open"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.gm.story_services import StoryServiceError, join_story_room  # noqa: PLC0415
+
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return ActionResult(success=False, message="You have no character sheet.")
+        room_profile = RoomProfile.objects.filter(objectdb_id=kwargs.get("room_id")).first()
+        if room_profile is None:
+            return ActionResult(success=False, message="No such room.")
+        try:
+            join_story_room(sheet=sheet, room_profile=room_profile)
+        except StoryServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message=f"You join {room_profile.objectdb.db_key}.")
+
+
+@dataclass
+class LeaveStoryRoomAction(_StoryRoomPlayerAction):
+    """Leave the story room you're currently in, returning to where you joined from."""
+
+    key: str = "leave_story_room"
+    name: str = "Leave Story Room"
+    icon: str = "door-closed"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.gm.story_services import StoryServiceError, leave_story_room  # noqa: PLC0415
+
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return ActionResult(success=False, message="You have no character sheet.")
+        location = actor.location
+        try:
+            room_profile = location.room_profile if location is not None else None
+        except ObjectDoesNotExist:
+            room_profile = None
+        if room_profile is None:
+            return ActionResult(success=False, message="You're not in a story room.")
+        try:
+            leave_story_room(sheet=sheet, room_profile=room_profile)
+        except StoryServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message="You leave.")

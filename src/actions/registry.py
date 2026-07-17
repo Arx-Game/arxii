@@ -384,9 +384,15 @@ from actions.definitions.speaker_queue import (
     SkipSpeakerAction,
 )
 from actions.definitions.story_builder import (
+    CloseSceneRoomAction,
     CreateStoryAreaAction,
     EditStoryAreaAction,
+    GrantStoryRoomAccessAction,
+    JoinStoryRoomAction,
+    LeaveStoryRoomAction,
     RemoveStoryAreaAction,
+    RevokeStoryRoomAccessAction,
+    SpinUpSceneRoomAction,
     StoryDigRoomAction,
     StoryEditRoomAction,
     StoryLinkRoomsAction,
@@ -812,6 +818,12 @@ _ALL_ACTIONS: list[Action] = [
     StoryUnlinkRoomsAction(),
     StoryPlaceRoomAction(),
     StoryRemoveRoomAction(),
+    GrantStoryRoomAccessAction(),
+    RevokeStoryRoomAccessAction(),
+    JoinStoryRoomAction(),
+    LeaveStoryRoomAction(),
+    SpinUpSceneRoomAction(),
+    CloseSceneRoomAction(),
 ]
 
 # Lookup by key
