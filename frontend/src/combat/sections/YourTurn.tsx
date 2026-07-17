@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
 import type {
@@ -36,6 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  combatKeys,
   useAvailableCombos,
   useCoverMutation,
   useDispatchPlayerAction,
@@ -463,6 +465,7 @@ export function YourTurn({
   onPositionShapeChange,
 }: YourTurnProps) {
   const strainMax = availableStrain ?? 10;
+  const queryClient = useQueryClient();
   // ---------------------------------------------------------------------------
   // Slot state
   // ---------------------------------------------------------------------------
@@ -1009,7 +1012,16 @@ export function YourTurn({
       )}
 
       {/* Move-to-position actions (#532) — shown when adjacent open positions exist */}
-      <MovementActions actions={moveActions} isLocked={isLocked} dispatchAction={dispatchAction} />
+      <MovementActions
+        actions={moveActions}
+        isLocked={isLocked}
+        dispatchAction={dispatchAction}
+        onDispatched={() => {
+          queryClient
+            .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
+            .catch(() => {});
+        }}
+      />
 
       {/* Passive slots — only non-focused-category slots */}
       {visiblePassiveSlots.length > 0 && (

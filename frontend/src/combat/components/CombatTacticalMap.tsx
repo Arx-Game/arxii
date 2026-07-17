@@ -10,8 +10,10 @@
  */
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useCombatEncounter, useDispatchPlayerAction } from '../queries';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../queries';
+import { isDispatchFailure } from '../types';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
 import { TacticalMap } from '@/areas/components/TacticalMap';
 import type { OccupantSummary } from '@/areas/components/PositionMapNode';
@@ -59,6 +61,7 @@ export function CombatTacticalMap({
   );
 
   const { mutateAsync: dispatchAction } = useDispatchPlayerAction(characterId);
+  const queryClient = useQueryClient();
 
   const occupantsByPosition = useMemo(() => {
     const map = new Map<number, OccupantSummary[]>();
@@ -96,7 +99,19 @@ export function CombatTacticalMap({
   }
 
   const handleDispatchMove = (action: PlayerAction) => {
-    dispatchAction({ ref: action.ref, kwargs: {} }).catch(() => {});
+    dispatchAction({ ref: action.ref, kwargs: {} })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Move rejected.');
+          return;
+        }
+        queryClient
+          .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
+          .catch(() => {});
+      })
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'Move failed.');
+      });
   };
 
   // Only hand TacticalMap a defined onPickPosition while a position-shaped

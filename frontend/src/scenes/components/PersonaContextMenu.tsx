@@ -15,6 +15,7 @@ import { Ban, HeartPulse, Swords, VolumeX, Zap, ScrollText, Eye } from 'lucide-r
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction, combatKeys } from '@/combat/queries';
+import { isDispatchFailure } from '@/combat/types';
 import {
   Dialog,
   DialogContent,
@@ -210,7 +211,13 @@ export function PersonaContextMenu({
       ref: { backend: 'registry', registry_key: 'challenge' },
       kwargs: { target: personaId },
     })
-      .then(() => queryClient.invalidateQueries({ queryKey: combatKeys.duelChallengesAll() }))
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not send the challenge.');
+          return;
+        }
+        queryClient.invalidateQueries({ queryKey: combatKeys.duelChallengesAll() }).catch(() => {});
+      })
       .catch(() => {});
   }
 

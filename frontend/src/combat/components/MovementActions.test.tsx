@@ -4,6 +4,15 @@ import { vi } from 'vitest';
 import { MovementActions } from './MovementActions';
 import type { PlayerAction } from '@/scenes/actionTypes';
 
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+import { toast } from 'sonner';
+
 function makeMoveAction(positionId: number, displayName: string): PlayerAction {
   return {
     backend: 'registry',
@@ -68,5 +77,59 @@ describe('MovementActions', () => {
       <MovementActions actions={[]} isLocked={false} dispatchAction={dispatchAction} />
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Dispatch contract (#2423) — the endpoint resolves HTTP 200 + success:false
+  // for a business-rule rejection, so a resolved promise is not itself proof
+  // of success.
+  // ---------------------------------------------------------------------------
+
+  it('shows a toast and does not call onDispatched when the dispatch resolves success:false', async () => {
+    vi.clearAllMocks();
+    const action = makeMoveAction(5, 'Move to Balcony');
+    const dispatchAction = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: false, message: 'Blocked.' })
+    );
+    const onDispatched = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <MovementActions
+        actions={[action]}
+        isLocked={false}
+        dispatchAction={dispatchAction}
+        onDispatched={onDispatched}
+      />
+    );
+
+    await user.click(screen.getByTestId('move-btn-5'));
+
+    expect(toast.error).toHaveBeenCalledWith('Blocked.');
+    expect(onDispatched).not.toHaveBeenCalled();
+  });
+
+  it('calls onDispatched when the dispatch resolves success:true', async () => {
+    vi.clearAllMocks();
+    const action = makeMoveAction(5, 'Move to Balcony');
+    const dispatchAction = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: true })
+    );
+    const onDispatched = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <MovementActions
+        actions={[action]}
+        isLocked={false}
+        dispatchAction={dispatchAction}
+        onDispatched={onDispatched}
+      />
+    );
+
+    await user.click(screen.getByTestId('move-btn-5'));
+
+    expect(onDispatched).toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });
