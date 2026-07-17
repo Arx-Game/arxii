@@ -2278,6 +2278,23 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
     `actions/definitions/currency.py`. Telnet: `withdraw coins <amount>` (via the existing
     `CmdWithdraw`), `deposit <item>` (`CmdDeposit`), `give <amount>` (via `CmdGive`,
     auto-detected through `parse_coppers`).
+- **Golden Hares / favor tokens (#2428):** an org-issued deed token — a gold coin bearing
+  a rabbit with emerald eyes, one Hare = one deed done for `issuing_organization`.
+  Deliberately NOT coppers-denominated (a distinct instrument from `CurrencyInstrumentDetails`);
+  tradeable as an ordinary item via existing give/trade (no market machinery). Deed-provenance
+  is story-significant, so redemption never hard-deletes: `FavorTokenDetails` (`item_instance`
+  OneToOne, `issuing_organization` FK, `provenance_note`, `minted_at`, `redeemed_at`) rows and
+  their `ItemInstance` both survive redemption.
+  - **Key functions:** `mint_favor_token(org, recipient_character, *, provenance_note) ->
+    FavorTokenDetails` (mirrors the coin-mint item-creation shape, no ledger transfer/fee);
+    `redeem_favor_token(token, *, redeemer_org) -> None` — only the issuing org may redeem its
+    own Hare; soft-disposes the item (stamps `ItemInstance.destroyed_at`, relocates the
+    game_object out of play, logs a CONSUMED `OwnershipEvent`) rather than hard-deleting it,
+    mirroring the items app's provenance-preserving soft-delete norm
+    (`consume_item_charges`'s preserve branch / `forfeit_item_instance`), not
+    `redeem_instrument`'s hard-delete.
+  - Substrate for the tradition-sponsorship cluster (#2428/#2440/#2441/#2442): Academy
+    training costs a Hare; sponsorship is a Hare spent on the Prospect's behalf at CG.
 - **Source:** `src/world/currency/`
 
 ### Predicates (shared rule engine)

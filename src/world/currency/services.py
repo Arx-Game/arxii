@@ -43,6 +43,7 @@ from world.currency.models import (
     CurrencyInstrumentDetails,
     CurrencyTransfer,
     DebtInstrument,
+    FavorTokenDetails,
     IncomeDeclaration,
     OrganizationTreasury,
     OrgEconomicsProfile,
@@ -286,6 +287,109 @@ def redeem_instrument(
         if holder is not None and hasattr(holder, "carried_items"):
             holder.carried_items.invalidate()
     return row
+
+
+def _favor_token_template():
+    """Lazy ItemTemplate for Golden Hares (same precedent as ``_instrument_template``).
+
+    PLACEHOLDER description — Golden Hare flavor text is an authored-content
+    pass for Apostate.
+    """
+    from world.items.models import ItemTemplate  # noqa: PLC0415
+
+    template, _ = ItemTemplate.objects.get_or_create(
+        name="Golden Hare",
+        defaults={
+            "description": (
+                "PLACEHOLDER A gold coin stamped with a hare whose eyes are two "
+                "flecks of emerald. One deed done, waiting to be called in."
+            ),
+        },
+    )
+    return template
+
+
+def mint_favor_token(
+    org: Organization,
+    recipient_character: CharacterSheet,
+    *,
+    provenance_note: str,
+) -> FavorTokenDetails:
+    """Mint a Golden Hare: one deed done for ``org``, now a physical coin (#2428).
+
+    Mirrors ``mint_instrument``'s item-creation shape, but favor tokens are
+    NOT coppers-denominated — no ledger transfer, no mint fee involved. A
+    Hare is deed-backed, not money-backed; ordinary item give/trade already
+    moves it once minted (no market machinery).
+    """
+    from world.items.models import ItemInstance  # noqa: PLC0415
+    from world.items.services.materialize import materialize_item_game_object  # noqa: PLC0415
+
+    with transaction.atomic():
+        instance = ItemInstance.objects.create(
+            template=_favor_token_template(),
+            holder_character_sheet=recipient_character,
+        )
+        token = FavorTokenDetails.objects.create(
+            item_instance=instance,
+            issuing_organization=org,
+            provenance_note=provenance_note,
+        )
+        # Coin is physical (#1909 precedent): born as a real object in the
+        # recipient's inventory so it can be dropped/given/stowed/stolen/traded.
+        materialize_item_game_object(instance, recipient_character)
+    return token
+
+
+def redeem_favor_token(token: FavorTokenDetails, *, redeemer_org: Organization) -> None:
+    """Surrender a Golden Hare: the deed is called in, once (#2428).
+
+    Only the issuing organization can redeem its own Hare — trading a Hare
+    changes who carries it, never who it is owed to. Deed-provenance is
+    story-significant (never hard-deleted, per CLAUDE.md): mirrors the
+    items app's soft-delete norm (``consume_item_charges``'s preserve
+    branch, ``forfeit_item_instance``) rather than ``redeem_instrument``'s
+    hard-delete — stamps ``ItemInstance.destroyed_at`` and relocates the
+    game_object out of play, but keeps both the ``ItemInstance`` and this
+    ``FavorTokenDetails`` row as history; only ``redeemed_at`` flips.
+
+    Raises ``ValidationError`` if already redeemed or if ``redeemer_org`` is
+    not the Hare's issuer.
+    """
+    from world.items.constants import OwnershipEventType  # noqa: PLC0415
+    from world.items.models import ItemInstance, OwnershipEvent  # noqa: PLC0415
+
+    with transaction.atomic():
+        locked = FavorTokenDetails.objects.select_for_update().get(pk=token.pk)
+        if locked.redeemed_at is not None:
+            msg = "This Golden Hare has already been redeemed."
+            raise ValidationError(msg)
+        if locked.issuing_organization_id != redeemer_org.pk:
+            msg = "Only the issuing organization can redeem this Golden Hare."
+            raise ValidationError(msg)
+        item = ItemInstance.objects.select_for_update().get(pk=locked.item_instance_id)
+        holder_sheet = item.holder_character_sheet
+        now = timezone.now()
+        item.destroyed_at = now
+        item.save(update_fields=["destroyed_at"])
+        game_object = item.game_object
+        holder = game_object.location if game_object is not None else None
+        if game_object is not None:
+            # Relocate-but-not-delete (mirrors the soft-delete branch): the
+            # coin leaves play but its row — and this detail row — survive
+            # as deed-provenance.
+            game_object.location = None
+            game_object.save()
+        if holder is not None and hasattr(holder, "carried_items"):
+            holder.carried_items.invalidate()
+        OwnershipEvent.objects.create(
+            item_instance=item,
+            event_type=OwnershipEventType.CONSUMED,
+            from_character_sheet=holder_sheet,
+            notes=f"Redeemed with {redeemer_org.name}.",
+        )
+        locked.redeemed_at = now
+        locked.save(update_fields=["redeemed_at"])
 
 
 def get_or_create_economics(organization: Organization) -> OrgEconomicsProfile:

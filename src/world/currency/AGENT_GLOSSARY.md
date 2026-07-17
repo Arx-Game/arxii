@@ -12,6 +12,10 @@ _Avoid_: coin type, bill
 Everyday pocket cash withdrawn from a purse as a real, holdable item (`Denomination.LOOSE`) — arbitrary face value, no mint fee, unlike the six fixed grand-coin Denominations. Minted via `mint_loose_cache` and redeemed (deposited) via the same fee-free `redeem_instrument` path every instrument uses. Like every minted instrument it is born physical: a materialized `game_object` in the minter's inventory, so it can be dropped, given, stowed in a container, or stolen.
 _Avoid_: loose coins (field/display name only), pocket money, cash
 
+**Golden Hare**:
+An org-issued favor token (`FavorTokenDetails`): a gold coin bearing a rabbit with emerald eyes, representing one deed done for `issuing_organization`. Deliberately NOT coppers-denominated — a distinct instrument from the `CurrencyInstrumentDetails` money coins, minted via `mint_favor_token` and surrendered via `redeem_favor_token`. Like a minted instrument it is born physical and tradeable via ordinary item give/trade (no market machinery), but unlike a coin its detail row survives redemption — deed-provenance is story-significant, so `redeem_favor_token` soft-disposes the item (stamps `destroyed_at`, relocates the game_object out of play) rather than hard-deleting it, and only the issuing organization may redeem its own Hare.
+_Avoid_: favor coin, deed token, IOU
+
 **CharacterPurse**:
 The ledger holding one character's personal money as a copper balance, anchored to the body (CharacterSheet) rather than a persona.
 _Avoid_: wallet, personal account

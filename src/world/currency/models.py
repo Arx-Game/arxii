@@ -190,6 +190,50 @@ class CurrencyInstrumentDetails(SharedMemoryModel):
         return f"{self.get_denomination_display()} ({self.face_value}c)"
 
 
+class FavorTokenDetails(SharedMemoryModel):
+    """Per-instance details for a Golden Hare, an org-issued favor token (#2428).
+
+    A gold coin bearing a rabbit with emerald eyes: one Hare = one deed done
+    for ``issuing_organization``. Deliberately NOT coppers-denominated — a
+    distinct instrument from ``CurrencyInstrumentDetails``, tradeable as an
+    ordinary item via existing give/trade surfaces (no market machinery).
+    Deed-provenance is story-significant: a redeemed row is never deleted,
+    only stamped (``redeemed_at``), mirroring the items app's soft-delete
+    norm for provenance-bearing instances.
+    """
+
+    item_instance = models.OneToOneField(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="favor_token",
+        help_text="The physical Golden Hare coin in the world.",
+    )
+    issuing_organization = models.ForeignKey(
+        ORGANIZATION_MODEL,
+        on_delete=models.PROTECT,
+        related_name="issued_favor_tokens",
+        help_text="The org this Hare represents a deed done for.",
+    )
+    provenance_note = models.CharField(
+        max_length=200,
+        help_text="The deed that minted this Hare.",
+    )
+    minted_at = models.DateTimeField(auto_now_add=True)
+    redeemed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the Hare is surrendered/redeemed. Null = still owed.",
+    )
+
+    class Meta:
+        verbose_name = "Favor Token"
+        verbose_name_plural = "Favor Tokens"
+
+    def __str__(self) -> str:
+        state = "redeemed" if self.redeemed_at else "outstanding"
+        return f"Golden Hare ({self.issuing_organization_id}, {state})"
+
+
 class OrgEconomicsProfile(SharedMemoryModel):
     """Per-org economic state (#926): the Graft stat.
 

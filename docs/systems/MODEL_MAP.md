@@ -2791,6 +2791,11 @@
 **Foreign Keys:**
   - item_instance -> items.ItemInstance [OneToOne]
 
+### FavorTokenDetails
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [OneToOne]
+  - issuing_organization -> societies.Organization [FK]
+
 ### OrgEconomicsProfile
 **Foreign Keys:**
   - organization -> societies.Organization [OneToOne]
@@ -2873,10 +2878,12 @@
 - `get_or_create_treasury(organization: 'Organization') -> 'OrganizationTreasury'`
 - `improve_org_domain(*, organization: 'Organization', character) -> 'ImprovementResult' — One domain-investment attempt (#930): Scholarship/Economics against the ledgers.`
 - `invest_in_business(business: 'Business', *, amount: 'int') -> 'Business' — Sink owner money into a venture (#929); investment raises the level.`
+- `mint_favor_token(org: 'Organization', recipient_character: 'CharacterSheet', *, provenance_note: 'str') -> 'FavorTokenDetails' — Mint a Golden Hare: one deed done for ``org``, now a physical coin (#2428).`
 - `mint_instrument(*, denomination: 'str', holder_sheet: 'CharacterSheet', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None) -> 'ItemInstance' — Convert ledger money into a physical coin (face value + mint fee).`
 - `mint_loose_cache(*, amount: 'int', holder_sheet: 'CharacterSheet', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None) -> 'ItemInstance' — Convert ledger money into a loose-coin cache item (#1909).`
 - `process_income_stream(stream: 'OrgIncomeStream', amount: 'int', *, declared_amount: 'int | None' = None) -> 'IncomeDeclaration' — Land ``amount`` collected coppers from one stream (#926, reshaped by #930).`
 - `record_contribution(*, persona: 'Persona', organization: 'Organization', amount: 'int', reason: 'str' = '') -> 'ContributionRecord' — A member pays into the org treasury, on the books (#926).`
+- `redeem_favor_token(token: 'FavorTokenDetails', *, redeemer_org: 'Organization') -> 'None' — Surrender a Golden Hare: the deed is called in, once (#2428).`
 - `redeem_instrument(*, instance: 'ItemInstance', to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' — Convert a physical coin back into ledger money (fee-free).`
 - `repay_principal(debt: 'DebtInstrument', amount: 'int') -> 'CurrencyTransfer' — Pay down (or off) a debt's principal, treasury→treasury (#927).`
 - `run_business_week(business: 'Business', *, fortune: 'int') -> 'int' — One week's business result (#929). ``fortune`` is -100..100.`
@@ -3246,6 +3253,7 @@
 **Pointed to by:**
   - applied_disguise_overlays <- forms.CharacterFormState
   - currency_instrument <- currency.CurrencyInstrumentDetails
+  - favor_token <- currency.FavorTokenDetails
   - crime_evidence <- justice.CrimeEvidence
   - contents <- items.ItemInstance
   - equipped_slots <- items.EquippedItem
@@ -6585,6 +6593,7 @@
   - features <- societies.OrganizationFeature
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
   - treasury <- currency.OrganizationTreasury
+  - issued_favor_tokens <- currency.FavorTokenDetails
   - economics <- currency.OrgEconomicsProfile
   - income_streams <- currency.OrgIncomeStream
   - obligations_owed <- currency.OrgObligation
