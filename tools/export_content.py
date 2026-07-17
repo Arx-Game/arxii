@@ -141,6 +141,7 @@ def _run_grid_check() -> None:
     """Dry-run: count authored areas/rooms, write nothing."""
     from django.db.models import Count  # noqa: PLC0415
 
+    from core_management.grid_export import find_unhoused_authored_rooms  # noqa: PLC0415
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
     from world.areas.constants import GridOrigin  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
@@ -157,6 +158,13 @@ def _run_grid_check() -> None:
         room_count = room_counts_by_area.get(area.pk, 0)
         slug = area.slug or "MISSING SLUG"
         print(f"  {slug}: {room_count} authored room(s) -> fixtures/grid/{slug}.json")
+
+    unhoused = find_unhoused_authored_rooms()
+    if unhoused:
+        print(f"\nWARNING: {len(unhoused)} unhoused AUTHORED room(s) — export will FAIL:")
+        for line in unhoused:
+            print(f"  {line}", file=sys.stderr)
+
     print("Nothing written (--check).")
 
 

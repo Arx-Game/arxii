@@ -13,7 +13,13 @@ reserved `authored:` prefix, so weather/sanctum-growth/building-style writers ne
 swept into a bundle. `GridOrigin` (AUTHORED/STORY/PLAYER) is the export gate: only staff
 promoting content to AUTHORED (a deliberate act, never a default) makes it exportable, so
 GM-improvised `STORY` areas and player-built `PLAYER` rooms can never leak into the lore
-repo. `grid_import.py`'s `load_grid_bundles()` reads every bundle back in four passes
+repo. Corollary invariant (#2448 review fix): an AUTHORED room's `area` must itself be
+AUTHORED — a NULL or non-AUTHORED area makes the room unreachable through the per-area
+room-set query `export_grid_bundles()` walks, so it would silently never export (letting a
+`StartingArea` fixture reference a room no bundle contains); `export_grid_bundles()` now
+refuses instead, raising `ContentExportError` naming every offending room, mirroring the
+existing missing-`fixture_key` "never silent" rule. `grid_import.py`'s `load_grid_bundles()`
+reads every bundle back in four passes
 (areas topologically by parent slug, rooms by `fixture_key`, exits by source/destination
 key, sidecars scoped to each bundle's area/rooms) and is report-never-delete: an AUTHORED
 area/room/exit present in the DB but absent from every bundle surfaces as a report line,

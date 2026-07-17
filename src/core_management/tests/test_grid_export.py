@@ -14,6 +14,7 @@ from core_management.grid_export import export_grid_bundles
 from core_management.tests._grid_fixtures import build_sample_grid
 from evennia_extensions.constants import ExitKind, RoomEnclosure
 from world.areas.constants import AreaLevel, GridOrigin
+from world.areas.models import Area
 from world.buildings.constants import PermitEligibility
 from world.locations.constants import LocationParentType, StatKey
 
@@ -169,4 +170,38 @@ class GridExportTests(TestCase):
         broken_room.save()
 
         with self.assertRaises(ContentExportError):
+            export_grid_bundles(self.root)
+
+    def test_authored_room_with_no_area_raises(self) -> None:
+        """An AUTHORED room whose ``area`` is NULL is silently unexportable (#2448)."""
+        homeless_obj = evennia_create.create_object(
+            typeclass="typeclasses.rooms.Room", key="Homeless Room", nohome=True
+        )
+        homeless_room = homeless_obj.room_profile
+        homeless_room.origin = GridOrigin.AUTHORED
+        homeless_room.fixture_key = "arx-city/homeless-room"
+        # area deliberately left unset (NULL).
+        homeless_room.save()
+
+        with self.assertRaisesRegex(ContentExportError, "arx-city/homeless-room"):
+            export_grid_bundles(self.root)
+
+    def test_authored_room_in_non_authored_area_raises(self) -> None:
+        """An AUTHORED room housed by a non-AUTHORED (e.g. STORY) area is also
+        silently unexportable (#2448) — the area itself must be AUTHORED."""
+        story_area = Area.objects.create(
+            name="GM Pocket Dimension",
+            level=AreaLevel.CITY,
+            origin=GridOrigin.STORY,
+        )
+        misplaced_obj = evennia_create.create_object(
+            typeclass="typeclasses.rooms.Room", key="Misplaced Room", nohome=True
+        )
+        misplaced_room = misplaced_obj.room_profile
+        misplaced_room.area = story_area
+        misplaced_room.origin = GridOrigin.AUTHORED
+        misplaced_room.fixture_key = "arx-city/misplaced-room"
+        misplaced_room.save()
+
+        with self.assertRaisesRegex(ContentExportError, "arx-city/misplaced-room"):
             export_grid_bundles(self.root)

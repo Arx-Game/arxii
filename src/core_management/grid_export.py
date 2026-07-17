@@ -268,15 +268,53 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
     }
 
 
+def find_unhoused_authored_rooms() -> list[str]:
+    """Human-readable messages for AUTHORED rooms that can never export (#2448).
+
+    An AUTHORED room whose ``area`` is NULL or itself not AUTHORED is silently
+    unexportable — ``export_grid_bundles`` only visits rooms reachable through an
+    AUTHORED area's room set. That's the "never silent" precedent extended: a
+    grid element claiming canonical/AUTHORED status but lacking a home an export
+    pass can reach is a data bug (e.g. it lets a ``StartingArea`` fixture
+    reference a room no bundle ever contains), not something to skip quietly.
+
+    One query (select_related, no per-room DB round-trip); read-only. Shared by
+    ``export_grid_bundles`` (which raises on any hit), ``tools/export_content.py``'s
+    ``--check`` dry run, and the admin export-preview page (both of which only
+    warn — the writing pass is the actual "never silent" gate).
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.areas.constants import GridOrigin  # noqa: PLC0415
+
+    messages: list[str] = []
+    rooms = (
+        RoomProfile.objects.filter(origin=GridOrigin.AUTHORED)
+        .select_related("objectdb", "area")
+        .order_by("objectdb_id")
+    )
+    for room in rooms:
+        label = room.fixture_key or f"{room.objectdb.db_key!r} (objectdb pk={room.objectdb_id})"
+        if room.area_id is None:
+            reason = "no area"
+        elif room.area.origin != GridOrigin.AUTHORED:
+            area_label = room.area.slug or room.area_id
+            reason = f"area {area_label!r} is not AUTHORED (origin={room.area.origin!r})"
+        else:
+            continue
+        messages.append(f"AUTHORED room {label} has {reason}.")
+    return messages
+
+
 def export_grid_bundles(content_root: Path | None = None) -> GridExportResult:
     """Serialize AUTHORED grid areas and write one bundle JSON per area.
 
     Writes to ``<content_root>/fixtures/grid/<area-slug>.json``. Raises
-    ``ContentExportError`` when the content root can't be resolved, an
-    AUTHORED area has no ``slug``, or an AUTHORED room (in an authored area)
-    has no ``fixture_key`` — the "never silent" rule: a grid element that
-    claims to be canonical content but lacks its stable identity key is a
-    data bug, not something to skip quietly.
+    ``ContentExportError`` when the content root can't be resolved, an AUTHORED
+    room is unhoused (see ``find_unhoused_authored_rooms``), an AUTHORED area has
+    no ``slug``, or an AUTHORED room (in an authored area) has no ``fixture_key``
+    — the "never silent" rule: a grid element that claims to be canonical
+    content but lacks its stable identity key (or a home an export pass can
+    reach) is a data bug, not something to skip quietly.
     """
     from core_management.content_export import ContentExportError  # noqa: PLC0415
     from core_management.content_repo import resolve_content_root  # noqa: PLC0415
@@ -289,6 +327,13 @@ def export_grid_bundles(content_root: Path | None = None) -> GridExportResult:
             "CONTENT_REPO_PATH is not set or does not exist. "
             "Set it in src/.env pointing at your local checkout of the "
             "private content repository."
+        )
+        raise ContentExportError(msg)
+
+    unhoused = find_unhoused_authored_rooms()
+    if unhoused:
+        msg = "Unhoused AUTHORED room(s) — never exportable:\n" + "\n".join(
+            f"  - {line}" for line in unhoused
         )
         raise ContentExportError(msg)
 

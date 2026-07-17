@@ -4766,6 +4766,13 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `load_dotenv_content_path()`) is the one canonical content-repo path resolver every
   export/push/load call site uses. See ADR-0137 (bundle format + rejected
   alternatives) and `docs/evennia-quirks.md`'s #946 entry (why upsert, not `loaddata`).
+  Invariant (#2448 review fix): an AUTHORED room's `area` must itself be AUTHORED (never
+  NULL or GM/player-owned) — `export_grid_bundles()` only walks rooms reachable through an
+  AUTHORED area, so an unhoused AUTHORED room is silently unexportable otherwise;
+  `grid_export.find_unhoused_authored_rooms()` is the one query both the exporter (raises)
+  and the `--check`/admin-preview surfaces (warn) share. `world.seeds.character_creation.
+  ensure_canonical_fallback_room()` houses the canonical fallback starting room in a
+  reserved AUTHORED area (`slug="arx"`) for exactly this reason.
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,

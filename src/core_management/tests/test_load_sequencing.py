@@ -18,11 +18,15 @@ import tempfile
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from core_management.content_export import export_to_content_repo
 from core_management.content_fixtures import load_world_content
 from core_management.grid_export import export_grid_bundles
 from core_management.tests._grid_fixtures import build_sample_grid
 from evennia_extensions.models import RoomProfile
+from world.areas.models import Area
+from world.character_creation.constants import FALLBACK_STARTING_ROOM_FIXTURE_KEY
 from world.character_creation.models import StartingArea
+from world.seeds.character_creation import ensure_canonical_fallback_room
 from world.traits.models import Trait
 
 GOOD_SKILL = """---
@@ -132,3 +136,59 @@ class LoadWorldContentSequencingTests(TestCase):
         # Everything else in the same run still loaded.
         self.assertTrue(Trait.objects.filter(name="Performance").exists())
         self.assertGreaterEqual(world_result.created, 1)
+
+
+class RealBootstrapFallbackRoomTests(TestCase):
+    """The REAL bootstrap path, not a hand-built grid fixture (#2448).
+
+    ``ensure_canonical_fallback_room`` now houses its room in a reserved
+    AUTHORED area (see ``world.seeds.character_creation``) specifically so this
+    round-trip works on a fresh DB: without a home area, the room was AUTHORED
+    but never visited by ``export_grid_bundles`` (which only walks rooms via
+    AUTHORED areas), so a ``StartingArea`` naming it as ``default_starting_room``
+    exported a fixture referencing a room no bundle contained — permanently
+    ``skipped`` on reload, never resolved by the deferred retry.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_fallback_room_and_starting_area_survive_fresh_load(self) -> None:
+        room = ensure_canonical_fallback_room()
+        profile = room.room_profile
+        area_pk = profile.area_id
+        self.assertIsNotNone(area_pk, "fallback room must be housed in an area to export")
+
+        starting_area = StartingArea.objects.create(
+            name="Bootstrap City",
+            description="The bootstrap starting area.",
+            default_starting_room=profile,
+        )
+
+        export_to_content_repo(self.root)
+        export_grid_bundles(self.root)
+
+        # Wipe everything the export just captured — mirrors a fixtures-only
+        # fresh DB where only the bundle/fixture files exist, not these rows.
+        starting_area.delete()
+        room.delete()  # cascades the RoomProfile row (OneToOne CASCADE)
+        Area.objects.filter(pk=area_pk).delete()
+
+        self.assertFalse(
+            RoomProfile.objects.filter(fixture_key=FALLBACK_STARTING_ROOM_FIXTURE_KEY).exists()
+        )
+        self.assertFalse(StartingArea.objects.filter(name="Bootstrap City").exists())
+
+        world_result = load_world_content(self.root)
+
+        self.assertGreaterEqual(world_result.deferred_resolved, 1)
+        self.assertEqual(world_result.skipped, [])
+
+        recreated_area = StartingArea.objects.get(name="Bootstrap City")
+        self.assertIsNotNone(recreated_area.default_starting_room)
+        self.assertEqual(
+            recreated_area.default_starting_room.fixture_key,
+            FALLBACK_STARTING_ROOM_FIXTURE_KEY,
+        )

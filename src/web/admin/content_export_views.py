@@ -74,14 +74,21 @@ def _grid_preview_context() -> dict:
     """
     from django.db.models import Count  # noqa: PLC0415
 
+    from core_management.grid_export import find_unhoused_authored_rooms  # noqa: PLC0415
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
     from world.areas.constants import GridOrigin  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
 
     try:
         areas = list(Area.objects.filter(origin=GridOrigin.AUTHORED).order_by("slug"))
+        unhoused_rooms = find_unhoused_authored_rooms()
     except (DatabaseError, OperationalError):
-        return {"grid_areas": [], "grid_area_count": 0, "grid_room_count": 0}
+        return {
+            "grid_areas": [],
+            "grid_area_count": 0,
+            "grid_room_count": 0,
+            "grid_unhoused_rooms": [],
+        }
 
     room_counts_by_area = {
         row["area_id"]: row["n"]
@@ -107,6 +114,7 @@ def _grid_preview_context() -> dict:
         "grid_areas": grid_areas,
         "grid_area_count": len(grid_areas),
         "grid_room_count": grid_room_count,
+        "grid_unhoused_rooms": unhoused_rooms,
     }
 
 

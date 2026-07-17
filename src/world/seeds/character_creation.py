@@ -50,6 +50,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Reserved slug for the AUTHORED Area that houses the canonical fallback
+# starting room (#2448) — a room with no area is silently unexportable
+# (export_grid_bundles only visits rooms via AUTHORED areas), so the fallback
+# room must live somewhere AUTHORED too. Never assigned a realm here — this
+# helper must stay callable independent of cluster order.
+RESERVED_FALLBACK_AREA_SLUG = "arx"
+
 # The canonical 12 stat names. Mirrors the set FinalizationTestMixin uses; kept
 # here as the single seed-time source (factories-as-seed-data). The test mixin's
 # DEFAULT_STATS dict carries per-stat starting *values* for a different purpose
@@ -166,6 +173,14 @@ def ensure_canonical_fallback_room() -> ObjectDB:
     origin + the reserved ``FALLBACK_STARTING_ROOM_FIXTURE_KEY``, so this row is
     stable-identity and included in the grid export. Never clobbers a staff-edited
     ``fixture_key`` on re-run.
+
+    Also houses the room in a reserved AUTHORED Area (``RESERVED_FALLBACK_AREA_SLUG``,
+    #2448): an AUTHORED room whose area is NULL or non-AUTHORED is silently
+    unexportable (``export_grid_bundles`` only visits rooms via AUTHORED areas), so
+    a room marked AUTHORED with no home area would export a StartingArea fixture
+    referencing a room no bundle ever contains. Never overwrites an already-set
+    ``area`` (staff edit wins), and never reassigns the reserved area if it already
+    exists with a non-AUTHORED origin (staff edit wins there too — just warns).
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
     from evennia.utils import create as evennia_create  # noqa: PLC0415
@@ -184,13 +199,35 @@ def ensure_canonical_fallback_room() -> ObjectDB:
         )
 
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-    from world.areas.constants import GridOrigin  # noqa: PLC0415
+    from world.areas.constants import AreaLevel, GridOrigin  # noqa: PLC0415
+    from world.areas.models import Area  # noqa: PLC0415
+
+    reserved_area, area_created = Area.objects.get_or_create(
+        slug=RESERVED_FALLBACK_AREA_SLUG,
+        defaults={"name": "Arx", "level": AreaLevel.CITY, "origin": GridOrigin.AUTHORED},
+    )
+    if not area_created and reserved_area.origin != GridOrigin.AUTHORED:
+        logger.warning(
+            "Reserved fallback area (slug=%r) exists with origin=%r, not AUTHORED — "
+            "leaving it alone. The canonical fallback room will not be assigned to it, "
+            "which means it stays unexportable until a staff member fixes the area's "
+            "origin.",
+            RESERVED_FALLBACK_AREA_SLUG,
+            reserved_area.origin,
+        )
+        reserved_area = None
 
     profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+    update_fields = []
     if profile.fixture_key is None:
         profile.fixture_key = FALLBACK_STARTING_ROOM_FIXTURE_KEY
         profile.origin = GridOrigin.AUTHORED
-        profile.save(update_fields=["fixture_key", "origin"])
+        update_fields.extend(["fixture_key", "origin"])
+    if profile.area_id is None and reserved_area is not None:
+        profile.area = reserved_area
+        update_fields.append("area")
+    if update_fields:
+        profile.save(update_fields=update_fields)
     return room
 
 

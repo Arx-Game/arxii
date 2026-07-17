@@ -50,6 +50,19 @@
       grid state never exports.
     </p>
 
+    {% if grid_unhoused_rooms %}
+    <div class="errornote">
+      <strong>{{ grid_unhoused_rooms|length }} AUTHORED room(s) are unhoused and
+      will make the export FAIL</strong> — an AUTHORED room's area must itself be
+      AUTHORED (never NULL or GM/player-owned):
+      <ul>
+        {% for line in grid_unhoused_rooms %}
+        <li>{{ line }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
     <table>
       <thead>
         <tr>
