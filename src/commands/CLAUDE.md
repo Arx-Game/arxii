@@ -967,8 +967,8 @@ actions, backends, and service functions.
 ## Telnet input markup (`%r` / `%t`)
 
 Telnet is line-oriented, so MU* players embed newlines/tabs in a single line of
-input with MUSH markup: `%r` (also `%R`) → newline, `%t` (`%T`) → tab, `%%` →
-literal `%`. This is normalized to real `\n`/`\t` at the telnet input boundary
+input with MUSH markup: `%r` (also `%R`) → newline, `%t` (`%T`) → tab, `%b`
+(`%B`) → non-breaking space (U+00A0), `%%` → literal `%`. This is normalized to real `\n`/`\t` at the telnet input boundary
 in `server/conf/inputfuncs.py:text` (converter: `server/conf/mush_markup.py`)
 **before** command parsing, and only for telnet-family sessions — websocket/ajax
 (the React frontend) is untouched. Because conversion happens at input, stored

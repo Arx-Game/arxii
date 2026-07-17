@@ -75,6 +75,7 @@ HELP_ENTRY_DICTS = [
 
               %r   inserts a line break (new line)
               %t   inserts a tab
+              %b   inserts a non-breaking space
               %%   inserts a literal percent sign
 
             For example, setting a two-line description:

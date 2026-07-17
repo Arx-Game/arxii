@@ -13,6 +13,7 @@ live web messages, and REST-read fields).
 
 _NEWLINE = ("r", "R")
 _TAB = ("t", "T")
+_NBSP = ("b", "B")
 
 
 def normalize_mush_markup(text: str) -> str:
@@ -22,6 +23,7 @@ def normalize_mush_markup(text: str) -> str:
 
     - ``%r`` / ``%R`` -> newline
     - ``%t`` / ``%T`` -> tab
+    - ``%b`` / ``%B`` -> non-breaking space (U+00A0)
     - ``%%``          -> a literal ``%`` (lets a user type a real ``%r`` as ``%%r``)
     - ``%`` followed by anything else, or a trailing lone ``%`` -> left unchanged
     """
@@ -38,6 +40,8 @@ def normalize_mush_markup(text: str) -> str:
                 out.append("\n")
             elif nxt in _TAB:
                 out.append("\t")
+            elif nxt in _NBSP:
+                out.append("\N{NO-BREAK SPACE}")
             elif nxt == "%":
                 out.append("%")
             else:

@@ -62,6 +62,7 @@ A pure, single-pass function (single pass so escape handling is unambiguous).
 |--------------------------------|-------------|----------------------------------------|
 | `%r`, `%R`                     | `\n`        | newline (both cases — MUSH clients vary)|
 | `%t`, `%T`                     | `\t`        | tab                                    |
+| `%b`, `%B`                     | U+00A0      | non-breaking space                     |
 | `%%`                           | `%`         | escape → literal percent               |
 | `%` + any other char           | unchanged   | e.g. `%s`, `%d`, `%z` pass through      |
 | trailing lone `%`              | unchanged   |                                        |
@@ -118,7 +119,7 @@ The collision is scoped to telnet input only.
 
 ## Out of scope
 
-- Any additional MUSH markup beyond `%r`/`%t` (e.g. `%b`, ansi `%c...`) — not
+- Any additional MUSH markup beyond `%r`/`%t`/`%b` (e.g. ansi `%c...`) — not
   requested; add later only if players ask.
 - Output-side aliasing for the traditional Evennia webclient (unused; the React
   client is the web target).

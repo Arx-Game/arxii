@@ -18,6 +18,12 @@ class NormalizeMushMarkupTests(SimpleTestCase):
     def test_capital_t_becomes_tab(self) -> None:
         self.assertEqual(normalize_mush_markup("a%Tb"), "a\tb")
 
+    def test_percent_b_becomes_non_breaking_space(self) -> None:
+        self.assertEqual(normalize_mush_markup("a%bb"), "a\u00a0b")
+
+    def test_capital_b_becomes_non_breaking_space(self) -> None:
+        self.assertEqual(normalize_mush_markup("a%Bb"), "a\u00a0b")
+
     def test_double_percent_escapes_to_literal_percent(self) -> None:
         self.assertEqual(normalize_mush_markup("100%%ready"), "100%ready")
 
