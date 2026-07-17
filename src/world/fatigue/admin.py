@@ -5,6 +5,7 @@ from world.fatigue.models import FatiguePool
 
 @admin.register(FatiguePool)
 class FatiguePoolAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet"]
     list_display = [
         "character_sheet",
         "physical_current",

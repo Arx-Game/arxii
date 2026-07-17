@@ -22,6 +22,7 @@ class JournalEntryAdmin(admin.ModelAdmin):
 
 @admin.register(WeeklyJournalXP)
 class WeeklyJournalXPAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet"]
     list_display = [
         "character_sheet",
         "posts_this_week",

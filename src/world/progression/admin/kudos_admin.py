@@ -45,6 +45,8 @@ class KudosClaimCategoryAdmin(admin.ModelAdmin):
 class KudosPointsDataAdmin(admin.ModelAdmin):
     """Admin interface for KudosPointsData."""
 
+    autocomplete_fields = ["account"]
+
     list_display = ["account", "current_available", "total_earned", "total_claimed"]
     list_filter = ["updated_date"]
     search_fields = ["account__username"]

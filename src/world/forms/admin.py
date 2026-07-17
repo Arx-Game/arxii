@@ -165,6 +165,7 @@ class CharacterFormValueInline(admin.TabularInline):
 
 @admin.register(CharacterForm)
 class CharacterFormAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = ["character", "name", "form_type", "is_player_created", "created_at"]
     list_filter = ["form_type", "is_player_created"]
     search_fields = ["character__db_key", "name"]
@@ -173,6 +174,7 @@ class CharacterFormAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterFormState)
 class CharacterFormStateAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["applied_kit_instance", "character"]
     list_display = ["character", "active_form"]
     search_fields = ["character__db_key"]
 
@@ -226,6 +228,7 @@ class ActiveAlternateSelfAdmin(admin.ModelAdmin):
 
 @admin.register(TemporaryFormChange)
 class TemporaryFormChangeAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character"]
     list_display = [
         "character",
         "trait",

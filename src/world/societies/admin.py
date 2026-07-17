@@ -375,6 +375,8 @@ class LegendEntryAdmin(admin.ModelAdmin):
     Manages legendary deeds and their spread instances.
     """
 
+    autocomplete_fields = ["linked_items"]
+
     list_display = [
         "title",
         "persona",
@@ -573,6 +575,8 @@ class FameReactionLineAdmin(admin.ModelAdmin):
 class FameReactionCooldownAdmin(admin.ModelAdmin):
     """#881 — re-fire throttle rows (operational visibility only)."""
 
+    autocomplete_fields = ["persona"]
+
     list_display = ("persona", "room", "available_at")
 
 
@@ -672,6 +676,8 @@ class HouseClaimAdmin(admin.ModelAdmin):
     Approval is the staff greenlight only; the house materializes at CG
     finalization, so approving here never creates rows by itself.
     """
+
+    autocomplete_fields = ["reviewed_by"]
 
     list_display = ("house_name", "title", "template", "status", "created_at", "reviewed_by")
     list_select_related = ("title", "template", "reviewed_by")

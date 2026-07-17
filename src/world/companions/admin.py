@@ -38,7 +38,7 @@ class CompanionAdmin(admin.ModelAdmin):
     list_display = ["name", "archetype", "owner", "bonded_at", "released_at"]
     list_filter = ["archetype__domain"]
     search_fields = ["name"]
-    autocomplete_fields = ["owner", "archetype", "granting_gift"]
+    autocomplete_fields = ["archetype", "granting_gift", "objectdb", "owner", "ridden_by"]
 
 
 @admin.register(CompanionDeployment)

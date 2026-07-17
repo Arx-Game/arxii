@@ -18,6 +18,7 @@ from world.codex.models import BeginningsCodexGrant
 
 @admin.register(StartingArea)
 class StartingAreaAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["default_starting_room"]
     list_display = [
         "name",
         "realm",
@@ -61,6 +62,8 @@ class BeginningTraditionInline(admin.TabularInline):
 @admin.register(Beginnings)
 class BeginningsAdmin(admin.ModelAdmin):
     """Admin for Beginnings - worldbuilding paths in character creation."""
+
+    autocomplete_fields = ["starting_room_override"]
 
     list_display = [
         "name",
@@ -122,6 +125,7 @@ class BeginningsAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterDraft)
 class CharacterDraftAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["account"]
     list_display = [
         "__str__",
         "account",
@@ -187,6 +191,7 @@ class DraftApplicationCommentInline(admin.TabularInline):
 
 @admin.register(DraftApplication)
 class DraftApplicationAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["player_account", "reviewer"]
     list_display = ["__str__", "status", "submitted_at", "reviewer", "reviewed_at", "expires_at"]
     list_filter = ["status"]
     search_fields = ["draft__account__username", "draft__draft_data"]

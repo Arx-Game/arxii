@@ -47,12 +47,14 @@ class RoomFeatureProgressionDetailsAdmin(admin.ModelAdmin):
 
 @admin.register(Trap)
 class TrapAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["created_by_sheet", "detected_by"]
     list_display = ("name", "room_profile", "is_armed", "is_hidden")
     list_filter = ("is_armed", "is_hidden")
 
 
 @admin.register(VaultDetails)
 class VaultDetailsAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["founder_persona"]
     list_display = ("feature_instance", "founder_persona", "max_items")
     readonly_fields = ("feature_instance", "founder_persona", "max_items")
 
@@ -65,6 +67,7 @@ class BrigDetailsAdmin(admin.ModelAdmin):
 
 @admin.register(VaultAccessEntry)
 class VaultAccessEntryAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["added_by", "holder_persona"]
     list_display = (
         "vault_details",
         "holder_type",

@@ -51,6 +51,7 @@ class CombatParticipantInline(admin.TabularInline):
 
 @admin.register(CombatEncounter)
 class CombatEncounterAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["duel_winner", "room", "scene"]
     list_display = [
         "id",
         "encounter_type",
@@ -78,6 +79,7 @@ class BossPhaseInline(admin.TabularInline):
 
 @admin.register(CombatOpponent)
 class CombatOpponentAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["objectdb", "persona", "summoned_by"]
     list_display = [
         "name",
         "persona",
@@ -93,6 +95,7 @@ class CombatOpponentAdmin(admin.ModelAdmin):
 
 @admin.register(CombatParticipant)
 class CombatParticipantAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet"]
     list_display = ["character_sheet", "encounter", "covenant_role"]
 
 
@@ -143,6 +146,7 @@ class BossPhaseAdmin(admin.ModelAdmin):
 
 @admin.register(CombatRoundAction)
 class CombatRoundActionAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["fury_anchor", "interaction", "item_instance", "redirect_object_target"]
     list_display = [
         "participant",
         "round_number",
@@ -190,6 +194,7 @@ class ComboSlotAdmin(admin.ModelAdmin):
 
 @admin.register(ComboLearning)
 class ComboLearningAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["character_sheet"]
     list_display = ["character_sheet", "combo", "learned_via", "learned_at", "use_count"]
     list_filter = ["learned_via"]
 
@@ -333,6 +338,7 @@ class ClashRoundAdmin(admin.ModelAdmin):
 
 @admin.register(StrainConfig)
 class StrainConfigAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["updated_by"]
     list_display = [
         "pk",
         "conversion_base",
@@ -344,6 +350,7 @@ class StrainConfigAdmin(admin.ModelAdmin):
 
 @admin.register(ClashConfig)
 class ClashConfigAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["updated_by"]
     list_display = [
         "pk",
         "affinity_tilt_coefficient",
@@ -429,6 +436,7 @@ class StakesLevelRequirementAdmin(admin.ModelAdmin):
 
 @admin.register(EncounterScalingConfig)
 class EncounterScalingConfigAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["updated_by"]
     list_display = [
         "pk",
         "baseline_party_size",

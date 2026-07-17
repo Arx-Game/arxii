@@ -16,6 +16,8 @@ from world.progression.models import (
 class ExperiencePointsDataAdmin(admin.ModelAdmin):
     """Admin interface for ExperiencePointsData."""
 
+    autocomplete_fields = ["account"]
+
     list_display = ["account", "current_available", "total_earned", "total_spent"]
     list_filter = ["updated_date"]
     search_fields = ["account__username"]
@@ -31,6 +33,8 @@ class ExperiencePointsDataAdmin(admin.ModelAdmin):
 class XPTransactionAdmin(admin.ModelAdmin):
     """Admin interface for XPTransaction."""
 
+    autocomplete_fields = ["account", "character", "gm"]
+
     list_display = ["account", "amount", "reason", "description", "transaction_date"]
     list_filter = ["reason", "transaction_date"]
     search_fields = ["account__username", "description"]
@@ -41,6 +45,8 @@ class XPTransactionAdmin(admin.ModelAdmin):
 class DevelopmentPointsAdmin(admin.ModelAdmin):
     """Admin interface for DevelopmentPoints."""
 
+    autocomplete_fields = ["character_sheet"]
+
     list_display = ["character_sheet", "trait", "total_earned"]
     list_filter = ["trait__trait_type", "updated_date"]
     search_fields = ["character_sheet__character__db_key", "trait__name"]
@@ -50,6 +56,8 @@ class DevelopmentPointsAdmin(admin.ModelAdmin):
 @admin.register(DevelopmentTransaction)
 class DevelopmentTransactionAdmin(admin.ModelAdmin):
     """Admin interface for DevelopmentTransaction."""
+
+    autocomplete_fields = ["character_sheet", "gm", "scene"]
 
     list_display = [
         "character_sheet",
