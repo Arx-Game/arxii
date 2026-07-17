@@ -58,6 +58,11 @@ class DistinctionOrigin(models.TextChoices):
     pool, or endorsement threshold involved). Every in-play grant goes through
     ``world.distinctions.services.grant_distinction`` and stamps one of these
     six values.
+
+    ``SPECIES`` (#2472) is a finalize-time origin alongside ``CHARACTER_CREATION``:
+    it marks a distinction forced onto the sheet by the character's species
+    (e.g. a minor gift auto-granted to fill an empty gift slot) rather than one
+    the player spent points on during the draft.
     """
 
     CHARACTER_CREATION = "character_creation", "Character Creation"
@@ -66,6 +71,7 @@ class DistinctionOrigin(models.TextChoices):
     ACHIEVEMENT_AUTO_GRANT = "achievement_auto_grant", "Achievement"
     CONSEQUENCE_POOL = "consequence_pool", "Consequence"
     ENDORSEMENT_THRESHOLD = "endorsement_threshold", "Endorsement Threshold"
+    SPECIES = "species", "Species"
 
 
 class OtherStatus(models.TextChoices):
