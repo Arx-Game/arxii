@@ -758,6 +758,34 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   `CLEANUP_REGAIN_WEEKS`. Room descriptions get quality-based suffixes at display
   time. Contributors earn celestial resonance (via `ProjectKindResonanceAward`) and
   society reputation (via `bump_society_reputation` with `area.dominant_society`).
+- **Staff World-Builder Canvas (#2449, epic #2436):** `world.areas.grid_services`
+  extracts the area-generic room-graph core (`create_room`, `create_exit_pair`,
+  `cell_occupied`, `place_room_on_grid`, `stranded_rooms` BFS, `promote_to_authored`,
+  `suggest_fixture_key`, `ensure_slug_change_allowed`) out of
+  `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
+  staff canvas share one substrate instead of two drifting copies. Eleven REGISTRY
+  actions (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
+  `target_type=SELF`) — `create_area`/`edit_area`/`staff_dig_room`/`staff_edit_room`/
+  `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
+  `staff_remove_room`/`promote_room`/`promote_area` — gated solely by
+  `StaffOnlyPrerequisite` (no ownership/tenancy standing, and deliberately no
+  GM-ladder trust check — see ADR-0139). `staff_dig_room` requires an AUTHORED area
+  and always authors the new room outright; `staff_remove_room` refuses an
+  already-exported room (report-never-delete pipeline territory, not the canvas);
+  `staff_unlink_rooms`'s stranding guard is the narrower "would this drop leave an
+  *occupied* room with zero exits" rule, not the Room Builder's anchor-room BFS
+  (there's no single anchor world-wide). `world.locations.services.
+  set_room_display_data` gained `persona=None`/`bypass_ownership=False` kwargs so
+  `staff_edit_room` can write display data with no owner/tenant standing. Read-only
+  staff API: `WorldBuilderViewSet` (`src/world/areas/builder_views.py`, mounted at
+  `/api/world-builder/areas/` — `IsAdminUser`-gated; `GET .../<id>/manager/` returns
+  the area's full room+exit payload, private rooms included, unlike the player-facing
+  `AreaViewSet`/`RoomProfileViewSet`). Frontend: shared `map-canvas/` primitives
+  (`MapCanvasShell`, `useMapNodeInteraction`, `coords`/`edges`/`ghosts`/`GhostNode`)
+  extracted so buildings, battles, and the new `world-builder/` app
+  (`/staff/world-builder`, linked from the profile dropdown + Game Setup hub) render
+  off one canvas shell instead of three parallel ones. Not built this slice:
+  `edit_area` UI, GM story areas (#2450), clue/portal layers (#2451).
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
