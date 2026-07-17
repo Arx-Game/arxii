@@ -31083,6 +31083,91 @@ paths:
               schema:
                 $ref: '#/components/schemas/Conditions'
           description: ''
+  /api/world-builder/areas/:
+    get:
+      operationId: world_builder_areas_list
+      description: Staff-only reads for the world-builder canvas (#2449).
+      parameters:
+      - in: query
+        name: has_parent
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: parent
+        schema:
+          type: number
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorldBuilderAreaList'
+          description: ''
+  /api/world-builder/areas/{id}/:
+    get:
+      operationId: world_builder_areas_retrieve
+      description: Staff-only reads for the world-builder canvas (#2449).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Area.
+        required: true
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldBuilderArea'
+          description: ''
+  /api/world-builder/areas/{id}/manager/:
+    get:
+      operationId: world_builder_areas_manager_retrieve
+      description: |-
+        GET /api/world-builder/areas/<id>/manager/ — area + all rooms + exits.
+
+        Unlike ``BuildingManagerViewSet.retrieve``, ``rooms`` includes every
+        RoomProfile in the area regardless of ``is_public`` — staff editing
+        the canvas needs to see (and select) private rooms too.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Area.
+        required: true
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldBuilderAreaManager'
+          description: ''
   /api/worship/beings/:
     get:
       operationId: worship_beings_list
@@ -31769,7 +31854,7 @@ components:
           readOnly: true
         level:
           allOf:
-          - $ref: '#/components/schemas/AreaListLevelEnum'
+          - $ref: '#/components/schemas/LevelC97Enum'
           readOnly: true
         level_display:
           type: string
@@ -31799,28 +31884,6 @@ components:
       - level
       - level_display
       - name
-    AreaListLevelEnum:
-      enum:
-      - 10
-      - 20
-      - 30
-      - 40
-      - 50
-      - 60
-      - 70
-      - 80
-      - 90
-      type: integer
-      description: |-
-        * `10` - Building
-        * `20` - Neighborhood
-        * `30` - Ward
-        * `40` - City
-        * `50` - Region
-        * `60` - Kingdom
-        * `70` - Continent
-        * `80` - World
-        * `90` - Plane
     AreaRoom:
       type: object
       properties:
@@ -43796,6 +43859,28 @@ components:
       - direction
       - id
       - reason
+    LevelC97Enum:
+      enum:
+      - 10
+      - 20
+      - 30
+      - 40
+      - 50
+      - 60
+      - 70
+      - 80
+      - 90
+      type: integer
+      description: |-
+        * `10` - Building
+        * `20` - Neighborhood
+        * `30` - Ward
+        * `40` - City
+        * `50` - Region
+        * `60` - Kingdom
+        * `70` - Continent
+        * `80` - World
+        * `90` - Plane
     LibraryEntry:
       type: object
       description: Read-only serializer for library browse cards.
@@ -47045,6 +47130,16 @@ components:
       required:
       - id
       - name
+    OriginEnum:
+      enum:
+      - authored
+      - story
+      - player
+      type: string
+      description: |-
+        * `authored` - Authored (canonical, exported)
+        * `story` - GM Story (never exported)
+        * `player` - Player-built (never exported)
     Outcome5d6Enum:
       enum:
       - unresolved
@@ -51180,6 +51275,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Will'
+    PaginatedWorldBuilderAreaList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderArea'
     PaginatedWorshippedBeingRefList:
       type: object
       required:
@@ -64379,6 +64497,184 @@ components:
       required:
       - choice
       - persona_id
+    WorldBuilderArea:
+      type: object
+      description: |-
+        Area-tree node for the staff world-builder canvas (#2449).
+
+        Unlike ``AreaListSerializer`` (player-facing area browser), this exposes
+        ``slug``/``origin``/``parent`` — staff-only bookkeeping fields the canvas
+        needs to render the AUTHORED/STORY/PLAYER distinction and the fixture-key
+        promotion flow.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Permanent stable identifier for authored (exported) areas (#2448).
+            Required when origin=AUTHORED; NULL for runtime areas.
+          pattern: ^[-a-zA-Z0-9_]+$
+        level:
+          allOf:
+          - $ref: '#/components/schemas/LevelC97Enum'
+          readOnly: true
+        level_display:
+          type: string
+          readOnly: true
+        origin:
+          allOf:
+          - $ref: '#/components/schemas/OriginEnum'
+          readOnly: true
+          description: |-
+            Who authored this area — only AUTHORED areas export (#2448).
+
+            * `authored` - Authored (canonical, exported)
+            * `story` - GM Story (never exported)
+            * `player` - Player-built (never exported)
+        parent:
+          type: integer
+          readOnly: true
+          nullable: true
+        children_count:
+          type: integer
+          readOnly: true
+        grid_x:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Position within the PARENT area's local grid (rendering/hint
+            data only — never routing); units are parent-local cells, meaningful only
+            among siblings.
+        grid_y:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Position within the PARENT area's local grid (rendering/hint
+            data only — never routing); units are parent-local cells, meaningful only
+            among siblings.
+      required:
+      - children_count
+      - grid_x
+      - grid_y
+      - id
+      - level
+      - level_display
+      - name
+      - origin
+      - parent
+      - slug
+    WorldBuilderAreaManager:
+      type: object
+      description: 'The full staff-only area-manager payload: area header + rooms
+        + exits.'
+      properties:
+        area:
+          $ref: '#/components/schemas/WorldBuilderArea'
+        rooms:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoom'
+        exits:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderExit'
+      required:
+      - area
+      - exits
+      - rooms
+    WorldBuilderExit:
+      type: object
+      description: |-
+        One directed exit in the staff area-manager payload (#2449).
+
+        ``to_area_id`` is null when the destination has no RoomProfile (or no
+        destination at all) — a cross-area exit is otherwise a normal row here,
+        the canvas renders the far end as an edge-of-view marker.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        from_room_id:
+          type: integer
+        to_room_id:
+          type: integer
+          nullable: true
+        to_room_name:
+          type: string
+          nullable: true
+        to_area_id:
+          type: integer
+          nullable: true
+      required:
+      - from_room_id
+      - id
+      - name
+      - to_area_id
+      - to_room_id
+      - to_room_name
+    WorldBuilderRoom:
+      type: object
+      description: |-
+        One RoomProfile in the staff area-manager payload (#2449).
+
+        Unlike the owner-facing ``buildings.ManagerRoomSerializer``, this has no
+        ownership gate (staff-only read) and includes private rooms plus
+        staff-only bookkeeping (``fixture_key``, ``origin``, ``occupant_count``).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        is_public:
+          type: boolean
+        is_social_hub:
+          type: boolean
+        is_outdoor:
+          type: boolean
+        enclosure:
+          type: string
+        size_name:
+          type: string
+          nullable: true
+        grid_x:
+          type: integer
+          nullable: true
+        grid_y:
+          type: integer
+          nullable: true
+        floor:
+          type: integer
+        fixture_key:
+          type: string
+          nullable: true
+        origin:
+          type: string
+        occupant_count:
+          type: integer
+      required:
+      - description
+      - enclosure
+      - fixture_key
+      - floor
+      - grid_x
+      - grid_y
+      - id
+      - is_outdoor
+      - is_public
+      - is_social_hub
+      - name
+      - occupant_count
+      - origin
+      - size_name
     WorshippedBeingRef:
       type: object
       properties:

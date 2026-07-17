@@ -18694,6 +18694,63 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/world-builder/areas/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only reads for the world-builder canvas (#2449). */
+    get: operations['world_builder_areas_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/world-builder/areas/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only reads for the world-builder canvas (#2449). */
+    get: operations['world_builder_areas_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/world-builder/areas/{id}/manager/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/world-builder/areas/<id>/manager/ — area + all rooms + exits.
+     *
+     *     Unlike ``BuildingManagerViewSet.retrieve``, ``rooms`` includes every
+     *     RoomProfile in the area regardless of ``is_public`` — staff editing
+     *     the canvas needs to see (and select) private rooms too.
+     */
+    get: operations['world_builder_areas_manager_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/beings/': {
     parameters: {
       query?: never;
@@ -19037,7 +19094,7 @@ export interface components {
     AreaList: {
       readonly id: number;
       readonly name: string;
-      readonly level: components['schemas']['AreaListLevelEnum'];
+      readonly level: components['schemas']['LevelC97Enum'];
       readonly level_display: string;
       readonly children_count: number;
       /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
@@ -19045,19 +19102,6 @@ export interface components {
       /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
       readonly grid_y: number | null;
     };
-    /**
-     * @description * `10` - Building
-     *     * `20` - Neighborhood
-     *     * `30` - Ward
-     *     * `40` - City
-     *     * `50` - Region
-     *     * `60` - Kingdom
-     *     * `70` - Continent
-     *     * `80` - World
-     *     * `90` - Plane
-     * @enum {integer}
-     */
-    AreaListLevelEnum: 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90;
     AreaRoom: {
       id: number;
       name: string;
@@ -24616,6 +24660,19 @@ export interface components {
       /** Format: date-time */
       created_at: string;
     };
+    /**
+     * @description * `10` - Building
+     *     * `20` - Neighborhood
+     *     * `30` - Ward
+     *     * `40` - City
+     *     * `50` - Region
+     *     * `60` - Kingdom
+     *     * `70` - Continent
+     *     * `80` - World
+     *     * `90` - Plane
+     * @enum {integer}
+     */
+    LevelC97Enum: 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90;
     /** @description Read-only serializer for library browse cards. */
     LibraryEntry: {
       readonly id: number;
@@ -26278,6 +26335,13 @@ export interface components {
       id: number;
       name: string;
     };
+    /**
+     * @description * `authored` - Authored (canonical, exported)
+     *     * `story` - GM Story (never exported)
+     *     * `player` - Player-built (never exported)
+     * @enum {string}
+     */
+    OriginEnum: 'authored' | 'story' | 'player';
     /**
      * @description * `unresolved` - Unresolved
      *     * `attacker_decisive` - Attacker — decisive
@@ -28906,6 +28970,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Will'][];
+    };
+    PaginatedWorldBuilderAreaList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['WorldBuilderArea'][];
     };
     PaginatedWorshippedBeingRefList: {
       /** @example 123 */
@@ -35759,6 +35838,80 @@ export interface components {
       persona_id: number;
       /** @description Slug from the window's choices payload. */
       choice: string;
+    };
+    /**
+     * @description Area-tree node for the staff world-builder canvas (#2449).
+     *
+     *     Unlike ``AreaListSerializer`` (player-facing area browser), this exposes
+     *     ``slug``/``origin``/``parent`` — staff-only bookkeeping fields the canvas
+     *     needs to render the AUTHORED/STORY/PLAYER distinction and the fixture-key
+     *     promotion flow.
+     */
+    WorldBuilderArea: {
+      readonly id: number;
+      readonly name: string;
+      /** @description Permanent stable identifier for authored (exported) areas (#2448). Required when origin=AUTHORED; NULL for runtime areas. */
+      readonly slug: string | null;
+      readonly level: components['schemas']['LevelC97Enum'];
+      readonly level_display: string;
+      /**
+       * @description Who authored this area — only AUTHORED areas export (#2448).
+       *
+       *     * `authored` - Authored (canonical, exported)
+       *     * `story` - GM Story (never exported)
+       *     * `player` - Player-built (never exported)
+       */
+      readonly origin: components['schemas']['OriginEnum'];
+      readonly parent: number | null;
+      readonly children_count: number;
+      /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
+      readonly grid_x: number | null;
+      /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
+      readonly grid_y: number | null;
+    };
+    /** @description The full staff-only area-manager payload: area header + rooms + exits. */
+    WorldBuilderAreaManager: {
+      area: components['schemas']['WorldBuilderArea'];
+      rooms: components['schemas']['WorldBuilderRoom'][];
+      exits: components['schemas']['WorldBuilderExit'][];
+    };
+    /**
+     * @description One directed exit in the staff area-manager payload (#2449).
+     *
+     *     ``to_area_id`` is null when the destination has no RoomProfile (or no
+     *     destination at all) — a cross-area exit is otherwise a normal row here,
+     *     the canvas renders the far end as an edge-of-view marker.
+     */
+    WorldBuilderExit: {
+      id: number;
+      name: string;
+      from_room_id: number;
+      to_room_id: number | null;
+      to_room_name: string | null;
+      to_area_id: number | null;
+    };
+    /**
+     * @description One RoomProfile in the staff area-manager payload (#2449).
+     *
+     *     Unlike the owner-facing ``buildings.ManagerRoomSerializer``, this has no
+     *     ownership gate (staff-only read) and includes private rooms plus
+     *     staff-only bookkeeping (``fixture_key``, ``origin``, ``occupant_count``).
+     */
+    WorldBuilderRoom: {
+      id: number;
+      name: string;
+      description: string;
+      is_public: boolean;
+      is_social_hub: boolean;
+      is_outdoor: boolean;
+      enclosure: string;
+      size_name: string | null;
+      grid_x: number | null;
+      grid_y: number | null;
+      floor: number;
+      fixture_key: string | null;
+      origin: string;
+      occupant_count: number;
     };
     WorshippedBeingRef: {
       readonly id: number;
@@ -62324,6 +62477,76 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Conditions'];
+        };
+      };
+    };
+  };
+  world_builder_areas_list: {
+    parameters: {
+      query?: {
+        has_parent?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        parent?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWorldBuilderAreaList'];
+        };
+      };
+    };
+  };
+  world_builder_areas_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Area. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorldBuilderArea'];
+        };
+      };
+    };
+  };
+  world_builder_areas_manager_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Area. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorldBuilderAreaManager'];
         };
       };
     };
