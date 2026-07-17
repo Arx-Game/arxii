@@ -6937,6 +6937,7 @@
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' — Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' — Sum the legend this character earned that was credited to covenants where they held ``role``.`
 - `get_covenant_legend_total(covenant: 'Covenant') -> 'int' — Return the covenant's total legend from the materialized view.`
+- `get_covenant_legend_totals(covenant_ids: 'list[int]') -> 'dict[int, int]' — Bulk sibling of ``get_covenant_legend_total`` — one query for a page of covenants.`
 - `get_persona_legend_total(persona: 'Persona') -> 'int' — Per-persona legend lookup from materialized view.`
 - `refresh_legend_views() -> None — Refresh all legend materialized views concurrently.`
 - `spread_deed(deed: 'LegendEntry', spreader_persona: 'Persona', value_added: 'int', *, description: 'str' = '', method: 'str' = '', skill: 'Skill | None' = None, audience_factor: 'Decimal' = Decimal('1.0'), scene: 'Scene | None' = None, societies_reached: 'list[Society] | None' = None) -> 'LegendSpread' — Record a spreading action and add legend value, clamped to capacity.`

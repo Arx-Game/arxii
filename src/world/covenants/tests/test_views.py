@@ -474,6 +474,66 @@ class CovenantViewTests(CovenantsViewTestCase):
         response = unauthenticated_client.get("/api/covenants/covenants/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_list_aggregates_member_count_and_legend_without_per_row_queries(self) -> None:
+        """List member_count/legend_total come from one bulk pass, not per row (2026-07 audit).
+
+        The legend matview is Postgres-only (absent in the fast SQLite tier), so
+        this mocks the bulk legend service — that also isolates the member_count
+        aggregate + query-bounding, which need no matview. Adding more covenants
+        must not add per-covenant count/legend queries.
+        """
+        from unittest.mock import patch
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from evennia.accounts.models import AccountDB
+        from evennia.utils.idmapper.models import flush_cache
+
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+        )
+
+        staff = AccountDB.objects.create_user(
+            username="cov_agg_staff", email="cov_agg_staff@test.com", password="p", is_staff=True
+        )
+        self.client.force_authenticate(user=staff)
+        url = "/api/covenants/covenants/"
+
+        # cov_active_member has one active membership (from setUpTestData).
+        legend_map = {self.cov_active_member.pk: 42}
+
+        def fake_totals(ids: list[int]) -> dict[int, int]:
+            return {pk: legend_map.get(pk, 0) for pk in ids}
+
+        with patch("world.societies.services.get_covenant_legend_totals", side_effect=fake_totals):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            rows = {row["id"]: row for row in response.data["results"]}
+            self.assertEqual(rows[self.cov_active_member.pk]["member_count"], 1)
+            self.assertEqual(rows[self.cov_active_member.pk]["legend_total"], 42)
+            self.assertEqual(rows[self.cov_no_membership.pk]["member_count"], 0)
+            self.assertEqual(rows[self.cov_no_membership.pk]["legend_total"], 0)
+
+            flush_cache()
+            with CaptureQueriesContext(connection) as ctx_before:
+                self.client.get(url)
+            baseline = len(ctx_before.captured_queries)
+
+            # Two more covenants, one with two active members.
+            extra = CovenantFactory(name="ExtraCov")
+            CharacterCovenantRoleFactory(covenant=extra)
+            CharacterCovenantRoleFactory(covenant=extra)
+            CovenantFactory(name="ExtraCov2")
+
+            flush_cache()
+            with CaptureQueriesContext(connection) as ctx_after:
+                after = self.client.get(url)
+            self.assertEqual(after.status_code, status.HTTP_200_OK)
+            self.assertEqual(len(ctx_after.captured_queries), baseline)
+            after_rows = {row["id"]: row for row in after.data["results"]}
+            self.assertEqual(after_rows[extra.pk]["member_count"], 2)
+
 
 class CharacterCovenantRoleSerializerExposureTests(CovenantsViewTestCase):
     """Verify CharacterCovenantRoleSerializer exposes covenant + engaged."""

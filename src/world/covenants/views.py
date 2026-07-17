@@ -290,8 +290,18 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = CovenantFilter
 
+    # Page aggregates (member_count / legend_total keyed by covenant pk) that
+    # ``list`` precomputes for ``get_serializer_context``; None on non-list
+    # actions so the serializer falls back to its per-object path. DRF builds a
+    # fresh viewset instance per request, so this never leaks across requests.
+    _page_aggregates: dict[int, dict[str, int]] | None = None
+
     def get_queryset(self) -> QuerySet[Covenant]:
-        qs = Covenant.objects.all().order_by("-formed_at")
+        # prefetch storylines (2026-07 audit): CovenantSerializer.storylines is a
+        # many-relation that otherwise fires one query per covenant on the list.
+        qs = Covenant.objects.prefetch_related(
+            "storylines",  # noqa: PREFETCH_STRING
+        ).order_by("-formed_at")
         if self.request.user.is_staff:
             return qs
         return qs.filter(
@@ -299,6 +309,56 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
             memberships__character_sheet__roster_entry__tenures__end_date__isnull=True,
             memberships__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
         ).distinct()
+
+    @staticmethod
+    def _covenant_aggregates(covenant_ids: list[int]) -> dict[int, dict[str, int]]:
+        """Bulk member_count + legend_total for a page of covenants (2026-07 audit).
+
+        CovenantSerializer computed both per row — a ``.count()`` and a matview
+        ``values_list`` each — so a page cost ~2 queries per covenant. This runs
+        two total queries for the whole page instead. Kept as a plain
+        bulk-fetch (correlated matview Subqueries proved fragile on the covenant
+        pk); the members-only list keeps the page small regardless.
+        """
+        from django.db.models import Count  # noqa: PLC0415
+
+        from world.societies.services import get_covenant_legend_totals  # noqa: PLC0415
+
+        if not covenant_ids:
+            return {}
+        counts = dict(
+            CharacterCovenantRole.objects.filter(covenant_id__in=covenant_ids, left_at__isnull=True)
+            .values("covenant_id")
+            .annotate(c=Count("id"))
+            .values_list("covenant_id", "c")
+        )
+        totals = get_covenant_legend_totals(covenant_ids)
+        return {
+            pk: {"member_count": counts.get(pk, 0), "legend_total": totals.get(pk, 0)}
+            for pk in covenant_ids
+        }
+
+    def get_serializer_context(self) -> dict:
+        context = super().get_serializer_context()
+        aggregates = self._page_aggregates
+        if aggregates is not None:
+            context["covenant_aggregates"] = aggregates
+        return context
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        # NOTE: intentionally no docstring — drf-spectacular would publish it as
+        # the list endpoint's description, replacing the class docstring. Mirrors
+        # DRF's default list() but stashes the page's aggregates first so
+        # get_serializer_context can hand them to the serializer, avoiding the
+        # per-row member_count/legend_total queries.
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        covenants = page if page is not None else list(queryset)
+        self._page_aggregates = self._covenant_aggregates([c.pk for c in covenants])
+        serializer = self.get_serializer(covenants, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["GET"])
     def powers(self, request: Request, pk: int | None = None) -> Response:
