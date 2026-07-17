@@ -158,10 +158,7 @@ export function BequestEditor({ will, frozen, mutations }: BequestEditorProps) {
                   <button
                     type="button"
                     className="w-full p-1 text-left hover:bg-accent"
-                    onClick={() => {
-                      setRecipient(m);
-                      setMatches([]);
-                    }}
+                    onClick={() => setRecipient(m)}
                   >
                     {m.name}
                   </button>
