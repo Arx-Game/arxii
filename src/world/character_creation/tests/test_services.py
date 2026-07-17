@@ -1329,6 +1329,142 @@ class FinalizeGiftAndTechniquesTests(TestCase):
         )
 
 
+class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase):
+    """The Unbound magic-learning AP surcharge (#2442), proven end-to-end through the
+    REAL CG flow (review-requested — the "Important" test): a draft built via the same
+    finalization helpers as the rest of this file selects the Unbound tradition through
+    the real ``select-tradition`` endpoint (which auto-adds the "Unbound" drawback
+    distinction, #2442), is finalized via ``finalize_character``, and the resulting
+    character pays the surcharge on a live technique acquisition.
+
+    This exercises the full chain the unit-level surcharge tests
+    (``world.magic.tests.test_gift_acquisition_service
+    .UnboundMagicLearningApSurchargeTest``) stub out: draft -> select-tradition ->
+    finalize_character -> ``_create_distinction_modifiers_bulk`` ->
+    ``world.mechanics.services.get_modifier_total`` -> ``charge_and_learn``'s surcharge
+    read.
+    """
+
+    def setUp(self):
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username=f"unboundsurcharge_{id(self)}")
+        self._setup_finalization_base(
+            self, prefix="Unbound CG Surcharge", height_min=2500, height_max=2600
+        )
+
+    def test_finalize_via_real_select_tradition_pays_ap_surcharge_on_acquisition(self):
+        import math
+
+        from rest_framework import status as drf_status
+        from rest_framework.test import APIClient
+
+        from world.action_points.models import ActionPointPool
+        from world.character_creation.constants import UNBOUND_TRADITION_NAME
+        from world.magic.constants import (
+            MAGIC_LEARNING_AP_COST_TARGET_NAME,
+            MAGIC_MODIFIER_CATEGORY_NAME,
+        )
+        from world.magic.models import TechniqueTeachingOffer
+        from world.magic.services.gift_acquisition import accept_technique_offer
+        from world.mechanics.models import ModifierTarget
+        from world.mechanics.services import get_modifier_total
+        from world.roster.factories import RosterTenureFactory
+        from world.seeds.character_creation import seed_beginning_traditions
+
+        # Seed the real "Unbound" Tradition + wire it to this test's own Gift, then run
+        # the real seeder to author the BeginningTradition gate (required_distinction=
+        # the real "unbound" drawback, #2442) for this test's own Beginnings row.
+        unbound_tradition = TraditionFactory(name=UNBOUND_TRADITION_NAME)
+        TraditionGiftGrantFactory(tradition=unbound_tradition, gift=self.gift)
+        seed_beginning_traditions()
+
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            selected_path=self.path,
+            age=25,
+            height_band=self.height_band,
+            height_inches=(self.height_band.min_inches + self.height_band.max_inches) // 2,
+            build=self.build,
+            draft_data={
+                "first_name": "Solitary",
+                "description": "A test character",
+                "stats": DEFAULT_STATS,
+                "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
+                "traits_complete": True,
+            },
+        )
+
+        # Real select-tradition endpoint — auto-adds the "Unbound" drawback distinction
+        # to the draft (#2442's one deliberate exception; see
+        # TraditionViewSet.select_tradition's docstring).
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": unbound_tradition.id},
+            format="json",
+        )
+        assert response.status_code == drf_status.HTTP_200_OK
+        draft.refresh_from_db()
+        assert draft.selected_tradition == unbound_tradition
+        distinction_ids = {
+            entry.get("distinction_id") for entry in draft.draft_data.get("distinctions", [])
+        }
+        assert distinction_ids, "select-tradition should have auto-added the Unbound drawback"
+
+        # Complete the Gift stage against the (now-selected) Unbound tradition.
+        self._create_complete_magic(draft)
+        # CharacterDraft is a SharedMemoryModel: the select-tradition response
+        # serializer already computed stage errors on this same idmapper-shared
+        # instance, BEFORE the Gift keys above existed. Drop the per-instance memo
+        # so finalize re-validates the now-complete draft.
+        if hasattr(draft, "_cached_stage_errors"):
+            del draft._cached_stage_errors
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        # draft -> finalize -> _create_distinction_modifiers_bulk -> get_modifier_total:
+        # the live post-CG CharacterModifier resolution path charge_and_learn reads.
+        target = ModifierTarget.objects.get(
+            name=MAGIC_LEARNING_AP_COST_TARGET_NAME,
+            category__name=MAGIC_MODIFIER_CATEGORY_NAME,
+        )
+        assert get_modifier_total(sheet, target) == 50
+
+        # Drive one technique acquisition through the shared charge_and_learn seam
+        # (accept_technique_offer front door) and assert the AP charged is
+        # ceil(base_ap_cost * 1.5).
+        teacher_tenure = RosterTenureFactory()
+        ActionPointPool.get_or_create_for_character(teacher_tenure.character)
+        learner_pool = ActionPointPool.get_or_create_for_character(character)
+        learner_pool.current = 200
+        learner_pool.save()
+
+        second_technique = TechniqueFactory(gift=self.gift)
+        base_ap_cost = 5
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=teacher_tenure,
+            technique=second_technique,
+            pitch="A second lesson, the hard way",
+            learn_ap_cost=base_ap_cost,
+            banked_ap=1,
+        )
+
+        accept_technique_offer(sheet, offer)
+
+        learner_pool.refresh_from_db()
+        expected_cost = math.ceil(base_ap_cost * 1.5)
+        assert expected_cost == 8  # sanity: ceil(5 * 1.5) == 8
+        assert learner_pool.current == 200 - expected_cost
+
+
 class FinalizeCharacterTarotTests(FinalizationTestMixin, TestCase):
     """Tests for tarot surname derivation and tarot data transfer during finalization."""
 

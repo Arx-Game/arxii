@@ -619,6 +619,47 @@ class UnboundMagicLearningApSurchargeTest(TestCase):
         self.learner_ap.refresh_from_db()
         self.assertEqual(self.learner_ap.current, 200 - 5)
 
+    def test_surcharge_reapplies_after_leaving_a_living_tradition(self):
+        """Mirror of ``test_surcharge_disappears_after_joining_a_living_tradition``
+        (review-requested, Minor): a member of a living tradition pays base AP;
+        ``leave_tradition`` re-applies the REAL seeded "unbound" drawback
+        (``ensure_unbound_drawback_distinction`` in ``setUp``, #2441 ruling 4 / #2442
+        Task 9), and the very next acquisition is charged the surcharge again."""
+        from world.magic.factories import TechniqueFactory, TraditionFactory
+        from world.magic.services.gift_acquisition import accept_technique_offer
+        from world.magic.services.tradition_membership import join_tradition, leave_tradition
+
+        tradition = TraditionFactory(name="The Caretakers")
+        join_tradition(self.sheet, tradition)
+
+        technique_before = TechniqueFactory(gift=self.gift)
+        offer_before = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=technique_before,
+            pitch="Trained and true",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        accept_technique_offer(self.sheet, offer_before)
+        self.learner_ap.refresh_from_db()
+        self.assertEqual(self.learner_ap.current, 200 - 5)
+
+        leave_tradition(self.sheet)
+
+        technique_after = TechniqueFactory(gift=self.gift)
+        offer_after = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=technique_after,
+            pitch="Traditionless once more",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        accept_technique_offer(self.sheet, offer_after)
+
+        self.learner_ap.refresh_from_db()
+        # base AP (5) already spent above; this second charge is ceil(5 * 1.5) = 8.
+        self.assertEqual(self.learner_ap.current, 200 - 5 - 8)
+
     def test_surcharge_disappears_after_joining_a_living_tradition(self):
         """Integration with #2441 Task 8 — join_tradition sheds the Unbound
         drawback; its ModifierSource/CharacterModifier rows cascade-delete
