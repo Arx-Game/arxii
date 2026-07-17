@@ -20,7 +20,7 @@ from world.magic.factories import GiftFactory, ResonanceFactory, TraditionFactor
 from world.magic.models import Thread
 from world.magic.models.gifts import CharacterGift
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
-from world.species.services import provision_species_gifts
+from world.species.services import provision_species_gifts, total_species_gift_cost
 
 
 class ProvisionSpeciesGiftsTests(TestCase):
@@ -390,3 +390,38 @@ class ProvisionSpeciesGiftsBenefitTest(TestCase):
             "Species benefit condition's ConditionCheckModifier should reach "
             "get_check_modifier for the resist check type",
         )
+
+
+class TotalSpeciesGiftCostTests(TestCase):
+    """Unit tests for total_species_gift_cost (#2472 encapsulation fix)."""
+
+    def test_costed_grant_returns_cost(self):
+        """A species with a costed grant returns that grant's cg_point_cost."""
+        species = SpeciesFactory(name="TestCostedGiftSpecies")
+        SpeciesGiftGrantFactory(
+            species=species,
+            gift=GiftFactory(name="Test Costed Gift", kind=GiftKind.MINOR),
+            cg_point_cost=7,
+        )
+        self.assertEqual(total_species_gift_cost(species), 7)
+
+    def test_subspecies_charged_for_parents_costed_grant(self):
+        """A subspecies whose parent carries the costed grant returns the parent's cost."""
+        parent = SpeciesFactory(name="TestCostedParentSpecies")
+        SpeciesGiftGrantFactory(
+            species=parent,
+            gift=GiftFactory(name="Test Parent Costed Gift", kind=GiftKind.MINOR),
+            cg_point_cost=5,
+        )
+        subspecies = SpeciesFactory(name="TestCostedSubspecies", parent=parent)
+        self.assertEqual(total_species_gift_cost(subspecies), 5)
+
+    def test_no_costed_grant_returns_zero(self):
+        """A species with no costed grant returns 0."""
+        species = SpeciesFactory(name="TestUncostedSpecies")
+        SpeciesGiftGrantFactory(
+            species=species,
+            gift=GiftFactory(name="Test Free Gift", kind=GiftKind.MINOR),
+            cg_point_cost=0,
+        )
+        self.assertEqual(total_species_gift_cost(species), 0)

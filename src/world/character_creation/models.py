@@ -885,16 +885,9 @@ class CharacterDraft(SharedMemoryModel):
                     }
                 )
         if self.selected_species_id is not None:
-            from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
-            from world.species.services import _species_and_ancestors  # noqa: PLC0415
+            from world.species.services import total_species_gift_cost  # noqa: PLC0415
 
-            species_pks = [s.pk for s in _species_and_ancestors(self.selected_species)]
-            species_cost = (
-                SpeciesGiftGrant.objects.filter(species_id__in=species_pks)
-                .aggregate(total=models.Sum("cg_point_cost"))
-                .get("total")
-                or 0
-            )
+            species_cost = total_species_gift_cost(self.selected_species)
             if species_cost:
                 breakdown.append(
                     {

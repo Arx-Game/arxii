@@ -136,6 +136,23 @@ def _grant_species_distinction_once(sheet, distinction) -> None:
     grant_distinction(sheet, distinction, origin=DistinctionOrigin.SPECIES, rank=1)
 
 
+def total_species_gift_cost(species) -> int:
+    """Total CG-point cost of a species' gift grants, summed over it and its ancestors.
+
+    Mirrors provision_species_gifts' species+ancestor walk so a subspecies is charged
+    for a parent's costed grant. Returns 0 for a species with no costed grants.
+    """
+    from django.db.models import Sum  # noqa: PLC0415
+
+    species_pks = [s.pk for s in _species_and_ancestors(species)]
+    return (
+        SpeciesGiftGrant.objects.filter(species_id__in=species_pks)
+        .aggregate(total=Sum("cg_point_cost"))
+        .get("total")
+        or 0
+    )
+
+
 def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[CharacterGift]:
     """Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.
 
