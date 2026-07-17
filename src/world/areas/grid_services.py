@@ -62,6 +62,10 @@ def create_room(  # noqa: PLR0913 — mirrors dig_room's full room-creation surf
     """
     from evennia.utils import create as evennia_create  # noqa: PLC0415
 
+    # create_object runs Room.at_object_creation, which get_or_creates a bare
+    # RoomProfile; the update_or_create below then fills it. One extra write vs
+    # the old bare-ObjectDB create, accepted to stay under the noqa ratchet and
+    # keep typeclass init honest.
     room = evennia_create.create_object(
         typeclass="typeclasses.rooms.Room",
         key=name.strip(),
@@ -89,6 +93,11 @@ def _create_exit(
 ) -> ObjectDB:
     from evennia.utils import create as evennia_create  # noqa: PLC0415
 
+    # Unlike the old bare-ObjectDB create, create_object(location=...) fires
+    # source.at_object_receive for the exit object. Room.at_object_receive's
+    # gossip/tidings paths early-return for non-Characters and its scene
+    # broadcast no-ops without live in-memory scene state, so this is benign —
+    # traced in the #2449 Task 1 review.
     exit_obj = evennia_create.create_object(
         typeclass="typeclasses.exits.Exit",
         key=name,
