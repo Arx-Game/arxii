@@ -201,6 +201,44 @@ class StaffDigRoomActionTests(TestCase):
         assert not result.success
         assert not RoomProfile.objects.filter(area=self.authored_area).exists()
 
+    def test_dig_onto_free_cell_keeps_explicit_coords(self) -> None:
+        from actions.definitions.world_builder import StaffDigRoomAction
+
+        result = StaffDigRoomAction().run(
+            self.staff,
+            area_id=self.authored_area.pk,
+            name="Empty Lot",
+            grid_x=3,
+            grid_y=4,
+            floor=0,
+        )
+        assert result.success
+        profile = RoomProfile.objects.get(fixture_key="arx-city/empty-lot")
+        assert profile.grid_x == 3
+        assert profile.grid_y == 4
+        assert "unplaced" not in result.message
+
+    def test_dig_onto_occupied_cell_creates_unplaced_room(self) -> None:
+        from actions.definitions.world_builder import StaffDigRoomAction
+
+        RoomProfileFactory(
+            area=self.authored_area, grid_x=3, grid_y=4, floor=0, origin=GridOrigin.AUTHORED
+        )
+
+        result = StaffDigRoomAction().run(
+            self.staff,
+            area_id=self.authored_area.pk,
+            name="Crowded Lot",
+            grid_x=3,
+            grid_y=4,
+            floor=0,
+        )
+        assert result.success
+        profile = RoomProfile.objects.get(fixture_key="arx-city/crowded-lot")
+        assert profile.grid_x is None
+        assert profile.grid_y is None
+        assert "unplaced" in result.message
+
 
 class StaffEditRoomActionTests(TestCase):
     def setUp(self) -> None:

@@ -279,6 +279,7 @@ class StaffDigRoomAction(_WorldBuilderAction):
         from world.areas.constants import GridOrigin  # noqa: PLC0415
         from world.areas.grid_services import (  # noqa: PLC0415
             GridServiceError,
+            cell_occupied,
             create_room,
             suggest_fixture_key,
         )
@@ -308,6 +309,15 @@ class StaffDigRoomAction(_WorldBuilderAction):
         if parsed_grid is None:
             return ActionResult(success=False, message="Grid position and floor must be numbers.")
         grid_x, grid_y, floor = parsed_grid
+        unplaced_note = ""
+        if grid_x is not None and grid_y is not None and cell_occupied(area, grid_x, grid_y, floor):
+            # Cosmetic coordinates never block creation (mirrors dig_room's
+            # precedent) — place_room_on_grid is the verb that still raises.
+            grid_x = None
+            grid_y = None
+            unplaced_note = (
+                " That cell was occupied — room created unplaced; drag it into position."
+            )
         profile = create_room(
             area=area,
             name=room_name,
@@ -319,7 +329,10 @@ class StaffDigRoomAction(_WorldBuilderAction):
             origin=GridOrigin.AUTHORED,
             fixture_key=fixture_key,
         )
-        return ActionResult(success=True, message=f"{profile.objectdb.db_key} dug (#{profile.pk}).")
+        return ActionResult(
+            success=True,
+            message=f"{profile.objectdb.db_key} dug (#{profile.pk}).{unplaced_note}",
+        )
 
 
 @dataclass

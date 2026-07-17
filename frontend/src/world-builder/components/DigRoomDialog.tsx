@@ -47,6 +47,7 @@ export function DigRoomDialog({
   const [description, setDescription] = useState('');
   const [gridX, setGridX] = useState('');
   const [gridY, setGridY] = useState('');
+  const [fixtureKey, setFixtureKey] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -54,6 +55,7 @@ export function DigRoomDialog({
       setDescription('');
       setGridX(prefill ? String(prefill.grid_x) : '');
       setGridY(prefill ? String(prefill.grid_y) : '');
+      setFixtureKey('');
     }
   }, [open, prefill]);
 
@@ -70,6 +72,7 @@ export function DigRoomDialog({
       kwargs.grid_x = Number(gridX);
       kwargs.grid_y = Number(gridY);
     }
+    if (fixtureKey.trim() !== '') kwargs.fixture_key = fixtureKey.trim();
     runAction('staff_dig_room', kwargs);
     onOpenChange(false);
   };
@@ -120,6 +123,18 @@ export function DigRoomDialog({
               onChange={(event) => setDescription(event.target.value)}
               rows={3}
             />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="dig-room-fixture-key">Fixture key (optional)</Label>
+            <Input
+              id="dig-room-fixture-key"
+              value={fixtureKey}
+              onChange={(event) => setFixtureKey(event.target.value)}
+              placeholder="area-slug/room-name"
+            />
+            <p className="text-xs text-muted-foreground">
+              Leave blank to auto-generate from the area slug and room name.
+            </p>
           </div>
         </div>
         <DialogFooter>
