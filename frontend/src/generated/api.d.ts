@@ -19629,7 +19629,7 @@ export interface components {
       readonly allowed_species_ids: number[];
       /** @description If False, characters don't get species' racial language (Misbegotten) */
       grants_species_languages?: boolean;
-      /** @description CG point cost for selecting this option (added to species cost) */
+      /** @description CG point cost for this beginning; summed with species gift grant costs into the character-creation points budget. */
       cg_point_cost?: number;
       /** @description Check if the requesting user can access this option. */
       readonly is_accessible: boolean;
@@ -19649,7 +19649,7 @@ export interface components {
       family_known?: boolean;
       /** @description If False, characters don't get species' racial language (Misbegotten) */
       grants_species_languages?: boolean;
-      /** @description CG point cost for selecting this option (added to species cost) */
+      /** @description CG point cost for this beginning; summed with species gift grant costs into the character-creation points budget. */
       cg_point_cost?: number;
     };
     Bequest: {

@@ -146,7 +146,8 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     """A Minor Gift (and optional drawback) a species grants its members (ADR-0050).
 
     FK direction specific→general (ADR-0010): the grant lives on the species side and
-    points into world/magic + world/conditions; those apps never import species.
+    points into world/magic, world/conditions, and world/distinctions; those apps
+    never import species.
     """
 
     species = models.ForeignKey(
@@ -178,12 +179,26 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         help_text="Optional permanent beneficial condition applied at finalize "
         "(e.g. a resist-check bonus condition).",
     )
+    drawback_distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="species_gift_drawbacks",
+        help_text="Optional forced drawback distinction applied at finalize "
+        "(a social/reputation price, e.g. feared-and-distrusted).",
+    )
+    cg_point_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="CG points charged for this grant (0 = free). Summed across a "
+        "species' grants into the character-creation points breakdown.",
+    )
 
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
         fields = ["species", "gift"]
-        dependencies = ["species.Species", "magic.Gift"]
+        dependencies = ["species.Species", "magic.Gift", "distinctions.Distinction"]
 
     class Meta:
         verbose_name = "Species Gift Grant"

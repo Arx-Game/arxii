@@ -297,7 +297,8 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
     )
     cg_point_cost = models.IntegerField(
         default=0,
-        help_text="CG point cost for selecting this option (added to species cost)",
+        help_text="CG point cost for this beginning; summed with species gift "
+        "grant costs into the character-creation points budget.",
     )
     heritage = models.ForeignKey(
         "character_sheets.Heritage",
@@ -881,6 +882,18 @@ class CharacterDraft(SharedMemoryModel):
                         "category": "distinction",
                         "item": d.get("distinction_name", "Unknown"),
                         "cost": cost,
+                    }
+                )
+        if self.selected_species_id is not None:
+            from world.species.services import total_species_gift_cost  # noqa: PLC0415
+
+            species_cost = total_species_gift_cost(self.selected_species)
+            if species_cost:
+                breakdown.append(
+                    {
+                        "category": "species",
+                        "item": self.selected_species.name,
+                        "cost": species_cost,
                     }
                 )
         return breakdown

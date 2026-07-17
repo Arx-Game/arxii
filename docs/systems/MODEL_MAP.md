@@ -3582,7 +3582,7 @@
 - `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' — Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
 - `set_primary_home(*, persona: 'Persona', room: 'DefaultObject', notes: 'str' = '') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670, #2036).`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
-- `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
+- `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona | None' = None, name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None, bypass_ownership: 'bool' = False) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
 - `set_room_stat_modifier(room_profile: 'RoomProfile', stat_key: 'StatKey', *, source: 'str', value: 'int') -> 'LocationValueModifier | None' — Set the room-level ``(room_profile, stat_key, source)`` cascade row to ``value``.`
 - `tenancies_for(persona: 'Persona', room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return the QuerySet of currently-active tenancies that give this`
 - `tenancies_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, list[LocationTenancy]]' — Bulk-resolve currently-active tenancies for many rooms.`
@@ -5566,8 +5566,10 @@
 - `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' — Register a per-kind resolution handler. Re-registration overwrites.`
 - `register_tiered_resolver(kind: 'str', resolver: 'TieredResolver') -> 'None' — Register a TIERED_PERIOD kind's tier-grading resolver. Re-registration overwrites.`
 - `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' — Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
+- `restore_registries(snapshot: 'tuple[dict[str, KindHandler], dict[str, TieredResolver]]') -> 'None' — Test-only: reset both registries to a snapshot_registries() copy.`
 - `scan_active_projects() -> 'int' — Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
 - `set_contribution_story(project: 'Project', *, contributor_persona: 'Persona', text: 'str') -> 'Contribution | None' — Attach the narrative of how a contributor helped to their most recent contribution (#1574).`
+- `snapshot_registries() -> 'tuple[dict[str, KindHandler], dict[str, TieredResolver]]' — Test-only: copy both registries for restore_registries().`
 
 
 ## world.realms
@@ -6978,6 +6980,48 @@
 - `refresh_legend_views() -> None — Refresh all legend materialized views concurrently.`
 - `spread_deed(deed: 'LegendEntry', spreader_persona: 'Persona', value_added: 'int', *, description: 'str' = '', method: 'str' = '', skill: 'Skill | None' = None, audience_factor: 'Decimal' = Decimal('1.0'), scene: 'Scene | None' = None, societies_reached: 'list[Society] | None' = None) -> 'LegendSpread' — Record a spreading action and add legend value, clamped to capacity.`
 - `spread_event(event: 'LegendEvent', spreader_persona: 'Persona', value_per_deed: 'int', *, description: 'str' = '', method: 'str' = '', skill: 'Skill | None' = None, audience_factor: 'Decimal' = Decimal('1.0'), scene: 'Scene | None' = None, societies_reached: 'list[Society] | None' = None) -> 'list[LegendSpread]' — Spread all active deeds linked to an event at once.`
+
+
+## world.species
+
+### Species
+**Foreign Keys:**
+  - parent -> species.Species [FK] (nullable)
+  - starting_languages -> species.Language [M2M]
+**Pointed to by:**
+  - character_sheets <- character_sheets.CharacterSheet
+  - children <- species.Species
+  - stat_bonuses <- species.SpeciesStatBonus
+  - gift_grants <- species.SpeciesGiftGrant
+  - beginnings <- character_creation.Beginnings
+  - drafts <- character_creation.CharacterDraft
+  - form_traits <- forms.SpeciesFormTrait
+
+### SpeciesStatBonus
+**Foreign Keys:**
+  - species -> species.Species [FK]
+
+### SpeciesGiftGrant
+**Foreign Keys:**
+  - species -> species.Species [FK]
+  - gift -> magic.Gift [FK]
+  - drawback_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - benefit_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - drawback_distinction -> distinctions.Distinction [FK] (nullable)
+
+### Language
+**Pointed to by:**
+  - native_species <- species.Species
+  - beginnings <- character_creation.Beginnings
+
+### Service Functions
+- `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult — Apply a condition to a target, handling stacking and interactions.`
+- `ensure_round_for_acute_condition(character_sheet: 'CharacterSheet') -> 'SceneRound | None' — Ensure an active scene round exists for the character's room and enrol all present`
+- `get_ic_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.TimePhase | None — Return the current time-of-day phase, or None if no clock exists.`
+- `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
+- `provision_species_gifts(sheet: 'CharacterSheet', *, resonance=None) -> 'list[CharacterGift]' — Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.`
+- `reconcile_sunlight_exposure(character, room) -> 'None' — Apply or remove the Sunlight Exposure condition based on outdoor + day-phase + shelter`
+- `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool — Remove a condition from a target.`
 
 
 ## world.stories

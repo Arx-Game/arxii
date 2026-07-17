@@ -12,12 +12,15 @@ from django.test import TestCase, tag
 from world.character_creation.factories import CharacterDraftFactory
 from world.character_creation.services import finalize_magic_data
 from world.character_sheets.factories import CharacterSheetFactory
+from world.distinctions.factories import DistinctionFactory
+from world.distinctions.models import CharacterDistinction
+from world.distinctions.types import DistinctionOrigin
 from world.magic.constants import GiftKind, TargetKind
 from world.magic.factories import GiftFactory, ResonanceFactory, TraditionFactory
 from world.magic.models import Thread
 from world.magic.models.gifts import CharacterGift
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
-from world.species.services import provision_species_gifts
+from world.species.services import provision_species_gifts, total_species_gift_cost
 
 
 class ProvisionSpeciesGiftsTests(TestCase):
@@ -134,6 +137,38 @@ class ProvisionSpeciesGiftsTests(TestCase):
             ConditionInstance.objects.filter(target=sheet.character).exists(),
             "No condition should be applied when grant has no benefit_condition",
         )
+
+    def test_drawback_distinction_applied_with_species_origin(self):
+        """A grant's drawback_distinction is minted at finalize with origin=SPECIES."""
+        distinction = DistinctionFactory(slug="test-feared", name="Feared")
+        grant = SpeciesGiftGrantFactory(
+            species=SpeciesFactory(name="TestInfernal"),
+            gift=GiftFactory(name="Test Hellfire", kind=GiftKind.MINOR),
+            drawback_distinction=distinction,
+        )
+        grant.gift.resonances.add(self.resonance)
+        sheet = CharacterSheetFactory(species=grant.species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        cd = CharacterDistinction.objects.get(character=sheet.character, distinction=distinction)
+        self.assertEqual(cd.origin, DistinctionOrigin.SPECIES)
+
+    def test_drawback_distinction_is_idempotent(self):
+        """Double finalize does not rank up or duplicate the drawback distinction."""
+        distinction = DistinctionFactory(slug="test-feared-2", name="Feared2", max_rank=2)
+        grant = SpeciesGiftGrantFactory(
+            species=SpeciesFactory(name="TestInfernal2"),
+            gift=GiftFactory(name="Test Hellfire2", kind=GiftKind.MINOR),
+            drawback_distinction=distinction,
+        )
+        grant.gift.resonances.add(self.resonance)
+        sheet = CharacterSheetFactory(species=grant.species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        rows = CharacterDistinction.objects.filter(
+            character=sheet.character, distinction=distinction
+        )
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.first().rank, 1)
 
 
 class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
@@ -355,3 +390,38 @@ class ProvisionSpeciesGiftsBenefitTest(TestCase):
             "Species benefit condition's ConditionCheckModifier should reach "
             "get_check_modifier for the resist check type",
         )
+
+
+class TotalSpeciesGiftCostTests(TestCase):
+    """Unit tests for total_species_gift_cost (#2472 encapsulation fix)."""
+
+    def test_costed_grant_returns_cost(self):
+        """A species with a costed grant returns that grant's cg_point_cost."""
+        species = SpeciesFactory(name="TestCostedGiftSpecies")
+        SpeciesGiftGrantFactory(
+            species=species,
+            gift=GiftFactory(name="Test Costed Gift", kind=GiftKind.MINOR),
+            cg_point_cost=7,
+        )
+        self.assertEqual(total_species_gift_cost(species), 7)
+
+    def test_subspecies_charged_for_parents_costed_grant(self):
+        """A subspecies whose parent carries the costed grant returns the parent's cost."""
+        parent = SpeciesFactory(name="TestCostedParentSpecies")
+        SpeciesGiftGrantFactory(
+            species=parent,
+            gift=GiftFactory(name="Test Parent Costed Gift", kind=GiftKind.MINOR),
+            cg_point_cost=5,
+        )
+        subspecies = SpeciesFactory(name="TestCostedSubspecies", parent=parent)
+        self.assertEqual(total_species_gift_cost(subspecies), 5)
+
+    def test_no_costed_grant_returns_zero(self):
+        """A species with no costed grant returns 0."""
+        species = SpeciesFactory(name="TestUncostedSpecies")
+        SpeciesGiftGrantFactory(
+            species=species,
+            gift=GiftFactory(name="Test Free Gift", kind=GiftKind.MINOR),
+            cg_point_cost=0,
+        )
+        self.assertEqual(total_species_gift_cost(species), 0)

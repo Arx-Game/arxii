@@ -72,6 +72,8 @@ class SpeciesGiftGrantFactory(factory_django.DjangoModelFactory):
     species = factory.SubFactory(SpeciesFactory)
     gift = factory.SubFactory("world.magic.factories.GiftFactory", kind=GiftKind.MINOR)
     drawback_condition = None
+    drawback_distinction = None
+    cg_point_cost = 0
 
 
 # ---------------------------------------------------------------------------

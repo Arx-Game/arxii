@@ -10,3 +10,9 @@ and a separate species-ability subsystem, because routing species powers through
 gives them techniques, threads, resonance, and progression for free.
 
 > Status: accepted · Source: design discussion 2026-06-27 · Confidence: verify against code — extends `world/magic` `Gift` (no Major/Minor field today)
+
+> Update (#2472): `SpeciesGiftGrant` now expresses species balance in four
+> independent, freely-combinable shapes — condition drawback, benefit condition,
+> drawback distinction (a social/reputation price), and a CG point cost (summed
+> into the CG-points breakdown) — plus the all-null/0 default, a free weak gift.
+> Per-species assignment of these shapes is lore-repo content, not authored here.

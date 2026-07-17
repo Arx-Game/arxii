@@ -33010,7 +33010,8 @@ components:
           type: integer
           maximum: 2147483647
           minimum: -2147483648
-          description: CG point cost for selecting this option (added to species cost)
+          description: CG point cost for this beginning; summed with species gift
+            grant costs into the character-creation points budget.
         is_accessible:
           type: boolean
           description: Check if the requesting user can access this option.
@@ -33049,7 +33050,8 @@ components:
           type: integer
           maximum: 2147483647
           minimum: -2147483648
-          description: CG point cost for selecting this option (added to species cost)
+          description: CG point cost for this beginning; summed with species gift
+            grant costs into the character-creation points budget.
       required:
       - description
       - name
