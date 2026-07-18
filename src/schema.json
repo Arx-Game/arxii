@@ -14025,6 +14025,99 @@ paths:
               schema:
                 $ref: '#/components/schemas/QualityTier'
           description: ''
+  /api/items/reclamation-claims/:
+    get:
+      operationId: items_reclamation_claims_retrieve
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/reclamation-claims/{id}/advance/:
+    post:
+      operationId: items_reclamation_claims_advance_create
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/reclamation-claims/{id}/report/:
+    post:
+      operationId: items_reclamation_claims_report_create
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/reclamation-claims/{id}/take-back/:
+    post:
+      operationId: items_reclamation_claims_take_back_create
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/reclamation-claims/file/:
+    post:
+      operationId: items_reclamation_claims_file_create
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/items/service-offers/:
     get:
       operationId: items_service_offers_list
@@ -15236,7 +15329,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Consequence Pool.
         required: true
       tags:
       - magic
@@ -15328,8 +15422,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic

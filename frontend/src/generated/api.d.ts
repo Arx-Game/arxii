@@ -8765,6 +8765,116 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/reclamation-claims/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    get: operations['items_reclamation_claims_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/reclamation-claims/{id}/advance/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    post: operations['items_reclamation_claims_advance_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/reclamation-claims/{id}/report/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    post: operations['items_reclamation_claims_report_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/reclamation-claims/{id}/take-back/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    post: operations['items_reclamation_claims_take_back_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/reclamation-claims/file/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    post: operations['items_reclamation_claims_file_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/service-offers/': {
     parameters: {
       query?: never;
@@ -48038,6 +48148,102 @@ export interface operations {
       };
     };
   };
+  items_reclamation_claims_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_advance_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_report_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_take_back_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_file_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   items_service_offers_list: {
     parameters: {
       query?: {
@@ -48939,7 +49145,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Consequence Pool. */
+        id: number;
       };
       cookie?: never;
     };
@@ -49138,8 +49345,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
