@@ -1,12 +1,17 @@
 """Content-load health helpers (#2501): group, allowlist, and report skips.
 
 ``load_world_content`` (``core_management.content_fixtures``) records each
-skipped row as a string in ``WorldLoadResult.skipped``, formatted
-``"{source_path}: {Model} could not be loaded: ..."``. Those skips scroll past
-silently today. This module is the pure-python layer a later task wires into
-the CLI: group skips by source file, load a ``KNOWN_DRIFT.txt`` allowlist of
-substring patterns for expected/pre-existing drift, partition skips into known
-vs. unexpected, and render a human-readable health report.
+skipped row as a string in ``WorldLoadResult.skipped``. Most read
+``"{source_path}: {Model} could not be loaded: ..."``, but not all: a stale
+model reads ``"{source_path}: stale model {model!r} (renamed or removed) —
+skipped."``, and a model missing ``NaturalKeyMixin`` reads
+``"{location}: model {Model} lacks NaturalKeyMixin — ..."`` where ``location``
+falls back to ``model._meta.label`` (not a source path) when the failure
+isn't tied to one file. Those skips scroll past silently today. This module
+is the pure-python layer a later task wires into the CLI: group skips by
+source file, load a ``KNOWN_DRIFT.txt`` allowlist of substring patterns for
+expected/pre-existing drift, partition skips into known vs. unexpected, and
+render a human-readable health report.
 
 Import-safe without Django configured (same convention as
 ``content_fixtures.py``): no Django imports at module scope, so tooling and
