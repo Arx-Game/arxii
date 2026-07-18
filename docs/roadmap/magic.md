@@ -324,15 +324,17 @@ lore-repo content, not synthetic in-repo seed data — closing the gap left when
 
 Before #2504, a technique-granted `CapabilityType` only fed the **availability** oracle
 (`get_capability_sources_for_character`, `world.mechanics.services` — "what could grant this
-capability"); the **agency** oracle (`get_effective_capability_value`/`get_all_capability_values`,
+capability"); the **agency** oracle (`get_effective_capability_value`,
 `world.conditions.services` — "can this character do X right now," consumed by requirement/gate
 checks) did not know techniques existed, so a character whose only path to a capability was a
 known technique failed requirement checks a condition or innate baseline would have passed.
 
 - `world.conditions.services._technique_capability_values` folds the best (max) `prerequisite__isnull=True`
   `TechniqueCapabilityGrant` across a character's known techniques
-  (`technique__character_grants__character=character_sheet`) into both `get_effective_capability_value`
-  and `get_all_capability_values`, reusing `TechniqueCapabilityGrant.calculate_value()`.
+  (`technique__character_grants__character=character_sheet`) into `get_effective_capability_value`,
+  reusing `TechniqueCapabilityGrant.calculate_value()`. (`get_all_capability_values` deliberately keeps
+  source-enumeration semantics with NO technique folding — the availability oracle's `_get_condition_sources`
+  reads it, and folding there duplicated technique grants as phantom condition sources; caught by CI on this PR.)
 - Zero per-consumer changes needed: `technique_performable` (`world/magic/services/capability_requirements.py`),
   mission `challenge_options_for_character` (`world/missions/services/challenge_options.py`), positioning +
   battle movement gates, predicates, and vitals awareness all now honor technique grants automatically —

@@ -28,7 +28,9 @@ _Avoid_: damage tick, bleed, poison (for the general mechanism)
 The condition effect that adds to or subtracts from a target's capability value (`ConditionCapabilityEffect`: additive integer, floored at zero). It governs what a character CAN do — movement, flight, casting — distinct from check or resistance modifiers.
 _Avoid_: ability modifier, stat effect
 
-**Agency oracle** (`get_effective_capability_value` / `get_all_capability_values`):
+**Agency oracle** (`get_effective_capability_value`; note `get_all_capability_values` is NOT part of it —
+that bulk dict feeds the availability oracle's condition-source enumeration and deliberately excludes
+technique grants):
 The "can this character do X right now" answer — innate baseline + `CharacterModifier` contributions
 (distinctions/species/equipment) + condition contributions + the best (max) known-technique grant, floored
 at zero. Consumed by requirement/gate checks (`technique_performable`, mission `challenge_options_for_character`,

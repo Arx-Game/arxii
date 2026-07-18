@@ -1,7 +1,7 @@
 # Technique capability folding is max-not-sum, and prerequisite-free grants only
 
-When the one-oracle merge (#2504) folded `TechniqueCapabilityGrant` into `get_effective_capability_value`/
-`get_all_capability_values` (`world.conditions.services`) so the agency/requirement oracle honors known
+When the one-oracle merge (#2504) folded `TechniqueCapabilityGrant` into `get_effective_capability_value`
+(`world.conditions.services`) so the agency/requirement oracle honors known
 techniques the same way it honors an innate baseline or a condition, two shapes needed a deliberate call.
 First, when a character knows several techniques that grant the same `CapabilityType`, the fold takes the
 **best (max)** grant, not the sum — summing would let stacking unrelated techniques inflate one capability
