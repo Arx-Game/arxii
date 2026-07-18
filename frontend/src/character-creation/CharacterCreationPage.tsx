@@ -44,8 +44,10 @@ import {
 } from './queries';
 import { Stage } from './types';
 import { getRealmTheme } from './utils';
+import { usePageBackgrounds, pageBackgroundStyle } from '@/hooks/usePageBackgrounds';
 
 export function CharacterCreationPage() {
+  const { data: backgrounds } = usePageBackgrounds();
   const account = useAccount();
   const { data: canCreate, isLoading: canCreateLoading } = useCanCreateCharacter();
   const { data: draft, isLoading: draftLoading } = useDraft();
@@ -217,7 +219,10 @@ export function CharacterCreationPage() {
   };
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-8">
+    <div
+      className="container mx-auto max-w-5xl px-4 py-8"
+      style={pageBackgroundStyle(backgrounds, 'cg_stage', 'Character Creation')}
+    >
       <header className="mb-8">
         <h1 className="theme-heading text-3xl font-bold">Character Creation</h1>
       </header>
