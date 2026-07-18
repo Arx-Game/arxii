@@ -528,8 +528,9 @@ over `RoomProfile` / `ObjectDisplayData`.
 the #1287 scene-privacy re-check always runs, and `persona` may be `None` only in
 bypass mode. It:
 
-- re-checks `is_owner(persona, room)` as a hard boundary (raises `RoomEditError`,
-  which carries a player-facing `user_message` — never surface `str(exc)`);
+- re-checks `is_owner(persona, room) or is_tenant(persona, room)` as a hard
+  boundary (raises `RoomEditError`, which carries a player-facing
+  `user_message` — never surface `str(exc)`);
 - refuses to flip `is_public`→True while a non-public scene is live in the room
   (`_has_active_non_public_scene`, the inverse of the #1287 scene-privacy invariant);
 - writes name → `ObjectDisplayData.longname`, description → `permanent_description`,
