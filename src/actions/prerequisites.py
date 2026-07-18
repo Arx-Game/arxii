@@ -207,6 +207,11 @@ class IsRoomTenantPrerequisite(Prerequisite):
     via ``is_owner``/``is_tenant``) is exactly "does this persona have standing
     at this room," which every current caller (``SetPrimaryHomeAction``,
     ``TagRoomResonanceAction``, ``UntagRoomResonanceAction``) wants.
+
+    Anchors on the ``room_id`` kwarg when supplied (web canvas), else the
+    actor's own location — the same resolution ``IsRoomOwnerPrerequisite`` uses,
+    needed so ``RoomEditAction`` (#2452) can use this prerequisite for its own
+    room_id-aware targeting.
     """
 
     def is_met(
@@ -220,9 +225,21 @@ class IsRoomTenantPrerequisite(Prerequisite):
         from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        room = actor.location
-        if room is None:
-            return False, "You're not in a room."
+        kwargs = (context or {}).get("kwargs", {})
+        room_id = kwargs.get("room_id")
+        if room_id:
+            from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+            profile = (
+                RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb").first()
+            )
+            if profile is None:
+                return False, "No such room."
+            room = profile.objectdb
+        else:
+            room = actor.location
+            if room is None:
+                return False, "You're not in a room."
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
