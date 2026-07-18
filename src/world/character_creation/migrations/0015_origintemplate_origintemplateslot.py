@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("character_creation", "0012_draftapplication_invited_via"),
+        ("character_creation", "0014_beginnings_prelude_mission"),
     ]
 
     operations = [

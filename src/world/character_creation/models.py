@@ -534,9 +534,7 @@ class OriginTemplate(NaturalKeyMixin, SharedMemoryModel):
         related_name="origin_templates",
         help_text="The beginning this origin-story frame belongs to.",
     )
-    name = models.CharField(
-        max_length=100, help_text="Template name (part of natural key)."
-    )
+    name = models.CharField(max_length=100, help_text="Template name (part of natural key).")
     frame_narrative = models.TextField(
         help_text="The fixed frame prose every character with this beginning shares."
     )
@@ -580,9 +578,7 @@ class OriginTemplateSlot(NaturalKeyMixin, SharedMemoryModel):
         related_name="slots",
         help_text="The template this slot belongs to.",
     )
-    name = models.CharField(
-        max_length=100, help_text="Slot name (part of natural key)."
-    )
+    name = models.CharField(max_length=100, help_text="Slot name (part of natural key).")
     prompt = models.TextField(help_text="The question shown to the player.")
     example = models.TextField(
         blank=True, help_text="Short illustrative answer shown in the guided step."
@@ -607,6 +603,37 @@ class OriginTemplateSlot(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class CharacterOriginSlot(SharedMemoryModel):
+    """A character's authored answer to an origin-story slot (#2478).
+
+    Instance data — NOT a content model, never exported. Mirrors
+    ``CharacterGlimpseTag`` (``glimpse.py:65-88``).
+    """
+
+    sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="origin_slots",
+        help_text="The character sheet this slot answer belongs to.",
+    )
+    slot = models.ForeignKey(
+        OriginTemplateSlot,
+        on_delete=models.PROTECT,
+        related_name="character_rows",
+        help_text="The catalog slot this answer fills.",
+    )
+    value = models.TextField(help_text="The player's authored answer.")
+
+    class Meta:
+        verbose_name = "Character Origin Slot"
+        verbose_name_plural = "Character Origin Slots"
+        unique_together = [["sheet", "slot"]]
+        ordering = ["slot__sort_order"]
+
+    def __str__(self) -> str:
+        return f"{self.slot} on {self.sheet}"
 
 
 class CharacterDraft(SharedMemoryModel):
