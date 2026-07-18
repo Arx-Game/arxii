@@ -3541,12 +3541,20 @@ holder is never notified a claim exists.
     16 names, four per tier.
   - **Crafting sub-models** (`world.items.crafting`, registered under the `items` app):
     `CraftingRecipe` (one per `CraftingRecipeKind`; carries check config + AP/anima cost +
-    default consumption policy), `CraftingMaterialRequirement` (ingredient rows —
+    default consumption policy), `CraftingMaterialRequirement` (ingredient rows — each
+    targets **either** a specific `item_template` **or** a `MaterialCategory` (xor,
+    DB-enforced); a category requirement is satisfied by any member template. Build 0a.
     `world.items.seeds_facet_reagents.ensure_facet_attach_reagent_requirement(recipe)`
     seeds a generic reagent requirement onto a FACET_ATTACH recipe, content-only, #707),
     `CraftingSkillCap` (skill-rank → quality ceiling ladder), `CraftingRecipeConsequence`
     (weighted consequence pool entry with per-row `cost_consumption` override). Replaces
     the old `FacetCraftingConfig` singleton.
+  - **`MaterialCategory`** (`world.items.models`, lookup) — a crafting-equivalence class of
+    materials (e.g. "Precious Gemstones"); `ItemTemplate.material_category` FK points into it
+    (specific→general, ADR-0010). The *eligibility* axis only; value-denominated requirements
+    ("N value of a tier") are Build 0b, gated on the gemstone-value ladder. Crafting
+    *execution* honors category requirements; the read-only quote preview raises
+    `CategoryRequirementsNotQuotable` until the quote surface lands.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
@@ -3629,9 +3637,12 @@ holder is never notified a claim exists.
       -> StyleCraftResult`
     - `compute_quality_score(check_result, *, step, min_success_level) -> int`
   - **Shared material helper** (`world.items.services.materials`):
-    - `gather_consumable_pks(*, available, requirements) -> list[int]` — validates inventory,
-      returns PKs to delete; also used by the ritual path
-    - `consume_pks(pks) -> None`
+    - `gather_consumable_pks(*, available, requirements) -> list[tuple[ItemInstance, int]]` —
+      validates inventory, returns (instance, amount) allocations to consume; also used by the
+      ritual path. Matches a requirement by its `material_category_id` (any member template)
+      when set, else by `item_template_id` (Build 0a; ritual requirements have no category
+      and their caller pre-filters to `item_template_id`, so that path is unchanged)
+    - `consume_materials(allocations) -> None`
     - `meets_quality_tier(inst, requirement) -> bool`
   - **Narrative acquisition** (`world.items.services.narrative_grants`, #707 — no shop/
     merchant system exists anywhere in this codebase):

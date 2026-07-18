@@ -53,6 +53,15 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   quality ceiling ladder), and `CraftingRecipeConsequence` (weighted consequence pool with
   per-row `CostConsumption` override).
 
+- **Material categories (Build 0a) — DONE.** A `MaterialCategory` equivalence class groups
+  `ItemTemplate`s (e.g. "Precious Gemstones"), and `CraftingMaterialRequirement` may target a
+  category (any member template satisfies it) instead of a single template — xor-enforced in
+  the DB, matched through the shared `gather_consumable_pks` seam. This is the *eligibility*
+  axis. **Value-denominated requirements** ("a bounty = N value of a tier") and per-stone
+  size/value individuation are **Build 0b**, gated on the gemstone-value ladder brainstorm.
+  Crafting execution honors category requirements end-to-end; the quote preview is guarded
+  (`CategoryRequirementsNotQuotable`) until the quote surface lands.
+
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +
   registering a thin handler — no schema change required.
@@ -203,7 +212,11 @@ stowable, and — deliberately, with consequences — stealable). Fully playable
 out-of-scope list stands as written on the issue.
 
 ## What's Needed for MVP
-- Material/resource models — types, sources, quantities, storage
+- Material/resource models — types, sources, quantities, storage. `partial` — the
+  **eligibility layer** shipped (Build 0a: `MaterialCategory` + category-targeted crafting
+  requirements). Still needed: value-denominated requirements + per-stone size/value
+  individuation (Build 0b, gated on the gemstone-value ladder), mine/domain production, and
+  the bulk-commodity market/scarcity layer.
 - ~~Item creation pipeline — crafted items with stats, facets, and fashion properties~~ — **DONE (#2195)**
 - Fashion system — how worn item facets map to resonances, admiration mechanics (outfit
   trickle is live; admiration mechanics remain future)

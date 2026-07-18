@@ -331,6 +331,7 @@
 **Pointed to by:**
   - applications <- roster.RosterApplication
   - reviewed_applications <- roster.RosterApplication
+  - sent_invites <- roster.GameInvite
   - tenures <- roster.RosterTenure
   - approved_tenures <- roster.RosterTenure
   - blocks_made <- scenes.Block
@@ -1281,6 +1282,7 @@
   - draft -> character_creation.CharacterDraft [OneToOne] (nullable)
   - player_account -> accounts.AccountDB [FK] (nullable)
   - reviewer -> accounts.AccountDB [FK] (nullable)
+  - invited_via -> roster.GameInvite [FK] (nullable)
 **Pointed to by:**
   - comments <- character_creation.DraftApplicationComment
 
@@ -1447,6 +1449,8 @@
   - fashion_presentations <- items.FashionPresentation
   - mantle_clearances <- items.MantleLevelClearance
   - recipe_knowledge <- items.CharacterRecipeKnowledge
+  - reclamation_claims <- items.ReclamationClaim
+  - original_reclamation_claims <- items.ReclamationClaim
   - fatigue <- fatigue.FatiguePool
   - led_courts <- covenants.Covenant
   - covenant_role_assignments <- covenants.CharacterCovenantRole
@@ -3226,6 +3230,10 @@
   - itemstyle_attachments <- items.ItemStyle
   - crafted_item_recipes <- items.CraftedItemRecipe
 
+### MaterialCategory
+**Pointed to by:**
+  - templates <- items.ItemTemplate
+
 ### InteractionType
 **Pointed to by:**
   - templates <- items.ItemTemplate
@@ -3233,6 +3241,7 @@
 
 ### ItemTemplate
 **Foreign Keys:**
+  - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
   - minimum_quality_tier -> items.QualityTier [FK] (nullable)
@@ -3293,6 +3302,7 @@
   - crafted_recipes <- items.CraftedItemRecipe
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
+  - reclamation_claims <- items.ReclamationClaim
   - bequests <- estates.Bequest
   - estate_claims <- estates.EstateClaim
   - project_contributions <- projects.Contribution
@@ -3330,6 +3340,8 @@
   - to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - from_persona_display -> scenes.Persona [FK] (nullable)
   - to_persona_display -> scenes.Persona [FK] (nullable)
+**Pointed to by:**
+  - trace_steps <- items.ClaimTraceStep
 
 ### CurrencyBalance
 **Foreign Keys:**
@@ -3450,7 +3462,8 @@
 ### CraftingMaterialRequirement
 **Foreign Keys:**
   - recipe -> items.CraftingRecipe [FK]
-  - item_template -> items.ItemTemplate [FK]
+  - item_template -> items.ItemTemplate [FK] (nullable)
+  - material_category -> items.MaterialCategory [FK] (nullable)
   - min_quality_tier -> items.QualityTier [FK] (nullable)
 
 ### CraftingSkillCap
@@ -3527,6 +3540,22 @@
   - buyer_persona -> scenes.Persona [FK]
   - seller_persona -> scenes.Persona [FK] (nullable)
   - item_instance -> items.ItemInstance [FK] (nullable)
+
+### ReclamationClaim
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [FK]
+  - claimant_sheet -> character_sheets.CharacterSheet [FK]
+  - original_claimant_sheet -> character_sheets.CharacterSheet [FK]
+  - estate_claim -> estates.EstateClaim [FK] (nullable)
+  - acquired_from -> items.ReclamationClaim [FK] (nullable)
+**Pointed to by:**
+  - assignments <- items.ReclamationClaim
+  - trace_steps <- items.ClaimTraceStep
+
+### ClaimTraceStep
+**Foreign Keys:**
+  - claim -> items.ReclamationClaim [FK]
+  - ownership_event -> items.OwnershipEvent [FK]
 
 ### Service Functions
 - `attach_facet_to_item(*, crafter: 'AccountDB', item_instance: 'ItemInstance', facet: 'Facet', attachment_quality_tier: 'QualityTier') -> 'ItemFacet' — Attach ``facet`` to ``item_instance``.`
@@ -5884,6 +5913,14 @@
   - allowed_genders -> character_sheets.Gender [M2M]
 **Pointed to by:**
   - drafts <- character_creation.CharacterDraft
+
+### GameInvite
+**Foreign Keys:**
+  - inviter -> evennia_extensions.PlayerData [FK]
+  - invited_account -> accounts.AccountDB [FK] (nullable)
+  - revoked_by -> accounts.AccountDB [FK] (nullable)
+**Pointed to by:**
+  - applications <- character_creation.DraftApplication
 
 ### PlayerMail
 **Foreign Keys:**
