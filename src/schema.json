@@ -14321,6 +14321,30 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/justice/cases/evidence/:
+    post:
+      operationId: justice_cases_evidence_create
+      description: POST /api/justice/cases/evidence/ — help the accused; never hurt
+        (#2378).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/justice/cases/trial/:
+    post:
+      operationId: justice_cases_trial_create
+      description: POST /api/justice/cases/trial/ — the captive calls their moment
+        (#2378).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/justice/heat/:
     get:
       operationId: justice_heat_list
@@ -14375,6 +14399,18 @@ paths:
     post:
       operationId: justice_lie_low_create
       description: POST /api/justice/lie-low/ — declare or end going to ground (#1826).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/justice/my-case/:
+    get:
+      operationId: justice_my_case_retrieve
+      description: GET /api/justice/my-case/?viewer= — the captive's own case picture
+        (#2378).
       tags:
       - justice
       security:
@@ -15318,7 +15354,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Consequence Pool.
         required: true
       tags:
       - magic
@@ -15377,8 +15414,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic

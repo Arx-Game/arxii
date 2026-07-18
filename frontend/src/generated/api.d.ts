@@ -9007,6 +9007,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/justice/cases/evidence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/cases/evidence/ — help the accused; never hurt (#2378). */
+    post: operations['justice_cases_evidence_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/cases/trial/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/cases/trial/ — the captive calls their moment (#2378). */
+    post: operations['justice_cases_trial_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/justice/heat/': {
     parameters: {
       query?: never;
@@ -9052,6 +9086,23 @@ export interface paths {
     put?: never;
     /** @description POST /api/justice/lie-low/ — declare or end going to ground (#1826). */
     post: operations['justice_lie_low_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/my-case/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378). */
+    get: operations['justice_my_case_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -48347,6 +48398,42 @@ export interface operations {
       };
     };
   };
+  justice_cases_evidence_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_cases_trial_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   justice_heat_list: {
     parameters: {
       query?: {
@@ -48393,6 +48480,24 @@ export interface operations {
     };
   };
   justice_lie_low_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_my_case_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -49099,7 +49204,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Consequence Pool. */
+        id: number;
       };
       cookie?: never;
     };
@@ -49211,8 +49317,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };

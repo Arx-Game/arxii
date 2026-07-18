@@ -92,9 +92,7 @@ _TRIGGER_FLOOR = {
 
 
 def heat_value_for(persona: Persona, area: Area) -> int:
-    return sum(
-        row.value for row in PersonaHeat.objects.filter(persona=persona, area=area)
-    )
+    return sum(row.value for row in PersonaHeat.objects.filter(persona=persona, area=area))
 
 
 def maybe_guard_encounter(
@@ -113,9 +111,7 @@ def maybe_guard_encounter(
         return None
     if heat_value_for(persona, area) < _TRIGGER_FLOOR.get(trigger, MAX_VALUE_FLOOR):
         return None
-    if GuardEncounter.objects.filter(
-        persona=persona, area=area, resolved_at__isnull=True
-    ).exists():
+    if GuardEncounter.objects.filter(persona=persona, area=area, resolved_at__isnull=True).exists():
         return None
     if JusticeCase.objects.filter(
         persona=persona, area=area, status=CaseStatus.AWAITING_TRIAL
@@ -201,9 +197,11 @@ def _take_into_custody(encounter: GuardEncounter, society):
     if sheet is None or sheet.character is None:
         return None
     captor = Organization.objects.filter(society=society).first()
+    from world.captivity.services import AlreadyCapturedError  # noqa: PLC0415
+
     try:
         return capture_character(captive=sheet, captor_organization=captor)
-    except Exception:  # noqa: BLE001 — capture is best-effort (already held, no body)
+    except AlreadyCapturedError:
         return None
 
 
@@ -217,10 +215,7 @@ def release_threshold(case: JusticeCase) -> int:
 
 
 def exculpatory_total(case: JusticeCase) -> int:
-    return sum(
-        row.weight
-        for row in ExculpatoryEvidence.objects.filter(case=case, exposed=False)
-    )
+    return sum(row.weight for row in ExculpatoryEvidence.objects.filter(case=case, exposed=False))
 
 
 def submit_exculpatory(
@@ -283,12 +278,14 @@ def _release(case: JusticeCase, status: str) -> None:
 def _end_captivity(case: JusticeCase) -> None:
     if case.captivity is None:
         return
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
     from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
     from world.captivity.services import resolve_captivity  # noqa: PLC0415
 
     try:
         resolve_captivity(case.captivity, status=CaptivityStatus.RELEASED)
-    except Exception:  # noqa: BLE001 — release is best-effort cleanup
+    except (ObjectDoesNotExist, ValueError):
         return
 
 
@@ -315,9 +312,7 @@ def initiate_trial(
         raise JusticePipelineError(msg, user_message="That case is closed.")
     if initiator.pk != case.persona_id:
         msg = f"persona {initiator.pk} is not the accused on case {case.pk}"
-        raise JusticePipelineError(
-            msg, user_message="Only the accused may call for their trial."
-        )
+        raise JusticePipelineError(msg, user_message="Only the accused may call for their trial.")
 
     participants: list[Persona] = [case.persona, *(helpers or [])]
     levels = check_levels if check_levels is not None else _argument_levels(participants)
@@ -412,7 +407,12 @@ def _execution_reachable(case: JusticeCase) -> bool:
     account = _account_for(case.persona)
     if account is None:
         return True  # an NPC persona — execution is a legal terminal sentence
-    player_data = getattr(account, "player_data", None)
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        player_data = account.player_data
+    except (AttributeError, ObjectDoesNotExist):
+        player_data = None
     if player_data is None or not player_data.lethal_consequences_opt_in:
         return False
     return case.failed_outs >= EXECUTION_MIN_FAILED_OUTS

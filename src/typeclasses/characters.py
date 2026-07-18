@@ -473,7 +473,6 @@ class Character(ObjectParent, DefaultCharacter):
                 actor=self,
             )
 
-
     def _maybe_justice_room_arrival(self):
         """Max-tier guard pressure on public-room arrival (#2378)."""
         from world.justice.constants import GuardTrigger
@@ -490,7 +489,7 @@ class Character(ObjectParent, DefaultCharacter):
             return
         try:
             sheet = self.sheet_data
-        except Exception:  # noqa: BLE001 — objects without sheets take no pressure
+        except (RosterEntry.DoesNotExist, ObjectDoesNotExist, AttributeError):
             return
         persona = active_persona_for_sheet(sheet) if sheet else None
         if persona is None:

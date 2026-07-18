@@ -1192,6 +1192,19 @@ or org leadership of the enforcing society; `PardonGrant` audit + public feed
 item); **wanted visibility** (`wanted_rows_for_area` — at/above
 `WANTED_VALUE_FLOOR` the warrant flips public: tier + presented name + crime
 kinds, never numbers; `GET /api/justice/wanted/`).
+Pipeline (#2378, `justice/pipeline.py`): guard pressure is **event-driven rolls
+against active public play** — the trigger ladder (`maybe_guard_encounter`) fires
+on NPC transactions at wanted, any public interaction at hunted, room arrival at
+max (hooks: `dispatch_offer_effect`, the interaction seam, `Character.at_post_move`;
+never offline, never private rooms). Evasion check → escape / seen (+heat) /
+captured (`resolve_guard_encounter`); capture brigs via captivity and opens a
+`JusticeCase`. **The trial waits on the captive** (`initiate_trial` — argument
+checks by accused + helpers, nobody prosecutes); helpers can only help
+(`submit_exculpatory` — threshold releases outright; manufactured evidence
+exposed backfires on the SUBMITTER). Sentences scale with prosecution weight
+(fine/brig/humiliation/exile); **the lethal wall holds** (ADR-0023):
+`PlayerData.lethal_consequences_opt_in` + an exhausted case (`failed_outs`)
+gate PC execution — NPCs may hang.
 
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`

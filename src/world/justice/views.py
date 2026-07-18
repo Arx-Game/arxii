@@ -196,3 +196,107 @@ class WantedListView(APIView):
         if area is None:
             return Response({"detail": "Unknown area."}, status=400)
         return Response({"wanted": wanted_rows_for_area(area)})
+
+
+class MyCaseView(_ViewerActionView):
+    """GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378)."""
+
+    def get(self, request):
+        from world.justice.models import JusticeCase  # noqa: PLC0415
+        from world.justice.pipeline import (  # noqa: PLC0415
+            exculpatory_total,
+            release_threshold,
+        )
+
+        persona = self._viewer_persona(request)
+        if persona is None:
+            return Response({"detail": "Unknown viewer."}, status=400)
+        case = (
+            JusticeCase.objects.filter(persona=persona, status="awaiting_trial")
+            .select_related("area", "society")
+            .first()
+        )
+        if case is None:
+            return Response({"case": None})
+        return Response(
+            {
+                "case": {
+                    "id": case.pk,
+                    "area_name": case.area.name,
+                    "society_name": case.society.name,
+                    "opened_at": case.opened_at,
+                    "evidence_total": exculpatory_total(case),
+                    "release_threshold": release_threshold(case),
+                    "failed_outs": case.failed_outs,
+                }
+            }
+        )
+
+
+class SubmitEvidenceView(_ViewerActionView):
+    """POST /api/justice/cases/evidence/ — help the accused; never hurt (#2378)."""
+
+    def post(self, request):
+        from world.justice.models import JusticeCase  # noqa: PLC0415
+        from world.justice.pipeline import (  # noqa: PLC0415
+            JusticePipelineError,
+            exculpatory_total,
+            submit_exculpatory,
+        )
+
+        persona = self._viewer_persona(request)
+        raw_case = request.data.get("case")
+        case = (
+            JusticeCase.objects.filter(pk=int(raw_case)).first()
+            if raw_case is not None and str(raw_case).isdigit()
+            else None
+        )
+        if persona is None or case is None:
+            return Response({"detail": "Unknown viewer or case."}, status=400)
+        manufactured = bool(request.data.get("manufactured"))
+        try:
+            submit_exculpatory(case, persona, manufactured=manufactured)
+        except JusticePipelineError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        case.refresh_from_db()
+        return Response(
+            {"status": case.status, "evidence_total": exculpatory_total(case)},
+            status=201,
+        )
+
+
+class InitiateTrialView(_ViewerActionView):
+    """POST /api/justice/cases/trial/ — the captive calls their moment (#2378)."""
+
+    def post(self, request):
+        from world.justice.models import JusticeCase  # noqa: PLC0415
+        from world.justice.pipeline import (  # noqa: PLC0415
+            JusticePipelineError,
+            initiate_trial,
+        )
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        persona = self._viewer_persona(request)
+        raw_case = request.data.get("case")
+        case = (
+            JusticeCase.objects.filter(pk=int(raw_case)).first()
+            if raw_case is not None and str(raw_case).isdigit()
+            else None
+        )
+        if persona is None or case is None:
+            return Response({"detail": "Unknown viewer or case."}, status=400)
+        helper_ids = request.data.get("helpers") or []
+        helpers = list(
+            Persona.objects.filter(pk__in=[int(h) for h in helper_ids if str(h).isdigit()])
+        )
+        try:
+            case = initiate_trial(case, persona, helpers)
+        except JusticePipelineError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        return Response(
+            {
+                "verdict": case.verdict,
+                "sentence_kind": case.sentence_kind,
+                "sentence_amount": case.sentence_amount,
+            }
+        )

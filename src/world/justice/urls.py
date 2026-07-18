@@ -5,9 +5,12 @@ from rest_framework.routers import DefaultRouter
 
 from world.justice.views import (
     BribeView,
+    InitiateTrialView,
     LieLowView,
+    MyCaseView,
     PardonView,
     PersonaHeatViewSet,
+    SubmitEvidenceView,
     WantedListView,
 )
 
@@ -19,5 +22,8 @@ urlpatterns = [
     path("bribe/", BribeView.as_view(), name="justice-bribe"),
     path("pardon/", PardonView.as_view(), name="justice-pardon"),
     path("wanted/", WantedListView.as_view(), name="justice-wanted"),
+    path("my-case/", MyCaseView.as_view(), name="justice-my-case"),
+    path("cases/evidence/", SubmitEvidenceView.as_view(), name="justice-case-evidence"),
+    path("cases/trial/", InitiateTrialView.as_view(), name="justice-case-trial"),
     *router.urls,
 ]

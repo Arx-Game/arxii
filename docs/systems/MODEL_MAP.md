@@ -576,6 +576,8 @@
   - heat_rows <- justice.PersonaHeat
   - lie_low_states <- justice.LieLowState
   - pardons <- justice.PardonGrant
+  - guard_encounters <- justice.GuardEncounter
+  - justice_cases <- justice.JusticeCase
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
@@ -1200,6 +1202,7 @@
   - rescue_template -> missions.MissionTemplate [FK] (nullable)
 **Pointed to by:**
   - rescue_clues <- clues.Clue
+  - justice_cases <- justice.JusticeCase
 
 ### CaptivityConfig
 **Foreign Keys:**
@@ -6066,6 +6069,9 @@
   - lie_low_states <- justice.LieLowState
   - pardons_granted <- justice.PardonGrant
   - pardons_received <- justice.PardonGrant
+  - guard_encounters <- justice.GuardEncounter
+  - justice_cases <- justice.JusticeCase
+  - exculpatory_submissions <- justice.ExculpatoryEvidence
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - trendsetter_crownings <- items.Trendsetter
@@ -6580,6 +6586,7 @@
   - dominant_areas <- areas.Area
   - heat_rows <- justice.PersonaHeat
   - pardons <- justice.PardonGrant
+  - justice_cases <- justice.JusticeCase
   - fashion_presentations <- items.FashionPresentation
   - facet_momentum <- items.FacetVogueMomentum
   - trendsetters <- items.Trendsetter
