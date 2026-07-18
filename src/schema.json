@@ -4224,8 +4224,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Starting Area.
+          type: string
         required: true
       tags:
       - character-creation
@@ -37665,6 +37664,7 @@ components:
       - affinity
       - pull
       - relationship
+      - capability
       type: string
       description: |-
         * `condition` - Condition
@@ -37679,6 +37679,7 @@ components:
         * `affinity` - Affinity
         * `pull` - Combat Pull
         * `relationship` - Relationship
+        * `capability` - Capability
     ConsequencePoolCatalog:
       type: object
       description: Read-only serializer for the curated technique-cast consequence-pool

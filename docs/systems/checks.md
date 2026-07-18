@@ -85,7 +85,6 @@ This is the same curated-never-invented discipline as the rest of the modifier
 seam — nothing here is enforced by a DB constraint; it is a review-time authoring
 rule. This is independent of, and does not change, the existing `CheckType`
 `(name, category)` natural-key uniqueness rule.
->>>>>>> 5f9d5eb9a (docs: authored capability→check links + ADR-0145 (#2505))
 
 ---
 
