@@ -81,6 +81,21 @@ class MediaPermissionsTestCase(APITestCase):
         response = self.client.patch(url, data, format="json")
         assert response.status_code == status.HTTP_200_OK
 
+    @suppress_permission_errors
+    def test_media_modify_unowned_staff_authored_forbidden(self):
+        """Non-staff, non-owner user gets 403 (not a 500) against a staff-authored
+        Media row (player_data=None) -- regression test for the AttributeError that
+        obj.player_data.account raised unconditionally before the None check."""
+        staff_media = MediaFactory(player_data=None)
+        url = reverse("roster:media-detail", kwargs={"pk": staff_media.pk})
+
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.patch(url, {"title": "Hijacked"}, format="json")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+        response = self.client.delete(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
     def test_media_modify_staff_permission(self):
         """Staff can always modify media."""
         url = reverse("roster:media-detail", kwargs={"pk": self.owner_media.pk})

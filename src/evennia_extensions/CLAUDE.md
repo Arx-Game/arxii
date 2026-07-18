@@ -6,7 +6,7 @@ Extends Evennia's functionality with additional models and data handlers while p
 
 ### `models.py`
 - **`PlayerData`**: Extends AccountDB with player preferences and session tracking
-- **`PlayerMedia`**: Media storage and gallery management
+- **`Media`**: Media storage and gallery management
 - **`ObjectDisplayData`**: Custom display settings for objects
 - **`PlayerAllowList`**: Social allow lists for player communication
 - **`PlayerBlockList`**: Social block lists for player communication
