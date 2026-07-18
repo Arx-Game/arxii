@@ -4208,6 +4208,7 @@
   - affinity -> magic.Affinity [FK]
   - opposite -> magic.Resonance [OneToOne] (nullable)
   - properties -> mechanics.Property [M2M]
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
 **Pointed to by:**
   - opposite_of <- magic.Resonance
   - gifts <- magic.Gift
@@ -7811,6 +7812,7 @@
 **Foreign Keys:**
   - parent -> species.Species [FK] (nullable)
   - starting_languages -> species.Language [M2M]
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
 **Pointed to by:**
   - character_sheets <- character_sheets.CharacterSheet
   - children <- species.Species
