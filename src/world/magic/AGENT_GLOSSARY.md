@@ -6,6 +6,16 @@ One of the three magical sources — Celestial, Primal, or Abyssal — modeled a
 **Aura**:
 A character's soul-state expressed as percentages across the three Affinities (celestial / primal / abyssal), constrained to sum to 100. Its presence is the derived gate for whether a character can work magic at all.
 
+**Glimpse**:
+The narrative of a character's first magical awakening — prose living on `CharacterAura.glimpse_story`. Authored at character creation via a guided, tag-driven flow (#2427) and revisable afterward through the "finish your Glimpse later" editor on the own-character sheet.
+
+**Glimpse Tag**:
+An authored catalog choice (`GlimpseTag`) on one of four narrative axes (`GlimpseTagAxis`: Tone, Consequence, Witness & Secrecy, Sensory & Discovery) that a player picks while composing their Glimpse. Content model, lore-repo authored — no factory-seeded catalog. Curated `GlimpseTagDistinctionSuggestion` rows link a tag to distinctions worth considering; the suggestion grants nothing. (#2427.)
+_Avoid_: conflating with `Ritual.glimpse_eligible` — an unrelated ritual-gating flag (whether a `Ritual` may be performed pre-formal-training), not a tag from this catalog.
+
+**Glimpse State**:
+`CharacterAura.glimpse_state` — the NOT_STARTED/TAGS_ONLY/COMPLETE deferral cache tracking whether a character's Glimpse has any chosen tags and/or written prose. Maintained exclusively by `world.magic.services.glimpse`, mirroring the `CharacterDistinction.secret`/`.from_glimpse` FK-presence-is-state precedent — never written directly. (#2427.)
+
 **Anima**:
 A character's pool of magical energy (current / maximum). It governs the *safety* of casting, not access — magic can always be attempted, and a shortfall is paid from life force rather than blocking the cast.
 _Avoid_: mana, magic points.

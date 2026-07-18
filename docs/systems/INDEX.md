@@ -306,6 +306,36 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     teaching structure; `Tradition.society` (no live consumer) was dropped. The `Cantrip`
     model + its full API/admin/frontend stack were removed. See `docs/systems/magic.md`
     and `docs/systems/character_creation.md` for the CG stage/endpoint detail.
+  - **Guided Glimpse Story (#2427):** `GlimpseTag` (`models/glimpse.py`, content model —
+    `CONTENT_MODELS` `magic.glimpsetag` — `axis` (`GlimpseTagAxis`), `name`, `slug`
+    natural key, `description`, `example`, `sort_order`, `is_active`),
+    `CharacterGlimpseTag` (instance data, never exported; `aura` FK
+    `related_name="glimpse_tags"`, `tag` FK PROTECT, unique per `(aura, tag)`),
+    `GlimpseTagDistinctionSuggestion` (content model — `magic.glimpsetagdistinctionsuggestion`
+    — `tag`/`distinction` FKs, specific→general per ADR-0010, grants nothing, purely a
+    suggestion surface). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
+    (`constants.py`) — four axes (TONE single-select; CONSEQUENCE, WITNESS, SENSORY
+    multi-select, SENSORY renders as prose prompts) and the NOT_STARTED/TAGS_ONLY/
+    COMPLETE deferral cache. `CharacterAura.glimpse_state` (cache maintained
+    exclusively by `world.magic.services.glimpse`, mirrors the `is_secret`
+    FK-presence precedent) + `world.distinctions.models.CharacterDistinction
+    .from_glimpse` (nullable FK → `CharacterAura`, SET_NULL — provenance, mirrors
+    `CharacterDistinction.secret`). Services (`services/glimpse.py`):
+    `refresh_glimpse_state(aura) -> GlimpseState`, `set_glimpse_tags(aura, tags, *,
+    axis)`, `set_glimpse_prose(aura, text)`, `link_distinction_to_glimpse(character_distinction,
+    aura)` / `unlink_distinction_from_glimpse(character_distinction)`. CG finalize
+    (`world.character_creation.services.finalize_magic_data`) consumes
+    `draft_data["glimpse_tag_ids"/"glimpse_story"/"glimpse_linked_distinction_ids"]`
+    through these services. API: CG catalog `GET
+    /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, embeds
+    `suggested_distinctions`) + four `CharacterAuraViewSet` actions
+    (`set-glimpse-tags` / `set-glimpse-prose` / `link-glimpse-distinction` /
+    `unlink-glimpse-distinction`). Sheet payload: `AuraData.glimpse_story` /
+    `.glimpse_state` / `.glimpse_tags` / `.can_finish_glimpse` (privileged-only);
+    `DistinctionEntry.is_from_glimpse`. Frontend: `GlimpseFlow` (shared,
+    presentational), mounted by CG's `GlimpseSection` and the character sheet's
+    `GlimpseEditorDialog` ("finish later"). See `docs/systems/magic.md`'s "Guided
+    Glimpse Story (#2427)" section for the full detail.
   - Soul Tether config: `get_soul_tether_config() -> SoulTetherConfig` (lazy pk=1 singleton)
   - Soul Tether events: `SOUL_TETHER_DISSOLVED` emitted by `dissolve_soul_tether`
   - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater
@@ -482,6 +512,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     pending entry-flourish offer inbox (#1140)
   - `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`; resolves
     offer via `resolve_entry_flourish_offer` and fires the self-grant (#1140)
+- **API endpoints (guided Glimpse story — #2427):**
+  - `GET /api/character-creation/glimpse-tags/` — active `GlimpseTag` catalog
+    (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`); embeds
+    `suggested_distinctions` per tag. Shared by CG and the post-CG "finish later" surface
+  - `POST /api/magic/character-auras/{id}/set-glimpse-tags/` — body `{axis, tag_ids[]}`
+  - `POST /api/magic/character-auras/{id}/set-glimpse-prose/` — body `{text}`
+  - `POST /api/magic/character-auras/{id}/link-glimpse-distinction/` — body
+    `{character_distinction_id}`
+  - `POST /api/magic/character-auras/{id}/unlink-glimpse-distinction/` — body
+    `{character_distinction_id}`
 - **Portal travel (#2222, ADR-0121):** `PortalAnchorKind` (staff-authored anchor medium
   catalog — arrival/departure verbs) + `PortalAnchor` (stackable per-room install, FK
   `room_profile`, PROTECT FK `kind`, soft-deleted via `dissolved_at`, partial-unique per
@@ -551,6 +591,9 @@ allocations that convert AP to development points.
 Character advantages and disadvantages (CG Stage 6: Traits).
 
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
+  (`from_glimpse` nullable FK → `magic.CharacterAura`, SET_NULL, #2427 — FK presence is
+  the Glimpse-provenance state, mirroring `.secret`; set via
+  `world.magic.services.glimpse.link_distinction_to_glimpse`/`unlink_distinction_from_glimpse`)
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
 - **Enums:** `DistinctionOrigin` (`CHARACTER_CREATION`, `GAMEPLAY` vestigial, `GM_AWARD`,
   `ACHIEVEMENT_AUTO_GRANT`, `CONSEQUENCE_POOL`, `ENDORSEMENT_THRESHOLD`), `OtherStatus`

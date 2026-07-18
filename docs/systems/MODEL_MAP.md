@@ -3910,6 +3910,9 @@
 ### CharacterAura
 **Foreign Keys:**
   - character -> objects.ObjectDB [OneToOne]
+**Pointed to by:**
+  - glimpse_tags <- magic.CharacterGlimpseTag
+  - glimpse_born_distinctions <- distinctions.CharacterDistinction
 
 ### CharacterResonance
 **Foreign Keys:**
@@ -4072,6 +4075,21 @@
   - technique -> magic.Technique [FK]
 
 ### GiftAcquisitionConfig
+
+### GlimpseTag
+**Pointed to by:**
+  - character_rows <- magic.CharacterGlimpseTag
+  - distinction_suggestions <- magic.GlimpseTagDistinctionSuggestion
+
+### CharacterGlimpseTag
+**Foreign Keys:**
+  - aura -> magic.CharacterAura [FK]
+  - tag -> magic.GlimpseTag [FK]
+
+### GlimpseTagDistinctionSuggestion
+**Foreign Keys:**
+  - tag -> magic.GlimpseTag [FK]
+  - distinction -> distinctions.Distinction [FK]
 
 ### ResonanceGrant
 **Foreign Keys:**

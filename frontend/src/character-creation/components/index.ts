@@ -24,3 +24,6 @@ export { AnimaCheckStep } from './gift/AnimaCheckStep';
 export { GiftSelector } from './gift/GiftSelector';
 export { TechniqueSelector } from './gift/TechniqueSelector';
 export { TraditionStep } from './gift/TraditionStep';
+
+// Guided Glimpse flow CG mount (#2427)
+export { GlimpseSection } from './gift/GlimpseSection';

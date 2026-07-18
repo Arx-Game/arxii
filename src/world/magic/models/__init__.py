@@ -117,6 +117,11 @@ from world.magic.models.gifts import (
     Tradition,
     TraditionManager,
 )
+from world.magic.models.glimpse import (
+    CharacterGlimpseTag,
+    GlimpseTag,
+    GlimpseTagDistinctionSuggestion,
+)
 from world.magic.models.grant import ResonanceGrant
 from world.magic.models.grants import (
     BeginningsRitualGrant,
@@ -258,6 +263,8 @@ __all__ = [
     # gifts
     "CharacterGift",
     "CharacterGiftUnlock",
+    # Glimpse guided flow (#2427)
+    "CharacterGlimpseTag",
     "CharacterResonance",
     # knowledge layer (Anima Ritual UI spec §Decision 6)
     "CharacterRitualKnowledge",
@@ -300,6 +307,9 @@ __all__ = [
     "GiftAcquisitionConfig",
     "GiftManager",
     "GiftUnlock",
+    # Glimpse guided flow (#2427)
+    "GlimpseTag",
+    "GlimpseTagDistinctionSuggestion",
     # rituals
     "ImbuingProseTemplate",
     "IntensityTier",

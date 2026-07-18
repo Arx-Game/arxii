@@ -111,6 +111,27 @@ class ContentExportTests(TestCase):
             with self.assertRaises(ContentExportError):
                 export_to_content_repo(None)
 
+    def test_glimpse_catalog_round_trips(self) -> None:
+        """GlimpseTag + suggestion export then import = updates, no creates (#2427)."""
+        from world.distinctions.factories import DistinctionFactory
+        from world.magic.factories import (
+            GlimpseTagDistinctionSuggestionFactory,
+            GlimpseTagFactory,
+        )
+
+        tag = GlimpseTagFactory(slug="round-trip-tag")
+        GlimpseTagDistinctionSuggestionFactory(
+            tag=tag, distinction=DistinctionFactory(slug="round-trip-distinction")
+        )
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0
+
     def test_content_models_all_have_natural_key(self) -> None:
         """Every model in the allowlist must have NaturalKeyMixin."""
         from django.apps import apps

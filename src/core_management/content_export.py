@@ -82,6 +82,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.affinity",
         "magic.effecttype",
         "magic.facet",
+        "magic.glimpsetag",
+        "magic.glimpsetagdistinctionsuggestion",
         "magic.intensitytier",
         "magic.techniquestyle",
         "magic.tradition",

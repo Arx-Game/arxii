@@ -255,6 +255,14 @@ so the owner's gate UI can show which are relocated. A relocated distinction sur
 The old `DistinctionVisibility` enum / `default_visibility` / `visibility_override` /
 `effective_visibility` / `is_publicly_visible` are removed.
 
+`DistinctionEntry` also carries `is_from_glimpse` (#2427) — `True` when
+`CharacterDistinction.from_glimpse` points at the character's `CharacterAura` (the
+distinction was born from the guided Glimpse flow). The own-character sheet's
+Glimpse editor (`GlimpseEditorDialog`, `frontend/src/magic/components/glimpse/`)
+reads this flag to seed which distinction chips show as already linked, and links
+new ones via `character_distinction_id` — this `DistinctionEntry.id` (the
+CharacterDistinction pk), not a catalog `Distinction` id.
+
 ---
 
 ## Key Methods

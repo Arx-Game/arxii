@@ -22,6 +22,7 @@ from world.conditions.models import CapabilityType, ConditionTemplate, DamageTyp
 from world.items.models import ItemInstance
 from world.magic.constants import (
     ALTERATION_TIER_CAPS,
+    GlimpseTagAxis,
     TargetKind,
     anima_band_for,
     is_imbuing_ritual,
@@ -345,13 +346,39 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "abyssal",
             "dominant_affinity",
             "dominant_affinity_display",
+            "glimpse_state",
             "updated_at",
         ]
-        read_only_fields = ["id", "dominant_affinity", "dominant_affinity_display", "updated_at"]
+        read_only_fields = [
+            "id",
+            "dominant_affinity",
+            "dominant_affinity_display",
+            "glimpse_state",
+            "updated_at",
+        ]
 
     def get_dominant_affinity_display(self, obj: CharacterAura) -> str:
         """Return the display label for the dominant affinity."""
         return obj.dominant_affinity.label
+
+
+class GlimpseSetTagsSerializer(serializers.Serializer):
+    """Input for CharacterAuraViewSet.set_glimpse_tags (#2427)."""
+
+    axis = serializers.ChoiceField(choices=GlimpseTagAxis.choices)
+    tag_ids = serializers.ListField(child=serializers.IntegerField(), allow_empty=True)
+
+
+class GlimpseSetProseSerializer(serializers.Serializer):
+    """Input for CharacterAuraViewSet.set_glimpse_prose (#2427)."""
+
+    text = serializers.CharField(allow_blank=True)
+
+
+class GlimpseDistinctionLinkSerializer(serializers.Serializer):
+    """Input for CharacterAuraViewSet.link/unlink_glimpse_distinction (#2427)."""
+
+    character_distinction_id = serializers.IntegerField()
 
 
 class CharacterAuraCreateSerializer(serializers.ModelSerializer):

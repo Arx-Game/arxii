@@ -13,6 +13,7 @@ from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.magic.constants import GlimpseState
 from world.magic.models.affinity import Resonance
 from world.magic.types import AffinityType
 
@@ -55,6 +56,16 @@ class CharacterAura(SharedMemoryModel):
     glimpse_story = models.TextField(
         blank=True,
         help_text="Narrative of the character's first magical awakening (The Glimpse).",
+    )
+    glimpse_state = models.CharField(
+        max_length=20,
+        choices=GlimpseState.choices,
+        default=GlimpseState.NOT_STARTED,
+        help_text=(
+            "Deferral/progress state of the Glimpse (#2427). Cache of "
+            "prose+tag truth — maintained by world.magic.services.glimpse, "
+            "never written directly."
+        ),
     )
     updated_at = models.DateTimeField(auto_now=True)
 

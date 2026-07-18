@@ -401,6 +401,34 @@ export interface UnbindMotifStyleRequest {
   style_id: number;
 }
 
+// ---------------------------------------------------------------------------
+// Glimpse aura action mutations, #2427
+//
+// CharacterAuraViewSet's set-glimpse-tags/set-glimpse-prose/link-glimpse-
+// distinction/unlink-glimpse-distinction actions are now `@extend_schema`-annotated
+// (src/world/magic/views.py) against their real input serializers
+// (GlimpseSetTagsSerializer / GlimpseSetProseSerializer /
+// GlimpseDistinctionLinkSerializer), so the generated schema types these bodies
+// correctly — aliased here rather than hand-rolled, single source of truth.
+// ---------------------------------------------------------------------------
+
+/** Request body for POST /api/magic/character-auras/{id}/set-glimpse-tags/. */
+export type SetGlimpseTagsRequest = components['schemas']['GlimpseSetTagsRequest'];
+
+/** Request body for POST /api/magic/character-auras/{id}/set-glimpse-prose/. */
+export type SetGlimpseProseRequest = components['schemas']['GlimpseSetProseRequest'];
+
+/**
+ * Request body for POST /api/magic/character-auras/{id}/link-glimpse-distinction/
+ * and .../unlink-glimpse-distinction/.
+ *
+ * NOTE the semantic difference from CG: this id is a **CharacterDistinction**
+ * row pk (the character's own distinction instance), not a catalog
+ * `Distinction` id — CG's `glimpse_linked_distinction_ids` (draft_data) links
+ * by catalog Distinction id instead. Never mix the two id spaces.
+ */
+export type GlimpseDistinctionLinkRequest = components['schemas']['GlimpseDistinctionLinkRequest'];
+
 /** Request body for POST /api/magic/techniques/price/ and /api/magic/techniques/author/. */
 export interface TechniqueDesignRequest {
   name: string;

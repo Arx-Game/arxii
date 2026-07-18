@@ -402,6 +402,75 @@ details and opens `AcceptOfferDialog`. Teacher is shown via the anonymity-respec
 
 Dialog for accepting a teaching offer. Shows XP cost and calls `useAcceptTeachingOffer`.
 
+### `components/glimpse/GlimpseFlow.tsx` + `glimpseTypes.ts` (#2427)
+
+Shared, purely presentational guided flow for authoring "The Glimpse" — props
+in (`heading` (optional, defaults `'The Glimpse'`), `tags`, `selectedTagIds`,
+`prose`, `linkedDistinctionIds`, `linkableDistinctions`,
+`showDeferralControls`), callbacks out (`onChangeAxis`, `onChangeProse`,
+`onToggleDistinctionLink`, `onSkip`); no queries or mutations inside.
+`glimpseTypes.ts` is the single definition of `GlimpseTagOption` (backs
+`GET /api/character-creation/glimpse-tags/`) — the character-creation module
+re-exports it from `types.ts` rather than redeclaring it. Renders the
+`heading` at the top (staff-authorable — CG threads `magic_glimpse_heading`
+from `useCGExplanations()` through, mirroring the sibling Motif field's
+`magic_motif_heading`; review fix, #2427), then a Radix accordion (TONE
+single-select, CONSEQUENCE/WITNESS multi-select — axes with zero catalog tags
+don't render a step; each tag Card is `role="button" tabIndex={0}` with an
+explicit `onKeyDown` for Enter/Space activation — review fix), SENSORY tags as
+toggle chips (native `<button>`s, keyboard-operable for free) inside the
+always-visible story `Textarea`, a suggestion panel (deduped
+`suggested_distinctions` across selected tags), and an unconditional manual
+distinction-link fallback. Two mounts share it: the CG `GiftStage`
+(`character-creation/components/gift/GlimpseSection.tsx`, which binds it to
+`draft_data.glimpse_tag_ids`/`glimpse_story`/`glimpse_linked_distinction_ids`
+and threads `heading` down from GiftStage's copy query) and the character
+sheet (`components/glimpse/GlimpseEditorDialog.tsx`, below).
+
+### `components/glimpse/GlimpseEditorDialog.tsx` (#2427 Task 6)
+
+The "finish later" Glimpse editor on the own-character sheet — a `Dialog`
+(same `@/components/ui/dialog` primitives `CodexModal` uses) hosting
+`GlimpseFlow` in live mode. Opened from `SpellbookTab`'s aura card via a
+"Finish your Glimpse" button, gated on `isMyCharacter && aura.can_finish_glimpse`
+(mirrors the `MotifStylePanel` own-view gate). Catalog comes from
+`useGlimpseTags()` (`@/character-creation/queries` — the same catalog CG's
+`GlimpseSection` reads); selection/prose are seeded from the sheet payload's
+`magic.aura.glimpse_tags`/`glimpse_story`; writes go through the Task 4 aura
+action mutations below. `showDeferralControls={false}` — closing the dialog
+IS the deferral (unlike CG, which offers an explicit "skip" button).
+
+**ID-space note:** CG's `GlimpseSection` links glimpse suggestions by
+**catalog** `Distinction` id (`draft_data.glimpse_linked_distinction_ids`,
+reconciled at finalize). This dialog links by **CharacterDistinction row id**
+instead — the id the aura's `link-glimpse-distinction`/
+`unlink-glimpse-distinction` endpoints require, which is exactly what
+`CharacterSheetDistinction.id` already carries. `linkedDistinctionIds` is
+derived from the sheet payload's new `distinctions[*].is_from_glimpse` flag
+(`world.character_sheets.types.DistinctionEntry`, #2427 backend touch-up —
+`CharacterDistinction.from_glimpse_id is not None`); `linkableDistinctions`
+maps the same list to `{id, name}`. No separate fetch — both come from the
+sheet payload `SpellbookTab` already has.
+
+**Mutation hooks** (`@/magic/queries`, wrap the Task 4
+`CharacterAuraViewSet` actions — `src/world/magic/views.py`):
+`useSetGlimpseTags(auraId, characterSheetId)`,
+`useSetGlimpseProse(auraId, characterSheetId)`,
+`useToggleGlimpseDistinction(auraId, characterSheetId)` (wraps
+link+unlink behind one `toggle(characterDistinctionId, isCurrentlyLinked)`
+call). All three invalidate `['character-sheets', characterSheetId]` on
+success — the same key `useCharacterSheetQuery` reads — rather than trying
+to read the aura action responses (`CharacterAuraSerializer` output doesn't
+carry `glimpse_tags`/`glimpse_story`/`can_finish_glimpse`; those live only in
+the sheet payload's `AuraData`). Request bodies in `magic/types.ts`
+(`SetGlimpseTagsRequest`/`SetGlimpseProseRequest`/
+`GlimpseDistinctionLinkRequest`) are aliases onto the generated schema
+(`GlimpseSetTagsRequest`/`GlimpseSetProseRequest`/`GlimpseDistinctionLinkRequest`
+components) — the four `CharacterAuraViewSet` `@action` methods now carry
+`@extend_schema(request=...)` (`src/world/magic/views.py`), so drf-spectacular
+types each body against its real input serializer instead of falling back to
+the ViewSet's own `CharacterAuraSerializer`.
+
 ### `XpKudosPage.alterationGate.test.tsx` (in `src/progression/`)
 
 3 tests for the `AlterationGateAlert` rendered within `XpKudosPage`: alert is shown when `usePendingAlterations` returns open alterations, names the affected character(s), and is absent when the list is empty.

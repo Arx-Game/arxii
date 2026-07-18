@@ -50,12 +50,26 @@ export interface CharacterSheetAnimaRitual {
   description: string;
 }
 
+/** Mirrors `world.character_sheets.types.GlimpseTagEntry`. */
+export interface CharacterSheetGlimpseTag {
+  id: number;
+  axis: string;
+  name: string;
+  description: string;
+}
+
 /** Mirrors `world.character_sheets.types.AuraData`. */
 export interface CharacterSheetAura {
+  /** CharacterAura pk — the id the aura action endpoints (`/api/magic/character-auras/{id}/...`) key on. */
+  id: number;
   celestial: number;
   primal: number;
   abyssal: number;
   glimpse_story: string;
+  glimpse_state: 'NOT_STARTED' | 'TAGS_ONLY' | 'COMPLETE';
+  glimpse_tags: CharacterSheetGlimpseTag[];
+  /** Owner-only affordance: true unless the viewer isn't privileged or the glimpse is already COMPLETE. */
+  can_finish_glimpse: boolean;
 }
 
 /** Mirrors `world.character_sheets.types.MagicSection`. */
@@ -68,11 +82,14 @@ export interface CharacterSheetMagic {
 
 /** Mirrors `world.character_sheets.types.DistinctionEntry`. */
 export interface CharacterSheetDistinction {
+  /** CharacterDistinction pk — matches the aura glimpse-link endpoints' `character_distinction_id`. */
   id: number;
   name: string;
   rank: number;
   notes: string;
   is_secret: boolean;
+  /** True when `CharacterDistinction.from_glimpse` points at this character's aura (#2427). */
+  is_from_glimpse: boolean;
 }
 
 /**

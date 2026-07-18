@@ -2538,6 +2538,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/glimpse-tags/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active glimpse tags for the CG guided glimpse flow (#2427).
+     *
+     *     Global authored catalog — not draft-dependent, so it also serves the
+     *     post-CG "finish your glimpse later" surface on the character sheet.
+     */
+    get: operations['character_creation_glimpse_tags_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/glimpse-tags/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active glimpse tags for the CG guided glimpse flow (#2427).
+     *
+     *     Global authored catalog — not draft-dependent, so it also serves the
+     *     post-CG "finish your glimpse later" surface on the character sheet.
+     */
+    get: operations['character_creation_glimpse_tags_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/house-titles/': {
     parameters: {
       query?: never;
@@ -9528,6 +9572,74 @@ export interface paths {
      *     to disambiguate when the user has alts.
      */
     patch: operations['magic_character_auras_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/character-auras/{id}/link-glimpse-distinction/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Mark one of the character's distinctions as born in the Glimpse (#2427). */
+    post: operations['magic_character_auras_link_glimpse_distinction_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/character-auras/{id}/set-glimpse-prose/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Write the aura's glimpse story prose (#2427). */
+    post: operations['magic_character_auras_set_glimpse_prose_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/character-auras/{id}/set-glimpse-tags/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Replace the aura's glimpse tags for one axis (#2427). */
+    post: operations['magic_character_auras_set_glimpse_tags_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/character-auras/{id}/unlink-glimpse-distinction/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Clear a distinction's Glimpse provenance (#2427). */
+    post: operations['magic_character_auras_unlink_glimpse_distinction_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/magic/character-gifts/': {
@@ -19353,6 +19465,14 @@ export interface components {
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
     };
     /**
+     * @description * `TONE` - Tone
+     *     * `CONSEQUENCE` - Consequence
+     *     * `WITNESS` - Witness & Secrecy
+     *     * `SENSORY` - Sensory & Discovery
+     * @enum {string}
+     */
+    AxisEnum: 'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY';
+    /**
      * @description * `standing` - Standing (unit or banner — can rise again)
      *     * `campaign` - Campaign (one-time event — dissolves when done)
      * @enum {string}
@@ -20095,6 +20215,42 @@ export interface components {
      * @enum {string}
      */
     CGGiftOptionKindEnum: 'MAJOR' | 'MINOR';
+    /**
+     * @description Glimpse tag row for the CG guided flow (#2427).
+     *
+     *     Backs ``GET /api/character-creation/glimpse-tags/``. Curated distinction
+     *     suggestions are embedded per tag (prefetched); the client dedupes across
+     *     the chosen tag set.
+     */
+    CGGlimpseTag: {
+      readonly id: number;
+      /**
+       * @description Which guided step this tag belongs to.
+       *
+       *     * `TONE` - Tone
+       *     * `CONSEQUENCE` - Consequence
+       *     * `WITNESS` - Witness & Secrecy
+       *     * `SENSORY` - Sensory & Discovery
+       */
+      readonly axis: components['schemas']['AxisEnum'];
+      /** @description Player-facing tag name. */
+      readonly name: string;
+      /** @description Natural key. */
+      readonly slug: string;
+      /** @description What choosing this tag says about the glimpse. */
+      readonly description: string;
+      /** @description Short illustrative sentence shown in the guided step. */
+      readonly example: string;
+      /** @description Display order within the axis. */
+      readonly sort_order: number;
+      readonly suggested_distinctions: components['schemas']['CGGlimpseTagSuggestedDistinction'][];
+    };
+    /** @description Distinction stub embedded in a glimpse tag's suggestion list (#2427). */
+    CGGlimpseTagSuggestedDistinction: {
+      readonly id: number;
+      /** @description Display name for this distinction. */
+      readonly name: string;
+    };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
       readonly id: number;
@@ -20531,6 +20687,14 @@ export interface components {
       readonly dominant_affinity: string;
       /** @description Return the display label for the dominant affinity. */
       readonly dominant_affinity_display: string;
+      /**
+       * @description Deferral/progress state of the Glimpse (#2427). Cache of prose+tag truth — maintained by world.magic.services.glimpse, never written directly.
+       *
+       *     * `NOT_STARTED` - Not started
+       *     * `TAGS_ONLY` - Tags chosen, story unwritten
+       *     * `COMPLETE` - Complete
+       */
+      readonly glimpse_state: components['schemas']['GlimpseStateEnum'];
       /** Format: date-time */
       readonly updated_at: string;
     };
@@ -23776,6 +23940,26 @@ export interface components {
      * @enum {string}
      */
     GiverKindEnum: 'environmental_detail' | 'room_trigger' | 'board';
+    /** @description Input for CharacterAuraViewSet.link/unlink_glimpse_distinction (#2427). */
+    GlimpseDistinctionLinkRequest: {
+      character_distinction_id: number;
+    };
+    /** @description Input for CharacterAuraViewSet.set_glimpse_prose (#2427). */
+    GlimpseSetProseRequest: {
+      text: string;
+    };
+    /** @description Input for CharacterAuraViewSet.set_glimpse_tags (#2427). */
+    GlimpseSetTagsRequest: {
+      axis: components['schemas']['AxisEnum'];
+      tag_ids: number[];
+    };
+    /**
+     * @description * `NOT_STARTED` - Not started
+     *     * `TAGS_ONLY` - Tags chosen, story unwritten
+     *     * `COMPLETE` - Complete
+     * @enum {string}
+     */
+    GlimpseStateEnum: 'NOT_STARTED' | 'TAGS_ONLY' | 'COMPLETE';
     /** @description Serializer for GlobalStoryProgress — singleton metaplot progress pointer. */
     GlobalStoryProgress: {
       readonly id: number;
@@ -39737,6 +39921,57 @@ export interface operations {
       };
     };
   };
+  character_creation_glimpse_tags_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description Which guided step this tag belongs to.
+         *
+         *     * `TONE` - Tone
+         *     * `CONSEQUENCE` - Consequence
+         *     * `WITNESS` - Witness & Secrecy
+         *     * `SENSORY` - Sensory & Discovery
+         */
+        axis?: 'CONSEQUENCE' | 'SENSORY' | 'TONE' | 'WITNESS';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGGlimpseTag'][];
+        };
+      };
+    };
+  };
+  character_creation_glimpse_tags_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Glimpse Tag. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGGlimpseTag'];
+        };
+      };
+    };
+  };
   character_creation_house_titles_list: {
     parameters: {
       query?: never;
@@ -49222,6 +49457,106 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedCharacterAuraRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAura'];
+        };
+      };
+    };
+  };
+  magic_character_auras_link_glimpse_distinction_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlimpseDistinctionLinkRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAura'];
+        };
+      };
+    };
+  };
+  magic_character_auras_set_glimpse_prose_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlimpseSetProseRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAura'];
+        };
+      };
+    };
+  };
+  magic_character_auras_set_glimpse_tags_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlimpseSetTagsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAura'];
+        };
+      };
+    };
+  };
+  magic_character_auras_unlink_glimpse_distinction_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlimpseDistinctionLinkRequest'];
       };
     };
     responses: {

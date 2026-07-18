@@ -2,6 +2,10 @@
  * Character Creation types
  */
 
+// Single definition lives with the shared guided-flow component; both CG and
+// the character sheet mount (Task 6) import it from here.
+export type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
+
 export interface StartingArea {
   id: number;
   name: string;
@@ -695,8 +699,10 @@ export interface DraftData {
   anima_check_skill_id?: number | null;
   anima_ritual_name?: string;
   motif_description?: string;
-  // The Glimpse story
+  // The Glimpse guided flow (#2427)
   glimpse_story?: string;
+  glimpse_tag_ids?: number[];
+  glimpse_linked_distinction_ids?: number[];
   // Magic fields - Gift resonance (anchors the latent GIFT thread at CG finalization, #1620)
   selected_gift_resonance_id?: number | null;
   magic_complete?: boolean;

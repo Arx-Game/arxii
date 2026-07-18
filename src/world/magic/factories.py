@@ -24,6 +24,7 @@ from world.magic.constants import (
     AlterationTier,
     EffectKind,
     GiftKind,
+    GlimpseTagAxis,
     MagicMilestoneKind,
     ParticipationRule,
     PendingAlterationStatus,
@@ -41,6 +42,7 @@ from world.magic.models import (
     CharacterAura,
     CharacterGift,
     CharacterGiftUnlock,
+    CharacterGlimpseTag,
     CharacterResonance,
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
@@ -49,6 +51,8 @@ from world.magic.models import (
     Facet,
     Gift,
     GiftUnlock,
+    GlimpseTag,
+    GlimpseTagDistinctionSuggestion,
     ImbuingProseTemplate,
     IntensityTier,
     MagicalAlterationEvent,
@@ -1481,6 +1485,42 @@ class ThreadLevelUnlockFactory(factory.django.DjangoModelFactory):
     thread = factory.SubFactory(ThreadFactory)
     unlocked_level = 20
     xp_spent = 200
+
+
+# =============================================================================
+# Glimpse guided flow factories (#2427)
+# =============================================================================
+
+
+class GlimpseTagFactory(factory.django.DjangoModelFactory):
+    """Unit-test factory only — the real catalog is lore-repo content (#2427)."""
+
+    class Meta:
+        model = GlimpseTag
+        django_get_or_create = ("slug",)
+
+    axis = GlimpseTagAxis.TONE
+    name = factory.Sequence(lambda n: f"Glimpse Tag {n}")
+    slug = factory.Sequence(lambda n: f"glimpse-tag-{n}")
+    description = "A test glimpse tag."
+    example = "An example sentence."
+
+
+class CharacterGlimpseTagFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CharacterGlimpseTag
+
+    aura = factory.SubFactory(CharacterAuraFactory)
+    tag = factory.SubFactory(GlimpseTagFactory)
+
+
+class GlimpseTagDistinctionSuggestionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = GlimpseTagDistinctionSuggestion
+
+    tag = factory.SubFactory(GlimpseTagFactory)
+    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    sort_order = 0
 
 
 # =============================================================================

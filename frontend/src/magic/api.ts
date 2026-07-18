@@ -33,6 +33,7 @@ import type {
   DissolveRequest,
   EntryFlourishRespondRequest,
   EntryFlourishResult,
+  GlimpseDistinctionLinkRequest,
   ImbueRequest,
   ImbueResponse,
   MotifStyleBindingsResponse,
@@ -53,6 +54,8 @@ import type {
   PullPreviewResponse,
   RescueOutcome,
   RescueRequest,
+  SetGlimpseProseRequest,
+  SetGlimpseTagsRequest,
   SineatingOffer,
   SineatingPendingOffer,
   SineatingRequest,
@@ -101,6 +104,7 @@ const PATH_INTENT_URL = '/api/progression/path-intent/';
 const PATH_OPTIONS_URL = '/api/progression/path-options/';
 const MOTIF_STYLES_URL = '/api/magic/motif-styles';
 const ITEMS_STYLES_URL = '/api/items/styles';
+const CHARACTER_AURAS_URL = '/api/magic/character-auras';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -1092,4 +1096,84 @@ export async function getStyleCatalog(): Promise<PaginatedStyleList> {
   const res = await apiFetch(`${ITEMS_STYLES_URL}/`);
   if (!res.ok) throw new Error('Failed to load style catalog');
   return res.json() as Promise<PaginatedStyleList>;
+}
+
+// ---------------------------------------------------------------------------
+// Glimpse aura actions, #2427 — the "finish later" character-sheet editor.
+//
+// Wire contract: CharacterAuraViewSet (src/world/magic/views.py). Every
+// action returns CharacterAuraSerializer(aura).data, which does NOT include
+// glimpse_tags/glimpse_story/can_finish_glimpse (those live only in the
+// character-sheet payload's AuraData) — callers should invalidate the
+// character-sheet query rather than read this response.
+// ---------------------------------------------------------------------------
+
+/** POST /api/magic/character-auras/{id}/set-glimpse-tags/ — replace one axis's tag picks. */
+export async function setGlimpseTags(
+  auraId: number,
+  body: SetGlimpseTagsRequest
+): Promise<unknown> {
+  const res = await apiFetch(`${CHARACTER_AURAS_URL}/${auraId}/set-glimpse-tags/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to set glimpse tags');
+  }
+  return res.json();
+}
+
+/** POST /api/magic/character-auras/{id}/set-glimpse-prose/ — write the glimpse story prose. */
+export async function setGlimpseProse(
+  auraId: number,
+  body: SetGlimpseProseRequest
+): Promise<unknown> {
+  const res = await apiFetch(`${CHARACTER_AURAS_URL}/${auraId}/set-glimpse-prose/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to save the glimpse story');
+  }
+  return res.json();
+}
+
+/**
+ * POST /api/magic/character-auras/{id}/link-glimpse-distinction/
+ *
+ * `body.character_distinction_id` is a CharacterDistinction row pk — see the
+ * NOTE on `GlimpseDistinctionLinkRequest` (magic/types.ts) for the CG-vs-live
+ * id-space distinction.
+ */
+export async function linkGlimpseDistinction(
+  auraId: number,
+  body: GlimpseDistinctionLinkRequest
+): Promise<unknown> {
+  const res = await apiFetch(`${CHARACTER_AURAS_URL}/${auraId}/link-glimpse-distinction/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to link distinction to the glimpse');
+  }
+  return res.json();
+}
+
+/** POST /api/magic/character-auras/{id}/unlink-glimpse-distinction/ — same body shape as link. */
+export async function unlinkGlimpseDistinction(
+  auraId: number,
+  body: GlimpseDistinctionLinkRequest
+): Promise<unknown> {
+  const res = await apiFetch(`${CHARACTER_AURAS_URL}/${auraId}/unlink-glimpse-distinction/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to unlink distinction from the glimpse');
+  }
+  return res.json();
 }

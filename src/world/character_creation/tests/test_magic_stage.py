@@ -22,8 +22,11 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.fatigue.models import FatiguePool
+from world.magic.constants import GlimpseTagAxis
 from world.magic.factories import (
     GiftFactory,
+    GlimpseTagDistinctionSuggestionFactory,
+    GlimpseTagFactory,
     PathGiftGrantFactory,
     ResonanceFactory,
     TechniqueFactory,
@@ -596,3 +599,113 @@ class CGTechniqueOptionEndpointTest(TestCase):
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+class CGGlimpseTagEndpointTest(TestCase):
+    """GET /api/character-creation/glimpse-tags/ (#2427)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def test_lists_active_tags_ordered_axis_then_sort_order(self):
+        tone_b = GlimpseTagFactory(
+            axis=GlimpseTagAxis.TONE, slug="tone-b", sort_order=2, name="Tone B"
+        )
+        tone_a = GlimpseTagFactory(
+            axis=GlimpseTagAxis.TONE, slug="tone-a", sort_order=1, name="Tone A"
+        )
+        consequence_a = GlimpseTagFactory(
+            axis=GlimpseTagAxis.CONSEQUENCE, slug="consequence-a", sort_order=1
+        )
+        GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-inactive", is_active=False)
+
+        response = self.client.get("/api/character-creation/glimpse-tags/")
+
+        assert response.status_code == status.HTTP_200_OK
+        slugs = [row["slug"] for row in response.data]
+        assert "tone-inactive" not in slugs
+        # Meta.ordering = ["axis", "sort_order", "name"] — CONSEQUENCE < TONE alphabetically.
+        assert slugs == [consequence_a.slug, tone_a.slug, tone_b.slug]
+
+    def test_embeds_suggested_distinctions(self):
+        tag = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-x")
+        distinction = DistinctionFactory(name="Fated")
+        GlimpseTagDistinctionSuggestionFactory(tag=tag, distinction=distinction)
+
+        response = self.client.get("/api/character-creation/glimpse-tags/")
+
+        assert response.status_code == status.HTTP_200_OK
+        row = next(r for r in response.data if r["slug"] == "tone-x")
+        assert row["suggested_distinctions"] == [{"id": distinction.id, "name": "Fated"}]
+
+    def test_axis_filter(self):
+        GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-only")
+        GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="consequence-only")
+
+        response = self.client.get(
+            "/api/character-creation/glimpse-tags/", {"axis": GlimpseTagAxis.TONE}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        slugs = {row["slug"] for row in response.data}
+        assert slugs == {"tone-only"}
+
+    def test_anonymous_request_rejected(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get("/api/character-creation/glimpse-tags/")
+
+        assert response.status_code in (
+            status.HTTP_401_UNAUTHORIZED,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_query_count_constant_as_tags_grow(self):
+        """Prefetch guard: same query count with 2 tags (+suggestions) as with 6.
+
+        ``GlimpseTag``/``GlimpseTagDistinctionSuggestion`` are SharedMemoryModel
+        (idmapper) rows — once an instance is fetched with its prefetch populated,
+        re-fetching the *same* identity-mapped row skips the prefetch query
+        entirely (a feature, not a bug: see the ``sharedmemory-model`` skill).
+        That would make the second capture look artificially cheaper rather than
+        reflecting the view's real query shape, so the identity map is flushed
+        between captures to keep the comparison apples-to-apples.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.magic.models import GlimpseTag, GlimpseTagDistinctionSuggestion
+
+        url = "/api/character-creation/glimpse-tags/"
+
+        # Warmup: the very first authenticated request in a test also creates the
+        # session row (extra SELECT/INSERT/UPDATE) — prime it (with an empty
+        # catalog) before creating any tags, so neither capture pays that cost.
+        self.client.get(url)
+
+        tag_a = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="qc-a")
+        tag_b = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="qc-b")
+        GlimpseTagDistinctionSuggestionFactory(tag=tag_a, distinction=DistinctionFactory())
+        GlimpseTagDistinctionSuggestionFactory(tag=tag_b, distinction=DistinctionFactory())
+
+        with CaptureQueriesContext(connection) as small:
+            response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+        for i in range(4):
+            tag = GlimpseTagFactory(axis=GlimpseTagAxis.WITNESS, slug=f"qc-extra-{i}")
+            GlimpseTagDistinctionSuggestionFactory(tag=tag, distinction=DistinctionFactory())
+
+        GlimpseTag.flush_instance_cache()
+        GlimpseTagDistinctionSuggestion.flush_instance_cache()
+
+        with CaptureQueriesContext(connection) as big:
+            response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+        assert len(big.captured_queries) == len(small.captured_queries)
