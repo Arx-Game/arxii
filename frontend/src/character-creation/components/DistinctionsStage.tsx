@@ -566,18 +566,11 @@ interface EffectBadgeProps {
 }
 
 /**
- * Renders an effect badge with optional CodexTerm link.
- * If the effect has a codex_entry_id, the text becomes clickable
- * to open the Codex modal for that term.
+ * Renders an effect badge.
+ * Per-effect codex links were removed in #2477; distinction-level lore
+ * now comes from codex_entry_ids on the Distinction itself.
  */
 function EffectBadge({ effect }: EffectBadgeProps) {
-  if (effect.codex_entry_id) {
-    return (
-      <Badge variant="secondary" className="text-xs">
-        <CodexTerm entryId={effect.codex_entry_id}>{effect.text}</CodexTerm>
-      </Badge>
-    );
-  }
   return (
     <Badge variant="secondary" className="text-xs">
       {effect.text}
