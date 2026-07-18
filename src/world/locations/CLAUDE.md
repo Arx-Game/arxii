@@ -518,7 +518,7 @@ Same `_validate_location_kwargs` shape as the lifecycle helpers —
 exactly one of `area` or `room_profile`. Raises `ValueError` on
 violation.
 
-## Owner-facing room editing (#1470)
+## Owner-or-tenant room editing (#1470, widened #2452)
 
 `set_room_display_data(*, room, persona=None, name=None, description=None, is_public=None,
 bypass_ownership=False)` is the owner-or-tenant-gated MVP seam for a player editing
