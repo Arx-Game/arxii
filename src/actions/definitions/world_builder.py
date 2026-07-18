@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
     from world.clues.models import ClueTrigger, RoomClue
+    from world.magic.models import PortalAnchor
 
 _EXIT_TYPECLASS = "typeclasses.exits.Exit"
 
@@ -80,6 +81,14 @@ def _resolve_clue_trigger(clue_trigger_id: Any) -> ClueTrigger | None:
         .select_related("room_profile", "clue")
         .first()
     )
+
+
+def _resolve_portal_anchor(anchor_id: Any) -> PortalAnchor | None:
+    from world.magic.models import PortalAnchor  # noqa: PLC0415
+
+    if not anchor_id:
+        return None
+    return PortalAnchor.objects.active().filter(pk=anchor_id).select_related("room_profile").first()
 
 
 def _resolve_exit(exit_id: Any) -> ObjectDB | None:
@@ -783,3 +792,83 @@ class StaffRemoveClueTriggerAction(_WorldBuilderAction):
             return ActionResult(success=False, message="No such clue trigger.")
         trigger.delete()
         return ActionResult(success=True, message="Clue trigger removed.")
+
+
+@dataclass
+class StaffPlacePortalAnchorAction(_WorldBuilderAction):
+    """Install a ``PortalAnchor`` from the canvas (staff variant, #2451).
+
+    Kwargs: ``room_id``, ``kind_name``, ``name``, optional ``fixture_key``
+    (auto-suggested from ``room-<id>/<kind_name-slugified>`` when omitted).
+    No standing/cost gate — see ``install_portal_anchor_as_staff``.
+    """
+
+    key: str = "staff_place_portal_anchor"
+    name: str = "Place Portal Anchor"
+    icon: str = "door-open"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.utils.text import slugify  # noqa: PLC0415
+
+        from world.magic.exceptions import PortalAnchorKindAlreadyInstalled  # noqa: PLC0415
+        from world.magic.models import PortalAnchorKind  # noqa: PLC0415
+        from world.magic.services.portal_travel import (  # noqa: PLC0415
+            install_portal_anchor_as_staff,
+        )
+
+        room_profile = _resolve_room_profile(kwargs.get("room_id"))
+        if room_profile is None:
+            return ActionResult(success=False, message="No such room.")
+        kind_name = (kwargs.get("kind_name") or "").strip()
+        kind = PortalAnchorKind.objects.filter(name__iexact=kind_name).first()
+        if kind is None:
+            return ActionResult(success=False, message="No such anchor kind.")
+        anchor_name = (kwargs.get("name") or "").strip()
+        if not anchor_name:
+            return ActionResult(success=False, message="Name the anchor.")
+        fixture_key = kwargs.get("fixture_key") or (
+            f"room-{room_profile.objectdb_id}/{slugify(kind_name)}"
+        )
+        try:
+            install_portal_anchor_as_staff(
+                room=room_profile.objectdb,
+                kind=kind,
+                name=anchor_name,
+                fixture_key=fixture_key,
+            )
+        except PortalAnchorKindAlreadyInstalled:
+            return ActionResult(
+                success=False, message=f"This room already has an active {kind.name} anchor."
+            )
+        return ActionResult(
+            success=True, message=f"{anchor_name} installed in {room_profile.objectdb.db_key}."
+        )
+
+
+@dataclass
+class StaffRemovePortalAnchorAction(_WorldBuilderAction):
+    """Dissolve a ``PortalAnchor`` (soft-delete). Kwarg: ``anchor_id``."""
+
+    key: str = "staff_remove_portal_anchor"
+    name: str = "Dissolve Portal Anchor"
+    icon: str = "door-closed"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.utils import timezone  # noqa: PLC0415
+
+        anchor = _resolve_portal_anchor(kwargs.get("anchor_id"))
+        if anchor is None:
+            return ActionResult(success=False, message="No such active anchor.")
+        anchor.dissolved_at = timezone.now()
+        anchor.save(update_fields=["dissolved_at"])
+        return ActionResult(success=True, message=f"{anchor.name} dissolves.")

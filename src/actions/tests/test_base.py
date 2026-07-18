@@ -506,6 +506,8 @@ class ActionRegistryTests(TestCase):
             "staff_remove_clue",
             "staff_place_clue_trigger",
             "staff_remove_clue_trigger",
+            "staff_place_portal_anchor",
+            "staff_remove_portal_anchor",
             # #2450 — GM story builder.
             "create_story_area",
             "edit_story_area",

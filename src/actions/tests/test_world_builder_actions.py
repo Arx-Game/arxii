@@ -27,6 +27,8 @@ from world.areas.models import Area
 from world.character_sheets.factories import CharacterSheetFactory
 from world.clues.factories import ClueFactory, ClueTriggerFactory, RoomClueFactory
 from world.clues.models import ClueTrigger, RoomClue
+from world.magic.factories import PortalAnchorFactory, PortalAnchorKindFactory
+from world.magic.models import PortalAnchor
 from world.room_features.factories import RoomFeatureInstanceFactory
 
 
@@ -746,3 +748,62 @@ class StaffRemoveClueTriggerActionTests(TestCase):
 
         result = get_action("staff_remove_clue_trigger").run(self.staff, clue_trigger_id=999999)
         assert not result.success
+
+
+class StaffPlacePortalAnchorActionTests(TestCase):
+    def test_installs_anchor(self) -> None:
+        from actions.registry import get_action
+
+        staff_char = _staff_actor("PlacePortalAnchorStaff")
+        room_profile = RoomProfileFactory()
+        kind = PortalAnchorKindFactory(name="Mirror")
+
+        result = get_action("staff_place_portal_anchor").run(
+            staff_char,
+            room_id=room_profile.objectdb_id,
+            kind_name="Mirror",
+            name="a tall silvered mirror",
+        )
+
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(
+            PortalAnchor.objects.active().filter(room_profile=room_profile, kind=kind).exists()
+        )
+
+    def test_fails_for_unknown_kind(self) -> None:
+        from actions.registry import get_action
+
+        staff_char = _staff_actor("PlacePortalAnchorNoKindStaff")
+        room_profile = RoomProfileFactory()
+
+        result = get_action("staff_place_portal_anchor").run(
+            staff_char, room_id=room_profile.objectdb_id, kind_name="No Such Kind", name="x"
+        )
+        self.assertFalse(result.success)
+
+    def test_fails_for_duplicate_active_kind(self) -> None:
+        from actions.registry import get_action
+
+        staff_char = _staff_actor("PlacePortalAnchorDupeStaff")
+        room_profile = RoomProfileFactory()
+        kind = PortalAnchorKindFactory(name="Mirror")
+        PortalAnchorFactory(room_profile=room_profile, kind=kind)
+
+        result = get_action("staff_place_portal_anchor").run(
+            staff_char, room_id=room_profile.objectdb_id, kind_name="Mirror", name="another"
+        )
+        self.assertFalse(result.success)
+
+
+class StaffRemovePortalAnchorActionTests(TestCase):
+    def test_dissolves_anchor(self) -> None:
+        from actions.registry import get_action
+
+        staff_char = _staff_actor("RemovePortalAnchorStaff")
+        anchor = PortalAnchorFactory()
+
+        result = get_action("staff_remove_portal_anchor").run(staff_char, anchor_id=anchor.pk)
+
+        self.assertTrue(result.success, result.message)
+        anchor.refresh_from_db()
+        self.assertIsNotNone(anchor.dissolved_at)
