@@ -1,0 +1,326 @@
+[
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": null,
+      "name": "Resonance",
+      "description": "What resonance is and how it shapes magic.",
+      "display_order": 0
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": null,
+      "name": "The Durance",
+      "description": "The journey of magical self-discovery that awakens a practitioner's gift.",
+      "display_order": 1
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": null,
+      "name": "Traditions",
+      "description": "Schools of magic and how practitioners are trained.",
+      "display_order": 2
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Smiling Shadows",
+      "description": "The shadow-wielding tricksters who treat darkness as a tool and a stage.",
+      "display_order": 0
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Vigil",
+      "description": "The solemn wardens of ancient rites who tend the city beneath the Shroud.",
+      "display_order": 1
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Masque",
+      "description": "The forbidden tradition of Luxen's underworld, hidden behind theatrical personas.",
+      "display_order": 2
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Umbral Guard",
+      "description": "The military magical tradition of the Umbral Empire.",
+      "display_order": 3
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Silken Thread",
+      "description": "A secret society of domination magic shared between empires.",
+      "display_order": 4
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Sanguinus",
+      "description": "The foremost practitioners of blood magic, founded by the Blood Patriarch.",
+      "display_order": 5
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Furyborn",
+      "description": "The berserker tradition of primal rage and savage instinct.",
+      "display_order": 6
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Late Cardian",
+      "description": "The scholarly tradition studying the legacy of ancient dragons.",
+      "display_order": 7
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Envalan",
+      "description": "Worshippers of the Goddess of Corruption who wield emerald witchfire.",
+      "display_order": 8
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Unbound",
+      "description": "Self-taught practitioners with no formal tradition, raw and unrefined.",
+      "display_order": 99
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Metallic Order",
+      "description": "The oldest living magical tradition in the world, preserved unchanged in Arx since before the Shroud rose.",
+      "display_order": 10
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Fractals of the Abyss",
+      "description": "The warded study of mirror and Abyss, tended in Death's city rather than burned.",
+      "display_order": 11
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Red Feast",
+      "description": "The priesthood of the Fleshreaper, shared between the Lycan war clans of Ariwn and the Northlands.",
+      "display_order": 12
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Old Troth",
+      "description": "Keepers of the geas-sworn troth between the Aythir and the spirits of storm, sky, land, and beast.",
+      "display_order": 13
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Order of the Lys",
+      "description": "The extinguished paladin order of the old Kingdom of Luxen, burned by the Holy Revolution.",
+      "display_order": 14
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Lumenaires",
+      "description": "The old court's kindly radiant mages, first to burn in the revolution.",
+      "display_order": 15
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "La Chasse",
+      "description": "The royal hunt's monster-hunting craft, extinguished — and stolen — by the revolution.",
+      "display_order": 16
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Deathspeakers",
+      "description": "The order that speaks to the dead, and avenges them, and is fed by the avenging.",
+      "display_order": 18
+    }
+  }
+]

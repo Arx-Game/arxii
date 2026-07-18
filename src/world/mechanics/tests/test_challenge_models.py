@@ -24,6 +24,7 @@ from world.mechanics.factories import (
     SituationTemplateFactory,
 )
 from world.mechanics.models import (
+    ChallengeApproach,
     ChallengeCategory,
     ChallengeInstance,
     ChallengeTemplate,
@@ -146,6 +147,23 @@ class ChallengeApproachTests(TestCase):
         approach = ChallengeApproachFactory(is_default=True)
         approach.refresh_from_db()
         self.assertTrue(approach.is_default)
+
+    def test_natural_key_round_trips(self) -> None:
+        """NK is (challenge_template, application) — the pre-existing unique constraint.
+
+        natural_key() flattens FK natural keys into the tuple (see
+        core.natural_keys module docstring), so a two-FK NK yields a flat
+        2-tuple here since both ChallengeTemplate and Application key on a
+        single ``name`` field.
+        """
+        approach = self.approach_with_name
+        natural_key = approach.natural_key()
+        self.assertEqual(
+            natural_key,
+            (approach.challenge_template.name, approach.application.name),
+        )
+        looked_up = ChallengeApproach.objects.get_by_natural_key(*natural_key)
+        self.assertEqual(looked_up, approach)
 
 
 class ApproachConsequenceTests(TestCase):

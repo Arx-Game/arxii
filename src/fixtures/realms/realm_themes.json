@@ -1,0 +1,44 @@
+[
+  {
+    "model": "realms.realm",
+    "fields": {
+      "name": "Arx",
+      "theme": "arx"
+    }
+  },
+  {
+    "model": "realms.realm",
+    "fields": {
+      "name": "Umbral Empire",
+      "theme": "umbros"
+    }
+  },
+  {
+    "model": "realms.realm",
+    "fields": {
+      "name": "The Holy Republic of Luxen",
+      "theme": "luxen"
+    }
+  },
+  {
+    "model": "realms.realm",
+    "fields": {
+      "name": "Grand Principality of Inferna",
+      "theme": "inferna"
+    }
+  },
+  {
+    "model": "realms.realm",
+    "fields": {
+      "name": "Kingdom of Ariwn",
+      "theme": "ariwn"
+    }
+  },
+  {
+    "model": "realms.realm",
+    "fields": {
+      "name": "Aythirmok",
+      "theme": "aythirmok"
+    }
+  }
+]

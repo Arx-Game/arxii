@@ -1,0 +1,122 @@
+[
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of the Chosen"
+      ],
+      "aspect": [
+        "Devotion"
+      ],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of Steel"
+      ],
+      "aspect": [
+        "Warfare"
+      ],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of Steel"
+      ],
+      "aspect": [
+        "Martial"
+      ],
+      "weight": 1
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of Whispers"
+      ],
+      "aspect": [
+        "Subterfuge"
+      ],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of Whispers"
+      ],
+      "aspect": [
+        "Shadow"
+      ],
+      "weight": 1
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of the Voice"
+      ],
+      "aspect": [
+        "Diplomacy"
+      ],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of the Voice"
+      ],
+      "aspect": [
+        "Performance"
+      ],
+      "weight": 1
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of the Chosen"
+      ],
+      "aspect": [
+        "Faith"
+      ],
+      "weight": 1
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of the Tome"
+      ],
+      "aspect": [
+        "Scholarship"
+      ],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": [
+        "Path of the Tome"
+      ],
+      "aspect": [
+        "Arcana"
+      ],
+      "weight": 1
+    }
+  }
+]

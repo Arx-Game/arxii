@@ -1,0 +1,68 @@
+[
+  {
+    "model": "distinctions.distinction",
+    "pk": 57,
+    "fields": {
+      "name": "Assassin",
+      "slug": "assassin",
+      "description": "You have been trained in the deadly arts of assassination. Whether through a guild, a mentor, or bitter necessity, you have learned to strike from the shadows and vanish without a trace. This training has honed your predatory instincts and your talent for deception.",
+      "category": 4,
+      "cost_per_rank": 10,
+      "max_rank": 1,
+      "parent_distinction": null,
+      "allow_other": false,
+      "variants_are_mutually_exclusive": false,
+      "trust_value": null,
+      "trust_category": null,
+      "is_automatic": false,
+      "requires_slot_filled": false,
+      "is_active": true,
+      "mutually_exclusive_with": [],
+      "tags": []
+    }
+  },
+  {
+    "model": "distinctions.distinction",
+    "pk": 58,
+    "fields": {
+      "name": "Highborn",
+      "slug": "highborn",
+      "description": "You are a claimant to a noble title in one of the realms beyond Arx. Whether through birth, marriage, or political maneuvering, you hold a landed title and the responsibilities that come with it. This grants you some measure of wealth and social standing, and marks you as someone of the blood -- eligible for certain traditions that train only nobility.",
+      "category": 5,
+      "cost_per_rank": 20,
+      "max_rank": 1,
+      "parent_distinction": null,
+      "allow_other": false,
+      "variants_are_mutually_exclusive": false,
+      "trust_value": null,
+      "trust_category": null,
+      "is_automatic": false,
+      "requires_slot_filled": false,
+      "is_active": true,
+      "mutually_exclusive_with": [],
+      "tags": []
+    }
+  },
+  {
+    "model": "distinctions.distinction",
+    "pk": 59,
+    "fields": {
+      "name": "Leal Agent",
+      "slug": "leal-agent",
+      "description": "You are a sworn operative of a noble house, embedded in the criminal underworld to serve your patrons from the shadows. Whether by choice or obligation, you live a double life -- moving among thieves and cutthroats while secretly answering to a landed lord. Your noble handlers ensured you received training befitting someone in their service.",
+      "category": 5,
+      "cost_per_rank": 15,
+      "max_rank": 1,
+      "parent_distinction": null,
+      "allow_other": false,
+      "variants_are_mutually_exclusive": false,
+      "trust_value": null,
+      "trust_category": null,
+      "is_automatic": false,
+      "requires_slot_filled": false,
+      "is_active": true,
+      "mutually_exclusive_with": [],
+      "tags": []
+    }
+  }
+]

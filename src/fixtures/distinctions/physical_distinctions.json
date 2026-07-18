@@ -1,0 +1,72 @@
+[
+  {
+    "model": "distinctions.distinction",
+    "fields": {
+      "name": "Giant's Blood",
+      "slug": "giants-blood",
+      "description": "You have the blood of giants in your lineage, granting you unusual size and strength. You tower over most of your peers and possess raw physical power to match.",
+      "category": [
+        "physical"
+      ],
+      "cost_per_rank": 20,
+      "max_rank": 1,
+      "is_active": true
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": [
+        "giants-blood"
+      ],
+      "target": [
+        "stat",
+        "strength"
+      ],
+      "value_per_rank": 10,
+      "description": "Increases Strength by 1.0"
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": [
+        "giants-blood"
+      ],
+      "target": [
+        "height_band",
+        "max_height_band_bonus"
+      ],
+      "value_per_rank": 1,
+      "description": "Can select one height band taller than normal maximum"
+    }
+  },
+  {
+    "model": "distinctions.distinction",
+    "fields": {
+      "name": "Spoiled",
+      "slug": "spoiled",
+      "description": "A life of comfort has left you ill-prepared for hardship. Physical exertion and discomfort are foreign to you, making it harder to develop physical skills through practice.",
+      "category": [
+        "personality"
+      ],
+      "cost_per_rank": -10,
+      "max_rank": 1,
+      "is_active": true
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": [
+        "spoiled"
+      ],
+      "target": [
+        "development",
+        "physical_skill_development_rate"
+      ],
+      "value_per_rank": -20,
+      "description": "Physical skills develop 20% slower"
+    }
+  }
+]

@@ -280,6 +280,7 @@ class ApplicationFactory(DjangoModelFactory):
     capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
     target_property = factory.SubFactory(PropertyFactory)
     description = factory.Faker("sentence")
+    default_template = None
 
 
 # ---------------------------------------------------------------------------

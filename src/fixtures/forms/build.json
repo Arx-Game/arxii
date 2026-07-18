@@ -1,0 +1,82 @@
+[
+  {
+    "model": "forms.build",
+    "fields": {
+      "name": "average_build",
+      "display_name": "Average",
+      "weight_factor": "1.0",
+      "is_cg_selectable": true,
+      "sort_order": 0
+    }
+  },
+  {
+    "model": "forms.build",
+    "fields": {
+      "name": "slight",
+      "display_name": "Slight",
+      "weight_factor": "2.0",
+      "is_cg_selectable": true,
+      "sort_order": 0
+    }
+  },
+  {
+    "model": "forms.build",
+    "fields": {
+      "name": "lean",
+      "display_name": "Lean",
+      "weight_factor": "2.2",
+      "is_cg_selectable": true,
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.build",
+    "fields": {
+      "name": "average",
+      "display_name": "Average",
+      "weight_factor": "2.5",
+      "is_cg_selectable": true,
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.build",
+    "fields": {
+      "name": "athletic",
+      "display_name": "Athletic",
+      "weight_factor": "2.5",
+      "is_cg_selectable": true,
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.build",
+    "fields": {
+      "name": "overweight",
+      "display_name": "Overweight",
+      "weight_factor": "3.0",
+      "is_cg_selectable": true,
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.build",
+    "fields": {
+      "name": "brawny",
+      "display_name": "Brawny",
+      "weight_factor": "3.0",
+      "is_cg_selectable": true,
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "forms.build",
+    "fields": {
+      "name": "hulking",
+      "display_name": "Hulking",
+      "weight_factor": "3.5",
+      "is_cg_selectable": false,
+      "sort_order": 6
+    }
+  }
+]

@@ -1,0 +1,102 @@
+[
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Compulsion",
+      "description": "Alters a target's behavior or allegiance.",
+      "base_power": null,
+      "base_anima_cost": 0,
+      "has_power_scaling": false
+    }
+  },
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Weapon Enhancement",
+      "description": "Imbues a held weapon with magical force.",
+      "base_power": 10,
+      "base_anima_cost": 3,
+      "has_power_scaling": true
+    }
+  },
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Ranged Attack",
+      "description": "Projects destructive energy at a distant target.",
+      "base_power": 10,
+      "base_anima_cost": 3,
+      "has_power_scaling": true
+    }
+  },
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Buff",
+      "description": "Beneficial effects that enhance allies.",
+      "base_power": null,
+      "base_anima_cost": 2,
+      "has_power_scaling": false
+    }
+  },
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Debuff",
+      "description": "Harmful effects that weaken or hinder enemies.",
+      "base_power": null,
+      "base_anima_cost": 2,
+      "has_power_scaling": false
+    }
+  },
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Defense",
+      "description": "Protective effects that shield or armor the caster or allies.",
+      "base_power": 10,
+      "base_anima_cost": 2,
+      "has_power_scaling": true
+    }
+  },
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Utility",
+      "description": "Non-combat effects for movement, illusion, or environmental manipulation.",
+      "base_power": null,
+      "base_anima_cost": 2,
+      "has_power_scaling": false
+    }
+  },
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Social Influence",
+      "description": "Magical enhancement of social action.",
+      "base_power": null,
+      "base_anima_cost": 2,
+      "has_power_scaling": false
+    }
+  },
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Teleport",
+      "description": "Instant relocation through bent space.",
+      "base_power": null,
+      "base_anima_cost": 0,
+      "has_power_scaling": false
+    }
+  },
+  {
+    "model": "magic.effecttype",
+    "fields": {
+      "name": "Attack",
+      "description": "Offensive effects that deal damage or harm targets.",
+      "base_power": 10,
+      "base_anima_cost": 2,
+      "has_power_scaling": true
+    }
+  }
+]

@@ -1,0 +1,482 @@
+[
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Social",
+      "description": "Social / emotional states that color interaction.",
+      "display_order": 0,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Inspiration",
+      "description": "Rallying and inspirational effects that bolster allies.",
+      "display_order": 0,
+      "is_negative": false,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Charm",
+      "description": "Compulsion/charm effects that alter an NPC's behavior.",
+      "display_order": 0,
+      "is_negative": true,
+      "alters_behavior": true,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 0",
+      "description": "Test category",
+      "display_order": 0,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 1",
+      "description": "Test category",
+      "display_order": 1,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 2",
+      "description": "Test category",
+      "display_order": 2,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 3",
+      "description": "Test category",
+      "display_order": 3,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 4",
+      "description": "Test category",
+      "display_order": 4,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 5",
+      "description": "Test category",
+      "display_order": 5,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 6",
+      "description": "Test category",
+      "display_order": 6,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 7",
+      "description": "Test category",
+      "display_order": 7,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 8",
+      "description": "Test category",
+      "display_order": 8,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 9",
+      "description": "Test category",
+      "display_order": 9,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 10",
+      "description": "Test category",
+      "display_order": 10,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 11",
+      "description": "Test category",
+      "display_order": 11,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 12",
+      "description": "Test category",
+      "display_order": 12,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 13",
+      "description": "Test category",
+      "display_order": 13,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 14",
+      "description": "Test category",
+      "display_order": 14,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Magical",
+      "description": "Magical conditions arising from spellcasting and aura interactions.",
+      "display_order": 0,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Magical Boon",
+      "description": "Positive magical conditions from resonance alignment and aura attunement.",
+      "display_order": 10,
+      "is_negative": false,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 15",
+      "description": "Test category",
+      "display_order": 15,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 16",
+      "description": "Test category",
+      "display_order": 16,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 17",
+      "description": "Test category",
+      "display_order": 17,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 18",
+      "description": "Test category",
+      "display_order": 18,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 19",
+      "description": "Test category",
+      "display_order": 19,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 20",
+      "description": "Test category",
+      "display_order": 20,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Category 21",
+      "description": "Test category",
+      "display_order": 21,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Elemental",
+      "description": "Elemental conditions affecting the target.",
+      "display_order": 0,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Concealed",
+      "description": "Conditions that make the bearer imperceptible to others (invisibility, magical concealment, stealth) — pierced per-observer via a detection check, never revealed via a check to everyone at once.",
+      "display_order": 40,
+      "is_negative": false,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": true
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Incapacitation",
+      "description": "Acute peril states: incapacitation that may escalate to death.",
+      "display_order": 0,
+      "is_negative": true,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Emotional",
+      "description": "Emotional states that affect control and performance.",
+      "display_order": 45,
+      "is_negative": false,
+      "alters_behavior": false,
+      "grants_intangibility": false,
+      "conceals_from_perception": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Damage Over Time",
+      "description": "Conditions that deal periodic damage - burning, bleeding, poison effects.",
+      "display_order": 10,
+      "is_negative": true
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Control",
+      "description": "Conditions that restrict actions - paralysis, stun, immobilization, incapacitation.",
+      "display_order": 20,
+      "is_negative": true
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Debuff",
+      "description": "Conditions that reduce effectiveness - weakness, slowness, penalties to checks.",
+      "display_order": 30,
+      "is_negative": true
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Mental",
+      "description": "Conditions affecting the mind - fear, charm, confusion, domination.",
+      "display_order": 40,
+      "is_negative": true
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Sensory",
+      "description": "Conditions affecting senses - blindness, deafness, sensory overload.",
+      "display_order": 50,
+      "is_negative": true
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Poison",
+      "description": "Toxic conditions with progression - paralytic, lethal, hallucinogenic poisons.",
+      "display_order": 60,
+      "is_negative": true
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Corruption",
+      "description": "Abyssal taint and dark magic effects - soul corruption, dark marks, creeping doom.",
+      "display_order": 70,
+      "is_negative": true
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Environmental",
+      "description": "Conditions from surroundings - wet, chilled, heated, exposed to elements.",
+      "display_order": 80,
+      "is_negative": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Combat State",
+      "description": "Tactical conditions during combat - vulnerable, exposed, flanked, guarded.",
+      "display_order": 90,
+      "is_negative": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Buff",
+      "description": "Beneficial conditions - empowered, protected, hastened, strengthened.",
+      "display_order": 100,
+      "is_negative": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Channeling",
+      "description": "Active casting states - charging abilities, maintaining effects, preparing actions.",
+      "display_order": 110,
+      "is_negative": false
+    }
+  },
+  {
+    "model": "conditions.conditioncategory",
+    "fields": {
+      "name": "Wound",
+      "description": "Lasting injuries - crippled limbs, deep wounds, scars that haven't healed.",
+      "display_order": 120,
+      "is_negative": true
+    }
+  }
+]

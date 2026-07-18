@@ -1,0 +1,585 @@
+[
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Caretaker",
+      "description": "Arx is a city built for three million that holds fifty thousand, and your family has tended it for a thousand years. You grew up under the Shroud's grey twilight: sweeping steps no one would climb, lighting lamps in streets where nothing living walked, learning the names of every house on your row — including the empty ones. Especially the empty ones. Your people were offered the Great Callings and stayed; someone had to keep the city. When you came of age a dark house passed into your keeping, chosen from among the countless empty, and you read its registry aloud the day you took the keys, so the house would know it was remembered. Then the Vanishing took the teachers, the Shroud fell, and the world outside — older now by ages you cannot count — began speaking your city's name like a prayer. The duty your family deferred for forty generations has come due. It is time, at last, to complete the Durance.",
+      "art_image": "",
+      "starting_area": [
+        "The City of Arx"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 0,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Sleeper",
+      "description": "You woke in the dark beneath Arx, in a tomb that was never quite a grave. The stone lid moved because you pushed it; the cold preserving light faded as you sat up; and cut into the slab where your head had lain was a single line of text: your name. It is the only thing you have. Not your family, not your first language, not the reason you were set aside like a letter addressed to someone not yet born. The Caretakers found you wandering the necropolis and took you in gently — they have found others like you, more and more since the Shroud fell, and no one says aloud what everyone thinks about the timing. Sometimes your hands know things. A ward-sign drawn without thinking. A phrase of the craft pronounced a way that makes your teachers go quiet, because it is how their tradition sounded before their tradition began. Whoever preserved you meant you for something. The Vanishing took everyone who might have remembered what.",
+      "art_image": "",
+      "starting_area": [
+        "The City of Arx"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 1,
+      "family_known": false,
+      "allowed_species": [
+        [
+          "Human"
+        ],
+        [
+          "Nox'alfar"
+        ],
+        [
+          "Sylv'alfar"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": [
+        "Sleeper"
+      ],
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Misbegotten",
+      "description": "No one carried you into the world. The Tree of Souls simply had you, the way a tree has fruit: you were found at its roots, an infant with no mother, no lineage, and no explanation, and the Vigil carried you to the Cradle to be raised with the others like you. Arx lives easily with its ghosts, but it has never decided what you are — blessing or omen — so it treats you carefully, like a dropped thing that might be sacred: doors close politely as you pass, and prayers are said just after. Inside the Cradle you had what the rest of the ghost city forgot it missed. Noise. Siblings. A family assembled from foundlings, fiercer for being chosen. You speak the common tongue of Arx and nothing older; whatever people the Tree shaped you from, it did not pass along their words. And the question follows you up every empty street: the Tree keeps making people, in the emptiest city in the world, in the hour of its greatest need. What are you for?",
+      "art_image": "",
+      "starting_area": [
+        "The City of Arx"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 2,
+      "family_known": false,
+      "allowed_species": [
+        [
+          "Human"
+        ],
+        [
+          "Daeva"
+        ],
+        [
+          "Elf"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": false,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": [
+        "Misbegotten"
+      ],
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Commoner",
+      "description": "A common beginning.",
+      "art_image": "",
+      "starting_area": [
+        "The City of Arx"
+      ],
+      "trust_required": 0,
+      "is_active": false,
+      "sort_order": 90,
+      "family_known": false,
+      "allowed_species": [
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Noble",
+      "description": "A noble upbringing with known family and standing.",
+      "art_image": "",
+      "starting_area": [
+        "The City of Arx"
+      ],
+      "trust_required": 0,
+      "is_active": false,
+      "sort_order": 91,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Work Crews",
+      "description": "Salvation is the most beautiful city in the world — white marble, gold leaf, the Shepherd's crook on every wall — and you have seen all of it through the eyeholes of a mask. You were born a Sinner: had you not sinned, the priests explain, you would not have been born Khati, and the Republic is nothing if not just. So you were made useful. Fields, mines, labor yards; dawn prayers thanking the Shepherd for the mercy of work. You kept your face hidden and your head down, and you might have kept them down forever — but then came the Glimpse, one blinding instant of what you might become, and the Republic keeps exactly one mercy for a Gifted Sinner: fire. Your crew hid you for three days. On the third night they took you down into the catacombs beneath Salvation, past crypts older than the Republic itself, to a door no one living remembered — and it woke at your touch as if it had been waiting. Somewhere ahead is a hall where a bare face is no crime, and where they ask your name not to report it, but to record it.",
+      "art_image": "",
+      "starting_area": [
+        "Salvation"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 0,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Khati"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Luxeri"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "les Ouwoux",
+      "description": "You are one of les Ouwoux. The word is your people's own — no one in the household ever asked what it meant — and it bought you the better servitude: a Humble house in the high wards of Salvation, warm kitchens, clean livery, a mask of good lacquer instead of crew-issue tin. You stood at attention through a thousand dinners, invisible and indispensable, while the family praised its own humility beneath murals of gold. Sinners who serve well, the mistress liked to say, are very nearly forgiven. You learned what the house never guessed you knew: which floorboards speak, which doors are watched, which words mean danger coming. When the Glimpse came you hid it — les Ouwoux have hidden more, for longer — and you weighed the life you had against the stake that waited if you were ever found, and against something no one had ever offered you: a life that was yours. Then you walked out of the gilded house with your mask still in your hand, down into the catacombs, through hidden doors older than the Republic, toward a place where they ask your name in order to record it.",
+      "art_image": "",
+      "starting_area": [
+        "Salvation"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 1,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Khati"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Luxeri"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Tailless Sinner",
+      "description": "There was a trial. There is always a trial — the Republic is nothing if not thorough — and at the end of it a brand, a mask, and a word: Sinner. A born Sinner needs no story; a Khati is simply Sinner, and that is the end of it. You had to earn yours, so you come with a tale — the night it happened, the thing you did or were said to have done — and the tale is the joke. All tale and no tail, the commoners laugh, a Sinner who talked his way into the mask; guilty by verdict rather than by birth, which everyone agrees is the more shameful way. What you did stopped mattering the moment the judgment was read; Salvation does not punish so much as reclassify. Stripped of the freedom to leave, to gather, to show your face, you went where the fallen go — the underside of the radiant city, where the Honest collect their fees in the Shepherd's name and everyone is careful about what they see. You learned to live small, and to keep your tale behind your mask. Then the Glimpse found you even there, one searing instant of what you might become, and the underside taught you its last lesson for free: there is no hole in Salvation deep enough to hide the Gifted, only fire at the end of the search. So you went deeper — down where even the Honest will not go, into catacombs older than the Republic, following a rumor of doors that open for people like you. The rumor was true. Somewhere ahead is a hall where they ask your name — and write down the answer as if it still belonged to you.",
+      "art_image": "",
+      "starting_area": [
+        "Salvation"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 2,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Luxeri"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "The Simple",
+      "description": "You had a good life, as Salvation counts good lives: honest work, feast days, a pew with your name worn into it. You believed — truly, the way you believe in weather. You dropped your coin in the plate, kept clear of masked Sinners as decent people do, and when the witchhunters burned some wickedness out of a neighboring parish you were grateful, and said so in your prayers. Lead us not into temptation; deliver us from evil. Then, on an ordinary afternoon, the temptation was you. One instant — of impossible light, or of something that was not light at all — and you knew, with a catechism's certainty, exactly what you had become and exactly what comes for it. You had watched the pyres. You had carried kindling once. Perhaps you could have gone to the Church and hoped to be found worthy of service — but the Glimpse showed you something the sermons never had, and now the prayer breaks off in the middle every time. So you ran: out of the parish, out of your life, down into the catacombs everyone knows to fear, toward a door the wicked whisper will open for people like you. It did.",
+      "art_image": "",
+      "starting_area": [
+        "Salvation"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 3,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Luxeri"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "The Blessed",
+      "description": "When your Glimpse came, no one hid you and no one ran. You were brought to the Church within the week, as the law provides, and the Church, finding your gift tolerable, gave you to one of the orders of the Lesser Gods — permitted, the way a shepherd permits dogs: watchfully, and for the work. The work is real. You have spent the years since hunting the things the sermons only gesture at — Afflictions that eat villages, slaver demons wearing borrowed joy — and you have saved people who spat as you left, and gone back the next time anyway, because your order cares less for doctrine than for the dying. You are Blessed, the fifth caste, the Republic's drawn sword; you have guarded Salvation all your life and never once had cause to walk beneath it. Now the Shroud over legendary Arx has fallen, and the Church would know what stirs there. In the Citadel of Absolution you knelt and were charged: go out by the sanctioned gate, complete your Durance among the watchers at Shroudwatch, and watch — always — for wickedness from beneath the fallen Shroud. You answered with the only words there are. Thy will be done. You have never had reason to wonder whose.",
+      "art_image": "",
+      "starting_area": [
+        "Salvation"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 4,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Luxeri"
+        ],
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Nobility",
+      "description": "Your house is older than the Empire's present borders, and it has never once let anyone forget it. You were raised in Alarician halls hung with murals that swear your blood runs back to the legendary mages of the deep ages — Metallic lords, Fractal adepts — the gold leaf laid a little thicker each year to gild how much of it is now owed to Blighton banks. Tradition and Steel, the Empire says, and your family is fluent in both: the silk glove and the edge beneath it, the toast and the knife, the advantageous marriage and the quiet ruin. Then your Glimpse came, and overnight you were no longer merely an heir but an asset — the rarest strength a house can put on the board. Umbros prizes the Gifted exactly the way it prizes everything else: for what they can take, and hold. You were watched all your life for grace and advantage; now you are watched with intent. The Black Spire opens for you, and with it the oldest charge the Empire lays upon its Gifted — go out, grow puissant, and return the stronger for it, the better to serve the Empire and to raise your house's name above the rivals who would smile at your funeral. Let the lesser realms call all of this evil if it comforts them. In Umbros it is only the truth said without apology: the strong shape the world, and you were born and bred to be strong.",
+      "art_image": "",
+      "starting_area": [
+        "Umbros"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 0,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Umbral"
+        ],
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 1,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Underworld",
+      "description": "No house will claim you, and you have made a virtue of it. You came up in the under-markets of Umbros, the shadow-lit tiers beneath the blackstone, where a name is worth only what it can pay and loyalty is a contract like any other — honored exactly as long as it profits. Maybe you had family down there: not a house with a crest but a crew with a reputation, which in the Underworld is worth more and tends to last about as long. Coin over blood, they say, and you have lived every word of it — every scrap of what you are, you took, dealt, or bled for, in a city that respects precisely that and nothing softer. The nobles up in the gold-leaf halls pretend Umbros is a meritocracy; down in the dark it very nearly is, because down in the dark there is nothing else to trade on. Then the Glimpse marked you, and a strength no coin could ever buy came up through your hands — and every creditor who ever held your paper leaned a little closer. The Black Spire takes the Gifted out of whatever gutter they climbed from; the Empire is honest about strength even when it is honest about nothing else. So you go out under the same old charge as any highborn blade — return puissant, return useful — trailing the patrons and debts that fully intend to collect on whatever you become. Let Luxen's priests name you damned from their white towers. You have been called worse, by better, and charged them for the privilege.",
+      "art_image": "",
+      "starting_area": [
+        "Umbros"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 1,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Human"
+        ],
+        [
+          "Khati"
+        ],
+        [
+          "Infernal"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Umbral"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Infernal Nobility",
+      "description": "Your house took its palazzo the way it takes everything — boldly, from someone who thought they could keep it — and it has spent the generations since daring the world to take it back. You were raised in the grand Reefian sprawl of the Isles: open galleries drinking the sea wind, storm-proof inner halls, floors of white Luxen marble that your great-grandmother's crews liberated from a Church convoy, which is the only way your family has ever bought marble. Your grandmother rules the house as her mother did; your mother commands its ships; power in Inferna has a matriarch's face and a corsair's manners. The continent calls your people Imps, pirates, and witches — and the Isles answer by flying it from the masthead. Praise to Envala for the Sea and Reefs: corruption is only transformation, the priestesses teach, and they say it smiling. But you have stood in your Cinderan cousins' sandstone halls, before the great windows they keep facing northwest, and you know what the laughter is built over — what Luxen took, and never answered for. When your Glimpse came, the house celebrated for three days. Now the Shroud is down and the ghost city's gates stand open, and you go to walk its silent Echoes to Shroudwatch, carrying the Goddess's blessing, your house's name, and a standing instruction as old as the family charter: learn everything, and come home with something worth taking.",
+      "art_image": "",
+      "starting_area": [
+        "Inferna"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 0,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Infernal"
+        ],
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Luxeri"
+        ],
+        [
+          "Cinderi"
+        ],
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 1,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Reavers",
+      "description": "No caste, no mask, no landlord and no lord — the deck of a free ship is the flattest floor in the world, and you learned your trade standing on one. Reaver covers a great deal of honest work: privateer under the Grand Princess's letters, sellsword between wars, smuggler wherever Luxen calls trade a sin, and pirate whenever a fat convoy makes the argument for it. The Isles do not ask what you were before. A runaway Sinner who came aboard still wearing the mask, a winged Cinderan with a grudge worth its weight in powder, a farm child from nowhere with good knife-hands — the crew counts what you can do, splits the take by shares, and praises Envala for the reefs that eat the fleets sent chasing you. The continent calls it wickedness; the Isles grin and call it Tuesday. Then came your Glimpse — witchfire-green, or something stranger — and the shares got complicated, because a Gifted reaver is worth more than any prize in the hold, and everyone aboard knew where you would have to go to become one. So the crew sailed you to the edge of legend and put you ashore with your split and their blessing: walk the Echoes, learn what you are, and remember which flag taught you what free means.",
+      "art_image": "",
+      "starting_area": [
+        "Inferna"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 1,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Infernal"
+        ],
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Luxeri"
+        ],
+        [
+          "Cinderi"
+        ],
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Peerage",
+      "description": "The sun does not rise in Ariwn, and the Peerage prefers it that way. You belong to that eternal court — perhaps of the deathless blood yourself, young as the Peerage counts youth; perhaps an heir of mixed blood to a succession that will never come, the head of your house being six centuries old and in excellent health; perhaps the sworn mortal steward of a lineage your family has served for twelve generations, who holds more of its secrets than some of its nobles do. The court's games are played in centuries. Alliances are eternal and grudges more so; a slight from before the long night began is still being avenged, carefully, by parties with all the time in the world. Nothing changes in Ariwn — the castles are preserved rather than built, the titles do not pass, the night does not lift — and that is exactly why the whole Peerage leaned forward at once when the Shroud over Arx came down and the dead portals began to wake. Something new had finally entered the game, and you, Gifted, are suddenly the rarest thing in the Kingdom: a piece that can move. Your house arranged your departure within the season, which is breathtaking haste by Ariwn standards, with letters, expectations, and instructions that took longer to recite than the journey. Walk the Echoes. Take up the Durance. Eternity is watching its investment.",
+      "art_image": "",
+      "starting_area": [
+        "Ariwn"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 0,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Vampire"
+        ],
+        [
+          "Dhampir"
+        ],
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Ari"
+        ],
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 1,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "War Clans",
+      "description": "You were raised in a Packstone fortress, where everything worth having is earned: the private room in better stone, the wide moon-window that tells the whole clan your standing, the right to lead the hunt. The war clans are Ariwn's fang — bound to the vampire crown by ancient blood pacts, and proud of the bargain, because the clans keep their word and the crown knows better than to test it. Pack is the whole of the law. Wolf-blooded or human kin who runs with them, the pack does not care, and outsiders never quite believe what they see when someone threatens one of yours. You grew up on the hunt and the howl: on Furyborn elders who wear their rage like armor, on the Fleshreaper's shrine-room with its sloped and blood-channeled floor, where the devout wear skulls and spikes and the offerings are honest. Then the Glimpse marked you, and the clan's arithmetic was simple — a strength this rare belongs to the pack, and the pack sends its strength where it will grow. The elders traded with the court for your passage before you had finished healing from the celebration. Walk the Echoes, they told you. Grow terrible. Come home to us. The pact holds, and the pack remembers its own.",
+      "art_image": "",
+      "starting_area": [
+        "Ariwn"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 1,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Lycan"
+        ],
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Ari"
+        ],
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  },
+  {
+    "model": "character_creation.beginnings",
+    "fields": {
+      "name": "Northlander",
+      "description": "In the Northlands you learn the year backwards: winter is the safe season, and everything soft and green is a warning. When the thaw comes the Deadlands march — legions of the dead sweeping the softening fields for the living to swell their ranks — so the Aythir build holds that can be taken down in a night and carried north, keep salt and steel at every hearth, and pray the old prayer: salt and steel guard us well, ere the dead march from hell. You grew up counting what could be carried and testing what could be trusted, which was little, and few. Trust in Aythirmok is not given; it is earned in winters, and once earned it is total — a hold that trusts you will starve with you before it lets you starve alone. Then came your Glimpse, and the fire went quiet, because everyone knew what it meant. The Gifted can do what salt and steel cannot: kill the things that raise the dead, and end what marches. There was no question of keeping you. The hold pooled what it could spare — furs, silver, a blade with three owners' marks on the hilt — and sent you south toward the ghost city and the watchers' school beyond it. Learn fast, they said, and be home before the thaw. You have never yet trusted a stranger, and you are about to live among thousands of them. Survival is the creed. Trust is earned. Begin.",
+      "art_image": "",
+      "starting_area": [
+        "Aythirmok"
+      ],
+      "trust_required": 0,
+      "is_active": true,
+      "sort_order": 0,
+      "family_known": true,
+      "allowed_species": [
+        [
+          "Human"
+        ]
+      ],
+      "starting_languages": [
+        [
+          "Aythir"
+        ],
+        [
+          "Arvani Common"
+        ]
+      ],
+      "grants_species_languages": true,
+      "societies": [],
+      "social_rank": 0,
+      "cg_point_cost": 0,
+      "heritage": null,
+      "starting_room_override": null
+    }
+  }
+]

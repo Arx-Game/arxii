@@ -1,0 +1,600 @@
+[
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Ignite",
+      "capability": [
+        "generation"
+      ],
+      "target_property": [
+        "flammable"
+      ],
+      "description": "Ignite using generation on flammable targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Illuminate",
+      "capability": [
+        "generation"
+      ],
+      "target_property": [
+        "dark"
+      ],
+      "description": "Illuminate using generation on dark targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Evaporate",
+      "capability": [
+        "generation"
+      ],
+      "target_property": [
+        "flooded"
+      ],
+      "description": "Evaporate using generation on flooded targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Break",
+      "capability": [
+        "force"
+      ],
+      "target_property": [
+        "breakable"
+      ],
+      "description": "Break using force on breakable targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Lift",
+      "capability": [
+        "force"
+      ],
+      "target_property": [
+        "heavy"
+      ],
+      "description": "Lift using force on heavy targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Breach",
+      "capability": [
+        "force"
+      ],
+      "target_property": [
+        "armored"
+      ],
+      "description": "Breach using force on armored targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Drain",
+      "capability": [
+        "force"
+      ],
+      "target_property": [
+        "flooded"
+      ],
+      "description": "Drain using force on flooded targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Blast",
+      "capability": [
+        "projection"
+      ],
+      "target_property": [
+        "solid"
+      ],
+      "description": "Blast using projection on solid targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Strike",
+      "capability": [
+        "projection"
+      ],
+      "target_property": [
+        "armored"
+      ],
+      "description": "Strike using projection on armored targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Channel",
+      "capability": [
+        "manipulation"
+      ],
+      "target_property": [
+        "flooded"
+      ],
+      "description": "Channel using manipulation on flooded targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Direct",
+      "capability": [
+        "manipulation"
+      ],
+      "target_property": [
+        "gaseous"
+      ],
+      "description": "Direct using manipulation on gaseous targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Control",
+      "capability": [
+        "manipulation"
+      ],
+      "target_property": [
+        "mechanical"
+      ],
+      "description": "Control using manipulation on mechanical targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Shield",
+      "capability": [
+        "barrier"
+      ],
+      "target_property": [
+        "hazardous"
+      ],
+      "description": "Shield using barrier on hazardous targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Contain",
+      "capability": [
+        "barrier"
+      ],
+      "target_property": [
+        "flooded"
+      ],
+      "description": "Contain using barrier on flooded targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Ward",
+      "capability": [
+        "barrier"
+      ],
+      "target_property": [
+        "arcane"
+      ],
+      "description": "Ward using barrier on arcane targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Block",
+      "capability": [
+        "barrier"
+      ],
+      "target_property": [
+        "armored"
+      ],
+      "description": "Block using barrier on armored targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Navigate",
+      "capability": [
+        "traversal"
+      ],
+      "target_property": [
+        "dark"
+      ],
+      "description": "Navigate using traversal on dark targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Cross",
+      "capability": [
+        "traversal"
+      ],
+      "target_property": [
+        "hazardous"
+      ],
+      "description": "Cross using traversal on hazardous targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Escape",
+      "capability": [
+        "traversal"
+      ],
+      "target_property": [
+        "enclosed"
+      ],
+      "description": "Escape using traversal on enclosed targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Ascend",
+      "capability": [
+        "traversal"
+      ],
+      "target_property": [
+        "elevated"
+      ],
+      "description": "Ascend using traversal on elevated targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Swim",
+      "capability": [
+        "traversal"
+      ],
+      "target_property": [
+        "underwater"
+      ],
+      "description": "Swim using traversal on underwater targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Scout",
+      "capability": [
+        "perception"
+      ],
+      "target_property": [
+        "dark"
+      ],
+      "description": "Scout using perception on dark targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Detect",
+      "capability": [
+        "perception"
+      ],
+      "target_property": [
+        "arcane"
+      ],
+      "description": "Detect using perception on arcane targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Analyze",
+      "capability": [
+        "perception"
+      ],
+      "target_property": [
+        "spectral"
+      ],
+      "description": "Analyze using perception on spectral targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Spot",
+      "capability": [
+        "perception"
+      ],
+      "target_property": [
+        "enclosed"
+      ],
+      "description": "Spot using perception on enclosed targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Cleanse",
+      "capability": [
+        "suppression"
+      ],
+      "target_property": [
+        "arcane"
+      ],
+      "description": "Cleanse using suppression on arcane targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Purify",
+      "capability": [
+        "suppression"
+      ],
+      "target_property": [
+        "abyssal"
+      ],
+      "description": "Purify using suppression on abyssal targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Dispel",
+      "capability": [
+        "suppression"
+      ],
+      "target_property": [
+        "shadowy"
+      ],
+      "description": "Dispel using suppression on shadowy targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Exorcise",
+      "capability": [
+        "suppression"
+      ],
+      "target_property": [
+        "undead"
+      ],
+      "description": "Exorcise using suppression on undead targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Pick",
+      "capability": [
+        "precision"
+      ],
+      "target_property": [
+        "locked"
+      ],
+      "description": "Pick using precision on locked targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Disarm",
+      "capability": [
+        "precision"
+      ],
+      "target_property": [
+        "mechanical"
+      ],
+      "description": "Disarm using precision on mechanical targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Solve",
+      "capability": [
+        "analysis"
+      ],
+      "target_property": [
+        "mechanical"
+      ],
+      "description": "Solve using analysis on mechanical targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Decipher",
+      "capability": [
+        "analysis"
+      ],
+      "target_property": [
+        "arcane"
+      ],
+      "description": "Decipher using analysis on arcane targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Assess",
+      "capability": [
+        "analysis"
+      ],
+      "target_property": [
+        "armored"
+      ],
+      "description": "Assess using analysis on armored targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Exploit",
+      "capability": [
+        "exploitation"
+      ],
+      "target_property": [
+        "armored"
+      ],
+      "description": "Exploit using exploitation on armored targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Shatter",
+      "capability": [
+        "exploitation"
+      ],
+      "target_property": [
+        "breakable"
+      ],
+      "description": "Shatter using exploitation on breakable targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Cow",
+      "capability": [
+        "intimidation"
+      ],
+      "target_property": [
+        "proud"
+      ],
+      "description": "Cow using intimidation on proud targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Threaten",
+      "capability": [
+        "intimidation"
+      ],
+      "target_property": [
+        "fearful"
+      ],
+      "description": "Threaten using intimidation on fearful targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Convince",
+      "capability": [
+        "persuasion"
+      ],
+      "target_property": [
+        "reasonable"
+      ],
+      "description": "Convince using persuasion on reasonable targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Sway",
+      "capability": [
+        "persuasion"
+      ],
+      "target_property": [
+        "trusting"
+      ],
+      "description": "Sway using persuasion on trusting targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Mislead",
+      "capability": [
+        "deception"
+      ],
+      "target_property": [
+        "trusting"
+      ],
+      "description": "Mislead using deception on trusting targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Bluff",
+      "capability": [
+        "deception"
+      ],
+      "target_property": [
+        "proud"
+      ],
+      "description": "Bluff using deception on proud targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Befriend",
+      "capability": [
+        "charm"
+      ],
+      "target_property": [
+        "reasonable"
+      ],
+      "description": "Befriend using charm on reasonable targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Seduce",
+      "capability": [
+        "charm"
+      ],
+      "target_property": [
+        "proud"
+      ],
+      "description": "Seduce using charm on proud targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Rally",
+      "capability": [
+        "inspiration"
+      ],
+      "target_property": [
+        "demoralized"
+      ],
+      "description": "Rally using inspiration on demoralized targets."
+    }
+  },
+  {
+    "model": "mechanics.application",
+    "fields": {
+      "name": "Embolden",
+      "capability": [
+        "inspiration"
+      ],
+      "target_property": [
+        "fearful"
+      ],
+      "description": "Embolden using inspiration on fearful targets."
+    }
+  }
+]

@@ -1,0 +1,216 @@
+[
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Human",
+      "description": "The default species.",
+      "parent": null,
+      "sort_order": 0,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Khati",
+      "description": "Beast-touched humanoids with subtle animal characteristics - ears, tails, and other minor tells. Almost entirely human in appearance.",
+      "parent": null,
+      "sort_order": 10,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Vulpi",
+      "description": "Fox-touched Khati known for their cunning and grace.",
+      "parent": [
+        "Khati"
+      ],
+      "sort_order": 1,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Cani",
+      "description": "Canine-touched Khati known for their loyalty and pack bonds.",
+      "parent": [
+        "Khati"
+      ],
+      "sort_order": 2,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Leoi",
+      "description": "Feline-touched Khati known for their pride and independence.",
+      "parent": [
+        "Khati"
+      ],
+      "sort_order": 3,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Aviari",
+      "description": "Bird-touched Khati with subtle feathered features.",
+      "parent": [
+        "Khati"
+      ],
+      "sort_order": 4,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Repi",
+      "description": "Cold-blooded Khati with reptilian or aquatic characteristics.",
+      "parent": [
+        "Khati"
+      ],
+      "sort_order": 5,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Nezi",
+      "description": "Rodent-touched Khati known for their resourcefulness.",
+      "parent": [
+        "Khati"
+      ],
+      "sort_order": 6,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Lopari",
+      "description": "Rabbit-touched Khati known for their swiftness.",
+      "parent": [
+        "Khati"
+      ],
+      "sort_order": 7,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Infernal",
+      "description": "Tiefling-like beings with demonic heritage, marked by horns, tails, and unusual skin tones.",
+      "parent": null,
+      "sort_order": 20,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Daeva",
+      "description": "Angelic beings with divine heritage, always bearing feathered wings.",
+      "parent": null,
+      "sort_order": 30,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Vampire",
+      "description": "Undead beings who subsist on blood, bearing eternal fangs.",
+      "parent": null,
+      "sort_order": 40,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Dhampir",
+      "description": "Half-vampires who walk between worlds, bearing subtle fangs.",
+      "parent": null,
+      "sort_order": 41,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Lycan",
+      "description": "Shapeshifters who can assume a bestial battle form.",
+      "parent": null,
+      "sort_order": 50,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Saurian",
+      "description": "Lizardfolk with scaled skin, claws, and reptilian features.",
+      "parent": null,
+      "sort_order": 60,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Elf",
+      "description": "The elder peoples of the deep ages. Elves begin only in Arx.",
+      "parent": null,
+      "sort_order": 40,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Nox'alfar",
+      "description": "Dark elves of the deep past, night-bound and easy among the dead. Sunlight is lethal to them; the grey twilight of Arx never was.",
+      "parent": [
+        "Elf"
+      ],
+      "sort_order": 41,
+      "starting_languages": [
+        [
+          "Nox'alfar"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Sylv'alfar",
+      "description": "Wood elves, children of the old forests who once settled Arvum before the world outside forgot them.",
+      "parent": [
+        "Elf"
+      ],
+      "sort_order": 42,
+      "starting_languages": []
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Rex'alfar",
+      "description": "High elves of lost Caer'alfar, rarest and proudest of the elder peoples.",
+      "parent": [
+        "Elf"
+      ],
+      "sort_order": 43,
+      "starting_languages": []
+    }
+  }
+]

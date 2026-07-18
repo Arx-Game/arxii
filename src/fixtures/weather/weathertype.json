@@ -1,0 +1,86 @@
+[
+  {
+    "model": "weather.weathertype",
+    "fields": {
+      "name": "Clear",
+      "codex_subject": null,
+      "is_automated": true,
+      "selection_weight": 2,
+      "min_temperature": null,
+      "max_temperature": null,
+      "is_active": true
+    }
+  },
+  {
+    "model": "weather.weathertype",
+    "fields": {
+      "name": "Stormy",
+      "codex_subject": null,
+      "is_automated": true,
+      "selection_weight": 1,
+      "min_temperature": null,
+      "max_temperature": null,
+      "is_active": true
+    }
+  },
+  {
+    "model": "weather.weathertype",
+    "fields": {
+      "name": "Snowy",
+      "codex_subject": null,
+      "is_automated": true,
+      "selection_weight": 4,
+      "min_temperature": null,
+      "max_temperature": 20,
+      "is_active": true
+    }
+  },
+  {
+    "model": "weather.weathertype",
+    "fields": {
+      "name": "Windy",
+      "codex_subject": null,
+      "is_automated": true,
+      "selection_weight": 1,
+      "min_temperature": null,
+      "max_temperature": null,
+      "is_active": true
+    }
+  },
+  {
+    "model": "weather.weathertype",
+    "fields": {
+      "name": "Foggy",
+      "codex_subject": null,
+      "is_automated": true,
+      "selection_weight": 1,
+      "min_temperature": null,
+      "max_temperature": null,
+      "is_active": true
+    }
+  },
+  {
+    "model": "weather.weathertype",
+    "fields": {
+      "name": "Eclipse of Mirrors",
+      "codex_subject": null,
+      "is_automated": false,
+      "selection_weight": 1,
+      "min_temperature": null,
+      "max_temperature": null,
+      "is_active": true
+    }
+  },
+  {
+    "model": "weather.weathertype",
+    "fields": {
+      "name": "Moon Madness",
+      "codex_subject": null,
+      "is_automated": false,
+      "selection_weight": 1,
+      "min_temperature": null,
+      "max_temperature": null,
+      "is_active": true
+    }
+  }
+]
