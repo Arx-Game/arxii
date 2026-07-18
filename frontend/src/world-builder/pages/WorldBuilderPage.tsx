@@ -53,9 +53,14 @@ export function WorldBuilderPage() {
   const { data: manager, isLoading } = useAreaManagerQuery(selectedAreaId);
   const { mutate: runMutation } = useWorldBuilderAction(characterId ?? 0, selectedAreaId);
 
-  const runAction = (key: WorldBuilderActionKey, kwargs: Record<string, unknown>) => {
+  // Keyed generically (not `WorldBuilderActionKey`) so this callback still
+  // satisfies the shared canvas/dialog/panel components' widened `runAction`
+  // prop type (they also serve the story palette's own key union, #2450);
+  // the cast back to `WorldBuilderActionKey` at the mutation boundary keeps
+  // `useWorldBuilderAction` itself narrowly typed for this page's own calls.
+  const runAction = (key: string, kwargs: Record<string, unknown>) => {
     if (characterId == null) return;
-    runMutation({ key, kwargs });
+    runMutation({ key: key as WorldBuilderActionKey, kwargs });
   };
 
   const selectedRoom = manager?.rooms.find((room) => room.id === selectedRoomId) ?? null;

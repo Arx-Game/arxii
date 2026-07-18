@@ -111,3 +111,54 @@ describe('RoomDetailPanel', () => {
     expect(runAction).toHaveBeenCalledWith('staff_remove_room', { room_id: 5 });
   });
 });
+
+describe('RoomDetailPanel with palette="story"', () => {
+  it('hides the fixture-key row, profile-flag toggles, and promote section', () => {
+    renderPanel({ palette: 'story', room: { ...room, fixture_key: 'some-key' } });
+
+    expect(screen.queryByText(/Fixture key:/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Publicly listed')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Social hub')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Outdoor')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Enclosure')).not.toBeInTheDocument();
+    expect(screen.queryByText('Promote')).not.toBeInTheDocument();
+    expect(screen.queryByText('Promote Grand Hall')).not.toBeInTheDocument();
+  });
+
+  it('hides exit renaming but keeps unlink', () => {
+    renderPanel({ palette: 'story' });
+
+    expect(screen.queryByText('Rename')).not.toBeInTheDocument();
+    expect(screen.getByText('✕')).toBeInTheDocument();
+  });
+
+  it('dispatches story_edit_room with only name/description', async () => {
+    const { runAction } = renderPanel({ palette: 'story' });
+
+    await userEvent.clear(screen.getByLabelText('Name'));
+    await userEvent.type(screen.getByLabelText('Name'), 'Throne Room');
+    await userEvent.click(screen.getByText('Save changes'));
+
+    expect(runAction).toHaveBeenCalledWith('story_edit_room', {
+      room_id: 5,
+      name: 'Throne Room',
+    });
+  });
+
+  it('dispatches story_unlink_rooms for an exit removal', async () => {
+    const { runAction } = renderPanel({ palette: 'story' });
+
+    await userEvent.click(screen.getByText('✕'));
+
+    expect(runAction).toHaveBeenCalledWith('story_unlink_rooms', { exit_id: 9 });
+  });
+
+  it('dispatches story_remove_room after confirming', async () => {
+    const { runAction } = renderPanel({ palette: 'story' });
+
+    await userEvent.click(screen.getByText('Remove Grand Hall'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove it' }));
+
+    expect(runAction).toHaveBeenCalledWith('story_remove_room', { room_id: 5 });
+  });
+});

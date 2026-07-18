@@ -501,6 +501,22 @@ class ActionRegistryTests(TestCase):
             "staff_remove_room",
             "promote_room",
             "promote_area",
+            # #2450 — GM story builder.
+            "create_story_area",
+            "edit_story_area",
+            "remove_story_area",
+            "story_dig_room",
+            "story_edit_room",
+            "story_link_rooms",
+            "story_unlink_rooms",
+            "story_place_room",
+            "story_remove_room",
+            "grant_story_room",
+            "revoke_story_room",
+            "join_story_room",
+            "leave_story_room",
+            "spin_up_scene_room",
+            "close_scene_room",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

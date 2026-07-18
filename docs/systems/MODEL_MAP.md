@@ -404,6 +404,7 @@
   - crafting_service_offers <- items.CraftingServiceOffer
   - events <- events.Event
   - ceremonies <- ceremonies.Ceremony
+  - story_grants <- gm.StoryRoomGrant
   - functionaries <- npc_services.Functionary
   - npc_assignments <- npc_services.NPCAssignment
   - entry_for_buildings <- buildings.Building
@@ -582,6 +583,7 @@
   - market_squares <- items.MarketSquare
   - battles <- battles.Battle
   - city_defense_projects <- battles.CityDefenseDetails
+  - story_ownership <- gm.StoryArea
   - default_permits_offered <- npc_services.PermitOfferDetails
   - building_profile <- buildings.Building
   - building_permits_valid_in <- buildings.BuildingPermitDetails
@@ -1212,7 +1214,7 @@
 - `rescue_captive(captive: 'CharacterSheet') -> 'bool' — Free a captive via rescue (#931 Phase 4) — a rescue run's terminal verb.`
 - `resolve_captivity(captivity: 'Captivity', *, status: 'str') -> 'None' — End a captivity and free the captive.`
 - `resolve_capture_setup(*, captive_template: 'MissionTemplate | None' = None, rescue_template: 'MissionTemplate | None' = None, cell_name: 'str' = '', cell_description: 'str' = '', clue_name: 'str' = '', clue_description: 'str' = '', clue_detect_difficulty: 'int | None' = None) -> 'CaptureSetup' — Resolve one capture's loops + cell flavor: per-capture override, else default.`
-- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '') -> evennia.objects.models.ObjectDB — Create a temporary instanced room and its lifecycle record.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None) -> evennia.objects.models.ObjectDB — Create a temporary instanced room, its RoomProfile, and lifecycle record.`
 
 
 ## world.character_creation
@@ -1466,6 +1468,7 @@
   - commanded_military_units <- military.MilitaryUnit
   - summoned_military_units <- military.MilitaryUnit
   - commanded_armies <- military.Army
+  - story_room_grants <- gm.StoryRoomGrant
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - conjured_hazards <- room_features.Trap
   - detected_traps <- room_features.Trap
@@ -3056,9 +3059,12 @@
   - crossover_invites_sent <- stories.CrossoverInvite
   - stake_outcomes <- stories.StakeOutcome
   - custody_requests <- stories.CustodyClearance
+  - owned_instances <- instances.InstancedRoom
   - tables <- gm.GMTable
   - invites_created <- gm.GMRosterInvite
   - level_changes <- gm.GMLevelChange
+  - story_areas <- gm.StoryArea
+  - story_grants_issued <- gm.StoryRoomGrant
   - weekly_reward_tracker <- gm.GMWeeklyRewardTracker
   - summonses_created <- npc_services.OfferSummons
 
@@ -3098,6 +3104,18 @@
 **Foreign Keys:**
   - profile -> gm.GMProfile [FK]
   - changed_by -> accounts.AccountDB [FK]
+
+### StoryArea
+**Foreign Keys:**
+  - gm -> gm.GMProfile [FK]
+  - area -> areas.Area [OneToOne]
+
+### StoryRoomGrant
+**Foreign Keys:**
+  - room -> evennia_extensions.RoomProfile [FK]
+  - character -> character_sheets.CharacterSheet [FK]
+  - granted_by -> gm.GMProfile [FK]
+  - return_location -> objects.ObjectDB [FK] (nullable)
 
 ### SituationKind
 **Pointed to by:**

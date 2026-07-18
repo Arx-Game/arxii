@@ -17,6 +17,8 @@ from world.gm.models import (
     GMWeeklyRewardTracker,
     SituationDifficultyGuide,
     SituationKind,
+    StoryArea,
+    StoryRoomGrant,
 )
 
 
@@ -73,6 +75,8 @@ class GMLevelCapAdmin(admin.ModelAdmin):
         "allow_custom_stakes",
         "allow_global_scope_authoring",
         "auto_clear_regional",
+        "max_story_areas",
+        "max_story_rooms_per_area",
     ]
     list_filter = [
         "max_beat_risk",
@@ -102,6 +106,18 @@ class GMLevelChangeAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+@admin.register(StoryArea)
+class StoryAreaAdmin(admin.ModelAdmin):
+    list_display = ("area", "gm", "created_at")
+    raw_id_fields = ("gm", "area")
+
+
+@admin.register(StoryRoomGrant)
+class StoryRoomGrantAdmin(admin.ModelAdmin):
+    list_display = ("room", "character", "granted_by", "created_at")
+    raw_id_fields = ("room", "character", "granted_by", "return_location")
 
 
 @admin.register(SituationKind)

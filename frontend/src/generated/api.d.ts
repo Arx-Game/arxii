@@ -413,7 +413,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse the area hierarchy for room selection. */
+    /**
+     * @description Browse the area hierarchy for room selection.
+     *
+     *     STORY-origin areas are excluded — those are a GM's own scratch space
+     *     (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+     *     world an ordinary player browses (#2450).
+     */
     get: operations['areas_list'];
     put?: never;
     post?: never;
@@ -430,7 +436,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse the area hierarchy for room selection. */
+    /**
+     * @description Browse the area hierarchy for room selection.
+     *
+     *     STORY-origin areas are excluded — those are a GM's own scratch space
+     *     (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+     *     world an ordinary player browses (#2450).
+     */
     get: operations['areas_retrieve'];
     put?: never;
     post?: never;
@@ -470,7 +482,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse public rooms, filterable by area (includes descendant areas). */
+    /**
+     * @description Browse public rooms, filterable by area (includes descendant areas).
+     *
+     *     STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+     *     depth alongside the STORY area exclusion above, since a room's own
+     *     ``is_public`` flag says nothing about its area's origin (#2450).
+     */
     get: operations['areas_rooms_list'];
     put?: never;
     post?: never;
@@ -487,7 +505,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse public rooms, filterable by area (includes descendant areas). */
+    /**
+     * @description Browse public rooms, filterable by area (includes descendant areas).
+     *
+     *     STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+     *     depth alongside the STORY area exclusion above, since a room's own
+     *     ``is_public`` flag says nothing about its area's origin (#2450).
+     */
     get: operations['areas_rooms_retrieve'];
     put?: never;
     post?: never;
@@ -7309,6 +7333,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/my-story-grants/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+     *
+     *     Read-only listing backing the player-facing Story Rooms page (frontend
+     *     ``frontend/src/story-rooms/``). Joining/leaving still go through the
+     *     ``join_story_room``/``leave_story_room`` REGISTRY actions
+     *     (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+     *     ``actions/definitions/story_builder.py``), dispatched via the generic
+     *     action-dispatch endpoint — this ViewSet never mutates.
+     */
+    get: operations['gm_my_story_grants_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/my-story-grants/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+     *
+     *     Read-only listing backing the player-facing Story Rooms page (frontend
+     *     ``frontend/src/story-rooms/``). Joining/leaving still go through the
+     *     ``join_story_room``/``leave_story_room`` REGISTRY actions
+     *     (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+     *     ``actions/definitions/story_builder.py``), dispatched via the generic
+     *     action-dispatch endpoint — this ViewSet never mutates.
+     */
+    get: operations['gm_my_story_grants_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/profiles/': {
     parameters: {
       query?: never;
@@ -7425,6 +7501,81 @@ export interface paths {
      *     URL path: /api/gm/queue/<id>/<action>/ where action is 'approve' or 'deny'.
      */
     post: operations['gm_queue_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/{id}/manager/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_manager_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/instances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A bare array, not paginated — ``pagination_class=None`` makes the schema say so.
+     *
+     *     The view never calls ``self.paginate_queryset()`` (a GM has at most a
+     *     handful of active temp rooms), so without this the ViewSet-level
+     *     ``pagination_class`` made drf-spectacular wrongly advertise
+     *     ``PaginatedStoryInstanceList`` for a response that was always a flat list.
+     */
+    get: operations['gm_story_areas_instances_list'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -25746,6 +25897,44 @@ export interface components {
        */
       readonly active_persona_id: number | null;
     };
+    /**
+     * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+     *
+     *     Backs ``GET /api/gm/my-story-grants/``, the read side of the player-facing
+     *     Story Rooms page. Read-only: joining/leaving still go through the
+     *     ``join_story_room``/``leave_story_room`` REGISTRY actions
+     *     (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+     *     ``actions/definitions/story_builder.py``), dispatched via the generic
+     *     action-dispatch endpoint — never a DRF write here.
+     *
+     *     ``character_id`` is included even though it isn't shown in the UI: those
+     *     two actions resolve their actor from ``actor.sheet_data`` (no target-character
+     *     kwarg) and ``join_story_room``/``leave_story_room`` 404 with "no invitation"
+     *     unless the dispatching character is exactly the one the grant was issued to
+     *     — so the frontend must dispatch each row's join/leave against *this*
+     *     character, not whichever character happens to be active. Since
+     *     ``CharacterSheet.character`` is a primary_key OneToOneField, this FK's attname
+     *     (``StoryRoomGrant.character_id``) already equals the character's ObjectDB pk,
+     *     the id the generic dispatch endpoint (``/api/actions/characters/<id>/dispatch/``)
+     *     expects.
+     */
+    MyStoryGrant: {
+      readonly id: number;
+      readonly room_id: number;
+      readonly room_name: string;
+      readonly character_id: number;
+      readonly character_name: string;
+      /**
+       * @description True when the granted character is currently located inside the room.
+       *
+       *     Compares ObjectDB pks directly — ``room_id`` is the same value as the
+       *     room's ObjectDB pk (``RoomProfile.objectdb`` is its primary key), so no
+       *     extra query is needed beyond the character's own location.
+       */
+      readonly is_inside: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     NPCAsset: {
       readonly id: number;
       readonly asset_persona_name: string;
@@ -27725,6 +27914,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Mute'][];
+    };
+    PaginatedMyStoryGrantList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['MyStoryGrant'][];
     };
     PaginatedNPCAssetList: {
       /** @example 123 */
@@ -34127,6 +34331,12 @@ export interface components {
      * @enum {string}
      */
     StatusF08Enum: 'active' | 'inactive' | 'completed' | 'cancelled';
+    /** @description The story-builder area-manager payload: area header + rooms (with grants) + exits. */
+    StoryAreaManager: {
+      area: components['schemas']['WorldBuilderArea'];
+      rooms: components['schemas']['StoryRoom'][];
+      exits: components['schemas']['WorldBuilderExit'][];
+    };
     /** @description Serializer for creating stories */
     StoryCreate: {
       title: string;
@@ -34302,6 +34512,30 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
     };
+    /** @description A GM-owned temp scene room row for the story-builder dashboard (#2450). */
+    StoryInstance: {
+      readonly id: number;
+      readonly room_id: number;
+      readonly name: string;
+      status?: components['schemas']['StoryInstanceStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * @description Character names granted access, from the view's batched lookup.
+       *
+       *     Populated via serializer ``context["grants_by_room"]`` (keyed by
+       *     ``RoomProfile``/``ObjectDB`` pk, which are the same value —
+       *     ``RoomProfile.objectdb`` is its primary key) so the whole list of
+       *     instances costs one extra query, not one per row.
+       */
+      readonly grants: string[];
+    };
+    /**
+     * @description * `active` - Active
+     *     * `completed` - Completed
+     * @enum {string}
+     */
+    StoryInstanceStatusEnum: 'active' | 'completed';
     /** @description Lightweight serializer for story list views */
     StoryList: {
       readonly id: number;
@@ -34434,6 +34668,31 @@ export interface components {
       is_active?: boolean;
       /** @description GM notes on why this subject is critical. GM-only; never serialized to outsiders. */
       notes?: string;
+    };
+    /**
+     * @description One RoomProfile in the story-builder manager payload (#2450).
+     *
+     *     Extends the staff-only ``WorldBuilderRoomSerializer`` with ``grants`` — the
+     *     names of characters currently granted access to join this room. Kept as a
+     *     subclass (not a change to the shared serializer) so the staff world-builder
+     *     manager payload shape is untouched.
+     */
+    StoryRoom: {
+      id: number;
+      name: string;
+      description: string;
+      is_public: boolean;
+      is_social_hub: boolean;
+      is_outdoor: boolean;
+      enclosure: string;
+      size_name: string | null;
+      grid_x: number | null;
+      grid_y: number | null;
+      floor: number;
+      fixture_key: string | null;
+      origin: string;
+      occupant_count: number;
+      grants: string[];
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
     StrainAvailability: {
@@ -46103,6 +46362,51 @@ export interface operations {
       };
     };
   };
+  gm_my_story_grants_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMyStoryGrantList'];
+        };
+      };
+    };
+  };
+  gm_my_story_grants_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MyStoryGrant'];
+        };
+      };
+    };
+  };
   gm_profiles_list: {
     parameters: {
       query?: {
@@ -46241,6 +46545,91 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  gm_story_areas_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWorldBuilderAreaList'];
+        };
+      };
+    };
+  };
+  gm_story_areas_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorldBuilderArea'];
+        };
+      };
+    };
+  };
+  gm_story_areas_manager_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryAreaManager'];
+        };
+      };
+    };
+  };
+  gm_story_areas_instances_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryInstance'][];
+        };
       };
     };
   };

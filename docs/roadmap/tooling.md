@@ -39,8 +39,32 @@ canvas consumers (buildings, battles, this one) share one implementation — see
 `src/world/areas/tests/test_world_builder_journey.py` for the create-area →
 dig → link → place → promote → export journey proving the canvas actually feeds
 slice 1's `export_grid_bundles()` pipeline. Not built this slice: an `edit_area`
-UI (the action exists; no canvas panel calls it yet), GM story areas (#2450),
-clue/portal layers (#2451) — all remain filed as their own sub-issues.
+UI (the action exists; no canvas panel calls it yet), GM story areas
+(#2450, see "Built" below), clue/portal layers (#2451) — the latter remains
+filed as its own sub-issue.
+
+## Built (2026-07-18, epic #2436 slice 3 / #2450 — GM story areas & story rooms)
+
+The first GM-trust-gated (not staff-flag-gated) consumer of slice 1/2's grid
+substrate: a GM can author their own private `STORY`-origin area, dig/link/place/
+remove rooms in it (mirroring the staff canvas's verb set, scoped to areas they
+own via `StoryArea`), and grant specific characters consent-first access to join
+(`StoryRoomGrant` — gates the join only; walking inside rides ordinary exits, see
+ADR-0141) — or spin up a disposable temp scene room (`InstancedRoom.gm_owner`) for
+a one-off beat and close it out afterward, returning every joined character. Caps
+are per-`GMLevel` (`GMLevelCap.max_story_areas`/`max_story_rooms_per_area`,
+staff-tunable). 13 GM-authored REGISTRY actions
+(`category="story_builder"`, `src/actions/definitions/story_builder.py`) plus 2
+player-side join/leave actions (`category="story_rooms"`, no GM standing
+required); telnet play verbs only (`sceneroom`/`joinroom`/`leaveroom`,
+`src/commands/story_rooms.py`) — canvas authoring stays web-only (epic Decision
+2), landing on the `/gm/story-builder` frontend page and the read-only
+`StoryBuilderViewSet` (`/api/gm/story-areas/`, `IsGMOrStaff`). Story areas/rooms
+are excluded from the player-facing `AreaViewSet`/`RoomProfileViewSet` and never
+publicly listed regardless of a room's own `is_public` flag — see
+`docs/systems/INDEX.md`'s GM section ("Story areas & story rooms") for the full
+model/service/action/API rundown. Remaining: clue/portal layers (#2451), player
+building via projects (#2452, `needs-design`).
 
 ## Overview
 Tools for players, GMs, and staff to interact with and manage the game world. Player tools focus on building and customizing spaces. GM tools are granular and level-gated — GMs can only do what their trust level allows. Staff tools are unrestricted for the one staffer coordinating the entire game.
@@ -60,8 +84,11 @@ Tools for players, GMs, and staff to interact with and manage the game world. Pl
 - **Areas system:** Room creation infrastructure exists through the areas app;
   authored/runtime identity + grid export/import round-trip now exists (#2436/#2448,
   see "Built" above), and a staff-only drag-and-drop authoring canvas now sits on
-  top of it (#2449, see "Built" above)
-- **No GM-specific tooling** — no level-gated commands or GM dashboard
+  top of it (#2449, see "Built" above); a GM-trust-gated variant of that same
+  canvas (story areas + story rooms, #2450) now sits alongside it, see "Built" above
+- **GM dashboard** — see `docs/roadmap/gm-system.md` for GM-specific tooling
+  (level-gated commands, story areas/rooms, the scenario catalog); this document's
+  "GM tools" section below describes the still-open NPC/combat/reward tooling gap
 
 ## What's Needed for MVP
 - GM command framework — level-gated command permissions scaling with GM trust

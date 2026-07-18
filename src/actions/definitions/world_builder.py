@@ -41,7 +41,6 @@ if TYPE_CHECKING:
     from world.areas.models import Area
 
 _EXIT_TYPECLASS = "typeclasses.exits.Exit"
-_CHARACTER_TYPECLASS = "typeclasses.characters.Character"
 
 
 def _resolve_area(area_id: Any) -> Area | None:
@@ -81,19 +80,6 @@ def _exit_pair(exit_obj: ObjectDB) -> list[ObjectDB]:
     return pair
 
 
-def _has_character_occupants(room: ObjectDB) -> bool:
-    return any(obj.is_typeclass(_CHARACTER_TYPECLASS, exact=False) for obj in room.contents)
-
-
-def _has_non_exit_contents(room: ObjectDB) -> bool:
-    """Any character or item still in ``room`` — exits don't count.
-
-    Exits are cleaned up as part of removal itself (see ``StaffRemoveRoomAction``),
-    so they're not "contents" blocking it; a character or a stray item is.
-    """
-    return any(not obj.is_typeclass(_EXIT_TYPECLASS, exact=False) for obj in room.contents)
-
-
 def _resolve_authored_area(area_id: Any) -> tuple[Area | None, str | None]:
     """Resolve ``area_id`` to an AUTHORED area, or an error message.
 
@@ -130,6 +116,8 @@ def _parse_dig_room_grid(kwargs: dict[str, Any]) -> tuple[int | None, int | None
 
 def _stranded_occupied_room(rooms: set[ObjectDB], dropped_exit_ids: set[int]) -> ObjectDB | None:
     """The first room in ``rooms`` that would be left exit-less AND occupied."""
+    from world.areas.grid_services import has_character_occupants  # noqa: PLC0415
+
     for room in rooms:
         if room is None:
             # A dangling one-way exit can have a null db_location/db_destination
@@ -140,7 +128,7 @@ def _stranded_occupied_room(rooms: set[ObjectDB], dropped_exit_ids: set[int]) ->
             .exclude(pk__in=dropped_exit_ids)
             .exists()
         )
-        if not remaining and _has_character_occupants(room):
+        if not remaining and has_character_occupants(room):
             return room
     return None
 
@@ -562,13 +550,14 @@ class StaffRemoveRoomAction(_WorldBuilderAction):
         from django.db import transaction  # noqa: PLC0415
 
         from world.areas.constants import GridOrigin  # noqa: PLC0415
+        from world.areas.grid_services import has_non_exit_contents  # noqa: PLC0415
         from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
 
         profile = _resolve_room_profile(kwargs.get("room_id"))
         if profile is None:
             return ActionResult(success=False, message="No such room.")
         room = profile.objectdb
-        if _has_non_exit_contents(room):
+        if has_non_exit_contents(room):
             return ActionResult(success=False, message="This room isn't empty; empty it first.")
         if RoomFeatureInstance.objects.filter(room_profile=profile).active().exists():
             return ActionResult(

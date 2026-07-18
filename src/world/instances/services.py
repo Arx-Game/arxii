@@ -3,32 +3,44 @@ from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils.create import create_object
 
-from evennia_extensions.models import ObjectDisplayData
+from evennia_extensions.models import ObjectDisplayData, RoomProfile
 from world.character_sheets.models import CharacterSheet
+from world.gm.models import GMProfile
 from world.instances.constants import InstanceStatus
 from world.instances.models import InstancedRoom
 from world.scenes.models import Scene
 
 
-def spawn_instanced_room(
+def spawn_instanced_room(  # noqa: PLR0913 — one owner-kind arg per caller (player vs GM)
     name: str,
     description: str,
-    owner: CharacterSheet,
+    owner: CharacterSheet | None,
     return_location: ObjectDB | None,
     source_key: str = "",
+    gm_owner: GMProfile | None = None,
 ) -> ObjectDB:
-    """Create a temporary instanced room and its lifecycle record."""
+    """Create a temporary instanced room, its RoomProfile, and lifecycle record.
+
+    Temporary instanced rooms are never publicly listed — the profile always
+    ends with ``is_public=False``, regardless of the model default, so a GM
+    scene room, mission room, or captivity room never leaks into public room
+    browsing or derives a PUBLIC scene privacy from a stale default.
+    """
     room = create_object(
         typeclass="typeclasses.rooms.Room",
         key=name,
         nohome=True,
     )
+    profile, _created = RoomProfile.objects.get_or_create(objectdb=room)
+    RoomProfile.objects.filter(pk=profile.pk).update(is_public=False)
+    profile.is_public = False
     display_data, _created = ObjectDisplayData.objects.get_or_create(object=room)
     display_data.permanent_description = description
     display_data.save(update_fields=["permanent_description"])
     InstancedRoom.objects.create(
         room=room,
         owner=owner,
+        gm_owner=gm_owner,
         return_location=return_location,
         source_key=source_key,
     )

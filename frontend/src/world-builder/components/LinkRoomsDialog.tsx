@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { useAreaManagerQuery, useWorldBuilderAreasQuery } from '../queries';
-import type { WorldBuilderActionKey, WorldBuilderRoom } from '../types';
+import type { WorldBuilderRoom } from '../types';
 
 export interface LinkRoomsDialogProps {
   fromRoom: WorldBuilderRoom;
@@ -31,7 +31,18 @@ export interface LinkRoomsDialogProps {
   sameAreaRooms: WorldBuilderRoom[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  runAction: (key: WorldBuilderActionKey, kwargs: Record<string, unknown>) => void;
+  /** Keyed generically (not `WorldBuilderActionKey`) so the story palette's own action-key union type-checks too (#2450). */
+  runAction: (key: string, kwargs: Record<string, unknown>) => void;
+  /**
+   * `'story'` (#2450) hides the cross-area picker (story rooms only link
+   * within the GM's currently selected story area in this slice — the
+   * `story_link_rooms` action itself does allow linking across a GM's own
+   * story areas, but this dialog doesn't expose that yet, same call as
+   * skipping the staff-only area-picker data source here) and dispatches
+   * `story_link_rooms` with `name`/`reverse_name` kwargs instead of
+   * `staff_link_rooms`'s `name_ab`/`name_ba`. Defaults to `'staff'`.
+   */
+  palette?: 'staff' | 'story';
 }
 
 export function LinkRoomsDialog({
@@ -40,21 +51,24 @@ export function LinkRoomsDialog({
   open,
   onOpenChange,
   runAction,
+  palette = 'staff',
 }: LinkRoomsDialogProps) {
+  const isStory = palette === 'story';
   const [crossArea, setCrossArea] = useState(false);
   const [pickedAreaId, setPickedAreaId] = useState('');
   const [targetRoomId, setTargetRoomId] = useState('');
   const [nameAB, setNameAB] = useState('');
   const [nameBA, setNameBA] = useState('');
 
-  const { data: areasData } = useWorldBuilderAreasQuery({}, crossArea);
+  const { data: areasData } = useWorldBuilderAreasQuery({}, !isStory && crossArea);
   const areaOptions = areasData?.results ?? [];
-  const crossAreaId = crossArea && pickedAreaId ? Number(pickedAreaId) : null;
+  const crossAreaId = !isStory && crossArea && pickedAreaId ? Number(pickedAreaId) : null;
   const { data: crossManager } = useAreaManagerQuery(crossAreaId);
 
-  const targetOptions = crossArea
-    ? (crossManager?.rooms ?? []).map((room) => ({ value: String(room.id), label: room.name }))
-    : sameAreaRooms.map((room) => ({ value: String(room.id), label: room.name }));
+  const targetOptions =
+    !isStory && crossArea
+      ? (crossManager?.rooms ?? []).map((room) => ({ value: String(room.id), label: room.name }))
+      : sameAreaRooms.map((room) => ({ value: String(room.id), label: room.name }));
 
   const canSubmit = targetRoomId !== '' && nameAB.trim() !== '' && nameBA.trim() !== '';
 
@@ -67,12 +81,20 @@ export function LinkRoomsDialog({
   };
 
   const submit = () => {
-    runAction('staff_link_rooms', {
-      room_a_id: fromRoom.id,
-      room_b_id: Number(targetRoomId),
-      name_ab: nameAB.trim(),
-      name_ba: nameBA.trim(),
-    });
+    const kwargs: Record<string, unknown> = isStory
+      ? {
+          room_a_id: fromRoom.id,
+          room_b_id: Number(targetRoomId),
+          name: nameAB.trim(),
+          reverse_name: nameBA.trim(),
+        }
+      : {
+          room_a_id: fromRoom.id,
+          room_b_id: Number(targetRoomId),
+          name_ab: nameAB.trim(),
+          name_ba: nameBA.trim(),
+        };
+    runAction(isStory ? 'story_link_rooms' : 'staff_link_rooms', kwargs);
     reset();
     onOpenChange(false);
   };
@@ -90,32 +112,34 @@ export function LinkRoomsDialog({
           <DialogTitle>Link {fromRoom.name} to another room</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={crossArea ? 'outline' : 'default'}
-              onClick={() => {
-                setCrossArea(false);
-                setTargetRoomId('');
-              }}
-            >
-              This area
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={crossArea ? 'default' : 'outline'}
-              onClick={() => {
-                setCrossArea(true);
-                setTargetRoomId('');
-              }}
-              data-testid="link-rooms-cross-area-toggle"
-            >
-              Another area
-            </Button>
-          </div>
-          {crossArea && (
+          {!isStory && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={crossArea ? 'outline' : 'default'}
+                onClick={() => {
+                  setCrossArea(false);
+                  setTargetRoomId('');
+                }}
+              >
+                This area
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={crossArea ? 'default' : 'outline'}
+                onClick={() => {
+                  setCrossArea(true);
+                  setTargetRoomId('');
+                }}
+                data-testid="link-rooms-cross-area-toggle"
+              >
+                Another area
+              </Button>
+            </div>
+          )}
+          {!isStory && crossArea && (
             <div className="flex flex-col gap-1.5">
               <Label>Area</Label>
               <Combobox

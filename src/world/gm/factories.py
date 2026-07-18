@@ -9,6 +9,7 @@ from factory import django as factory_django
 
 from actions.factories import ConsequencePoolFactory
 from evennia_extensions.factories import AccountFactory
+from world.areas.constants import AreaLevel, GridOrigin
 from world.gm.constants import CatalogSuggestionProposalKind, GMApplicationStatus, GMLevel
 from world.gm.models import (
     CatalogSuggestion,
@@ -23,6 +24,8 @@ from world.gm.models import (
     GMTableMembership,
     SituationDifficultyGuide,
     SituationKind,
+    StoryArea,
+    StoryRoomGrant,
 )
 from world.player_submissions.constants import SubmissionStatus
 from world.roster.factories import RosterEntryFactory
@@ -100,6 +103,27 @@ class GMLevelChangeFactory(factory_django.DjangoModelFactory):
     reason = factory.Faker("sentence")
 
 
+class StoryAreaFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StoryArea
+
+    gm = factory.SubFactory(GMProfileFactory)
+    area = factory.SubFactory(
+        "world.areas.factories.AreaFactory",
+        level=AreaLevel.BUILDING,
+        origin=GridOrigin.STORY,
+    )
+
+
+class StoryRoomGrantFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StoryRoomGrant
+
+    room = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    granted_by = factory.SubFactory(GMProfileFactory)
+
+
 # --- Seed GM level caps (#2000 task 1) ------------------------------------
 #
 # Mirrors world.boundaries.factories.make_default_content_themes(): plain
@@ -122,30 +146,40 @@ def seed_default_gm_level_caps() -> dict[str, GMLevelCap]:
             "allow_custom_stakes": False,
             "allow_global_scope_authoring": False,
             "auto_clear_regional": False,
+            "max_story_areas": 1,
+            "max_story_rooms_per_area": 8,
         },
         GMLevel.JUNIOR: {
             "max_beat_risk": RenownRisk.MODERATE,
             "allow_custom_stakes": False,
             "allow_global_scope_authoring": False,
             "auto_clear_regional": False,
+            "max_story_areas": 2,
+            "max_story_rooms_per_area": 12,
         },
         GMLevel.GM: {
             "max_beat_risk": RenownRisk.HIGH,
             "allow_custom_stakes": False,
             "allow_global_scope_authoring": False,
             "auto_clear_regional": False,
+            "max_story_areas": 3,
+            "max_story_rooms_per_area": 20,
         },
         GMLevel.EXPERIENCED: {
             "max_beat_risk": RenownRisk.EXTREME,
             "allow_custom_stakes": False,
             "allow_global_scope_authoring": False,
             "auto_clear_regional": True,
+            "max_story_areas": 4,
+            "max_story_rooms_per_area": 30,
         },
         GMLevel.SENIOR: {
             "max_beat_risk": RenownRisk.EXTREME,
             "allow_custom_stakes": True,
             "allow_global_scope_authoring": False,
             "auto_clear_regional": True,
+            "max_story_areas": 6,
+            "max_story_rooms_per_area": 50,
         },
     }
     caps: dict[str, GMLevelCap] = {}

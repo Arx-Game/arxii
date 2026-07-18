@@ -3,8 +3,11 @@ from unittest.mock import MagicMock
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile
 from flows.service_functions.serializers.room_state import RoomStatePayloadSerializer
 from world.areas.constants import AreaLevel, GridOrigin
@@ -1189,3 +1192,60 @@ class PositioningIntegrationTests(TestCase):
         op = force_move_to_position(self.char_a, self.pit)
         assert op.position == self.pit
         assert position_of(self.char_a) == self.pit
+
+
+# ---------------------------------------------------------------------------
+# #2450 — STORY-origin areas/rooms excluded from the canonical player listings
+# ---------------------------------------------------------------------------
+
+
+class StoryOriginExcludedFromCanonicalListingsTests(APITestCase):
+    """A GM's STORY-origin area/rooms must never leak into the player-facing browser.
+
+    ``AreaViewSet``/``RoomProfileViewSet`` (world.areas.views) back the
+    canonical `/api/areas/` room-selection UI every player uses — STORY areas
+    are a GM's own scratch space (world.gm.story_views.StoryBuilderViewSet is
+    the dedicated read surface for those). A STORY room with ``is_public=True``
+    must still be excluded (defense in depth): a room's own flag says nothing
+    about its area's origin.
+    """
+
+    def setUp(self) -> None:
+        self.player_account = AccountFactory(username="story_excl_player")
+
+        self.authored_area = AreaFactory(
+            name="Authored Ward", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED
+        )
+        self.story_area = AreaFactory(
+            name="GM Scratch Ward", level=AreaLevel.WARD, origin=GridOrigin.STORY
+        )
+
+        self.authored_room = ObjectDBFactory(
+            db_key="Authored Hall", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        RoomProfile.objects.update_or_create(
+            objectdb=self.authored_room, defaults={"area": self.authored_area, "is_public": True}
+        )
+        self.story_room = ObjectDBFactory(
+            db_key="Story Hall", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        # Public flag set True deliberately — the exclusion must hold anyway.
+        RoomProfile.objects.update_or_create(
+            objectdb=self.story_room, defaults={"area": self.story_area, "is_public": True}
+        )
+
+        self.client.force_authenticate(user=self.player_account)
+
+    def test_story_area_absent_from_area_list(self) -> None:
+        response = self.client.get(reverse("areas:area-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertIn(self.authored_area.pk, ids)
+        self.assertNotIn(self.story_area.pk, ids)
+
+    def test_story_room_absent_from_room_list_even_when_public(self) -> None:
+        response = self.client.get(reverse("areas:room-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertIn(self.authored_room.pk, ids)
+        self.assertNotIn(self.story_room.pk, ids)

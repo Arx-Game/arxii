@@ -472,7 +472,6 @@ def _spawn_mission_instance_room(
     doorway works twice without minting a second interior. Wires the
     EXISTING instances lifecycle; no parallel machinery.
     """
-    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
     from world.instances.services import spawn_instanced_room  # noqa: PLC0415
 
     if instance.spawned_room_id is not None:
@@ -485,7 +484,7 @@ def _spawn_mission_instance_room(
             return_location=character.location,
             source_key=f"mission:{instance.pk}",
         )
-        profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        profile = room.room_profile
         instance.spawned_room = profile
         instance.save(update_fields=["spawned_room"])
     character.move_to(room, quiet=True)

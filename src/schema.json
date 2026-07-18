@@ -626,7 +626,12 @@ paths:
   /api/areas/:
     get:
       operationId: areas_list
-      description: Browse the area hierarchy for room selection.
+      description: |-
+        Browse the area hierarchy for room selection.
+
+        STORY-origin areas are excluded — those are a GM's own scratch space
+        (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+        world an ordinary player browses (#2450).
       parameters:
       - in: query
         name: has_parent
@@ -663,7 +668,12 @@ paths:
   /api/areas/{id}/:
     get:
       operationId: areas_retrieve
-      description: Browse the area hierarchy for room selection.
+      description: |-
+        Browse the area hierarchy for room selection.
+
+        STORY-origin areas are excluded — those are a GM's own scratch space
+        (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+        world an ordinary player browses (#2450).
       parameters:
       - in: path
         name: id
@@ -702,7 +712,12 @@ paths:
   /api/areas/rooms/:
     get:
       operationId: areas_rooms_list
-      description: Browse public rooms, filterable by area (includes descendant areas).
+      description: |-
+        Browse public rooms, filterable by area (includes descendant areas).
+
+        STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+        depth alongside the STORY area exclusion above, since a room's own
+        ``is_public`` flag says nothing about its area's origin (#2450).
       parameters:
       - in: query
         name: area
@@ -735,7 +750,12 @@ paths:
   /api/areas/rooms/{id}/:
     get:
       operationId: areas_rooms_retrieve
-      description: Browse public rooms, filterable by area (includes descendant areas).
+      description: |-
+        Browse public rooms, filterable by area (includes descendant areas).
+
+        STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+        depth alongside the STORY area exclusion above, since a room's own
+        ``is_public`` flag says nothing about its area's origin (#2450).
       parameters:
       - in: path
         name: id
@@ -11721,6 +11741,71 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/gm/my-story-grants/:
+    get:
+      operationId: gm_my_story_grants_list
+      description: |-
+        A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+
+        Read-only listing backing the player-facing Story Rooms page (frontend
+        ``frontend/src/story-rooms/``). Joining/leaving still go through the
+        ``join_story_room``/``leave_story_room`` REGISTRY actions
+        (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+        ``actions/definitions/story_builder.py``), dispatched via the generic
+        action-dispatch endpoint — this ViewSet never mutates.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - story-rooms
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMyStoryGrantList'
+          description: ''
+  /api/gm/my-story-grants/{id}/:
+    get:
+      operationId: gm_my_story_grants_retrieve
+      description: |-
+        A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+
+        Read-only listing backing the player-facing Story Rooms page (frontend
+        ``frontend/src/story-rooms/``). Joining/leaving still go through the
+        ``join_story_room``/``leave_story_room`` REGISTRY actions
+        (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+        ``actions/definitions/story_builder.py``), dispatched via the generic
+        action-dispatch endpoint — this ViewSet never mutates.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - story-rooms
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyStoryGrant'
+          description: ''
   /api/gm/profiles/:
     get:
       operationId: gm_profiles_list
@@ -11892,6 +11977,99 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/gm/story-areas/:
+    get:
+      operationId: gm_story_areas_list
+      description: 'A GM''s own story areas (staff: all story areas). Reads only.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - story-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorldBuilderAreaList'
+          description: ''
+  /api/gm/story-areas/{id}/:
+    get:
+      operationId: gm_story_areas_retrieve
+      description: 'A GM''s own story areas (staff: all story areas). Reads only.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - story-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldBuilderArea'
+          description: ''
+  /api/gm/story-areas/{id}/manager/:
+    get:
+      operationId: gm_story_areas_manager_retrieve
+      description: 'A GM''s own story areas (staff: all story areas). Reads only.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - story-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoryAreaManager'
+          description: ''
+  /api/gm/story-areas/instances/:
+    get:
+      operationId: gm_story_areas_instances_list
+      description: |-
+        A bare array, not paginated — ``pagination_class=None`` makes the schema say so.
+
+        The view never calls ``self.paginate_queryset()`` (a GM has at most a
+        handful of active temp rooms), so without this the ViewSet-level
+        ``pagination_class`` made drf-spectacular wrongly advertise
+        ``PaginatedStoryInstanceList`` for a response that was always a flat list.
+      tags:
+      - story-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StoryInstance'
+          description: ''
   /api/gm/table-memberships/:
     get:
       operationId: gm_table_memberships_list
@@ -46001,6 +46179,65 @@ components:
       - name
       - primary_persona_id
       - profile_picture_url
+    MyStoryGrant:
+      type: object
+      description: |-
+        A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+
+        Backs ``GET /api/gm/my-story-grants/``, the read side of the player-facing
+        Story Rooms page. Read-only: joining/leaving still go through the
+        ``join_story_room``/``leave_story_room`` REGISTRY actions
+        (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+        ``actions/definitions/story_builder.py``), dispatched via the generic
+        action-dispatch endpoint — never a DRF write here.
+
+        ``character_id`` is included even though it isn't shown in the UI: those
+        two actions resolve their actor from ``actor.sheet_data`` (no target-character
+        kwarg) and ``join_story_room``/``leave_story_room`` 404 with "no invitation"
+        unless the dispatching character is exactly the one the grant was issued to
+        — so the frontend must dispatch each row's join/leave against *this*
+        character, not whichever character happens to be active. Since
+        ``CharacterSheet.character`` is a primary_key OneToOneField, this FK's attname
+        (``StoryRoomGrant.character_id``) already equals the character's ObjectDB pk,
+        the id the generic dispatch endpoint (``/api/actions/characters/<id>/dispatch/``)
+        expects.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        room_id:
+          type: integer
+          readOnly: true
+        room_name:
+          type: string
+          readOnly: true
+        character_id:
+          type: integer
+          readOnly: true
+        character_name:
+          type: string
+          readOnly: true
+        is_inside:
+          type: boolean
+          description: |-
+            True when the granted character is currently located inside the room.
+
+            Compares ObjectDB pks directly — ``room_id`` is the same value as the
+            room's ObjectDB pk (``RoomProfile.objectdb`` is its primary key), so no
+            extra query is needed beyond the character's own location.
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - character_id
+      - character_name
+      - created_at
+      - id
+      - is_inside
+      - room_id
+      - room_name
     NPCAsset:
       type: object
       properties:
@@ -49418,6 +49655,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Mute'
+    PaginatedMyStoryGrantList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyStoryGrant'
     PaginatedNPCAssetList:
       type: object
       required:
@@ -61254,6 +61514,25 @@ components:
         * `inactive` - Inactive
         * `completed` - Completed
         * `cancelled` - Cancelled
+    StoryAreaManager:
+      type: object
+      description: 'The story-builder area-manager payload: area header + rooms (with
+        grants) + exits.'
+      properties:
+        area:
+          $ref: '#/components/schemas/WorldBuilderArea'
+        rooms:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoryRoom'
+        exits:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderExit'
+      required:
+      - area
+      - exits
+      - rooms
     StoryCreate:
       type: object
       description: Serializer for creating stories
@@ -61631,6 +61910,52 @@ components:
       - status
       - story
       - updated_at
+    StoryInstance:
+      type: object
+      description: A GM-owned temp scene room row for the story-builder dashboard
+        (#2450).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        room_id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/StoryInstanceStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        grants:
+          type: array
+          items:
+            type: string
+          description: |-
+            Character names granted access, from the view's batched lookup.
+
+            Populated via serializer ``context["grants_by_room"]`` (keyed by
+            ``RoomProfile``/``ObjectDB`` pk, which are the same value —
+            ``RoomProfile.objectdb`` is its primary key) so the whole list of
+            instances costs one extra query, not one per row.
+          readOnly: true
+      required:
+      - created_at
+      - grants
+      - id
+      - name
+      - room_id
+    StoryInstanceStatusEnum:
+      enum:
+      - active
+      - completed
+      type: string
+      description: |-
+        * `active` - Active
+        * `completed` - Completed
     StoryList:
       type: object
       description: Lightweight serializer for story list views
@@ -61891,6 +62216,68 @@ components:
       required:
       - story
       - subject_kind
+    StoryRoom:
+      type: object
+      description: |-
+        One RoomProfile in the story-builder manager payload (#2450).
+
+        Extends the staff-only ``WorldBuilderRoomSerializer`` with ``grants`` — the
+        names of characters currently granted access to join this room. Kept as a
+        subclass (not a change to the shared serializer) so the staff world-builder
+        manager payload shape is untouched.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        is_public:
+          type: boolean
+        is_social_hub:
+          type: boolean
+        is_outdoor:
+          type: boolean
+        enclosure:
+          type: string
+        size_name:
+          type: string
+          nullable: true
+        grid_x:
+          type: integer
+          nullable: true
+        grid_y:
+          type: integer
+          nullable: true
+        floor:
+          type: integer
+        fixture_key:
+          type: string
+          nullable: true
+        origin:
+          type: string
+        occupant_count:
+          type: integer
+        grants:
+          type: array
+          items:
+            type: string
+      required:
+      - description
+      - enclosure
+      - fixture_key
+      - floor
+      - grants
+      - grid_x
+      - grid_y
+      - id
+      - is_outdoor
+      - is_public
+      - is_social_hub
+      - name
+      - occupant_count
+      - origin
+      - size_name
     StrainAvailability:
       type: object
       description: Read-only serializer for StrainAvailability — per-character strain

@@ -736,6 +736,21 @@ actions, backends, and service functions.
   `world.stories.services.crossover` (the same service the web `CrossoverInviteViewSet` calls);
   authorization replicated inline (sender-only withdraw, recipient-only accept/decline) so telnet
   cannot escalate.
+- **`story_rooms.py`**: telnet play verbs for GM story areas / temp scene rooms (#2450, epic
+  #2436 slice 3) — canvas authoring (create/dig/link/place/remove a story area's rooms) stays
+  web-only (epic Decision 2); only the play-time verbs get a telnet face, mirroring the "no
+  telnet for staff authoring tools" split. `CmdSceneRoom` (`sceneroom`) — GM lifecycle for
+  disposable temp scene rooms: `sceneroom <name> = <description>` spins one up
+  (`SpinUpSceneRoomAction`), `sceneroom close <#room-id>` closes one (`CloseSceneRoomAction`,
+  returning any joined characters). `CmdJoinRoom` (`joinroom`) — bare `joinroom` lists the
+  caller's own `StoryRoomGrant` rows; `joinroom <#id|name>` dispatches `JoinStoryRoomAction`
+  (name matches only among the caller's own grants; ties resolve to the lowest room id).
+  `CmdLeaveRoom` (`leaveroom`) — dispatches `LeaveStoryRoomAction`, returning the caller to the
+  `return_location` their grant captured at join (fallback: `home`). All three are thin
+  `ArxCommand`s over the four REGISTRY actions in `actions/definitions/story_builder.py`; locks
+  are `cmd:all()` throughout — real authorization lives in the actions/services (the grant
+  itself, or `MinimumGMLevelPrerequisite` for the GM-lifecycle pair), the same seam
+  `setstage.py` uses. No business logic in the command.
 - **`durance.py`**: `CmdDurance` (`durance`, Progression, #1700) — the Ritual of the Durance
   readiness hub + site-convene surface. Bare `durance`/`durance status` shows level, unlock
   gate, eligible paths, declared intent, and training-site presence. `durance intent <path>`

@@ -6,7 +6,14 @@ from django.db.models import QuerySet
 import django_filters
 
 from world.gm.constants import GMApplicationStatus, GMTableStatus
-from world.gm.models import CatalogSuggestion, GMApplication, GMProfile, GMTable, GMTableMembership
+from world.gm.models import (
+    CatalogSuggestion,
+    GMApplication,
+    GMProfile,
+    GMTable,
+    GMTableMembership,
+    StoryRoomGrant,
+)
 from world.player_submissions.constants import SubmissionStatus
 
 
@@ -66,3 +73,13 @@ class CatalogSuggestionFilter(django_filters.FilterSet):
     class Meta:
         model = CatalogSuggestion
         fields = ["status", "proposal_kind"]
+
+
+class StoryRoomGrantFilter(django_filters.FilterSet):
+    """Filter for a player's own story-room grants (#2450 Fix 2) — by room."""
+
+    room = django_filters.NumberFilter()
+
+    class Meta:
+        model = StoryRoomGrant
+        fields = ["room"]
