@@ -171,6 +171,7 @@ treat those names as hints to confirm, not gospel.
 - [0139 — Staff world-builder shares the map-canvas layer; authority is the staff flag, not the GM ladder](0139-staff-world-builder-shares-the-map-canvas-layer-gated-by-staff-flag-not-gm-ladder.md) (epic #2436, #2449; follow-ups #2450/#2451/#2452)
 - [0140 — Grid content exports as graph-aware, per-area bundles keyed by permanent slugs](0140-grid-content-exports-as-graph-aware-area-bundles.md) (epic #2436, #2448; related ADR-0120/0121)
 - [0141 — Story-room access is a consent-first player-side join, not a GM summon](0141-story-room-access-is-player-side-join.md) (epic #2436, #2450; extends ADR-0024; related ADR-0139/0140)
+- [0144 — Technique capability folding is max-not-sum, and prerequisite-free grants only](0144-technique-capability-folding-is-max-not-sum.md) (#2504; related ADR-0034)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
