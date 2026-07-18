@@ -1530,6 +1530,16 @@ Character lifecycle management with web-first applications and player anonymity.
   account identifiers. Frontend: in-scene quick-compose (`SendLetterDialog` pre-filling
   `ComposeMailForm`) from the character card, an `UnreadMailBadge` in the header, and a
   mark-read-on-open flow in `ReceivedMailList`. No telnet mail command exists or is planned.
+- **Game invites (#2483):** `GameInvite` model + `GameInviteViewSet` for
+  player-to-friend contextual invites. Trust-gated via `PlayerTrust` (new
+  `INVITE` `TrustCategory`, `BASIC` minimum, seeded via the Big Button
+  "roster" cluster). Token-in-URL flow: inviter creates invite with a message
+  → friend registers via `/register?invite=TOKEN` → claims on first login
+  → invite annotates their first `DraftApplication.invited_via` FK → inviter
+  gets a websocket push on submission. Services use the `game_invite` prefix
+  (`create_game_invite`/`claim_game_invite`/`revoke_game_invite`) to avoid
+  collision with `world/gm/services.py`'s `GMRosterInvite` functions. See
+  ADR-0141.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)

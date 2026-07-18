@@ -1320,6 +1320,22 @@ def submit_draft_for_review(
         comment_type=CommentType.STATUS_CHANGE,
     )
 
+    # Attach invite context if the submitting account arrived via an invite (#2483)
+    try:
+        from world.roster.services.invite_notifications import (  # noqa: PLC0415
+            notify_inviter_of_submission,
+        )
+        from world.roster.services.invite_services import annotate_application  # noqa: PLC0415
+
+        invite = annotate_application(application, application.player_account)
+        if invite is not None:
+            notify_inviter_of_submission(invite, application)
+    except Exception:
+        logger.exception(
+            "Failed to annotate/notify invite for application %s",
+            application.pk,
+        )
+
     from world.character_creation.email_service import CGEmailService  # noqa: PLC0415
 
     try:

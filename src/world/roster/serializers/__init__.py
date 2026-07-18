@@ -29,6 +29,11 @@ from world.roster.serializers.families import (
     KinSlotPoolSerializer,
     KinSlotSerializer,
 )
+from world.roster.serializers.invites import (
+    GameInviteCreateSerializer,
+    GameInviteResolveSerializer,
+    GameInviteSerializer,
+)
 from world.roster.serializers.mail import PlayerMailSerializer, UnreadMailCountSerializer
 from world.roster.serializers.media import (
     ArtistSerializer,
@@ -56,6 +61,9 @@ __all__ = [
     # Family serializers
     "FamilySerializer",
     "FamilyTreeSerializer",
+    "GameInviteCreateSerializer",
+    "GameInviteResolveSerializer",
+    "GameInviteSerializer",
     "KinSlotPoolSerializer",
     "KinSlotSerializer",
     "MyRosterEntrySerializer",

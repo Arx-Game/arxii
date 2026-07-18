@@ -26082,6 +26082,159 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/roster/invites/:
+    get:
+      operationId: roster_invites_list
+      description: |-
+        Viewset for game invites.
+
+        - Create: auth + trust-gated (service validates trust)
+        - List: auth, returns only the inviter's own invites
+        - Resolve: AllowAny, returns display-safe context for registration page
+        - Claim: auth, links invite to the authenticated account
+        - Revoke: auth, inviter or staff only
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGameInviteList'
+          description: ''
+    post:
+      operationId: roster_invites_create
+      description: Create a new game invite.
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameInviteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameInvite'
+          description: ''
+  /api/roster/invites/{id}/:
+    get:
+      operationId: roster_invites_retrieve
+      description: |-
+        Viewset for game invites.
+
+        - Create: auth + trust-gated (service validates trust)
+        - List: auth, returns only the inviter's own invites
+        - Resolve: AllowAny, returns display-safe context for registration page
+        - Claim: auth, links invite to the authenticated account
+        - Revoke: auth, inviter or staff only
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Game Invite.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameInvite'
+          description: ''
+  /api/roster/invites/{id}/revoke/:
+    post:
+      operationId: roster_invites_revoke_create
+      description: Revoke an invite (inviter or staff only).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Game Invite.
+        required: true
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameInviteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameInvite'
+          description: ''
+  /api/roster/invites/claim/:
+    post:
+      operationId: roster_invites_claim_create
+      description: Claim an invite token (first-login flow).
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameInviteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameInvite'
+          description: ''
+  /api/roster/invites/resolve/:
+    get:
+      operationId: roster_invites_resolve_retrieve
+      description: |-
+        Resolve a token to display-safe invite context (for registration page).
+
+        AllowAny — this is called before the user has an account. Returns only
+        the inviter's display name and message, never account info.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameInvite'
+          description: ''
   /api/roster/mail/:
     get:
       operationId: roster_mail_list
@@ -41991,6 +42144,81 @@ components:
       description: |-
         * `active` - Active
         * `archived` - Archived
+    GameInvite:
+      type: object
+      description: |-
+        Serializer for listing/viewing game invites.
+
+        Shows the inviter's display name (not account username) to preserve
+        player anonymity. The token is included so the inviter can share the link.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        inviter_display:
+          type: string
+          readOnly: true
+        token:
+          type: string
+          readOnly: true
+          description: URL-safe random token (secrets.token_urlsafe(48))
+        message:
+          type: string
+          description: The inviter's contextual note to the friend (why they're invited).
+        status:
+          allOf:
+          - $ref: '#/components/schemas/GameInviteStatusEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        claimed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Optional expiry; null = no expiry.
+      required:
+      - claimed_at
+      - created_at
+      - expires_at
+      - id
+      - inviter_display
+      - message
+      - status
+      - token
+    GameInviteRequest:
+      type: object
+      description: |-
+        Serializer for listing/viewing game invites.
+
+        Shows the inviter's display name (not account username) to preserve
+        player anonymity. The token is included so the inviter can share the link.
+      properties:
+        message:
+          type: string
+          minLength: 1
+          description: The inviter's contextual note to the friend (why they're invited).
+      required:
+      - message
+    GameInviteStatusEnum:
+      enum:
+      - pending
+      - claimed
+      - expired
+      - revoked
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `claimed` - Claimed
+        * `expired` - Expired
+        * `revoked` - Revoked
     GearArchetypeCompatibility:
       type: object
       description: Read-only serializer for GearArchetypeCompatibility join rows.
@@ -49687,6 +49915,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GMTableMembership'
+    PaginatedGameInviteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GameInvite'
     PaginatedGemitList:
       type: object
       required:
