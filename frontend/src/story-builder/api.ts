@@ -3,10 +3,10 @@ import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch
 
 import type {
   PaginatedStoryAreaList,
-  PaginatedStoryInstanceList,
   StoryArea,
   StoryAreaManager,
   StoryBuilderActionKey,
+  StoryInstance,
 } from './types';
 
 export type { DispatchResult };
@@ -52,8 +52,12 @@ export function fetchStoryAreaManager(areaId: number): Promise<StoryAreaManager>
   return getJson(`/api/gm/story-areas/${areaId}/manager/`, 'Failed to load the story area map.');
 }
 
-/** A GM's own active temp scene rooms (staff: every GM-owned active instance). */
-export function fetchStoryInstances(): Promise<PaginatedStoryInstanceList> {
+/**
+ * A GM's own active temp scene rooms (staff: every GM-owned active instance).
+ * A bare array — the endpoint's `pagination_class=None` (see `world.gm.story_views`)
+ * because a GM has at most a handful of active temp rooms at once.
+ */
+export function fetchStoryInstances(): Promise<StoryInstance[]> {
   return getJson('/api/gm/story-areas/instances/', 'Failed to load temp scene rooms.');
 }
 

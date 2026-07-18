@@ -108,6 +108,45 @@ describe('useStoryBuilderAction', () => {
     });
   });
 
+  it('invalidates the instances list on a grant_story_room success (Fix round 1)', async () => {
+    mockApiFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true, message: 'Grantee may now join Alley.' }),
+    } as Response);
+    const { qc, Wrapper } = wrapper();
+
+    // areaId=null: a grant on a temp scene room, not a story-area room.
+    const { result } = renderHook(() => useStoryBuilderAction(7, null), { wrapper: Wrapper });
+    result.current.mutate({
+      key: 'grant_story_room',
+      kwargs: { room_id: 9, character_name: 'Grantee' },
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(qc.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: storyBuilderKeys.instances(),
+    });
+  });
+
+  it('invalidates the instances list on a revoke_story_room success (Fix round 1)', async () => {
+    mockApiFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true, message: "Grantee's access revoked." }),
+    } as Response);
+    const { qc, Wrapper } = wrapper();
+
+    const { result } = renderHook(() => useStoryBuilderAction(7, null), { wrapper: Wrapper });
+    result.current.mutate({
+      key: 'revoke_story_room',
+      kwargs: { room_id: 9, character_name: 'Grantee' },
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(qc.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: storyBuilderKeys.instances(),
+    });
+  });
+
   it('toasts a network/HTTP error from the dispatch call', async () => {
     mockApiFetch.mockResolvedValue({
       ok: false,

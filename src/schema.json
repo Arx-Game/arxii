@@ -11980,25 +11980,18 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorldBuilderAreaManager'
+                $ref: '#/components/schemas/StoryAreaManager'
           description: ''
   /api/gm/story-areas/instances/:
     get:
       operationId: gm_story_areas_instances_list
-      description: 'A GM''s own story areas (staff: all story areas). Reads only.'
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
+      description: |-
+        A bare array, not paginated — ``pagination_class=None`` makes the schema say so.
+
+        The view never calls ``self.paginate_queryset()`` (a GM has at most a
+        handful of active temp rooms), so without this the ViewSet-level
+        ``pagination_class`` made drf-spectacular wrongly advertise
+        ``PaginatedStoryInstanceList`` for a response that was always a flat list.
       tags:
       - story-builder
       security:
@@ -12008,7 +12001,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedStoryInstanceList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/StoryInstance'
           description: ''
   /api/gm/table-memberships/:
     get:
@@ -51190,29 +51185,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StoryGMOffer'
-    PaginatedStoryInstanceList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/StoryInstance'
     PaginatedStoryListList:
       type: object
       required:
@@ -61395,6 +61367,25 @@ components:
         * `inactive` - Inactive
         * `completed` - Completed
         * `cancelled` - Cancelled
+    StoryAreaManager:
+      type: object
+      description: 'The story-builder area-manager payload: area header + rooms (with
+        grants) + exits.'
+      properties:
+        area:
+          $ref: '#/components/schemas/WorldBuilderArea'
+        rooms:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoryRoom'
+        exits:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderExit'
+      required:
+      - area
+      - exits
+      - rooms
     StoryCreate:
       type: object
       description: Serializer for creating stories
@@ -61792,8 +61783,21 @@ components:
           type: string
           format: date-time
           readOnly: true
+        grants:
+          type: array
+          items:
+            type: string
+          description: |-
+            Character names granted access, from the view's batched lookup.
+
+            Populated via serializer ``context["grants_by_room"]`` (keyed by
+            ``RoomProfile``/``ObjectDB`` pk, which are the same value —
+            ``RoomProfile.objectdb`` is its primary key) so the whole list of
+            instances costs one extra query, not one per row.
+          readOnly: true
       required:
       - created_at
+      - grants
       - id
       - name
       - room_id
@@ -62065,6 +62069,68 @@ components:
       required:
       - story
       - subject_kind
+    StoryRoom:
+      type: object
+      description: |-
+        One RoomProfile in the story-builder manager payload (#2450).
+
+        Extends the staff-only ``WorldBuilderRoomSerializer`` with ``grants`` — the
+        names of characters currently granted access to join this room. Kept as a
+        subclass (not a change to the shared serializer) so the staff world-builder
+        manager payload shape is untouched.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        is_public:
+          type: boolean
+        is_social_hub:
+          type: boolean
+        is_outdoor:
+          type: boolean
+        enclosure:
+          type: string
+        size_name:
+          type: string
+          nullable: true
+        grid_x:
+          type: integer
+          nullable: true
+        grid_y:
+          type: integer
+          nullable: true
+        floor:
+          type: integer
+        fixture_key:
+          type: string
+          nullable: true
+        origin:
+          type: string
+        occupant_count:
+          type: integer
+        grants:
+          type: array
+          items:
+            type: string
+      required:
+      - description
+      - enclosure
+      - fixture_key
+      - floor
+      - grants
+      - grid_x
+      - grid_y
+      - id
+      - is_outdoor
+      - is_public
+      - is_social_hub
+      - name
+      - occupant_count
+      - origin
+      - size_name
     StrainAvailability:
       type: object
       description: Read-only serializer for StrainAvailability — per-character strain

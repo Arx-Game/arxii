@@ -3,6 +3,10 @@
  * form (name + description → `spin_up_scene_room`) and one row per active
  * `InstancedRoom`, each with a close button (`close_scene_room`) and an
  * expandable `RoomAccessPanel` for granting/revoking join access.
+ *
+ * `useStoryInstancesQuery` returns a bare array (the endpoint isn't
+ * paginated — see `world.gm.story_views`'s `instances` action and
+ * `api.ts`'s `fetchStoryInstances`), not a `{results: [...]}` page.
  */
 import { useState } from 'react';
 
@@ -24,7 +28,7 @@ export interface TempRoomsPanelProps {
 
 export function TempRoomsPanel({ runAction, runAccessAction }: TempRoomsPanelProps) {
   const { data, isLoading } = useStoryInstancesQuery();
-  const instances = data?.results ?? [];
+  const instances = data ?? [];
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [expandedRoomId, setExpandedRoomId] = useState<number | null>(null);
@@ -91,7 +95,11 @@ export function TempRoomsPanel({ runAction, runAccessAction }: TempRoomsPanelPro
             </Button>
           </div>
           {expandedRoomId === instance.room_id && (
-            <RoomAccessPanel roomId={instance.room_id} runAccessAction={runAccessAction} />
+            <RoomAccessPanel
+              roomId={instance.room_id}
+              grants={instance.grants}
+              runAccessAction={runAccessAction}
+            />
           )}
         </div>
       ))}

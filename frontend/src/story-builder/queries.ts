@@ -71,14 +71,27 @@ const AREA_LIST_KEYS: StoryBuilderActionKey[] = [
 const INSTANCE_KEYS: StoryBuilderActionKey[] = ['spin_up_scene_room', 'close_scene_room'];
 
 /**
+ * Grant/revoke actions (#2450 Fix round 1) — the room they target may be a
+ * story-area room (needs the manager payload refreshed, already handled
+ * below by the unconditional `areaId != null` invalidation) or a temp scene
+ * room (needs the instances list refreshed, since each row now carries its
+ * own `grants`). Invalidating both unconditionally on either action is
+ * simpler than threading "which kind of room" through the mutation, and
+ * invalidating a query nobody's watching is a no-op.
+ */
+const GRANT_KEYS: StoryBuilderActionKey[] = ['grant_story_room', 'revoke_story_room'];
+
+/**
  * The one mutation every GM story-builder verb goes through: dispatch by
  * registry key, toast the action's message, refresh the area manager payload
  * (mirrors `useWorldBuilderAction`, `frontend/src/world-builder/queries.ts`).
  * Area-list-shaping actions additionally invalidate the areas list/detail;
- * temp-room actions invalidate the instances list. A `success: false`
- * dispatch (a business-rule refusal — HTTP 200, see `DispatchResult` in
- * `./api`) toasts an error and skips every cache invalidation instead, so a
- * refused action never looks like it landed.
+ * temp-room actions AND grant/revoke actions invalidate the instances list
+ * (grant/revoke can target a temp room too, and every instance row now
+ * carries its own `grants`). A `success: false` dispatch (a business-rule
+ * refusal — HTTP 200, see `DispatchResult` in `./api`) toasts an error and
+ * skips every cache invalidation instead, so a refused action never looks
+ * like it landed.
  */
 export function useStoryBuilderAction(characterId: number, areaId: number | null) {
   const queryClient = useQueryClient();
@@ -98,7 +111,7 @@ export function useStoryBuilderAction(characterId: number, areaId: number | null
         queryClient.invalidateQueries({ queryKey: [...storyBuilderKeys.all, 'areas'] });
         queryClient.invalidateQueries({ queryKey: [...storyBuilderKeys.all, 'area'] });
       }
-      if (INSTANCE_KEYS.includes(key)) {
+      if (INSTANCE_KEYS.includes(key) || GRANT_KEYS.includes(key)) {
         queryClient.invalidateQueries({ queryKey: storyBuilderKeys.instances() });
       }
     },

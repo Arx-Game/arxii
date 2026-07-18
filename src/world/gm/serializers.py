@@ -9,6 +9,7 @@ from rest_framework import serializers
 if TYPE_CHECKING:
     from world.projects.models import Project
 
+from world.areas.serializers import WorldBuilderAreaManagerSerializer, WorldBuilderRoomSerializer
 from world.gm.constants import GMApplicationStatus, GMLevel, GMTableViewerRole
 from world.gm.models import (
     CatalogSuggestion,
@@ -591,7 +592,37 @@ class StoryInstanceSerializer(serializers.ModelSerializer):
 
     room_id = serializers.IntegerField(source="room.pk", read_only=True)
     name = serializers.CharField(source="room.db_key", read_only=True)
+    grants = serializers.SerializerMethodField()
 
     class Meta:
         model = InstancedRoom
-        fields = ["id", "room_id", "name", "status", "created_at"]
+        fields = ["id", "room_id", "name", "status", "created_at", "grants"]
+
+    def get_grants(self, obj: InstancedRoom) -> list[str]:
+        """Character names granted access, from the view's batched lookup.
+
+        Populated via serializer ``context["grants_by_room"]`` (keyed by
+        ``RoomProfile``/``ObjectDB`` pk, which are the same value —
+        ``RoomProfile.objectdb`` is its primary key) so the whole list of
+        instances costs one extra query, not one per row.
+        """
+        grants_by_room: dict[int, list[str]] = self.context.get("grants_by_room", {})
+        return grants_by_room.get(obj.room_id, [])
+
+
+class StoryRoomSerializer(WorldBuilderRoomSerializer):
+    """One RoomProfile in the story-builder manager payload (#2450).
+
+    Extends the staff-only ``WorldBuilderRoomSerializer`` with ``grants`` — the
+    names of characters currently granted access to join this room. Kept as a
+    subclass (not a change to the shared serializer) so the staff world-builder
+    manager payload shape is untouched.
+    """
+
+    grants = serializers.ListField(child=serializers.CharField())
+
+
+class StoryAreaManagerSerializer(WorldBuilderAreaManagerSerializer):
+    """The story-builder area-manager payload: area header + rooms (with grants) + exits."""
+
+    rooms = StoryRoomSerializer(many=True)

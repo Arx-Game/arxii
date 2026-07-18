@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from typing import TYPE_CHECKING
+
 from django.db.models import Count, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -14,14 +17,34 @@ from world.areas.builder_views import WorldBuilderAreaPagination, area_manager_p
 from world.areas.constants import GridOrigin
 from world.areas.filters import AreaFilter
 from world.areas.models import Area
-from world.areas.serializers import (
-    WorldBuilderAreaManagerSerializer,
-    WorldBuilderAreaSerializer,
-)
+from world.areas.serializers import WorldBuilderAreaSerializer
+from world.gm.models import StoryRoomGrant
 from world.gm.permissions import IsGMOrStaff
-from world.gm.serializers import StoryInstanceSerializer
+from world.gm.serializers import StoryAreaManagerSerializer, StoryInstanceSerializer
 from world.instances.constants import InstanceStatus
 from world.instances.models import InstancedRoom
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+
+def _grants_by_room(room_ids: Iterable[int]) -> dict[int, list[str]]:
+    """Batch-fetch granted character names, one query, keyed by room pk.
+
+    ``StoryRoomGrant.room_id`` is a ``RoomProfile`` pk, which is the same
+    value as the room's ``ObjectDB`` pk (``RoomProfile.objectdb`` is its
+    primary key) — the same id used as ``room["id"]`` in
+    ``area_manager_payload`` and as ``room_id`` on ``StoryInstanceSerializer``.
+    """
+    grants_by_room: dict[int, list[str]] = defaultdict(list)
+    grants = StoryRoomGrant.objects.filter(room_id__in=room_ids).select_related(
+        "character__character"
+    )
+    for grant in grants:
+        char = grant.character.character
+        if char is not None:
+            grants_by_room[grant.room_id].append(char.db_key)
+    return grants_by_room
 
 
 @extend_schema(tags=["story-builder"])
@@ -44,18 +67,33 @@ class StoryBuilderViewSet(viewsets.ReadOnlyModelViewSet):
             return qs
         return qs.filter(story_ownership__gm__account=self.request.user)
 
-    @extend_schema(responses={200: WorldBuilderAreaManagerSerializer})
+    @extend_schema(responses={200: StoryAreaManagerSerializer})
     @action(detail=True, methods=["get"], url_path="manager")
     def manager(self, request: Request, pk: str | None = None) -> Response:
         payload = area_manager_payload(self.get_object())
-        return Response(WorldBuilderAreaManagerSerializer(payload).data)
+        grants_by_room = _grants_by_room(room["id"] for room in payload["rooms"])
+        for room in payload["rooms"]:
+            room["grants"] = grants_by_room.get(room["id"], [])
+        return Response(StoryAreaManagerSerializer(payload).data)
 
     @extend_schema(responses={200: StoryInstanceSerializer(many=True)})
-    @action(detail=False, methods=["get"], url_path="instances")
+    @action(detail=False, methods=["get"], url_path="instances", pagination_class=None)
     def instances(self, request: Request) -> Response:
+        """A bare array, not paginated — ``pagination_class=None`` makes the schema say so.
+
+        The view never calls ``self.paginate_queryset()`` (a GM has at most a
+        handful of active temp rooms), so without this the ViewSet-level
+        ``pagination_class`` made drf-spectacular wrongly advertise
+        ``PaginatedStoryInstanceList`` for a response that was always a flat list.
+        """
         qs = InstancedRoom.objects.filter(status=InstanceStatus.ACTIVE).select_related("room")
         if not request.user.is_staff:
             qs = qs.filter(gm_owner__account=request.user)
         else:
             qs = qs.filter(gm_owner__isnull=False)
-        return Response(StoryInstanceSerializer(qs.order_by("-created_at"), many=True).data)
+        instances = list(qs.order_by("-created_at"))
+        grants_by_room = _grants_by_room(inst.room_id for inst in instances)
+        serializer = StoryInstanceSerializer(
+            instances, many=True, context={"grants_by_room": grants_by_room}
+        )
+        return Response(serializer.data)

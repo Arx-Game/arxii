@@ -13,7 +13,8 @@ from rest_framework.test import APIClient, APITestCase
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile
 from world.areas.constants import AreaLevel, GridOrigin
-from world.gm.factories import GMProfileFactory, StoryAreaFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.gm.factories import GMProfileFactory, StoryAreaFactory, StoryRoomGrantFactory
 from world.instances.constants import InstanceStatus
 from world.instances.factories import InstancedRoomFactory
 
@@ -116,6 +117,34 @@ class StoryAreaManagerTests(StoryBuilderApiBase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["area"]["id"], self.other_story_area.pk)
 
+    def test_manager_payload_room_has_no_grants(self) -> None:
+        room = _room_in(self.story_area)
+        response = self._get(self._url(), self.gm_account)
+        rooms_by_id = {row["id"]: row for row in response.data["rooms"]}
+        self.assertEqual(rooms_by_id[room.pk]["grants"], [])
+
+    def test_manager_payload_room_includes_grants_for_granted_room(self) -> None:
+        room = _room_in(self.story_area)
+        profile = RoomProfile.objects.get(objectdb=room)
+        sheet = CharacterSheetFactory(character=ObjectDBFactory(db_key="Grantee"))
+        StoryRoomGrantFactory(room=profile, character=sheet, granted_by=self.gm)
+
+        response = self._get(self._url(), self.gm_account)
+        rooms_by_id = {row["id"]: row for row in response.data["rooms"]}
+        self.assertEqual(rooms_by_id[room.pk]["grants"], ["Grantee"])
+
+    def test_manager_payload_does_not_leak_grants_from_other_areas(self) -> None:
+        """A grant on a totally different room never bleeds into an unrelated room's list."""
+        room = _room_in(self.story_area)
+        other_room = _room_in(self.other_story_area, name="Other Room")
+        other_profile = RoomProfile.objects.get(objectdb=other_room)
+        sheet = CharacterSheetFactory(character=ObjectDBFactory(db_key="Elsewhere"))
+        StoryRoomGrantFactory(room=other_profile, character=sheet, granted_by=self.other_gm)
+
+        response = self._get(self._url(), self.gm_account)
+        rooms_by_id = {row["id"]: row for row in response.data["rooms"]}
+        self.assertEqual(rooms_by_id[room.pk]["grants"], [])
+
 
 class StoryInstancesTests(StoryBuilderApiBase):
     def _url(self) -> str:
@@ -158,3 +187,32 @@ class StoryInstancesTests(StoryBuilderApiBase):
         self.assertEqual(row["room_id"], instance.room_id)
         self.assertEqual(row["name"], "Goblin Cave")
         self.assertEqual(row["status"], InstanceStatus.ACTIVE)
+        self.assertEqual(row["grants"], [])
+
+    def test_instance_row_includes_grants_for_granted_room(self) -> None:
+        room = ObjectDBFactory(db_key="Goblin Cave", db_typeclass_path="typeclasses.rooms.Room")
+        profile, _created = RoomProfile.objects.get_or_create(objectdb=room)
+        instance = InstancedRoomFactory(gm_owner=self.gm, status=InstanceStatus.ACTIVE, room=room)
+        sheet = CharacterSheetFactory(character=ObjectDBFactory(db_key="Grantee"))
+        StoryRoomGrantFactory(room=profile, character=sheet, granted_by=self.gm)
+
+        response = self._get(self._url(), self.gm_account)
+        row = next(r for r in response.data if r["id"] == instance.pk)
+        self.assertEqual(row["grants"], ["Grantee"])
+
+    def test_instance_row_does_not_leak_grants_from_other_rooms(self) -> None:
+        """A grant on another GM's instance room never bleeds into an unrelated row's list."""
+        room = ObjectDBFactory(db_key="Goblin Cave", db_typeclass_path="typeclasses.rooms.Room")
+        instance = InstancedRoomFactory(gm_owner=self.gm, status=InstanceStatus.ACTIVE, room=room)
+
+        other_room = ObjectDBFactory(
+            db_key="Other Cave", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        other_profile, _created = RoomProfile.objects.get_or_create(objectdb=other_room)
+        InstancedRoomFactory(gm_owner=self.other_gm, status=InstanceStatus.ACTIVE, room=other_room)
+        sheet = CharacterSheetFactory(character=ObjectDBFactory(db_key="Elsewhere"))
+        StoryRoomGrantFactory(room=other_profile, character=sheet, granted_by=self.other_gm)
+
+        response = self._get(self._url(), self.gm_account)
+        row = next(r for r in response.data if r["id"] == instance.pk)
+        self.assertEqual(row["grants"], [])

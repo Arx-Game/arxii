@@ -2,24 +2,26 @@
  * Types for the GM story-builder canvas (#2450) — thin aliases over the
  * generated schema plus the Task 5-7 action-key union.
  *
- * The read payloads are byte-for-byte the staff world-builder shapes
- * (`GET /api/gm/story-areas/.../manager/` reuses `area_manager_payload`,
- * see Task 9's report) — a story room's `fixture_key` is always `null` and
- * its `origin` is always `'story'`, but the wire shape is identical, so
- * these are aliases onto the same generated schema types rather than
- * parallel ones. Kept as a distinct module (not a re-export from
- * `@/world-builder/types`) so this surface can diverge independently if the
- * two payloads ever do.
+ * The area/room/exit read payloads were byte-for-byte the staff world-builder
+ * shapes (`GET /api/gm/story-areas/.../manager/` reuses `area_manager_payload`,
+ * see Task 9's report). Fix round 1 (#2450 Task 10 follow-up) added a
+ * `grants` field to the manager's rooms and to `StoryInstance` — server-side
+ * `StoryAreaManagerSerializer`/`StoryRoomSerializer` subclass the staff
+ * serializers rather than changing them, so the manager payload now has its
+ * own `StoryAreaManager`/`StoryRoom` schema components distinct from
+ * `WorldBuilderAreaManager`/`WorldBuilderRoom`. Kept as a distinct module
+ * (not a re-export from `@/world-builder/types`) so this surface can diverge
+ * independently if the two payloads ever do.
  */
 import type { components } from '@/generated/api';
 
 export type StoryArea = components['schemas']['WorldBuilderArea'];
-export type StoryAreaManager = components['schemas']['WorldBuilderAreaManager'];
-export type StoryRoom = components['schemas']['WorldBuilderRoom'];
+export type StoryAreaManager = components['schemas']['StoryAreaManager'];
+export type StoryRoom = components['schemas']['StoryRoom'];
 export type StoryExit = components['schemas']['WorldBuilderExit'];
 export type PaginatedStoryAreaList = components['schemas']['PaginatedWorldBuilderAreaList'];
+/** A GM's own active temp scene rooms — a bare array, not paginated (see `api.ts`). */
 export type StoryInstance = components['schemas']['StoryInstance'];
-export type PaginatedStoryInstanceList = components['schemas']['PaginatedStoryInstanceList'];
 
 /** Registry keys of the GM story-builder actions this surface dispatches (#2450 Tasks 5-7). */
 export type StoryBuilderActionKey =

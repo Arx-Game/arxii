@@ -5,22 +5,21 @@
  * kind of room id, so this one panel serves both `RoomDetailPanel` and
  * `TempRoomsPanel`'s per-row access list).
  *
- * There is no backend read endpoint for a room's currently-granted
- * characters — Task 9's read surface (`GET /api/gm/story-areas/...`) covers
- * areas/rooms/exits/instances, not `StoryRoomGrant` rows. This panel tracks
- * "granted this session" client-side, reset whenever `roomId` changes. A
- * grant made in an earlier session (or a different GM session/device) won't
- * show here even though it's still in effect server-side — a known display
- * gap, not a functional one; the grant/revoke actions themselves are the
- * real state and always dispatch against the server.
+ * Fix round 1 (#2450 Task 10 follow-up): the grant list is now server-backed
+ * — `grants` comes straight from the parent's already-fetched manager/
+ * instances payload (`world.gm.story_views` batch-attaches
+ * `StoryRoomGrant` names, see `_grants_by_room`), so it survives a reload and
+ * reflects grants made in any session, not just this one. This panel is
+ * purely a form + list over that prop; it holds no grant state of its own.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 export interface RoomAccessPanelProps {
   roomId: number;
+  grants: string[];
   runAccessAction: (
     key: 'grant_story_room' | 'revoke_story_room',
     kwargs: Record<string, unknown>,
@@ -28,28 +27,23 @@ export interface RoomAccessPanelProps {
   ) => void;
 }
 
-export function RoomAccessPanel({ roomId, runAccessAction }: RoomAccessPanelProps) {
+export function RoomAccessPanel({ roomId, grants, runAccessAction }: RoomAccessPanelProps) {
   const [characterName, setCharacterName] = useState('');
-  const [granted, setGranted] = useState<string[]>([]);
-
-  useEffect(() => {
-    setGranted([]);
-    setCharacterName('');
-  }, [roomId]);
 
   const grant = () => {
     const trimmed = characterName.trim();
     if (!trimmed) return;
     runAccessAction('grant_story_room', { room_id: roomId, character_name: trimmed }, () => {
-      setGranted((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
       setCharacterName('');
     });
   };
 
   const revoke = (grantedName: string) => {
-    runAccessAction('revoke_story_room', { room_id: roomId, character_name: grantedName }, () => {
-      setGranted((prev) => prev.filter((n) => n !== grantedName));
-    });
+    runAccessAction(
+      'revoke_story_room',
+      { room_id: roomId, character_name: grantedName },
+      () => {}
+    );
   };
 
   return (
@@ -67,10 +61,10 @@ export function RoomAccessPanel({ roomId, runAccessAction }: RoomAccessPanelProp
           Grant
         </Button>
       </div>
-      {granted.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No one granted access yet this session.</p>
+      {grants.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No one has access yet.</p>
       ) : (
-        granted.map((grantedName) => (
+        grants.map((grantedName) => (
           <div key={grantedName} className="flex items-center justify-between gap-1.5">
             <span className="text-sm">{grantedName}</span>
             <Button variant="ghost" size="sm" onClick={() => revoke(grantedName)}>

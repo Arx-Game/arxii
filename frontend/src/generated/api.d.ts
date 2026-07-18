@@ -7513,7 +7513,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    /**
+     * @description A bare array, not paginated — ``pagination_class=None`` makes the schema say so.
+     *
+     *     The view never calls ``self.paginate_queryset()`` (a GM has at most a
+     *     handful of active temp rooms), so without this the ViewSet-level
+     *     ``pagination_class`` made drf-spectacular wrongly advertise
+     *     ``PaginatedStoryInstanceList`` for a response that was always a flat list.
+     */
     get: operations['gm_story_areas_instances_list'];
     put?: never;
     post?: never;
@@ -28884,21 +28891,6 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['StoryGMOffer'][];
     };
-    PaginatedStoryInstanceList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['StoryInstance'][];
-    };
     PaginatedStoryListList: {
       /** @example 123 */
       count: number;
@@ -34234,6 +34226,12 @@ export interface components {
      * @enum {string}
      */
     StatusF08Enum: 'active' | 'inactive' | 'completed' | 'cancelled';
+    /** @description The story-builder area-manager payload: area header + rooms (with grants) + exits. */
+    StoryAreaManager: {
+      area: components['schemas']['WorldBuilderArea'];
+      rooms: components['schemas']['StoryRoom'][];
+      exits: components['schemas']['WorldBuilderExit'][];
+    };
     /** @description Serializer for creating stories */
     StoryCreate: {
       title: string;
@@ -34417,6 +34415,15 @@ export interface components {
       status?: components['schemas']['StoryInstanceStatusEnum'];
       /** Format: date-time */
       readonly created_at: string;
+      /**
+       * @description Character names granted access, from the view's batched lookup.
+       *
+       *     Populated via serializer ``context["grants_by_room"]`` (keyed by
+       *     ``RoomProfile``/``ObjectDB`` pk, which are the same value —
+       *     ``RoomProfile.objectdb`` is its primary key) so the whole list of
+       *     instances costs one extra query, not one per row.
+       */
+      readonly grants: string[];
     };
     /**
      * @description * `active` - Active
@@ -34556,6 +34563,31 @@ export interface components {
       is_active?: boolean;
       /** @description GM notes on why this subject is critical. GM-only; never serialized to outsiders. */
       notes?: string;
+    };
+    /**
+     * @description One RoomProfile in the story-builder manager payload (#2450).
+     *
+     *     Extends the staff-only ``WorldBuilderRoomSerializer`` with ``grants`` — the
+     *     names of characters currently granted access to join this room. Kept as a
+     *     subclass (not a change to the shared serializer) so the staff world-builder
+     *     manager payload shape is untouched.
+     */
+    StoryRoom: {
+      id: number;
+      name: string;
+      description: string;
+      is_public: boolean;
+      is_social_hub: boolean;
+      is_outdoor: boolean;
+      enclosure: string;
+      size_name: string | null;
+      grid_x: number | null;
+      grid_y: number | null;
+      floor: number;
+      fixture_key: string | null;
+      origin: string;
+      occupant_count: number;
+      grants: string[];
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
     StrainAvailability: {
@@ -46427,19 +46459,14 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['WorldBuilderAreaManager'];
+          'application/json': components['schemas']['StoryAreaManager'];
         };
       };
     };
   };
   gm_story_areas_instances_list: {
     parameters: {
-      query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
@@ -46451,7 +46478,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedStoryInstanceList'];
+          'application/json': components['schemas']['StoryInstance'][];
         };
       };
     };

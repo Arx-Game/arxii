@@ -74,11 +74,13 @@ export function StoryBuilderPage() {
     runMutation({ key: key as StoryBuilderActionKey, kwargs });
   };
 
-  // Grant/revoke need a per-call success callback (to update
-  // `RoomAccessPanel`'s client-tracked "granted this session" list — see its
-  // doc comment for why there's no server list to read back instead), so
-  // this is a separate mutate call from the generic `runAction` above rather
-  // than threading an `onSuccess` param through every action's kwargs.
+  // Grant/revoke need a per-call success callback (to clear
+  // `RoomAccessPanel`'s name input on a successful grant — the grant/revoke
+  // list itself is server-backed and refreshes via the generic manager/
+  // instances invalidation `useStoryBuilderAction` already does, see
+  // `queries.ts`), so this is a separate mutate call from the generic
+  // `runAction` above rather than threading an `onSuccess` param through
+  // every action's kwargs.
   const runAccessAction = (
     key: 'grant_story_room' | 'revoke_story_room',
     kwargs: Record<string, unknown>,
@@ -186,7 +188,11 @@ export function StoryBuilderPage() {
                   onLinkRooms={() => setLinkOpen(true)}
                   palette="story"
                 />
-                <RoomAccessPanel roomId={selectedRoom.id} runAccessAction={runAccessAction} />
+                <RoomAccessPanel
+                  roomId={selectedRoom.id}
+                  grants={selectedRoom.grants}
+                  runAccessAction={runAccessAction}
+                />
               </>
             ) : (
               <p className="text-sm text-muted-foreground">Pick a room to edit it.</p>
