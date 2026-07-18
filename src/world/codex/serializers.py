@@ -102,6 +102,7 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
     subject_path = serializers.SerializerMethodField()
     # Read from Subquery annotation set by ViewSet
     knowledge_status = serializers.CharField(read_only=True, allow_null=True)
+    art_url = serializers.SerializerMethodField()
 
     class Meta:
         model = CodexEntry
@@ -115,6 +116,7 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
             "subject_path",
             "display_order",
             "knowledge_status",
+            "art_url",
         ]
 
     def get_subject_path(self, obj: CodexEntry) -> list[dict]:
@@ -123,6 +125,9 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
             return obj.subject.breadcrumb_cache.breadcrumb_path
         except ObjectDoesNotExist:
             return obj.subject.breadcrumb_path
+
+    def get_art_url(self, obj: CodexEntry) -> str | None:
+        return obj.art.cloudinary_url if obj.art_id else None
 
 
 class CodexEntryDetailSerializer(serializers.ModelSerializer):
@@ -140,6 +145,7 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
     mechanics_content = serializers.SerializerMethodField()
     lore_links = serializers.SerializerMethodField()
     mechanics_links = serializers.SerializerMethodField()
+    art_url = serializers.SerializerMethodField()
 
     class Meta:
         model = CodexEntry
@@ -159,6 +165,7 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
             "learn_threshold",
             "knowledge_status",
             "research_progress",
+            "art_url",
         ]
 
     def get_subject_path(self, obj: CodexEntry) -> list[dict]:
@@ -194,3 +201,6 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
     def get_mechanics_links(self, obj: CodexEntry) -> list[dict]:
         """Return resolved wikilinks from mechanics_content."""
         return self._get_links(obj, obj.mechanics_content)
+
+    def get_art_url(self, obj: CodexEntry) -> str | None:
+        return obj.art.cloudinary_url if obj.art_id else None

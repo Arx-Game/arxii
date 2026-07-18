@@ -12,10 +12,11 @@ that adds the field each method exercises, since ``CodexEntry.art``,
 
 from pathlib import Path
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from core_management.content_fixtures import BuildResult, load_entries
 from evennia_extensions.models import Media, PageBackground, PageBackgroundSlot
+from world.codex.models import CodexCategory, CodexEntry, CodexSubject
 
 
 class MediaContentPipelineTest(TestCase):
@@ -88,3 +89,25 @@ class MediaContentPipelineTest(TestCase):
         media = Media.objects.get(slug="homepage-hero")
         bg = PageBackground.objects.get(slot=PageBackgroundSlot.HOMEPAGE)
         self.assertEqual(bg.art_id, media.pk)
+
+    @tag("postgres")
+    def test_codexentry_resolves_media_by_natural_key(self):
+        """PG-only: ``CodexSubject.save()`` refreshes the ``codex_subjectbreadcrumb``
+        materialized view, which doesn't exist on the SQLite inner-loop tier.
+        """
+        category = CodexCategory.objects.create(name="Test Category")
+        subject = CodexSubject.objects.create(category=category, name="Test Subject")
+        rows = [
+            {
+                "model": "codex.codexentry",
+                "fields": {
+                    "subject": [category.name, None, subject.name],
+                    "name": "Test Entry",
+                    "art": ["entry-art"],
+                },
+            },
+        ]
+        self._load_raw_fixture("fixtures/codex/codexentry.json", rows)
+        media = Media.objects.get(slug="entry-art")
+        entry = CodexEntry.objects.get(subject=subject, name="Test Entry")
+        self.assertEqual(entry.art_id, media.pk)
