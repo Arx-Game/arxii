@@ -30,6 +30,7 @@ from world.items.crafting.models import CraftedItemRecipe, CraftingRecipe, Craft
 from world.items.crafting.quality import resolve_capped_tier
 from world.items.crafting.registry import get_handler
 from world.items.exceptions import (
+    CategoryRequirementsNotQuotable,
     CraftingNotConfigured,
     CraftingStationBroken,
     CraftingStationRequired,
@@ -243,8 +244,17 @@ def build_crafting_quote(
 
     # 4. Materials availability ---
     requirements = list(
-        recipe.material_requirements.all().select_related("item_template", "min_quality_tier")
+        recipe.material_requirements.all().select_related(
+            "item_template", "min_quality_tier", "material_category"
+        )
     )
+    # Category-requirement quotes need the quote API + FE types to represent a
+    # material class (no single template) in each per-row shape — deferred to the
+    # quote-surface work. Crafting *execution* (stage_and_assert_affordable)
+    # already supports category requirements; no seeded recipe uses them yet, so
+    # this is a forward guard, not a live path.
+    if any(r.material_category_id for r in requirements):
+        raise CategoryRequirementsNotQuotable
     required_template_ids = [r.item_template_id for r in requirements]
     available: list[ItemInstance] = list(
         ItemInstance.objects.filter(

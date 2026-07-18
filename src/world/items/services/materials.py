@@ -14,7 +14,11 @@ Caller contract
 * ``requirements``: any iterable of requirement-like objects. Each must
   expose ``.item_template_id``, ``.min_quality_tier_id``,
   ``.min_quality_tier`` (with ``.sort_order`` when not None),
-  and ``.quantity``.
+  and ``.quantity``. A requirement may optionally expose
+  ``.material_category_id``; when set (not None) it matches any instance
+  whose ``template.material_category_id`` equals it, instead of matching by
+  template. Callers must ``select_related("template")`` on ``available`` so
+  the category walk stays query-free.
 
 Duck-typing means both RitualComponentRequirement + components_provided
 and the future CraftingMaterialRequirement + holder-inventory slices work
@@ -54,6 +58,31 @@ def meets_quality_tier(inst: ItemInstance, requirement: object) -> bool:
     return inst.quality_tier.sort_order >= requirement.min_quality_tier.sort_order
 
 
+def _requirement_category_id(req: object) -> int | None:
+    """Return ``req.material_category_id`` when the attribute exists and is set.
+
+    Requirements without the attribute — e.g. RitualComponentRequirement — are
+    template-mode, so they resolve to None and match by template. Resolved once
+    per requirement (not per candidate) to keep the ritual path free of a
+    per-instance AttributeError.
+    """
+    try:
+        return req.material_category_id
+    except AttributeError:
+        return None
+
+
+def _matches_requirement(inst: ItemInstance, req: object, category_id: int | None) -> bool:
+    """True if ``inst`` satisfies ``req``.
+
+    When ``category_id`` is set, any instance whose template belongs to that
+    material category matches; otherwise the match is by template id.
+    """
+    if category_id is not None:
+        return inst.template.material_category_id == category_id
+    return inst.template_id == req.item_template_id
+
+
 def gather_consumable_pks(
     *,
     available: Iterable[ItemInstance],
@@ -90,11 +119,13 @@ def gather_consumable_pks(
     allocated_pks: set[int] = set()
 
     for req in requirements:
-        # Candidates: right template, meets quality tier, not already allocated.
+        # Candidates: right template (or material category), meets quality tier,
+        # not already allocated. Category resolved once per requirement.
+        category_id = _requirement_category_id(req)
         candidates = [
             inst
             for inst in available_list
-            if inst.template_id == req.item_template_id
+            if _matches_requirement(inst, req, category_id)
             and meets_quality_tier(inst, req)
             and inst.pk not in allocated_pks
         ]

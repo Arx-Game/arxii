@@ -61,6 +61,18 @@ class InteractionTypeFactory(factory.django.DjangoModelFactory):
     description = ""
 
 
+class MaterialCategoryFactory(factory.django.DjangoModelFactory):
+    """Factory for MaterialCategory."""
+
+    class Meta:
+        model = "items.MaterialCategory"
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Material Category {n}")
+    description = ""
+    sort_order = factory.Sequence(lambda n: n)
+
+
 class ItemTemplateFactory(factory.django.DjangoModelFactory):
     """Factory for ItemTemplate."""
 
@@ -74,6 +86,7 @@ class ItemTemplateFactory(factory.django.DjangoModelFactory):
     size = 1
     value = 0
     is_active = True
+    material_category = None
     tied_resonance = None
     resonance_tier = None
 

@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 import math
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
+
 from world.items.crafting.constants import PARTIAL_FRACTION, CostConsumption
 from world.items.exceptions import CraftingCostUnaffordable, InsufficientMaterials
 from world.items.models import ItemInstance
@@ -99,14 +101,19 @@ def stage_and_assert_affordable(
     # Materialise available inventory for this recipe's required templates in a
     # single query to avoid N+1 on the hot path.
     requirements = list(
-        recipe.material_requirements.all().select_related("item_template", "min_quality_tier")
+        recipe.material_requirements.all().select_related(
+            "item_template", "min_quality_tier", "material_category"
+        )
     )
-    required_template_ids = [r.item_template_id for r in requirements]
+    required_template_ids = [r.item_template_id for r in requirements if r.item_template_id]
+    required_category_ids = [r.material_category_id for r in requirements if r.material_category_id]
     available: list[ItemInstance] = list(
-        ItemInstance.objects.filter(
-            holder_character_sheet=crafter_character_sheet,
-            template_id__in=required_template_ids,
-        ).select_related("quality_tier")
+        ItemInstance.objects.filter(holder_character_sheet=crafter_character_sheet)
+        .filter(
+            Q(template_id__in=required_template_ids)
+            | Q(template__material_category_id__in=required_category_ids)
+        )
+        .select_related("quality_tier", "template")
     )
 
     try:

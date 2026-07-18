@@ -106,6 +106,31 @@ class QualityTier(SharedMemoryModel):
         return ordered.last()
 
 
+class MaterialCategory(SharedMemoryModel):
+    """A crafting-equivalence class of materials (e.g. "Precious Gemstones").
+
+    Recipes may target a category so that any member template satisfies the
+    requirement. This is the *eligibility* axis only — value/magnitude is a
+    separate concern deferred to Build 0b (the gemstone-value ladder). FK
+    direction is specific→general (ADR-0010): templates point here; this model
+    imports nothing from its consumers.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Display ordering (lower first).",
+    )
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        verbose_name_plural = "material categories"
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class InteractionType(SharedMemoryModel):
     """
     An action that can be performed on an item (eat, drink, read, wield, etc.).
@@ -173,6 +198,17 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
     is_active = models.BooleanField(
         default=True,
         help_text="Inactive templates cannot be used to create new items.",
+    )
+    material_category = models.ForeignKey(
+        "items.MaterialCategory",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="templates",
+        help_text=(
+            "Optional crafting-equivalence class this template belongs to "
+            "(e.g. Precious Gemstones). Null = not a categorised material."
+        ),
     )
     supports_open_close = models.BooleanField(
         default=False,
