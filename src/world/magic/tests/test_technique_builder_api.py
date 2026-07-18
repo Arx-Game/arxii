@@ -136,6 +136,17 @@ class TechniqueBuilderAPITests(APITestCase):
         assert "breakdown" in res.data
         assert Technique.objects.count() == before  # atomic rollback
 
+    def test_author_duplicate_name_under_same_gift_returns_400(self):
+        """A second author POST reusing (gift, name) fails clean with 400, not a
+        500 IntegrityError against unique_technique_name_per_gift (#2486)."""
+        url = reverse("magic:technique-author")
+        first = self.client.post(url, self._payload(), format="json")
+        assert first.status_code == status.HTTP_201_CREATED, first.data
+        before = Technique.objects.count()
+        second = self.client.post(url, self._payload(), format="json")
+        assert second.status_code == status.HTTP_400_BAD_REQUEST, second.data
+        assert Technique.objects.count() == before
+
     def test_author_stamps_representative_level(self):
         """Authored technique level equals tier's representative_level (default tier 1 → 1)."""
         url = reverse("magic:technique-author")
@@ -199,6 +210,31 @@ class TechniqueBuilderAPITests(APITestCase):
         # Staff should get through (may be 201 or 400 depending on field validation,
         # but NOT 403)
         assert res.status_code != status.HTTP_403_FORBIDDEN, res.data
+
+    def test_base_create_duplicate_name_returns_400_not_500(self):
+        """Raw staff CRUD hits the same (gift, name) constraint; DRF's ModelSerializer
+        auto-derives a UniqueTogetherValidator from Technique's UniqueConstraint, so
+        this must 400 rather than raise an unhandled IntegrityError (#2486)."""
+        self.client.force_authenticate(user=self.staff_account)
+        url = reverse("magic:technique-list")
+        payload = {
+            "name": "RawStaffTechDup",
+            "gift": self.staff_gift.id,
+            "style": self.style.id,
+            "effect_type": self.effect.id,
+            "level": 1,
+            "intensity": 1,
+            "control": 0,
+            "anima_cost": 0,
+            "action_category": "physical",
+            "description": "",
+        }
+        first = self.client.post(url, payload, format="json")
+        assert first.status_code == status.HTTP_201_CREATED, first.data
+        before = Technique.objects.count()
+        second = self.client.post(url, payload, format="json")
+        assert second.status_code == status.HTTP_400_BAD_REQUEST, second.data
+        assert Technique.objects.count() == before
 
     # ------------------------------------------------------------------
     # Referential validation — clean 400, not 500

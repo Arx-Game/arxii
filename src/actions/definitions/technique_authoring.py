@@ -5,9 +5,9 @@ command (Task 6) will converge on this action's ``run()``, so technique authorin
 no longer needs to bypass the action layer.
 
 Known domain exceptions (``TechniqueBudgetExceeded``, ``TechniqueAuthoringNotPermitted``,
-``UnknownGift``, ``GiftNotOwned``, ``TechniqueDraftIncomplete``) are caught and returned
-as failure ``ActionResult`` values so both telnet (prints ``message``) and web
-(maps ``message`` → HTTP 400) get a uniform, user-safe failure.
+``UnknownGift``, ``GiftNotOwned``, ``TechniqueDraftIncomplete``, ``DuplicateTechniqueName``)
+are caught and returned as failure ``ActionResult`` values so both telnet (prints
+``message``) and web (maps ``message`` → HTTP 400) get a uniform, user-safe failure.
 
 All ``world.magic`` imports are done lazily inside ``execute()`` to avoid import
 cycles — the action registry is imported very early; magic models pull in much of
@@ -75,6 +75,7 @@ class AuthorTechniqueAction(Action):
             when any domain exception fires.
         """
         from world.magic.exceptions import (  # noqa: PLC0415
+            DuplicateTechniqueName,
             GiftNotOwned,
             TechniqueAuthoringNotPermitted,
             TechniqueBudgetExceeded,
@@ -115,7 +116,12 @@ class AuthorTechniqueAction(Action):
                 message=exc.user_message,
                 data={"error": "not_permitted"},
             )
-        except (UnknownGift, GiftNotOwned, TechniqueDraftIncomplete) as exc:
+        except (
+            UnknownGift,
+            GiftNotOwned,
+            TechniqueDraftIncomplete,
+            DuplicateTechniqueName,
+        ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
         return ActionResult(

@@ -451,6 +451,15 @@ class TechniqueBudgetExceeded(MagicError):
         self.breakdown = breakdown
 
 
+class DuplicateTechniqueName(MagicError):
+    """Raised when authoring a Technique whose (gift, name) collides with an existing
+    row — pre-checked ahead of the INSERT so a name collision fails clean instead of
+    an unhandled IntegrityError against the ``unique_technique_name_per_gift`` DB
+    constraint (#2486)."""
+
+    user_message = "A technique with that name already exists for this gift."
+
+
 # =============================================================================
 # Technique Draft exceptions (#1496)
 # =============================================================================

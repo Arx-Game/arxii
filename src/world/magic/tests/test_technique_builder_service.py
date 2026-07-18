@@ -2,7 +2,7 @@ from django.test import TestCase
 
 from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.exceptions import TechniqueBudgetExceeded
+from world.magic.exceptions import DuplicateTechniqueName, TechniqueBudgetExceeded
 from world.magic.factories import (
     CharacterGiftFactory,
     EffectTypeFactory,
@@ -92,6 +92,43 @@ class CreateTechniqueHelperTests(TestCase):
         assert tech.creator_id == sheet.pk
         # helper does NOT bind a CharacterTechnique
         assert not CharacterTechnique.objects.filter(technique=tech).exists()
+
+    def test_duplicate_name_under_same_gift_raises_clean(self):
+        """A second technique reusing (gift, name) raises DuplicateTechniqueName
+        instead of hitting the unique_technique_name_per_gift IntegrityError (#2486)."""
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory(creator=sheet)
+        style = TechniqueStyleFactory()
+        effect_type = EffectTypeFactory()
+        create_technique(
+            creator=sheet,
+            name="Spark",
+            gift=gift,
+            style=style,
+            effect_type=effect_type,
+            intensity=3,
+            control=2,
+            anima_cost=2,
+            level=1,
+            action_category="physical",
+            description="",
+        )
+        before = Technique.objects.count()
+        with self.assertRaises(DuplicateTechniqueName):
+            create_technique(
+                creator=sheet,
+                name="Spark",
+                gift=gift,
+                style=style,
+                effect_type=effect_type,
+                intensity=3,
+                control=2,
+                anima_cost=2,
+                level=1,
+                action_category="physical",
+                description="",
+            )
+        assert Technique.objects.count() == before
 
 
 class PriceDesignTests(TestCase):
