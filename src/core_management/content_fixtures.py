@@ -806,6 +806,59 @@ def load_entries(
     return created_count, updated_count
 
 
+def _retry_deferred(
+    deferred: list[tuple[dict, Path | None]], result: BuildResult
+) -> tuple[int, int, int]:
+    """Fixpoint retry of deferred fixture objects (#2486).
+
+    The single defer-off pass this replaces handled the one-level grid case
+    (#2448), but catalog fixtures chain ≥ 2 levels deep against alphabetical
+    load order (gift→resonance, technique→gift, grant→technique). So: retry
+    passes with deferral ON until a pass resolves nothing new (each
+    productive pass strictly shrinks the list — bounded, no retry knob),
+    then one final defer-off pass so genuine gaps land in ``result.skipped``.
+
+    Returns ``(created, updated, deferred_resolved)``.
+    """
+    from django.apps import apps  # noqa: PLC0415
+
+    created = updated = resolved = 0
+
+    def _one_pass(pairs: list, *, defer: bool) -> list:
+        nonlocal created, updated, resolved
+        still: list = []
+        for obj, source_path in pairs:
+            app_label, model_name = obj["model"].split(".")
+            try:
+                model = apps.get_model(app_label, model_name)
+            except LookupError:
+                result.skipped.append(
+                    f"{source_path}: stale model {obj['model']!r} (renamed or removed) — skipped."
+                )
+                continue
+            outcome = _upsert_fixture_object(
+                model, obj, source_path, result, defer_unresolved=defer
+            )
+            if outcome == OUTCOME_CREATED:
+                created += 1
+                resolved += 1
+            elif outcome == OUTCOME_UPDATED:
+                updated += 1
+                resolved += 1
+            elif outcome == OUTCOME_DEFERRED:
+                still.append((obj, source_path))
+        return still
+
+    while deferred:
+        remaining = _one_pass(deferred, defer=True)
+        if len(remaining) == len(deferred):
+            break  # fixpoint: no progress
+        deferred = remaining
+    if deferred:
+        _one_pass(deferred, defer=False)
+    return created, updated, resolved
+
+
 @dataclass
 class WorldLoadResult:
     """Outcome of ``load_world_content``'s full content-fixtures + grid load (#2448).
@@ -841,41 +894,28 @@ def load_world_content(content_root: Path) -> WorldLoadResult:
        instead of skipped.
     2. Loads the grid bundles (creating the rooms/areas/exits those FK
        targets may have named).
-    3. Retries every deferred object once, with deferral off — still
-       unresolved now is a genuine gap, and lands in ``skipped`` exactly as
-       an unresolved FK does on a normal ``load_entries`` call.
+    3. Retries deferred objects to a fixpoint (``_retry_deferred``, #2486):
+       repeated deferral-on passes until a pass resolves nothing new — a
+       catalog chain (e.g. grant→technique→gift→resonance) can be ≥ 2 levels
+       deep against alphabetical load order, and a single retry pass only
+       settles a one-level chain — followed by one final deferral-off pass
+       so a still-unresolved entry lands in ``skipped`` exactly as an
+       unresolved FK does on a normal ``load_entries`` call.
 
     Requires Django to be configured (delegates to ``build_all``/
     ``load_entries``/``load_grid_bundles``, all of which need it); imports of
     those are deferred so this module stays import-safe for pure validation
     callers that never load.
     """
-    from django.apps import apps  # noqa: PLC0415
-
     from core_management.grid_import import load_grid_bundles  # noqa: PLC0415
 
     result = build_all(content_root)
     created, updated, deferred = load_entries(result, defer_unresolved=True)
     grid = load_grid_bundles(content_root)
 
-    deferred_resolved = 0
-    for obj, source_path in deferred:
-        app_label, model_name = obj["model"].split(".")
-        try:
-            model = apps.get_model(app_label, model_name)
-        except LookupError:
-            result.skipped.append(
-                f"{source_path}: stale model {obj['model']!r} (renamed or removed) — skipped."
-            )
-            continue
-        outcome = _upsert_fixture_object(model, obj, source_path, result, defer_unresolved=False)
-        if outcome == OUTCOME_CREATED:
-            created += 1
-            deferred_resolved += 1
-        elif outcome == OUTCOME_UPDATED:
-            updated += 1
-            deferred_resolved += 1
-        # "skipped" outcome already appended its message to result.skipped.
+    retry_created, retry_updated, deferred_resolved = _retry_deferred(deferred, result)
+    created += retry_created
+    updated += retry_updated
 
     return WorldLoadResult(
         created=created,

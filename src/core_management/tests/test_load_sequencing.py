@@ -19,7 +19,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from core_management.content_export import export_to_content_repo
-from core_management.content_fixtures import load_world_content
+from core_management.content_fixtures import BuildResult, _retry_deferred, load_world_content
 from core_management.grid_export import export_grid_bundles
 from core_management.tests._grid_fixtures import build_sample_grid
 from evennia_extensions.models import RoomProfile
@@ -192,3 +192,96 @@ class RealBootstrapFallbackRoomTests(TestCase):
             recreated_area.default_starting_room.fixture_key,
             FALLBACK_STARTING_ROOM_FIXTURE_KEY,
         )
+
+
+class RetryDeferredFixpointTests(TestCase):
+    """``_retry_deferred`` settles multi-level natural-key chains (#2486).
+
+    ``_upsert_fixture_object`` resolves M2M values BEFORE writing (Task 3),
+    so a 2-level chain — a Technique naming a not-yet-loaded Gift, and that
+    Gift naming an M2M Resonance — needs more than one retry pass when the
+    Technique entry sits ahead of the Gift entry in the deferred list.
+    """
+
+    def test_retry_deferred_settles_two_level_chain(self) -> None:
+        """gift->resonance and technique->gift chains settle only via fixpoint iteration."""
+        from world.magic.factories import EffectTypeFactory, ResonanceFactory, TechniqueStyleFactory
+        from world.magic.models import Gift, Technique
+
+        resonance = ResonanceFactory(name="Chain Res")
+        style = TechniqueStyleFactory()
+        effect_type = EffectTypeFactory()
+
+        # Deferred list deliberately ordered worst-first:
+        #   [0] technique  (needs gift "Chain Gift" — not yet loadable on pass 1
+        #                   because gift is also deferred and sits LATER in the list)
+        #   [1] gift       (needs resonance "Chain Res" — exists in DB already,
+        #                   so gift resolves on pass 1; technique then resolves on pass 2)
+        # A single-pass retry (the old behavior) leaves the technique unresolved.
+        technique_obj = {
+            "model": "magic.technique",
+            "fields": {
+                "name": "Chain Technique",
+                "gift": ["Chain Gift"],
+                "style": [style.name],
+                "effect_type": [effect_type.name],
+                "anima_cost": 5,
+            },
+        }
+        gift_obj = {
+            "model": "magic.gift",
+            "fields": {
+                "name": "Chain Gift",
+                "resonances": [[resonance.name]],
+            },
+        }
+        deferred: list[tuple[dict, Path | None]] = [
+            (technique_obj, Path("fixtures/magic/technique.json")),
+            (gift_obj, Path("fixtures/magic/gift.json")),
+        ]
+        result = BuildResult()
+
+        created, updated, resolved = _retry_deferred(deferred, result)
+
+        self.assertEqual(resolved, 2)
+        self.assertEqual(created, 2)
+        self.assertEqual(updated, 0)
+        self.assertEqual(result.skipped, [])
+
+        gift = Gift.objects.get(name="Chain Gift")
+        self.assertEqual(list(gift.resonances.all()), [resonance])
+
+        technique = Technique.objects.get(name="Chain Technique")
+        self.assertEqual(technique.gift_id, gift.pk)
+
+    def test_retry_deferred_genuine_gap_lands_in_skipped(self) -> None:
+        """A gift no fixture ever defines makes no progress; lands in result.skipped."""
+        # One entry referencing a gift that never exists: fixpoint loop makes no
+        # progress, final defer-off pass records it in result.skipped; no row written.
+        from world.magic.factories import EffectTypeFactory, TechniqueStyleFactory
+        from world.magic.models import Technique
+
+        style = TechniqueStyleFactory()
+        effect_type = EffectTypeFactory()
+
+        technique_obj = {
+            "model": "magic.technique",
+            "fields": {
+                "name": "Orphan Technique",
+                "gift": ["No Such Gift"],
+                "style": [style.name],
+                "effect_type": [effect_type.name],
+                "anima_cost": 5,
+            },
+        }
+        deferred: list[tuple[dict, Path | None]] = [
+            (technique_obj, Path("fixtures/magic/technique.json")),
+        ]
+        result = BuildResult()
+
+        created, updated, resolved = _retry_deferred(deferred, result)
+
+        self.assertEqual((created, updated, resolved), (0, 0, 0))
+        self.assertEqual(len(result.skipped), 1)
+        self.assertIn("No Such Gift", result.skipped[0])
+        self.assertFalse(Technique.objects.filter(name="Orphan Technique").exists())
