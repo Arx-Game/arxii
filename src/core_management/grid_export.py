@@ -196,6 +196,52 @@ def _serialize_modifiers(modifiers, room_fixture_by_pk: dict) -> list[dict]:
     return modifiers_data
 
 
+def _serialize_clues(clues, room_fixture_by_pk: dict) -> list[dict]:
+    clues_data = [
+        {
+            "fixture_key": row.fixture_key,
+            "room": room_fixture_by_pk[row.room_profile_id],
+            "clue": row.clue.slug,
+            "detect_difficulty": row.detect_difficulty,
+            "eligibility_rule": row.eligibility_rule,
+            "is_active": row.is_active,
+        }
+        for row in clues
+    ]
+    clues_data.sort(key=lambda c: c["fixture_key"])
+    return clues_data
+
+
+def _serialize_clue_triggers(triggers, room_fixture_by_pk: dict) -> list[dict]:
+    triggers_data = [
+        {
+            "fixture_key": row.fixture_key,
+            "room": room_fixture_by_pk[row.room_profile_id],
+            "clue": row.clue.slug,
+            "eligibility_rule": row.eligibility_rule,
+            "is_active": row.is_active,
+        }
+        for row in triggers
+    ]
+    triggers_data.sort(key=lambda t: t["fixture_key"])
+    return triggers_data
+
+
+def _serialize_portal_anchors(anchors, room_fixture_by_pk: dict) -> list[dict]:
+    anchors_data = [
+        {
+            "fixture_key": row.fixture_key,
+            "room": room_fixture_by_pk[row.room_profile_id],
+            "kind": row.kind.name,
+            "name": row.name,
+            "is_network_open": row.is_network_open,
+        }
+        for row in anchors
+    ]
+    anchors_data.sort(key=lambda a: a["fixture_key"])
+    return anchors_data
+
+
 def _build_area_bundle(area, result: GridExportResult) -> dict:
     """Assemble one area's full bundle dict. Raises ContentExportError on the never-silent
     rules (missing area slug — checked by the caller — or missing room fixture_key)."""
@@ -251,6 +297,25 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
         ).select_related("resonance", "damage_type")
     )
 
+    from world.clues.models import ClueTrigger, RoomClue  # noqa: PLC0415
+    from world.magic.models import PortalAnchor  # noqa: PLC0415
+
+    clues = list(
+        RoomClue.objects.filter(
+            room_profile_id__in=room_objectdb_ids, fixture_key__isnull=False
+        ).select_related("clue")
+    )
+    clue_triggers = list(
+        ClueTrigger.objects.filter(
+            room_profile_id__in=room_objectdb_ids, fixture_key__isnull=False
+        ).select_related("clue")
+    )
+    portal_anchors = list(
+        PortalAnchor.objects.active()
+        .filter(room_profile_id__in=room_objectdb_ids, fixture_key__isnull=False)
+        .select_related("kind")
+    )
+
     rooms_data = _serialize_rooms(rooms, display_map)
     exits_data = _serialize_exits(exit_qs, room_fixture_by_objectdb_id, result.reports)
     overrides_data = _serialize_overrides(overrides, room_fixture_by_pk)
@@ -265,6 +330,9 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
         "exits": exits_data,
         "overrides": overrides_data,
         "modifiers": modifiers_data,
+        "clues": _serialize_clues(clues, room_fixture_by_pk),
+        "clue_triggers": _serialize_clue_triggers(clue_triggers, room_fixture_by_pk),
+        "portal_anchors": _serialize_portal_anchors(portal_anchors, room_fixture_by_pk),
     }
 
 
