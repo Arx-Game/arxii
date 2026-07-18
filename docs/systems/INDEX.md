@@ -1229,6 +1229,34 @@ most-specific-wins up the `Area` tree; knowledge propagation is the accrual engi
 reading to the enforcing society's dominion (ADR-0080 — sanctuary and cross-border
 immunity are the same mismatch rule). Masks (TEMPORARY personas) deliberately soak
 heat; identity-association copies it (`associate_heat` — the #1334 outing seam).
+Lifecycle (#1826, `justice/lifecycle.py`): **lie low** (`LieLowState` — declared
+go-to-ground: ×`LIE_LOW_DECAY_MULT` decay in the area + CRIME_KICKUP collection
+malus for member orgs; broken by any IC action there — interaction or fresh heat);
+**bribe** (`attempt_bribe` — coin sink scaled by heat, `perform_check`-banded;
+botch mints a `bribery` crime); **pardon** (`pardon_persona` — magistrate office
+or org leadership of the enforcing society; `PardonGrant` audit + public feed
+item); **wanted visibility** (`wanted_rows_for_area` — at/above
+`WANTED_VALUE_FLOOR` the warrant flips public: tier + presented name + crime
+kinds, never numbers; `GET /api/justice/wanted/` also carries the area's
+awaiting-trial `held` list — public record, the help-the-accused discovery
+seam — and `viewer_can_pardon` for the lord's-grant control gate; the room
+hub payload (`_get_hub`, flows room_state serializer) exposes `area_id` so
+the frontend `WantedBoard` renders at notice boards/criers, and `CrimeTab`
+shows the captive's own case + stand-trial control via `GET
+/api/justice/my-case/`).
+Pipeline (#2378, `justice/pipeline.py`): guard pressure is **event-driven rolls
+against active public play** — the trigger ladder (`maybe_guard_encounter`) fires
+on NPC transactions at wanted, any public interaction at hunted, room arrival at
+max (hooks: `dispatch_offer_effect`, the interaction seam, `Character.at_post_move`;
+never offline, never private rooms). Evasion check → escape / seen (+heat) /
+captured (`resolve_guard_encounter`); capture brigs via captivity and opens a
+`JusticeCase`. **The trial waits on the captive** (`initiate_trial` — argument
+checks by accused + helpers, nobody prosecutes); helpers can only help
+(`submit_exculpatory` — threshold releases outright; manufactured evidence
+exposed backfires on the SUBMITTER). Sentences scale with prosecution weight
+(fine/brig/humiliation/exile); **the lethal wall holds** (ADR-0023):
+`PlayerData.lethal_consequences_opt_in` + an exhausted case (`failed_outs`)
+gate PC execution — NPCs may hang.
 
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`

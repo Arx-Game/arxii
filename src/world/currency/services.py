@@ -500,6 +500,17 @@ def collect_org_income(*, organization: Organization, character) -> CollectionRe
             organization=organization, active=True, uncollected_pool__gt=0
         )
     )
+    # #1826 — a lying-low member's rackets run short-handed: CRIME_KICKUP
+    # pools in that area are docked before the gather (the take never existed).
+    from world.currency.constants import IncomeStreamKind  # noqa: PLC0415
+    from world.justice.constants import LIE_LOW_CRIME_MALUS_PCT  # noqa: PLC0415
+    from world.justice.lifecycle import crime_collection_malus_applies  # noqa: PLC0415
+
+    for stream in streams:
+        if stream.kind == IncomeStreamKind.CRIME_KICKUP and crime_collection_malus_applies(
+            organization, stream.area
+        ):
+            stream.uncollected_pool -= stream.uncollected_pool * LIE_LOW_CRIME_MALUS_PCT // 100
     gathered = sum(stream.uncollected_pool for stream in streams)
     if gathered <= 0:
         msg = "There is nothing waiting to be collected."

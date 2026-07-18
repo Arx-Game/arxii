@@ -158,6 +158,8 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         fury_committed=fury_committed,
         pose_kind=pose_kind,
     )
+    # #1826 — posing in a scene is IC action in its area: lie-low breaks.
+    _break_lie_low_for_interaction(persona, scene)
 
     # Determine receiver list
     effective_receivers = receivers
@@ -936,3 +938,22 @@ def broadcast_scene_outcome(
     )
     _broadcast_to_location(room, payload)
     return interaction
+
+
+def _break_lie_low_for_interaction(persona: Persona, scene: Scene | None) -> None:
+    """End any active lie-low in the scene's area (#1826) and, at hunted tier,
+    roll public-interaction guard pressure (#2378). Cheap no-op path."""
+    location = scene.location if scene is not None else None
+    if location is None:
+        return
+    from world.justice.constants import GuardTrigger  # noqa: PLC0415
+    from world.justice.lifecycle import break_lie_low_for_ic_action  # noqa: PLC0415
+    from world.justice.pipeline import maybe_guard_encounter  # noqa: PLC0415
+    from world.justice.services import area_for_room  # noqa: PLC0415
+
+    area = area_for_room(location)
+    break_lie_low_for_ic_action(persona, area)
+    from world.justice.pipeline import public_room_profile  # noqa: PLC0415
+
+    if public_room_profile(location) is not None:
+        maybe_guard_encounter(persona, area, GuardTrigger.PUBLIC_INTERACTION)

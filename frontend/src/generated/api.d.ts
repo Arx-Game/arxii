@@ -9185,6 +9185,57 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/justice/bribe/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/bribe/ — bribe the hunters in an area (#1826). */
+    post: operations['justice_bribe_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/cases/evidence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/cases/evidence/ — help the accused; never hurt (#2378). */
+    post: operations['justice_cases_evidence_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/cases/trial/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/cases/trial/ — the captive calls their moment (#2378). */
+    post: operations['justice_cases_trial_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/justice/heat/': {
     parameters: {
       query?: never;
@@ -9211,6 +9262,83 @@ export interface paths {
     };
     /** @description The viewer's own pursuit picture — where they're wanted, and for what. */
     get: operations['justice_heat_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/lie-low/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/lie-low/ — declare or end going to ground (#1826). */
+    post: operations['justice_lie_low_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/my-case/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378). */
+    get: operations['justice_my_case_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/pardon/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/pardon/ — a lord's grant (#1826). */
+    post: operations['justice_pardon_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/wanted/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/justice/wanted/?area=<id> — the public wanted board (#1826).
+     *
+     *     Deliberately public-to-authenticated: crossing the wanted floor ends
+     *     self-only visibility for those tiers. Tier + presented name + crime kinds;
+     *     never raw values. An optional ``viewer`` adds two viewer-facing extras:
+     *     ``viewer_can_pardon`` (the lord's-grant control gate, #1826) and the
+     *     ``held`` list of awaiting-trial captives here (being held for trial is a
+     *     public record — the discovery seam for the help-the-accused loop, #2378).
+     */
+    get: operations['justice_wanted_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -31405,6 +31533,7 @@ export interface components {
      */
     PersonaHeat: {
       readonly id: number;
+      area: number;
       readonly area_name: string;
       society: number;
       readonly society_name: string;
@@ -48986,6 +49115,60 @@ export interface operations {
       };
     };
   };
+  justice_bribe_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_cases_evidence_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_cases_trial_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   justice_heat_list: {
     parameters: {
       query?: {
@@ -49028,6 +49211,78 @@ export interface operations {
         content: {
           'application/json': components['schemas']['PersonaHeat'];
         };
+      };
+    };
+  };
+  justice_lie_low_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_my_case_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_pardon_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_wanted_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

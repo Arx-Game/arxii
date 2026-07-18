@@ -157,6 +157,7 @@ describe('ReputationTab', () => {
     setHeat([
       {
         id: 1,
+        area: 1,
         area_name: 'The Ward',
         society: 3,
         society_name: 'The Honest',

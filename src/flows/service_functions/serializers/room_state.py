@@ -327,12 +327,17 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         from world.room_features.services import active_hub_feature  # noqa: PLC0415
         from world.tidings.services import hub_feed_for_room  # noqa: PLC0415
 
-        feature = active_hub_feature(get_room_profile(room.obj))
+        profile = get_room_profile(room.obj)
+        feature = active_hub_feature(profile)
         if feature is None:
             return None
+        # #1826 — the hub's area anchors the public wanted board; the frontend
+        # fetches /api/justice/wanted/?area= itself so this broadcast stays cheap.
+        area = profile.area if profile is not None else None
         return {
             "kind": feature.feature_kind.service_strategy,
             "name": feature.feature_kind.name,
+            "area_id": area.pk if area is not None else None,
             "items": [
                 {
                     "kind": item.kind,

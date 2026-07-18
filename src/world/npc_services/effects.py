@@ -143,6 +143,18 @@ def dispatch_offer_effect(offer: NPCServiceOffer, persona: Persona) -> EffectRes
     authoring should ensure every OfferKind value is wired before any
     offer of that kind ships.
     """
+    # #2378 — dealing with an NPC while wanted risks recognition and alarm.
+    from world.justice.constants import GuardTrigger  # noqa: PLC0415
+    from world.justice.pipeline import maybe_guard_encounter  # noqa: PLC0415
+    from world.justice.services import area_for_room  # noqa: PLC0415
+
+    _sheet = persona.character_sheet
+    _character = _sheet.character if _sheet is not None else None
+    if _character is not None and _character.location is not None:
+        maybe_guard_encounter(
+            persona, area_for_room(_character.location), GuardTrigger.NPC_TRANSACTION
+        )
+
     handler = OFFER_EFFECT_HANDLERS.get(offer.kind)
     if handler is None:
         raise UnregisteredOfferKindError(offer.kind)

@@ -156,6 +156,10 @@ def accrue_heat(
         from world.areas.cleanup_services import erode_area_quality  # noqa: PLC0415
 
         erode_area_quality(area)
+    # #1826 — fresh heat in the area is IC action: an active lie-low breaks.
+    from world.justice.lifecycle import break_lie_low_for_ic_action  # noqa: PLC0415
+
+    break_lie_low_for_ic_action(persona, area)
     return row
 
 
@@ -257,6 +261,17 @@ def heat_decay_tick() -> int:
     touched = PersonaHeat.objects.filter(value__gt=0).update(
         value=Greatest(F("value") - HEAT_DECAY_PER_DAY, 0)
     )
+    # Lying low (#1826): declared go-to-ground rows cool faster in that area.
+    from world.justice.constants import LIE_LOW_DECAY_MULT  # noqa: PLC0415
+    from world.justice.lifecycle import lie_low_extra_decay  # noqa: PLC0415
+    from world.justice.models import LieLowState  # noqa: PLC0415
+
+    extra = lie_low_extra_decay(base_decay=HEAT_DECAY_PER_DAY, multiplier=LIE_LOW_DECAY_MULT)
+    if extra:
+        for state in LieLowState.objects.filter(ended_at__isnull=True):
+            PersonaHeat.objects.filter(persona=state.persona, area=state.area, value__gt=0).update(
+                value=Greatest(F("value") - extra, 0)
+            )
     PersonaHeat.objects.filter(value=0).delete()
     return touched
 

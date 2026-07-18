@@ -64,6 +64,14 @@ export function FocusPanel({
     const match = myRosterEntries.find((entry) => entry.name === roomCharacter);
     return match?.character_id ?? null;
   }, [myRosterEntries, roomCharacter]);
+  // The active puppet's RosterEntry pk — the hub wanted board's viewer scope (#1826).
+  const viewerEntryId = useMemo<number | null>(() => {
+    if (!roomCharacter) {
+      return null;
+    }
+    const match = myRosterEntries.find((entry) => entry.name === roomCharacter);
+    return match?.id ?? null;
+  }, [myRosterEntries, roomCharacter]);
 
   // When the underlying room, scene, or active puppet changes (player
   // switches puppets, moves rooms, or starts/ends a scene), reset the
@@ -121,6 +129,7 @@ export function FocusPanel({
           onCharacterClick={onCharacterClickFromRoom}
           hasActiveEncounter={hasActiveEncounter}
           hasActiveBattle={hasActiveBattle}
+          viewerEntryId={viewerEntryId}
         />
       );
       break;

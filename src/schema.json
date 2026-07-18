@@ -14552,6 +14552,41 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/justice/bribe/:
+    post:
+      operationId: justice_bribe_create
+      description: POST /api/justice/bribe/ — bribe the hunters in an area (#1826).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/justice/cases/evidence/:
+    post:
+      operationId: justice_cases_evidence_create
+      description: POST /api/justice/cases/evidence/ — help the accused; never hurt
+        (#2378).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/justice/cases/trial/:
+    post:
+      operationId: justice_cases_trial_create
+      description: POST /api/justice/cases/trial/ — the captive calls their moment
+        (#2378).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/justice/heat/:
     get:
       operationId: justice_heat_list
@@ -14602,6 +14637,59 @@ paths:
               schema:
                 $ref: '#/components/schemas/PersonaHeat'
           description: ''
+  /api/justice/lie-low/:
+    post:
+      operationId: justice_lie_low_create
+      description: POST /api/justice/lie-low/ — declare or end going to ground (#1826).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/justice/my-case/:
+    get:
+      operationId: justice_my_case_retrieve
+      description: GET /api/justice/my-case/?viewer= — the captive's own case picture
+        (#2378).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/justice/pardon/:
+    post:
+      operationId: justice_pardon_create
+      description: POST /api/justice/pardon/ — a lord's grant (#1826).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/justice/wanted/:
+    get:
+      operationId: justice_wanted_retrieve
+      description: |-
+        GET /api/justice/wanted/?area=<id> — the public wanted board (#1826).
+
+        Deliberately public-to-authenticated: crossing the wanted floor ends
+        self-only visibility for those tiers. Tier + presented name + crime kinds;
+        never raw values. An optional ``viewer`` adds two viewer-facing extras:
+        ``viewer_can_pardon`` (the lord's-grant control gate, #1826) and the
+        ``held`` list of awaiting-trial captives here (being held for trial is a
+        public record — the discovery seam for the help-the-accused loop, #2378).
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/locations/comfort/:
     get:
       operationId: locations_comfort_retrieve
@@ -55457,6 +55545,8 @@ components:
         id:
           type: integer
           readOnly: true
+        area:
+          type: integer
         area_name:
           type: string
           readOnly: true
@@ -55478,6 +55568,7 @@ components:
           readOnly: true
       required:
       - alleged_deeds
+      - area
       - area_name
       - id
       - society
