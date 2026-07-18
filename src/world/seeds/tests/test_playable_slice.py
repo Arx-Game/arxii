@@ -90,24 +90,12 @@ class TestSeededCharacterCreation(TestCase):
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
         from world.character_sheets.models import CharacterSheet
-        from world.magic.models import Resonance
+        from world.magic.models import Resonance, Tradition
         from world.magic.services.cg_catalog import get_gift_options, get_technique_options
         from world.seeds.character_creation import DEFAULT_STAT_NAMES
-        from world.seeds.game_content.magic import MagicContent
         from world.skills.models import Skill
         from world.tarot.models import TarotCard
         from world.traits.models import Trait, TraitType
-
-        # The starter Gift/Technique/Tradition catalog is real lore-repo content,
-        # loaded via load_world_content() — absent here under the minimal test
-        # stub content root (#2474). Build a synthetic stand-in via factories
-        # BEFORE seed_dev_database() runs, so it's in place exactly like real
-        # lore content would be by the time character_creation's
-        # seed_beginning_traditions() (which needs the "Unbound" Tradition to
-        # already exist) runs inside it.
-        catalog = MagicContent.create_starter_gift_catalog(
-            [("Path of Steel", "Emberwork", "Burning Strike")]
-        )
 
         seed_dev_database()
 
@@ -124,10 +112,12 @@ class TestSeededCharacterCreation(TestCase):
             key="unspecified"
         )
         # "The Wanderer" (the generic fallback path) has no starter Gift options —
-        # the CG-selectable magic pipeline lives on the style-linked PROSPECT
-        # paths the starter catalog provides (synthetic here; lore-repo content
-        # for a real Big Button run, #2474).
-        path = catalog.paths["Path of Steel"]
+        # the CG-selectable magic pipeline lives on the 5 style-linked PROSPECT
+        # paths — real lore-repo content, loaded via load_world_content()
+        # (the stub content root carries an equivalent-shaped stand-in, #2474).
+        path = CharacterDraft._meta.get_field("selected_path").related_model.objects.get(
+            name="Path of Steel"
+        )
         height_band = CharacterDraft._meta.get_field("height_band").related_model.objects.get(
             name="average_band"
         )
@@ -136,10 +126,9 @@ class TestSeededCharacterCreation(TestCase):
         )
         tarot = TarotCard.objects.get(name="The Fool")
 
-        # The synthetic starter catalog provides the Unbound tradition + a
-        # Gift/technique pool for "Path of Steel" (mirrors what the real magic
-        # cluster used to provide directly, #2426/#2474).
-        tradition = catalog.tradition
+        # The seeded magic cluster / loaded catalog provides the Unbound
+        # tradition + a Gift/technique pool for every PROSPECT path (#2426/#2474).
+        tradition = Tradition.objects.get(name="Unbound")
         gift_options = get_gift_options(tradition, path)
         self.assertTrue(gift_options, "Unbound must have a gift option for Path of Steel")
         gift = gift_options[0]
@@ -213,15 +202,6 @@ class TestSeededCharacterCreation(TestCase):
         from rest_framework.test import APIClient
 
         from world.character_creation.models import Beginnings, CharacterDraft
-        from world.magic.factories import TraditionFactory
-
-        # The "Unbound" Tradition row is real lore-repo content, loaded via
-        # load_world_content() — absent under the minimal test stub content
-        # root (#2474). seed_beginning_traditions() (run inside
-        # seed_dev_database()) looks it up by name and skips (logged) if it's
-        # not there yet, so build it via factory first, standing in for
-        # already-loaded lore content.
-        TraditionFactory(name="Unbound")
 
         seed_dev_database()
 
@@ -278,40 +258,30 @@ class TestAcademyTrainingLoopReachable(TestCase):
         from world.action_points.models import ActionPointPool
         from world.currency.services import get_or_create_purse, mint_favor_token
         from world.magic.factories import ResonanceFactory
+        from world.magic.models.grants import PathGiftGrant
         from world.magic.specialization.services import grant_gift_to_character
         from world.npc_services.constants import OfferKind
         from world.npc_services.effects import run_train_offer
         from world.npc_services.models import NPCRole, NPCServiceOffer
-        from world.npc_services.seeds import (
-            _GENERALIST_TRAINER_TECHNIQUE_NAMES,
-            ACADEMY_GENERALIST_TRAINER_ROLE_NAME,
-        )
+        from world.npc_services.seeds import ACADEMY_GENERALIST_TRAINER_ROLE_NAME
         from world.progression.factories import CharacterPathHistoryFactory
         from world.scenes.factories import PersonaFactory
         from world.seeds.character_creation import ensure_shroudwatch_academy
-        from world.seeds.game_content.magic import MagicContent
 
         # The starter Gift/Technique/PathGiftGrant/Tradition catalog is real
-        # lore-repo content, loaded via load_world_content() — absent under the
-        # minimal test stub content root (#2474). Build a synthetic stand-in
-        # via factories, one (Path, Gift) pair per hardcoded technique name the
-        # generalist trainer seed looks up, BEFORE seed_dev_database() runs —
-        # ensure_academy_generalist_trainer_role() (invoked inside it, via the
-        # npc_services cluster) needs real Technique rows to author TRAIN
-        # offers against.
-        specs = [
-            (f"Test Path {i}", f"Test Starter Gift {i}", technique_name)
-            for i, technique_name in enumerate(_GENERALIST_TRAINER_TECHNIQUE_NAMES, start=1)
-        ]
-        catalog = MagicContent.create_starter_gift_catalog(specs)
-
+        # lore-repo content, loaded via load_world_content() — the stub content
+        # root carries an equivalent-shaped stand-in (#2474), so
+        # ensure_academy_generalist_trainer_role() (invoked inside
+        # seed_dev_database(), via the npc_services cluster) has real Technique
+        # rows to author TRAIN offers against.
         seed_dev_database()
         academy = ensure_shroudwatch_academy()
         role = NPCRole.objects.get(name=ACADEMY_GENERALIST_TRAINER_ROLE_NAME)
 
-        self.assertGreaterEqual(len(catalog.path_gift_grants), 5)
+        path_gift_grants = list(PathGiftGrant.objects.select_related("path", "gift"))
+        self.assertGreaterEqual(len(path_gift_grants), 5)
 
-        for grant in catalog.path_gift_grants.values():
+        for grant in path_gift_grants:
             path = grant.path
             gift = grant.gift
 

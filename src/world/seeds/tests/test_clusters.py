@@ -108,16 +108,13 @@ class TestClusterRegistry(TestCase):
         for every Beginning — CG is uncompletable. Runs the full Big Button
         (not just the ``character_creation`` cluster in isolation) since the
         seeder depends on the "Unbound" Tradition row existing first — real
-        lore-repo content, loaded via ``load_world_content()`` (#2474). The
-        minimal test stub content root carries no such row, so build one via
-        factory first, standing in for already-loaded lore content.
+        lore-repo content, loaded via ``load_world_content()`` (#2474); the
+        stub content root carries an equivalent-shaped stand-in.
         """
         from world.character_creation.models import Beginnings
-        from world.magic.factories import TraditionFactory
         from world.seeds.database import seed_dev_database
 
         with stub_content_root():
-            TraditionFactory(name="Unbound")
             seed_dev_database()
 
         beginnings = Beginnings.objects.filter(is_active=True)
