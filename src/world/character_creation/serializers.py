@@ -49,6 +49,7 @@ class BeginningsSerializer(serializers.ModelSerializer):
 
     allowed_species_ids = serializers.SerializerMethodField()
     is_accessible = serializers.SerializerMethodField()
+    art_image = serializers.SerializerMethodField()
 
     def get_allowed_species_ids(self, obj: Beginnings) -> list[int]:
         """
@@ -82,12 +83,17 @@ class BeginningsSerializer(serializers.ModelSerializer):
             return False
         return obj.is_accessible_by(request.user)
 
+    def get_art_image(self, obj: Beginnings) -> str | None:
+        """Cloudinary URL sourced from art (#2408); key name kept for frontend compat."""
+        return obj.art.cloudinary_url if obj.art_id else None
+
 
 class StartingAreaSerializer(serializers.ModelSerializer):
     """Serializer for starting areas with accessibility check."""
 
     is_accessible = serializers.SerializerMethodField()
     realm_theme = serializers.CharField(source="realm.theme", read_only=True, default="default")
+    crest_image = serializers.SerializerMethodField()
 
     class Meta:
         model = StartingArea
@@ -106,6 +112,10 @@ class StartingAreaSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         return obj.is_accessible_by(request.user)
+
+    def get_crest_image(self, obj: StartingArea) -> str | None:
+        """Cloudinary URL sourced from crest_art (#2408); key name kept for frontend compat."""
+        return obj.crest_art.cloudinary_url if obj.crest_art_id else None
 
 
 class SpeciesSerializer(serializers.ModelSerializer):

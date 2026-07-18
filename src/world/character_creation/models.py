@@ -131,10 +131,13 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
     description = models.TextField(
         help_text="Rich description shown on hover/click in character creation",
     )
-    crest_image = models.URLField(
-        blank=True,
+    crest_art = models.ForeignKey(
+        "evennia_extensions.Media",
+        on_delete=models.SET_NULL,
         null=True,
-        help_text="Cloudinary URL for crest/flag image. Leave blank for gradient placeholder.",
+        blank=True,
+        related_name="starting_area_crests",
+        help_text="Crest/flag art for this area. Leave unset for gradient placeholder.",
     )
     default_starting_room = models.ForeignKey(
         "evennia_extensions.RoomProfile",
@@ -231,9 +234,13 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
     description = models.TextField(
         help_text="Worldbuilding text shown to players",
     )
-    art_image = models.URLField(
+    art = models.ForeignKey(
+        "evennia_extensions.Media",
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text="URL for visual presentation",
+        related_name="beginnings_art",
+        help_text="Visual presentation art for this beginnings path.",
     )
     starting_area = models.ForeignKey(
         StartingArea,

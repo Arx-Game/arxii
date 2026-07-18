@@ -18,7 +18,7 @@ from world.codex.models import BeginningsCodexGrant
 
 @admin.register(StartingArea)
 class StartingAreaAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["default_starting_room"]
+    autocomplete_fields = ["default_starting_room", "crest_art"]
     list_display = [
         "name",
         "realm",
@@ -32,7 +32,7 @@ class StartingAreaAdmin(admin.ModelAdmin):
     ordering = ["sort_order", "name"]
     raw_id_fields = ["default_starting_room"]
     fieldsets = [
-        (None, {"fields": ["realm", "name", "description", "crest_image"]}),
+        (None, {"fields": ["realm", "name", "description", "crest_art"]}),
         (
             "Access Control",
             {"fields": ["is_active", "access_level", "minimum_trust", "sort_order"]},
@@ -63,7 +63,7 @@ class BeginningTraditionInline(admin.TabularInline):
 class BeginningsAdmin(admin.ModelAdmin):
     """Admin for Beginnings - worldbuilding paths in character creation."""
 
-    autocomplete_fields = ["starting_room_override"]
+    autocomplete_fields = ["starting_room_override", "art"]
 
     list_display = [
         "name",
@@ -89,7 +89,7 @@ class BeginningsAdmin(admin.ModelAdmin):
     inlines = [BeginningTraditionInline, BeginningsCodexGrantInline]
 
     fieldsets = [
-        (None, {"fields": ["name", "description", "art_image", "starting_area"]}),
+        (None, {"fields": ["name", "description", "art", "starting_area"]}),
         (
             "Access Control",
             {"fields": ["trust_required", "is_active", "sort_order"]},

@@ -16,6 +16,7 @@ from django.test import TestCase, tag
 
 from core_management.content_fixtures import BuildResult, load_entries
 from evennia_extensions.models import Media, PageBackground, PageBackgroundSlot
+from world.character_creation.models import Beginnings, StartingArea
 from world.codex.models import CodexCategory, CodexEntry, CodexSubject
 
 
@@ -111,3 +112,37 @@ class MediaContentPipelineTest(TestCase):
         media = Media.objects.get(slug="entry-art")
         entry = CodexEntry.objects.get(subject=subject, name="Test Entry")
         self.assertEqual(entry.art_id, media.pk)
+
+    def test_startingarea_resolves_media_by_natural_key(self):
+        rows = [
+            {
+                "model": "character_creation.startingarea",
+                "fields": {
+                    "name": "Test Crest Area",
+                    "description": "A place with a crest.",
+                    "crest_art": ["crest-arx"],
+                },
+            },
+        ]
+        self._load_raw_fixture("fixtures/character_creation/startingarea.json", rows)
+        media = Media.objects.get(slug="crest-arx")
+        area = StartingArea.objects.get(name="Test Crest Area")
+        self.assertEqual(area.crest_art_id, media.pk)
+
+    def test_beginnings_resolves_media_by_natural_key(self):
+        area = StartingArea.objects.create(name="Test Beginnings Area", description="...")
+        rows = [
+            {
+                "model": "character_creation.beginnings",
+                "fields": {
+                    "starting_area": [area.name],
+                    "name": "Test Sleeper",
+                    "description": "Woke up with no memories.",
+                    "art": ["sleeper-art"],
+                },
+            },
+        ]
+        self._load_raw_fixture("fixtures/character_creation/beginnings.json", rows)
+        media = Media.objects.get(slug="sleeper-art")
+        beginnings = Beginnings.objects.get(starting_area=area, name="Test Sleeper")
+        self.assertEqual(beginnings.art_id, media.pk)
