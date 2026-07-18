@@ -72,6 +72,32 @@ class HouseFeatureFacetSerializer(serializers.Serializer):
     description = serializers.CharField(allow_blank=True)
 
 
+class HouseCrisisOptionSerializer(serializers.Serializer):
+    """One judgment-call option on an open crisis (#2238)."""
+
+    id = serializers.IntegerField()
+    kind = serializers.CharField()
+    cost_coppers = serializers.IntegerField()
+    mission_template_id = serializers.IntegerField(allow_null=True)
+    self_resolve_pct = serializers.IntegerField()
+    worsen_pct = serializers.IntegerField()
+
+
+class HouseCrisisSerializer(serializers.Serializer):
+    """An open DomainCrisis on the house block (#2238)."""
+
+    id = serializers.IntegerField()
+    domain_name = serializers.CharField()
+    severity = serializers.CharField()
+    type_name = serializers.CharField(allow_blank=True)
+    description = serializers.CharField(allow_blank=True)
+    origin = serializers.CharField()
+    opened_at = serializers.DateTimeField()
+    chosen_kind = serializers.CharField(allow_blank=True)
+    minted_mission_id = serializers.IntegerField(allow_null=True)
+    options = HouseCrisisOptionSerializer(many=True)
+
+
 class HouseDetailSerializer(serializers.Serializer):
     """The house block of an org payload (#1884) — null for non-family orgs."""
 
@@ -82,6 +108,7 @@ class HouseDetailSerializer(serializers.Serializer):
     domains = HouseDomainSerializer(many=True)
     aspects = HouseAspectFacetSerializer(many=True)
     features = HouseFeatureFacetSerializer(many=True)
+    open_crises = HouseCrisisSerializer(many=True)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -142,6 +169,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
                 }
                 for stamped in obj.features.all()
             ],
+            "open_crises": _house_open_crises(obj),
         }
         return HouseDetailSerializer(payload).data
 
@@ -216,3 +244,63 @@ class OrganizationMembershipOfferSerializer(serializers.ModelSerializer):
 
     def get_to_persona_name(self, obj: OrganizationMembershipOffer) -> str:
         return obj.to_persona.name if obj.to_persona else ""
+
+
+def _house_open_crises(organization) -> list[dict]:
+    """Open crises across the org's domains (#2238), options included.
+
+    Reads the viewset's prefetched ``domains`` relation; the per-crisis option
+    menu comes from ``crisis_options`` (computed PAY costs).
+    """
+    from world.societies.houses.crisis_services import crisis_options  # noqa: PLC0415
+
+    rows: list[dict] = []
+    for domain in organization.domains.all():
+        for crisis in domain.crises.all():
+            if crisis.resolved_at is not None:
+                continue
+            rows.append(
+                {
+                    "id": crisis.pk,
+                    "domain_name": domain.name,
+                    "severity": crisis.severity,
+                    "type_name": crisis.crisis_type.name if crisis.crisis_type else "",
+                    "description": crisis.description,
+                    "origin": crisis.origin,
+                    "opened_at": crisis.opened_at,
+                    "chosen_kind": (crisis.chosen_option.kind if crisis.chosen_option_id else ""),
+                    "minted_mission_id": crisis.minted_mission_id,
+                    "options": crisis_options(crisis),
+                }
+            )
+    return rows
+
+
+class CrisisOptionInputSerializer(serializers.Serializer):
+    """Input for the crisis judgment call (#2238): crisis + option, org-scoped."""
+
+    crisis = serializers.IntegerField()
+    option = serializers.IntegerField()
+
+    def validate(self, attrs: dict) -> dict:
+        from world.societies.houses.models import (  # noqa: PLC0415
+            DomainCrisis,
+            DomainCrisisTypeOption,
+        )
+
+        organization = self.context["organization"]
+        crisis = (
+            DomainCrisis.objects.select_related("domain", "crisis_type")
+            .filter(pk=attrs["crisis"])
+            .first()
+        )
+        if crisis is None or crisis.domain.owner_org_id != organization.pk:
+            msg = "That crisis is not on this house's domains."
+            raise serializers.ValidationError({"crisis": msg})
+        option = DomainCrisisTypeOption.objects.filter(pk=attrs["option"]).first()
+        if option is None:
+            msg = "Unknown option."
+            raise serializers.ValidationError({"option": msg})
+        attrs["crisis"] = crisis
+        attrs["option"] = option
+        return attrs

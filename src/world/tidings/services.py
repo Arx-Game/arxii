@@ -183,6 +183,35 @@ def house_feed_for(organization, *, limit: int = _DEFAULT_LIMIT) -> list[PublicF
         .order_by("-updated_date")
         .distinct()[:limit]
     )
-    items = [_deed_item(entry) for entry in deeds] + [_scandal_item(secret) for secret in scandals]
+    crises = _open_crisis_items(organization, limit=limit)
+    items = (
+        [_deed_item(entry) for entry in deeds]
+        + [_scandal_item(secret) for secret in scandals]
+        + crises
+    )
     items.sort(key=lambda item: item.occurred_at, reverse=True)
     return items[:limit]
+
+
+def _open_crisis_items(organization, *, limit: int) -> list[PublicFeedItem]:
+    """Open crises on the org's domains (#2238) — the household hears its lands groan."""
+    from world.societies.houses.models import DomainCrisis  # noqa: PLC0415
+
+    crises = (
+        DomainCrisis.objects.filter(domain__owner_org=organization, resolved_at__isnull=True)
+        .select_related("domain", "crisis_type")
+        .order_by("-opened_at")[:limit]
+    )
+    return [
+        PublicFeedItem(
+            kind="crisis",
+            headline=(
+                f"{crisis.crisis_type.name if crisis.crisis_type else 'Crisis'} "
+                f"in {crisis.domain.name}"
+            ),
+            subject=crisis.domain.name,
+            occurred_at=crisis.opened_at,
+            category=crisis.severity,
+        )
+        for crisis in crises
+    ]

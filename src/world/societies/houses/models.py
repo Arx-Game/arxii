@@ -13,7 +13,11 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.societies.houses.constants import (
+    CRISIS_INCOME_FACTORS,
     DOMAIN_PROSPERITY_BASELINE,
+    CrisisOrigin,
+    CrisisResolution,
+    CrisisResolutionKind,
     DomainCrisisSeverity,
     HouseClaimStatus,
     PactCommitmentKind,
@@ -251,8 +255,16 @@ class Domain(SharedMemoryModel):
         A neutral 1.0 at ``DOMAIN_PROSPERITY_BASELINE``; a thriving domain
         over-yields, a struggling one under-yields, and a collapsed domain
         (prosperity 0) earns nothing. PLACEHOLDER curve — deliberately linear.
+
+        An open crisis further scales this by its severity factor — the
+        damaged-but-stable neutral state (#2238): the penalty holds while the
+        crisis is open but never compounds on its own.
         """
-        return self.prosperity / DOMAIN_PROSPERITY_BASELINE
+        base = self.prosperity / DOMAIN_PROSPERITY_BASELINE
+        open_crisis = self.crises.filter(resolved_at__isnull=True).first()
+        if open_crisis is not None:
+            base *= open_crisis.income_factor
+        return base
 
 
 class HoldingKind(SharedMemoryModel):
@@ -349,6 +361,98 @@ class DomainImprovementDetails(SharedMemoryModel):
         return f"Improvement of {self.domain_id} (project {self.project_id})"
 
 
+class DomainCrisisType(SharedMemoryModel):
+    """Authored crisis catalog row (#2238) — resolution is per-type, not global.
+
+    A minor "protests" type can be paid off; an invasion type offers no gold
+    option and must be defeated. ``automated=True`` rows are eligible for the
+    system spawners (improvement failure / unrest boil-over); staff may attach
+    any type by hand. Rows are PLACEHOLDER seeds pending the content pass.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(
+        blank=True, help_text="PLACEHOLDER prose shown on the crisis card."
+    )
+    default_severity = models.CharField(
+        max_length=20,
+        choices=DomainCrisisSeverity.choices,
+        default=DomainCrisisSeverity.TROUBLE,
+    )
+    automated = models.BooleanField(
+        default=True,
+        help_text="Eligible for system spawners (improvement failure / unrest boil-over).",
+    )
+    spawn_weight = models.PositiveSmallIntegerField(
+        default=10, help_text="Relative weight among same-severity automated types."
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class DomainCrisisTypeOption(SharedMemoryModel):
+    """One resolution option a crisis type offers (#2238). Columns per kind, no JSON.
+
+    PAY: ``cost_coppers`` (severity-scaled at runtime). MISSION:
+    ``mission_template`` (consumer-side FK, ADR-0010). WAIT: the chosen-ignore
+    option — ``self_resolve_pct`` / ``worsen_pct`` roll weekly ONLY once chosen.
+    """
+
+    crisis_type = models.ForeignKey(
+        DomainCrisisType, on_delete=models.CASCADE, related_name="options"
+    )
+    kind = models.CharField(max_length=20, choices=CrisisResolutionKind.choices)
+    cost_coppers = models.PositiveBigIntegerField(
+        default=0, help_text="PAY only: base cost, scaled by severity at runtime. PLACEHOLDER."
+    )
+    mission_template = models.ForeignKey(
+        "missions.MissionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="crisis_options",
+        help_text="MISSION only: the org-scoped mission this option mints.",
+    )
+    self_resolve_pct = models.PositiveSmallIntegerField(
+        default=0, help_text="WAIT only: weekly %% chance it blows over. PLACEHOLDER."
+    )
+    worsen_pct = models.PositiveSmallIntegerField(
+        default=0, help_text="WAIT only: weekly %% chance severity bumps. PLACEHOLDER."
+    )
+
+    class Meta:
+        ordering = ["crisis_type", "kind"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["crisis_type", "kind"], name="unique_option_kind_per_crisis_type"
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(kind="mission", mission_template__isnull=False)
+                    | ~models.Q(kind="mission")
+                ),
+                name="crisis_option_mission_requires_template",
+            ),
+        ]
+
+    def clean(self) -> None:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        if self.kind == CrisisResolutionKind.MISSION and self.mission_template_id is None:
+            msg = "MISSION options require a mission_template."
+            raise ValidationError(msg)
+        if self.kind != CrisisResolutionKind.MISSION and self.mission_template_id is not None:
+            msg = "Only MISSION options may carry a mission_template."
+            raise ValidationError(msg)
+
+    def __str__(self) -> str:
+        return f"{self.crisis_type.name}: {self.get_kind_display()}"
+
+
 class DomainCrisis(SharedMemoryModel):
     """A crisis opened on a domain (#1884) — content, not just a debuff.
 
@@ -371,6 +475,39 @@ class DomainCrisis(SharedMemoryModel):
         blank=True,
         help_text="PLACEHOLDER prose describing what went wrong.",
     )
+    crisis_type = models.ForeignKey(
+        DomainCrisisType,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="crises",
+        help_text="Null = staff freeform (no options; GM resolves by hand).",
+    )
+    origin = models.CharField(
+        max_length=20,
+        choices=CrisisOrigin.choices,
+        default=CrisisOrigin.STAFF,
+    )
+    chosen_option = models.ForeignKey(
+        DomainCrisisTypeOption,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="chosen_on",
+        help_text="The administrator's judgment call. WAIT only rolls once chosen (#2238).",
+    )
+    chosen_at = models.DateTimeField(null=True, blank=True)
+    minted_mission = models.ForeignKey(
+        "missions.MissionInstance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="source_crisis",
+        help_text="The org-scoped mission this crisis minted, when a MISSION path is live.",
+    )
+    resolution = models.CharField(
+        max_length=30, choices=CrisisResolution.choices, blank=True, default=""
+    )
     opened_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
@@ -380,6 +517,13 @@ class DomainCrisis(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.get_severity_display()} on {self.domain.name}"
+
+    @property
+    def income_factor(self) -> float:
+        """Severity-scaled income malus while open (#2238). 1.0 once resolved."""
+        if self.resolved_at is not None:
+            return 1.0
+        return CRISIS_INCOME_FACTORS.get(self.severity, 1.0)
 
 
 class MarriagePact(SharedMemoryModel):

@@ -649,9 +649,10 @@ def complete_domain_improvement(project) -> None:
     Success applies the improvement; a failed resolution (negative outcome
     tier) opens a TROUBLE-severity crisis on the domain instead.
     """
-    from world.societies.houses.constants import DomainCrisisSeverity  # noqa: PLC0415
+    from world.societies.houses.constants import (  # noqa: PLC0415
+        CrisisOrigin,
+    )
     from world.societies.houses.models import (  # noqa: PLC0415
-        DomainCrisis,
         DomainImprovementDetails,
     )
 
@@ -665,9 +666,12 @@ def complete_domain_improvement(project) -> None:
     outcome = project.outcome_tier
     failed = outcome is not None and outcome.success_level < 0
     if failed:
-        DomainCrisis.objects.create(
-            domain=details.domain,
-            severity=DomainCrisisSeverity.TROUBLE,
+        from world.societies.houses.constants import CrisisOrigin  # noqa: PLC0415
+        from world.societies.houses.crisis_services import open_crisis  # noqa: PLC0415
+
+        open_crisis(
+            details.domain,
+            origin=CrisisOrigin.IMPROVEMENT,
             description=(
                 "PLACEHOLDER: the improvement works went badly wrong — "
                 "spoiled materials, angry laborers, a debt of favors."
@@ -757,8 +761,6 @@ def maybe_open_unrest_crisis(domain: Domain, *, roll: float | None = None) -> Do
     """
     import random  # noqa: PLC0415
 
-    from world.societies.houses.constants import DomainCrisisSeverity  # noqa: PLC0415
-
     if domain.crises.filter(resolved_at__isnull=True).exists():
         return None
     chance = unrest_crisis_chance(domain.unrest)
@@ -768,8 +770,11 @@ def maybe_open_unrest_crisis(domain: Domain, *, roll: float | None = None) -> Do
         roll = random.random()  # noqa: S311 — a game crisis roll, not cryptography
     if roll >= chance:
         return None
-    return DomainCrisis.objects.create(
-        domain=domain,
-        severity=DomainCrisisSeverity.CRISIS,
+    from world.societies.houses.constants import CrisisOrigin  # noqa: PLC0415
+    from world.societies.houses.crisis_services import open_crisis  # noqa: PLC0415
+
+    return open_crisis(
+        domain,
+        origin=CrisisOrigin.UNREST,
         description="PLACEHOLDER — simmering unrest boiled over into a crisis.",
     )

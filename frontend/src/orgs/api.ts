@@ -8,6 +8,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type { components } from '@/generated/api';
 
 export type Organization = components['schemas']['Organization'];
@@ -51,4 +52,23 @@ export async function fetchHouseFeed(id: number): Promise<PublicFeedItem[]> {
   const res = await apiFetch(`/api/societies/organizations/${id}/feed/`);
   if (!res.ok) throw new Error('Failed to load house feed');
   return (await res.json()) as PublicFeedItem[];
+}
+
+export type HouseCrisis = components['schemas']['HouseCrisis'];
+
+/**
+ * The administrator's judgment call on an open domain crisis (#2238).
+ * POST /api/societies/organizations/{id}/crisis-option/
+ */
+export async function chooseCrisisOption(
+  orgId: number,
+  crisisId: number,
+  optionId: number
+): Promise<{ open_crises: HouseCrisis[] }> {
+  const res = await apiFetch(`/api/societies/organizations/${orgId}/crisis-option/`, {
+    method: 'POST',
+    body: JSON.stringify({ crisis: crisisId, option: optionId }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to act on the crisis');
+  return res.json();
 }

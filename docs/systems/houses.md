@@ -30,7 +30,23 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   holding materializes an `OrgIncomeStream` (OneToOne) so collection, graft,
   and settlement reuse the audited currency pipeline unchanged.
 - **`DomainImprovementDetails`** — per-kind details for `DOMAIN_IMPROVEMENT`
-  projects; **`DomainCrisis`** — opened when an improvement resolves badly.
+  projects.
+- **`DomainCrisisType`** / **`DomainCrisisTypeOption`** (#2238) — the authored
+  crisis catalog: resolution is per-type (PAY / MISSION / WAIT option rows, no
+  JSON); `automated` types feed the system spawners with `spawn_weight`.
+- **`DomainCrisis`** (#2238) — opened by improvement failure, unrest boil-over,
+  or staff (`origin`). While open it holds the domain in a damaged-but-stable
+  state (`income_factor` scales `Domain.income_multiplier` by severity — never
+  compounds). The administrator's judgment call (`choose_crisis_option`,
+  gated by `can_administer_domain`) pays it off (treasury debit), commits to a
+  mission, or consciously rides it out — only a *chosen* WAIT ever rolls
+  weekly self-resolve/worsen (`crisis_wait_tick`; AFK-safe by design). An
+  AUTOMATED-origin crisis whose type has exactly one MISSION option pre-commits
+  at creation. Mission completion resolves the source crisis
+  (`resolve_crisis_for_mission`, wired into missions' terminal seam). Open
+  crises surface on the house feed (`kind="crisis"`) and the org page's house
+  block (`open_crises` with computed option costs). Lifecycle services live in
+  `world/societies/houses/crisis_services.py`.
 - **`MarriagePact`** — OneToOne → `roster.Union`; senior/junior house;
   dissolved with reason (DEATH/ANNULMENT/BREACH). **`PactCommitment`** — coded
   kind (DOWRY/SUBSIDY/CRISIS_RESPONSE/RESIDENCY/CUSTOM), amount/percent,

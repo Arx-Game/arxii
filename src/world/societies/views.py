@@ -60,6 +60,8 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             "aspects__definition",  # noqa: PREFETCH_STRING
             "aspects__option",  # noqa: PREFETCH_STRING
             "features__feature",  # noqa: PREFETCH_STRING
+            "domains__crises__crisis_type__options",  # noqa: PREFETCH_STRING — crisis cards (#2238)
+            "domains__crises__chosen_option",  # noqa: PREFETCH_STRING
             "fealty__liege",  # noqa: PREFETCH_STRING  — this org's liege edge (get_house)
             "vassal_edges__vassal",  # noqa: PREFETCH_STRING  — its direct vassals
         )
@@ -80,6 +82,50 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             memberships__left_at__isnull=True,
             memberships__exiled_at__isnull=True,
         ).distinct()
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="crisis-option")
+    def crisis_option(self, request, pk=None):
+        """POST /api/societies/organizations/{id}/crisis-option/ (#2238).
+
+        The administrator's judgment call on an open DomainCrisis. Body:
+        ``{"crisis": <id>, "option": <id>}``. Acts as whichever of the
+        requester's personas holds domain authority (leader rank or the
+        domain-steward office) — a 400 with a safe message otherwise.
+        """
+        from world.scenes.interaction_permissions import get_account_personas  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.societies.houses.crisis_services import (  # noqa: PLC0415
+            CrisisServiceError,
+            choose_crisis_option,
+        )
+        from world.societies.houses.services import can_administer_domain  # noqa: PLC0415
+        from world.societies.serializers import (  # noqa: PLC0415
+            CrisisOptionInputSerializer,
+            _house_open_crises,
+        )
+
+        organization = self.get_object()
+        ser = CrisisOptionInputSerializer(data=request.data, context={"organization": organization})
+        ser.is_valid(raise_exception=True)
+        crisis = ser.validated_data["crisis"]
+        option = ser.validated_data["option"]
+
+        persona = None
+        owned = Persona.objects.filter(pk__in=get_account_personas(request))
+        for candidate in owned:
+            if can_administer_domain(candidate, crisis.domain):
+                persona = candidate
+                break
+        if persona is None:
+            return Response(
+                {"detail": "You do not have authority over this domain."},
+                status=400,
+            )
+        try:
+            choose_crisis_option(crisis, persona, option)
+        except CrisisServiceError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        return Response({"open_crises": _house_open_crises(organization)})
 
     @extend_schema(responses=PublicFeedItemSerializer(many=True))
     @action(detail=True, methods=[HTTPMethod.GET])

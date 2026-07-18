@@ -2,7 +2,8 @@
  * Organizations React Query hooks (#1446).
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { chooseCrisisOption } from '@/orgs/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetchOrganizationByName, fetchOrganizationById, fetchHouseFeed } from './api';
 
@@ -40,5 +41,18 @@ export function useHouseFeedQuery(orgId: number, enabled: boolean) {
     queryKey: ['orgs', 'houseFeed', orgId],
     queryFn: () => fetchHouseFeed(orgId),
     enabled: enabled && orgId > 0,
+  });
+}
+
+/** Judgment call on an open domain crisis (#2238); refreshes the org detail. */
+export function useChooseCrisisOption(orgId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ crisisId, optionId }: { crisisId: number; optionId: number }) =>
+      chooseCrisisOption(orgId, crisisId, optionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orgs', 'detail', orgId] }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ['orgs', 'houseFeed', orgId] }).catch(() => {});
+    },
   });
 }

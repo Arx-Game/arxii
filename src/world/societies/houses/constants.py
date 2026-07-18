@@ -17,6 +17,39 @@ UNREST_CRISIS_PCT_PER_POINT = 2
 # (add holdings, commission improvements) alongside the org's leadership rank.
 DOMAIN_STEWARD_OFFICE = "domain-steward"
 
+# --- Crisis lifecycle (#2238) — PLACEHOLDER magnitudes ---
+# While a crisis is open, holding income is further scaled by severity: the
+# domain sits in a damaged-but-stable neutral state (never compounds on its own).
+CRISIS_INCOME_FACTORS: dict[str, float] = {
+    "trouble": 0.9,
+    "crisis": 0.75,
+    "catastrophe": 0.5,
+}
+
+
+class CrisisOrigin(models.TextChoices):
+    """How a DomainCrisis came to exist — drives the auto-mint rule (#2238)."""
+
+    IMPROVEMENT = "improvement", "Failed Improvement"
+    UNREST = "unrest", "Unrest Boil-over"
+    STAFF = "staff", "Staff/GM Crafted"
+
+
+class CrisisResolutionKind(models.TextChoices):
+    """The kinds of resolution option a crisis type may offer (#2238)."""
+
+    PAY = "pay", "Pay It Off"
+    MISSION = "mission", "Confront It (mission)"
+    WAIT = "wait", "Ride It Out"
+
+
+class CrisisResolution(models.TextChoices):
+    """How a resolved crisis ended (#2238)."""
+
+    PAID = "paid", "Paid Off"
+    MISSION_COMPLETED = "mission_completed", "Mission Completed"
+    SELF_RESOLVED = "self_resolved", "Blew Over"
+
 
 class TitleTier(models.TextChoices):
     """Rank of a landed/dynastic title. Realm-specific display labels are

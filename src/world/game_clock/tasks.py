@@ -51,6 +51,7 @@ def weekly_rollover_task() -> None:
         ("AP weekly regen", batch_ap_weekly_regen),
         ("weekly economy", _run_weekly_economy),
         ("domain food consumption", _run_domain_food_consumption),
+        ("domain crisis wait rolls", _run_crisis_wait_tick),
         ("social engagement kudos grant", _run_social_engagement_grant),
         ("idle table summary", _run_idle_table_summary),
     ]
@@ -73,6 +74,13 @@ def _run_domain_food_consumption() -> None:
     from world.agriculture.services import domain_consumption_tick
 
     domain_consumption_tick()
+
+
+def _run_crisis_wait_tick() -> None:
+    """Weekly self-resolve/worsen rolls for consciously-ignored crises (#2238)."""
+    from world.societies.houses.crisis_services import crisis_wait_tick
+
+    crisis_wait_tick()
 
 
 def _run_idle_table_summary() -> None:
