@@ -369,7 +369,28 @@ def _grant_prelude_mission(draft: CharacterDraft, character: ObjectDB, persona: 
     staff_assign_mission(beginnings.prelude_mission, character, persona=persona)
 
 
-def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:  # noqa: C901, PLR0912
+def _finalize_origin_slots(sheet: CharacterSheet, origin_slots: dict[str, str]) -> str:
+    """Upsert CharacterOriginSlot rows from draft_data and assemble prose (#2478).
+
+    Called from ``_apply_sheet_demographics`` when the draft carries
+    ``origin_slots``. Returns the assembled prose for ``Profile.background``.
+    State refresh is deferred to the caller (after ``profile.save()``) so
+    ``refresh_origin_story_state`` sees the final prose value.
+    """
+    for slot_id_str, value in origin_slots.items():
+        try:
+            slot = OriginTemplateSlot.objects.get(pk=int(slot_id_str))
+        except (OriginTemplateSlot.DoesNotExist, ValueError, TypeError):
+            logger.warning(
+                "Origin slot id %s not found during finalize; skipping.",
+                slot_id_str,
+            )
+            continue
+        set_origin_slot(sheet, slot, value)
+    return assemble_origin_prose(sheet)
+
+
+def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:  # noqa: C901, PLR0912, PLR0915
     """
     Populate demographic, heritage, descriptive, and physical fields on a CharacterSheet
     from a CharacterDraft and save it.
@@ -440,7 +461,12 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
 
         profile = Profile.objects.create()
         sheet.true_profile = profile
-    if draft_data.get("background"):
+    # Origin story: assemble prose from structured slots if present (#2478),
+    # otherwise fall back to legacy free-text background for backward compat.
+    origin_slots = draft_data.get("origin_slots")
+    if origin_slots:
+        profile.background = _finalize_origin_slots(sheet, origin_slots)
+    elif draft_data.get("background"):
         profile.background = draft_data["background"]
     if draft_data.get("personality"):
         profile.personality = draft_data["personality"]
@@ -449,6 +475,10 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     if draft_data.get("quote"):
         profile.quote = draft_data["quote"]
     profile.save()
+
+    # Refresh origin-story state now that the assembled prose is persisted (#2478).
+    if origin_slots:
+        refresh_origin_story_state(sheet)
 
     # Set physical characteristics from draft
     if draft.height_inches:
