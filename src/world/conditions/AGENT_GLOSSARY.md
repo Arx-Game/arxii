@@ -54,3 +54,11 @@ _Avoid_: cure template, heal type
 **Damage interaction**:
 An authored `ConditionDamageInteraction` row that fires when a conditioned target takes a specific damage type — amplifying (`damage_modifier_percent` > 0), dampening (< 0), consuming (`removes_condition=True`), or transforming (`applies_condition` set) the condition. Wired into the combat damage path after all soak/resistance/armor (#2018). Narration fires only on transitions (removal/transform), not on every-hit modifiers — a pure damage modifier is silent math.
 _Avoid_: elemental reaction, status effect combo (for the damage-axis interaction)
+
+**awareness** (CapabilityType):
+The foundational passive sense-gate every character has (`FoundationalCapability.AWARENESS`, `world/conditions/constants.py`) — `innate_baseline=1`, required by ~all techniques, zeroed by Unconscious via a large negative `ConditionCapabilityEffect`. Distinct from **perception** (below): awareness is "can you sense anything at all," not "how well." See ADR-0143 for the canonical capability vocabulary this belongs to.
+_Avoid_: using "awareness" and "perception" interchangeably — they are separate `CapabilityType` rows with different baselines and different roles.
+
+**perception** (CapabilityType):
+The active, supernormal-sensing capability from the affordance matrix (`docs/architecture/capability-challenge-content.md`) — `innate_baseline=0` (granted by techniques/gifts, not innate), used for Application eligibility (e.g. Scout, Detect, Analyze, Spot) rather than as a baseline sense-gate. A character can have full `awareness` (conscious, sensing normally) with zero `perception` (no supernormal detection). See ADR-0143.
+_Avoid_: awareness, sense, detection (as a synonym for the granted capability specifically)
