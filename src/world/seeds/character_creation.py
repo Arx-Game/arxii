@@ -6,11 +6,14 @@ seed rows — the content a fresh DB needs to actually run ``finalize_character`
 Create-if-missing; never overwrites; never deletes (the #651 invariant).
 
 Child of #651 / epic #1220 (Phase A). Registered in ``CLUSTER_SEEDERS`` after
-``magic`` because ``finalize_character`` picks the magic-seeded catalog
-``Gift``/``Technique`` + ``Resonance``/``TechniqueStyle`` at finalize time (#2426),
-and ``seed_beginning_traditions`` (below) links every seeded ``Beginnings`` to the
-magic-seeded Unbound ``Tradition`` — NOT because ``Beginnings`` FKs into magic (it
-FKs ``starting_area`` -> ``Realm`` and an M2M ``allowed_species`` -> ``Species``).
+``magic`` because ``finalize_character`` picks catalog ``Gift``/``Technique`` +
+``Resonance``/``TechniqueStyle`` rows at finalize time (#2426), and
+``seed_beginning_traditions`` (below) links every seeded ``Beginnings`` to the
+Unbound ``Tradition`` — NOT because ``Beginnings`` FKs into magic (it FKs
+``starting_area`` -> ``Realm`` and an M2M ``allowed_species`` -> ``Species``).
+Since #2474 those catalog rows are lore-repo content loaded by
+``load_world_content`` before any cluster seeder runs (ADR-0142), not
+magic-cluster-seeded.
 """
 
 from __future__ import annotations

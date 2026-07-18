@@ -13,7 +13,9 @@ key (currently just `ensure_technique_cast_content()`, since lore-repo `Techniqu
 "Technique Cast" `ActionTemplate` and the content load's own deferred-retry loop can't conjure a
 config row the content/grid load itself never creates); (3) `load_world_content()`; (4) the ordinary
 `CLUSTER_SEEDERS` loop, which now only seeds non-lore config/lookup tables (tuning singletons, rituals,
-check types, thread-pull catalogs) and never authors catalog content again. Rejected: a synthetic
+check types, thread-pull catalogs) and never authors catalog content again — one known remnant,
+`ensure_portal_travel_content()`'s "Mirrorwalking" `Gift`/`Technique`, still violates this and is
+flagged for lore-repo curation (#2474 Task 5 notes). Rejected: a synthetic
 sample-content fallback baked into arxii seeds for third-party instances that never clone the private
 lore repo — deferred as a someday-aspiration, deliberately undesigned, since no such instance exists
 yet and building it now would resurrect exactly the drift problem this decision closes.
