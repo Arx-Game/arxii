@@ -55,6 +55,7 @@ class OwnershipEventType(models.TextChoices):
     INHERITED = "inherited", "Inherited"  # estate settlement moved it to an heir (#1985)
     ACTIVATED = "activated", "Activated"  # consumable used (e.g. permit redeemed)
     CONSUMED = "consumed", "Consumed"  # item destroyed by use (e.g. permit absorbed into project)
+    RECOVERED = "recovered", "Recovered"  # reclamation returned it to the wronged (#2368)
 
 
 # Ownership events that represent the item changing hands — the lore-relevant
@@ -67,6 +68,7 @@ PROVENANCE_EVENT_TYPES = frozenset(
         OwnershipEventType.STOLEN,
         OwnershipEventType.TRANSFERRED,
         OwnershipEventType.INHERITED,
+        OwnershipEventType.RECOVERED,
     }
 )
 
@@ -184,3 +186,23 @@ def get_fashion_modifier_target() -> ModifierTarget:
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
     return ModifierTarget.objects.get(name=FASHION_PRESENTATION_MODIFIER_TARGET_NAME)
+
+
+# --- Theft reclamation (#2368) — PLACEHOLDER magnitudes ---
+TRACE_CHECK_TYPE_NAME = "Provenance Tracing"
+TRACE_BOTCH_LEVEL = -2
+TRACE_CHILL_HOURS = 24
+RECEIVING_STOLEN_CRIME_SLUG = "receiving-stolen-goods"
+RECEIVING_STOLEN_CRIME_SCALE = 2
+
+
+class ClaimOrigin(models.TextChoices):
+    VICTIM_REPORT = "victim_report", "Victim Report"
+    ESTATE_SETTLEMENT = "estate_settlement", "Estate Settlement"
+
+
+class ClaimStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    RECOVERED_LAWFUL = "recovered_lawful", "Recovered (Lawful)"
+    RECOVERED_TAKEN = "recovered_taken", "Recovered (Taken Back)"
+    RELEASED = "released", "Released"

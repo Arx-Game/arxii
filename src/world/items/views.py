@@ -47,6 +47,7 @@ from world.items.models import (
     Outfit,
     OutfitSlot,
     QualityTier,
+    ReclamationClaim,
     Style,
     TemplateInteraction,
     TemplateSlot,
@@ -1608,3 +1609,152 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
             },
             status=status_code,
         )
+
+
+class ReclamationClaimViewSet(viewsets.ViewSet):
+    """Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+    Self-only: scoped to the requesting account's characters' sheets. The
+    holder is never notified a claim exists.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _own_sheets(self, request: Request) -> list:
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        account = cast(AccountDB, request.user)
+        return [entry.character_sheet for entry in RosterEntry.objects.for_account(account)]
+
+    def _own_claim(self, request: Request, pk: object) -> ReclamationClaim | None:
+        return ReclamationClaim.objects.filter(
+            pk=pk, claimant_sheet__in=self._own_sheets(request)
+        ).first()
+
+    @staticmethod
+    def _claim_payload(claim: ReclamationClaim) -> dict:
+        from world.items.services.reclamation import trace_complete  # noqa: PLC0415
+
+        return {
+            "id": claim.pk,
+            "item_name": claim.item_instance.display_name,
+            "status": claim.status,
+            "origin": claim.origin,
+            "trace_position": claim.trace_position,
+            "trace_complete": trace_complete(claim),
+            "steps": [
+                {"position": s.position, "text": s.revealed_text} for s in claim.trace_steps.all()
+            ],
+        }
+
+    def list(self, request: Request) -> Response:
+        claims = ReclamationClaim.objects.filter(
+            claimant_sheet__in=self._own_sheets(request)
+        ).select_related("item_instance")
+        return Response({"claims": [self._claim_payload(c) for c in claims]})
+
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="claimable")
+    def claimable(self, request: Request) -> Response:
+        """Items stolen from the viewer's characters with no open claim yet (#2368).
+
+        The filing seam: the victim discovers the theft here and mints the claim.
+        Self-scoped and tiny (a player's own unresolved thefts), so the per-item
+        provenance check stays a simple loop.
+        """
+        from world.items.constants import ClaimStatus, OwnershipEventType  # noqa: PLC0415
+        from world.items.models import OwnershipEvent  # noqa: PLC0415
+        from world.items.services.provenance import stolen_victim  # noqa: PLC0415
+
+        sheets = self._own_sheets(request)
+        candidate_items = {
+            event.item_instance
+            for event in OwnershipEvent.objects.filter(
+                event_type=OwnershipEventType.STOLEN,
+                from_character_sheet__in=sheets,
+            ).select_related("item_instance")
+        }
+        claimed_ids = set(
+            ReclamationClaim.objects.filter(
+                claimant_sheet__in=sheets, status=ClaimStatus.OPEN
+            ).values_list("item_instance_id", flat=True)
+        )
+        rows = [
+            {"item": item.pk, "item_name": item.display_name}
+            for item in candidate_items
+            if item.pk not in claimed_ids and stolen_victim(item) in sheets
+        ]
+        return Response({"claimable": rows})
+
+    @action(detail=False, methods=[HTTPMethod.POST], url_path="file")
+    def file_claim(self, request: Request) -> Response:
+        from world.items.models import ItemInstance  # noqa: PLC0415
+        from world.items.services.reclamation import (  # noqa: PLC0415
+            ReclamationError,
+            file_theft_claim,
+        )
+
+        raw = request.data.get("item")
+        item = (
+            ItemInstance.objects.filter(pk=int(raw)).first()
+            if raw is not None and str(raw).isdigit()
+            else None
+        )
+        if item is None:
+            return Response({"detail": "Unknown item."}, status=400)
+        for sheet in self._own_sheets(request):
+            try:
+                claim = file_theft_claim(sheet, item)
+            except ReclamationError:
+                continue
+            return Response(self._claim_payload(claim), status=201)
+        return Response({"detail": "You have no standing claim on that item."}, status=400)
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="advance")
+    def advance(self, request: Request, pk: object = None) -> Response:
+        from world.items.services.reclamation import (  # noqa: PLC0415
+            ReclamationError,
+            advance_trace,
+        )
+
+        claim = self._own_claim(request, pk)
+        if claim is None:
+            return Response({"detail": "Unknown claim."}, status=400)
+        try:
+            outcome = advance_trace(claim)
+        except ReclamationError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        claim.refresh_from_db()
+        return Response({**outcome, "claim": self._claim_payload(claim)})
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="report")
+    def report(self, request: Request, pk: object = None) -> Response:
+        from world.items.services.reclamation import (  # noqa: PLC0415
+            ReclamationError,
+            file_reclamation_accusation,
+        )
+
+        claim = self._own_claim(request, pk)
+        if claim is None:
+            return Response({"detail": "Unknown claim."}, status=400)
+        try:
+            minted = file_reclamation_accusation(claim)
+        except ReclamationError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        return Response({"reported": True, "heat_minted": minted})
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="take-back")
+    def take_back(self, request: Request, pk: object = None) -> Response:
+        from world.items.services.reclamation import (  # noqa: PLC0415
+            ReclamationError,
+            record_steal_back,
+        )
+
+        claim = self._own_claim(request, pk)
+        if claim is None:
+            return Response({"detail": "Unknown claim."}, status=400)
+        try:
+            record_steal_back(claim, claim.original_claimant_sheet)
+        except ReclamationError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        claim.refresh_from_db()
+        return Response(self._claim_payload(claim))

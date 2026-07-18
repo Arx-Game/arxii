@@ -14267,6 +14267,115 @@ paths:
               schema:
                 $ref: '#/components/schemas/QualityTier'
           description: ''
+  /api/items/reclamation-claims/:
+    get:
+      operationId: items_reclamation_claims_retrieve
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/reclamation-claims/{id}/advance/:
+    post:
+      operationId: items_reclamation_claims_advance_create
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/reclamation-claims/{id}/report/:
+    post:
+      operationId: items_reclamation_claims_report_create
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/reclamation-claims/{id}/take-back/:
+    post:
+      operationId: items_reclamation_claims_take_back_create
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/reclamation-claims/claimable/:
+    get:
+      operationId: items_reclamation_claims_claimable_retrieve
+      description: |-
+        Items stolen from the viewer's characters with no open claim yet (#2368).
+
+        The filing seam: the victim discovers the theft here and mints the claim.
+        Self-scoped and tiny (a player's own unresolved thefts), so the per-item
+        provenance check stays a simple loop.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/reclamation-claims/file/:
+    post:
+      operationId: items_reclamation_claims_file_create
+      description: |-
+        Theft reclamation (#2368): the claimant's own claims + trace + routes.
+
+        Self-only: scoped to the requesting account's characters' sheets. The
+        holder is never notified a claim exists.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/items/service-offers/:
     get:
       operationId: items_service_offers_list

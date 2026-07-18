@@ -52,9 +52,14 @@ export function InventorySidebarPanel({ characterId }: InventorySidebarPanelProp
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Inventory</h2>
-        <Link to="/wardrobe" className="text-xs text-primary hover:underline">
-          Manage in wardrobe
-        </Link>
+        <span className="flex gap-2">
+          <Link to="/wardrobe" className="text-xs text-primary hover:underline">
+            Manage in wardrobe
+          </Link>
+          <Link to="/reclamation" className="text-xs text-primary hover:underline">
+            Stolen property
+          </Link>
+        </span>
       </div>
       {inventory.length === 0 ? (
         <p className="text-sm italic text-muted-foreground">You aren&apos;t carrying anything.</p>
