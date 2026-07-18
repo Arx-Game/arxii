@@ -39799,6 +39799,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
+        /** @description A unique integer value identifying this Starting Area. */
         id: number;
       };
       cookie?: never;
@@ -49248,6 +49249,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
+        /** @description A unique integer value identifying this Consequence Pool. */
         id: number;
       };
       cookie?: never;
