@@ -1,10 +1,11 @@
 """Clue model invariants (#1144) — a clue always points at exactly one target."""
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.clues.constants import ClueTargetKind
-from world.clues.factories import ClueFactory
+from world.clues.factories import ClueFactory, ClueTriggerFactory, RoomClueFactory
 from world.clues.models import Clue
 from world.missions.factories import MissionTemplateFactory
 
@@ -85,3 +86,25 @@ class ClueInvariantTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             clue.full_clean()
+
+
+class RoomClueFixtureKeyTests(TestCase):
+    def test_fixture_key_defaults_to_none(self) -> None:
+        room_clue = RoomClueFactory()
+        self.assertIsNone(room_clue.fixture_key)
+
+    def test_fixture_key_is_settable_and_unique(self) -> None:
+        RoomClueFactory(fixture_key="arx-city/golden-hart-taproom/torn-letter")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            RoomClueFactory(fixture_key="arx-city/golden-hart-taproom/torn-letter")
+
+
+class ClueTriggerFixtureKeyTests(TestCase):
+    def test_fixture_key_defaults_to_none(self) -> None:
+        trigger = ClueTriggerFactory()
+        self.assertIsNone(trigger.fixture_key)
+
+    def test_fixture_key_is_settable_and_unique(self) -> None:
+        ClueTriggerFactory(fixture_key="arx-city/golden-hart-taproom/whisper")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ClueTriggerFactory(fixture_key="arx-city/golden-hart-taproom/whisper")

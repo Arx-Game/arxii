@@ -236,6 +236,17 @@ class RoomClue(SharedMemoryModel):
             "MissionTemplate.visibility_rule."
         ),
     )
+    fixture_key = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text=(
+            "Permanent stable identifier for authored (exported) clue placements, e.g. "
+            "'arx-city/golden-hart-taproom/torn-letter' (#2451). Set when the placement "
+            "is authored via the world-builder canvas; NULL for ad hoc/test rows."
+        ),
+    )
 
     class Meta:
         ordering = ["room_profile", "clue"]
@@ -278,6 +289,17 @@ class ClueTrigger(SharedMemoryModel):
     is_active = models.BooleanField(
         default=True,
         help_text="Whether this trigger currently fires on entry.",
+    )
+    fixture_key = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text=(
+            "Permanent stable identifier for authored (exported) clue trigger placements, "
+            "e.g. 'arx-city/golden-hart-taproom/torn-letter' (#2451). Set when the placement "
+            "is authored via the world-builder canvas; NULL for ad hoc/test rows."
+        ),
     )
 
     class Meta:
