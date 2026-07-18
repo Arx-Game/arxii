@@ -574,6 +574,18 @@ class ClashStateSerializer(serializers.ModelSerializer):
             "contributors",
             "side_favored",
         ]
+        # This serializer is read-only (constructed directly for output, never bound
+        # to request data — see get_clashes below), but ModelSerializer infers
+        # `required=False` from the model's `default=`/`null=True` on `status`,
+        # `progress`, and `npc_win_threshold`. Every response always includes them
+        # (drf-spectacular otherwise marks them optional, which surfaces as `?` on
+        # the generated frontend type even though the field is never actually
+        # missing — #2423 follow-up, caught by dropping the `as unknown as` casts).
+        extra_kwargs = {
+            "status": {"required": True},
+            "progress": {"required": True},
+            "npc_win_threshold": {"required": True},
+        }
 
     @extend_schema_field(ClashContributorSerializer(many=True))
     def get_contributors(self, obj: Clash) -> list[dict[str, object]]:

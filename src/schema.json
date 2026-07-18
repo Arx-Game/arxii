@@ -35714,8 +35714,11 @@ components:
       - flavor
       - id
       - npc_opponent
+      - npc_win_threshold
       - pc_win_threshold
+      - progress
       - side_favored
+      - status
     ClashStateStatusEnum:
       enum:
       - ACTIVE

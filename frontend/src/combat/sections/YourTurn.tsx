@@ -552,7 +552,12 @@ export function YourTurn({
   // existing call site (~60 across this file and child-component props)
   // compiles unchanged. Defined inside the component (not module level) so it
   // closes over `setRoundState`; `setRoundState` from `useState` is stable, so
-  // the `useMemo([])` deps below are correct.
+  // the `useMemo([])` deps below are correct. `makeFieldSetter` itself is a
+  // fresh function object every render, but that's harmless: it's a pure
+  // factory (no closure over per-render values besides the stable
+  // `setRoundState`) and nothing holds a reference to it by identity across
+  // renders — only the memoized setters it returns are read, and those never
+  // need to change.
   function makeFieldSetter<K extends keyof RoundScopedState>(key: K) {
     return (value: SetStateAction<RoundScopedState[K]>) => {
       setRoundState((prev) => ({

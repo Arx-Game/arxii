@@ -20819,11 +20819,11 @@ export interface components {
     ClashState: {
       readonly id: number;
       flavor: components['schemas']['FlavorEnum'];
-      status?: components['schemas']['ClashStateStatusEnum'];
-      progress?: number;
+      status: components['schemas']['ClashStateStatusEnum'];
+      progress: number;
       pc_win_threshold: number;
       /** @description Set iff flavor=CLASH; null otherwise. */
-      npc_win_threshold?: number | null;
+      npc_win_threshold: number | null;
       npc_opponent: number;
       readonly contributors: components['schemas']['ClashContributor'][];
       /**
