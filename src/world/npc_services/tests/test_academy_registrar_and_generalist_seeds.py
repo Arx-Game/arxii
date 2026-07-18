@@ -14,11 +14,27 @@ from django.test import TestCase
 from world.npc_services.constants import OfferKind
 from world.npc_services.models import NPCRole, NPCServiceOffer, TrainOfferDetails
 from world.npc_services.seeds import (
+    _GENERALIST_TRAINER_TECHNIQUE_NAMES,
     ACADEMY_GENERALIST_TRAINER_ROLE_NAME,
     ACADEMY_REGISTRAR_ROLE_NAME,
     ensure_academy_generalist_trainer_role,
     ensure_academy_registrar_role,
 )
+from world.seeds.game_content.magic import MagicContent
+
+
+def _build_generalist_trainer_catalog():
+    """Factory-build a synthetic Path/Gift/Technique catalog for the generalist
+    trainer tests (#2474) — one (Path, Gift) pair per hardcoded technique name
+    ``ensure_academy_generalist_trainer_role`` looks up, so its ORM lookup
+    (``Technique.objects.filter(name__in=...)``) finds real rows instead of a
+    catalog seeded by the now-retired ``seed_starter_gift_catalog()``.
+    """
+    specs = [
+        (f"Test Path {i}", f"Test Starter Gift {i}", technique_name)
+        for i, technique_name in enumerate(_GENERALIST_TRAINER_TECHNIQUE_NAMES, start=1)
+    ]
+    return MagicContent.create_starter_gift_catalog(specs)
 
 
 class EnsureAcademyRegistrarRoleTests(TestCase):
@@ -49,6 +65,18 @@ class EnsureAcademyRegistrarRoleTests(TestCase):
 
 
 class EnsureAcademyGeneralistTrainerRoleTests(TestCase):
+    """#2474: the retired ``seed_starter_gift_catalog()`` used to synthesize its
+    own catalog on every call, so these tests never needed one set up ahead of
+    time. Now that ``ensure_academy_generalist_trainer_role()`` reads the
+    catalog via ORM lookups instead, every test needs a real one built first —
+    ``setUpTestData`` builds one covering every hardcoded technique name the
+    seed looks up.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.catalog = _build_generalist_trainer_catalog()
+
     def test_creates_role_and_ungated_train_offers(self) -> None:
         role = ensure_academy_generalist_trainer_role()
 
@@ -68,9 +96,6 @@ class EnsureAcademyGeneralistTrainerRoleTests(TestCase):
     def test_covers_every_starter_gift(self) -> None:
         """One offer per starter Gift (one representative technique each) — the
         same coverage shape the Great Archive self-study seed uses, just ungated."""
-        from world.seeds.game_content.magic import seed_starter_gift_catalog
-
-        catalog = seed_starter_gift_catalog()
         role = ensure_academy_generalist_trainer_role()
 
         offered_gift_ids = set(
@@ -78,7 +103,7 @@ class EnsureAcademyGeneralistTrainerRoleTests(TestCase):
                 "technique__gift_id", flat=True
             )
         )
-        expected_gift_ids = {gift.pk for gift in catalog.gifts.values()}
+        expected_gift_ids = {gift.pk for gift in self.catalog.gifts.values()}
         self.assertEqual(offered_gift_ids, expected_gift_ids)
 
     def test_idempotent(self) -> None:

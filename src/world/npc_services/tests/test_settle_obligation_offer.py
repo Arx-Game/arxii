@@ -130,6 +130,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
 
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
+        from world.magic.factories import TechniqueFactory
         from world.magic.models import CharacterTechnique, Resonance, Tradition
         from world.magic.services.cg_catalog import get_gift_options, get_technique_options
         from world.npc_services.effects import run_train_offer
@@ -140,10 +141,27 @@ class SettleObligationLoopEndToEndTests(TestCase):
         )
         from world.seeds.character_creation import DEFAULT_STAT_NAMES, ensure_shroudwatch_academy
         from world.seeds.database import seed_dev_database
+        from world.seeds.game_content.magic import MagicContent
         from world.societies.models import OrganizationObligation
         from world.societies.obligation_services import has_open_obligation
         from world.tarot.models import TarotCard
         from world.traits.models import Trait, TraitType
+
+        # The starter Gift/Technique/PathGiftGrant/Tradition catalog is real
+        # lore-repo content, loaded via load_world_content() — absent under
+        # the minimal test stub content root (#2474). Build a synthetic
+        # stand-in via factories BEFORE seed_dev_database() runs, so it's in
+        # place exactly like real lore content would be for the npc_services
+        # cluster's Academy trainer roles. A second Technique is added to the
+        # same Gift's starter pool so CG has a genuinely different technique
+        # to pick from the one the generalist trainer's TRAIN offer teaches
+        # (below) — otherwise the post-settle TRAIN attempt would refuse as
+        # "you already know this" rather than proving a new grant.
+        catalog = MagicContent.create_starter_gift_catalog(
+            [("Path of Steel", "Emberwork", "Burning Strike")]
+        )
+        extra_technique = TechniqueFactory(name="Ember Guard", gift=catalog.gifts["Path of Steel"])
+        catalog.path_gift_grants["Path of Steel"].starter_techniques.add(extra_technique)
 
         seed_dev_database()
         academy = ensure_shroudwatch_academy()

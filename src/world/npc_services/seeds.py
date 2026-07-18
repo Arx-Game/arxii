@@ -14,6 +14,7 @@ testable today.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from world.npc_services.constants import DrawMode, OfferKind
@@ -27,6 +28,9 @@ from world.npc_services.models import (
 if TYPE_CHECKING:
     from world.achievements.models import Achievement
     from world.buildings.models import BuildingKind
+    from world.magic.models import Technique
+
+logger = logging.getLogger(__name__)
 
 BUILDERS_GUILD_CLERK_ROLE_NAME = "Builders Guild Clerk"
 
@@ -196,7 +200,9 @@ GREAT_ARCHIVE_LIBRARIAN_ROLE_NAME = "Great Archive Librarian"
 GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG = "great-archive-self-study"
 
 #: One representative technique per starter Gift (the "attack" row of the
-#: 5x5 grid seeded by ``seed_starter_gift_catalog``) — a small, symmetric
+#: starter Gift/Technique catalog — real lore-repo content, loaded via
+#: ``load_world_content()``; formerly a synthetic 5x5 grid seeded in-repo by
+#: the now-retired ``seed_starter_gift_catalog()``, #2474) — a small, symmetric
 #: self-study sample so the TRAIN-offer-gated-by-achievement substrate is
 #: walkable on a fresh DB. Real Archive curriculum content (which/how many
 #: techniques) is a lore-repo authoring pass (#2440's spec, "Out of scope" —
@@ -210,6 +216,40 @@ _SELF_STUDY_TECHNIQUE_NAMES: tuple[str, ...] = (
     "Smiting Light",
     "Force Sigil",
 )
+
+
+def _resolve_starter_techniques(names: tuple[str, ...]) -> dict[str, Technique]:
+    """Look up starter Techniques by name from the loaded content catalog (#2474).
+
+    The starter Gift/Technique catalog is real lore-repo content, loaded via
+    ``core_management.content_fixtures.load_world_content()`` — this seed no
+    longer authors it (the retired ``seed_starter_gift_catalog()`` used to).
+
+    Logs a loud warning pointing at the content repo / Big Button when NONE of
+    ``names`` resolve (mirrors the log-and-skip idiom
+    ``world.seeds.character_creation.seed_beginning_traditions`` uses for the
+    same "content not loaded yet" shape) rather than raising: this seed runs
+    inside ``seed_dev_database()``'s cluster loop alongside many unrelated
+    clusters, and every existing ``stub_content_root()``-based test in the
+    repo seeds a content root with no starter catalog at all — raising here
+    would abort the entire Big Button run for all of them, not just this one
+    seed's slice. The caller already tolerates individual missing names (a
+    partially-loaded or edited catalog) by skipping them; a fully-empty
+    catalog degrades the same way, to zero offers, with a clear log line
+    instead of a silent no-op.
+    """
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    techniques = {t.name: t for t in Technique.objects.filter(name__in=names)}
+    if not techniques:
+        logger.warning(
+            "Starter Gift/Technique catalog not found (no rows matched %r). Content repo "
+            "not loaded — run the Big Button (seed_dev_database()) / load_world_content() "
+            "to load the arx2-lore content repo before seeding NPC roles that reference "
+            "starter techniques.",
+            sorted(names),
+        )
+    return techniques
 
 
 def ensure_great_archive_self_study_achievement() -> Achievement:
@@ -268,10 +308,9 @@ def ensure_great_archive_librarian_role() -> NPCRole:
     ``teaches_tradition`` FK can't express — deferred, not this task's scope.
     """
     from world.seeds.character_creation import ensure_shroudwatch_academy  # noqa: PLC0415
-    from world.seeds.game_content.magic import seed_starter_gift_catalog  # noqa: PLC0415
 
     academy = ensure_shroudwatch_academy()
-    catalog = seed_starter_gift_catalog()
+    starter_techniques = _resolve_starter_techniques(_SELF_STUDY_TECHNIQUE_NAMES)
     achievement = ensure_great_archive_self_study_achievement()
 
     role, _ = NPCRole.objects.get_or_create(
@@ -295,7 +334,7 @@ def ensure_great_archive_librarian_role() -> NPCRole:
     eligibility_rule = {"leaf": "has_achievement", "params": {"slug": achievement.slug}}
     expected_labels: set[str] = set()
     for technique_name in _SELF_STUDY_TECHNIQUE_NAMES:
-        technique = catalog.techniques.get(technique_name)
+        technique = starter_techniques.get(technique_name)
         if technique is None:
             continue
         label = f"Self-study: {technique.name}"
@@ -439,10 +478,9 @@ def ensure_academy_generalist_trainer_role() -> NPCRole:
     cleanup), mirroring ``ensure_great_archive_librarian_role``.
     """
     from world.seeds.character_creation import ensure_shroudwatch_academy  # noqa: PLC0415
-    from world.seeds.game_content.magic import seed_starter_gift_catalog  # noqa: PLC0415
 
     academy = ensure_shroudwatch_academy()
-    catalog = seed_starter_gift_catalog()
+    starter_techniques = _resolve_starter_techniques(_GENERALIST_TRAINER_TECHNIQUE_NAMES)
 
     role, _ = NPCRole.objects.get_or_create(
         name=ACADEMY_GENERALIST_TRAINER_ROLE_NAME,
@@ -465,7 +503,7 @@ def ensure_academy_generalist_trainer_role() -> NPCRole:
 
     expected_labels: set[str] = set()
     for technique_name in _GENERALIST_TRAINER_TECHNIQUE_NAMES:
-        technique = catalog.techniques.get(technique_name)
+        technique = starter_techniques.get(technique_name)
         if technique is None:
             continue
         label = f"Learn: {technique.name}"
