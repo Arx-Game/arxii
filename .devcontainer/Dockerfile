@@ -72,7 +72,7 @@ RUN cd /tmp/mise && ~/.local/bin/mise trust \
 # GH_TOKEN is provided via dev.env.
 USER root
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
- && apt-get install -y --no-install-recommends gh shellcheck \
+ && apt-get install -y --no-install-recommends gh shellcheck tmux \
       # Playwright Chromium runtime dependencies (not the browser itself —
       # that's downloaded at runtime via `npx playwright install chromium`).
       # Without these libs, Chromium launches but crashes on first navigation.
@@ -99,3 +99,14 @@ RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g @anthropic-ai/claude-c
 # never needs get/dl.polytoken.dev — only the model-provider host
 # (api.code.umans.ai) is allowlisted in init-firewall.sh.
 RUN curl -fsS https://get.polytoken.dev | bash
+
+# Terminal multiplexer for long-lived agent sessions. `just dc-shell` attaches
+# over `docker exec`, which has NO reattach mechanism: a dropped host
+# connection permanently orphans every TUI running in that shell. Running
+# claude/polytoken inside a zellij session makes them reattachable
+# (`zellij attach`). Pinned static musl binary into ~/.local/bin; tmux (apt,
+# above) is the fallback multiplexer. See docs/devcontainer-setup.md
+# "Persistent sessions".
+ARG ZELLIJ_VERSION=0.44.3
+RUN curl -fsSL "https://github.com/zellij-org/zellij/releases/download/v${ZELLIJ_VERSION}/zellij-x86_64-unknown-linux-musl.tar.gz" \
+    | tar -xz -C /home/vscode/.local/bin zellij
