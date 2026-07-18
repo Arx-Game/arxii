@@ -4,9 +4,20 @@ from allauth.account.models import EmailAddress
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
+from evennia_extensions.models import PageBackground
 from web.api.character_type import derive_character_type
 from world.roster.models import RosterApplication, RosterEntry
 from world.scenes.models import Persona
+
+
+class PageBackgroundSerializer(serializers.Serializer):
+    """Serialize a page-background slot for the public read endpoint."""
+
+    slot = serializers.CharField()
+    art_url = serializers.SerializerMethodField()
+
+    def get_art_url(self, obj: PageBackground) -> str | None:
+        return obj.art.cloudinary_url if obj.art_id else None
 
 
 class PersonaPayloadSerializer(serializers.ModelSerializer):

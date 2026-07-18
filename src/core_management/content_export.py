@@ -71,6 +71,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "distinctions.distinctioneffect",
         "distinctions.distinctiontag",
         # evennia_extensions
+        "evennia_extensions.media",
+        "evennia_extensions.pagebackground",
         "evennia_extensions.roomsizetier",
         # forms
         "forms.build",
@@ -168,6 +170,8 @@ def export_to_content_repo(content_root: Path | None = None) -> ExportResult:
             continue
 
         queryset = model.objects.all().order_by("pk")
+        if model_label == "evennia_extensions.media":
+            queryset = queryset.filter(slug__isnull=False)
         count = queryset.count()
         if count == 0:
             result.skipped.append(model_label)

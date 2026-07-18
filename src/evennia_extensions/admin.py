@@ -14,6 +14,7 @@ from evennia_extensions.models import (
     Artist,
     Media,
     ObjectDisplayData,
+    PageBackground,
     PlayerAllowList,
     PlayerData,
     RoomProfile,
@@ -87,6 +88,12 @@ class MediaAdmin(admin.ModelAdmin):
     list_filter: ClassVar[list[str]] = ["media_type", "uploaded_date"]
     search_fields: ClassVar[list[str]] = ["player_data__account__username", "title"]
     readonly_fields: ClassVar[list[str]] = ["uploaded_date", "updated_date"]
+
+
+@admin.register(PageBackground)
+class PageBackgroundAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["art"]
+    list_display: ClassVar[list[str]] = ["slot", "art"]
 
 
 @admin.register(ObjectDisplayData)

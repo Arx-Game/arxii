@@ -132,6 +132,29 @@ class ContentExportTests(TestCase):
         created, _updated = load_entries(load_result)
         assert created == 0
 
+    def test_media_export_excludes_player_uploaded_rows(self) -> None:
+        """Player-uploaded Media (slug=None) must never export toward the lore repo.
+
+        #2408: without the ``slug__isnull=False`` filter in the export loop,
+        every player-uploaded row would serialize with the identical,
+        unresolvable natural key ``(None,)`` and leak player content into the
+        content-repo fixtures — the exact thing ADR-0142's content boundary
+        exists to prevent.
+        """
+        from evennia_extensions.factories import MediaFactory
+
+        MediaFactory(player_data=None, slug="staff-art")  # should export
+        MediaFactory()  # player upload, slug=None — must NOT export
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        exported = (self.root / "fixtures" / "evennia_extensions" / "media.json").read_text(
+            encoding="utf-8"
+        )
+        assert "staff-art" in exported
+        assert '"slug": null' not in exported
+
     def test_content_models_all_have_natural_key(self) -> None:
         """Every model in the allowlist must have NaturalKeyMixin."""
         from django.apps import apps

@@ -282,6 +282,48 @@ class Media(NaturalKeyMixin, SharedMemoryModel):
         indexes = [models.Index(fields=["player_data", "media_type"])]
 
 
+class PageBackgroundSlot(models.TextChoices):
+    """Named page/area that can carry a staff-set background image."""
+
+    HOMEPAGE = "homepage", "Homepage"
+    ROSTER = "roster", "Roster"
+    CG_STAGE = "cg_stage", "Character Creation"
+    GAME_CLIENT = "game_client", "Game Client"
+
+
+class PageBackground(NaturalKeyMixin, SharedMemoryModel):
+    """Maps a named page slot to a background Media row (#2408).
+
+    One row per slot; ``art`` is null-safe everywhere it's read (missing art
+    falls back to the existing gradient-placeholder convention on the frontend).
+    """
+
+    slot = models.CharField(
+        max_length=20,
+        choices=PageBackgroundSlot.choices,
+        unique=True,
+    )
+    art = models.ForeignKey(
+        "Media",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="page_backgrounds",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["slot"]
+
+    def __str__(self) -> str:
+        return f"PageBackground({self.slot})"
+
+    class Meta:
+        verbose_name = "Page Background"
+        verbose_name_plural = "Page Backgrounds"
+
+
 class ObjectDisplayData(SharedMemoryModel):
     """
     Generic display data for any Evennia object.

@@ -9,7 +9,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils import create
 import factory
 
-from evennia_extensions.models import Media, RoomProfile
+from evennia_extensions.models import Media, PageBackground, PageBackgroundSlot, RoomProfile
 
 
 class ObjectDBFactory(factory.django.DjangoModelFactory):
@@ -194,6 +194,22 @@ class MediaFactory(factory.django.DjangoModelFactory):
     )
     media_type = "photo"
     title = factory.Sequence(lambda n: f"Test Media {n}")
+
+
+class PageBackgroundFactory(factory.django.DjangoModelFactory):
+    """Factory for PageBackground instances.
+
+    Deliberately no ``django_get_or_create`` on ``slot`` — unlike RoomProfile,
+    there's no auto-creation race to dedupe against, and the model test
+    (``test_slot_is_unique``) exercises the real unique constraint by creating
+    two rows for the same slot and expecting ``IntegrityError``.
+    """
+
+    class Meta:
+        model = PageBackground
+
+    slot = PageBackgroundSlot.HOMEPAGE
+    art = None
 
 
 class RoomProfileFactory(factory.django.DjangoModelFactory):
