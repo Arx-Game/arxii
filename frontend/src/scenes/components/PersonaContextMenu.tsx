@@ -1,5 +1,5 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,7 @@ import { Ban, HeartPulse, Swords, VolumeX, Zap, ScrollText, Eye } from 'lucide-r
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction, combatKeys } from '@/combat/queries';
+import { isDispatchFailure } from '@/combat/types';
 import {
   Dialog,
   DialogContent,
@@ -27,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateBlock, useCreateMute } from '@/social/queries';
 import { toast } from 'sonner';
-import { createActionRequest, fetchAvailableActions } from '../actionQueries';
+import { createActionRequest, useAvailableActionsQuery } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerAction } from '../actionTypes';
 import type { SceneDetail } from '../types';
 import { WhisperReceiverPicker } from './WhisperReceiverPicker';
@@ -77,7 +78,7 @@ export function PersonaContextMenu({
   const queryClient = useQueryClient();
 
   // Resolve the active character name to its numeric ObjectDB pk to look up
-  // the correct cache key (which ActionAttachment populates as ['available-actions', characterId]).
+  // the correct cache key (the shared availableActionsKeys.forCharacter(characterId)).
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const characterId = useMemo(
@@ -88,11 +89,7 @@ export function PersonaContextMenu({
   // Fetch directly (mirrors ActionPanel.tsx) rather than reading the cache
   // opportunistically — the menu must populate even if ActionPanel/ActionAttachment
   // hasn't been opened yet this session (#2158).
-  const { data } = useQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId!),
-    enabled: characterId !== null,
-  });
+  const { data } = useAvailableActionsQuery(characterId);
 
   // #907: present scene personas (excluding the target) are the extra-listener
   // pool. Read from the already-loaded scene cache; empty if not yet present.
@@ -210,7 +207,13 @@ export function PersonaContextMenu({
       ref: { backend: 'registry', registry_key: 'challenge' },
       kwargs: { target: personaId },
     })
-      .then(() => queryClient.invalidateQueries({ queryKey: combatKeys.duelChallengesAll() }))
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not send the challenge.');
+          return;
+        }
+        queryClient.invalidateQueries({ queryKey: combatKeys.duelChallengesAll() }).catch(() => {});
+      })
       .catch(() => {});
   }
 

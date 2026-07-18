@@ -6,7 +6,7 @@
  *
  * Props:
  * - characterId     — Evennia ObjectDB pk. NOT characterSheetId. Used with
- *                     fetchAvailableActions (scenes/actionQueries).
+ *                     useAvailableActionsQuery (scenes/actionQueries).
  * - characterSheetId — CharacterSheet pk. Used by the applicable-pulls API
  *                      (POST /api/magic/applicable-pulls/). The two IDs are
  *                      different objects; the parent supplies both. Phase 7
@@ -19,9 +19,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery as useTQQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { fetchAvailableActions } from '@/scenes/actionQueries';
+import { useAvailableActionsQuery } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import { useTechnique, useCharacterResonances } from '@/magic/queries';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
@@ -593,11 +592,7 @@ export function ActionDeclarationCard({
   onCastPositionChange,
 }: ActionDeclarationCardProps) {
   // Fetch available techniques for this character.
-  const { data, isLoading } = useTQQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId),
-    enabled: characterId > 0,
-  });
+  const { data, isLoading } = useAvailableActionsQuery(characterId);
 
   // Fetch technique detail for I/C chip and cost preview.
   const {

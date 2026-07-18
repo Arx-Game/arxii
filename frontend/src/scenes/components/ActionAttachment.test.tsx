@@ -5,10 +5,25 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { PlayerActionsResponse } from '../actionTypes';
 
-vi.mock('../actionQueries', () => ({
-  fetchAvailableActions: vi.fn(),
-  createActionRequest: vi.fn(),
-}));
+vi.mock('../actionQueries', async () => {
+  const { useQuery } = await import('@tanstack/react-query');
+  const fetchAvailableActions = vi.fn();
+  return {
+    fetchAvailableActions,
+    createActionRequest: vi.fn(),
+    useAvailableActionsQuery: (
+      characterId: number | null,
+      options: { enabled?: boolean; staleTime?: number; refetchInterval?: number } = {}
+    ) =>
+      useQuery({
+        queryKey: ['available-actions', characterId ?? 0],
+        queryFn: () => fetchAvailableActions(characterId),
+        enabled: (options.enabled ?? true) && characterId !== null && characterId > 0,
+        staleTime: options.staleTime ?? 10_000,
+        refetchInterval: options.refetchInterval,
+      }),
+  };
+});
 
 // Mock the roster query — component resolves active character → characterId
 vi.mock('@/roster/queries', () => ({

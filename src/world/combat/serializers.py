@@ -533,6 +533,21 @@ class RoundActionSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 
 
+class ClashContributorSerializer(serializers.Serializer):
+    """Schema-only shape of get_contributors rows on ClashStateSerializer.
+
+    Never instantiated for serialization — exists so drf-spectacular emits a
+    concrete component instead of {[key: string]: unknown} (#2423). Mirrors
+    the frontend ``ClashContributor`` interface (combat/types.ts).
+    """
+
+    character_id = serializers.IntegerField(allow_null=True)
+    character_name = serializers.CharField()
+    action_slot = serializers.CharField()
+    progress_delta = serializers.IntegerField()
+    anima = serializers.IntegerField()
+
+
 class ClashStateSerializer(serializers.ModelSerializer):
     """Compact read serializer for an active Clash, surfaced on EncounterDetail.
 
@@ -559,7 +574,20 @@ class ClashStateSerializer(serializers.ModelSerializer):
             "contributors",
             "side_favored",
         ]
+        # This serializer is read-only (constructed directly for output, never bound
+        # to request data — see get_clashes below), but ModelSerializer infers
+        # `required=False` from the model's `default=`/`null=True` on `status`,
+        # `progress`, and `npc_win_threshold`. Every response always includes them
+        # (drf-spectacular otherwise marks them optional, which surfaces as `?` on
+        # the generated frontend type even though the field is never actually
+        # missing — #2423 follow-up, caught by dropping the `as unknown as` casts).
+        extra_kwargs = {
+            "status": {"required": True},
+            "progress": {"required": True},
+            "npc_win_threshold": {"required": True},
+        }
 
+    @extend_schema_field(ClashContributorSerializer(many=True))
     def get_contributors(self, obj: Clash) -> list[dict[str, object]]:
         """Per-PC contribution rollup across all rounds of the clash.
 
@@ -1010,7 +1038,10 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         beats: list[dict[str, Any]] = []
         for record in records:
-            beat: dict[str, Any] = {"narration": self._render_surge_beat_narration(record)}
+            beat: dict[str, Any] = {
+                "id": record.pk,
+                "narration": self._render_surge_beat_narration(record),
+            }
             character_id = record.participant.character_sheet.character_id
             if is_gm_or_staff or character_id in viewer_character_ids:
                 beat["trigger_kind"] = record.trigger_kind
@@ -1035,6 +1066,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             return ""
         return _render_surge_narration(curve, character_name)
 
+    @extend_schema_field(ClashStateSerializer(many=True))
     def get_clashes(self, obj: CombatEncounter) -> list[dict[str, Any]]:
         """Return active Clash records for this encounter.
 

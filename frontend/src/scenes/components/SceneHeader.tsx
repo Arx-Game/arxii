@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { SceneDetail, updateScene, finishScene } from '../queries';
-import { fetchAvailableActions } from '../actionQueries';
+import { useAvailableActionsQuery } from '../actionQueries';
 import type { PlayerAction } from '../actionTypes';
 import type { SceneRoundState } from '../types';
 import { Button } from '@/components/ui/button';
@@ -41,11 +41,7 @@ function GrantSceneGMControl() {
     [myRosterEntries, activeCharacterName]
   );
 
-  const { data: actionsData } = useQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId!),
-    enabled: characterId !== null,
-  });
+  const { data: actionsData } = useAvailableActionsQuery(characterId);
   const availableActions: PlayerAction[] = actionsData?.results ?? [];
   const grantAction =
     availableActions.find(

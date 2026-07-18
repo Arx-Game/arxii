@@ -10,8 +10,8 @@
  * module-level `nodeTypes`, `Background` + `Controls`.
  */
 
-import { useCallback, useEffect, useMemo } from 'react';
-import { type Node, useNodesState } from '@xyflow/react';
+import { useCallback, useMemo } from 'react';
+import type { Node, NodeChange } from '@xyflow/react';
 
 import {
   centeredNodePosition,
@@ -78,11 +78,18 @@ export function BattleMapCanvas({ detail, selectedPlaceId, onSelectPlace }: Batt
     });
   }, [detail, selectedPlaceId, onSelectPlace]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-
-  useEffect(() => {
-    setNodes(computedNodes);
-  }, [computedNodes, setNodes]);
+  // Places never move interactively (read-only map — `nodesDraggable={false}`
+  // below, Decision 1 in the header doc), so there's no mutable node state to
+  // own: `computedNodes` is passed straight through as a controlled prop
+  // (`areas/components/TacticalMap.tsx`'s memo-direct pattern), which also
+  // fixes first paint — a `useNodesState([])` seed + mirroring `useEffect`
+  // rendered an empty canvas for one frame before the effect caught up
+  // (#2423). `MapCanvasShell.onNodesChange` is a required prop, so this is a
+  // no-op: React Flow's internal dimension/selection bookkeeping (used for
+  // its own measurement pass) doesn't need to round-trip back into our node
+  // list, since selection here is driven by `selectedPlaceId` and dragging
+  // is disabled.
+  const onNodesChange = useCallback((_changes: NodeChange[]) => {}, []);
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -97,7 +104,7 @@ export function BattleMapCanvas({ detail, selectedPlaceId, onSelectPlace }: Batt
   return (
     <MapCanvasShell
       testId="battle-map-canvas"
-      nodes={nodes}
+      nodes={computedNodes}
       edges={[]}
       nodeTypes={nodeTypes}
       onNodesChange={onNodesChange}

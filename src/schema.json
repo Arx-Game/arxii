@@ -36116,6 +36116,97 @@ components:
       - seat_domain_name
       - templates
       - tier
+    ClashContributor:
+      type: object
+      description: |-
+        Schema-only shape of get_contributors rows on ClashStateSerializer.
+
+        Never instantiated for serialization — exists so drf-spectacular emits a
+        concrete component instead of {[key: string]: unknown} (#2423). Mirrors
+        the frontend ``ClashContributor`` interface (combat/types.ts).
+      properties:
+        character_id:
+          type: integer
+          nullable: true
+        character_name:
+          type: string
+        action_slot:
+          type: string
+        progress_delta:
+          type: integer
+        anima:
+          type: integer
+      required:
+      - action_slot
+      - anima
+      - character_id
+      - character_name
+      - progress_delta
+    ClashState:
+      type: object
+      description: |-
+        Compact read serializer for an active Clash, surfaced on EncounterDetail.
+
+        Exposes the fields needed by the frontend ActiveState rail section:
+        - id, flavor, status, progress, pc_win_threshold, npc_win_threshold
+        - npc_opponent_id (for labelling the clash target)
+        - contributors: per-PC contribution rollup (latest round)
+        - side_favored: "PC" / "NPC" / "EVEN" computed from progress vs thresholds.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        flavor:
+          $ref: '#/components/schemas/FlavorEnum'
+        status:
+          $ref: '#/components/schemas/ClashStateStatusEnum'
+        progress:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        pc_win_threshold:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        npc_win_threshold:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: Set iff flavor=CLASH; null otherwise.
+        npc_opponent:
+          type: integer
+        contributors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClashContributor'
+          readOnly: true
+        side_favored:
+          type: string
+          description: |-
+            PC / NPC / EVEN — computed from current progress vs thresholds.
+
+            Heuristic: a side is "favored" when progress is past 75% of that side's
+            win threshold. Else "EVEN."
+          readOnly: true
+      required:
+      - contributors
+      - flavor
+      - id
+      - npc_opponent
+      - npc_win_threshold
+      - pc_win_threshold
+      - progress
+      - side_favored
+      - status
+    ClashStateStatusEnum:
+      enum:
+      - ACTIVE
+      - RESOLVED
+      type: string
+      description: |-
+        * `ACTIVE` - Active
+        * `RESOLVED` - Resolved
     ClockAdjustRequest:
       type: object
       description: Request serializer for staff clock adjustment.
@@ -36990,24 +37081,7 @@ components:
         outcome_display:
           type: array
           items:
-            type: object
-            additionalProperties: {}
-          description: |-
-            Recompute the roulette from pool + selected_consequence on read.
-
-            When pool is not None, reads pool entries and parent entries from the
-            prefetch cache (populated by the ViewSet's _POOL_ENTRIES_PREFETCH /
-            _PARENT_ENTRIES_PREFETCH Prefetch objects) so no additional queries are
-            issued per row.  Mirrors the pool-walk logic of
-            resolve_pool_consequences() but operates on already-fetched data.
-
-            When pool is None (challenge-based resolution), reconstructs the
-            consequence list from the authored ApproachConsequence and
-            ChallengeTemplateConsequence links via the challenge_record.  Uses
-            prefetch caches populated by the ViewSet's challenge-link Prefetch
-            objects.
-
-            Returns a list of plain dicts matching OutcomeDisplay's fields.
+            $ref: '#/components/schemas/OutcomeDisplayRow'
           readOnly: true
         modifiers:
           type: array
@@ -39415,19 +39489,7 @@ components:
         clashes:
           type: array
           items:
-            type: object
-            additionalProperties: {}
-          description: |-
-            Return active Clash records for this encounter.
-
-            Phase 8, Task 8.4 — exposes clash state to the frontend ActiveState
-            rail section. Returns only ACTIVE clashes so resolved ones don't litter
-            the UI after the clash is done.
-
-            Uses the ``clashes_cached`` prefetch-to-attr set on the viewset's
-            ``_base_queryset`` so no extra query fires during detail serialization.
-            Falls back to a direct filter for callers that don't use the viewset
-            (e.g. unit tests that call the serializer directly).
+            $ref: '#/components/schemas/ClashState'
           readOnly: true
         engagement_locks:
           type: array
@@ -41054,6 +41116,18 @@ components:
       - description
       - id
       - name
+    FlavorEnum:
+      enum:
+      - CLASH
+      - LOCK
+      - WARD
+      - BREAK
+      type: string
+      description: |-
+        * `CLASH` - Clash
+        * `LOCK` - Lock
+        * `WARD` - Ward
+        * `BREAK` - Break
     ForRoomResult:
       type: object
       description: 'Cheap RoomPanel resolver: which building, and what the viewer
@@ -47938,6 +48012,27 @@ components:
       required:
       - action_interaction_id
       - effects
+    OutcomeDisplayRow:
+      type: object
+      description: |-
+        Schema-only shape of get_outcome_display rows (world.checks.types.OutcomeDisplay).
+
+        Never instantiated for serialization — exists so drf-spectacular emits a
+        concrete component instead of {[key: string]: unknown} (#2423).
+      properties:
+        label:
+          type: string
+        tier_name:
+          type: string
+        weight:
+          type: integer
+        is_selected:
+          type: boolean
+      required:
+      - is_selected
+      - label
+      - tier_name
+      - weight
     OutfitRead:
       type: object
       description: Read serializer for Outfit — nests slot rows.

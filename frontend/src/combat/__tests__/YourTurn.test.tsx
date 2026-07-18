@@ -155,9 +155,14 @@ function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  return function Wrapper({ children }: { children: ReactNode }) {
+  function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
+  }
+  // Exposes the QueryClient instance so tests can spy on invalidateQueries
+  // (#2423) — attaching to the function keeps every existing
+  // `{ wrapper: createWrapper() }` call site unaffected.
+  Wrapper.queryClient = queryClient;
+  return Wrapper;
 }
 
 const mockedUseAvailableCombos = combatQueries.useAvailableCombos as ReturnType<typeof vi.fn>;
@@ -1656,5 +1661,195 @@ describe('YourTurn — cast-position mount-reset guard (#2206 review finding)', 
     // the position the caller already lifted (e.g. surviving a Map -> Your
     // Turn tab remount).
     expect(onCastPositionChange).not.toHaveBeenCalledWith({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 5 — lock derives from server is_ready; submit checks results (#2423)
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — server is_ready lock (#2423)', () => {
+  it('locks the panel and shows the ready badge from server is_ready on fresh mount', () => {
+    // Simulates the tab-remount scenario: Radix unmounts YourTurn on Map tab
+    // switch, then remounts it — local `submitted` state resets to false, but
+    // the server already has this participant's round action marked ready.
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: null,
+          is_ready: true,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    // Fresh local state (no click on submit) — ready-badge still renders
+    // because it derives from ownRoundAction.is_ready, not local `submitted`.
+    expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    expect(screen.getByTestId('submit-declarations-btn')).toBeDisabled();
+    expect(screen.getByTestId('action-card-focused')).toHaveAttribute('data-readonly', 'true');
+  });
+
+  it('skips the ready badge and encounter invalidation when a job resolves success:false', async () => {
+    setupMocks();
+
+    // Override the focused card stub so selecting a technique emits techniqueId=99.
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          ActionCard [{slot}]
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({
+                slot,
+                effort: 'MEDIUM',
+                strainCommitment: 0,
+                techniqueId: 99,
+              })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    // The dispatch endpoint always resolves 200 — a business-rule rejection
+    // surfaces as success:false, not a thrown error.
+    mockMutateAsync.mockResolvedValueOnce({
+      backend: 'COMBAT',
+      deferred: false,
+      success: false,
+      message: 'Rejected.',
+    });
+
+    const wrapper = createWrapper();
+    const invalidateSpy = vi.spyOn(wrapper.queryClient, 'invalidateQueries');
+
+    render(<YourTurn {...defaultProps()} />, { wrapper });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Rejected.');
+
+    // ready-badge should NOT appear — submission did not complete successfully.
+    expect(screen.queryByTestId('ready-badge')).not.toBeInTheDocument();
+    expect(screen.getByTestId('submit-declarations-btn')).not.toBeDisabled();
+
+    // The honest-failure result must short-circuit before any invalidation —
+    // a rejected dispatch must not refresh the encounter as if it succeeded.
+    expect(invalidateSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: combatQueries.combatKeys.encounter(1) })
+    );
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('invalidates the encounter query once every dispatch job succeeds', async () => {
+    setupMocks();
+
+    // Override the focused card stub so selecting a technique emits techniqueId=7.
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          ActionCard [{slot}]
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({
+                slot,
+                effort: 'MEDIUM',
+                strainCommitment: 0,
+                techniqueId: 7,
+              })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    // beforeEach already sets mockMutateAsync's default resolved value to a
+    // successful, non-deferred-looking result — no override needed here.
+
+    const wrapper = createWrapper();
+    const invalidateSpy = vi.spyOn(wrapper.queryClient, 'invalidateQueries');
+
+    render(<YourTurn {...defaultProps({ encounterId: 1 })} />, { wrapper });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: combatQueries.combatKeys.encounter(1) })
+    );
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-advance round-scoped state reset (#2423 finding 4)
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — round-advance clash reset (#2423 finding 4)', () => {
+  it('does not carry a round-N clash selection into the round-N+1 submit', async () => {
+    setupMocks();
+    const clashAction = makePlayerAction(42, 'The Great Clash');
+
+    const { rerender } = render(
+      <YourTurn {...defaultProps({ roundNumber: 1, availableActions: [clashAction] })} />,
+      { wrapper: createWrapper() }
+    );
+
+    // Select the clash in round 1 — no submit yet.
+    await userEvent.click(screen.getByTestId('clash-commit-btn-42'));
+    expect(screen.getByTestId('clash-strain-slider-42')).toBeInTheDocument();
+
+    // Advance to round 2 (same clash action still offered by the server).
+    // Deliberately reuses the SAME wrapper/QueryClientProvider instance (RTL's
+    // `rerender` re-wraps with the original `wrapper` automatically) so the
+    // component does NOT remount — only its props change — otherwise a fresh
+    // mount would trivially reset all local state and mask the bug (#2423).
+    rerender(<YourTurn {...defaultProps({ roundNumber: 2, availableActions: [clashAction] })} />);
+
+    // The round-N selection must not have survived the reset — no strain
+    // slider, no selected styling on the commit button.
+    await waitFor(() => {
+      expect(screen.queryByTestId('clash-strain-slider-42')).not.toBeInTheDocument();
+    });
+
+    // Submit round 2 with nothing declared.
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    // The dispatched jobs must NOT include a clash contribution carried over
+    // from round 1's stale `selectedClashRef` — this is the exact bug (#2423).
+    const calls = mockMutateAsync.mock.calls as Array<
+      [{ ref: Record<string, unknown>; kwargs: Record<string, unknown> }]
+    >;
+    const staleClashCall = calls.find((c) => c[0].ref.clash_id === 42);
+    expect(staleClashCall).toBeUndefined();
   });
 });

@@ -33,6 +33,45 @@ export async function fetchAvailableActions(characterId: number): Promise<Player
   return res.json() as Promise<PlayerActionsResponse>;
 }
 
+/**
+ * Single source of truth for the available-actions cache (#2423 finding 5).
+ * The key is intentionally UN-namespaced (`['available-actions', id]`) rather
+ * than nested under a system prefix (e.g. `['combat', ...]`) because the
+ * endpoint is an actions-registry surface shared by scenes/combat/battles —
+ * every consumer must land on the same cache entry so a single invalidation
+ * (e.g. useEndEncounter) reaches every mounted rail/panel.
+ */
+export const availableActionsKeys = {
+  all: ['available-actions'] as const,
+  forCharacter: (characterId: number) => [...availableActionsKeys.all, characterId] as const,
+};
+
+export interface AvailableActionsOptions {
+  enabled?: boolean;
+  staleTime?: number;
+  refetchInterval?: number;
+}
+
+/**
+ * Shared TanStack Query hook for the unified available-actions endpoint
+ * (#2423 finding 5). Every consumer of GET
+ * /api/actions/characters/<characterId>/available/ should go through this
+ * hook rather than an inline `useQuery` — that's what keeps them all on the
+ * one `availableActionsKeys` cache entry.
+ */
+export function useAvailableActionsQuery(
+  characterId: number | null,
+  options: AvailableActionsOptions = {}
+) {
+  return useQuery({
+    queryKey: availableActionsKeys.forCharacter(characterId ?? 0),
+    queryFn: () => fetchAvailableActions(characterId!),
+    enabled: (options.enabled ?? true) && characterId !== null && characterId > 0,
+    staleTime: options.staleTime ?? 10_000,
+    refetchInterval: options.refetchInterval,
+  });
+}
+
 /** The treat-condition action key — a backend registry key, not a UI string. */
 export const TREAT_CONDITION_ACTION_KEY = 'treat_condition';
 

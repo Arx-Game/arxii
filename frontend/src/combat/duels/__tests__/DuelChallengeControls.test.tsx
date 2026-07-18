@@ -1,14 +1,15 @@
 /**
- * Tests for DuelChallengeControls — Task 14.
+ * Tests for DuelYieldControls / DuelAcknowledgeRiskBanner — Task 14 (#2423 follow-up).
  *
  * Covers:
- * - Pending-challenge accept/decline prompt renders and dispatches correctly.
  * - Yield button visible only in an active duel (encounter_type==='duel').
  * - AcknowledgeRisk banner visible when is_lethal and no acknowledgement yet.
- * - No duel controls rendered when there is no pending challenge and no active duel.
+ * - Both honor the dispatch contract: a resolved `{success: false}` result must
+ *   NOT flip confirmed/acknowledged state and must surface the server message (#2423).
  *
  * Note: the outgoing "challenge a co-located character" affordance (challenge button)
- * is deferred to a follow-up and is not tested here.
+ * is deferred to a follow-up and is not tested here. The former Accept/Decline prompt
+ * (DuelChallengeControls) was deleted (#2423) — that UI now lives in DuelChallengeNotifier.
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -30,12 +31,8 @@ vi.mock('@/combat/queries', () => ({
 }));
 
 import * as combatQueries from '@/combat/queries';
-import {
-  DuelChallengeControls,
-  DuelYieldControls,
-  DuelAcknowledgeRiskBanner,
-} from '../DuelChallengeControls';
-import type { DuelChallengeControlsProps, DuelYieldControlsProps } from '../DuelChallengeControls';
+import { DuelYieldControls, DuelAcknowledgeRiskBanner } from '../DuelChallengeControls';
+import type { DuelYieldControlsProps } from '../DuelChallengeControls';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -70,156 +67,6 @@ function setupMocks() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockMutateAsync.mockResolvedValue({ backend: 'registry', deferred: false });
-});
-
-// ---------------------------------------------------------------------------
-// DuelChallengeControls — accept/decline prompt
-// ---------------------------------------------------------------------------
-
-describe('DuelChallengeControls — pending challenge prompt', () => {
-  function defaultChallengeProps(
-    overrides?: Partial<DuelChallengeControlsProps>
-  ): DuelChallengeControlsProps {
-    return {
-      characterId: 10,
-      hasPendingIncomingChallenge: true,
-      challengerName: 'Rival Knight',
-      challengeId: 42,
-      ...overrides,
-    };
-  }
-
-  it('renders accept and decline buttons when there is a pending incoming challenge', () => {
-    setupMocks();
-
-    render(<DuelChallengeControls {...defaultChallengeProps()} />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('duel-accept-btn')).toBeInTheDocument();
-    expect(screen.getByTestId('duel-decline-btn')).toBeInTheDocument();
-  });
-
-  it('shows the challenger name in the prompt', () => {
-    setupMocks();
-
-    render(<DuelChallengeControls {...defaultChallengeProps({ challengerName: 'Baron Vex' })} />, {
-      wrapper: createWrapper(),
-    });
-
-    expect(screen.getByTestId('duel-challenge-prompt')).toHaveTextContent('Baron Vex');
-  });
-
-  it('dispatches accept action with the threaded challenge_id and calls onResolved', async () => {
-    setupMocks();
-    const onResolved = vi.fn();
-
-    render(<DuelChallengeControls {...defaultChallengeProps({ onResolved })} />, {
-      wrapper: createWrapper(),
-    });
-
-    await userEvent.click(screen.getByTestId('duel-accept-btn'));
-
-    expect(mockMutateAsync).toHaveBeenCalledWith({
-      ref: {
-        backend: 'registry',
-        registry_key: 'accept',
-      },
-      kwargs: { challenge_id: 42 },
-    });
-    await waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1));
-  });
-
-  it('dispatches decline action with the threaded challenge_id and calls onResolved', async () => {
-    setupMocks();
-    const onResolved = vi.fn();
-
-    render(<DuelChallengeControls {...defaultChallengeProps({ onResolved })} />, {
-      wrapper: createWrapper(),
-    });
-
-    await userEvent.click(screen.getByTestId('duel-decline-btn'));
-
-    expect(mockMutateAsync).toHaveBeenCalledWith({
-      ref: {
-        backend: 'registry',
-        registry_key: 'decline',
-      },
-      kwargs: { challenge_id: 42 },
-    });
-    await waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1));
-  });
-
-  it('omits challenge_id from kwargs when no challengeId is provided (back-compat)', async () => {
-    setupMocks();
-
-    render(<DuelChallengeControls {...defaultChallengeProps({ challengeId: null })} />, {
-      wrapper: createWrapper(),
-    });
-
-    await userEvent.click(screen.getByTestId('duel-accept-btn'));
-
-    expect(mockMutateAsync).toHaveBeenCalledWith({
-      ref: {
-        backend: 'registry',
-        registry_key: 'accept',
-      },
-      kwargs: {},
-    });
-  });
-
-  it('does not call onResolved when the dispatch fails', async () => {
-    setupMocks();
-    mockMutateAsync.mockRejectedValueOnce(new Error('Challenge already expired'));
-    const onResolved = vi.fn();
-
-    render(<DuelChallengeControls {...defaultChallengeProps({ onResolved })} />, {
-      wrapper: createWrapper(),
-    });
-
-    await userEvent.click(screen.getByTestId('duel-accept-btn'));
-
-    await screen.findByRole('alert');
-    expect(onResolved).not.toHaveBeenCalled();
-  });
-
-  it('does not render the challenge prompt when there is no pending challenge', () => {
-    setupMocks();
-
-    render(
-      <DuelChallengeControls
-        characterId={10}
-        hasPendingIncomingChallenge={false}
-        challengerName={null}
-      />,
-      { wrapper: createWrapper() }
-    );
-
-    expect(screen.queryByTestId('duel-challenge-prompt')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('duel-accept-btn')).not.toBeInTheDocument();
-  });
-
-  it('shows an error message when accept dispatch fails', async () => {
-    setupMocks();
-    mockMutateAsync.mockRejectedValueOnce(new Error('Challenge already expired'));
-
-    render(<DuelChallengeControls {...defaultChallengeProps()} />, { wrapper: createWrapper() });
-
-    await userEvent.click(screen.getByTestId('duel-accept-btn'));
-
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Challenge already expired');
-  });
-
-  it('buttons are disabled while a dispatch is pending', () => {
-    mockedUseDispatchPlayerAction.mockReturnValue({
-      mutateAsync: mockMutateAsync,
-      isPending: true,
-    });
-
-    render(<DuelChallengeControls {...defaultChallengeProps()} />, { wrapper: createWrapper() });
-
-    expect(screen.getByTestId('duel-accept-btn')).toBeDisabled();
-    expect(screen.getByTestId('duel-decline-btn')).toBeDisabled();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -293,6 +140,19 @@ describe('DuelYieldControls — yield button', () => {
     expect(alert).toHaveTextContent('Not in a duel');
   });
 
+  it('does not show the confirmed state when the dispatch resolves success:false (#2423)', async () => {
+    setupMocks();
+    mockMutateAsync.mockResolvedValueOnce({ success: false, message: 'Not your turn.' });
+
+    render(<DuelYieldControls {...defaultYieldProps()} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('duel-yield-btn'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Not your turn.');
+    expect(screen.queryByTestId('duel-yield-confirmed')).not.toBeInTheDocument();
+  });
+
   it('yield button is disabled while a dispatch is pending', () => {
     mockedUseDispatchPlayerAction.mockReturnValue({
       mutateAsync: mockMutateAsync,
@@ -347,5 +207,20 @@ describe('DuelAcknowledgeRiskBanner', () => {
       },
       kwargs: {},
     });
+  });
+
+  it('keeps the banner visible when the dispatch resolves success:false (#2423)', async () => {
+    setupMocks();
+    mockMutateAsync.mockResolvedValueOnce({ success: false, message: 'Not your turn.' });
+
+    render(<DuelAcknowledgeRiskBanner characterId={10} showBanner={true} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('duel-acknowledge-risk-btn'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Not your turn.');
+    expect(screen.getByTestId('duel-acknowledge-risk-banner')).toBeInTheDocument();
   });
 });

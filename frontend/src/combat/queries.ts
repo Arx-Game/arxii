@@ -8,7 +8,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type { DispatchActionRequest, DispatchResult, EncounterListItem } from './types';
-import { fetchAvailableActions } from '@/scenes/actionQueries';
+import { availableActionsKeys, useAvailableActionsQuery } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
 
 // ---------------------------------------------------------------------------
@@ -25,11 +25,6 @@ export const combatKeys = {
 
   combos: (encounterId: number) => [...combatKeys.all, 'combos', encounterId] as const,
 
-  availableActionsAll: () => [...combatKeys.all, 'available-actions'] as const,
-
-  availableActions: (characterId: number) =>
-    [...combatKeys.availableActionsAll(), characterId] as const,
-
   outcomeDetails: (ids: number[]) => [...combatKeys.all, 'outcome-details', ids] as const,
 
   consequenceOutcomes: (params: api.ConsequenceOutcomesParams) =>
@@ -45,7 +40,7 @@ export const combatKeys = {
  * Invalidate every consequence-outcome query (all character/encounter variants),
  * so the "Last Outcome" panel refetches after a round-affecting mutation (#866).
  */
-function invalidateConsequenceOutcomes(qc: QueryClient): void {
+export function invalidateConsequenceOutcomes(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: [...combatKeys.all, 'consequence-outcomes'] }).catch(() => {});
 }
 
@@ -204,35 +199,21 @@ export function useUpgradeCombo(encounterId: number) {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch COMBAT-backend PlayerActions for the character.
- *
- * Wraps GET /api/actions/characters/{characterId}/available/ and filters
- * results where ref.backend === 'combat'. Clash contribution actions appear
- * here too with ref.clash_id !== null.
- *
- * Disabled when characterId <= 0.
+ * COMBAT-backend PlayerActions for the character. Thin filter over the shared
+ * useAvailableActionsQuery; polls at 10s to match useCombatEncounter's
+ * declaration-phase contract (#2423 finding 6) so round advances and clash
+ * spawns reach the technique list within one poll period.
  */
 export function useAvailableActions(characterId: number): {
   data: PlayerAction[];
   isLoading: boolean;
   isError: boolean;
 } {
-  const result = useQuery({
-    queryKey: combatKeys.availableActions(characterId),
-    queryFn: () => fetchAvailableActions(characterId),
-    enabled: characterId > 0,
-    staleTime: 10_000,
-  });
-
+  const result = useAvailableActionsQuery(characterId, { refetchInterval: 10_000 });
   const combatActions = (result.data?.results ?? []).filter(
     (a: PlayerAction) => a.ref.backend === 'combat'
   );
-
-  return {
-    data: combatActions,
-    isLoading: result.isLoading,
-    isError: result.isError,
-  };
+  return { data: combatActions, isLoading: result.isLoading, isError: result.isError };
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +313,7 @@ export function useEndEncounter(encounterId: number) {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
       // Terminal event: every character's action list for this fight is now stale.
-      qc.invalidateQueries({ queryKey: combatKeys.availableActionsAll() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: availableActionsKeys.all }).catch(() => {});
       invalidateConsequenceOutcomes(qc);
       if (typeof data.scene === 'number') {
         qc.invalidateQueries({ queryKey: combatKeys.encountersForScene(data.scene) }).catch(

@@ -21132,6 +21132,53 @@ export interface components {
       readonly seat_domain_name: string;
       readonly templates: components['schemas']['HouseTemplateOption'][];
     };
+    /**
+     * @description Schema-only shape of get_contributors rows on ClashStateSerializer.
+     *
+     *     Never instantiated for serialization — exists so drf-spectacular emits a
+     *     concrete component instead of {[key: string]: unknown} (#2423). Mirrors
+     *     the frontend ``ClashContributor`` interface (combat/types.ts).
+     */
+    ClashContributor: {
+      character_id: number | null;
+      character_name: string;
+      action_slot: string;
+      progress_delta: number;
+      anima: number;
+    };
+    /**
+     * @description Compact read serializer for an active Clash, surfaced on EncounterDetail.
+     *
+     *     Exposes the fields needed by the frontend ActiveState rail section:
+     *     - id, flavor, status, progress, pc_win_threshold, npc_win_threshold
+     *     - npc_opponent_id (for labelling the clash target)
+     *     - contributors: per-PC contribution rollup (latest round)
+     *     - side_favored: "PC" / "NPC" / "EVEN" computed from progress vs thresholds.
+     */
+    ClashState: {
+      readonly id: number;
+      flavor: components['schemas']['FlavorEnum'];
+      status: components['schemas']['ClashStateStatusEnum'];
+      progress: number;
+      pc_win_threshold: number;
+      /** @description Set iff flavor=CLASH; null otherwise. */
+      npc_win_threshold: number | null;
+      npc_opponent: number;
+      readonly contributors: components['schemas']['ClashContributor'][];
+      /**
+       * @description PC / NPC / EVEN — computed from current progress vs thresholds.
+       *
+       *     Heuristic: a side is "favored" when progress is past 75% of that side's
+       *     win threshold. Else "EVEN."
+       */
+      readonly side_favored: string;
+    };
+    /**
+     * @description * `ACTIVE` - Active
+     *     * `RESOLVED` - Resolved
+     * @enum {string}
+     */
+    ClashStateStatusEnum: 'ACTIVE' | 'RESOLVED';
     /** @description Request serializer for staff clock adjustment. */
     ClockAdjustRequest: {
       /** Format: date-time */
@@ -21503,26 +21550,7 @@ export interface components {
       readonly selected_consequence: number | null;
       readonly modifier_total: number;
       readonly summary: string;
-      /**
-       * @description Recompute the roulette from pool + selected_consequence on read.
-       *
-       *     When pool is not None, reads pool entries and parent entries from the
-       *     prefetch cache (populated by the ViewSet's _POOL_ENTRIES_PREFETCH /
-       *     _PARENT_ENTRIES_PREFETCH Prefetch objects) so no additional queries are
-       *     issued per row.  Mirrors the pool-walk logic of
-       *     resolve_pool_consequences() but operates on already-fetched data.
-       *
-       *     When pool is None (challenge-based resolution), reconstructs the
-       *     consequence list from the authored ApproachConsequence and
-       *     ChallengeTemplateConsequence links via the challenge_record.  Uses
-       *     prefetch caches populated by the ViewSet's challenge-link Prefetch
-       *     objects.
-       *
-       *     Returns a list of plain dicts matching OutcomeDisplay's fields.
-       */
-      readonly outcome_display: {
-        [key: string]: unknown;
-      }[];
+      readonly outcome_display: components['schemas']['OutcomeDisplayRow'][];
       readonly modifiers: components['schemas']['ConsequenceOutcomeModifier'][];
       readonly combat_interaction_id: number;
       readonly challenge_record_id: number;
@@ -22670,21 +22698,7 @@ export interface components {
       readonly is_participant: boolean;
       /** @description Check whether the requesting user is GM of the linked scene. */
       readonly is_gm: boolean;
-      /**
-       * @description Return active Clash records for this encounter.
-       *
-       *     Phase 8, Task 8.4 — exposes clash state to the frontend ActiveState
-       *     rail section. Returns only ACTIVE clashes so resolved ones don't litter
-       *     the UI after the clash is done.
-       *
-       *     Uses the ``clashes_cached`` prefetch-to-attr set on the viewset's
-       *     ``_base_queryset`` so no extra query fires during detail serialization.
-       *     Falls back to a direct filter for callers that don't use the viewset
-       *     (e.g. unit tests that call the serializer directly).
-       */
-      readonly clashes: {
-        [key: string]: unknown;
-      }[];
+      readonly clashes: components['schemas']['ClashState'][];
       /**
        * @description Return active EngagementLock records for this encounter (#2020).
        *
@@ -23471,6 +23485,14 @@ export interface components {
       amenity: number;
       affinities: components['schemas']['FixtureAffinity'][];
     };
+    /**
+     * @description * `CLASH` - Clash
+     *     * `LOCK` - Lock
+     *     * `WARD` - Ward
+     *     * `BREAK` - Break
+     * @enum {string}
+     */
+    FlavorEnum: 'CLASH' | 'LOCK' | 'WARD' | 'BREAK';
     /** @description Cheap RoomPanel resolver: which building, and what the viewer may do. */
     ForRoomResult: {
       building_id: number | null;
@@ -26829,6 +26851,18 @@ export interface components {
       strain_committed?: number | null;
       power?: number | null;
       progress_delta?: number | null;
+    };
+    /**
+     * @description Schema-only shape of get_outcome_display rows (world.checks.types.OutcomeDisplay).
+     *
+     *     Never instantiated for serialization — exists so drf-spectacular emits a
+     *     concrete component instead of {[key: string]: unknown} (#2423).
+     */
+    OutcomeDisplayRow: {
+      label: string;
+      tier_name: string;
+      weight: number;
+      is_selected: boolean;
     };
     /** @description Read serializer for Outfit — nests slot rows. */
     OutfitRead: {
