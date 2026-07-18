@@ -310,6 +310,12 @@ def _seed_project_resonance() -> None:
     ensure_project_kind_resonance_awards()
 
 
+def _seed_roster() -> None:
+    from world.roster.seeds import seed_invite_trust_category  # noqa: PLC0415
+
+    seed_invite_trust_category()
+
+
 def _seed_traits() -> None:
     """No-op cluster (#2266): Trait rows are created by other clusters already —
 
@@ -469,6 +475,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # PROJECT_CONTRIBUTION GainSource (#2038 — "projects to add gifts to
     # organizations"). No dependencies on any other cluster.
     "project_resonance": _seed_project_resonance,
+    # Roster: the INVITE TrustCategory for game-invite eligibility (#2483).
+    # No dependencies on any other cluster.
+    "roster": _seed_roster,
     # Traits: no-op — see _seed_traits docstring. Registered so the Game Setup
     # inventory can show a Trait row count for the #944 content-pipeline domain,
     # which had zero inventory visibility before #2266.
