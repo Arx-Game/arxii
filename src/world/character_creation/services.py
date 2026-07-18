@@ -18,8 +18,13 @@ from django.utils import timezone
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import PlayerData
-from world.character_creation.constants import ApplicationStatus, CommentType
-from world.character_creation.models import CharacterDraft
+from world.character_creation.constants import ApplicationStatus, CommentType, OriginStoryState
+from world.character_creation.models import (
+    CharacterDraft,
+    CharacterOriginSlot,
+    OriginTemplate,
+    OriginTemplateSlot,
+)
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry, RosterTenure
@@ -1956,3 +1961,71 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     draft.delete()
 
     return entry, story
+
+
+# =============================================================================
+# Origin-story guided-flow write services (#2478)
+#
+# Single write path for a character's origin story: slot answers and prose
+# assembly. Every mutation recomputes ``CharacterSheet.origin_story_state`` so
+# the cached state never drifts from the slot rows (the field is a cache of
+# truth, mirroring the ``glimpse_state`` precedent, #2427).
+# =============================================================================
+
+
+def refresh_origin_story_state(sheet: CharacterSheet) -> OriginStoryState:
+    """Recompute and persist ``origin_story_state`` from slot rows + prose.
+
+    Mirrors ``refresh_glimpse_state`` (``glimpse.py:28-39``).
+    """
+    has_slots = sheet.origin_slots.exists()
+    has_prose = bool(sheet.background and sheet.background.strip())
+    if has_prose and has_slots:
+        state = OriginStoryState.COMPLETE
+    elif has_slots:
+        state = OriginStoryState.SLOTS_ONLY
+    else:
+        state = OriginStoryState.NOT_STARTED
+    if sheet.origin_story_state != state:
+        sheet.origin_story_state = state
+        sheet.save(update_fields=["origin_story_state"])
+    return state
+
+
+@transaction.atomic
+def set_origin_slot(sheet: CharacterSheet, slot: OriginTemplateSlot, value: str) -> None:
+    """Upsert a character's slot answer, then refresh state.
+
+    Mirrors ``set_glimpse_tags`` (``glimpse.py:42-62``).
+    """
+    CharacterOriginSlot.objects.update_or_create(sheet=sheet, slot=slot, defaults={"value": value})
+    refresh_origin_story_state(sheet)
+
+
+def clear_origin_slot(sheet: CharacterSheet, slot: OriginTemplateSlot) -> None:
+    """Delete a slot answer and recompute state."""
+    CharacterOriginSlot.objects.filter(sheet=sheet, slot=slot).delete()
+    refresh_origin_story_state(sheet)
+
+
+def assemble_origin_prose(sheet: CharacterSheet) -> str:
+    """Compose the frame narrative + slot answers into prose.
+
+    Pure template concatenation — no LLM. Called at finalize and on
+    sheet-editor save. Returns empty string when the sheet has no slots
+    filled.
+    """
+    slots = list(sheet.origin_slots.select_related("slot__template").order_by("slot__sort_order"))
+    if not slots:
+        return ""
+
+    template: OriginTemplate | None = slots[0].slot.template
+    if template is None:
+        return ""
+
+    lines = [template.frame_narrative, ""]
+    for row in slots:
+        lines.append(row.slot.prompt)
+        lines.append(row.value)
+        lines.append("")
+    return "\n".join(lines).strip()
