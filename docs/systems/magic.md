@@ -1653,7 +1653,7 @@ Cached accessors (never query directly):
 ### Content pipeline — magic catalog export/import (#2486)
 
 The full magic catalog is lore-repo-authorable content, not admin-only data: `Affinity`,
-`Resonance`, `Facet`, `Gift`, `IntensityTier`, `Technique` + its payload rows
+`Resonance`, `Facet`, `Gift`, `Tradition`, `IntensityTier`, `Technique` + its payload rows
 (`TechniqueCapabilityGrant`/`TechniqueCapabilityRequirement`/`TechniqueDamageProfile`/
 `TechniqueOutcomeModifier`/`TechniqueAppliedCondition`/`TechniqueRemovedCondition`),
 `TechniqueStyle`, `Restriction`, `EffectType`, `PortalAnchorKind`, `PathGiftGrant`,
@@ -1665,8 +1665,10 @@ The full magic catalog is lore-repo-authorable content, not admin-only data: `Af
 `UniqueConstraint` backs it — authoring a second technique with the same name under the
 same gift raises `DuplicateTechniqueName`, a clean 400, not an `IntegrityError`); the grant
 tables (`PathGiftGrant`, `TraditionGiftGrant`, `SpeciesGiftGrant`) key on their FK pairs
-(`(path, gift)`, `(tradition, gift)`, `(species, gift)`); payload rows key on their owning
-technique plus their own unique-constraint fields; `PortalAnchorKind` keys on `name`
+(`(path, gift)`, `(tradition, gift)`, `(species, gift)`); the other payload rows key on their
+owning technique plus their own unique-constraint fields, except `TechniqueOutcomeModifier`,
+a global outcome-tier table with no technique FK — it's a `OneToOneField` to
+`traits.CheckOutcome` and keys on `outcome` alone; `PortalAnchorKind` keys on `name`
 (`achievements.Achievement` also gained a name natural key this branch but is not itself
 in `CONTENT_MODELS`). `load_entries` (`core_management/content_fixtures.py`) upserts by natural key —
 **fixtures win over seeds**: `seed_starter_gift_catalog()` (`world/seeds/game_content/magic.py`)
