@@ -19,6 +19,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from world.character_creation.models import CharacterDraft
+from world.codex.models import DistinctionCodexGrant
 from world.distinctions.filters import DistinctionCategoryFilter, DistinctionFilter
 from world.distinctions.models import (
     Distinction,
@@ -78,9 +79,7 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
             .prefetch_related(
                 Prefetch(
                     "effects",
-                    queryset=DistinctionEffect.objects.select_related(
-                        "target__codex_entry", "target__category"
-                    ),
+                    queryset=DistinctionEffect.objects.select_related("target__category"),
                     to_attr="cached_effects",
                 ),
                 Prefetch(
@@ -97,6 +96,11 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                     "mutually_exclusive_with",
                     queryset=Distinction.objects.only("id", "name"),
                     to_attr="prefetched_exclusive",
+                ),
+                Prefetch(
+                    "codex_grants",
+                    queryset=DistinctionCodexGrant.objects.only("distinction_id", "entry_id"),
+                    to_attr="cached_codex_grants",
                 ),
             )
             .select_related("category")
