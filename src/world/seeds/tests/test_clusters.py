@@ -48,6 +48,7 @@ class TestClusterRegistry(TestCase):
                 "propaganda",
                 "skills",
                 "project_resonance",
+                "roster",
                 "agriculture",
                 "traits",
             },
