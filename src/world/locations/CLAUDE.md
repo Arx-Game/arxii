@@ -521,8 +521,9 @@ violation.
 ## Owner-facing room editing (#1470)
 
 `set_room_display_data(*, room, persona=None, name=None, description=None, is_public=None,
-bypass_ownership=False)` is the owner-gated MVP seam for a player editing a room they
-own — the first player-facing write over `RoomProfile` / `ObjectDisplayData`.
+bypass_ownership=False)` is the owner-or-tenant-gated MVP seam for a player editing
+a room they own or hold tenancy in (widened #2452) — the first player-facing write
+over `RoomProfile` / `ObjectDisplayData`.
 `bypass_ownership=True` (staff world-builder, #2449) skips only the ownership raise;
 the #1287 scene-privacy re-check always runs, and `persona` may be `None` only in
 bypass mode. It:
@@ -535,7 +536,8 @@ bypass mode. It:
   listing → `RoomProfile.is_public`; idempotent, only supplied fields change.
 
 Callers: `actions.definitions.locations.RoomEditAction` (key `edit_room`), gated by
-`actions.prerequisites.IsRoomOwnerPrerequisite`. Faces: the telnet `room` family
+`actions.prerequisites.IsRoomTenantPrerequisite` (owner-or-tenant, widened #2452).
+Faces: the telnet `room` family
 (`CmdRoom`, aliases `build`/`manageroom` — `room/name|desc|public` plus the #670
 builder verbs), the web action-dispatch endpoint, and the React `RoomEditorPanel`.
 

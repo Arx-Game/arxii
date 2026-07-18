@@ -1,10 +1,12 @@
 """Player-facing room actions — the room-editor MVP seam (#1470) + the Room Builder (#670).
 
-``RoomEditAction`` lets a room **owner** edit the room they're standing in: its
-display name, description, and public/private listing. It is the single seam both
-telnet (``CmdManageRoom``) and the web (action-dispatch + ``RoomEditorPanel``)
-call. Ownership is gated by ``IsRoomOwnerPrerequisite``; the write + the
-public-toggle guard live in ``world.locations.services.set_room_display_data``.
+``RoomEditAction`` lets a room's **owner or tenant** edit the room they're
+standing in (or targeting via ``room_id``): its display name, description, and
+public/private listing (#2452 widened this from owner-only). It is the single
+seam both telnet (``CmdManageRoom``) and the web (action-dispatch +
+``RoomEditorPanel``) call. Owner-or-tenant standing is gated by
+``IsRoomTenantPrerequisite``; the write + the public-toggle guard live in
+``world.locations.services.set_room_display_data``.
 
 The Room Builder actions (#670) follow the same shape: thin dispatch over
 ``world.buildings.room_services`` / ``world.locations.services``, permission
@@ -38,10 +40,12 @@ if TYPE_CHECKING:
 
 @dataclass
 class RoomEditAction(Action):
-    """Owner edits the room they're standing in: name, description, public/private.
+    """Owner or tenant edits the room they're standing in: name, description,
+    public/private (#2452).
 
-    Operates on ``actor.location`` (the room the actor is in). Each field is
-    optional — only those supplied are changed.
+    Operates on ``actor.location`` (the room the actor is in), or the resolved
+    ``room_id`` when the web canvas supplies one. Each field is optional — only
+    those supplied are changed.
     """
 
     key: str = "edit_room"
@@ -52,7 +56,7 @@ class RoomEditAction(Action):
     target_type: TargetType = TargetType.SELF
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [IsRoomOwnerPrerequisite()]
+        return [IsRoomTenantPrerequisite()]
 
     def execute(
         self,
