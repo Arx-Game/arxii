@@ -50,6 +50,7 @@ class GemDetailsAdmin(admin.ModelAdmin):
 @admin.register(GemInstanceDetails)
 class GemInstanceDetailsAdmin(admin.ModelAdmin):
     list_display = ["item_instance", "size_grade", "purity_grade", "cut_grade"]
+    raw_id_fields = ["item_instance"]
 
 
 @admin.register(QualityTier)
