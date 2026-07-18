@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from evennia.accounts.models import AccountDB
 
+    from evennia_extensions.models import PlayerData
     from world.character_sheets.models import CharacterSheet
     from world.progression.models import XPTransaction
     from world.roster.models import RosterEntry
@@ -146,7 +147,42 @@ def join_table(table: GMTable, persona: Persona) -> GMTableMembership:
     ).first()
     if existing:
         return existing
-    return GMTableMembership.objects.create(table=table, persona=persona)
+    membership = GMTableMembership.objects.create(table=table, persona=persona)
+    # Auto-clear looking-for-table flag when a player joins a table (#2431)
+    _clear_looking_for_table_on_join(persona)
+    return membership
+
+
+def _clear_looking_for_table_on_join(persona: Persona) -> None:
+    """Clear the looking-for-table flag for the persona's player (#2431).
+
+    Walks persona → character_sheet → roster_entry → current_tenure → player_data.
+    No-op if any link is missing or the flag is already False.
+    """
+    sheet = persona.character_sheet
+    if sheet is None:
+        return
+    roster_entry = sheet.roster_entry
+    if roster_entry is None:
+        return
+    tenure = roster_entry.current_tenure
+    if tenure is None:
+        return
+    player_data = tenure.player_data
+    if player_data is None or not player_data.looking_for_table:
+        return
+    set_looking_for_table(player_data, looking=False)
+
+
+def set_looking_for_table(player_data: PlayerData, looking: bool) -> None:
+    """Set or clear the looking-for-table flag on a player's profile (#2431).
+
+    When setting, stamps ``looking_for_table_set_at`` for GM browse sorting.
+    When clearing, nulls the timestamp.
+    """
+    player_data.looking_for_table = looking
+    player_data.looking_for_table_set_at = timezone.now() if looking else None
+    player_data.save(update_fields=["looking_for_table", "looking_for_table_set_at"])
 
 
 @transaction.atomic

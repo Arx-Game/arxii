@@ -70,6 +70,19 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
     hide_from_watch = models.BooleanField(default=False)
     private_mode = models.BooleanField(default=False)
 
+    # Looking-for-table flag (#2431) — persistent profile flag a player sets
+    # so GMs browsing for players can find them. Auto-clears on GMTable join.
+    looking_for_table = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Player is looking for a GM table to join.",
+    )
+    looking_for_table_set_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the player set the looking-for-table flag (for GM browse sorting).",
+    )
+
     # Staff data
     gm_notes = models.TextField(blank=True, help_text="Staff notes about player")
 
