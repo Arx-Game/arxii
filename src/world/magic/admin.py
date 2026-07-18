@@ -81,6 +81,7 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
     DramaticMomentType,
 )
+from world.magic.services.glimpse import refresh_glimpse_state
 
 
 @admin.register(Affinity)
@@ -229,11 +230,21 @@ class CharacterAuraAdmin(admin.ModelAdmin):
     list_display = ["character", "celestial", "primal", "abyssal", "get_dominant"]
     list_filter = ["updated_at"]
     search_fields = ["character__db_key"]
-    readonly_fields = ["updated_at"]
+    readonly_fields = ["updated_at", "glimpse_state"]
 
     @admin.display(description="Dominant")
     def get_dominant(self, obj):
         return obj.dominant_affinity.label
+
+    def save_model(self, request, obj, form, change):
+        """Keep the glimpse_state cache truthful after an admin prose/tag edit (#2427).
+
+        ``glimpse_state`` is service-maintained (see the model field's help_text);
+        editing ``glimpse_story`` here would otherwise desync the cache from the
+        prose it's supposed to reflect.
+        """
+        super().save_model(request, obj, form, change)
+        refresh_glimpse_state(obj)
 
 
 @admin.register(GlimpseTag)

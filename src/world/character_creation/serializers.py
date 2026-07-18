@@ -323,6 +323,7 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    @extend_schema_field(CGGlimpseTagSuggestedDistinctionSerializer(many=True))
     def get_suggested_distinctions(self, obj: GlimpseTag) -> list[dict]:
         rows = obj.cached_distinction_suggestions  # Prefetch(to_attr=...), ordered
         return CGGlimpseTagSuggestedDistinctionSerializer(

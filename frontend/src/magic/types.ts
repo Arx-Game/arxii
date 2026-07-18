@@ -405,24 +405,18 @@ export interface UnbindMotifStyleRequest {
 // Glimpse aura action mutations, #2427
 //
 // CharacterAuraViewSet's set-glimpse-tags/set-glimpse-prose/link-glimpse-
-// distinction/unlink-glimpse-distinction actions are plain @action methods
-// (no @extend_schema), so drf-spectacular records their request bodies as the
-// ViewSet's own CharacterAuraRequest — inaccurate for these actions. These are
-// hand-rolled to mirror the real input serializers
+// distinction/unlink-glimpse-distinction actions are now `@extend_schema`-annotated
+// (src/world/magic/views.py) against their real input serializers
 // (GlimpseSetTagsSerializer / GlimpseSetProseSerializer /
-// GlimpseDistinctionLinkSerializer, src/world/magic/serializers.py).
+// GlimpseDistinctionLinkSerializer), so the generated schema types these bodies
+// correctly — aliased here rather than hand-rolled, single source of truth.
 // ---------------------------------------------------------------------------
 
 /** Request body for POST /api/magic/character-auras/{id}/set-glimpse-tags/. */
-export interface SetGlimpseTagsRequest {
-  axis: 'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY';
-  tag_ids: number[];
-}
+export type SetGlimpseTagsRequest = components['schemas']['GlimpseSetTagsRequest'];
 
 /** Request body for POST /api/magic/character-auras/{id}/set-glimpse-prose/. */
-export interface SetGlimpseProseRequest {
-  text: string;
-}
+export type SetGlimpseProseRequest = components['schemas']['GlimpseSetProseRequest'];
 
 /**
  * Request body for POST /api/magic/character-auras/{id}/link-glimpse-distinction/
@@ -433,9 +427,7 @@ export interface SetGlimpseProseRequest {
  * `Distinction` id — CG's `glimpse_linked_distinction_ids` (draft_data) links
  * by catalog Distinction id instead. Never mix the two id spaces.
  */
-export interface GlimpseDistinctionLinkRequest {
-  character_distinction_id: number;
-}
+export type GlimpseDistinctionLinkRequest = components['schemas']['GlimpseDistinctionLinkRequest'];
 
 /** Request body for POST /api/magic/techniques/price/ and /api/magic/techniques/author/. */
 export interface TechniqueDesignRequest {

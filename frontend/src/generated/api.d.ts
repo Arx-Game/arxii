@@ -20068,9 +20068,13 @@ export interface components {
       readonly example: string;
       /** @description Display order within the axis. */
       readonly sort_order: number;
-      readonly suggested_distinctions: {
-        [key: string]: unknown;
-      }[];
+      readonly suggested_distinctions: components['schemas']['CGGlimpseTagSuggestedDistinction'][];
+    };
+    /** @description Distinction stub embedded in a glimpse tag's suggestion list (#2427). */
+    CGGlimpseTagSuggestedDistinction: {
+      readonly id: number;
+      /** @description Display name for this distinction. */
+      readonly name: string;
     };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
@@ -23761,6 +23765,19 @@ export interface components {
      * @enum {string}
      */
     GiverKindEnum: 'environmental_detail' | 'room_trigger' | 'board';
+    /** @description Input for CharacterAuraViewSet.link/unlink_glimpse_distinction (#2427). */
+    GlimpseDistinctionLinkRequest: {
+      character_distinction_id: number;
+    };
+    /** @description Input for CharacterAuraViewSet.set_glimpse_prose (#2427). */
+    GlimpseSetProseRequest: {
+      text: string;
+    };
+    /** @description Input for CharacterAuraViewSet.set_glimpse_tags (#2427). */
+    GlimpseSetTagsRequest: {
+      axis: components['schemas']['AxisEnum'];
+      tag_ids: number[];
+    };
     /**
      * @description * `NOT_STARTED` - Not started
      *     * `TAGS_ONLY` - Tags chosen, story unwritten
@@ -49001,7 +49018,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['CharacterAuraRequest'];
+        'application/json': components['schemas']['GlimpseDistinctionLinkRequest'];
       };
     };
     responses: {
@@ -49026,7 +49043,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['CharacterAuraRequest'];
+        'application/json': components['schemas']['GlimpseSetProseRequest'];
       };
     };
     responses: {
@@ -49051,7 +49068,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['CharacterAuraRequest'];
+        'application/json': components['schemas']['GlimpseSetTagsRequest'];
       };
     };
     responses: {
@@ -49076,7 +49093,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['CharacterAuraRequest'];
+        'application/json': components['schemas']['GlimpseDistinctionLinkRequest'];
       };
     };
     responses: {

@@ -531,6 +531,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         character_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
         return CharacterAura.objects.filter(character_id__in=character_ids)
 
+    @extend_schema(request=GlimpseSetTagsSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-tags")
     def set_glimpse_tags(self, request: Request, pk: int | None = None) -> Response:
         """Replace the aura's glimpse tags for one axis (#2427)."""
@@ -554,6 +555,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
             )
         return Response(CharacterAuraSerializer(aura).data)
 
+    @extend_schema(request=GlimpseSetProseSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-prose")
     def set_glimpse_prose(self, request: Request, pk: int | None = None) -> Response:
         """Write the aura's glimpse story prose (#2427)."""
@@ -563,6 +565,9 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         glimpse_services.set_glimpse_prose(aura, serializer.validated_data["text"])
         return Response(CharacterAuraSerializer(aura).data)
 
+    @extend_schema(
+        request=GlimpseDistinctionLinkSerializer, responses={200: CharacterAuraSerializer}
+    )
     @action(detail=True, methods=["post"], url_path="link-glimpse-distinction")
     def link_glimpse_distinction(self, request: Request, pk: int | None = None) -> Response:
         """Mark one of the character's distinctions as born in the Glimpse (#2427)."""
@@ -583,6 +588,9 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
             )
         return Response(CharacterAuraSerializer(aura).data)
 
+    @extend_schema(
+        request=GlimpseDistinctionLinkSerializer, responses={200: CharacterAuraSerializer}
+    )
     @action(detail=True, methods=["post"], url_path="unlink-glimpse-distinction")
     def unlink_glimpse_distinction(self, request: Request, pk: int | None = None) -> Response:
         """Clear a distinction's Glimpse provenance (#2427)."""

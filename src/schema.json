@@ -15025,7 +15025,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CharacterAuraRequest'
+              $ref: '#/components/schemas/GlimpseDistinctionLinkRequest'
         required: true
       security:
       - cookieAuth: []
@@ -15052,7 +15052,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CharacterAuraRequest'
+              $ref: '#/components/schemas/GlimpseSetProseRequest'
         required: true
       security:
       - cookieAuth: []
@@ -15079,7 +15079,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CharacterAuraRequest'
+              $ref: '#/components/schemas/GlimpseSetTagsRequest'
         required: true
       security:
       - cookieAuth: []
@@ -15106,7 +15106,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CharacterAuraRequest'
+              $ref: '#/components/schemas/GlimpseDistinctionLinkRequest'
         required: true
       security:
       - cookieAuth: []
@@ -33849,8 +33849,7 @@ components:
         suggested_distinctions:
           type: array
           items:
-            type: object
-            additionalProperties: {}
+            $ref: '#/components/schemas/CGGlimpseTagSuggestedDistinction'
           readOnly: true
       required:
       - axis
@@ -33861,6 +33860,20 @@ components:
       - slug
       - sort_order
       - suggested_distinctions
+    CGGlimpseTagSuggestedDistinction:
+      type: object
+      description: Distinction stub embedded in a glimpse tag's suggestion list (#2427).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Display name for this distinction.
+      required:
+      - id
+      - name
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -41847,6 +41860,36 @@ components:
         * `environmental_detail` - Environmental Detail
         * `room_trigger` - Room Trigger
         * `board` - Notice Board
+    GlimpseDistinctionLinkRequest:
+      type: object
+      description: Input for CharacterAuraViewSet.link/unlink_glimpse_distinction
+        (#2427).
+      properties:
+        character_distinction_id:
+          type: integer
+      required:
+      - character_distinction_id
+    GlimpseSetProseRequest:
+      type: object
+      description: Input for CharacterAuraViewSet.set_glimpse_prose (#2427).
+      properties:
+        text:
+          type: string
+      required:
+      - text
+    GlimpseSetTagsRequest:
+      type: object
+      description: Input for CharacterAuraViewSet.set_glimpse_tags (#2427).
+      properties:
+        axis:
+          $ref: '#/components/schemas/AxisEnum'
+        tag_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - axis
+      - tag_ids
     GlimpseStateEnum:
       enum:
       - NOT_STARTED

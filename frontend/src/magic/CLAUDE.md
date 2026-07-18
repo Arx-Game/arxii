@@ -462,13 +462,14 @@ call). All three invalidate `['character-sheets', characterSheetId]` on
 success — the same key `useCharacterSheetQuery` reads — rather than trying
 to read the aura action responses (`CharacterAuraSerializer` output doesn't
 carry `glimpse_tags`/`glimpse_story`/`can_finish_glimpse`; those live only in
-the sheet payload's `AuraData`). Request bodies are hand-rolled in
-`magic/types.ts` (`SetGlimpseTagsRequest`/`SetGlimpseProseRequest`/
-`GlimpseDistinctionLinkRequest`) rather than the generated schema — the
-generated request type for these `@action` methods is
-`CharacterAuraRequest` (drf-spectacular falls back to the ViewSet's own
-serializer since the actions aren't `@extend_schema`-annotated), which is
-wrong for these bodies.
+the sheet payload's `AuraData`). Request bodies in `magic/types.ts`
+(`SetGlimpseTagsRequest`/`SetGlimpseProseRequest`/
+`GlimpseDistinctionLinkRequest`) are aliases onto the generated schema
+(`GlimpseSetTagsRequest`/`GlimpseSetProseRequest`/`GlimpseDistinctionLinkRequest`
+components) — the four `CharacterAuraViewSet` `@action` methods now carry
+`@extend_schema(request=...)` (`src/world/magic/views.py`), so drf-spectacular
+types each body against its real input serializer instead of falling back to
+the ViewSet's own `CharacterAuraSerializer`.
 
 ### `XpKudosPage.alterationGate.test.tsx` (in `src/progression/`)
 
