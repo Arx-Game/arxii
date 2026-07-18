@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from core_management.content_fixtures import ContentError
 from world.npc_services.constants import OfferKind
 from world.npc_services.models import NPCRole, NPCServiceOffer, TrainOfferDetails
 from world.npc_services.seeds import (
@@ -179,3 +180,11 @@ class ResolveStarterTechniquesGiftScopingTests(TestCase):
         wired_technique = offer.train_offer_details.technique
         self.assertNotEqual(wired_technique.pk, self.decoy_technique.pk)
         self.assertEqual(wired_technique.gift.name, "Emberwork")
+
+    def test_resolve_starter_techniques_raises_when_no_pair_resolves(self) -> None:
+        """#2474: when NONE of the (gift, technique) pairs match a real row —
+        the content repo hasn't been loaded — the lookup must fail loudly
+        (``ContentError``) rather than silently returning an empty mapping,
+        which would leave callers wiring zero TRAIN offers on a fresh DB."""
+        with self.assertRaises(ContentError):
+            _resolve_starter_techniques((("Nonexistent Gift", "Nonexistent Technique"),))
