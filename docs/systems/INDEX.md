@@ -3564,7 +3564,16 @@ holder is never notified a claim exists.
     .compute_gem_worth`, folded into the wired `appraise()` (`services/pricing.py` → `suggested_value`).
     Accessors: `ItemTemplate.gem_type_or_none`, `ItemInstance.gem_or_none`. No standalone gem
     roster (would orphan the consumption stack); `quality_level` is a plain int, not new
-    `QualityTier` rows. Mining / adornment / cut-recipe are later 0b slices.
+    `QualityTier` rows. Mining / cut-recipe are later 0b slices.
+  - **Gem adornment** (`world.items.gems`, Build 0b slice 2) — `Adornment` (standalone model,
+    *not* an `ItemAttachment` subclass — that base requires a non-null `attachment_quality_tier`,
+    meaningless for a grade-carrying gem) links a host `ItemInstance` to an embedded `gem_instance`
+    with `narration` + `set_by_account`/`set_at`. `world.items.gems.services.adorn_item()` gates on
+    `ItemTemplate.adornment_capacity` (mirrors `facet_capacity`), validates the offered instance is
+    a gem and unset, embeds it (clears holder), and adds its worth to the host's `lore_value` so the
+    wired `appraise()` reflects it. `adorned_materials(host)` is the queryable "materials on this
+    piece" seam magic reads. Exceptions: `AdornmentCapacityExceeded` / `NotAGem` / `GemAlreadyAdorned`.
+    Safe craft-time path only; risky prying/re-set defers to the cut slice.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)

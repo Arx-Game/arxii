@@ -66,10 +66,15 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   `GemDetails` sidecar (`quality_level` 1–15; tier = `MaterialCategory`; motif reuses
   `tied_resonance`); a cut gem *instance* is an `ItemInstance` + `GemInstanceDetails` carrying
   size/purity/cut `GemGrade`s (multiplier floor 1.0). Worth = `type_base × size × purity × cut`,
-  folded into the wired `appraise()`. Remaining 0b slices: **mining/distribution** (common
-  aggregate + Rare-Find rolls), **adornment** (worth-only attachment), the **cut recipe** (risky
-  value-add), and the **value-denominated / bucket** bulk path. Design capture + verify-against-code
-  review in the lore repo.
+  folded into the wired `appraise()`. Design capture + verify-against-code review in the lore repo.
+
+- **Gem adornment (Build 0b, slice 2) — DONE.** `Adornment` links a host `ItemInstance` to an
+  embedded gem instance (narration + provenance); `adorn_item()` gates on
+  `ItemTemplate.adornment_capacity`, embeds the gem, and adds its worth to the host's `lore_value`
+  (so `appraise()` reflects it). `adorned_materials()` is the queryable "materials on this piece"
+  seam the magic app reads. Safe craft-time path only. Remaining 0b slices: **mining/distribution**
+  (common aggregate + Rare-Find rolls), the **cut recipe** + risky prying/re-set, and the
+  **value-denominated / bucket** bulk path.
 
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +
