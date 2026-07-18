@@ -153,11 +153,13 @@ class ContentExportTests(TestCase):
         )
         from world.magic.factories import (
             GiftFactory,
+            ResonanceFactory,
             RestrictionFactory,
             TechniqueAppliedConditionFactory,
             TechniqueCapabilityGrantFactory,
             TechniqueCapabilityRequirementFactory,
             TechniqueFactory,
+            TechniqueRemovedConditionFactory,
             TraditionFactory,
         )
         from world.magic.models import (
@@ -184,11 +186,13 @@ class ContentExportTests(TestCase):
         )
         TechniqueDamageProfile.objects.create(technique=technique, damage_type=None)
         TechniqueAppliedConditionFactory(technique=technique, condition=ConditionTemplateFactory())
+        TechniqueRemovedConditionFactory(technique=technique, condition=ConditionTemplateFactory())
         TechniqueCapabilityGrantFactory(technique=technique, capability=CapabilityTypeFactory())
         TechniqueCapabilityRequirementFactory(
             technique=technique, capability=CapabilityTypeFactory()
         )
         TechniqueOutcomeModifier.objects.create(outcome=CheckOutcomeFactory(), modifier_value=-2)
+        technique.gift.resonances.add(ResonanceFactory())
 
         tradition_grant = TraditionGiftGrant.objects.create(
             tradition=TraditionFactory(), gift=technique.gift
@@ -211,3 +215,5 @@ class ContentExportTests(TestCase):
         technique.refresh_from_db()
         assert technique.restrictions.count() == 1
         assert list(path_grant.starter_techniques.all()) == [technique]
+        technique.gift.refresh_from_db()
+        assert technique.gift.resonances.count() == 1
