@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { MovementActions } from './MovementActions';
 import type { PlayerAction } from '@/scenes/actionTypes';
+import type { DispatchResult } from '@/combat/types';
 
 vi.mock('sonner', () => ({
   toast: {
@@ -12,6 +13,11 @@ vi.mock('sonner', () => ({
 }));
 
 import { toast } from 'sonner';
+
+/** Successful dispatch resolution — the full wire shape the tightened prop type requires. */
+function okDispatch(): Promise<DispatchResult> {
+  return Promise.resolve({ backend: 'registry', deferred: false, success: true });
+}
 
 function makeMoveAction(positionId: number, displayName: string): PlayerAction {
   return {
@@ -40,7 +46,7 @@ function makeMoveAction(positionId: number, displayName: string): PlayerAction {
 describe('MovementActions', () => {
   it('renders one button per action', () => {
     const actions = [makeMoveAction(1, 'Move to North Wall'), makeMoveAction(2, 'Move to Center')];
-    const dispatchAction = vi.fn(() => Promise.resolve());
+    const dispatchAction = vi.fn(okDispatch);
 
     render(<MovementActions actions={actions} isLocked={false} dispatchAction={dispatchAction} />);
 
@@ -52,7 +58,7 @@ describe('MovementActions', () => {
 
   it('click dispatches with the action ref and empty kwargs', async () => {
     const action = makeMoveAction(5, 'Move to Balcony');
-    const dispatchAction = vi.fn(() => Promise.resolve({ success: true }));
+    const dispatchAction = vi.fn(okDispatch);
     const user = userEvent.setup();
 
     render(<MovementActions actions={[action]} isLocked={false} dispatchAction={dispatchAction} />);
@@ -64,7 +70,7 @@ describe('MovementActions', () => {
 
   it('buttons are disabled when isLocked is true', () => {
     const actions = [makeMoveAction(3, 'Move to Gate')];
-    const dispatchAction = vi.fn(() => Promise.resolve());
+    const dispatchAction = vi.fn(okDispatch);
 
     render(<MovementActions actions={actions} isLocked={true} dispatchAction={dispatchAction} />);
 
@@ -72,7 +78,7 @@ describe('MovementActions', () => {
   });
 
   it('renders nothing when actions array is empty', () => {
-    const dispatchAction = vi.fn(() => Promise.resolve());
+    const dispatchAction = vi.fn(okDispatch);
     const { container } = render(
       <MovementActions actions={[]} isLocked={false} dispatchAction={dispatchAction} />
     );
