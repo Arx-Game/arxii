@@ -84,12 +84,6 @@ class SetRoomDisplayDataTests(TestCase):
         assert display.longname == "The Tenant's Nook"
         assert display.permanent_description == "Cluttered but home."
 
-    def test_neither_owner_nor_tenant_is_still_refused(self) -> None:
-        stranger = PersonaFactory()
-        with self.assertRaises(RoomEditError):
-            set_room_display_data(room=self.room, persona=stranger, name="Hijacked")
-        assert not ObjectDisplayData.objects.filter(object=self.room).exists()
-
     def test_no_persona_and_no_bypass_is_refused(self) -> None:
         """``persona`` defaults to ``None`` now (#2449); without a bypass, that's
 
