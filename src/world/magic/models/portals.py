@@ -12,11 +12,13 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+
 ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
 PERSONA_MODEL = "scenes.Persona"
 
 
-class PortalAnchorKind(SharedMemoryModel):
+class PortalAnchorKind(NaturalKeyMixin, SharedMemoryModel):
     """A staff-authored medium of portal travel (e.g. "Mirror").
 
     ``Technique.travel_anchor_kind`` points here to mark a technique as a
@@ -42,6 +44,11 @@ class PortalAnchorKind(SharedMemoryModel):
         default="steps into",
         help_text="Verb phrase narrating departure through an anchor of this kind.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["name"]

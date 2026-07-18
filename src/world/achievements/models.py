@@ -10,6 +10,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.constants import (
     ComparisonType,
     ConditionEventType,
@@ -94,7 +95,7 @@ class StatTracker(SharedMemoryModel):
         return f"{self.character_sheet} - {self.stat.key}: {self.value}"
 
 
-class Achievement(SharedMemoryModel):
+class Achievement(NaturalKeyMixin, SharedMemoryModel):
     """
     Definition of an achievement that characters can earn.
 
@@ -142,6 +143,11 @@ class Achievement(SharedMemoryModel):
         default=True,
         help_text="Inactive achievements cannot be earned",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["name"]

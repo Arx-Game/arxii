@@ -419,7 +419,7 @@ class ConsequencePoolChoiceAPITests(APITestCase):
         # Non-physical → magic shared default.
         mental_resp = self.client.post(
             "/api/magic/techniques/author/",
-            self._payload(action_category="mental"),
+            self._payload(action_category="mental", name="Spark Mental"),
             format="json",
         )
         self.assertEqual(mental_resp.status_code, 201, mental_resp.data)
