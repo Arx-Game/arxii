@@ -193,6 +193,32 @@ class IsSceneGMPrerequisite(Prerequisite):
         return False, "Only the scene's GM or staff can do that."
 
 
+def _resolve_room_from_kwarg_or_location(
+    actor: ObjectDB, context: dict | None
+) -> tuple[ObjectDB | None, str]:
+    """Resolve the anchor room: the ``room_id`` kwarg (web canvas) when supplied,
+    else the room the actor is standing in.
+
+    Returns ``(room, "")`` on success, or ``(None, refusal_message)`` on failure.
+    Shared by ``IsRoomOwnerPrerequisite`` and ``IsRoomTenantPrerequisite`` — both
+    prerequisites need identical room-anchor resolution, differing only in what
+    standing check they run against the resolved room.
+    """
+    kwargs = (context or {}).get("kwargs", {})
+    room_id = kwargs.get("room_id")
+    if room_id:
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+        profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb").first()
+        if profile is None:
+            return None, "No such room."
+        return profile.objectdb, ""
+    room = actor.location
+    if room is None:
+        return None, "You're not in a room."
+    return room, ""
+
+
 @dataclass
 class IsRoomTenantPrerequisite(Prerequisite):
     """The actor's active persona must have owner OR tenant standing in the room
@@ -207,6 +233,11 @@ class IsRoomTenantPrerequisite(Prerequisite):
     via ``is_owner``/``is_tenant``) is exactly "does this persona have standing
     at this room," which every current caller (``SetPrimaryHomeAction``,
     ``TagRoomResonanceAction``, ``UntagRoomResonanceAction``) wants.
+
+    Anchors on the ``room_id`` kwarg when supplied (web canvas), else the
+    actor's own location — the same resolution ``IsRoomOwnerPrerequisite`` uses,
+    needed so ``RoomEditAction`` (#2452) can use this prerequisite for its own
+    room_id-aware targeting.
     """
 
     def is_met(
@@ -220,9 +251,9 @@ class IsRoomTenantPrerequisite(Prerequisite):
         from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        room = actor.location
+        room, error = _resolve_room_from_kwarg_or_location(actor, context)
         if room is None:
-            return False, "You're not in a room."
+            return False, error
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
@@ -253,21 +284,9 @@ class IsRoomOwnerPrerequisite(Prerequisite):
         from world.locations.services import is_owner  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        kwargs = (context or {}).get("kwargs", {})
-        room_id = kwargs.get("room_id")
-        if room_id:
-            from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-
-            profile = (
-                RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb").first()
-            )
-            if profile is None:
-                return False, "No such room."
-            room = profile.objectdb
-        else:
-            room = actor.location
-            if room is None:
-                return False, "You're not in a room."
+        room, error = _resolve_room_from_kwarg_or_location(actor, context)
+        if room is None:
+            return False, error
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):

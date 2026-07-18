@@ -64,6 +64,10 @@ cache mid-deserialization.
   natural fields.
 - Don't build cache-flush workarounds; upsert is the standing answer (the
   identity map is load-bearing — see the `sharedmemory-model` skill).
+- **Silent skips now have a gate (#2501):** `tools/build_content_fixtures.py --load
+  --strict` exits 7 when a skip isn't covered by `fixtures/KNOWN_DRIFT.txt`, and a
+  per-source health report always prints after the load summary — see
+  `docs/systems/INDEX.md`'s "Strict-mode health gate" entry.
 
 **Grid bundles follow the same upsert discipline, sequenced after content
 fixtures (#2436/#2448):** `core_management.grid_import.load_grid_bundles()`

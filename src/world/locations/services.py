@@ -1584,9 +1584,9 @@ def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to th
     is_public: bool | None = None,
     bypass_ownership: bool = False,
 ) -> None:
-    """Owner-gated edit of a room's display name, description, and public listing.
+    """Owner-or-tenant-gated edit of a room's display name, description, and public listing.
 
-    Re-checks ownership as a hard boundary (the action prerequisite is the primary
+    Re-checks owner-or-tenant standing as a hard boundary (the action prerequisite is the primary
     UX gate). Refuses to make a room public while a non-public scene is active in
     it. Writes name → ``ObjectDisplayData.longname``, description →
     ``permanent_description``, listing → ``RoomProfile.is_public``. Idempotent;
@@ -1601,7 +1601,9 @@ def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to th
     """
     from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
 
-    if not bypass_ownership and (persona is None or not is_owner(persona, room)):
+    if not bypass_ownership and (
+        persona is None or not (is_owner(persona, room) or is_tenant(persona, room))
+    ):
         msg = "You don't own this room."
         raise RoomEditError(msg)
     if is_public is True and _has_active_non_public_scene(room):
