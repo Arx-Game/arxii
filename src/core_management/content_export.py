@@ -93,6 +93,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # skills
         "skills.skill",
         # species
+        "species.language",
         "species.species",
         # tarot
         "tarot.tarotcard",
