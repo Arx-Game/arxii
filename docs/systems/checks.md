@@ -49,6 +49,16 @@ result.chart_name     # str: chart name or "No Chart Found"
 | `CheckTypeTrait` | Weighted trait contribution to a check type | `check_type` (FK CheckType), `trait` (FK Trait), `weight` (Decimal, default 1.0) |
 | `CheckTypeAspect` | Weighted aspect relevance for a check type | `check_type` (FK CheckType), `aspect` (FK Aspect), `weight` (Decimal, default 1.0) |
 
+**Rule: a `CheckType.name` must never be duplicated across categories.** The DB
+constraint is only `unique_together = ["name", "category"]`, but several call sites
+look a `CheckType` up by bare name with no category filter — e.g.
+`CheckType.objects.get(name="Stealth")` (`world/npc_services/guard_services.py:83`)
+and `CheckType.objects.get_or_create(name=ENDURANCE_CHECK_NAME, ...)`
+(`world/vitals/services.py:255`). A second same-named `CheckType` in a different
+category makes those lookups raise `MultipleObjectsReturned` (or silently return the
+wrong row for `get_or_create`) — treat every `CheckType.name` as globally unique in
+practice, even though the schema doesn't enforce it (#2501 content-pipeline audit).
+
 ---
 
 ## Key Methods

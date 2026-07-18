@@ -36,6 +36,27 @@ force a rebuild after a model change. A plain `arx manage migrate` (with no
 a deploy pipeline must invoke them explicitly or lookups like the
 `social_engagement` KudosSourceCategory row will be missing.
 
+## Content Pipeline
+
+Loads/exports the private lore-repo content checkout (`CONTENT_REPO_PATH` in
+`src/.env`). See `docs/systems/INDEX.md`'s "Content-repo load" entry and
+`docs/evennia-quirks.md` (#946) for the upsert-not-`loaddata` rationale.
+
+- `just load-content` — build fixtures from the content checkout, then load them
+  (`tools/build_content_fixtures.py --load`; clones the checkout first if
+  `CONTENT_REPO_URL` is set and it doesn't exist yet).
+- `uv run python tools/build_content_fixtures.py --load --strict` — same load, but
+  exits `7` if any skipped row isn't covered by
+  `<content_root>/fixtures/KNOWN_DRIFT.txt` (#2501). A health report (per-source
+  skip counts, known-drift count, unexpected entries) always prints after the load
+  summary, `--strict` or not.
+- `just check-content` (`--check`) — validate content files + report remaining
+  `PLACEHOLDER` slots; writes nothing.
+- `just export-content` / `just check-export` — export authored content from the DB
+  to the content repo's `fixtures/` dir (`--check` for a dry run).
+- `just push-content` / `just check-push` — commit and push exported fixtures to the
+  content repo's origin `main` (`--check` for a dry run).
+
 ## Server Management
 
 - `arx start` — Start the Evennia server (**PREFERRED** for running the server)

@@ -5169,6 +5169,21 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   and the `--check`/admin-preview surfaces (warn) share. `world.seeds.character_creation.
   ensure_canonical_fallback_room()` houses the canonical fallback starting room in a
   reserved AUTHORED area (`slug="arx"`) for exactly this reason.
+- **Strict-mode health gate (#2501):** `tools/build_content_fixtures.py --load --strict`
+  exits `7` if any `world_result.skipped` entry isn't covered by
+  `<content_root>/fixtures/KNOWN_DRIFT.txt` (one substring pattern per line, `#`-comment
+  and blank lines ignored; absent file = no known drift). `core_management.content_health`
+  (`group_skips`, `load_known_drift`, `partition_skips`, `render_health_report`) is the
+  pure-python layer this rides — import-safe without Django, same convention as
+  `content_fixtures.py`. A health report (per-source skip counts, known-drift count, and
+  every unexpected skip verbatim) always prints after the load summary, `--strict` or not,
+  so a silent-skip regression (the #2501 root cause — 350 rows dropped with no signal) is
+  visible even on a plain `--load`. `--strict` requires `--load`.
+  `CONTENT_MODELS` (`core_management/content_export.py`) also gained
+  `mechanics.application`, `mechanics.prerequisite`, `mechanics.property`, and
+  `mechanics.propertycategory` — the loader was already dynamic (any `NaturalKeyMixin`
+  model can be fixture-loaded); this only widens the **export** allowlist to cover the
+  Capabilities & Challenges catalog.
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,

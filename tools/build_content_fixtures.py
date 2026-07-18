@@ -29,6 +29,7 @@ from core_management.content_fixtures import (  # noqa: E402
     build_all,
     write_fixtures,
 )
+from core_management.content_health import load_known_drift, render_health_report  # noqa: E402
 from core_management.content_repo import load_dotenv_content_path  # noqa: E402
 
 
@@ -136,8 +137,16 @@ def _load_world(content_root: Path) -> WorldLoadResult:
         raise _ExitEarly(2) from exc
 
 
-def _print_load_report(world_result: WorldLoadResult) -> None:
-    """Print the ``--load`` summary: content counts, grid counts, deferred, skips."""
+def _print_load_report(world_result: WorldLoadResult, content_root: Path) -> bool:
+    """Print the ``--load`` summary + health report; return the health verdict.
+
+    Summary covers content counts, grid counts, deferred, and skips (as
+    before). The health report (#2501) always follows: it groups
+    ``world_result.skipped`` against ``fixtures/KNOWN_DRIFT.txt`` so expected,
+    pre-existing drift doesn't drown out a genuinely new regression. The
+    returned bool is ``True`` iff every skip matched a known-drift pattern —
+    ``_run`` uses it to decide the ``--strict`` exit code.
+    """
     print(f"loaded: {world_result.created} created, {world_result.updated} updated.")
     if world_result.deferred_resolved:
         print(
@@ -157,6 +166,13 @@ def _print_load_report(world_result: WorldLoadResult) -> None:
         print(f"skipped: {len(world_result.skipped)} object(s):")
         for msg in world_result.skipped:
             print(f"  {msg}")
+
+    patterns = load_known_drift(content_root)
+    lines, healthy = render_health_report(world_result.skipped, patterns)
+    print("health report:")
+    for line in lines:
+        print(f"  {line}")
+    return healthy
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -188,7 +204,9 @@ def _run(args: argparse.Namespace) -> int:
         # Upsert path (NOT loaddata — see load_entries docstring). Sequences
         # content fixtures -> grid bundles -> deferred natural-key retry
         # (#2448) via load_world_content, rather than a bare load_entries.
-        _print_load_report(_load_world(content_root))
+        healthy = _print_load_report(_load_world(content_root), content_root)
+        if args.strict and not healthy:
+            return 7
     return 0
 
 
@@ -205,7 +223,14 @@ def main() -> int:
         default=None,
         help="override the content checkout location (default: CONTENT_REPO_PATH)",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="with --load: exit 7 if any skip is not covered by fixtures/KNOWN_DRIFT.txt",
+    )
     args = parser.parse_args()
+    if args.strict and not args.load:
+        parser.error("--strict requires --load")
 
     try:
         return _run(args)

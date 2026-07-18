@@ -101,8 +101,12 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.tradition",
         "magic.traditiongiftgrant",
         # mechanics
+        "mechanics.application",
         "mechanics.modifiercategory",
         "mechanics.modifiertarget",
+        "mechanics.prerequisite",
+        "mechanics.property",
+        "mechanics.propertycategory",
         # realms
         "realms.realm",
         # skills
