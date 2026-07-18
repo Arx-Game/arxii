@@ -88,6 +88,14 @@ class Resonance(NaturalKeyMixin, SharedMemoryModel):
         related_name="resonances",
         help_text="Properties associated with this resonance (e.g., Flame → flame property).",
     )
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="resonances",
+        help_text="Lore entry this resonance is bound to, if any.",
+    )
     objects = ResonanceManager()
 
     @cached_property
