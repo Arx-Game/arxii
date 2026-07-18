@@ -112,6 +112,12 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
         help_text=("Curated subset of this gift's techniques minted on crossing into this path."),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["path", "gift"]
+        dependencies = ["classes.Path", "magic.Gift"]
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -121,12 +127,6 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
         ]
         verbose_name = "Path Gift Grant"
         verbose_name_plural = "Path Gift Grants"
-
-    class NaturalKeyConfig:
-        fields = ["path", "gift"]
-        dependencies = ["classes.Path", "magic.Gift"]
-
-    objects = NaturalKeyManager()
 
     def __str__(self) -> str:
         return f"{self.path} grants {self.gift}"
@@ -175,6 +175,12 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["tradition", "gift"]
+        dependencies = ["magic.Tradition", "magic.Gift"]
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -184,12 +190,6 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         ]
         verbose_name = "Tradition Gift Grant"
         verbose_name_plural = "Tradition Gift Grants"
-
-    class NaturalKeyConfig:
-        fields = ["tradition", "gift"]
-        dependencies = ["magic.Tradition", "magic.Gift"]
-
-    objects = NaturalKeyManager()
 
     def __str__(self) -> str:
         return f"{self.tradition} grants {self.gift}"

@@ -34482,8 +34482,7 @@ components:
         name:
           type: string
           readOnly: true
-          description: Name of the technique (not unique - different characters can
-            have same name).
+          description: Name of the technique (unique within its gift).
         description:
           type: string
           readOnly: true
@@ -54832,8 +54831,7 @@ components:
         name:
           type: string
           minLength: 1
-          description: Name of the technique (not unique - different characters can
-            have same name).
+          description: Name of the technique (unique within its gift).
           maxLength: 200
         gift:
           type: integer
@@ -63652,8 +63650,7 @@ components:
           readOnly: true
         name:
           type: string
-          description: Name of the technique (not unique - different characters can
-            have same name).
+          description: Name of the technique (unique within its gift).
           maxLength: 200
         gift:
           type: integer
@@ -63794,8 +63791,7 @@ components:
         name:
           type: string
           minLength: 1
-          description: Name of the technique (not unique - different characters can
-            have same name).
+          description: Name of the technique (unique within its gift).
           maxLength: 200
         gift:
           type: integer

@@ -1685,6 +1685,38 @@ Cached accessors (never query directly):
 
 ---
 
+### Content pipeline — magic catalog export/import (#2486)
+
+The full magic catalog is lore-repo-authorable content, not admin-only data: `Affinity`,
+`Resonance`, `Facet`, `Gift`, `Tradition`, `IntensityTier`, `Technique` + its payload rows
+(`TechniqueCapabilityGrant`/`TechniqueCapabilityRequirement`/`TechniqueDamageProfile`/
+`TechniqueOutcomeModifier`/`TechniqueAppliedCondition`/`TechniqueRemovedCondition`),
+`TechniqueStyle`, `Restriction`, `EffectType`, `PortalAnchorKind`, `PathGiftGrant`,
+`TraditionGiftGrant`, plus `species.SpeciesGiftGrant` — all listed in `CONTENT_MODELS`
+(`core_management/content_export.py`) and exported/imported by the shared
+`content_export.py`/`content_fixtures.py` pipeline (see `docs/systems/INDEX.md`'s
+"Content-repo load" entry for the driver). Every model's natural key is its
+`NaturalKeyConfig.fields`: `Technique` is keyed `(gift, name)` (the `unique_technique_gift_name`
+`UniqueConstraint` backs it — authoring a second technique with the same name under the
+same gift raises `DuplicateTechniqueName`, a clean 400, not an `IntegrityError`); the grant
+tables (`PathGiftGrant`, `TraditionGiftGrant`, `SpeciesGiftGrant`) key on their FK pairs
+(`(path, gift)`, `(tradition, gift)`, `(species, gift)`); the other payload rows key on their
+owning technique plus their own unique-constraint fields, except `TechniqueOutcomeModifier`,
+a global outcome-tier table with no technique FK — it's a `OneToOneField` to
+`traits.CheckOutcome` and keys on `outcome` alone; `PortalAnchorKind` keys on `name`
+(`achievements.Achievement` also gained a name natural key this branch but is not itself
+in `CONTENT_MODELS`). `load_entries` (`core_management/content_fixtures.py`) upserts by
+natural key. There is no in-repo seed catalog to fall back on: the lore repo is the
+single source (`seed_starter_gift_catalog()` was retired by #2474 — see "CG Starter
+Gift/Technique Catalog" and "Content-vs-config boundary in the dev seed" above for the
+seed-vs-content sequencing, which seeds the "Technique Cast" `ActionTemplate` config
+prerequisite before `load_world_content()` runs, and ADR-0142 for the rationale).
+The deferred-retry loop resolves load-order gaps *within* the content/grid load; it
+cannot conjure a config row the load itself never creates — which is why the config
+prerequisites run first in that sequence.
+
+---
+
 ## Key Methods and Properties
 
 ### CharacterAura

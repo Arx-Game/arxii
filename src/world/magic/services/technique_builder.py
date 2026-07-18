@@ -9,6 +9,7 @@ import logging
 from django.db import transaction
 
 from world.magic.exceptions import (
+    DuplicateTechniqueName,
     GiftNotOwned,
     TechniqueAuthoringNotPermitted,
     TechniqueBudgetExceeded,
@@ -156,25 +157,35 @@ def create_technique(  # noqa: PLR0913
     starter-gift catalog seed. Does NOT create a CharacterTechnique.
 
     Defaults action_template to the shared 'Technique Cast' template so every
-    technique is castable standalone; pass an explicit template to override."""
+    technique is castable standalone; pass an explicit template to override.
+
+    Raises:
+        DuplicateTechniqueName: if a Technique already exists for this (gift, name) —
+            pre-checked ahead of the INSERT so a name collision fails clean instead of
+            an unhandled IntegrityError against the ``unique_technique_name_per_gift``
+            DB constraint (#2486).
+    """
     if action_template is None:
         from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
 
         action_template = get_standalone_cast_template()
-    return Technique.objects.create(
-        name=name,
-        gift=gift,
-        style=style,
-        effect_type=effect_type,
-        intensity=intensity,
-        control=control,
-        anima_cost=anima_cost,
-        level=level,
-        action_category=action_category,
-        description=description,
-        creator=creator,
-        action_template=action_template,
-    )
+    with transaction.atomic():
+        if Technique.objects.filter(gift=gift, name=name).exists():
+            raise DuplicateTechniqueName
+        return Technique.objects.create(
+            name=name,
+            gift=gift,
+            style=style,
+            effect_type=effect_type,
+            intensity=intensity,
+            control=control,
+            anima_cost=anima_cost,
+            level=level,
+            action_category=action_category,
+            description=description,
+            creator=creator,
+            action_template=action_template,
+        )
 
 
 def price_design(

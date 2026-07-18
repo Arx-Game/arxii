@@ -857,50 +857,26 @@ class WorldLoadResult:
     deferred_resolved: int
 
 
-def load_world_content(content_root: Path) -> WorldLoadResult:
-    """Sequence content fixtures -> grid bundles -> deferred natural-key retry (#2448).
+def _retry_deferred(
+    deferred: list[tuple[dict, Path | None]], result: BuildResult
+) -> tuple[int, int, int]:
+    """Retry deferred fixture objects to a fixed point (#2474/#2486).
 
-    Closes the circular dependency between content fixtures and the grid:
-    e.g. a ``StartingArea`` fixture's ``default_starting_room`` names a room
-    by its ``RoomProfile`` natural key (``fixture_key``), but that room only
-    exists once the grid bundles (Task 4's ``load_grid_bundles``) import —
-    and the grid bundles are a separate file tree from the content fixtures.
-    Neither can safely load first if the other's target might not exist yet,
-    so this driver:
+    A single retry pass is not enough: catalog fixtures chain natural-key
+    dependencies ≥ 2 levels deep against alphabetical load order (grant →
+    technique → gift → resonance), so each pass runs with deferral ON until a
+    pass resolves nothing new (each productive pass strictly shrinks the
+    list — bounded, no retry knob). One final pass with deferral OFF then
+    turns every still-blocked object into a terminal, diagnosed entry in
+    ``result.skipped`` instead of looping forever.
 
-    1. Builds + loads the content fixtures with ``defer_unresolved=True`` —
-       an unresolved natural-key FK target (only that failure mode) is queued
-       instead of skipped.
-    2. Loads the grid bundles (creating the rooms/areas/exits those FK
-       targets may have named).
-    3. Retries the deferred set to a FIXED POINT (#2474 review fix), not just
-       once: a multi-hop chain (e.g. ``PathGiftGrant.starter_techniques`` names
-       a ``Technique``, which itself names a ``Gift`` that was ALSO deferred)
-       can need more than one retry pass to fully resolve, since alphabetical
-       file order can attempt the grant before the technique it depends on
-       even within the retry set. Each pass keeps ``defer_unresolved=True`` so
-       a still-blocked object stays queued rather than skipping early; the
-       pass loops while it makes progress (the deferred set shrinks — either
-       something resolved or a genuinely different failure permanently
-       skipped it). Once a pass resolves/skips nothing new, one final pass
-       runs with ``defer_unresolved=False`` so every object still stuck lands
-       in ``skipped`` with a diagnostic — exactly the same terminal shape as
-       today's single-pass skip, just reached only once retrying stops paying off.
-
-    Requires Django to be configured (delegates to ``build_all``/
-    ``load_entries``/``load_grid_bundles``, all of which need it); imports of
-    those are deferred so this module stays import-safe for pure validation
-    callers that never load.
+    Module-level (not nested in ``load_world_content``) so the multi-pass
+    behavior is directly unit-testable. Returns
+    ``(created, updated, deferred_resolved)``.
     """
     from django.apps import apps  # noqa: PLC0415
 
-    from core_management.grid_import import load_grid_bundles  # noqa: PLC0415
-
-    result = build_all(content_root)
-    created, updated, deferred = load_entries(result, defer_unresolved=True)
-    grid = load_grid_bundles(content_root)
-
-    deferred_resolved = 0
+    created = updated = deferred_resolved = 0
 
     def _retry_pass(
         pending: list[tuple[dict, Path | None]], *, defer_unresolved: bool
@@ -942,6 +918,54 @@ def load_world_content(content_root: Path) -> WorldLoadResult:
             _retry_pass(next_pending, defer_unresolved=False)
             break
         pending = next_pending
+
+    return created, updated, deferred_resolved
+
+
+def load_world_content(content_root: Path) -> WorldLoadResult:
+    """Sequence content fixtures -> grid bundles -> deferred natural-key retry (#2448).
+
+    Closes the circular dependency between content fixtures and the grid:
+    e.g. a ``StartingArea`` fixture's ``default_starting_room`` names a room
+    by its ``RoomProfile`` natural key (``fixture_key``), but that room only
+    exists once the grid bundles (Task 4's ``load_grid_bundles``) import —
+    and the grid bundles are a separate file tree from the content fixtures.
+    Neither can safely load first if the other's target might not exist yet,
+    so this driver:
+
+    1. Builds + loads the content fixtures with ``defer_unresolved=True`` —
+       an unresolved natural-key FK target (only that failure mode) is queued
+       instead of skipped.
+    2. Loads the grid bundles (creating the rooms/areas/exits those FK
+       targets may have named).
+    3. Retries the deferred set to a FIXED POINT (#2474 review fix), not just
+       once: a multi-hop chain (e.g. ``PathGiftGrant.starter_techniques`` names
+       a ``Technique``, which itself names a ``Gift`` that was ALSO deferred)
+       can need more than one retry pass to fully resolve, since alphabetical
+       file order can attempt the grant before the technique it depends on
+       even within the retry set. Each pass keeps ``defer_unresolved=True`` so
+       a still-blocked object stays queued rather than skipping early; the
+       pass loops while it makes progress (the deferred set shrinks — either
+       something resolved or a genuinely different failure permanently
+       skipped it). Once a pass resolves/skips nothing new, one final pass
+       runs with ``defer_unresolved=False`` so every object still stuck lands
+       in ``skipped`` with a diagnostic — exactly the same terminal shape as
+       today's single-pass skip, just reached only once retrying stops paying off.
+
+    Requires Django to be configured (delegates to ``build_all``/
+    ``load_entries``/``load_grid_bundles``, all of which need it); imports of
+    those are deferred so this module stays import-safe for pure validation
+    callers that never load.
+    """
+    from core_management.grid_import import load_grid_bundles  # noqa: PLC0415
+
+    result = build_all(content_root)
+    created, updated, deferred = load_entries(result, defer_unresolved=True)
+    grid = load_grid_bundles(content_root)
+
+    retry_created, retry_updated, deferred_resolved = _retry_deferred(deferred, result)
+    created += retry_created
+    updated += retry_updated
 
     return WorldLoadResult(
         created=created,

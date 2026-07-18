@@ -20644,7 +20644,7 @@ export interface components {
      */
     CGTechniqueOption: {
       readonly id: number;
-      /** @description Name of the technique (not unique - different characters can have same name). */
+      /** @description Name of the technique (unique within its gift). */
       readonly name: string;
       /** @description Description of what this technique does. */
       readonly description: string;
@@ -31248,7 +31248,7 @@ export interface components {
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     PatchedTechniqueRequest: {
-      /** @description Name of the technique (not unique - different characters can have same name). */
+      /** @description Name of the technique (unique within its gift). */
       name?: string;
       /** @description The gift this technique belongs to. */
       gift?: number;
@@ -35601,7 +35601,7 @@ export interface components {
     /** @description Serializer for Technique records with intensity and control stats. */
     Technique: {
       readonly id: number;
-      /** @description Name of the technique (not unique - different characters can have same name). */
+      /** @description Name of the technique (unique within its gift). */
       name: string;
       /** @description The gift this technique belongs to. */
       gift: number;
@@ -35668,7 +35668,7 @@ export interface components {
     TechniqueReachEnum: 'same' | 'adjacent' | 'any' | 'reach_n';
     /** @description Serializer for Technique records with intensity and control stats. */
     TechniqueRequest: {
-      /** @description Name of the technique (not unique - different characters can have same name). */
+      /** @description Name of the technique (unique within its gift). */
       name: string;
       /** @description The gift this technique belongs to. */
       gift: number;

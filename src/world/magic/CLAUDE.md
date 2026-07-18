@@ -75,6 +75,13 @@ The magic system for Arx II. Power flows from identity and connection.
 
 ### Gifts & Techniques
 - `Gift` - Thematic collections of magical techniques (M2M to Resonance — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
+- **Content pipeline (#2486):** the catalog (`Gift`/`Technique` + grant tables
+  `PathGiftGrant`/`TraditionGiftGrant`/`species.SpeciesGiftGrant` + `Technique`'s payload
+  rows) is lore-repo exportable via `CONTENT_MODELS` with natural keys —
+  `Technique` is keyed `(gift, name)`, now DB-unique per gift
+  (`unique_technique_gift_name`), so authoring a duplicate raises
+  `DuplicateTechniqueName` (clean 400) instead of an `IntegrityError`. See
+  `docs/systems/magic.md`'s "Content pipeline" section for the full model list.
 - `TechniqueStyle` - How magic manifests (Manifestation, Subtle, Performance, Prayer, Incantation) with `allowed_paths` M2M
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)

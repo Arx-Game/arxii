@@ -87,8 +87,16 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.glimpsetagdistinctionsuggestion",
         "magic.intensitytier",
         "magic.pathgiftgrant",
+        "magic.portalanchorkind",
         "magic.resonance",
+        "magic.restriction",
         "magic.technique",
+        "magic.techniqueappliedcondition",
+        "magic.techniquecapabilitygrant",
+        "magic.techniquecapabilityrequirement",
+        "magic.techniquedamageprofile",
+        "magic.techniqueoutcomemodifier",
+        "magic.techniqueremovedcondition",
         "magic.techniquestyle",
         "magic.tradition",
         "magic.traditiongiftgrant",
@@ -102,6 +110,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # species
         "species.language",
         "species.species",
+        "species.speciesgiftgrant",
         # tarot
         "tarot.tarotcard",
         # traits

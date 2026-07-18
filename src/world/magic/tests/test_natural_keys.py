@@ -1,4 +1,4 @@
-"""Natural key tests for PathGiftGrant + TraditionGiftGrant (#2474 Task 1).
+"""Natural key tests for the magic catalog (#2474 Task 1 + #2486).
 
 Both models already have unique constraints on (path, gift) / (tradition, gift) --
 these tests prove the NaturalKeyMixin wiring round-trips through
@@ -78,3 +78,48 @@ class TechniqueNaturalKeyUniquenessTest(TestCase):
         # Must not raise -- name alone is explicitly not unique.
         TechniqueFactory(gift=second_gift, name="Shared Name", damage_profile=False)
         assert Technique.objects.filter(name="Shared Name").count() == 2
+
+
+class TechniqueNaturalKeyRoundTripTest(TestCase):
+    """#2486: Technique's own (gift, name) natural key round-trips."""
+
+    def test_natural_key_round_trip(self) -> None:
+        technique = TechniqueFactory(name="Ember Lash", damage_profile=False)
+        key = technique.natural_key()
+        assert key[-1] == "Ember Lash"
+        assert Technique.objects.get_by_natural_key(*key) == technique
+
+
+class PayloadNaturalKeyTest(TestCase):
+    """#2486: payload child rows carry composite natural keys."""
+
+    def test_damage_profile_untyped_round_trip(self) -> None:
+        """Null damage_type exercises the mixin's None-expansion path."""
+        from world.magic.factories import TechniqueDamageProfileFactory
+        from world.magic.models import TechniqueDamageProfile
+
+        profile = TechniqueDamageProfileFactory(damage_type=None)
+        assert TechniqueDamageProfile.objects.get_by_natural_key(*profile.natural_key()) == profile
+
+    def test_capability_grant_round_trip(self) -> None:
+        from world.magic.factories import TechniqueCapabilityGrantFactory
+        from world.magic.models import TechniqueCapabilityGrant
+
+        grant = TechniqueCapabilityGrantFactory()
+        assert TechniqueCapabilityGrant.objects.get_by_natural_key(*grant.natural_key()) == grant
+
+
+class VocabNaturalKeyTest(TestCase):
+    """#2486: name-keyed vocabulary models for FK-target portability."""
+
+    def test_portal_anchor_kind_round_trip(self) -> None:
+        from world.magic.models import PortalAnchorKind
+
+        kind = PortalAnchorKind.objects.create(name="Mirror")
+        assert PortalAnchorKind.objects.get_by_natural_key(*kind.natural_key()) == kind
+
+    def test_achievement_round_trip(self) -> None:
+        from world.achievements.models import Achievement
+
+        ach = Achievement.objects.create(name="First Steps", slug="first-steps", description="x")
+        assert Achievement.objects.get_by_natural_key(*ach.natural_key()) == ach

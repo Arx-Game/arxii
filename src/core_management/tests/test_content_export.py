@@ -143,6 +143,81 @@ class ContentExportTests(TestCase):
             model = apps.get_model(app_label, model_name)
             assert issubclass(model, NaturalKeyMixin), f"{model_label} lacks NaturalKeyMixin"
 
+    def test_magic_catalog_round_trips_with_payload(self) -> None:
+        """A payload-bearing Technique + all three grant tables export → load = no-op."""
+        from world.classes.factories import PathFactory
+        from world.conditions.factories import (
+            CapabilityTypeFactory,
+            ConditionTemplateFactory,
+            DamageTypeFactory,
+        )
+        from world.magic.factories import (
+            GiftFactory,
+            ResonanceFactory,
+            RestrictionFactory,
+            TechniqueAppliedConditionFactory,
+            TechniqueCapabilityGrantFactory,
+            TechniqueCapabilityRequirementFactory,
+            TechniqueFactory,
+            TechniqueRemovedConditionFactory,
+            TraditionFactory,
+        )
+        from world.magic.models import (
+            PathGiftGrant,
+            PortalAnchorKind,
+            TechniqueDamageProfile,
+            TechniqueOutcomeModifier,
+            TraditionGiftGrant,
+        )
+        from world.species.factories import SpeciesGiftGrantFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        anchor = PortalAnchorKind.objects.create(name="Mirror RT")
+        # damage_profile=False: TechniqueFactory's post_generation hook auto-seeds an
+        # untyped damage profile from EffectType.base_power (default 10), which would
+        # collide with the explicit untyped TechniqueDamageProfile.objects.create(...)
+        # below (unique_untyped_damage_profile_per_technique is one-per-technique).
+        technique = TechniqueFactory(
+            name="Round Trip Bolt", travel_anchor_kind=anchor, damage_profile=False
+        )
+        technique.restrictions.add(RestrictionFactory(name="RT Touch"))
+        TechniqueDamageProfile.objects.create(
+            technique=technique, damage_type=DamageTypeFactory(), base_damage=3
+        )
+        TechniqueDamageProfile.objects.create(technique=technique, damage_type=None)
+        TechniqueAppliedConditionFactory(technique=technique, condition=ConditionTemplateFactory())
+        TechniqueRemovedConditionFactory(technique=technique, condition=ConditionTemplateFactory())
+        TechniqueCapabilityGrantFactory(technique=technique, capability=CapabilityTypeFactory())
+        TechniqueCapabilityRequirementFactory(
+            technique=technique, capability=CapabilityTypeFactory()
+        )
+        TechniqueOutcomeModifier.objects.create(outcome=CheckOutcomeFactory(), modifier_value=-2)
+        technique.gift.resonances.add(ResonanceFactory())
+
+        tradition_grant = TraditionGiftGrant.objects.create(
+            tradition=TraditionFactory(), gift=technique.gift
+        )
+        tradition_grant.signature_techniques.set([technique])
+        path_grant = PathGiftGrant.objects.create(path=PathFactory(), gift=technique.gift)
+        path_grant.starter_techniques.set([technique])
+        SpeciesGiftGrantFactory(gift=GiftFactory(name="RT Minor Gift"))
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == [], result.errors
+
+        load_result = build_all(self.root)
+        created, _updated, deferred = load_entries(load_result, defer_unresolved=True)
+        assert created == 0, f"Round-trip created {created} records: {load_result.skipped}"
+        assert deferred == [], f"Round-trip deferred {len(deferred)} records"
+        # M2M survived the trip:
+        technique.refresh_from_db()
+        assert technique.restrictions.count() == 1
+        assert list(path_grant.starter_techniques.all()) == [technique]
+        technique.gift.refresh_from_db()
+        assert technique.gift.resonances.count() == 1
+
 
 class MagicCatalogContentExportTests(TestCase):
     """Round-trip coverage for the five magic catalog models (#2474).
