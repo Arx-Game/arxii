@@ -1806,3 +1806,50 @@ describe('YourTurn — server is_ready lock (#2423)', () => {
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Round-advance round-scoped state reset (#2423 finding 4)
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — round-advance clash reset (#2423 finding 4)', () => {
+  it('does not carry a round-N clash selection into the round-N+1 submit', async () => {
+    setupMocks();
+    const clashAction = makePlayerAction(42, 'The Great Clash');
+
+    const { rerender } = render(
+      <YourTurn {...defaultProps({ roundNumber: 1, availableActions: [clashAction] })} />,
+      { wrapper: createWrapper() }
+    );
+
+    // Select the clash in round 1 — no submit yet.
+    await userEvent.click(screen.getByTestId('clash-commit-btn-42'));
+    expect(screen.getByTestId('clash-strain-slider-42')).toBeInTheDocument();
+
+    // Advance to round 2 (same clash action still offered by the server).
+    // Deliberately reuses the SAME wrapper/QueryClientProvider instance (RTL's
+    // `rerender` re-wraps with the original `wrapper` automatically) so the
+    // component does NOT remount — only its props change — otherwise a fresh
+    // mount would trivially reset all local state and mask the bug (#2423).
+    rerender(<YourTurn {...defaultProps({ roundNumber: 2, availableActions: [clashAction] })} />);
+
+    // The round-N selection must not have survived the reset — no strain
+    // slider, no selected styling on the commit button.
+    await waitFor(() => {
+      expect(screen.queryByTestId('clash-strain-slider-42')).not.toBeInTheDocument();
+    });
+
+    // Submit round 2 with nothing declared.
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    // The dispatched jobs must NOT include a clash contribution carried over
+    // from round 1's stale `selectedClashRef` — this is the exact bug (#2423).
+    const calls = mockMutateAsync.mock.calls as Array<
+      [{ ref: Record<string, unknown>; kwargs: Record<string, unknown> }]
+    >;
+    const staleClashCall = calls.find((c) => c[0].ref.clash_id === 42);
+    expect(staleClashCall).toBeUndefined();
+  });
+});
