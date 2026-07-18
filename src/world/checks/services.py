@@ -739,10 +739,11 @@ def collect_check_modifiers(
         )
 
     # --- CAPABILITY contributions (#2505) ---
-    # Authored CheckTypeCapabilityModifier rows — mirrors _calculate_capability_points
-    # (the rolled-total math in _compute_check_breakdown) so recorded provenance matches
-    # what actually moved total_points. Reuses the isinstance guard: a mocked check_type
-    # has no real reverse ``capability_modifiers`` manager.
+    # Authored CheckTypeCapabilityModifier rows. Shares the _capability_point_allocation
+    # helper with _calculate_capability_points (the roll path) so recorded provenance always
+    # sums to exactly what moved total_points, never independently re-derived. Reuses the
+    # isinstance guard: a mocked check_type has no real reverse ``capability_modifiers``
+    # manager.
     if isinstance(check_type, _DjangoModel):
         contributions.extend(_capability_contributions(character_sheet, check_type))
 

@@ -62,6 +62,31 @@ category makes those lookups raise `MultipleObjectsReturned` (or silently return
 wrong row for `get_or_create`) — treat every `CheckType.name` as globally unique in
 practice, even though the schema doesn't enforce it (#2501 content-pipeline audit).
 
+### Authoring guardrail: one channel per condition/check pair (#2505)
+
+A condition can reach the same check through **two independent channels**, and
+authoring both for the same (condition, check_type) pair silently double-counts
+the condition's effect:
+
+1. **Direct**: a `ConditionCheckModifier` (`world/conditions/models.py`) applies a flat
+   value straight to `check_type` while the condition is active.
+2. **Indirect**: a `ConditionCapabilityEffect` boosts a `CapabilityType`'s value (folded
+   in by `get_effective_capability_value`, the agency oracle), and that same
+   `CapabilityType` is also linked to `check_type` via a weighted
+   `CheckTypeCapabilityModifier`.
+
+If both exist for the same condition/check pair, the condition's effect lands on the
+roll twice. **Author exactly one channel per condition/check pair** — pick the direct
+`ConditionCheckModifier` when the effect is check-specific and shouldn't ripple to
+anything else that reads the capability, or route it through the capability
+(`ConditionCapabilityEffect` + `CheckTypeCapabilityModifier`) when the effect should
+also show up anywhere else that capability is read (available actions, other checks).
+This is the same curated-never-invented discipline as the rest of the modifier
+seam — nothing here is enforced by a DB constraint; it is a review-time authoring
+rule. This is independent of, and does not change, the existing `CheckType`
+`(name, category)` natural-key uniqueness rule.
+>>>>>>> 5f9d5eb9a (docs: authored capability→check links + ADR-0145 (#2505))
+
 ---
 
 ## Key Methods
