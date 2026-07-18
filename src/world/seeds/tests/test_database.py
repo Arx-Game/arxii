@@ -4,6 +4,8 @@ from unittest import mock
 from django.test import TestCase
 
 from core_management.content_fixtures import ContentError
+from world.magic.models import Technique
+from world.magic.seeds_cast import TECHNIQUE_CAST_TEMPLATE_NAME
 from world.seeds.clusters import seeded_models
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import STUB_TRAIT_NAME, stub_content_root
@@ -28,6 +30,28 @@ class TestSeedDevDatabase(TestCase):
         self.assertIn("content", report.clusters)
         self.assertGreater(report.clusters["content"], 0)
         self.assertTrue(Trait.objects.filter(name=STUB_TRAIT_NAME).exists())
+
+    @stub_content_root()
+    def test_technique_action_template_fk_resolves_on_first_run(self) -> None:
+        """First-run ordering gap (#2474): config prerequisites precede content load.
+
+        The stub's lore-repo-shaped Technique fixtures FK the shared "Technique
+        Cast" ActionTemplate by natural key, exactly like real lore-repo
+        Technique fixtures do. On a fresh database, that ActionTemplate is
+        pure config seeded by ``ensure_technique_cast_content()`` — which used
+        to run only later, inside the cluster-seeder loop, AFTER the content
+        load. Before the fix, ``load_world_content()``'s deferred-retry loop
+        could never resolve this FK (the config row it waits on is never
+        created by the content/grid load itself), so every Technique row was
+        silently skipped on the very first run. Asserting a stub Technique
+        exists with its action_template correctly wired proves the ordering
+        fix, not just that seeding didn't raise.
+        """
+        seed_dev_database()
+        technique = Technique.objects.filter(name="Burning Strike").first()
+        self.assertIsNotNone(technique)
+        self.assertIsNotNone(technique.action_template)
+        self.assertEqual(technique.action_template.name, TECHNIQUE_CAST_TEMPLATE_NAME)
 
     def test_missing_content_repo_raises_loudly_before_any_cluster_seeds(self) -> None:
         """Decision 5 (#2474): no silent skip, no synthetic fallback.

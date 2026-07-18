@@ -45,6 +45,8 @@ from pathlib import Path
 import tempfile
 from unittest import mock
 
+from world.magic.seeds_cast import TECHNIQUE_CAST_TEMPLATE_NAME
+
 #: Name of the Trait row the stub fixture below creates — tests proving the
 #: content load actually ran (not silently skipped) assert against this.
 STUB_TRAIT_NAME = "Seed Test Stub Skill"
@@ -380,6 +382,14 @@ def _build_starter_catalog_fixture_objects() -> list[dict]:
                     "name": technique_name,
                     "style": [style_name],
                     "effect_type": [effect_type_name],
+                    # Natural-key FK to the shared standalone-cast ActionTemplate
+                    # (#2474 first-run gap fix) — mirrors real lore-repo Technique
+                    # fixtures, which carry this FK so every technique is castable
+                    # standalone out of the box. Resolvable because
+                    # ``seed_dev_database()`` now seeds this config prerequisite
+                    # (``ensure_technique_cast_content()``) BEFORE the content
+                    # load runs.
+                    "action_template": [TECHNIQUE_CAST_TEMPLATE_NAME],
                     "anima_cost": 5,
                     "description": description,
                 },

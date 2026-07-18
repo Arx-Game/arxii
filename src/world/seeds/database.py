@@ -17,12 +17,25 @@ every other content-validation failure, matched here rather than inventing a
 parallel exception type). Path resolution reuses
 ``core_management.content_repo.resolve_content_root`` (the canonical env/
 ``.env`` lookup) rather than re-parsing the environment here.
+
+Config prerequisites come before EVEN the content load (#2474 first-run gap
+fix): lore-repo ``Technique`` fixtures FK an ``ActionTemplate`` by natural
+key (``["Technique Cast"]``), but that row is pure config seeded by
+``world.magic.seeds_cast.ensure_technique_cast_content()`` — which used to
+run only later, inside the cluster-seeder loop below. On a fresh database
+``load_world_content``'s deferred-retry loop (which only retries against
+rows the content/grid load itself creates) can never resolve that FK, so
+every Technique row was silently skipped on the very first run. The fix:
+config/lookup rows that content fixtures FK by natural key must exist
+BEFORE the content load runs; content itself never lives here — only the
+narrow, idempotent config prerequisite. See issue #2474 Decision 5.
 """
 
 from __future__ import annotations
 
 from core_management.content_fixtures import ContentError, load_world_content
 from core_management.content_repo import resolve_content_root
+from world.magic.seeds_cast import ensure_technique_cast_content
 from world.seeds.clusters import CLUSTER_SEEDERS, seeded_models
 from world.seeds.types import SeedReport
 
@@ -44,9 +57,20 @@ def seed_dev_database(*, verbose: bool = False) -> SeedReport:
     """
     report = SeedReport()
 
+    # Fail loud BEFORE writing anything (Decision 5) — checked first so the
+    # config prerequisite below never runs on a call that's about to raise.
     content_root = resolve_content_root()
     if content_root is None:
         raise ContentError(_MISSING_CONTENT_ROOT_MSG)
+
+    # Config prerequisite (#2474 first-run gap fix): the shared "Technique Cast"
+    # ActionTemplate (+ its CheckType/ConsequencePool) must exist before the
+    # content load, since lore-repo Technique fixtures FK it by natural key and
+    # the content load's own deferred-retry loop cannot conjure config rows the
+    # content/grid load never creates. Idempotent; not content — see the module
+    # docstring's "Config prerequisites" section.
+    ensure_technique_cast_content()
+
     content_result = load_world_content(content_root)
     report.clusters["content"] = content_result.created + content_result.updated
     if verbose:
