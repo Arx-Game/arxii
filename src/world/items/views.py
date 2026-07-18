@@ -1653,6 +1653,38 @@ class ReclamationClaimViewSet(viewsets.ViewSet):
         ).select_related("item_instance")
         return Response({"claims": [self._claim_payload(c) for c in claims]})
 
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="claimable")
+    def claimable(self, request: Request) -> Response:
+        """Items stolen from the viewer's characters with no open claim yet (#2368).
+
+        The filing seam: the victim discovers the theft here and mints the claim.
+        Self-scoped and tiny (a player's own unresolved thefts), so the per-item
+        provenance check stays a simple loop.
+        """
+        from world.items.constants import ClaimStatus, OwnershipEventType  # noqa: PLC0415
+        from world.items.models import OwnershipEvent  # noqa: PLC0415
+        from world.items.services.provenance import stolen_victim  # noqa: PLC0415
+
+        sheets = self._own_sheets(request)
+        candidate_items = {
+            event.item_instance
+            for event in OwnershipEvent.objects.filter(
+                event_type=OwnershipEventType.STOLEN,
+                from_character_sheet__in=sheets,
+            ).select_related("item_instance")
+        }
+        claimed_ids = set(
+            ReclamationClaim.objects.filter(
+                claimant_sheet__in=sheets, status=ClaimStatus.OPEN
+            ).values_list("item_instance_id", flat=True)
+        )
+        rows = [
+            {"item": item.pk, "item_name": item.display_name}
+            for item in candidate_items
+            if item.pk not in claimed_ids and stolen_victim(item) in sheets
+        ]
+        return Response({"claimable": rows})
+
     @action(detail=False, methods=[HTTPMethod.POST], url_path="file")
     def file_claim(self, request: Request) -> Response:
         from world.items.models import ItemInstance  # noqa: PLC0415

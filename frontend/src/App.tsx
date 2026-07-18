@@ -39,6 +39,7 @@ import { EventCreatePage } from '@/events/pages/EventCreatePage';
 import { EventEditPage } from '@/events/pages/EventEditPage';
 import { CodexPage } from './codex/pages/CodexPage';
 import { WardrobePage } from './inventory/pages/WardrobePage';
+import { ReclamationPage } from './reclamation/pages/ReclamationPage';
 import { MarketPage } from './market/MarketPage';
 import { FeedbackPage } from './submissions/pages/FeedbackPage';
 import { BugReportPage } from './submissions/pages/BugReportPage';
@@ -456,6 +457,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <WardrobePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reclamation"
+            element={
+              <ProtectedRoute>
+                <ReclamationPage />
               </ProtectedRoute>
             }
           />

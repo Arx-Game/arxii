@@ -3347,6 +3347,21 @@ material `lore_value` → suggested worth, surfaced as the read-only
 `create_solo_deed`, from `run_crafting_recipe`). Mint self-provenance now stamps
 `designer_*` too (#2066/#2243). Magnitudes PLACEHOLDER.
 
+**Theft reclamation (#2368):** `ReclamationClaim` (claimant/original-claimant sheets —
+the immunity anchor never moves on assignment; `estate_claim` bridge FK; `acquired_from`
+lineage) + `ClaimTraceStep` (one revealed hop per row). Services
+(`world.items.services.reclamation`): `file_theft_claim` (provenance-victim gate),
+`open_trace_for_estate_claim`, `assign_claim`, `advance_trace` (check-banded, one hop
+per success, botch chills `TRACE_CHILL_HOURS`), `file_reclamation_accusation` (lawful
+route — mints receiving-stolen-goods heat on the holder),
+`execute_lawful_seizure` / `record_steal_back` (both `_return_item` → RECOVERED
+provenance event clears the hot flag), `has_reclamation_standing`. API:
+`/api/items/reclamation-claims/` (list/file/claimable/advance/report/take-back,
+self-scoped; `claimable` lists the viewer's unfiled thefts — the filing seam). Web:
+`/reclamation` (`ReclamationPage` — file at discovery, follow the trail hop by hop,
+then choose lawful seizure vs steal-back; linked from the inventory sidebar). The
+holder is never notified a claim exists.
+
 - **Models:**
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,
     `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`

@@ -145,3 +145,41 @@ class RouteTests(ReclamationFixture):
         claim = self._traced_claim()
         # Factory characters have no location: no jurisdiction, no heat, no error.
         self.assertFalse(file_reclamation_accusation(claim))
+
+
+class ClaimableApiTests(ReclamationFixture):
+    """GET /api/items/reclamation-claims/claimable/ — the filing seam (#2368)."""
+
+    def _get(self, account):
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=account)
+        return client.get("/api/items/reclamation-claims/claimable/")
+
+    def _victim_account(self):
+        from world.roster.factories import RosterTenureFactory
+
+        tenure = RosterTenureFactory(roster_entry__character_sheet=self.victim)
+        return tenure.player_data.account
+
+    def test_victim_sees_unfiled_theft(self):
+        response = self._get(self._victim_account())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["claimable"],
+            [{"item": self.item.pk, "item_name": self.item.display_name}],
+        )
+
+    def test_filed_theft_leaves_the_list(self):
+        account = self._victim_account()
+        file_theft_claim(self.victim, self.item)
+        response = self._get(account)
+        self.assertEqual(response.data["claimable"], [])
+
+    def test_stranger_sees_nothing(self):
+        from world.roster.factories import RosterTenureFactory
+
+        stranger = RosterTenureFactory().player_data.account
+        response = self._get(stranger)
+        self.assertEqual(response.data["claimable"], [])

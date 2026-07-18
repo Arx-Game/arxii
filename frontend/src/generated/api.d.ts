@@ -8853,6 +8853,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/reclamation-claims/claimable/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Items stolen from the viewer's characters with no open claim yet (#2368).
+     *
+     *     The filing seam: the victim discovers the theft here and mints the claim.
+     *     Self-scoped and tiny (a player's own unresolved thefts), so the per-item
+     *     provenance check stays a simple loop.
+     */
+    get: operations['items_reclamation_claims_claimable_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/reclamation-claims/file/': {
     parameters: {
       query?: never;
@@ -48213,6 +48236,24 @@ export interface operations {
       path: {
         id: string;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_claimable_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;
