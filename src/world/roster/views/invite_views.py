@@ -65,9 +65,9 @@ class GameInviteViewSet(viewsets.ModelViewSet):
                 inviter=player_data,
                 message=serializer.validated_data["message"],
             )
-        except PermissionError as exc:
+        except PermissionError:
             return Response(
-                {"detail": str(exc)},
+                {"detail": "You do not meet the trust threshold to send invites."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -112,9 +112,9 @@ class GameInviteViewSet(viewsets.ModelViewSet):
             )
         try:
             invite = claim_game_invite(token=token, account=request.user)  # type: ignore[arg-type]
-        except ValueError as exc:
+        except ValueError:
             return Response(
-                {"detail": str(exc)},
+                {"detail": "Invite could not be claimed (invalid, claimed, revoked, or expired)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(
