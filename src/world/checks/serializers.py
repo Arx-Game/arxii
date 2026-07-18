@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
@@ -16,6 +17,19 @@ class ConsequenceOutcomeModifierSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConsequenceOutcomeModifier
         fields = ["source_kind", "source_label", "value"]
+
+
+class OutcomeDisplayRowSerializer(serializers.Serializer):
+    """Schema-only shape of get_outcome_display rows (world.checks.types.OutcomeDisplay).
+
+    Never instantiated for serialization — exists so drf-spectacular emits a
+    concrete component instead of {[key: string]: unknown} (#2423).
+    """
+
+    label = serializers.CharField()
+    tier_name = serializers.CharField()
+    weight = serializers.IntegerField()
+    is_selected = serializers.BooleanField()
 
 
 class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
@@ -57,6 +71,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    @extend_schema_field(OutcomeDisplayRowSerializer(many=True))
     def get_outcome_display(self, obj: ConsequenceOutcome) -> list[dict]:
         """Recompute the roulette from pool + selected_consequence on read.
 

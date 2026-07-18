@@ -533,6 +533,21 @@ class RoundActionSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 
 
+class ClashContributorSerializer(serializers.Serializer):
+    """Schema-only shape of get_contributors rows on ClashStateSerializer.
+
+    Never instantiated for serialization — exists so drf-spectacular emits a
+    concrete component instead of {[key: string]: unknown} (#2423). Mirrors
+    the frontend ``ClashContributor`` interface (combat/types.ts).
+    """
+
+    character_id = serializers.IntegerField(allow_null=True)
+    character_name = serializers.CharField()
+    action_slot = serializers.CharField()
+    progress_delta = serializers.IntegerField()
+    anima = serializers.IntegerField()
+
+
 class ClashStateSerializer(serializers.ModelSerializer):
     """Compact read serializer for an active Clash, surfaced on EncounterDetail.
 
@@ -560,6 +575,7 @@ class ClashStateSerializer(serializers.ModelSerializer):
             "side_favored",
         ]
 
+    @extend_schema_field(ClashContributorSerializer(many=True))
     def get_contributors(self, obj: Clash) -> list[dict[str, object]]:
         """Per-PC contribution rollup across all rounds of the clash.
 
@@ -1038,6 +1054,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             return ""
         return _render_surge_narration(curve, character_name)
 
+    @extend_schema_field(ClashStateSerializer(many=True))
     def get_clashes(self, obj: CombatEncounter) -> list[dict[str, Any]]:
         """Return active Clash records for this encounter.
 

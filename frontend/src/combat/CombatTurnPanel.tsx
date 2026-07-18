@@ -32,7 +32,6 @@ import { RoundFlow } from './sections/RoundFlow';
 import { EncounterOutcomeBanner } from './components/EncounterOutcomeBanner';
 import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
 import { OutcomeRoulette } from './OutcomeRoulette';
-import type { OutcomeDisplayRow } from './api';
 import type { components } from '@/generated/api';
 import type { CastPosition, PositionTargetShape } from '@/actions/types';
 
@@ -363,7 +362,7 @@ export function CombatTurnPanel({
           {!collapsed.outcomeRoulette && (
             <div className="border-t border-border px-3 py-2">
               <OutcomeRoulette
-                outcomeDisplay={latestOutcome.outcome_display as unknown as OutcomeDisplayRow[]}
+                outcomeDisplay={latestOutcome.outcome_display}
                 modifiers={latestOutcome.modifiers}
                 modifierTotal={latestOutcome.modifier_total}
                 summary={latestOutcome.summary}
