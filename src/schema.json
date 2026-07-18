@@ -11805,6 +11805,17 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/gm/looking-for-table/:
+    get:
+      operationId: gm_looking_for_table_retrieve
+      description: Return looking-for-table players, sorted by most recently flagged.
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/gm/my-story-grants/:
     get:
       operationId: gm_my_story_grants_list
@@ -26235,6 +26246,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/GameInvite'
           description: ''
+  /api/roster/looking-for-table/:
+    post:
+      operationId: roster_looking_for_table_create
+      description: Set or clear the looking-for-table flag on the requesting user's
+        PlayerData.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/roster/mail/:
     get:
       operationId: roster_mail_list
