@@ -243,3 +243,45 @@ class GridImportTests(TestCase):
         matching = [r for r in result.reports if "arx-forgotten-ward" in r]
         self.assertEqual(len(matching), 1)
         self.assertTrue(Area.objects.filter(slug="arx-forgotten-ward").exists())
+
+    def test_imports_clues_triggers_and_portal_anchors(self) -> None:
+        from world.clues.models import ClueTrigger, RoomClue
+        from world.magic.models import PortalAnchor
+
+        export_grid_bundles(self.root)
+
+        RoomClue.objects.all().delete()
+        ClueTrigger.objects.all().delete()
+        PortalAnchor.objects.all().delete()
+
+        result = load_grid_bundles(self.root)
+
+        self.assertEqual(result.errors, [])
+        restored_clue = RoomClue.objects.get(fixture_key="arx-city/golden-hart-taproom/torn-letter")
+        self.assertEqual(restored_clue.detect_difficulty, 5)
+        self.assertTrue(
+            ClueTrigger.objects.filter(fixture_key="arx-city/golden-hart-taproom/whisper").exists()
+        )
+        self.assertTrue(
+            PortalAnchor.objects.active()
+            .filter(fixture_key="arx-city/golden-hart-taproom/mirror")
+            .exists()
+        )
+
+    def test_reimport_never_deletes_missing_sidecar(self) -> None:
+        """A fixture-keyed clue/anchor absent from a reimported bundle is reported, not deleted."""
+        from world.clues.factories import RoomClueFactory
+        from world.clues.models import RoomClue
+
+        export_grid_bundles(self.root)
+        orphan = RoomClueFactory(
+            room_profile=self.grid.taproom, fixture_key="arx-city/golden-hart-taproom/orphan"
+        )
+
+        result = load_grid_bundles(self.root)
+
+        self.assertTrue(RoomClue.objects.filter(pk=orphan.pk).exists())
+        self.assertTrue(
+            any("orphan" in line for line in result.reports),
+            f"expected an orphan report, got: {result.reports}",
+        )

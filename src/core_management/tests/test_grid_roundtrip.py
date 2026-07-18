@@ -25,6 +25,8 @@ from core_management.tests._grid_fixtures import build_sample_grid
 from evennia_extensions.models import ObjectDisplayData
 from world.areas.models import Area
 from world.character_creation.models import StartingArea
+from world.clues.models import RoomClue
+from world.magic.models import PortalAnchor
 
 _ROOM_TYPECLASS = "typeclasses.rooms.Room"
 
@@ -53,6 +55,8 @@ class GridRoundTripJourneyTests(TestCase):
         ).permanent_description
         original_city_name = self.grid.city.name
         fixture_key = self.grid.taproom.fixture_key
+        clue_fixture_key = self.grid.room_clue.fixture_key
+        anchor_fixture_key = self.grid.portal_anchor.fixture_key
         room_count_before = ObjectDB.objects.filter(db_typeclass_path=_ROOM_TYPECLASS).count()
 
         export_to_content_repo(self.root)
@@ -64,6 +68,8 @@ class GridRoundTripJourneyTests(TestCase):
         display.save()
         self.grid.city.name = "Somewhere Else"
         self.grid.city.save()
+        self.grid.room_clue.detect_difficulty = 1
+        self.grid.room_clue.save()
 
         world_result = load_world_content(self.root)
 
@@ -83,6 +89,12 @@ class GridRoundTripJourneyTests(TestCase):
         self.assertIsNotNone(restored_starting_area.default_starting_room)
         self.assertEqual(restored_starting_area.default_starting_room.fixture_key, fixture_key)
         self.assertEqual(restored_starting_area.default_starting_room_id, self.grid.taproom.pk)
+
+        restored_clue = RoomClue.objects.get(fixture_key=clue_fixture_key)
+        self.assertEqual(restored_clue.detect_difficulty, 5)
+        self.assertTrue(
+            PortalAnchor.objects.active().filter(fixture_key=anchor_fixture_key).exists()
+        )
 
         # No duplicate rooms were created by the reload.
         room_count_after = ObjectDB.objects.filter(db_typeclass_path=_ROOM_TYPECLASS).count()

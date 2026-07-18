@@ -6,7 +6,7 @@ Export writes one JSON bundle per ``AUTHORED`` (see
 ``<content_root>/fixtures/grid/<area-slug>.json``; this module reads every
 bundle back and upserts the areas/rooms/exits/sidecar rows they describe.
 
-Four passes, in order, because later passes reference rows earlier passes
+Five passes, in order, because later passes reference rows earlier passes
 create (a room's area, an exit's source/destination rooms, a sidecar row's
 area/room target):
 
@@ -17,12 +17,16 @@ area/room target):
    ``fixture_key`` against the rooms pass 2 just built.
 4. **Sidecars** — ``LocationValueOverride``/``LocationValueModifier`` rows
    scoped to each bundle's area/rooms.
+5. **Clue/anchor sidecars** — ``RoomClue``/``ClueTrigger``/``PortalAnchor``
+   rows, upserted by ``fixture_key`` against the rooms pass 2 just built.
 
 **Report-never-delete.** An authored area/room/exit that exists in the DB
 but is absent from every bundle is never deleted — it's surfaced as a
 ``reports`` line instead. Only ``authored:``-sourced modifiers are ever
 replaced wholesale (deleted + recreated from the bundle); any other
-``source`` (e.g. ``weather:cold-snap``) is left untouched.
+``source`` (e.g. ``weather:cold-snap``) is left untouched. The same
+report-never-delete rule applies to fixture-keyed ``RoomClue``/
+``ClueTrigger``/``PortalAnchor`` rows absent from every bundle.
 
 Import-safe without Django configured (mirrors ``grid_export.py``). All
 Django imports are deferred.
@@ -53,6 +57,8 @@ class GridImportResult:
     updated_exits: int = 0
     created_areas: int = 0
     updated_areas: int = 0
+    created_clue_sidecars: int = 0
+    updated_clue_sidecars: int = 0
     reports: list[str] = field(default_factory=list)  # never-deleted rows, orphaned exits, etc.
     errors: list[str] = field(default_factory=list)
 
@@ -449,6 +455,112 @@ def _import_sidecars(
                 )
 
 
+def _import_clue_and_anchor_sidecars(
+    bundles: list[tuple[Path, dict]],
+    room_by_fixture_key: dict[str, RoomProfile],
+    result: GridImportResult,
+) -> None:
+    """Pass 5: upsert fixture-keyed RoomClue/ClueTrigger/PortalAnchor rows by fixture_key."""
+    from django.db import transaction  # noqa: PLC0415
+
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+    from world.clues.models import Clue, ClueTrigger, RoomClue  # noqa: PLC0415
+    from world.magic.models import PortalAnchor, PortalAnchorKind  # noqa: PLC0415
+
+    for path, bundle in bundles:
+        bundle_name = path.name
+        with transaction.atomic():
+            for row_data in bundle["clues"]:
+                room_profile = room_by_fixture_key[row_data["room"]]
+                clue = Clue.objects.filter(slug=row_data["clue"]).first()
+                if clue is None:
+                    msg = f"{bundle_name}: unknown clue slug {row_data['clue']!r}"
+                    raise ContentError(msg)
+                _, created = RoomClue.objects.update_or_create(
+                    fixture_key=row_data["fixture_key"],
+                    defaults={
+                        "room_profile": room_profile,
+                        "clue": clue,
+                        "detect_difficulty": row_data["detect_difficulty"],
+                        "eligibility_rule": row_data["eligibility_rule"],
+                        "is_active": row_data["is_active"],
+                    },
+                )
+                result.created_clue_sidecars += created
+                result.updated_clue_sidecars += not created
+
+            for row_data in bundle["clue_triggers"]:
+                room_profile = room_by_fixture_key[row_data["room"]]
+                clue = Clue.objects.filter(slug=row_data["clue"]).first()
+                if clue is None:
+                    msg = f"{bundle_name}: unknown clue slug {row_data['clue']!r}"
+                    raise ContentError(msg)
+                _, created = ClueTrigger.objects.update_or_create(
+                    fixture_key=row_data["fixture_key"],
+                    defaults={
+                        "room_profile": room_profile,
+                        "clue": clue,
+                        "eligibility_rule": row_data["eligibility_rule"],
+                        "is_active": row_data["is_active"],
+                    },
+                )
+                result.created_clue_sidecars += created
+                result.updated_clue_sidecars += not created
+
+            for row_data in bundle["portal_anchors"]:
+                room_profile = room_by_fixture_key[row_data["room"]]
+                kind = PortalAnchorKind.objects.filter(name=row_data["kind"]).first()
+                if kind is None:
+                    msg = f"{bundle_name}: unknown portal anchor kind {row_data['kind']!r}"
+                    raise ContentError(msg)
+                _, created = PortalAnchor.objects.update_or_create(
+                    fixture_key=row_data["fixture_key"],
+                    defaults={
+                        "room_profile": room_profile,
+                        "kind": kind,
+                        "name": row_data["name"],
+                        "is_network_open": row_data["is_network_open"],
+                        "dissolved_at": None,
+                    },
+                )
+                result.created_clue_sidecars += created
+                result.updated_clue_sidecars += not created
+
+
+def _report_missing_clue_and_anchor_sidecars(
+    bundles: list[tuple[Path, dict]], result: GridImportResult
+) -> None:
+    """Report-never-delete: fixture-keyed sidecar rows in the DB absent from every bundle."""
+    from world.clues.models import ClueTrigger, RoomClue  # noqa: PLC0415
+    from world.magic.models import PortalAnchor  # noqa: PLC0415
+
+    bundle_clue_keys = {row["fixture_key"] for _, bundle in bundles for row in bundle["clues"]}
+    for room_clue in RoomClue.objects.filter(fixture_key__isnull=False).exclude(
+        fixture_key__in=bundle_clue_keys
+    ):
+        result.reports.append(
+            f"authored clue placement {room_clue.fixture_key!r} not in any bundle"
+        )
+
+    bundle_trigger_keys = {
+        row["fixture_key"] for _, bundle in bundles for row in bundle["clue_triggers"]
+    }
+    for trigger in ClueTrigger.objects.filter(fixture_key__isnull=False).exclude(
+        fixture_key__in=bundle_trigger_keys
+    ):
+        result.reports.append(f"authored clue trigger {trigger.fixture_key!r} not in any bundle")
+
+    bundle_anchor_keys = {
+        row["fixture_key"] for _, bundle in bundles for row in bundle["portal_anchors"]
+    }
+    for anchor in (
+        PortalAnchor.objects.active()
+        .filter(fixture_key__isnull=False)
+        .exclude(fixture_key__in=bundle_anchor_keys)
+    ):
+        result.reports.append(f"authored portal anchor {anchor.fixture_key!r} not in any bundle")
+
+
 def _report_missing_authored(
     area_by_slug: dict[str, Area],
     room_by_fixture_key: dict[str, RoomProfile],
@@ -477,8 +589,10 @@ def load_grid_bundles(content_root: Path | None = None) -> GridImportResult:
     Raises ``ContentError`` (from ``core_management.content_fixtures``) on structural
     problems: the content root can't be resolved, a bundle is invalid JSON, an area
     references an unresolvable parent/realm/climate/society/building-kind, a room
-    references an unresolvable size tier, or an exit has a dangling destination
-    fixture_key. Never deletes an AUTHORED area/room/exit absent from the bundles —
+    references an unresolvable size tier, an exit has a dangling destination
+    fixture_key, or a clue/clue-trigger/portal-anchor row references an unresolvable
+    clue slug or portal anchor kind name. Never deletes an AUTHORED area/room/exit
+    or a fixture-keyed clue/clue-trigger/portal-anchor absent from the bundles —
     those surface as ``reports`` lines instead (see module docstring).
     """
     from core_management.content_fixtures import ContentError  # noqa: PLC0415
@@ -505,5 +619,7 @@ def load_grid_bundles(content_root: Path | None = None) -> GridImportResult:
     _report_orphaned_exits(bundles, result)
     _import_sidecars(bundles, area_by_path, room_by_fixture_key)
     _report_missing_authored(area_by_slug, room_by_fixture_key, result)
+    _import_clue_and_anchor_sidecars(bundles, room_by_fixture_key, result)
+    _report_missing_clue_and_anchor_sidecars(bundles, result)
 
     return result
