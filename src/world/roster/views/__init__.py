@@ -13,6 +13,7 @@ from world.roster.views.entry_views import RosterEntryPagination, RosterEntryVie
 from world.roster.views.family_views import (
     FamilyViewSet,
 )
+from world.roster.views.invite_views import GameInviteViewSet
 from world.roster.views.mail_views import PlayerMailPagination, PlayerMailViewSet
 from world.roster.views.media_views import PlayerMediaViewSet, TenureGalleryViewSet
 from world.roster.views.roster_views import RosterViewSet
@@ -20,6 +21,7 @@ from world.roster.views.tenure_views import RosterTenureViewSet
 
 __all__ = [
     "FamilyViewSet",
+    "GameInviteViewSet",
     "PlayerMailPagination",
     "PlayerMailViewSet",
     "PlayerMediaViewSet",
