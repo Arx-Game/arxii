@@ -581,6 +581,30 @@ class ResolveFullTests(TestCase):
         challenge.refresh_from_db()
         assert challenge.is_active is True
 
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_capability_source_value_folds_into_extra_modifiers(self, mock_check) -> None:
+        """resolve_challenge folds capability_source.value into extra_modifiers (#2505)."""
+        from world.checks.types import CheckResult
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        mock_check.return_value = CheckResult(
+            check_type=self.approach.check_type,
+            outcome=self.outcome_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        challenge = self._make_challenge()
+        # self.source.value == 10 (see _make_source's default).
+        resolve_challenge(self.character, challenge, self.approach, self.source, extra_modifiers=7)
+
+        assert mock_check.call_args.kwargs["extra_modifiers"] == 7 + self.source.value
+
     @patch("actions.services.apply_resolution", return_value=[])
     @patch("actions.services.select_consequence_from_result")
     @patch("actions.services.perform_check")

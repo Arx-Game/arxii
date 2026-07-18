@@ -14,13 +14,16 @@ the identity map clean.  Immutable lookup rows (CheckType, ConditionTemplate,
 ConditionCheckModifier) live in setUpTestData for speed.
 """
 
+from decimal import Decimal
+
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierSourceKind
-from world.checks.factories import CheckTypeFactory
+from world.checks.factories import CheckTypeCapabilityModifierFactory, CheckTypeFactory
 from world.conditions.factories import (
+    CapabilityTypeFactory,
     ConditionCheckModifierFactory,
     ConditionInstanceFactory,
     ConditionTemplateFactory,
@@ -246,3 +249,44 @@ class CharacterSourceTests(TestCase):
         self.scoped_target.save()
         breakdown = collect_check_modifiers(self.sheet, self.check_type)
         self.assertEqual(breakdown.total, 0)
+
+
+class CapabilitySourceTests(TestCase):
+    """CAPABILITY source: authored CheckTypeCapabilityModifier rows (#2505)."""
+
+    def setUp(self):
+        self.target = ObjectDBFactory(db_key="CapabilitySourceTarget")
+        self.sheet = CharacterSheetFactory(character=self.target)
+        self.check_type = CheckTypeFactory(name="capability-source-collect")
+        self.capability = CapabilityTypeFactory(name="capability-source-fire", innate_baseline=5)
+
+    def test_authored_row_emits_capability_contribution(self) -> None:
+        """An authored row emits one CAPABILITY contribution with the correct value."""
+        from world.checks.services import collect_check_modifiers
+
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=self.capability,
+            weight=Decimal("2.0"),
+        )
+
+        breakdown = collect_check_modifiers(self.sheet, self.check_type)
+
+        capability_contribs = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CAPABILITY
+        ]
+        assert len(capability_contribs) == 1
+        # innate_baseline=5, weight=2.0 -> int(5 * 2.0) == 10
+        assert capability_contribs[0].value == 10
+        assert breakdown.total == 10
+
+    def test_no_authored_row_emits_no_capability_contribution(self) -> None:
+        """CURATED GATE: no authored row means no CAPABILITY contribution at all."""
+        from world.checks.services import collect_check_modifiers
+
+        breakdown = collect_check_modifiers(self.sheet, self.check_type)
+
+        capability_contribs = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CAPABILITY
+        ]
+        assert capability_contribs == []

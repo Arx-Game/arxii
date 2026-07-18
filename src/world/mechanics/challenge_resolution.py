@@ -69,7 +69,7 @@ def resolve_challenge(
     character: ObjectDB,
     challenge_instance: ChallengeInstance,
     approach: ChallengeApproach,
-    capability_source: CapabilitySource,  # noqa: ARG001
+    capability_source: CapabilitySource,
     *,
     extra_modifiers: int = 0,
 ) -> ChallengeResolutionResult:
@@ -77,12 +77,13 @@ def resolve_challenge(
     Resolve a character's action against a challenge.
 
     1. Validate state
-    2. Perform check
-    3. Select consequence
-    4. Apply effects
-    5. Update challenge state
-    6. Create record
-    7. Return result
+    2. Fold capability_source's value into extra_modifiers
+    3. Perform check
+    4. Select consequence
+    5. Apply effects
+    6. Update challenge state
+    7. Create record
+    8. Return result
     """
     _validate(character, challenge_instance, approach)
 
@@ -91,20 +92,20 @@ def resolve_challenge(
 
     template = challenge_instance.template
 
-    # 2. Perform check
+    # 2-3. Fold the capability source's value into extra_modifiers, then perform check.
     check_result = perform_check(
         character,
         approach.check_type,
         target_difficulty=template.severity,
-        extra_modifiers=extra_modifiers,
+        extra_modifiers=extra_modifiers + capability_source.value,
     )
 
-    # 3. Select consequence and resolution metadata
+    # 4. Select consequence and resolution metadata
     consequence, resolution_type = _select_consequence(
         approach, template, check_result.outcome, character
     )
 
-    # 4. Apply effects
+    # 5. Apply effects
     context = ResolutionContext(character=character, challenge_instance=challenge_instance)
     pending = PendingResolution(
         check_result=check_result,
@@ -119,7 +120,7 @@ def resolve_challenge(
             effect.created_instance.source_challenge = challenge_instance
             effect.created_instance.save(update_fields=["source_challenge"])
 
-    # 5. Determine resolution type and update challenge state
+    # 6. Determine resolution type and update challenge state
     challenge_deactivated = False
     if resolution_type == ResolutionType.DESTROY:
         challenge_instance.is_active = False
@@ -128,7 +129,7 @@ def resolve_challenge(
     # TEMPORARY: For MVP, treated same as PERSONAL (challenge stays active).
     # Future: track bypass duration and re-activate after N rounds.
 
-    # 6. Create record
+    # 7. Create record
     record = CharacterChallengeRecord.objects.create(
         character=character,
         challenge_instance=challenge_instance,
@@ -145,7 +146,7 @@ def resolve_challenge(
         consequence=consequence,
     )
 
-    # 7. Build display consequences and return
+    # 8. Build display consequences and return
     all_consequences = list(
         Consequence.objects.filter(
             challenge_template_consequences__challenge_template=template,

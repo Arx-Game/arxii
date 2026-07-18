@@ -6,15 +6,19 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import (
     CheckCategoryFactory,
     CheckTypeAspectFactory,
+    CheckTypeCapabilityModifierFactory,
     CheckTypeFactory,
     CheckTypeTraitFactory,
     create_resistance_check_types,
 )
 from world.checks.services import (
     _calculate_aspect_bonus,
+    _calculate_capability_points,
+    _compute_check_breakdown,
     chart_has_success_outcomes,
     compute_resist_increment,
     perform_check,
@@ -22,6 +26,7 @@ from world.checks.services import (
 )
 from world.classes.factories import PathFactory
 from world.classes.models import Aspect, PathAspect, PathStage
+from world.conditions.factories import CapabilityTypeFactory
 from world.progression.models import CharacterPathHistory
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import (
@@ -94,6 +99,87 @@ class CalculateAspectBonusTests(TestCase):
         # 0.75 * 1 * 3 = 2.25 -> int = 2
         bonus = _calculate_aspect_bonus(self.character, check, level=3)
         assert bonus == 2
+
+
+class CalculateCapabilityPointsTests(TestCase):
+    """Test _calculate_capability_points: authored CheckTypeCapabilityModifier folding (#2505)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.check_type = CheckTypeFactory(name="test_svc_capability_check")
+        cls.capability = CapabilityTypeFactory(name="test_svc_fire_control", innate_baseline=5)
+
+    def test_authored_row_shifts_points_by_weighted_value(self):
+        """An authored row contributes int(weight * effective_capability_value)."""
+        character = CharacterFactory()
+        CharacterSheetFactory(character=character)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=self.capability,
+            weight=Decimal("2.0"),
+        )
+        # innate_baseline=5, weight=2.0 -> int(5 * 2.0) == 10
+        points = _calculate_capability_points(character, self.check_type)
+        assert points == 10
+
+    def test_no_authored_row_returns_zero_even_with_huge_capability_value(self):
+        """CURATED GATE: a huge capability value has zero effect with no authored row."""
+        character = CharacterFactory()
+        CharacterSheetFactory(character=character)
+        huge_capability = CapabilityTypeFactory(
+            name="test_svc_huge_unlisted_capability", innate_baseline=99999
+        )
+        # No CheckTypeCapabilityModifier links huge_capability to self.check_type.
+        assert huge_capability.innate_baseline == 99999
+        points = _calculate_capability_points(character, self.check_type)
+        assert points == 0
+
+    def test_weight_rounding_truncates_toward_zero(self):
+        """weight=0.5 truncates the product toward zero."""
+        character = CharacterFactory()
+        CharacterSheetFactory(character=character)
+        odd_capability = CapabilityTypeFactory(name="test_svc_odd_capability", innate_baseline=3)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=odd_capability,
+            weight=Decimal("0.5"),
+        )
+        # 0.5 * 3 = 1.5 -> int = 1
+        points = _calculate_capability_points(character, self.check_type)
+        assert points == 1
+
+    def test_sheetless_character_returns_zero_without_raising(self):
+        """A character with no CharacterSheet (sheet_data) contributes 0, never raises."""
+        character = CharacterFactory()
+        # No CharacterSheetFactory(character=character) — sheet_data is absent.
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=self.capability,
+            weight=Decimal("2.0"),
+        )
+        points = _calculate_capability_points(character, self.check_type)
+        assert points == 0
+
+    def test_folds_into_compute_check_breakdown_total_points(self):
+        """capability_points is folded into total_points exactly like trait_points."""
+        character = CharacterFactory()
+        CharacterSheetFactory(character=character)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=self.capability,
+            weight=Decimal("2.0"),
+        )
+        breakdown = _compute_check_breakdown(
+            character,
+            self.check_type,
+            target_difficulty=0,
+            extra_modifiers=0,
+            effort_level=None,
+            fatigue_penalty=0,
+            specialization=None,
+        )
+        assert breakdown.capability_points == 10
+        assert breakdown.total_points == 10
 
 
 class PerformCheckTests(TestCase):

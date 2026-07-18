@@ -131,6 +131,7 @@ class _CheckBreakdown(NamedTuple):
     trait_points: int
     specialization_points: int
     aspect_bonus: int
+    capability_points: int
     total_points: int
     roller_rank: "CheckRank | None"
     target_rank: "CheckRank | None"
@@ -160,10 +161,12 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     trait_points = _calculate_trait_points(handler, check_type)
     specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
+    capability_points = _calculate_capability_points(character, check_type)
     total_points = (
         trait_points
         + specialization_points
         + aspect_bonus
+        + capability_points
         + extra_modifiers
         + effort_modifier
         + fatigue_penalty
@@ -180,6 +183,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         trait_points=trait_points,
         specialization_points=specialization_points,
         aspect_bonus=aspect_bonus,
+        capability_points=capability_points,
         total_points=total_points,
         roller_rank=roller_rank,
         target_rank=target_rank,
@@ -228,6 +232,7 @@ def _check_result(
         aspect_bonus=breakdown.aspect_bonus,
         total_points=breakdown.total_points,
         specialization_points=breakdown.specialization_points,
+        capability_points=breakdown.capability_points,
     )
 
 
@@ -327,6 +332,43 @@ def _calculate_specialization_points(
             total += PointConversionRange.calculate_points(TraitType.SKILL, value)
 
     return total
+
+
+def _calculate_capability_points(character: "ObjectDB", check_type: "CheckType") -> int:
+    """Weighted capability contribution from authored CheckTypeCapabilityModifier rows (#2505).
+
+    Curated gate: only (check_type, capability) pairs an author has explicitly linked can
+    ever move points — a character's raw capability value (however large) has zero effect
+    on a check_type with no authored row for it. When there are no authored rows this
+    returns 0 without ever calling the capability oracle (no pointless queries).
+
+    Per row: weight x get_effective_capability_value(sheet, capability) — the agency
+    oracle (innate baseline + CharacterModifier + condition contributions + passive
+    grants). Summed across rows, then truncated toward zero ONCE (matches
+    CheckTypeCapabilityModifier.weight's help_text), analogous to how trait/aspect
+    points truncate.
+
+    A character with no CharacterSheet (``sheet_data``) contributes 0 and never raises —
+    mirrors the guard in ``get_rollmod``.
+    """
+    capability_modifiers = list(
+        check_type.capability_modifiers.select_related("capability").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeCapabilityModifier
+    )
+    if not capability_modifiers:
+        return 0
+
+    try:
+        character_sheet = character.sheet_data  # type: ignore[attr-defined] — ObjectDB typeclass extension
+    except (ObjectDoesNotExist, AttributeError):
+        return 0
+
+    from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+
+    total = sum(
+        row.weight * get_effective_capability_value(character_sheet, row.capability)
+        for row in capability_modifiers
+    )
+    return int(total)
 
 
 def _get_character_level(character: "ObjectDB") -> int:
@@ -648,6 +690,14 @@ def collect_check_modifiers(
             _character_and_equipment_contributions(character_sheet, check_type, scene)
         )
 
+    # --- CAPABILITY contributions (#2505) ---
+    # Authored CheckTypeCapabilityModifier rows — mirrors _calculate_capability_points
+    # (the rolled-total math in _compute_check_breakdown) so recorded provenance matches
+    # what actually moved total_points. Reuses the isinstance guard: a mocked check_type
+    # has no real reverse ``capability_modifiers`` manager.
+    if isinstance(check_type, _DjangoModel):
+        contributions.extend(_capability_contributions(character_sheet, check_type))
+
     # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
     # Appended last so the gathered condition/rollmod/scene ordering stays stable.
     if extra_contributions:
@@ -758,4 +808,37 @@ def _character_and_equipment_contributions(
                 )
             )
 
+    return contributions
+
+
+def _capability_contributions(
+    character_sheet: "CharacterSheet", check_type: "CheckType"
+) -> list[ModifierContribution]:
+    """CAPABILITY contributions from authored CheckTypeCapabilityModifier rows (#2505).
+
+    One contribution per authored row with a non-zero weight x effective-capability-value
+    product — mirrors ``_calculate_capability_points`` (the rolled-total math in
+    ``_compute_check_breakdown``) so recorded ModifierBreakdown / ConsequenceOutcomeModifier
+    provenance matches what actually moved total_points. No authored rows -> no queries
+    beyond ``check_type.capability_modifiers`` itself (the curated gate).
+    """
+    capability_modifiers = list(
+        check_type.capability_modifiers.select_related("capability").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeCapabilityModifier
+    )
+    if not capability_modifiers:
+        return []
+
+    from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+
+    contributions: list[ModifierContribution] = []
+    for row in capability_modifiers:
+        value = int(row.weight * get_effective_capability_value(character_sheet, row.capability))
+        if value != 0:
+            contributions.append(
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.CAPABILITY,
+                    source_label=f"Capability: {row.capability.name}",
+                    value=value,
+                )
+            )
     return contributions

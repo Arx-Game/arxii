@@ -64,6 +64,7 @@ class ModifierSourceKind(models.TextChoices):
     AFFINITY = "affinity", "Affinity"
     PULL = "pull", "Combat Pull"
     RELATIONSHIP = "relationship", "Relationship"
+    CAPABILITY = "capability", "Capability"
 
 
 class SecurityCheckKind(models.TextChoices):

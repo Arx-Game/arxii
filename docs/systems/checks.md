@@ -26,7 +26,9 @@ from world.checks.types import (
 | `rank_difference` | `int` | roller_rank - target_rank |
 | `trait_points` | `int` | Points from weighted traits |
 | `aspect_bonus` | `int` | Bonus from path aspects |
-| `total_points` | `int` | trait_points + aspect_bonus + extra_modifiers |
+| `specialization_points` | `int` | Points from owned specializations (default 0, #1688) |
+| `capability_points` | `int` | Weighted authored `CheckTypeCapabilityModifier` points (default 0, #2505) |
+| `total_points` | `int` | trait_points + specialization_points + aspect_bonus + capability_points + extra_modifiers |
 
 ### CheckResult Properties
 
@@ -48,6 +50,7 @@ result.chart_name     # str: chart name or "No Chart Found"
 | `CheckType` | Named check definition with trait/aspect composition | `name`, `category` (FK CheckCategory), `description`, `is_active`, `display_order` |
 | `CheckTypeTrait` | Weighted trait contribution to a check type | `check_type` (FK CheckType), `trait` (FK Trait), `weight` (Decimal, default 1.0) |
 | `CheckTypeAspect` | Weighted aspect relevance for a check type | `check_type` (FK CheckType), `aspect` (FK Aspect), `weight` (Decimal, default 1.0) |
+| `CheckTypeCapabilityModifier` (#2505) | Weighted capability contribution to a check type — curated gate: only listed (check_type, capability) pairs ever move points | `check_type` (FK CheckType, related_name `capability_modifiers`), `capability` (FK `conditions.CapabilityType`), `weight` (Decimal, default 1.0) |
 
 **Rule: a `CheckType.name` must never be duplicated across categories.** The DB
 constraint is only `unique_together = ["name", "category"]`, but several call sites
@@ -110,7 +113,15 @@ rollmod = get_rollmod(character)
    For each CheckTypeAspect with matching PathAspect:
      bonus += int(check_aspect_weight * path_aspect_weight * character_level)
 
-3. Total = trait_points + aspect_bonus + extra_modifiers
+2.5. Capability points from authored CheckTypeCapabilityModifier rows (#2505)
+   No authored rows on check_type -> 0, capability oracle never called (curated gate).
+   character.sheet_data missing -> 0, never raises.
+   capability_points = int(sum(
+       row.weight * get_effective_capability_value(sheet, row.capability)
+       for row in check_type.capability_modifiers.all()
+   ))  # truncated toward zero AFTER summing
+
+3. Total = trait_points + specialization_points + aspect_bonus + capability_points + extra_modifiers
 
 4. Total points -> CheckRank.get_rank_for_points()
    Target difficulty -> CheckRank.get_rank_for_points()
@@ -140,6 +151,10 @@ _calculate_trait_points(handler, check_type) -> int
 # Calculate aspect bonus from character's most recent path
 _calculate_aspect_bonus(character, check_type, level) -> int
 
+# Calculate weighted capability points from authored CheckTypeCapabilityModifier rows (#2505)
+# 0 with no authored rows (curated gate, never calls the capability oracle) or no sheet_data
+_calculate_capability_points(character, check_type) -> int
+
 # Get character's primary class level (or highest, or default 1)
 _get_character_level(character) -> int
 
@@ -162,7 +177,7 @@ All models registered with appropriate admin interfaces:
 
 - **No check persistence** -- results are transient, consumed by flows/scenes
 - **Callers own complexity** -- the resolver stays simple; goals, magic, combat, and conditions compute their own `extra_modifiers` before calling `perform_check`
-- **SharedMemoryModel** for all lookup tables (CheckCategory, CheckType, CheckTypeTrait, CheckTypeAspect)
+- **SharedMemoryModel** for all lookup tables (CheckCategory, CheckType, CheckTypeTrait, CheckTypeAspect, CheckTypeCapabilityModifier)
 - **No API endpoints** -- check types are staff-defined via admin; resolution is called programmatically by other systems
 
 ---
@@ -172,8 +187,14 @@ All models registered with appropriate admin interfaces:
 - **Traits app**: Uses `PointConversionRange`, `CheckRank`, `ResultChart`, `CheckOutcome` for the resolution pipeline
 - **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation, `CharacterClassLevel` for character level
 - **Progression app**: Uses `CharacterPathHistory` for current path lookup
+- **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle — innate
+  baseline + CharacterModifier + condition contributions + passive grants) is the sole source `_calculate_capability_points`
+  and `collect_check_modifiers`'s CAPABILITY contributions read; lazily imported to avoid a module cycle
+  (`world.conditions.services` already imports `world.checks.services` at module scope)
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
 - **Callers** (goals, magic, combat, conditions, GM adjudication): Compute `extra_modifiers` before calling `perform_check()`
+- **Mechanics app**: `resolve_challenge()` folds its `capability_source.value` (a `CapabilitySource`, e.g. from a
+  technique) into `extra_modifiers` before calling `perform_check()`
 
 ---
 
