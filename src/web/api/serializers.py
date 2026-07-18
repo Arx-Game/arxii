@@ -47,7 +47,7 @@ class AvailableCharacterSerializer(serializers.Serializer):
     def get_portrait_url(self, obj: RosterEntry) -> str | None:
         if obj.profile_picture is None:
             return None
-        # profile_picture is a TenureMedia; the underlying PlayerMedia carries the URL.
+        # profile_picture is a TenureMedia; the underlying Media carries the URL.
         return obj.profile_picture.media.cloudinary_url
 
     def get_character_type(self, obj: RosterEntry) -> str:

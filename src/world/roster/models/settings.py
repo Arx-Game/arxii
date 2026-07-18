@@ -108,7 +108,7 @@ class TenureMedia(SharedMemoryModel):
         related_name="media",
     )
     media = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
+        "evennia_extensions.Media",
         on_delete=models.CASCADE,
         related_name="tenure_links",
     )

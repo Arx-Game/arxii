@@ -8,7 +8,7 @@ from world.roster.models import RosterTenure
 class IsOwnerOrStaff(permissions.BasePermission):
     """
     Permission to check if user owns the object or is staff.
-    Used for PlayerMedia and other user-owned resources.
+    Used for Media and other user-owned resources.
     """
 
     def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
@@ -48,7 +48,7 @@ class IsPlayerOrStaff(permissions.BasePermission):
 class ReadOnlyOrOwner(permissions.BasePermission):
     """
     Permission for read-only access to everyone, but write access only to owners.
-    Used for PlayerMedia viewsets where anyone can view but only owners can modify.
+    Used for Media viewsets where anyone can view but only owners can modify.
     """
 
     def has_permission(self, request: Request, view: APIView) -> bool:

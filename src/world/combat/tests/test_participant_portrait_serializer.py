@@ -13,12 +13,12 @@ from django.test import TestCase
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.serializers import ParticipantSerializer
 from world.combat.views import CombatEncounterViewSet
-from world.roster.factories import PlayerMediaFactory
+from world.roster.factories import MediaFactory
 
 
 class ParticipantPortraitSerializerTests(TestCase):
     def test_primary_persona_with_thumbnail_exposes_media_and_direct_url(self) -> None:
-        media = PlayerMediaFactory()
+        media = MediaFactory()
         participant = CombatParticipantFactory()
         persona = participant.character_sheet.primary_persona
         persona.thumbnail = media
@@ -44,7 +44,7 @@ class ParticipantPortraitQueryCountTests(TestCase):
 
     def test_resolving_thumbnails_is_n_plus_one_free(self) -> None:
         encounter = CombatEncounterFactory()
-        media = PlayerMediaFactory()
+        media = MediaFactory()
         for _ in range(3):
             participant = CombatParticipantFactory(encounter=encounter)
             persona = participant.character_sheet.primary_persona

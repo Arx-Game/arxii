@@ -6,7 +6,7 @@ from world.conditions.factories import (
     ConditionStageFactory,
     ConditionTemplateFactory,
 )
-from world.roster.factories import PlayerMediaFactory
+from world.roster.factories import MediaFactory
 
 
 class ConditionTemplateThumbnailTest(TestCase):
@@ -16,8 +16,8 @@ class ConditionTemplateThumbnailTest(TestCase):
         assert template.thumbnail is None
 
     def test_thumbnail_can_be_set(self) -> None:
-        """A PlayerMedia can be attached as the thumbnail."""
-        media = PlayerMediaFactory()
+        """A Media can be attached as the thumbnail."""
+        media = MediaFactory()
         template = ConditionTemplateFactory(thumbnail=media)
         template.refresh_from_db()
         assert template.thumbnail == media
@@ -31,8 +31,8 @@ class ConditionStageThumbnailTest(TestCase):
         assert stage.thumbnail is None
 
     def test_thumbnail_can_be_set(self) -> None:
-        """A PlayerMedia can be attached as the stage thumbnail."""
-        media = PlayerMediaFactory()
+        """A Media can be attached as the stage thumbnail."""
+        media = MediaFactory()
         stage = ConditionStageFactory(thumbnail=media)
         stage.refresh_from_db()
         assert stage.thumbnail == media

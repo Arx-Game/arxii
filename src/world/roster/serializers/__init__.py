@@ -37,7 +37,7 @@ from world.roster.serializers.invites import (
 from world.roster.serializers.mail import PlayerMailSerializer, UnreadMailCountSerializer
 from world.roster.serializers.media import (
     ArtistSerializer,
-    PlayerMediaSerializer,
+    MediaSerializer,
     TenureGallerySerializer,
     TenureMediaSerializer,
 )
@@ -66,10 +66,10 @@ __all__ = [
     "GameInviteSerializer",
     "KinSlotPoolSerializer",
     "KinSlotSerializer",
+    "MediaSerializer",
     "MyRosterEntrySerializer",
     # Mail serializers
     "PlayerMailSerializer",
-    "PlayerMediaSerializer",
     "RosterApplicationApprovalSerializer",
     "RosterApplicationCreateSerializer",
     "RosterApplicationDetailSerializer",

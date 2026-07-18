@@ -354,7 +354,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     # === Dynamic Thumbnail (#2196) ===
     thumbnail = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
+        "evennia_extensions.Media",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -595,7 +595,7 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
     # === Dynamic Thumbnail (#2196) ===
     thumbnail = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
+        "evennia_extensions.Media",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

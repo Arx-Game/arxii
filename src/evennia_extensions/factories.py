@@ -9,7 +9,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils import create
 import factory
 
-from evennia_extensions.models import RoomProfile
+from evennia_extensions.models import Media, RoomProfile
 
 
 class ObjectDBFactory(factory.django.DjangoModelFactory):
@@ -175,6 +175,25 @@ class EmailConfirmationFactory(factory.django.DjangoModelFactory):
         confirmation.save()
 
         return confirmation
+
+
+class MediaFactory(factory.django.DjangoModelFactory):
+    """Factory for Media instances.
+
+    Player uploads by default; pass player_data=None, slug=... for staff art.
+    """
+
+    class Meta:
+        model = Media
+
+    player_data = factory.SubFactory("world.roster.factories.PlayerDataFactory")
+    slug = None
+    cloudinary_public_id = factory.Sequence(lambda n: f"test_media_{n}")
+    cloudinary_url = factory.LazyAttribute(
+        lambda obj: f"https://res.cloudinary.com/test/image/upload/{obj.cloudinary_public_id}",
+    )
+    media_type = "photo"
+    title = factory.Sequence(lambda n: f"Test Media {n}")
 
 
 class RoomProfileFactory(factory.django.DjangoModelFactory):

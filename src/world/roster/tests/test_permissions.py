@@ -9,16 +9,16 @@ from rest_framework.test import APITestCase
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.roster.factories import (
+    MediaFactory,
     PlayerDataFactory,
-    PlayerMediaFactory,
     RosterEntryFactory,
     RosterTenureFactory,
     TenureMediaFactory,
 )
 
 
-class PlayerMediaPermissionsTestCase(APITestCase):
-    """Test permission enforcement for PlayerMedia management."""
+class MediaPermissionsTestCase(APITestCase):
+    """Test permission enforcement for Media management."""
 
     def setUp(self):
         # Create test accounts
@@ -32,8 +32,8 @@ class PlayerMediaPermissionsTestCase(APITestCase):
         self.staff_player_data = PlayerDataFactory(account=self.staff)
 
         # Create media owned by first user
-        self.owner_media = PlayerMediaFactory(player_data=self.owner_player_data)
-        self.other_media = PlayerMediaFactory(player_data=self.other_player_data)
+        self.owner_media = MediaFactory(player_data=self.owner_player_data)
+        self.other_media = MediaFactory(player_data=self.other_player_data)
 
     def test_media_list_public_access(self):
         """Anyone can list media (read-only access)."""
@@ -93,7 +93,7 @@ class PlayerMediaPermissionsTestCase(APITestCase):
     @suppress_permission_errors
     def test_media_delete_owner_only(self):
         """Only media owner can delete their media."""
-        media_to_delete = PlayerMediaFactory(player_data=self.owner_player_data)
+        media_to_delete = MediaFactory(player_data=self.owner_player_data)
         url = reverse("roster:media-detail", kwargs={"pk": media_to_delete.pk})
 
         # Other user cannot delete
@@ -249,8 +249,8 @@ class QuerysetPermissionsTestCase(APITestCase):
         self.user2_data = PlayerDataFactory(account=self.user2)
 
         # Create media for each user
-        self.user1_media = PlayerMediaFactory(player_data=self.user1_data)
-        self.user2_media = PlayerMediaFactory(player_data=self.user2_data)
+        self.user1_media = MediaFactory(player_data=self.user1_data)
+        self.user2_media = MediaFactory(player_data=self.user2_data)
 
     def test_user_sees_only_own_media(self):
         """Users should only see their own media when authenticated."""

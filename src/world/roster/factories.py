@@ -7,7 +7,7 @@ import factory
 import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
-from evennia_extensions.models import Artist, PlayerData, PlayerMedia
+from evennia_extensions.models import Artist, Media, PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.models import (
     Family,
@@ -174,11 +174,11 @@ class TenureDisplaySettingsFactory(factory_django.DjangoModelFactory):
     plot_involvement = "medium"
 
 
-class PlayerMediaFactory(factory_django.DjangoModelFactory):
-    """Factory for PlayerMedia instances."""
+class MediaFactory(factory_django.DjangoModelFactory):
+    """Factory for Media instances."""
 
     class Meta:
-        model = PlayerMedia
+        model = Media
 
     player_data = factory.SubFactory(PlayerDataFactory)
     cloudinary_public_id = factory.Sequence(lambda n: f"test_media_{n}")
@@ -197,7 +197,7 @@ class TenureMediaFactory(factory_django.DjangoModelFactory):
 
     tenure = factory.SubFactory(RosterTenureFactory)
     media = factory.SubFactory(
-        PlayerMediaFactory,
+        MediaFactory,
         player_data=factory.LazyAttribute(
             lambda obj: obj.factory_parent.tenure.player_data,
         ),

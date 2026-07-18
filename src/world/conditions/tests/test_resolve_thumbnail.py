@@ -10,7 +10,7 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.conditions.thumbnail_services import resolve_thumbnail
-from world.roster.factories import PlayerMediaFactory
+from world.roster.factories import MediaFactory
 
 
 class ResolveThumbnailPriorityTest(TestCase):
@@ -21,7 +21,7 @@ class ResolveThumbnailPriorityTest(TestCase):
             db_key="TestChar",
             db_typeclass_path="typeclasses.characters.Character",
         )
-        self.default_media = PlayerMediaFactory()
+        self.default_media = MediaFactory()
         ObjectDisplayData.objects.create(object=self.obj, thumbnail=self.default_media)
 
     def test_falls_back_to_object_display_data_when_no_overrides(self) -> None:
@@ -37,7 +37,7 @@ class ResolveThumbnailPriorityTest(TestCase):
 
     def test_condition_template_thumbnail_overrides_display_data(self) -> None:
         """Active condition with a thumbnail overrides ObjectDisplayData."""
-        condition_media = PlayerMediaFactory()
+        condition_media = MediaFactory()
         template = ConditionTemplateFactory(thumbnail=condition_media)
         ConditionInstanceFactory(target=self.obj, condition=template)
         url = resolve_thumbnail(self.obj)
@@ -45,8 +45,8 @@ class ResolveThumbnailPriorityTest(TestCase):
 
     def test_condition_stage_thumbnail_overrides_template(self) -> None:
         """Stage thumbnail takes priority over template thumbnail."""
-        stage_media = PlayerMediaFactory()
-        template_media = PlayerMediaFactory()
+        stage_media = MediaFactory()
+        template_media = MediaFactory()
         template = ConditionTemplateFactory(
             thumbnail=template_media,
             has_progression=True,
@@ -58,8 +58,8 @@ class ResolveThumbnailPriorityTest(TestCase):
 
     def test_highest_display_priority_condition_wins(self) -> None:
         """When multiple conditions with thumbnails are active, highest display_priority wins."""
-        high_media = PlayerMediaFactory()
-        low_media = PlayerMediaFactory()
+        high_media = MediaFactory()
+        low_media = MediaFactory()
         low_pri = ConditionTemplateFactory(
             thumbnail=low_media,
             display_priority=5,
@@ -75,7 +75,7 @@ class ResolveThumbnailPriorityTest(TestCase):
 
     def test_hidden_condition_not_visible_to_non_privileged_viewer(self) -> None:
         """Hidden condition does not override for non-privileged viewers."""
-        condition_media = PlayerMediaFactory()
+        condition_media = MediaFactory()
         template = ConditionTemplateFactory(
             thumbnail=condition_media,
             is_visible_to_others=False,
@@ -86,7 +86,7 @@ class ResolveThumbnailPriorityTest(TestCase):
 
     def test_hidden_condition_visible_to_privileged_viewer(self) -> None:
         """A hidden condition overrides for privileged viewers."""
-        condition_media = PlayerMediaFactory()
+        condition_media = MediaFactory()
         template = ConditionTemplateFactory(
             thumbnail=condition_media,
             is_visible_to_others=False,
@@ -97,14 +97,14 @@ class ResolveThumbnailPriorityTest(TestCase):
 
     def test_fallback_media_used_when_nothing_else_set(self) -> None:
         """fallback_media is the last resort before None."""
-        fallback = PlayerMediaFactory()
+        fallback = MediaFactory()
         bare_obj = ObjectDBFactory(db_key="NPC")
         url = resolve_thumbnail(bare_obj, fallback_media=fallback)
         assert url == fallback.cloudinary_url
 
     def test_cached_conditions_parameter_avoids_extra_query(self) -> None:
         """Passing cached_conditions skips the get_active_conditions query."""
-        condition_media = PlayerMediaFactory()
+        condition_media = MediaFactory()
         template = ConditionTemplateFactory(thumbnail=condition_media)
         instance = ConditionInstanceFactory(target=self.obj, condition=template)
         url = resolve_thumbnail(self.obj, cached_conditions=[instance])

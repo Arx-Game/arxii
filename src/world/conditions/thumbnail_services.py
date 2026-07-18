@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from evennia_extensions.models import PlayerMedia
+    from evennia_extensions.models import Media
     from world.conditions.models import ConditionInstance
     from world.scenes.models import Persona
 
@@ -19,7 +19,7 @@ def resolve_thumbnail(
     *,
     persona: "Persona | None" = None,
     viewer_can_see_hidden: bool = False,
-    fallback_media: "PlayerMedia | None" = None,
+    fallback_media: "Media | None" = None,
     cached_conditions: "list[ConditionInstance] | None" = None,
 ) -> str | None:
     """Resolve the thumbnail URL for an object, reflecting current state.
@@ -28,7 +28,7 @@ def resolve_thumbnail(
     1. Active condition's stage thumbnail (highest display_priority visible condition)
     2. Active condition's template thumbnail
     3. Active alternate self's thumbnail
-    4. Persona's PlayerMedia thumbnail FK
+    4. Persona's Media thumbnail FK
     5. ObjectDisplayData.thumbnail fallback
     6. ``fallback_media`` (e.g. CombatOpponent.portrait for persona-less NPCs)
 
@@ -40,7 +40,7 @@ def resolve_thumbnail(
         viewer_can_see_hidden: Whether the viewer can see hidden conditions.
             When False, only is_visible_to_others conditions contribute
             overrides.
-        fallback_media: A PlayerMedia to use after all other levels are
+        fallback_media: A Media to use after all other levels are
             exhausted. Defaults to None.
         cached_conditions: Prefetched active conditions (avoids N+1 in list
             contexts). When None, queries ``get_active_conditions(obj)``.

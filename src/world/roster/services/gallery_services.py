@@ -14,7 +14,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 
-from evennia_extensions.models import Artist, PlayerData, PlayerMedia
+from evennia_extensions.models import Artist, Media, PlayerData
 from world.roster.models import RosterTenure, TenureMedia
 from world.roster.services.media_scan import MediaScanService
 
@@ -53,7 +53,7 @@ class CloudinaryGalleryService:
         tenure: RosterTenure | None = None,
         gallery: TenureGallery | None = None,
         created_by: Artist | None = None,
-    ) -> PlayerMedia:
+    ) -> Media:
         """Upload an image to Cloudinary and create media records.
 
         Args:
@@ -67,7 +67,7 @@ class CloudinaryGalleryService:
             created_by: Optional artist who created the media
 
         Returns:
-            PlayerMedia: The created media record
+            Media: The created media record
 
         Raises:
             ValidationError: If upload fails or file is invalid
@@ -103,7 +103,7 @@ class CloudinaryGalleryService:
                 ],
             )
 
-            media = PlayerMedia.objects.create(
+            media = Media.objects.create(
                 player_data=player_data,
                 cloudinary_public_id=result["public_id"],
                 cloudinary_url=result["secure_url"],
@@ -116,18 +116,18 @@ class CloudinaryGalleryService:
             if tenure:
                 TenureMedia.objects.create(tenure=tenure, media=media, gallery=gallery)
 
-            return cast(PlayerMedia, media)
+            return cast(Media, media)
 
         except Exception as e:
             msg = f"Failed to upload image: {e!s}"
             raise ValidationError(msg) from e
 
     @classmethod
-    def delete_media(cls, media: PlayerMedia) -> bool:
+    def delete_media(cls, media: Media) -> bool:
         """Delete media from Cloudinary and remove the database record.
 
         Args:
-            media: The PlayerMedia to delete
+            media: The Media to delete
 
         Returns:
             bool: True if successful, False otherwise
@@ -145,17 +145,17 @@ class CloudinaryGalleryService:
             return False
 
     @classmethod
-    def get_tenure_gallery(cls, tenure: RosterTenure) -> list[PlayerMedia]:
+    def get_tenure_gallery(cls, tenure: RosterTenure) -> list[Media]:
         """Get all media for a tenure, ordered by sort order and upload date."""
         return list(
-            PlayerMedia.objects.filter(
+            Media.objects.filter(
                 tenure_links__tenure=tenure,
                 tenure_links__gallery__is_public=True,
             ).order_by("tenure_links__sort_order", "-uploaded_date"),
         )
 
     @classmethod
-    def get_primary_image(cls, tenure: RosterTenure) -> PlayerMedia | None:
+    def get_primary_image(cls, tenure: RosterTenure) -> Media | None:
         """Get the primary image for a tenure from the character's roster entry."""
         if tenure.roster_entry.profile_picture:
             profile_pic = tenure.roster_entry.profile_picture
@@ -164,7 +164,7 @@ class CloudinaryGalleryService:
                 and profile_pic.gallery
                 and profile_pic.gallery.is_public
             ):
-                return cast(PlayerMedia, profile_pic.media)
+                return cast(Media, profile_pic.media)
         return None
 
     @classmethod

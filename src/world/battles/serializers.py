@@ -192,7 +192,7 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         """Public persona identity only — id/name/thumbnail(s), never account/username.
 
         ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
-        ``get_thumbnail_media_url`` — the uploaded-portrait ``PlayerMedia`` FK,
+        ``get_thumbnail_media_url`` — the uploaded-portrait ``Media`` FK,
         already ``select_related``'d by the view's Prefetch (world/battles/views.py),
         so this never issues a query. ``thumbnail_url`` is the legacy URLField,
         kept alongside for callers still on it.

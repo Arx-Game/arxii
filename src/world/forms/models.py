@@ -475,7 +475,7 @@ class AlternateSelf(SharedMemoryModel):
     tuning_value = models.IntegerField(null=True, blank=True)
     display_name = models.CharField(max_length=100, blank=True)
     thumbnail = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
+        "evennia_extensions.Media",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

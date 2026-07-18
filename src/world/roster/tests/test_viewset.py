@@ -12,8 +12,8 @@ from rest_framework.test import APIClient
 from world.roster.factories import (
     ArtistFactory,
     CharacterFactory,
+    MediaFactory,
     PlayerDataFactory,
-    PlayerMediaFactory,
     RosterEntryFactory,
     RosterFactory,
     RosterTenureFactory,
@@ -197,15 +197,15 @@ class TestRosterViewSet(TestCase):
         assert isinstance(roster_data["available_count"], int)
 
 
-class TestPlayerMediaViewSet(TestCase):
-    """Tests for PlayerMediaViewSet API endpoints."""
+class TestMediaViewSet(TestCase):
+    """Tests for MediaViewSet API endpoints."""
 
     def setUp(self):
         self.client = APIClient()
         self.player = PlayerDataFactory()
         self.client.force_authenticate(user=self.player.account)
         self.tenure = RosterTenureFactory(player_data=self.player)
-        self.media = PlayerMediaFactory(player_data=self.player)
+        self.media = MediaFactory(player_data=self.player)
 
     def test_list_media(self):
         url = "/api/roster/media/"
@@ -234,8 +234,8 @@ class TestPlayerMediaViewSet(TestCase):
     def test_list_media_is_paginated(self):
         """A player's media library is paginated (ADR-0138); the FE walks pages."""
         # setUp made 1; add two more for this player (3 total).
-        PlayerMediaFactory(player_data=self.player)
-        PlayerMediaFactory(player_data=self.player)
+        MediaFactory(player_data=self.player)
+        MediaFactory(player_data=self.player)
 
         url = "/api/roster/media/"
         response = self.client.get(url)
@@ -251,7 +251,7 @@ class TestPlayerMediaViewSet(TestCase):
 
     @patch("world.roster.views.media_views.CloudinaryGalleryService.upload_image")
     def test_create_media(self, mock_upload):
-        mock_media = PlayerMediaFactory(player_data=self.player)
+        mock_media = MediaFactory(player_data=self.player)
         mock_upload.return_value = mock_media
         url = "/api/roster/media/"
         response = self.client.post(url, {"media_type": "photo"}, format="json")
@@ -261,7 +261,7 @@ class TestPlayerMediaViewSet(TestCase):
     @patch("world.roster.views.media_views.CloudinaryGalleryService.upload_image")
     def test_create_media_with_artist(self, mock_upload):
         artist = ArtistFactory()
-        mock_media = PlayerMediaFactory(player_data=self.player, created_by=artist)
+        mock_media = MediaFactory(player_data=self.player, created_by=artist)
         mock_upload.return_value = mock_media
         url = "/api/roster/media/"
         response = self.client.post(

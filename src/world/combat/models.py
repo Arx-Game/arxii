@@ -412,7 +412,7 @@ class CombatOpponent(SharedMemoryModel):
         help_text="Links to a persistent NPC identity for story NPCs.",
     )
     portrait = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
+        "evennia_extensions.Media",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

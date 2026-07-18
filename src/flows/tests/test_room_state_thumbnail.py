@@ -16,7 +16,7 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
-from world.roster.factories import PlayerMediaFactory
+from world.roster.factories import MediaFactory
 
 
 class RoomStateThumbnailE2ETest(TestCase):
@@ -27,9 +27,9 @@ class RoomStateThumbnailE2ETest(TestCase):
             db_key="target",
             db_typeclass_path="typeclasses.characters.Character",
         )
-        self.persona_media = PlayerMediaFactory()
+        self.persona_media = MediaFactory()
         ObjectDisplayData.objects.create(object=self.target, thumbnail=self.persona_media)
-        self.condition_media = PlayerMediaFactory()
+        self.condition_media = MediaFactory()
 
     def _target_state(self):
         context = SceneDataManagerFactory()

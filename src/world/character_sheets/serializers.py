@@ -987,7 +987,7 @@ def _build_profile_picture(sheet: CharacterSheet) -> str | None:
     """Return the profile picture URL or ``None``.
 
     RosterEntry.profile_picture is a FK to TenureMedia, which in turn
-    has a FK to PlayerMedia containing the ``cloudinary_url``.
+    has a FK to Media containing the ``cloudinary_url``.
     """
     roster_entry = sheet.roster_entry
     profile_pic = roster_entry.profile_picture

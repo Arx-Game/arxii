@@ -2,7 +2,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.consent.factories import SocialConsentPreferenceFactory
-from world.roster.factories import PlayerMediaFactory, RosterEntryFactory, RosterTenureFactory
+from world.roster.factories import MediaFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 from world.scenes.serializers import PersonaSerializer
 
@@ -16,7 +16,7 @@ class PersonaSerializerThumbnailMediaUrlTestCase(TestCase):
 
     def test_thumbnail_media_url_returns_cloudinary_url_when_set(self) -> None:
         """thumbnail_media_url equals Persona.thumbnail.cloudinary_url when set."""
-        media = PlayerMediaFactory()
+        media = MediaFactory()
         persona = PersonaFactory(thumbnail=media)
         data = PersonaSerializer(persona).data
         assert data["thumbnail_media_url"] == media.cloudinary_url

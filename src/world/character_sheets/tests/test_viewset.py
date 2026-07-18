@@ -68,8 +68,8 @@ from world.magic.models import CharacterAura
 from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import (
     FamilyFactory,
+    MediaFactory,
     PlayerDataFactory,
-    PlayerMediaFactory,
     RosterEntryFactory,
     RosterTenureFactory,
     TenureMediaFactory,
@@ -1667,7 +1667,7 @@ class TestPersonasSection(TestCase):
 
         # Persona with thumbnail
         cls.char_identity = CharacterSheetFactory(character=cls.character)
-        cls.media = PlayerMediaFactory(
+        cls.media = MediaFactory(
             player_data=cls.player,
             cloudinary_url="https://res.cloudinary.com/test/image/upload/iron_voice.jpg",
         )
@@ -2041,7 +2041,7 @@ class TestCharacterSheetQueryCount(TestCase):
         )
 
         # --- Personas ---
-        media = PlayerMediaFactory(
+        media = MediaFactory(
             player_data=cls.player,
             cloudinary_url="https://res.cloudinary.com/test/guise.jpg",
         )
@@ -2253,7 +2253,7 @@ class TestPrefetchCompleteness(TestCase):
         )
 
         # Guises
-        media = PlayerMediaFactory(
+        media = MediaFactory(
             player_data=cls.player,
             cloudinary_url="https://res.cloudinary.com/test/pfguise.jpg",
         )

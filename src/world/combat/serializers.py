@@ -192,7 +192,7 @@ class OpponentSerializer(serializers.ModelSerializer):
         return obj.persona.thumbnail_url
 
     def get_thumbnail_media_url(self, obj: CombatOpponent) -> str | None:
-        """PlayerMedia portrait URL, dynamically resolved (#2196).
+        """Media portrait URL, dynamically resolved (#2196).
 
         Uses ``resolve_thumbnail()`` when the opponent has a persona (character).
         For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
@@ -474,7 +474,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         return None if persona is None else persona.thumbnail_url
 
     def get_thumbnail_media_url(self, obj: CombatParticipant) -> str | None:
-        """PlayerMedia portrait URL, dynamically resolved (#2196).
+        """Media portrait URL, dynamically resolved (#2196).
 
         Uses ``resolve_thumbnail()`` via the primary persona's character.
         ``None`` when there is no primary persona.
