@@ -7,6 +7,7 @@ Extends Evennia's functionality with additional models and data handlers while p
 ### `models.py`
 - **`PlayerData`**: Extends AccountDB with player preferences and session tracking
 - **`Media`**: Media storage and gallery management
+- **`PageBackground`**: Maps a named page slot (homepage/roster/CG stage/game client) to a Media row
 - **`ObjectDisplayData`**: Custom display settings for objects
 - **`PlayerAllowList`**: Social allow lists for player communication
 - **`PlayerBlockList`**: Social block lists for player communication

@@ -169,7 +169,7 @@
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -218,7 +218,7 @@
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - properties -> mechanics.Property [M2M]
   - on_entry_conditions -> conditions.ConditionTemplate [M2M]
 **Pointed to by:**
@@ -327,7 +327,7 @@
 ### PlayerData
 **Foreign Keys:**
   - account -> accounts.AccountDB [OneToOne]
-  - profile_picture -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - profile_picture -> evennia_extensions.Media [FK] (nullable)
 **Pointed to by:**
   - applications <- roster.RosterApplication
   - reviewed_applications <- roster.RosterApplication
@@ -340,7 +340,7 @@
   - treasured_signoffs <- stories.TreasuredSignoff
   - content_boundaries <- boundaries.PlayerBoundary
   - artist_profile <- evennia_extensions.Artist
-  - media <- evennia_extensions.PlayerMedia
+  - media <- evennia_extensions.Media
   - allow_list <- evennia_extensions.PlayerAllowList
   - allowed_by <- evennia_extensions.PlayerAllowList
 
@@ -348,28 +348,36 @@
 **Foreign Keys:**
   - player_data -> evennia_extensions.PlayerData [OneToOne]
 **Pointed to by:**
-  - created_media <- evennia_extensions.PlayerMedia
+  - created_media <- evennia_extensions.Media
 
-### PlayerMedia
+### Media
 **Foreign Keys:**
-  - player_data -> evennia_extensions.PlayerData [FK]
+  - player_data -> evennia_extensions.PlayerData [FK] (nullable)
   - created_by -> evennia_extensions.Artist [FK] (nullable)
 **Pointed to by:**
   - tenure_links <- roster.TenureMedia
+  - starting_area_crests <- character_creation.StartingArea
+  - beginnings_art <- character_creation.Beginnings
   - persona_thumbnails <- scenes.Persona
   - alternate_self_thumbnails <- forms.AlternateSelf
+  - codex_entries <- codex.CodexEntry
   - condition_template_thumbnails <- conditions.ConditionTemplate
   - condition_stage_thumbnails <- conditions.ConditionStage
   - item_templates <- items.ItemTemplate
   - item_instances <- items.ItemInstance
   - combat_opponent_portraits <- combat.CombatOpponent
   - profile_for_players <- evennia_extensions.PlayerData
+  - page_backgrounds <- evennia_extensions.PageBackground
   - thumbnailed_objects <- evennia_extensions.ObjectDisplayData
+
+### PageBackground
+**Foreign Keys:**
+  - art -> evennia_extensions.Media [FK] (nullable)
 
 ### ObjectDisplayData
 **Foreign Keys:**
   - object -> objects.ObjectDB [OneToOne]
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
 
 ### PlayerAllowList
 **Foreign Keys:**
@@ -1332,6 +1340,7 @@
 ### StartingArea
 **Foreign Keys:**
   - realm -> realms.Realm [FK] (nullable)
+  - crest_art -> evennia_extensions.Media [FK] (nullable)
   - default_starting_room -> evennia_extensions.RoomProfile [FK] (nullable)
 **Pointed to by:**
   - beginnings <- character_creation.Beginnings
@@ -1339,6 +1348,7 @@
 
 ### Beginnings
 **Foreign Keys:**
+  - art -> evennia_extensions.Media [FK] (nullable)
   - starting_area -> character_creation.StartingArea [FK]
   - heritage -> character_sheets.Heritage [FK] (nullable)
   - starting_room_override -> objects.ObjectDB [FK] (nullable)
@@ -1851,6 +1861,7 @@
 **Foreign Keys:**
   - subject -> codex.CodexSubject [FK]
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
+  - art -> evennia_extensions.Media [FK] (nullable)
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
   - gifts <- magic.Gift
@@ -1956,7 +1967,7 @@
   - encounter -> combat.CombatEncounter [FK]
   - threat_pool -> combat.ThreatPool [FK] (nullable)
   - persona -> scenes.Persona [FK] (nullable)
-  - portrait -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - portrait -> evennia_extensions.Media [FK] (nullable)
   - objectdb -> objects.ObjectDB [FK] (nullable)
   - mirrors_participant -> combat.CombatParticipant [FK] (nullable)
   - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
@@ -2420,7 +2431,7 @@
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -2469,7 +2480,7 @@
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - properties -> mechanics.Property [M2M]
   - on_entry_conditions -> conditions.ConditionTemplate [M2M]
 **Pointed to by:**
@@ -3034,6 +3045,7 @@
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - species_gift_drawbacks <- species.SpeciesGiftGrant
+  - glimpse_tag_suggestions <- magic.GlimpseTagDistinctionSuggestion
   - ritual_grants <- magic.DistinctionRitualGrant
   - resonance_grants <- magic.DistinctionResonanceGrant
   - resonance_rank_thresholds <- magic.DistinctionResonanceRankThreshold
@@ -3065,6 +3077,7 @@
   - character -> objects.ObjectDB [FK]
   - distinction -> distinctions.Distinction [FK]
   - secret -> secrets.Secret [OneToOne] (nullable)
+  - from_glimpse -> magic.CharacterAura [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
   - modifier_sources <- mechanics.ModifierSource
@@ -3132,6 +3145,8 @@
   - item -> items.ItemInstance [FK]
   - claimant_persona -> scenes.Persona [FK] (nullable)
   - claimant_organization -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - reclamation_claims <- items.ReclamationClaim
 
 ### EstateConfig
 
@@ -3304,7 +3319,7 @@
   - form -> forms.CharacterForm [FK] (nullable)
   - persona -> scenes.Persona [FK] (nullable)
   - combat_profile -> forms.FormCombatProfile [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
   - techniques -> magic.Technique [M2M]
 **Pointed to by:**
@@ -3529,6 +3544,7 @@
 - `leave_table(membership: 'GMTableMembership') -> 'None' — Soft-leave a membership. No-op if already left.`
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' — Set profile.level (promotion OR demotion), writing the audit row.`
 - `revoke_invite(invite: 'GMRosterInvite') -> 'None' — Revoke an invite by setting expires_at to now.`
+- `set_looking_for_table(player_data: 'PlayerData', looking: 'bool') -> 'None' — Set or clear the looking-for-table flag on a player's profile (#2431).`
 - `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' — Future integration hook: called when a persona is retired.`
 - `submit_catalog_suggestion(account: 'AccountDB', *, proposal_kind: 'str', proposal_text: 'str', situation_kind: 'SituationKind | None' = None) -> 'CatalogSuggestion' — Create a ``CatalogSuggestion`` row, routed to the staff inbox (#2127).`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' — GM surrenders oversight of a story.`
@@ -3579,13 +3595,14 @@
 **Foreign Keys:**
   - room -> objects.ObjectDB [OneToOne]
   - owner -> character_sheets.CharacterSheet [FK] (nullable)
+  - gm_owner -> gm.GMProfile [FK] (nullable)
   - return_location -> objects.ObjectDB [FK] (nullable)
 **Pointed to by:**
   - captivities <- captivity.Captivity
 
 ### Service Functions
 - `complete_instanced_room(room: evennia.objects.models.ObjectDB) -> None — Mark room completed, relocate occupants, delete if no history.`
-- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '') -> evennia.objects.models.ObjectDB — Create a temporary instanced room and its lifecycle record.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None) -> evennia.objects.models.ObjectDB — Create a temporary instanced room, its RoomProfile, and lifecycle record.`
 
 
 ## world.items
@@ -3615,7 +3632,7 @@
   - minimum_quality_tier -> items.QualityTier [FK] (nullable)
   - tied_resonance -> magic.Resonance [FK] (nullable)
   - resonance_tier -> magic.ResonanceTier [FK] (nullable)
-  - image -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - image -> evennia_extensions.Media [FK] (nullable)
   - weapon_damage_type -> conditions.DamageType [FK] (nullable)
   - polish_category -> buildings.PolishCategory [FK] (nullable)
   - interactions -> items.InteractionType [M2M]
@@ -3651,7 +3668,7 @@
   - designer_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - designer_persona_display -> scenes.Persona [FK] (nullable)
   - contained_in -> items.ItemInstance [FK] (nullable)
-  - image -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - image -> evennia_extensions.Media [FK] (nullable)
   - legend_deeds -> societies.LegendEntry [M2M]
 **Pointed to by:**
   - applied_disguise_overlays <- forms.CharacterFormState
@@ -4028,6 +4045,37 @@
   - item_instance -> items.ItemInstance [OneToOne] (nullable)
 **Pointed to by:**
   - frame_jobs <- justice.FrameJobDetails
+
+### LieLowState
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+
+### PardonGrant
+**Foreign Keys:**
+  - granter_persona -> scenes.Persona [FK]
+  - target_persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+  - society -> societies.Society [FK]
+
+### GuardEncounter
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+
+### JusticeCase
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+  - society -> societies.Society [FK]
+  - captivity -> captivity.Captivity [FK] (nullable)
+**Pointed to by:**
+  - exculpatory_evidence <- justice.ExculpatoryEvidence
+
+### ExculpatoryEvidence
+**Foreign Keys:**
+  - case -> justice.JusticeCase [FK]
+  - submitter_persona -> scenes.Persona [FK]
 
 ### Service Functions
 - `accrue_accusation_heat(*, secret: 'Secret', area: 'Area | None', scale: 'int' = 1) -> 'PersonaHeat | None' — Mint pursuit heat on an accusation's subject, where the allegation landed.`
@@ -6505,8 +6553,8 @@
 - `handle_training_room_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — TRAINING_ROOM strategy (#675): row-only install/level.`
 - `handle_workshop_of_iniquity_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — WORKSHOP_OF_INIQUITY strategy (#1825): row-only install/level.`
 - `react_to_unauthorized_entry(actor, room) -> 'None' — React to `actor` entering `room` when an active ward/alarm is present`
-- `register_room_feature_strategy(strategy_key: 'str', handler: 'RoomFeatureStrategyHandler') -> 'None' — Register/override the strategy handler for ``strategy_key``.`
-- `reset_room_feature_strategies() -> 'None' — Restore the empty baseline. Test-only escape hatch.`
+- `register_room_feature_strategy(strategy_key: 'str', handler: 'RoomFeatureStrategyHandler', *, as_default: 'bool' = False) -> 'None' — Register/override the strategy handler for ``strategy_key``.`
+- `reset_room_feature_strategies() -> 'None' — Restore the at-ready baseline registrations. Test-only escape hatch.`
 - `room_ward_upkeep_tick() -> 'None' — Drain each active ward's resonance_reserve; lapse it if depleted (#2177).`
 - `sync_social_hub_traffic(room_profile: 'RoomProfile') -> 'None' — Reconcile the room's crowd-draw TRAFFIC modifier to its hub's current level.`
 
@@ -6651,7 +6699,7 @@
 ### TenureMedia
 **Foreign Keys:**
   - tenure -> roster.RosterTenure [FK]
-  - media -> evennia_extensions.PlayerMedia [FK]
+  - media -> evennia_extensions.Media [FK]
   - gallery -> roster.TenureGallery [FK] (nullable)
 **Pointed to by:**
   - profile_for_entries <- roster.RosterEntry
@@ -6762,7 +6810,7 @@
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - profile -> character_sheets.Profile [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - properties -> mechanics.Property [M2M]
 **Pointed to by:**
   - mentored_allocations <- skills.TrainingAllocation

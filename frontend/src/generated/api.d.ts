@@ -802,6 +802,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/backgrounds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return every configured page background (slot -> art URL). */
+    get: operations['backgrounds_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/battles/': {
     parameters: {
       query?: never;
@@ -20036,7 +20053,7 @@ export interface components {
        * @description Public persona identity only — id/name/thumbnail(s), never account/username.
        *
        *     ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
-       *     ``get_thumbnail_media_url`` — the uploaded-portrait ``PlayerMedia`` FK,
+       *     ``get_thumbnail_media_url`` — the uploaded-portrait ``Media`` FK,
        *     already ``select_related``'d by the view's Prefetch (world/battles/views.py),
        *     so this never issues a query. ``thumbnail_url`` is the legacy URLField,
        *     kept alongside for callers still on it.
@@ -20381,11 +20398,8 @@ export interface components {
       name: string;
       /** @description Worldbuilding text shown to players */
       description: string;
-      /**
-       * Format: uri
-       * @description URL for visual presentation
-       */
-      art_image?: string;
+      /** @description Cloudinary URL sourced from art (#2408); key name kept for frontend compat. */
+      readonly art_image: string | null;
       /** @description Whether family is selectable in Lineage stage (False = 'Unknown') */
       family_known?: boolean;
       /**
@@ -20409,11 +20423,6 @@ export interface components {
       name: string;
       /** @description Worldbuilding text shown to players */
       description: string;
-      /**
-       * Format: uri
-       * @description URL for visual presentation
-       */
-      art_image?: string;
       /** @description Whether family is selectable in Lineage stage (False = 'Unknown') */
       family_known?: boolean;
       /** @description If False, characters don't get species' racial language (Misbegotten) */
@@ -21754,6 +21763,7 @@ export interface components {
       learn_threshold?: number;
       readonly knowledge_status: string | null;
       readonly research_progress: number | null;
+      readonly art_url: string | null;
     };
     /**
      * @description Light serializer for entry lists.
@@ -21777,6 +21787,7 @@ export interface components {
       /** @description Order for display within subject. */
       display_order?: number;
       readonly knowledge_status: string | null;
+      readonly art_url: string | null;
     };
     CodexSubject: {
       readonly id: number;
@@ -25732,13 +25743,34 @@ export interface components {
      * @enum {string}
      */
     MaxRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /** @description Serialize media uploaded by a player. */
+    Media: {
+      readonly id: number;
+      /** @description Cloudinary public ID for this media */
+      readonly cloudinary_public_id: string;
+      /**
+       * Format: uri
+       * @description Full Cloudinary URL
+       */
+      readonly cloudinary_url: string;
+      readonly media_type: components['schemas']['MediaTypeEnum'];
+      readonly title: string;
+      readonly description: string;
+      readonly created_by: string;
+      /** Format: date-time */
+      readonly uploaded_date: string;
+      /** Format: date-time */
+      readonly updated_date: string;
+    };
     /**
      * @description * `photo` - Photo
      *     * `portrait` - Character Portrait
      *     * `gallery` - Gallery Image
+     *     * `background` - Background
+     *     * `illustration` - Illustration
      * @enum {string}
      */
-    MediaTypeEnum: 'photo' | 'portrait' | 'gallery';
+    MediaTypeEnum: 'photo' | 'portrait' | 'gallery' | 'background' | 'illustration';
     /** @description Minimal read-only representation of a mentor persona. */
     MentorPersona: {
       readonly id: number;
@@ -27122,7 +27154,7 @@ export interface components {
        */
       readonly thumbnail_url: string | null;
       /**
-       * @description PlayerMedia portrait URL, dynamically resolved (#2196).
+       * @description Media portrait URL, dynamically resolved (#2196).
        *
        *     Uses ``resolve_thumbnail()`` when the opponent has a persona (character).
        *     For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
@@ -28516,6 +28548,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['LabStationDetails'][];
     };
+    PaginatedMediaList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Media'][];
+    };
     PaginatedMissionCategoryList: {
       /** @example 123 */
       count: number;
@@ -29131,21 +29178,6 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['PlayerMail'][];
-    };
-    PaginatedPlayerMediaList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['PlayerMedia'][];
     };
     PaginatedPlayerReportDetailList: {
       /** @example 123 */
@@ -30161,7 +30193,7 @@ export interface components {
        */
       readonly thumbnail_url: string | null;
       /**
-       * @description PlayerMedia portrait URL, dynamically resolved (#2196).
+       * @description Media portrait URL, dynamically resolved (#2196).
        *
        *     Uses ``resolve_thumbnail()`` via the primary persona's character.
        *     ``None`` when there is no primary persona.
@@ -32247,25 +32279,6 @@ export interface components {
       message: string;
       in_reply_to?: number | null;
       sender_tenure: number;
-    };
-    /** @description Serialize media uploaded by a player. */
-    PlayerMedia: {
-      readonly id: number;
-      /** @description Cloudinary public ID for this media */
-      readonly cloudinary_public_id: string;
-      /**
-       * Format: uri
-       * @description Full Cloudinary URL
-       */
-      readonly cloudinary_url: string;
-      readonly media_type: components['schemas']['MediaTypeEnum'];
-      readonly title: string;
-      readonly description: string;
-      readonly created_by: string;
-      /** Format: date-time */
-      readonly uploaded_date: string;
-      /** Format: date-time */
-      readonly updated_date: string;
     };
     /**
      * @description Frontend supplies reporter persona + reported persona name (#1279).
@@ -35030,11 +35043,8 @@ export interface components {
       name: string;
       /** @description Rich description shown on hover/click in character creation */
       description: string;
-      /**
-       * Format: uri
-       * @description Cloudinary URL for crest/flag image. Leave blank for gradient placeholder.
-       */
-      crest_image?: string | null;
+      /** @description Cloudinary URL sourced from crest_art (#2408); key name kept for frontend compat. */
+      readonly crest_image: string | null;
       /** @description Check if the requesting user can access this area. */
       readonly is_accessible: boolean;
       /** @default default */
@@ -35046,11 +35056,6 @@ export interface components {
       name: string;
       /** @description Rich description shown on hover/click in character creation */
       description: string;
-      /**
-       * Format: uri
-       * @description Cloudinary URL for crest/flag image. Leave blank for gradient placeholder.
-       */
-      crest_image?: string | null;
     };
     /** @description LAB station snapshot within a crafting quote (#1234). */
     StationStatus: {
@@ -35917,7 +35922,7 @@ export interface components {
     /** @description Serialize media associated with a roster tenure. */
     TenureMedia: {
       readonly id: number;
-      readonly media: components['schemas']['PlayerMedia'];
+      readonly media: components['schemas']['Media'];
       readonly gallery: number | null;
       sort_order?: number;
     };
@@ -38135,6 +38140,24 @@ export interface operations {
     };
   };
   auth_browser_v1_auth_logout_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  backgrounds_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -40808,8 +40831,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Starting Area. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -59918,7 +59940,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedPlayerMediaList'];
+          'application/json': components['schemas']['PaginatedMediaList'];
         };
       };
     };
@@ -59937,7 +59959,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PlayerMedia'];
+          'application/json': components['schemas']['Media'];
         };
       };
     };
@@ -59947,7 +59969,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this player media. */
+        /** @description A unique integer value identifying this media. */
         id: number;
       };
       cookie?: never;
@@ -59959,7 +59981,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PlayerMedia'];
+          'application/json': components['schemas']['Media'];
         };
       };
     };
@@ -59969,7 +59991,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this player media. */
+        /** @description A unique integer value identifying this media. */
         id: number;
       };
       cookie?: never;
@@ -59981,7 +60003,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PlayerMedia'];
+          'application/json': components['schemas']['Media'];
         };
       };
     };
@@ -59991,7 +60013,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this player media. */
+        /** @description A unique integer value identifying this media. */
         id: number;
       };
       cookie?: never;
@@ -60012,7 +60034,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this player media. */
+        /** @description A unique integer value identifying this media. */
         id: number;
       };
       cookie?: never;
@@ -60024,7 +60046,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PlayerMedia'];
+          'application/json': components['schemas']['Media'];
         };
       };
     };
@@ -60034,7 +60056,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this player media. */
+        /** @description A unique integer value identifying this media. */
         id: number;
       };
       cookie?: never;
@@ -60046,7 +60068,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PlayerMedia'];
+          'application/json': components['schemas']['Media'];
         };
       };
     };
@@ -60056,7 +60078,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this player media. */
+        /** @description A unique integer value identifying this media. */
         id: number;
       };
       cookie?: never;
@@ -60068,7 +60090,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PlayerMedia'];
+          'application/json': components['schemas']['Media'];
         };
       };
     };

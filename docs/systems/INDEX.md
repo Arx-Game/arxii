@@ -1126,7 +1126,10 @@ Lore storage and character knowledge tracking.
 
 - **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`
 - **Key Methods:** Character learning from starting choices or teaching
-- **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge)
+- **Art (#2408):** `CodexEntry.art` — nullable FK → `evennia_extensions.Media`,
+  `SET_NULL`; illustration rendered in the codex-modal lore-card (`CodexModal.tsx`).
+  No art set falls back to the existing placeholder convention.
+- **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge), evennia_extensions (`Media`, art)
 - **Source:** `src/world/codex/`
 - **Details:** [codex.md](codex.md)
 
@@ -1468,7 +1471,9 @@ Multi-stage character creation flow with draft system.
 
 - **Models:** `CharacterDraft`, `StartingArea` (`grants_residence_tenancy` BooleanField, default
   True, #2036 — an authored per-area toggle for whether finalizing a character there grants a
-  `LocationTenancy` at the starting room), `Beginnings`
+  `LocationTenancy` at the starting room; `crest_art` — nullable FK →
+  `evennia_extensions.Media`, `SET_NULL`, #2408 — replaced a raw-URL field, gradient
+  placeholder when unset), `Beginnings` (`art` — same `Media` FK shape, #2408)
 - **Key Functions:** Stage validation, draft progression, `_grant_cg_residence_tenancy()` (#2036,
   `world/character_creation/services.py`) — called from `finalize_character`; when
   `starting_area.grants_residence_tenancy` and the starting room resolves a `RoomProfile`, calls
@@ -5063,8 +5068,16 @@ Core Evennia object definitions (Character, Room, Exit, Account).
 Extensions to Evennia models for additional data storage.
 
 - **Key Classes:** `PlayerData`, data handlers, integration adapters
+- **Media (#2408):** `Media` (renamed from `PlayerMedia`) unifies player-uploaded
+  and staff-authored art in one model — role is derived from `player_data`
+  (null ⇒ staff-authored), not a stored flag; staff rows additionally carry a
+  nullable, unique `slug` for natural-key addressing from the lore-repo content
+  pipeline (see ADR-0143). `PageBackground` (`slot: PageBackgroundSlot` — HOMEPAGE /
+  ROSTER / CG_STAGE / GAME_CLIENT, unique — → `art: Media | None`, `SET_NULL`) maps
+  a named page slot to a background `Media` row; read via `GET /api/backgrounds/`.
 - **Pattern:** Extend Evennia models without modifying library code
-- **Integrates with:** accounts, characters, Evennia core
+- **Integrates with:** accounts, characters, Evennia core, codex (`CodexEntry.art`),
+  character_creation (`StartingArea.crest_art`, `Beginnings.art`)
 - **Source:** `src/evennia_extensions/`
 - **Details:** [evennia_extensions.md](evennia_extensions.md)
 
