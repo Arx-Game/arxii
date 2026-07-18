@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
-    from world.clues.models import RoomClue
+    from world.clues.models import ClueTrigger, RoomClue
 
 _EXIT_TYPECLASS = "typeclasses.exits.Exit"
 
@@ -68,6 +68,18 @@ def _resolve_room_clue(room_clue_id: Any) -> RoomClue | None:
     if not room_clue_id:
         return None
     return RoomClue.objects.filter(pk=room_clue_id).select_related("room_profile", "clue").first()
+
+
+def _resolve_clue_trigger(clue_trigger_id: Any) -> ClueTrigger | None:
+    from world.clues.models import ClueTrigger  # noqa: PLC0415
+
+    if not clue_trigger_id:
+        return None
+    return (
+        ClueTrigger.objects.filter(pk=clue_trigger_id)
+        .select_related("room_profile", "clue")
+        .first()
+    )
 
 
 def _resolve_exit(exit_id: Any) -> ObjectDB | None:
@@ -714,3 +726,60 @@ class StaffRemoveClueAction(_WorldBuilderAction):
             return ActionResult(success=False, message="No such clue placement.")
         room_clue.delete()
         return ActionResult(success=True, message="Clue placement removed.")
+
+
+@dataclass
+class StaffPlaceClueTriggerAction(_WorldBuilderAction):
+    """Place a ``ClueTrigger`` in a room. Kwargs: ``room_id``, ``clue_slug``, optional
+    ``fixture_key`` (auto-suggested from ``room-<id>/trigger-<clue_slug>`` when omitted).
+    """
+
+    key: str = "staff_place_clue_trigger"
+    name: str = "Place Clue Trigger"
+    icon: str = "zap"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.clues.models import Clue, ClueTrigger  # noqa: PLC0415
+
+        room_profile = _resolve_room_profile(kwargs.get("room_id"))
+        if room_profile is None:
+            return ActionResult(success=False, message="No such room.")
+        clue_slug = (kwargs.get("clue_slug") or "").strip()
+        clue = Clue.objects.filter(slug=clue_slug).first() if clue_slug else None
+        if clue is None:
+            return ActionResult(success=False, message="No such clue.")
+        fixture_key = kwargs.get("fixture_key") or (
+            f"room-{room_profile.objectdb_id}/trigger-{clue_slug}"
+        )
+        ClueTrigger.objects.update_or_create(
+            room_profile=room_profile, clue=clue, defaults={"fixture_key": fixture_key}
+        )
+        return ActionResult(
+            success=True, message=f"{clue.name} trigger placed in {room_profile.objectdb.db_key}."
+        )
+
+
+@dataclass
+class StaffRemoveClueTriggerAction(_WorldBuilderAction):
+    """Remove a ``ClueTrigger`` placement. Kwarg: ``clue_trigger_id``."""
+
+    key: str = "staff_remove_clue_trigger"
+    name: str = "Remove Clue Trigger"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        trigger = _resolve_clue_trigger(kwargs.get("clue_trigger_id"))
+        if trigger is None:
+            return ActionResult(success=False, message="No such clue trigger.")
+        trigger.delete()
+        return ActionResult(success=True, message="Clue trigger removed.")

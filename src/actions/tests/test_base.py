@@ -504,6 +504,8 @@ class ActionRegistryTests(TestCase):
             # #2451 — staff clue placement.
             "staff_place_clue",
             "staff_remove_clue",
+            "staff_place_clue_trigger",
+            "staff_remove_clue_trigger",
             # #2450 — GM story builder.
             "create_story_area",
             "edit_story_area",
