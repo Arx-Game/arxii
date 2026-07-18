@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
+    from world.clues.models import RoomClue
 
 _EXIT_TYPECLASS = "typeclasses.exits.Exit"
 
@@ -59,6 +60,14 @@ def _resolve_room_profile(room_id: Any) -> RoomProfile | None:
     return (
         RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb", "area").first()
     )
+
+
+def _resolve_room_clue(room_clue_id: Any) -> RoomClue | None:
+    from world.clues.models import RoomClue  # noqa: PLC0415
+
+    if not room_clue_id:
+        return None
+    return RoomClue.objects.filter(pk=room_clue_id).select_related("room_profile", "clue").first()
 
 
 def _resolve_exit(exit_id: Any) -> ObjectDB | None:
@@ -643,3 +652,65 @@ class PromoteAreaAction(_WorldBuilderAction):
         except GridServiceError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, message=f"{area.name} promoted as {slug}.")
+
+
+@dataclass
+class StaffPlaceClueAction(_WorldBuilderAction):
+    """Place a ``RoomClue`` in a room. Kwargs: ``room_id``, ``clue_slug``, optional
+    ``detect_difficulty`` (int, default 0), optional ``fixture_key`` (auto-suggested
+    from ``room-<id>/<clue_slug>`` when omitted).
+    """
+
+    key: str = "staff_place_clue"
+    name: str = "Place Room Clue"
+    icon: str = "search"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.clues.models import Clue, RoomClue  # noqa: PLC0415
+
+        room_profile = _resolve_room_profile(kwargs.get("room_id"))
+        if room_profile is None:
+            return ActionResult(success=False, message="No such room.")
+        clue_slug = (kwargs.get("clue_slug") or "").strip()
+        clue = Clue.objects.filter(slug=clue_slug).first() if clue_slug else None
+        if clue is None:
+            return ActionResult(success=False, message="No such clue.")
+        try:
+            detect_difficulty = int(kwargs.get("detect_difficulty") or 0)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Detect difficulty must be a number.")
+        fixture_key = kwargs.get("fixture_key") or f"room-{room_profile.objectdb_id}/{clue_slug}"
+        _room_clue, _ = RoomClue.objects.update_or_create(
+            room_profile=room_profile,
+            clue=clue,
+            defaults={"detect_difficulty": detect_difficulty, "fixture_key": fixture_key},
+        )
+        return ActionResult(
+            success=True, message=f"{clue.name} placed in {room_profile.objectdb.db_key}."
+        )
+
+
+@dataclass
+class StaffRemoveClueAction(_WorldBuilderAction):
+    """Remove a ``RoomClue`` placement. Kwarg: ``room_clue_id``."""
+
+    key: str = "staff_remove_clue"
+    name: str = "Remove Room Clue"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        room_clue = _resolve_room_clue(kwargs.get("room_clue_id"))
+        if room_clue is None:
+            return ActionResult(success=False, message="No such clue placement.")
+        room_clue.delete()
+        return ActionResult(success=True, message="Clue placement removed.")

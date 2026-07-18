@@ -501,6 +501,9 @@ class ActionRegistryTests(TestCase):
             "staff_remove_room",
             "promote_room",
             "promote_area",
+            # #2451 — staff clue placement.
+            "staff_place_clue",
+            "staff_remove_clue",
             # #2450 — GM story builder.
             "create_story_area",
             "edit_story_area",

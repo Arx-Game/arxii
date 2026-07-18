@@ -25,6 +25,8 @@ from world.areas.factories import AreaFactory
 from world.areas.grid_services import create_exit_pair
 from world.areas.models import Area
 from world.character_sheets.factories import CharacterSheetFactory
+from world.clues.factories import ClueFactory, RoomClueFactory
+from world.clues.models import RoomClue
 from world.room_features.factories import RoomFeatureInstanceFactory
 
 
@@ -556,3 +558,101 @@ class PromoteAreaActionTests(TestCase):
         assert not result.success
         self.area.refresh_from_db()
         assert self.area.slug is None
+
+
+class StaffPlaceClueActionTests(TestCase):
+    def setUp(self) -> None:
+        self.staff = _staff_actor("PlaceClueStaff")
+        self.player = _player_actor("PlaceCluePlayer")
+        self.room_profile = RoomProfileFactory()
+        self.clue = ClueFactory(slug="torn-letter")
+
+    def test_creates_room_clue(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("staff_place_clue").run(
+            self.staff,
+            room_id=self.room_profile.objectdb_id,
+            clue_slug="torn-letter",
+            detect_difficulty=5,
+        )
+
+        assert result.success, result.message
+        room_clue = RoomClue.objects.get(room_profile=self.room_profile, clue=self.clue)
+        assert room_clue.detect_difficulty == 5
+        assert room_clue.fixture_key == f"room-{self.room_profile.objectdb_id}/torn-letter"
+
+    def test_non_staff_rejected(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("staff_place_clue").run(
+            self.player, room_id=self.room_profile.objectdb_id, clue_slug="torn-letter"
+        )
+        assert not result.success
+        assert not RoomClue.objects.filter(room_profile=self.room_profile).exists()
+
+    def test_fails_for_unknown_room(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("staff_place_clue").run(
+            self.staff, room_id=999999, clue_slug="torn-letter"
+        )
+        assert not result.success
+
+    def test_fails_for_unknown_clue_slug(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("staff_place_clue").run(
+            self.staff, room_id=self.room_profile.objectdb_id, clue_slug="no-such-slug"
+        )
+        assert not result.success
+
+    def test_re_placing_same_clue_in_same_room_updates_instead_of_erroring(self) -> None:
+        from actions.registry import get_action
+
+        get_action("staff_place_clue").run(
+            self.staff,
+            room_id=self.room_profile.objectdb_id,
+            clue_slug="torn-letter",
+            detect_difficulty=5,
+        )
+        result = get_action("staff_place_clue").run(
+            self.staff,
+            room_id=self.room_profile.objectdb_id,
+            clue_slug="torn-letter",
+            detect_difficulty=8,
+        )
+        assert result.success, result.message
+        assert RoomClue.objects.filter(room_profile=self.room_profile, clue=self.clue).count() == 1
+        room_clue = RoomClue.objects.get(room_profile=self.room_profile, clue=self.clue)
+        assert room_clue.detect_difficulty == 8
+
+
+class StaffRemoveClueActionTests(TestCase):
+    def setUp(self) -> None:
+        self.staff = _staff_actor("RemoveClueStaff")
+        self.player = _player_actor("RemoveCluePlayer")
+
+    def test_deletes_room_clue(self) -> None:
+        from actions.registry import get_action
+
+        room_clue = RoomClueFactory()
+        result = get_action("staff_remove_clue").run(self.staff, room_clue_id=room_clue.pk)
+
+        assert result.success, result.message
+        assert not RoomClue.objects.filter(pk=room_clue.pk).exists()
+
+    def test_non_staff_rejected(self) -> None:
+        from actions.registry import get_action
+
+        room_clue = RoomClueFactory()
+        result = get_action("staff_remove_clue").run(self.player, room_clue_id=room_clue.pk)
+
+        assert not result.success
+        assert RoomClue.objects.filter(pk=room_clue.pk).exists()
+
+    def test_fails_for_unknown_room_clue(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("staff_remove_clue").run(self.staff, room_clue_id=999999)
+        assert not result.success

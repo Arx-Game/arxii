@@ -431,7 +431,9 @@ from actions.definitions.world_builder import (
     StaffDigRoomAction,
     StaffEditRoomAction,
     StaffLinkRoomsAction,
+    StaffPlaceClueAction,
     StaffPlaceRoomAction,
+    StaffRemoveClueAction,
     StaffRemoveRoomAction,
     StaffRenameExitAction,
     StaffUnlinkRoomsAction,
@@ -808,6 +810,8 @@ _ALL_ACTIONS: list[Action] = [
     StaffRemoveRoomAction(),
     PromoteRoomAction(),
     PromoteAreaAction(),
+    StaffPlaceClueAction(),
+    StaffRemoveClueAction(),
     # #2450 — GM story builder: create/edit/remove story areas + dig/edit story rooms.
     CreateStoryAreaAction(),
     EditStoryAreaAction(),
