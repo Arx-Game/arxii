@@ -581,6 +581,53 @@ def _extract_natural_key(model, fields: dict, source_path: Path | None) -> dict:
     return lookup
 
 
+def _pop_m2m_fields(model, fields: dict) -> dict[str, list]:
+    """Pop many-to-many field values out of *fields*.
+
+    Django's natural-key serializer emits an M2M value as a list of
+    natural-key lists; ``update_or_create`` can't take them in ``defaults``
+    and ``_resolve_natural_key_fields`` would misread them as FK values, so
+    they are removed here and applied via ``.set()`` after the upsert.
+    """
+    m2m: dict[str, list] = {}
+    for m2m_field in model._meta.many_to_many:  # noqa: SLF001
+        if m2m_field.name in fields:
+            m2m[m2m_field.name] = fields.pop(m2m_field.name)
+    return m2m
+
+
+def _resolve_m2m_values(model, m2m_values: dict[str, list], source_path) -> dict[str, list]:
+    """Resolve popped M2M natural-key lists into model instances.
+
+    Runs BEFORE the upsert so an unresolvable target defers the whole entry
+    without writing a half-loaded row. A missing target raises
+    ``UnresolvedNaturalKeyError`` (rides ``load_world_content``'s retry); a
+    non-list item is a pk-based fixture and raises ``ContentError``.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    resolved: dict[str, list] = {}
+    for field_name, items in m2m_values.items():
+        field = model._meta.get_field(field_name)  # noqa: SLF001
+        related_model = field.related_model
+        location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+        instances = []
+        for item in items:
+            if not isinstance(item, list):
+                msg = (
+                    f"{location}: {field_name!r} on {model._meta.label} has a "  # noqa: SLF001
+                    f"non-natural-key M2M item {item!r} (likely pk-based fixture)."
+                )
+                raise ContentError(msg)
+            try:
+                instances.append(related_model.objects.get_by_natural_key(*item))
+            except ObjectDoesNotExist:
+                msg = f"{location}: {field_name!r} {related_model.__name__} {item!r} not found."
+                raise UnresolvedNaturalKeyError(msg) from None
+        resolved[field_name] = instances
+    return resolved
+
+
 def _upsert_fixture_object(
     model: type,
     obj: dict,
@@ -604,6 +651,16 @@ def _upsert_fixture_object(
     field, constraint violation, or an unresolved FK when the flag is false)
     still lands in ``result.skipped`` with the exact same message text as
     before this function was factored out.
+
+    M2M fields (#2486): a fixture's M2M value is a list of natural-key
+    lists (Django's own convention). ``_pop_m2m_fields`` removes them from
+    ``fields`` before natural-key FK resolution (``update_or_create`` can't
+    take M2M values in ``defaults``, and ``_resolve_natural_key_fields``
+    would misread a list-of-lists as a single FK value). Resolve-before-write
+    invariant: ``_resolve_m2m_values`` resolves every popped M2M value BEFORE
+    ``update_or_create`` runs, so an entry that defers or skips on an
+    unresolved M2M target never writes a partial row — the ``.set()`` calls
+    only run after the upsert has already succeeded.
     """
     from django.core.exceptions import FieldError  # noqa: PLC0415
     from django.db import IntegrityError  # noqa: PLC0415
@@ -629,9 +686,13 @@ def _upsert_fixture_object(
     created = False
     skip_msg: str | None = None
     try:
+        m2m_values = _pop_m2m_fields(model, fields)
         _resolve_natural_key_fields(model, lookup, source_path)
         _resolve_natural_key_fields(model, fields, source_path)
-        _, created = model.objects.update_or_create(**lookup, defaults=fields)
+        resolved_m2m = _resolve_m2m_values(model, m2m_values, source_path)
+        instance, created = model.objects.update_or_create(**lookup, defaults=fields)
+        for m2m_name, m2m_instances in resolved_m2m.items():
+            getattr(instance, m2m_name).set(m2m_instances)
     except UnresolvedNaturalKeyError as exc:
         # Must be caught before the broader ContentError clause below (it's a
         # subclass) — this is the ONLY failure mode ever deferred.
